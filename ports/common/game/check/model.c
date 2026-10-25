@@ -156,7 +156,17 @@ void old_gsu_wr8(uint32_t a, uint8_t v)
 
 void old_cyc(uint32_t c) { (void)c; }
 void old_cpu_idle(uint32_t c) { (void)c; }
-void old_gsu_code(uint32_t a, uint32_t n) { (void)a; (void)n; }
+int model_trace;   /* the decomp's Super FX code addresses printed as it runs */
+uint8_t model_cover[0x10000];   /* bank $01's code addresses the decomp has run, while model_covering */
+int model_covering;
+void old_gsu_code(uint32_t a, uint32_t n)
+{
+    if (model_covering && (a >> 16) == 1)
+        for (uint32_t i = 0; i < n; i++)
+            model_cover[(a + i) & 0xFFFF] = 1;
+    if (model_trace)
+        fprintf(stderr, "  %06X+%u R0=%04X R1=%04X R2=%04X R14=%04X 5C=%04X\n", a, n, old_gsu.r[0], old_gsu.r[1], old_gsu.r[2], old_gsu.r[14], pakram[0x5C] | pakram[0x5D] << 8);
+}
 void old_gsu_cache(uint16_t r15) { (void)r15; }
 void old_gsu_cyc(uint32_t c) { (void)c; }
 void old_gsu_time(int w) { (void)w; }
@@ -217,4 +227,12 @@ void model_pixels_flush(void)
     GsuScreen s = model_screen();
 
     gsuclk_rpix(&pixels, &s, 0, 0);
+}
+
+/* a pixel cache as a recording left it */
+void model_pixels_set(int i, uint16_t offset, uint8_t bitpend, const uint8_t data[8])
+{
+    pixels.pix[i].offset = offset;
+    pixels.pix[i].bitpend = bitpend;
+    memcpy(pixels.pix[i].data, data, 8);
 }

@@ -82,14 +82,14 @@ static void fresh(void)
     FXU(0x001C) = (uint16_t)(rnd() % 0x20);  /* the ROM bank a caller keeps there */
 }
 
-/* the stack and the clip routines' save words: not compared */
-static int list_scratch;    /* FxDrawList's own work in its list and words */
+/* the stack, and the word the clips keep R10 in: not compared */
+static int list_scratch;    /* FxDrawList's walk: R10, the edges' places, rows, slopes */
 
 static int scratch(size_t a)
 {
-    if (list_scratch && ((a >= 0x005E && a < 0x00D6) || (a >= 0x0700 && a < 0x0D00)))
+    if (list_scratch && a >= 0x005E && a < 0x0070)
         return 1;
-    return (a >= 0x0240 && a < 0x0280) || (a >= 0x008A && a < 0x00A2) || a == 0x001A || a == 0x001B;
+    return (a >= 0x0240 && a < 0x0280) || a == 0x00A0 || a == 0x00A1 || a == 0x001A || a == 0x001B;
 }
 
 /* a case that runs away is reported, not left spinning */

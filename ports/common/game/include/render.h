@@ -40,6 +40,11 @@ uint16_t fx_polygon_draw(uint16_t outcodes, uint8_t bank, uint16_t script);
 uint16_t fx_polygon_gather(uint16_t n, uint8_t bank, uint16_t script);
 uint16_t fx_polygon_clip_screen(uint16_t n);
 
+/* ---- render/fx_model.c ---- */
+void fx_model_draw(void);
+void fx_model_draw_flagged(void);
+void fx_model_draw_with_flags(uint16_t flags);
+
 /* ---- render/fx_screen.c ---- */
 /* The screen as the S-CPU has set it up: its colour depth (SCMR's mode:
    0 2 bits, 1 and 2 4 bits, 3 8 bits), height (0 128 lines, 1 160, 2 192,

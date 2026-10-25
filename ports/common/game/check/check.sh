@@ -1,7 +1,8 @@
 #!/bin/sh
 # Build and run one of the port's checks against the decomp.
 #   check/check.sh NAME [N [DIR]]  NAME_check.c (DIR: recorded calls), against the decomp files listed
-#                                in its first line ("old: path ...")
+#                                in its first line ("old: path ..."); its second line may give
+#                                link flags ("ldflags: ...")
 # The decomp's files are built with every symbol renamed old_*; a routine
 # they call that is not among them gets a stub that stops the check (a case
 # that reaches one is out of the check's scope). The port's side is every C
@@ -43,5 +44,5 @@ done
 $CC $CFLAGS -w -Isrc/stuntracefx/include -I$G/include -I$G/check -Itools/stuntracefx/sfxbox -c $G/check/model.c -o "$OUT/model.o"
 $CC $CFLAGS -w -Itools/stuntracefx/sfxbox -c tools/stuntracefx/sfxbox/gsu_clock.c -o "$OUT/gsu_clock.o"
 $CC $CFLAGS -Wall -Isrc/stuntracefx/include -I$G/include -I$G/check $G/check/${NAME}_check.c \
-  "$OUT/model.o" "$OUT/gsu_clock.o" "$OUT/stubs.c" $NEW $OLD -o "$OUT/${NAME}_check" -lm
+  "$OUT/model.o" "$OUT/gsu_clock.o" "$OUT/stubs.c" $NEW $OLD -o "$OUT/${NAME}_check" -lm $(sed -n '2s/^.*ldflags: *//p' $G/check/${NAME}_check.c)
 "$OUT/${NAME}_check" "$ROM" ${2:-20000} ${3:-}

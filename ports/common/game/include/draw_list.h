@@ -18,7 +18,10 @@ typedef struct {
 /* The screen's colour depth, as the plot rules need it (SCMR's mode bits:
    0 2 bits a pixel, 1 4 bits, 3 8 bits). */
 typedef struct {
-    const uint8_t *ram;      /* the game pak RAM (bank $70), 64 KB */
+    uint8_t *ram;            /* the game pak RAM (bank $70), 64 KB: read, and written as
+                                FxDrawList leaves it (the list's end word, each shape's
+                                vertices copied below it, the texture words, the walk's
+                                u and v words) */
     const uint8_t *rom;      /* the cartridge ROM */
     uint32_t rom_size;
     int mode, layout;

@@ -21,4 +21,8 @@ void model_reset(void);
 /* the Super FX's pixel caches emptied, or written out to the RAM */
 void model_pixels_empty(void);
 void model_pixels_flush(void);
+extern int model_trace;
+extern uint8_t model_cover[0x10000];
+extern int model_covering;
+void model_pixels_set(int i, uint16_t offset, uint8_t bitpend, const uint8_t data[8]);
 #endif

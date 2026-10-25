@@ -34,6 +34,9 @@
 #define RIGHT_V_PREV 0x0082u
 #define LEFT_DV     0x0084u
 #define RIGHT_DV    0x0086u
+#define TEX_BANK    0x00A6u
+#define TEX_BASE    0x00A8u
+#define TEX_MASK    0x00D4u
 #define TEX_U_OFF   0x00C0u
 #define TEX_V_OFF   0x00C2u
 
@@ -426,6 +429,9 @@ static uint16_t tex_polygon(Fill *f, uint16_t p, int n)
     TexEdge l, r;
     FxSpan s;
     int i;
+    wr16(m, TEX_BANK, bank);
+    wr16(m, TEX_BASE, base);
+    wr16(m, TEX_MASK, mask);
     /* COLOR with the options clear, then CMODE */
     f->colour = (uint8_t)word;
     f->options = (uint8_t)((word >> 8) & 0x1F);
@@ -588,10 +594,7 @@ void fx_list_spans(const FxDrawSource *src, FxSpanSink sink, void *ctx)
 {
     Fill f;
     uint16_t at, end;
-    uint8_t *ram = (uint8_t *)malloc(0x10000);
-    if (!ram)
-        return;
-    memcpy(ram, src->ram, 0x10000);
+    uint8_t *ram = src->ram;
     f.ram = ram;
     f.src = src;
     f.sink = sink;
@@ -613,7 +616,6 @@ void fx_list_spans(const FxDrawSource *src, FxSpanSink sink, void *ctx)
                 at = tex_polygon(&f, at, (uint8_t)~type);
         }
     }
-    free(ram);
 }
 
 typedef struct {

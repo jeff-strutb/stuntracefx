@@ -422,6 +422,9 @@ int fx_segment_cross_z(int16_t a[3], int16_t b[3])
     pos = a[2] < 0 ? b : a;
     for (k = 0; k < 3; k++)
         keep[k] = pos[k];
+    FXW(0x009A) = keep[0];                  /* the end kept, where the search saves it */
+    FXW(0x009C) = keep[1];
+    FXW(0x009E) = keep[2];
     for (;;) {
         int16_t m = div2(wrap16(neg[2] + pos[2]));
 

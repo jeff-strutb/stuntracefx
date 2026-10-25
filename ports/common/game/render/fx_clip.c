@@ -102,6 +102,9 @@ static int clip_segment(const FxPlane *p, FxVertex *a, FxVertex *b)
         return -1;
     o = a_in ? *b : *a;
     in = a_in ? *a : *b;
+    FXW(0x009A) = in.x;                 /* the end kept, as the search saves it */
+    FXW(0x009C) = in.y;
+    FXW(0x009E) = in.z;
     for (;;) {
         int16_t t;
 
@@ -115,6 +118,8 @@ static int clip_segment(const FxPlane *p, FxVertex *a, FxVertex *b)
             o = m;
     }
     *(a_in ? b : a) = m;
+    FXW(a_in ? 0x008C : 0x008A) = m.a1;  /* the moved end's attributes */
+    FXW(a_in ? 0x0090 : 0x008E) = m.a2;
     return 1;
 }
 
@@ -149,6 +154,10 @@ static uint16_t clip_polygon(const FxPlane *p, uint16_t *out_end)
 
         at = (uint16_t)(k == 1 ? in : at + 10);
         b = vertex_at(at);
+        FXW(0x008A) = a.a1;                 /* the edge's attributes, where the search keeps them */
+        FXW(0x008E) = a.a2;
+        FXW(0x008C) = b.a1;
+        FXW(0x0090) = b.a2;
         a_in = inside(p, *axis_of(&a, p->axis), a.z, p->neg);
         b_in = inside(p, *axis_of(&b, p->axis), b.z, p->neg);
         if (a_in)
