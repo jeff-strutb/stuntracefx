@@ -67,6 +67,26 @@ static void bbus(uint8_t r, uint8_t v)
         if (ppu.vmain & 0x80)
             ppu.vaddr = (uint16_t)(ppu.vaddr + vstep());
         break;
+    case 0x0D: case 0x0F: case 0x11: case 0x13: {   /* a layer's horizontal scroll: written twice */
+        int l = (r - 0x0D) / 2;
+
+        ppu.hofs[l] = (uint16_t)((v << 8 | (ppu.ofs_latch & ~7) | (ppu.hofs_latch & 7)) & 0x3FF);
+        ppu.ofs_latch = v;
+        ppu.hofs_latch = v;
+        break;
+    }
+    case 0x0E: case 0x10: case 0x12: case 0x14: {
+        int l = (r - 0x0E) / 2;
+
+        ppu.vofs[l] = (uint16_t)((v << 8 | ppu.ofs_latch) & 0x3FF);
+        ppu.ofs_latch = v;
+        break;
+    }
+    case 0x32:
+        if (v & 0x20) ppu.fixed[0] = v & 0x1F;
+        if (v & 0x40) ppu.fixed[1] = v & 0x1F;
+        if (v & 0x80) ppu.fixed[2] = v & 0x1F;
+        break;
     case 0x21:
         ppu.cgaddr = v;
         ppu.cg_second = 0;
@@ -166,7 +186,85 @@ int ppu_differs(char *out, unsigned size)
 
 void ppu_to_port(void)
 {
+    ppu_screen(video_screen());
     video_store_write(0, ppu.vram, sizeof ppu.vram);
     video_colours(0, ppu.cgram, 256);
     video_sprite_table(ppu.oam, 0, sizeof ppu.oam);
+}
+
+void ppu_screen(VideoScreen *s)
+{
+    const uint8_t *g = ppu.reg;
+    int l;
+
+    memset(s, 0, sizeof *s);
+    s->brightness = g[0x00] & 0x0F;
+    s->blank = g[0x00] >> 7;
+    s->sprite_sizes = g[0x01] >> 5;
+    s->sprite_gap = (g[0x01] >> 3) & 3;
+    s->sprite_tiles = (uint16_t)((g[0x01] & 7) << 13);
+    s->mode = g[0x05] & 7;
+    s->layer3_priority = (g[0x05] >> 3) & 1;
+    s->mosaic = g[0x06];
+    for (l = 0; l < 4; l++) {
+        VideoLayer *y = &s->layer[l];
+        uint8_t sc = g[0x07 + l], nba = g[0x0B + l / 2];
+
+        y->map = (uint16_t)((sc & 0xFC) << 8);
+        y->map_wide = sc & 1;
+        y->map_tall = (sc >> 1) & 1;
+        y->tiles = (uint16_t)(((l & 1 ? nba >> 4 : nba) & 0x0F) << 12);
+        y->large_tiles = (g[0x05] >> (4 + l)) & 1;
+        y->scroll_x = ppu.hofs[l];
+        y->scroll_y = ppu.vofs[l];
+    }
+    s->window_left[0] = g[0x26], s->window_right[0] = g[0x27];
+    s->window_left[1] = g[0x28], s->window_right[1] = g[0x29];
+    s->window_use[0] = g[0x23] & 0x0F, s->window_use[1] = g[0x23] >> 4;
+    s->window_use[2] = g[0x24] & 0x0F, s->window_use[3] = g[0x24] >> 4;
+    s->window_use[4] = g[0x25] & 0x0F, s->window_use[5] = g[0x25] >> 4;
+    for (l = 0; l < 4; l++)
+        s->window_logic[l] = (g[0x2A] >> (2 * l)) & 3;
+    s->window_logic[4] = g[0x2B] & 3;
+    s->window_logic[5] = (g[0x2B] >> 2) & 3;
+    s->main_layers = g[0x2C] & 0x1F;
+    s->sub_layers = g[0x2D] & 0x1F;
+    s->window_layers = g[0x2E] & 0x1F;
+    s->window_sub_layers = g[0x2F] & 0x1F;
+    s->colour_clip = g[0x30] >> 6;
+    s->colour_prevent = (g[0x30] >> 4) & 3;
+    s->colour_sub_screen = (g[0x30] >> 1) & 1;
+    s->colour_direct = g[0x30] & 1;
+    s->colour_subtract = g[0x31] >> 7;
+    s->colour_half = (g[0x31] >> 6) & 1;
+    s->colour_maths = g[0x31] & 0x3F;
+    s->fixed_colour = (uint16_t)(ppu.fixed[0] | ppu.fixed[1] << 5 | ppu.fixed[2] << 10);
+}
+
+int ppu_screen_differs(char *out, unsigned size)
+{
+    VideoScreen a;
+    const VideoScreen *b = video_screen();
+
+    ppu_screen(&a);
+#define F(f) if (a.f != b->f) { snprintf(out, size, #f " %u, the decomp's %u", (unsigned)b->f, (unsigned)a.f); return 1; }
+    F(brightness) F(blank) F(mode) F(layer3_priority) F(sprite_tiles) F(sprite_gap) F(sprite_sizes)
+    F(main_layers) F(sub_layers) F(window_layers) F(window_sub_layers) F(colour_clip) F(colour_prevent)
+    F(colour_sub_screen) F(colour_direct) F(colour_maths) F(colour_subtract) F(colour_half) F(fixed_colour) F(mosaic)
+    {
+        int l;
+
+        for (l = 0; l < 2; l++) {
+            F(window_left[l]) F(window_right[l])
+        }
+        for (l = 0; l < 6; l++) {
+            F(window_use[l]) F(window_logic[l])
+        }
+        for (l = 0; l < 4; l++) {
+            F(layer[l].map) F(layer[l].map_wide) F(layer[l].map_tall) F(layer[l].tiles) F(layer[l].large_tiles)
+            F(layer[l].scroll_x) F(layer[l].scroll_y)
+        }
+    }
+#undef F
+    return 0;
 }

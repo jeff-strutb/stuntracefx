@@ -77,6 +77,12 @@ static void fresh(void)
         ppu.cgram[i] = (uint8_t)(i & 1 ? rnd() & 0x7F : rnd());
     for (i = 0; i < sizeof ppu.oam; i++)
         ppu.oam[i] = (uint8_t)rnd();
+    for (i = 0; i < 0x34; i++)
+        ppu.reg[i] = (uint8_t)rnd();
+    for (i = 0; i < 4; i++)
+        ppu.hofs[i] = (uint16_t)(rnd() & 0x3FF), ppu.vofs[i] = (uint16_t)(rnd() & 0x3FF);
+    for (i = 0; i < 3; i++)
+        ppu.fixed[i] = (uint8_t)(rnd() & 0x1F);
     ppu.vmain = 0x80;                   /* the game's standing setting: words, a step of 1 */
     ppu_to_port();
     memset(&old_cpu, 0, sizeof old_cpu);
@@ -115,7 +121,7 @@ static void same(void)
             fail("game pak RAM $%04zX = %02X, the decomp's %02X (was %02X)", i, pakram[i], old_p[i], start_p[i]);
             return;
         }
-    if (ppu_differs(what, sizeof what))
+    if (ppu_differs(what, sizeof what) || ppu_screen_differs(what, sizeof what))
         fail("%s", what);
 }
 

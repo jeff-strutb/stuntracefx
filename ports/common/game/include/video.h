@@ -6,9 +6,7 @@
  * of sprites. Those are its data, and the port keeps them as they are;
  * what it does not keep is the machine they were sent to (registers, the
  * transfer channels, the beam's timing). Instead the game states what it
- * wants by meaning, here, and a platform turns the result into pixels
- * (video/render.c draws it in software for any platform that wants
- * that).
+ * wants by meaning, here, and a platform turns the result into pixels.
  *
  * A frame is the settings in force at its top, then changes at given
  * lines (a split screen's lower part, a sky's colours a line at a time,
