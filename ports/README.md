@@ -44,6 +44,6 @@ game; until then the decomp's routine serves those callers.
 | area | routines rewritten | checked |
 |---|---|---|
 | math | all 63 | 11.5 M cases against the decomp, 0 differ |
-| hud | 44 of 47 (not RaceHudSetup, RaceHudSetupTwoPlayers, HudCountMove19EE: they wait on the video interface and the Super FX) | 761 k random states against the decomp and 13,828 of the original's own calls (224 scripts), 0 differ |
+| hud | 44 of 47 (not RaceHudSetup, RaceHudSetupTwoPlayers, HudCountMove19EE: they wait on the video interface and the Super FX) | 761 k random states against the decomp and 14,250 of the original's own calls (228 scripts), 0 differ |
 | audio | the sound queue (3 of 213) | with hud |
 | video | the bar gauges and SpriteYOnScreen | with hud |
