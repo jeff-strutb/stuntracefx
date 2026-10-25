@@ -898,6 +898,12 @@ static void vary_car(uint16_t car)
             FXU(o + 0x24) = (uint16_t)rnd();
         if (!(rnd() & 3))
             FXU(o + 0x12) = (uint16_t)(rnd() & 3);
+        if (!(rnd() & 3)) {             /* right by the car */
+            int j;
+
+            for (j = 0; j < 3; j++)
+                FXW(o + 0x1E + 2 * j) = (int16_t)(FXW(car + 0x1E + 2 * j) + (int)(rnd() % 0x200) - 0x100);
+        }
         if (!(rnd() & 3)) {             /* the car's own model, for what it touches */
             FXU(car + 0x14) = FXU(o + 0x14);
             syn_shape(car);
@@ -942,6 +948,21 @@ static void vary(const RecState *in, void (*old)(void))
             syn_shape(in->r[7]);
     } else {
         vary_car(in->r[8]);
+        if (old == old_abi_FxCarCollide && (rnd() & 3)) {  /* what it touches against its own model */
+            uint16_t car = in->r[8], c = FXU(car + 0x18);
+
+            FXU(car + 0x16) &= (uint16_t)~0x10;
+            FXU(car + 0x1C) &= (uint16_t)~0x40;
+            for (; c; c = FXU(c + 0x0E)) {
+                uint16_t o = FXU(c + 0x0C);
+
+                FXU(o + 0x1A) &= (uint16_t)~2;
+                FXU(o + 0x16) &= (uint16_t)~0x20;
+                if (!FXU(car + 0x14) || FXU(car + 0x14) == SYN_SHAPE)
+                    FXU(car + 0x14) = FXU(o + 0x14);
+            }
+            syn_shape(car);
+        }
         if (old == old_abi_FxWheelUpdate) {
             maybe(in->r[9] + 0x46, 0x200), maybe(in->r[9] + 0x46, 0x80), maybe(in->r[9] + 0x46, 2), maybe(in->r[9] + 0x46, 8);
             maybe(in->r[9] + 0x46, 0x100), maybe(in->r[9] + 0x46, 1);
