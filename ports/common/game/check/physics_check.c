@@ -453,8 +453,7 @@ int main(int argc, char **argv)
         pool(0x1098, 0x1098 + 0x300);
         pool(0x1D70, 0x1D70 + 0x200);
         records((int)(rnd() % 4));
-        if (rnd() & 1)
-            FXU(0x2398) = 0;
+        FXU(0x2398) = (rnd() & 1) ? 0 : (uint16_t)(0x3800 + 2 * (rnd() % 0x400));   /* records are at even addresses */
         old_run(olds[w]);
         ports[w]();
         same_ram();
@@ -476,6 +475,14 @@ int main(int argc, char **argv)
 
         fresh();
         records(3);
+        if (rnd() & 1) {                    /* still, along x, near where they meet */
+            int16_t reach = wrap16(FXW(recs[0] + 0x0C) + FXW(recs[1] + 0x0C) - 0x0294);
+
+            for (k = 0; k < 3; k++)
+                FXW(recs[0] + 0x2E + 2 * k) = FXW(recs[1] + 0x2E + 2 * k) = 0;
+            FXW(recs[0] + 0x22) = FXW(recs[1] + 0x22);
+            FXW(recs[0] + 0x1E) = wrap16(FXW(recs[1] + 0x1E) + (reach < 0 ? 0 : reach) / 2 + within(-6, 6));
+        }
         old_gsu.r[7] = recs[0];
         old_gsu.r[8] = recs[1];
         old_run(old_abi_FxRecordsApart);
