@@ -742,6 +742,10 @@ static void run_collide_model(void) { fx_collide_model(cur.r[9], cur.r[7]); }
 static void run_record_collide(void) { fx_record_collide(cur.r[9]); }
 static void run_mark_touched(void) { fx_object_mark_touched(cur.r[8]); }
 static void run_fall(void) { fx_object_fall(cur.r[8]); }
+static void run_parts(void) { fx_parts_update(cur.r[8]); }
+static void run_wheel(void) { fx_wheel_update(cur.r[8], cur.r[9]); }
+static void run_contacts(void) { fx_contacts_resolve(cur.r[8], cur.r[9]); }
+static void run_contact(void) { uint16_t at = cur.r[3]; fx_contact_resolve(cur.r[9], &at); }
 
 #define BITMAP(name, w, h) \
     static void run_##name(void) { if (cur.rombr == 0x15) fx_draw_bitmap((uint16_t)(cur.r[14] - 0x8000), w, h, cur.r[4], cur.r[2], cur.r[9]); }
@@ -794,6 +798,10 @@ int main(int argc, char **argv)
         {"0491FF.grec", "FxRecordCollide", run_record_collide},
         {"0490E8.grec", "FxObjectMarkTouched", run_mark_touched},
         {"04910A.grec", "FxObjectFall", run_fall},
+        {"04AF54.grec", "FxContactResolve", run_contact},
+        {"04AEFF.grec", "FxContactsResolve", run_contacts},
+        {"04A893.grec", "FxWheelUpdate", run_wheel},
+        {"04A607.grec", "FxPartsUpdate", run_parts},
     };
     const char *only = getenv("ONLY");
 

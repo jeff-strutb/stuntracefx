@@ -58,6 +58,10 @@ void fx_object_mark_touched(uint16_t rec);
 void fx_object_fall(uint16_t rec);
 void fx_car_handler(uint16_t car);
 void fx_physics_program(void);
+uint16_t fx_contacts_resolve(uint16_t car, uint16_t w);
+void fx_contact_resolve(uint16_t w, uint16_t *slot);
+void fx_wheel_update(uint16_t car, uint16_t w);
+void fx_parts_update(uint16_t car);
 
 /* ---- object/fx_record.c ---- */
 uint16_t fx_push_set(int16_t amount);
