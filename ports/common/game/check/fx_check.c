@@ -783,55 +783,67 @@ static void maybe(uint16_t at, uint16_t bits)
    points with random flags (the slot, the variant bit $40, behind $80),
    normals and points, and new lists */
 #define SYN_SHAPE 0xFE00u
-static uint8_t shape_saved[0x100];
+static uint8_t shape_saved[0x40], faces_saved[0xC0], *faces_at;
+
+static void shape_put_back(void)
+{
+    memcpy(rom_copy + (SYN_SHAPE & 0x7FFF), shape_saved, sizeof shape_saved);
+    if (faces_at)
+        memcpy(faces_at, faces_saved, sizeof faces_saved);
+    faces_at = NULL;
+}
 
 static void syn_shape(uint16_t rec)
 {
-    uint8_t *rom = rom_copy + (SYN_SHAPE & 0x7FFF);
-    uint16_t real = FXU(rec + 0x14), at = 0x40;
+    uint8_t *rom = rom_copy + (SYN_SHAPE & 0x7FFF), *faces;
+    uint16_t real = FXU(rec + 0x14), at = 0;
     int k, f;
 
-    if (!real || (real & 0x8000) == 0)
+    if (!real || (real & 0x8000) == 0 || faces_at)
         return;
     for (k = 0; k < 0x0D; k++)
         rom[k] = rom_copy[(real + k) & 0x7FFF];
-    rom[3] = (uint8_t)(SYN_SHAPE + 0x40), rom[4] = (uint8_t)((SYN_SHAPE + 0x40) >> 8);
     if (!rom[0x0C] && !rom[0x0D])
         rom[0x0C] = 1;
-    rom[at++] = 0;
-    rom[at++] = 0;
+    /* the faces in the model's bank (its points' too), at $FE40 */
+    faces_at = rom_copy + (rom[2] & 0x7F) * 0x8000 + ((SYN_SHAPE + 0x40) & 0x7FFF);
+    memcpy(faces_saved, faces_at, sizeof faces_saved);
+    faces = faces_at;
+    rom[3] = (uint8_t)(SYN_SHAPE + 0x40), rom[4] = (uint8_t)((SYN_SHAPE + 0x40) >> 8);
+    faces[at++] = 0;
+    faces[at++] = 0;
     if (rnd() & 1) {
-        rom[at++] = 0x3C;
+        faces[at++] = 0x3C;
         for (k = (int)(rnd() % 4); k > 0; k--) {
             static const uint8_t cmds[3] = {0x40, 0x28, 0x44}, lens[3] = {1, 5, 3};
             int c = (int)(rnd() % 3), j;
 
-            rom[at++] = cmds[c];
+            faces[at++] = cmds[c];
             for (j = 1; j < lens[c]; j++)
-                rom[at++] = (uint8_t)rnd();
+                faces[at++] = (uint8_t)rnd();
         }
-        rom[at++] = (rnd() & 7) ? 1 : 0;
+        faces[at++] = (rnd() & 7) ? 1 : 0;
     } else {
-        rom[at++] = 0x7F;
+        faces[at++] = 0x7F;
     }
-    for (f = (int)(rnd() % 12); f > 0 && at < 0xE0; f--) {
+    for (f = (int)(rnd() % 12); f > 0 && at < 0xA0; f--) {
         int size = 3 + (int)(rnd() % 3), j;
 
         if (!(rnd() % 6)) {
-            rom[at++] = 0x80;
-            rom[at++] = 1;
+            faces[at++] = 0x80;
+            faces[at++] = 1;
             continue;
         }
-        rom[at++] = (uint8_t)size;
-        rom[at++] = (rnd() % 5) ? (uint8_t)((rnd() % 19 + 1) | (rnd() & 1 ? 0x40 : 0) | (rnd() % 4 ? 0 : 0x80) | (rnd() & 1 ? 0x20 : 0)) : 0;
-        rom[at++] = (uint8_t)rnd(), rom[at++] = (uint8_t)rnd();
+        faces[at++] = (uint8_t)size;
+        faces[at++] = (rnd() % 5) ? (uint8_t)((rnd() % 19 + 1) | (rnd() & 1 ? 0x40 : 0) | (rnd() % 4 ? 0 : 0x80) | (rnd() & 1 ? 0x20 : 0)) : 0;
+        faces[at++] = (uint8_t)rnd(), faces[at++] = (uint8_t)rnd();
         for (j = 0; j < 3; j++)
-            rom[at++] = (uint8_t)rnd();
+            faces[at++] = (uint8_t)rnd();
         for (j = 0; j < size; j++)
-            rom[at++] = (uint8_t)(rnd() % 4);
+            faces[at++] = (uint8_t)(rnd() % 4);
     }
-    rom[at++] = 0x80;
-    rom[at++] = 0;
+    faces[at++] = 0x80;
+    faces[at++] = 0;
     FXU(rec + 0x14) = SYN_SHAPE;
     if (rnd() & 1)
         FXU(0x2380) = 0;
@@ -967,7 +979,7 @@ static void phys_variants(const RecState *in, const uint8_t *entry, void (*old)(
         if (sigsetjmp(syn_escape, 1)) {
             phys_runaway++;
             phys_cases++;
-            memcpy(rom_copy + (SYN_SHAPE & 0x7FFF), shape_saved, sizeof shape_saved);
+            shape_put_back();
             continue;
         }
         alarm(5);
@@ -979,13 +991,13 @@ static void phys_variants(const RecState *in, const uint8_t *entry, void (*old)(
             if (++phys_differ <= 10)
                 fprintf(stderr, "%s variant %ld: the port ran away\n", model_current, phys_cases + 1);
             phys_cases++;
-            memcpy(rom_copy + (SYN_SHAPE & 0x7FFF), shape_saved, sizeof shape_saved);
+            shape_put_back();
             continue;
         }
         alarm(5);
         port();
         alarm(0);
-        memcpy(rom_copy + (SYN_SHAPE & 0x7FFF), shape_saved, sizeof shape_saved);
+        shape_put_back();
         phys_cases++;
         for (a = 0; a < 0x10000; a++) {
             if (pakram[a] == phys_old[a] || (a >= in->r[10] && a < in->r[10] + 0x60u && a < 0x0340) || (a >= 0x0240 && a < 0x02A0))
