@@ -743,6 +743,8 @@ static void run_record_collide(void) { fx_record_collide(cur.r[9]); }
 static void run_mark_touched(void) { fx_object_mark_touched(cur.r[8]); }
 static void run_fall(void) { fx_object_fall(cur.r[8]); }
 static void run_parts(void) { fx_parts_update(cur.r[8]); }
+static void run_car(void) { fx_car_handler(cur.r[8]); }
+static void run_car_collide(void) { fx_car_collide(cur.r[8]); }
 static void run_wheel(void) { fx_wheel_update(cur.r[8], cur.r[9]); }
 static void run_contacts(void) { fx_contacts_resolve(cur.r[8], cur.r[9]); }
 static void run_contact(void) { uint16_t at = cur.r[3]; fx_contact_resolve(cur.r[9], &at); }
@@ -802,6 +804,9 @@ int main(int argc, char **argv)
         {"04AEFF.grec", "FxContactsResolve", run_contacts},
         {"04A893.grec", "FxWheelUpdate", run_wheel},
         {"04A607.grec", "FxPartsUpdate", run_parts},
+        {"04BD20.grec", "FxCarCollide", run_car_collide},
+        {"04B1A1.grec", "FxCarHandler", run_car},
+        {"048FCA.grec", "FxPhysicsProgram", fx_physics_program},
     };
     const char *only = getenv("ONLY");
 

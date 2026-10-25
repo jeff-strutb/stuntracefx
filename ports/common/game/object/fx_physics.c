@@ -41,6 +41,22 @@
 #define FX_PARAM_GRIP_AHEAD 0x2676u
 #define FX_PARAM_SLIDE_LIMIT 0x2680u
 #define FX_MATRIX           0x00E4u     /* the object's matrix, nine words */
+#define FX_HIT              0x2334u     /* the hit's push, then the spin: three words each */
+#define FX_SPIN             0x233Au
+#define FX_CAR_POS          0x2354u     /* the car's place and surface bits, as the step began */
+#define FX_PARAM_THRUST_BOOST 0x2658u
+#define FX_PARAM_THRUST     0x265Au
+#define FX_PARAM_REVERSE    0x265Cu
+#define FX_PARAM_WHEEL_48   0x265Eu
+#define FX_PARAM_TURN_GRIP  0x2660u
+#define FX_PARAM_SPIN_DAMP  0x2670u
+#define FX_PARAM_LIFT       0x2672u
+#define FX_PARAM_CURVE_A    0x267Au
+#define FX_PARAM_CURVE_B    0x267Cu
+#define FX_PARAM_SPEED_CAP  0x267Eu
+#define FX_PARAM_JUMP       0x2682u
+#define FX_DRIVE_LEVEL      0x26F4u
+#define FX_CLOSING          0x26F6u
 
 /* ---- a record's collisions ---- */
 
@@ -65,6 +81,21 @@ static int contacts_any_touch(void)
         uint16_t f = FXU(FX_PUSHES + 10 * k);
 
         if (f && !(f >> 8))
+            return 1;
+    }
+    return 0;
+}
+
+/* Whether any of the 19 pushes has flags and a depth from 0 up (not
+   $7D00). */
+static int slots_any_depth(void)
+{
+    int k;
+
+    for (k = 0; k < 19; k++) {
+        uint16_t p = (uint16_t)(FX_PUSHES + 10 * k);
+
+        if (FXU(p) && FXU(p + 2) != 0x7D00 && FXW(p + 2) >= 0)
             return 1;
     }
     return 0;
@@ -382,8 +413,6 @@ static void object_drop(uint16_t rec)
         FXU(rec + 0x0A) = 0;
     }
 }
-
-void fx_car_handler(uint16_t car) { (void)car; }
 
 static void handler(uint16_t at, uint16_t rec)
 {
@@ -874,4 +903,427 @@ void fx_parts_update(uint16_t car)
             fx_wheel_update(car, p);
         FXU(car + 0x92) |= FXU(p + 0x2C);
     }
+}
+
+/* ---- the car ---- */
+
+/* Car `car` against each record it touches: a record that is a box
+   (its +$16 bit 4) pushes it apart (the closing speed into +$94), a model
+   the record collides with pushes it back from its faces, at the place
+   it touched; the push's x and z doubled into the hit. Not a record
+   marked off (+$1A bit 1, +$16 bit 5), nor another car while either is
+   still dropping in (+$5E). */
+void fx_car_collide(uint16_t car)
+{
+    uint16_t c;
+
+    fx_push_turn = 0;
+    fx_hit_depth = 0;
+    fx_push_amount = 0;
+    FXU(FX_CLOSING) = 0;
+    if (!fx_hit_on)
+        FXU(car + 0x94) = 0;
+    c = FXU(car + 0x18);
+    if (!c) {
+        FXU(car + 0x1C) &= (uint16_t)~0x40;
+        return;
+    }
+    if (FXU(car + 0x1C) & 0x40)
+        return;
+    for (; c; c = FXU(c + 0x0E)) {
+        uint16_t other = FXU(c + 0x0C), o16;
+
+        fx_collide_model_at = other;
+        if (FXU(other + 0x1A) & 2)
+            continue;
+        o16 = FXU(other + 0x16);
+        if (o16 & 0x20)
+            continue;
+        if (o16 & 2) {
+            int16_t r = wrap16(0x14 - wrap16(FXW(FX_DRIVE_LEVEL) * 2));
+
+            FXW(car + 0x7C) = r < 0 ? 0 : r;
+            if ((uint16_t)(FXU(car + 0x5E) + FXU(other + 0x5E)))
+                continue;
+        }
+        fx_sums_clear();
+        if ((o16 & 2) && (!(FXU(car + 0x64) & 0x10) || (FXU(other + 0x64) & 3)))
+            FXU(car + 0x2C) |= 4;
+        if (FXU(car + 0x16) & 0x10) {
+            uint16_t at = FX_PUSH;
+
+            fx_collide_push(c, other, car);
+            fx_push_turn = 0;
+            if (fx_push_apply(&at) && FXW(FX_CLOSING) >= 0)
+                FXU(car + 0x94) = (uint16_t)(FXU(car + 0x94) + FXU(FX_CLOSING));
+            FXW(FX_WORLD_SUM) = wrap16(FXW(FX_WORLD_SUM) * 2);
+            FXW(FX_WORLD_SUM + 4) = wrap16(FXW(FX_WORLD_SUM + 4) * 2);
+            FXW(FX_HIT) = wrap16(FXW(FX_HIT) + FXW(FX_WORLD_SUM));
+            FXW(FX_HIT + 4) = wrap16(FXW(FX_HIT + 4) + FXW(FX_WORLD_SUM + 4));
+            FXU(FX_WORLD_SUM + 2) = 0;
+        } else {
+            int16_t zero[3] = {0, 0, 0}, p[3], a, b;
+            int i;
+
+            if (!fx_collide_model(other, car) || !slots_any_depth())
+                continue;
+            fx_pushes_apply();
+            FXW(FX_WORLD_SUM) = wrap16(wrap16(-FXW(FX_WORLD_SUM)) * 2);
+            FXU(FX_WORLD_SUM + 2) = 0;
+            FXW(FX_WORLD_SUM + 4) = wrap16(wrap16(-FXW(FX_WORLD_SUM + 4)) * 2);
+            fx_hit_add_unit(zero);
+            a = div2(div2(FXW(0x0020)));
+            b = div2(div2(FXW(0x0024)));
+            for (i = 0; i < 3; i++)
+                FXW(0x0020 + 2 * i) = p[i] =
+                    wrap16(mul15(a, FXW(FX_MATRIX + 6 * i)) + mul15(0, FXW(FX_MATRIX + 6 * i + 2)) + mul15(b, FXW(FX_MATRIX + 6 * i + 4)));
+            fx_push_at(0, p);
+        }
+    }
+}
+
+/* 04:C72F: the car's speed set along its heading +$24, the length twice
+   word 4 of its segment's entry times the drive level's factor */
+static void car_aim_along_course(uint16_t car)
+{
+    uint16_t n = FXU(car + 0x58), w[4];
+    int16_t len, x, z;
+
+    if (!n)
+        return;
+    fx_course_entry_read(fx_table_entry_words(n), w);
+    len = fmult(wrap16((int16_t)w[3] * 2), (int16_t)rw(4, (uint16_t)(0xC781 + 2 * (FXU(FX_DRIVE_LEVEL) & 0xFF))));
+    fx_angle_vector((uint8_t)(FXU(car + 0x24) >> 8), len, &x, &z);
+    FXW(car + 0x2E) = x;
+    FXU(car + 0x30) = 0;
+    FXW(car + 0x32) = z;
+}
+
+/* 04:C3D5: a car the course drives (+$16 bit 10): held still and caught
+   up behind the others, or (bit 2 of +$70) just placed on its segment.
+   Else, coming back from that, posed and aimed along the course (and the
+   handler ends there, -1); then steered along its segment unless +$2C
+   bit 6, and kept apart from the traffic. Returns 1 when the car goes on
+   to move, 0 when not. */
+static int car_follow_course(uint16_t car)
+{
+    if (FXU(car + 0x16) & 0x400) {
+        if (FXU(car + 0x18))
+            FXU(car + 0x1C) |= 0x40;
+        if (!(FXU(car + 0x1C) & 0x10)) {
+            FXU(car + 0x1C) |= 0x10;
+            FXU(car + 0x72) = 0xFFFF;
+            FXU(car + 0x2E) = FXU(car + 0x30) = FXU(car + 0x32) = 0;
+        }
+        if (!(FXU(car + 0x70) & 4)) {
+            fx_car_catch_up(car);
+            return 0;
+        }
+    } else {
+        if (FXU(car + 0x1C) & 0x10) {
+            FXU(car + 0x1C) &= (uint16_t)~0x10;
+            fx_car_pose(car);
+            car_aim_along_course(car);
+            return -1;
+        }
+        if (!(FXU(car + 0x70) & 4)) {
+            if (!(FXU(car + 0x2C) & 0x40)) {
+                uint16_t at, w3[3], w4[4], n;
+
+                n = fx_course_nearest(FXW(car + 0x1E), FXW(car + 0x20), FXW(car + 0x22), &at, w3);
+                if (n) {
+                    FXU(car + 0x58) = n;
+                    fx_course_next_entry(car, n, &at, w4);
+                    fx_drive_decide(car, (int16_t)w4[0], (int16_t)w4[2], (int16_t)w4[3]);
+                }
+            }
+            fx_traffic_sides(car);
+            return 1;
+        }
+    }
+    {
+        uint16_t at, w3[3];
+
+        FXU(car + 0x58) = fx_course_nearest(FXW(car + 0x1E), FXW(car + 0x20), FXW(car + 0x22), &at, w3);
+    }
+    return 1;
+}
+
+/* the word at `at` made 0 when nearer 0 than `lim` (-lim itself
+   included) */
+static void dead_zone(uint16_t at, int16_t lim)
+{
+    int16_t v = FXW(at);
+
+    if (v >= 0 ? wrap16(v - lim) < 0 : wrap16(v + lim) >= 0)
+        FXU(at) = 0;
+}
+
+/* The record handler of a car: the parameters of its kind read (25 words
+   from bank 9 at +$6E to $2652), then, unless it is held (+$1C bit 5, or
+   the course drives it and it does not move), moved; its matrix from its
+   angles; the forces of the step: the grip of the surface, the steering,
+   the throttle and gears, the boost and jump, its parts and wheels, its
+   collisions, held to the limits; then its speed along its heading
+   (+$4A), and its lap and the distance to the next segment. */
+void fx_car_handler(uint16_t car)
+{
+    uint16_t p, bits, at;
+    int16_t v, thrust, gear_low, speed;
+    int k, r;
+
+    FXU(car + 0x1C) |= 4;
+    for (p = FXU(car + 0x3E); p; p = FXU(p + 0x34))
+        FXU(p + 0x1C) |= 4;
+    if (FXU(0x2472)) {
+        fx_car_pose(car);
+        return;
+    }
+    FXU(car + 0x1C) &= (uint16_t)~2;
+    FXU(car + 0x92) = 0;
+    for (k = 0, at = FXU(car + 0x6E); k < 25; k++, at = (uint16_t)(at + 2))
+        FXU(FX_PARAM_HIT + 2 * k) = rw(9, at);
+    if (FXU(car + 0x1C) & 0x20)
+        goto lap;
+    if (FXU(car + 0x1C) & 0x10) {
+        if (!(FXU(car + 0x64) & 8))
+            goto lap;
+        r = car_follow_course(car);
+        if (r < 0)
+            return;
+        if (!r)
+            goto lap;
+    }
+    fx_record_move(car, 6);
+    FXW(0x0020) = wrap16(-FXW(car + 0x26));
+    FXW(0x0022) = wrap16(-FXW(car + 0x24));
+    FXW(0x0024) = wrap16(-FXW(car + 0x28));
+    fx_matrix_from_angles_at(FX_MATRIX);
+    fx_matrix_transpose_at(FX_MATRIX);
+    if (FXU(car + 0x64) & 8) {
+        r = car_follow_course(car);
+        if (r < 0)
+            return;
+        if (!r)
+            goto lap;
+    } else {
+        uint16_t w3[3];
+
+        FXU(car + 0x58) = fx_course_nearest(FXW(car + 0x1E), FXW(car + 0x20), FXW(car + 0x22), &at, w3);
+    }
+    for (k = 0; k < 6; k++)
+        FXU(FX_HIT + 2 * k) = 0;
+    v = absw(fmult(FXW(car + 0x4A), FXW(FX_PARAM_SPIN_DAMP)));
+    v = wrap16(v + 0x78);
+    if (!(FXU(car + 0x1C) & 8))
+        v = wrap16(v + 0x3C);
+    FXW(FX_HIT + 2) = v;
+    for (k = 0; k < 3; k++)
+        FXU(FX_CAR_POS + 2 * k) = FXU(car + 0x1E + 2 * k);
+    FXU(FX_CAR_POS + 6) = FXU(car + 0x8A);
+    FXU(car + 0x40) = (uint16_t)((FXU(car + 0x40) & ~0x086A) | 0x100);
+    bits = FXU(car + 0x42);
+    {
+        uint16_t side, up;
+
+        if (FXU(car + 0x64) & 8) {
+            side = up = FXU(car + 0x7C) ? 0x3E80 : 0x7D00;
+        } else {
+            uint16_t b = FXU(FX_CAR_POS + 6);
+
+            side = 0x3E80, up = 0x4650;
+            if (!(FXU(car + 0x40) & 0x10)) {
+                if (b & 4)
+                    side = 0x445C, up = 0x4524;
+                else if (b & 1)
+                    side = 0x3E80, up = 0x4074;
+                else if (b & 0x42)
+                    side = 0x4268, up = 0x3A98;
+            }
+        }
+        FXU(FX_CONTACT_FORCE_SIDE) = side;
+        FXU(FX_CONTACT_FORCE_UP) = up;
+    }
+    {
+        int16_t slide = bits & 0x400 ? 0x14A : 0xF0;
+        uint16_t f = FXU(car + 0x40);
+
+        if (!(f & 0x2000) && ((FXU(FX_CAR_POS + 6) & 0x80) || (!(f & 0x10) && FXU(car + 0x46)))
+            && wrap16(absw(FXW(car + 0x4A)) - slide) >= 0)
+            bits = (uint16_t)((bits | 0x40) & ~0x430);
+    }
+    if (wrap16(FXW(car + 0x44) - 3) >= 0) {
+        bits &= (uint16_t)~0x430;
+        FXU(car + 0x40) |= 8;
+    }
+    if (FXU(car + 0x54) || (FXU(car + 0x40) & 4))
+        bits &= (uint16_t)~0x43F;
+    if (FXU(car + 0x5E)) {
+        FXU(car + 0x5E)--;
+    } else if ((bits & 0x80) && FXU(FX_PARAM_LIFT)) {
+        FXU(FX_HIT + 2) = (uint16_t)(FXU(FX_HIT + 2) + FXU(FX_PARAM_LIFT));
+        FXU(car + 0x5E) = 0x20;
+    }
+    v = fx_steer_from_input(car, bits);
+    if (FXU(car + 0x70) & 8)
+        v = wrap16(v * 2);
+    FXW(car + 0x3A) = v;
+    thrust = bits & 0x20 ? wrap16(-FXW(FX_PARAM_REVERSE)) : 0;
+    if (bits & 0x400) {
+        int16_t left = FXW(car + 0x6A);
+
+        thrust = FXW(FX_PARAM_THRUST_BOOST);
+        if (left) {
+            if (!(FXU(car + 0x40) & 0x2000)) {
+                left = wrap16(left - FXW(FX_PARAM_SPEED_CAP));
+                if (left < 0)
+                    left = 0;
+                if (!(FXU(0x26F2) & 0x200))
+                    FXW(car + 0x6A) = left;
+            }
+            thrust = FXW(FX_PARAM_THRUST);
+        }
+    } else if (bits & 0x10) {
+        thrust = FXW(FX_PARAM_THRUST_BOOST);
+    }
+    if (FXU(car + 0x40) & 0x2000)
+        thrust = wrap16(thrust * 4);
+    FXW(car + 0x78) = thrust;
+    /* the gear: the speed against the curve's steps */
+    speed = FXW(car + 0x4A);
+    gear_low = 0;
+    {
+        uint16_t gear = 1, c = FXU(FX_PARAM_CURVE_A);
+        int16_t step;
+
+        if (speed < 0) {
+            if (bits & 0x410) {
+                gear_low = 0x0F;
+                goto geared;
+            }
+            gear = 0;
+        } else {
+            for (;;) {
+                int16_t w = (int16_t)rw(9, c);
+
+                c = (uint16_t)(c + 2);
+                if (!w) {
+                    gear--;
+                    break;
+                }
+                if (wrap16(w - speed) >= 0)
+                    break;
+                gear_low = w;
+                gear++;
+            }
+        }
+        if (!(FXU(0x2470) & 3) && FXU(car + 0x4E) != gear) {
+            FXU(car + 0x4E) = gear;
+            if (gear == 4)
+                FXU(car + 0x40) |= 2;
+        }
+        c = (uint16_t)(FXU(FX_PARAM_CURVE_B) + (int16_t)((int8_t)(FXU(car + 0x4E) - 1) * 0x11));
+        step = fmult(wrap16(wrap16(absw(speed) - gear_low) * 2), (int16_t)(uint16_t)(rb(9, c) << 8));
+        if (wrap16(step - 0x0F) >= 0)
+            step = 0x0F;
+        gear_low = step;
+        c = (uint16_t)(c + 1 + step);
+        thrust = fmult(wrap16(thrust * 2), (int16_t)(uint16_t)(rb(9, c) << 8));
+    }
+geared:
+    FXW(car + 0x3C) = thrust;
+    FXW(car + 0x50) = wrap16(div2(div2(wrap16(wrap16(gear_low * 0x40) - FXW(car + 0x50)))) + FXW(car + 0x50));
+    if (bits & 0x800) {
+        int16_t a[3] = {0, 0, 0x258}, zero[3] = {0, 0, 0};
+
+        fx_sums_push_local(a);
+        fx_sums_rotate_local();
+        fx_hit_add_scaled(zero, 0x7FFF);
+    }
+    {
+        int16_t turn = 0;
+
+        if (!(bits & 0x410)) {
+            turn = absw(wrap16(speed * 8));
+            turn = fmult(wrap16(turn * 2), FXW(FX_PARAM_TURN_GRIP));
+            if (wrap16(turn - 0x800) < 0)
+                turn = 0x800;
+        }
+        if ((bits & 0x40) && speed >= 0) {
+            if (wrap16(0xC8 - speed) < 0)
+                FXU(car + 0x40) |= 0x800;
+            turn = FXW(FX_PARAM_WHEEL_48);
+        }
+        FXW(car + 0x48) = turn;
+    }
+    FXU(car + 0x42) = bits;
+    FXU(car + 0x2C) = 0x40;
+    fx_car_move_parts(car);
+    fx_parts_update(car);
+    fx_record_hold_y(car);
+    bits = FXU(car + 0x42);
+    if ((bits & 0x400) && FXU(FX_PARAM_JUMP) && wrap16(FXW(car + 0x4E) - 2) < 0
+        && wrap16(FXW(car + 0x26) - (int16_t)0xEAAB) >= 0)
+        FXW(FX_SPIN + 2) = wrap16(FXW(FX_SPIN + 2) - FXW(FX_PARAM_JUMP));
+    fx_car_collide(car);
+    fx_record_alignment(car);
+    fx_car_hit(car);
+    if (FXU(car + 0x70) & 0x80) {
+        int keep = 0;
+
+        if (FXU(car + 0x58) && (FXU(car + 0x8A) & 0x100)) {
+            uint16_t ahead = fx_record_heading_ahead(car), h = FXU(car + 0x24);
+
+            FXW(car + 0x24) = wrap16(div2(div2(wrap16((int16_t)ahead - (int16_t)h))) + (int16_t)h);
+            FXU(FX_SPIN) = 0;
+            FXU(car + 0x34) = 0;
+            keep = div2((int8_t)(uint8_t)((uint16_t)(h - ahead) >> 8)) != 0;
+        }
+        if (!keep)
+            FXU(car + 0x70) &= (uint16_t)~0x80;
+    }
+    FXW(FX_HIT + 2) = hold(FXW(FX_HIT + 2), 0x0BB8);
+    FXW(FX_SPIN + 4) = hold(FXW(FX_SPIN + 4), 0x0BB8);
+    FXW(FX_SPIN + 2) = hold(FXW(FX_SPIN + 2), 0x0BB8);
+    FXW(FX_SPIN) = hold(FXW(FX_SPIN), 0x0BB8);
+    for (k = 0; k < 2; k++) {
+        uint16_t a = (uint16_t)(car + (k ? 0x26 : 0x28)), s = (uint16_t)(car + (k ? 0x36 : 0x38));
+
+        v = FXW(a);
+        if (v >= 0 ? wrap16(v - 0x2000) >= 0 : wrap16(v + 0x2000) < 0) {
+            FXU(a) = v >= 0 ? 0x2000 : 0xE000;
+            FXU(s) = 0;
+        }
+    }
+    if (wrap16(absw(FXW(car + 0x4A)) - 0x258) >= 0) {
+        FXU(FX_HIT) = FXU(FX_HIT + 4) = 0;
+        FXW(car + 0x2E) = wrap16(FXW(car + 0x2E) - div2(div2(div2(FXW(car + 0x2E)))));
+        FXW(car + 0x32) = wrap16(FXW(car + 0x32) - div2(div2(div2(FXW(car + 0x32)))));
+    }
+    for (k = 0; k < 6; k++)
+        FXU(car + 0x2E + 2 * k) = (uint16_t)(FXU(FX_HIT + 2 * k) + FXU(car + 0x2E + 2 * k));
+    if (!(FXU(car + 0x64) & 8)) {
+        if (!(FXU(car + 0x42) & 0x430) && !(FXU(car + 0x2C) & 0x400)) {
+            dead_zone((uint16_t)(car + 0x2E), 0xC8);
+            dead_zone((uint16_t)(car + 0x32), 0xC8);
+            dead_zone((uint16_t)(car + 0x30), 0x32);
+        }
+        dead_zone((uint16_t)(car + 0x34), 0x40);
+        dead_zone((uint16_t)(car + 0x36), 0x40);
+        dead_zone((uint16_t)(car + 0x38), 0x40);
+    }
+    FXW(car + 0x4A) = div2(div2(div2(wrap16(wrap16(mul15(FXW(car + 0x2E), FXW(FX_MATRIX + 12)) + mul15(FXW(car + 0x30), FXW(FX_MATRIX + 14)))
+                                            + mul15(FXW(car + 0x32), FXW(FX_MATRIX + 16))))));
+    {
+        int16_t grip = FXW(car + 0x50);
+
+        if (wrap16(FXW(car + 0x44) - 4) >= 0) {
+            grip = wrap16(grip * 2);
+            FXW(car + 0x28) = wrap16(FXW(car + 0x28) - div2(div2(FXW(car + 0x28))));
+        }
+        FXW(car + 0x52) = wrap16(div2(wrap16(grip - FXW(car + 0x52))) + FXW(car + 0x52));
+    }
+lap:
+    fx_lap_segment(car);
+    FXW(car + 0x84) = fx_course_next_distance(car, FXU(car + 0x86));
 }
