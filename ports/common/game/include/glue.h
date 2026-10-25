@@ -37,5 +37,25 @@ void gsu_glyphs_three(void);
 void gsu_glyphs_five(void);
 int gsu_sprite_fa1b_from_tables(void);
 void gsu_sprites_fa5a_three(void);
+void gsu_sprites_fa5a_from_tables(void);
+void gsu_sprites_fa5a_six(void);
+void gsu_sprites_fa5a_six_left(void);
+void gsu_sprites_fa5a_three_shifted(void);
+int gsu_sprite_fa35_from_tables(void);
+void gsu_glyphs_two_lines(uint16_t rows);
+void gsu_glyph_rows_at_32(uint16_t rows);
+void gsu_glyph_rows_at_56(uint16_t rows);
+void gsu_glyphs_six(void);
+void gsu_pieces_step_10cb(void);
+void big_sprites_count_draw(void);
+void big_sprites_row(int six);
+void glyph_row_y60(int from);
+void glyph_list_draw(void);
+void glyph_sprite_draw(uint16_t k);
+void glyph_sprites_init(void);
+void glyph_list_message_and_time(uint16_t m);
+void hud_hold_draw(void);
+uint16_t object_length_and_angle(uint16_t obj);
+uint16_t object_angle(uint16_t obj);
 
 #endif

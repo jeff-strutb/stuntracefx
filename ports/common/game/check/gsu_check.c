@@ -58,6 +58,12 @@ OLD(GsuCF42ToC000) OLD(GsuCF42To4000) OLD(GsuCF42To3000) OLD(ObjectGsu80BC) OLD(
 OLD(Gsu8325) OLD(ViewMatrixUpdateAndSave) OLD(ViewReset) OLD(ViewUpdateAndGsuAEF8) OLD(GsuEE88Ramp) OLD(GsuF329Entry)
 OLD(GsuF329Sequence) OLD(GsuF441Player1) OLD(GsuF441Player2) OLD(GsuF0A5OrF0B4) OLD(GsuEEF5OrEFCD) OLD(GsuDigitPair0E74)
 OLD(GsuF15BThree) OLD(GsuF15BFive) OLD(GsuFA1BFromTables) OLD(GsuFA5AThree)
+OLD(FxGlyph16RowsFromBottom) OLD(FxSprite24x40) OLD(FxScaledSprite12)
+OLD(GsuFA5AFromTables) OLD(GsuFA5ASix) OLD(GsuFA5ASixLeft) OLD(GsuFA5AThreeShifted) OLD(GsuFA35FromTables) OLD(GsuF15BTwoLines)
+OLD(GlyphRowsAt32) OLD(GlyphRowsAt56) OLD(HudSixGlyphs) OLD(GsuPiecesStep10CB) OLD(BigSpritesCountDraw) OLD(BigSpritesRow6)
+OLD(BigSpritesRow5) OLD(GlyphRowY60From0) OLD(GlyphRowY60From1) OLD(GlyphRowY60From2) OLD(GlyphRowY60From3)
+OLD(GlyphRowY60From4) OLD(GlyphRowY60From5) OLD(GlyphListDraw) OLD(GlyphSpriteDraw) OLD(GlyphSpritesInit)
+OLD(GlyphListMessageAndTime) OLD(HudHoldDraw) OLD(ObjectGsu80BCThen81E3) OLD(ObjectGsu81E3)
 
 static uint64_t rng = 0x6A09E667F3BCC909ull;
 
@@ -93,6 +99,9 @@ static const struct {
     {0x07F15B, old_abi_FxGlyph16RowsFromTop},
     {0x07FA1B, old_abi_FxScaledSprite13},
     {0x07FA5A, old_abi_FxScaledSpriteEighth},
+    {0x07F121, old_abi_FxGlyph16RowsFromBottom},
+    {0x07FA88, old_abi_FxSprite24x40},
+    {0x07FA35, old_abi_FxScaledSprite12},
 };
 
 static void old_start(uint8_t bank, uint16_t start)
@@ -142,7 +151,10 @@ static void fresh(void)
     old_cpu.db = (rnd() & 1) ? 0x7E : 0x00;
     old_cpu.p = (uint8_t)(rnd() & (P_N | P_V | P_Z | P_C | P_I));
     memset(&old_gsu, 0, sizeof old_gsu);
-    old_gsu.scbr = fx_screen.base = (uint8_t)(rnd() & 1 ? 0x0B : rnd() % 0x30);
+    /* the game's screens: the race's at $2C00 (4 or 8 bits a pixel), the
+       menus' at $9400 (4 bits) */
+    old_gsu.scbr = fx_screen.base = (uint8_t)(rnd() & 1 ? 0x0B : 0x25);
+    W8(0x0374) = fx_screen.base == 0x25 || (rnd() & 1) ? 0x01 : 0x03;
     fx_screen.mode = 0, fx_screen.height = 0;
     {
         static const uint8_t zero[8];
@@ -178,9 +190,11 @@ static void old_run(void (*f)(void))
     memcpy(pakram, start_p, sizeof pakram);
 }
 
+static int scratch;                 /* the case's routines count in direct page $F1-$F4 */
+
 static int counted(size_t i)
 {
-    return i == 0xFE || i == 0xFF || i == 0x1F21 || i == 0x1F22;
+    return i == 0xFE || i == 0xFF || i == 0x1F21 || i == 0x1F22 || (scratch && i >= 0xF1 && i <= 0xF4);
 }
 
 static void same_ram(void)
@@ -409,7 +423,7 @@ int main(int argc, char **argv)
     }
     CASE("HUD glyphs and pictures") {
         int w = (int)(rnd() % 12);
-        uint16_t a = (uint16_t)rnd(), y = (uint16_t)(rnd() % 0x1F00);
+        uint16_t a = (uint16_t)rnd(), y = (uint16_t)(0x0300 + rnd() % 0x1C00);   /* digits in work RAM, past the direct page */
         void (*const f[12])(void) = {old_abi_GsuF329Entry, old_abi_GsuF329Sequence, old_abi_GsuF441Player1,
                                      old_abi_GsuF441Player2, old_abi_GsuF0A5OrF0B4, old_abi_GsuEEF5OrEFCD,
                                      old_abi_GsuDigitPair0E74, old_abi_GsuF15BThree, old_abi_GsuF15BFive,
@@ -444,6 +458,82 @@ int main(int argc, char **argv)
         case 10: gsu_sprites_fa5a_three(); break;
         }
         same_ram();
+    }
+
+    CASE("HUD sprites, glyph rows and lists") {
+        int w = (int)(rnd() % 26);
+        uint16_t a = (uint16_t)(rnd() % 0x40), k = (uint16_t)(rnd() % 16);
+        void (*const f[26])(void) = {old_abi_GsuFA5AFromTables, old_abi_GsuFA5ASix, old_abi_GsuFA5ASixLeft,
+            old_abi_GsuFA5AThreeShifted, old_abi_GsuFA35FromTables, old_abi_GsuF15BTwoLines, old_abi_GlyphRowsAt32,
+            old_abi_GlyphRowsAt56, old_abi_HudSixGlyphs, old_abi_GsuPiecesStep10CB, old_abi_BigSpritesCountDraw,
+            old_abi_BigSpritesRow6, old_abi_BigSpritesRow5, old_abi_GlyphRowY60From0, old_abi_GlyphRowY60From1,
+            old_abi_GlyphRowY60From2, old_abi_GlyphRowY60From3, old_abi_GlyphRowY60From4, old_abi_GlyphRowY60From5,
+            old_abi_GlyphListDraw, old_abi_GlyphSpriteDraw, old_abi_GlyphSpritesInit, old_abi_GlyphListMessageAndTime,
+            old_abi_HudHoldDraw, old_abi_GsuFA5AFromTables, old_abi_GsuFA5ASix};
+        int e;
+
+        fresh();
+        GUARD;
+        scratch = 1;
+        old_cpu.db = (w >= 13 && w <= 19) || w == 21 || w == 22 ? 0x04 : 0x07;
+        old_cpu.p &= (uint8_t)~(P_M | P_X);
+        W16(0x0D6B) = (uint16_t)(rnd() % 6 * 2);
+        W16(0x0D6D) = (uint16_t)(rnd() % 0xE0);
+        W16(0x0D6F) = (uint16_t)(rnd() % 0xA0);
+        if (rnd() & 1)
+            W8(0x0E5C) = 0;
+        if (rnd() & 1)
+            W16(0x0E5D) = 0;
+        W8(0x1160) = (uint8_t)((rnd() & 3) ? rnd() % 13 : rnd());
+        if (rnd() & 1)
+            W16(0x10CB) = (uint16_t)(rnd() % 0x18);
+        W16(0x10E4) = (uint16_t)(rnd() % 12);
+        W16(0x10E6) = (uint16_t)(rnd() % 20);
+        for (e = 0; e < 40; e += 2)
+            if (rnd() & 1)
+                W16(0x110E + e) = 0;
+        old_cpu.a = a;
+        old_cpu.x = w == 20 ? (uint16_t)(2 * k) : (uint16_t)(2 * (rnd() % 10));
+        k = old_cpu.x;
+        old_run(f[w]);
+        switch (w) {
+        case 0: case 24: gsu_sprites_fa5a_from_tables(); break;
+        case 1: case 25: gsu_sprites_fa5a_six(); break;
+        case 2: gsu_sprites_fa5a_six_left(); break;
+        case 3: gsu_sprites_fa5a_three_shifted(); break;
+        case 4: gsu_sprite_fa35_from_tables(); break;
+        case 5: gsu_glyphs_two_lines(a); break;
+        case 6: gsu_glyph_rows_at_32(a); break;
+        case 7: gsu_glyph_rows_at_56(a); break;
+        case 8: gsu_glyphs_six(); break;
+        case 9: gsu_pieces_step_10cb(); break;
+        case 10: big_sprites_count_draw(); break;
+        case 11: big_sprites_row(1); break;
+        case 12: big_sprites_row(0); break;
+        case 13: case 14: case 15: case 16: case 17: case 18: glyph_row_y60(w - 13); break;
+        case 19: glyph_list_draw(); break;
+        case 20: glyph_sprite_draw((uint16_t)(k / 2)); break;
+        case 21: glyph_sprites_init(); break;
+        case 22: glyph_list_message_and_time((uint16_t)(k / 2)); break;
+        case 23: hud_hold_draw(); break;
+        }
+        same_ram();
+        scratch = 0;
+    }
+    CASE("ObjectGsu80BCThen81E3 / ObjectGsu81E3") {
+        int w = (int)(rnd() & 1);
+        uint16_t obj = (uint16_t)(rnd() % 0x80 * 2), v;
+
+        fresh();
+        GUARD;
+        old_cpu.db = 0x7E;
+        old_cpu.p &= (uint8_t)~(P_M | P_X);
+        old_cpu.x = obj;
+        old_run(w ? old_abi_ObjectGsu81E3 : old_abi_ObjectGsu80BCThen81E3);
+        v = w ? object_angle(obj) : object_length_and_angle(obj);
+        same_ram();
+        if (v != old_cpu.a)
+            fail("A %04X, the decomp's %04X", v, old_cpu.a);
     }
 
     printf("gsu_check: %ld cases, %ld differ, %ld skipped (ran away)\n", cases, failed, skipped);
