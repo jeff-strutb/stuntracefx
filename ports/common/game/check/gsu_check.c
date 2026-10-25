@@ -1,4 +1,4 @@
-/* old: gsu/run.c gsu/params.c gsu/screen.c gsu/programs.c render/unused.c render/matrix.c render/arith.c render/angle.c math/fx_math.c gsu/fx_init.c data/unpack.c render/sort.c render/hud.c render/points.c render/fx_points.c render/project.c render/table.c
+/* old: gsu/run.c gsu/params.c gsu/screen.c gsu/programs.c render/unused.c render/matrix.c render/arith.c render/angle.c math/fx_math.c gsu/fx_init.c data/unpack.c render/sort.c render/hud.c render/points.c render/fx_points.c render/project.c render/table.c hud/lap_time.c audio/sound_queue.c
  *
  * gsu_check.c: the port's S-CPU side of the Super FX (gsu/glue.c) against
  * the decomp's, on random states. The decomp's S-CPU code starts the
@@ -64,6 +64,10 @@ OLD(GlyphRowsAt32) OLD(GlyphRowsAt56) OLD(HudSixGlyphs) OLD(GsuPiecesStep10CB) O
 OLD(BigSpritesRow5) OLD(GlyphRowY60From0) OLD(GlyphRowY60From1) OLD(GlyphRowY60From2) OLD(GlyphRowY60From3)
 OLD(GlyphRowY60From4) OLD(GlyphRowY60From5) OLD(GlyphListDraw) OLD(GlyphSpriteDraw) OLD(GlyphSpritesInit)
 OLD(GlyphListMessageAndTime) OLD(HudHoldDraw) OLD(ObjectGsu80BCThen81E3) OLD(ObjectGsu81E3)
+OLD(FxGlyph8x8) OLD(FxGlyph24x32Bank04) OLD(FxGlyph16x32) OLD(FxSprite16x32) OLD(FxGlyph16x16)
+OLD(GlyphWordAt1C28) OLD(GlyphGrid1A) OLD(GlyphGrid1D) OLD(GlyphSlideThree) OLD(GlyphSpritesDrawAll) OLD(HudTimesPackedDraw)
+OLD(HudLapDigitsDraw) OLD(HudLeadWordDraw) OLD(HudTimesDraw) OLD(HudBlankDraw) OLD(GlyphSpritesSlideOut) OLD(GlyphSpritesSlideIn)
+OLD(GsuF15BFourA) OLD(GsuF15BFourB) OLD(BigSpritesNine) OLD(BigSpritesRow6B)
 
 static uint64_t rng = 0x6A09E667F3BCC909ull;
 
@@ -102,6 +106,11 @@ static const struct {
     {0x07F121, old_abi_FxGlyph16RowsFromBottom},
     {0x07FA88, old_abi_FxSprite24x40},
     {0x07FA35, old_abi_FxScaledSprite12},
+    {0x07F280, old_abi_FxGlyph8x8},
+    {0x07F3D2, old_abi_FxGlyph24x32Bank04},
+    {0x07F6DF, old_abi_FxGlyph16x32},
+    {0x07FAB0, old_abi_FxSprite16x32},
+    {0x07F5C9, old_abi_FxGlyph16x16},
 };
 
 static void old_start(uint8_t bank, uint16_t start)
@@ -508,8 +517,8 @@ int main(int argc, char **argv)
         case 8: gsu_glyphs_six(); break;
         case 9: gsu_pieces_step_10cb(); break;
         case 10: big_sprites_count_draw(); break;
-        case 11: big_sprites_row(1); break;
-        case 12: big_sprites_row(0); break;
+        case 11: big_sprites_row6(); break;
+        case 12: big_sprites_row5(); break;
         case 13: case 14: case 15: case 16: case 17: case 18: glyph_row_y60(w - 13); break;
         case 19: glyph_list_draw(); break;
         case 20: glyph_sprite_draw((uint16_t)(k / 2)); break;
@@ -534,6 +543,82 @@ int main(int argc, char **argv)
         same_ram();
         if (v != old_cpu.a)
             fail("A %04X, the decomp's %04X", v, old_cpu.a);
+    }
+
+    CASE("HUD words, grids, times and slides") {
+        int w = (int)(rnd() % 17), e;
+        void (*const f[17])(void) = {old_abi_GlyphWordAt1C28, old_abi_GlyphGrid1A, old_abi_GlyphGrid1D,
+            old_abi_GlyphSlideThree, old_abi_GlyphSpritesDrawAll, old_abi_HudTimesPackedDraw, old_abi_HudLapDigitsDraw,
+            old_abi_HudLeadWordDraw, old_abi_HudTimesDraw, old_abi_HudBlankDraw, old_abi_GlyphSpritesSlideOut,
+            old_abi_GlyphSpritesSlideIn, old_abi_GsuF15BFourA, old_abi_GsuF15BFourB, old_abi_BigSpritesNine,
+            old_abi_BigSpritesRow6B, old_abi_HudTimesDraw};
+
+        fresh();
+        GUARD;
+        scratch = 1;
+        old_cpu.db = 0x07;
+        old_cpu.p &= (uint8_t)~(P_M | P_X);
+        for (e = 0; e < 48; e += 2) {           /* the glyph sprites on the screen */
+            W16(0x0FB0 + e) = (uint16_t)(rnd() % 0xE0);
+            W16(0x0FE0 + e) = (uint16_t)(rnd() % 0xA0);
+        }
+        for (e = 0; e < 6; e += 2) {
+            W16(0x1040 + e) = (uint16_t)(rnd() % 0x20);
+            W16(0x1070 + e) = (uint16_t)(rnd() % 0x40);
+            if (rnd() & 1)
+                W16(0x1010 + e) = (uint16_t)(0x8000 + 6 * (rnd() % 3));
+        }
+        if (w == 3 && (rnd() & 1))             /* a slide landing on its target */
+            for (e = 0; e < 6; e += 2)
+                W16(0x1070 + e) = (uint16_t)(W16(0x0FB0 + e) - W16(0x1040 + e));
+        if (w == 11 && (rnd() & 1)) {           /* both words arriving */
+            W16(0x0FB0) = (uint16_t)(0x0034 + rnd() % 0x17);
+            W16(0x0FB2) = (uint16_t)(0x0024 - rnd() % 0x17);
+            W8(0x0E55) = 0x10;
+            current_player = (uint8_t)(rnd() & 1);
+            sound_muted = 0;
+            sound_port0_count = (uint8_t)(rnd() % 8);
+            sound_port0_head = (uint8_t)(rnd() & 0x0F);
+        } else if (w == 10 || w == 11) {        /* the two words about their ends */
+            W16(0x0FB0) = (uint16_t)((rnd() & 1) ? 0xFF98 + rnd() % 0x30 : 0x0034 + rnd() % 0x30);
+            W16(0x0FB2) = (uint16_t)((rnd() & 1) ? 0x00D0 - rnd() % 0x30 : 0x0024 - rnd() % 0x30);
+            W8(0x0E55) = (uint8_t)((rnd() & 1) ? 0x10 : rnd() % 3);
+        }
+        if (rnd() & 1) W16(0x0FAE) = 0;
+        if (rnd() & 1) W8(0x10CD) = 0;
+        if (rnd() & 1) W16(0x0E5D) = 0x0001;
+        if (rnd() & 1) W16(0x0D2B) = 3;
+        if (rnd() & 1) W16(0x0D4C) = 0;
+        if (rnd() & 3) W16(0x0F2B) = (rnd() & 1) ? 0xFFFF : (uint16_t)rnd();
+        if (rnd() & 1) W8(0x0E57) = 0;
+        W8(0x0FA3) = (uint8_t)((rnd() % 3) - 1);
+        if (rnd() & 1) W16(0x1163) = 0xFFFF;
+        if (rnd() & 1) W16(0x1161) = 0xFFFF;
+        for (e = 0; e < 10; e++)
+            W8(0x0F64 + e) = (uint8_t)((rnd() & 3) ? rnd() % 10 : rnd());
+        if (rnd() & 1) W8(0x0E5C) = 0;
+        if (rnd() & 1) W16(0x1F71) = (uint16_t)(rnd() % 4);
+        old_run(f[w]);
+        switch (w) {
+        case 0: glyph_word_at_1c28(); break;
+        case 1: glyph_grid_1a(); break;
+        case 2: glyph_grid_1d(); break;
+        case 3: glyph_slide_three(); break;
+        case 4: glyph_sprites_draw_all(); break;
+        case 5: hud_times_packed_draw(); break;
+        case 6: hud_lap_digits_draw(); break;
+        case 7: hud_lead_word_draw(); break;
+        case 8: case 16: hud_times_draw(); break;
+        case 9: hud_blank_draw(); break;
+        case 10: glyph_sprites_slide_out(); break;
+        case 11: glyph_sprites_slide_in(); break;
+        case 12: gsu_glyphs_four(0); break;
+        case 13: gsu_glyphs_four(1); break;
+        case 14: big_sprites_nine(); break;
+        case 15: big_sprites_row6b(); break;
+        }
+        same_ram();
+        scratch = 0;
     }
 
     printf("gsu_check: %ld cases, %ld differ, %ld skipped (ran away)\n", cases, failed, skipped);
