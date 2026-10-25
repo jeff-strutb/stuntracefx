@@ -31,6 +31,19 @@ static inline int16_t wrap16(int32_t v)
     return (int16_t)(uint16_t)v;
 }
 
+/* ---- bcd.c: decimal mode ---- */
+
+/* An 8-bit add or subtract in the S-CPU's decimal mode, carry in and out
+   (out: set on a carry, or on no borrow). */
+uint8_t bcd_add8(uint8_t a, uint8_t m, bool *carry);
+uint8_t bcd_sub8(uint8_t a, uint8_t m, bool *carry);
+
+/* A binary value as four BCD digits, each counted as the original counts
+   it (a value of 10000 or more puts 10 or more in the top digit), and back
+   (each digit taken at its weight, 10-15 included). */
+uint16_t binary_to_bcd(uint16_t v);
+uint16_t bcd_to_binary(uint16_t v);
+
 /* ---- trig.c: the sine tables ---- */
 
 /* The S-CPU's sine and cosine of an 8-bit angle as signed bytes (127 is
