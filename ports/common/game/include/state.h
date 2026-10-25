@@ -20,6 +20,7 @@
 
 extern uint8_t wram[0x20000];
 extern uint8_t pakram[0x10000];
+uint8_t bank_byte(uint8_t bank, uint16_t at);     /* a byte as the game reads it in a bank */
 
 #if defined(_MSC_VER)
 typedef __unaligned uint16_t w16;

@@ -295,6 +295,80 @@ int main(int argc, char **argv)
         same();
     }
 
+    CASE("the per-line tables") {
+        static const uint8_t kinds[][3] = {     /* mode, target: the game's tables, then any */
+            {0x00, 0x2C, 0}, {0x00, 0x21, 0}, {0x42, 0x22, 1}, {0x44, 0x26, 1}, {0x00, 0x32, 0},
+            {0x01, 0x0D, 0}, {0x03, 0x0D, 0}, {0x02, 0x22, 0}, {0x04, 0x26, 0}, {0x00, 0x00, 0},
+            {0x05, 0x0D, 0}, {0x06, 0x22, 0}, {0x47, 0x0F, 1}};
+        static VideoScreen theirs[VIDEO_LINES];
+        static uint16_t their_colours[VIDEO_LINES][256];
+        int c, line, failed_line = 0;
+        char what[160];
+
+        fresh();
+        old_run(old_abi_OamDmaAll);             /* (only to take the RAM) */
+        memcpy(wram, old_w, sizeof wram);
+        ppu.hdmaen = (uint8_t)(rnd() & 0x3F);
+        for (c = 0; c < 8; c++) {
+            const uint8_t *k = kinds[rnd() % (sizeof kinds / sizeof kinds[0])];
+            uint16_t at = (uint16_t)(0x2000 + 0x0C00 * c + rnd() % 0x80), p = at, data = (uint16_t)(0x9000 + 0x0400 * c);
+            uint8_t *d = &ppu.dma[c * 0x10];
+            VideoLineTable t;
+            int e, lines = 0;
+            static const unsigned lengths[8] = {1, 2, 2, 4, 4, 4, 2, 4};
+
+            d[0] = k[0], d[1] = (uint8_t)k[1], d[2] = (uint8_t)at, d[3] = (uint8_t)(at >> 8), d[4] = 0x7F, d[7] = 0x7F;
+            for (e = 0; lines < 230 && e < 40; e++) {   /* entries: a count, then the values or their address */
+                uint8_t n = (uint8_t)(1 + rnd() % 0x50), rep = (uint8_t)(rnd() & 0x80);
+                unsigned v, nv = lengths[k[0] & 7] * (rep ? n : 1);
+
+                wram[0x10000 + p++] = (uint8_t)(n | rep);
+                if (k[2]) {
+                    wram[0x10000 + p++] = (uint8_t)data, wram[0x10000 + p++] = (uint8_t)(data >> 8);
+                    for (v = 0; v < nv; v++)
+                        wram[0x10000 + (uint16_t)(data + v)] = (uint8_t)rnd();
+                    data = (uint16_t)(data + nv);
+                } else {
+                    for (v = 0; v < nv; v++)
+                        wram[0x10000 + p++] = (uint8_t)rnd();
+                }
+                lines += n;
+            }
+            if (rnd() & 1)
+                wram[0x10000 + p] = 0;          /* an end, or the RAM after it */
+            t.mode = k[0] & 7, t.indirect = (k[0] >> 6) & 1, t.target = k[1], t.bank = 0x7F, t.indirect_bank = 0x7F, t.at = at;
+            video_line_table(c, &t);
+        }
+        {
+            static Ppu before;
+
+            before = ppu;
+            ppu_frame_lines(theirs, their_colours);
+            ppu = before;
+            video_frame_begin();
+            ppu_to_port();
+        }
+        video_line_tables_start();
+        for (line = 0; line < VIDEO_LINES; line++) {
+            video_at_line((unsigned)line);
+            video_line_tables_step();
+        }
+        cases++;
+        for (line = 0; line < VIDEO_LINES && !failed_line; line++) {
+            VideoScreen mine;
+            uint16_t my_colours[256];
+
+            video_screen_at((unsigned)line, &mine, my_colours);
+            if (ppu_screens_differ(&mine, &theirs[line], what, sizeof what)) {
+                fail("line %d: %s", line, what);
+                failed_line = 1;
+            } else if (memcmp(my_colours, their_colours[line], sizeof my_colours)) {
+                fail("line %d: the colours differ", line);
+                failed_line = 1;
+            }
+        }
+    }
+
     printf("video_check: %ld cases, %ld differ\n", cases, failed);
     return failed != 0;
 }

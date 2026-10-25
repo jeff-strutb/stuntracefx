@@ -16,19 +16,6 @@
 #define transfers           0x16B9u         /* entries: source address, bank, word in the store, bytes */
 #define transfer_staged     0x16B1u         /* bytes, source address, bank (word), word in the store */
 
-/* a byte the S-CPU reads in bank `bank` at `at` (work RAM, the game pak RAM
-   or the ROM) */
-static uint8_t bank_byte(uint8_t bank, uint16_t at)
-{
-    if (bank == 0x7E || bank == 0x7F)
-        return wram[(uint32_t)(bank - 0x7E) << 16 | at];
-    if (bank == 0x70)
-        return pakram[at];
-    if ((bank & 0x7F) < 0x40 && at < 0x2000)
-        return wram[at];
-    return rom_at((uint32_t)bank << 16 | at)[0];
-}
-
 /* OamDmaIfPending */
 void frame_sprites_if_pending(void)
 {

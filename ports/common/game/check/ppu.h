@@ -37,5 +37,9 @@ void ppu_to_port(void);
 void ppu_screen(VideoScreen *s);
 /* the first difference between them and the port's current settings */
 int ppu_screen_differs(char *out, unsigned size);
+int ppu_screens_differ(const VideoScreen *mine, const VideoScreen *theirs, char *out, unsigned size);
+/* the per-line tables run over a frame as the hardware runs them, each
+   line's settings and colours kept */
+void ppu_frame_lines(VideoScreen out[VIDEO_LINES], uint16_t colours[VIDEO_LINES][256]);
 
 #endif

@@ -244,17 +244,9 @@ void ppu_screen(VideoScreen *s)
     s->fixed_colour = (uint16_t)(ppu.fixed[0] | ppu.fixed[1] << 5 | ppu.fixed[2] << 10);
 }
 
-int ppu_screen_differs(char *out, unsigned size)
+int ppu_screens_differ(const VideoScreen *b, const VideoScreen *a, char *out, unsigned size)
 {
-    VideoScreen a;
-    const VideoScreen *b = video_screen();
-
-    ppu_screen(&a);
-    if (video_line_tables() != ppu.hdmaen) {
-        snprintf(out, size, "line tables %02X, the decomp's %02X", video_line_tables(), ppu.hdmaen);
-        return 1;
-    }
-#define F(f) if (a.f != b->f) { snprintf(out, size, #f " %u, the decomp's %u", (unsigned)b->f, (unsigned)a.f); return 1; }
+#define F(f) if (a->f != b->f) { snprintf(out, size, #f " %u, the decomp's %u", (unsigned)b->f, (unsigned)a->f); return 1; }
     F(brightness) F(blank) F(mode) F(layer3_priority) F(sprite_tiles) F(sprite_gap) F(sprite_sizes)
     F(main_layers) F(sub_layers) F(window_layers) F(window_sub_layers) F(colour_clip) F(colour_prevent)
     F(colour_sub_screen) F(colour_direct) F(colour_maths) F(colour_subtract) F(colour_half) F(fixed_colour) F(mosaic)
@@ -274,4 +266,94 @@ int ppu_screen_differs(char *out, unsigned size)
     }
 #undef F
     return 0;
+}
+
+int ppu_screen_differs(char *out, unsigned size)
+{
+    VideoScreen a;
+
+    ppu_screen(&a);
+    if (video_line_tables() != ppu.hdmaen) {
+        snprintf(out, size, "line tables %02X, the decomp's %02X", video_line_tables(), ppu.hdmaen);
+        return 1;
+    }
+    return ppu_screens_differ(video_screen(), &a, out, size);
+}
+
+/* ---- the per-line channels, as the hardware runs them ---- */
+
+static struct {
+    uint16_t a2a, indirect;
+    uint8_t counter, completed, transfer;
+} hdma[8];
+
+static int hdma_active(int c)
+{
+    return (ppu.hdmaen >> c & 1) && !hdma[c].completed;
+}
+
+static void hdma_reload(int c)
+{
+    uint8_t *d = &ppu.dma[c * 0x10], data = old_rd8((uint32_t)d[4] << 16 | hdma[c].a2a);
+
+    if (hdma[c].counter & 0x7F)
+        return;
+    hdma[c].counter = data;
+    hdma[c].a2a++;
+    hdma[c].completed = hdma[c].counter == 0;
+    hdma[c].transfer = !hdma[c].completed;
+    if (d[0] & 0x40) {
+        int k, finished = 1;
+
+        data = old_rd8((uint32_t)d[4] << 16 | hdma[c].a2a++);
+        hdma[c].indirect = (uint16_t)(data << 8);
+        for (k = c + 1; k < 8; k++)
+            if (hdma_active(k))
+                finished = 0;
+        if (hdma[c].completed && finished)
+            return;
+        data = old_rd8((uint32_t)d[4] << 16 | hdma[c].a2a++);
+        hdma[c].indirect = (uint16_t)(data << 8 | hdma[c].indirect >> 8);
+    }
+}
+
+void ppu_frame_lines(VideoScreen out[VIDEO_LINES], uint16_t colours[VIDEO_LINES][256])
+{
+    static const unsigned lengths[8] = {1, 2, 2, 4, 4, 4, 2, 4};
+    int c, line, i;
+
+    for (c = 0; c < 8; c++)
+        hdma[c].completed = 0, hdma[c].transfer = 0;
+    for (c = 0; c < 8; c++) {
+        hdma[c].transfer = 1;
+        if (!(ppu.hdmaen >> c & 1))
+            continue;
+        hdma[c].a2a = (uint16_t)(ppu.dma[c * 0x10 + 2] | ppu.dma[c * 0x10 + 3] << 8);
+        hdma[c].counter = 0;
+        hdma_reload(c);
+    }
+    for (line = 0; line < VIDEO_LINES; line++) {
+        for (c = 0; c < 8; c++) {
+            uint8_t *d = &ppu.dma[c * 0x10];
+            unsigned k;
+
+            if (!hdma_active(c) || !hdma[c].transfer)
+                continue;
+            for (k = 0; k < lengths[d[0] & 7]; k++) {
+                uint32_t at = d[0] & 0x40 ? (uint32_t)d[7] << 16 | hdma[c].indirect++ : (uint32_t)d[4] << 16 | hdma[c].a2a++;
+
+                bbus((uint8_t)(d[1] + pattern[d[0] & 7][k]), old_rd8(at));
+            }
+        }
+        ppu_screen(&out[line]);
+        for (i = 0; i < 256; i++)
+            colours[line][i] = (uint16_t)(ppu.cgram[2 * i] | ppu.cgram[2 * i + 1] << 8);
+        for (c = 0; c < 8; c++) {
+            if (!hdma_active(c))
+                continue;
+            hdma[c].counter--;
+            hdma[c].transfer = hdma[c].counter >> 7;
+            hdma_reload(c);
+        }
+    }
 }

@@ -97,9 +97,22 @@ void video_colour_at_line(uint8_t n, uint16_t colour);
 void video_register(uint8_t reg, uint8_t v);
 void video_registers_reset(void);
 
-/* The per-line tables the game has set up, on or off (bit n: table n). */
+/* The per-line tables: table n's place and kind, then which are on (bit
+   n: table n). At a frame's top they start; then each line takes their
+   values (video_at_line first). */
+typedef struct {
+    uint8_t mode;                       /* how its values lay out over the setting and those after (0-7) */
+    uint8_t indirect;                   /* entries hold the address of their values */
+    uint8_t target;                     /* the setting, as video_register numbers it */
+    uint8_t bank, indirect_bank;
+    uint16_t at;
+} VideoLineTable;
+void video_line_table(int n, const VideoLineTable *t);
+const VideoLineTable *video_line_table_get(int n);
 void video_line_tables_on(uint8_t mask);
 uint8_t video_line_tables(void);
+void video_line_tables_start(void);
+void video_line_tables_step(void);
 
 /* ---- the frame ---- */
 

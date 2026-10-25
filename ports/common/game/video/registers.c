@@ -5,6 +5,7 @@
  * meaning (video.h). A register written in two halves keeps its first
  * half until the second comes, as the game's data expects.
  */
+#include "state.h"
 #include "video.h"
 
 static uint8_t scroll_latch, hscroll_latch, colour_latch;
@@ -126,7 +127,22 @@ void video_register(uint8_t reg, uint8_t v)
 
 /* ---- the per-line tables ---- */
 
+/* Each of the 8 tables (the game uses 1-5): a run of entries, each a line
+   count (bit 7: a new value every line of the run, else one at its start;
+   0 ends the table) and the values (or, for an indirect table, the
+   address of the values in `indirect_bank`), written to the setting at
+   `target` and those after it as `mode` lays them out. */
+static VideoLineTable table[8];
+static struct {
+    uint16_t at, values;
+    uint8_t count, write, done;
+} run[8];
 static uint8_t line_tables;
+
+void video_line_table(int n, const VideoLineTable *t)
+{
+    table[n & 7] = *t;
+}
 
 void video_line_tables_on(uint8_t mask)
 {
@@ -136,4 +152,79 @@ void video_line_tables_on(uint8_t mask)
 uint8_t video_line_tables(void)
 {
     return line_tables;
+}
+
+const VideoLineTable *video_line_table_get(int n)
+{
+    return &table[n & 7];
+}
+
+/* the next entry, when the run is out */
+static void reload(int n)
+{
+    const VideoLineTable *t = &table[n];
+    uint8_t c = bank_byte(t->bank, run[n].at);
+
+    if (run[n].count & 0x7F)
+        return;
+    run[n].count = c;
+    run[n].at++;
+    run[n].done = c == 0;
+    run[n].write = !run[n].done;
+    if (t->indirect) {
+        uint8_t lo = bank_byte(t->bank, run[n].at++);
+
+        run[n].values = (uint16_t)(lo << 8);
+        if (run[n].done) {                  /* (the last table still running, ending, reads no more) */
+            int m, more = 0;
+
+            for (m = n + 1; m < 8; m++)
+                more |= (line_tables >> m & 1) && !run[m].done;
+            if (!more)
+                return;
+        }
+        run[n].values = (uint16_t)(bank_byte(t->bank, run[n].at++) << 8 | run[n].values >> 8);
+    }
+}
+
+void video_line_tables_start(void)
+{
+    int n;
+
+    for (n = 0; n < 8; n++)
+        run[n].done = 0, run[n].write = 1;
+    for (n = 0; n < 8; n++) {
+        if (!(line_tables >> n & 1))
+            continue;
+        run[n].at = table[n].at;
+        run[n].count = 0;
+        reload(n);
+    }
+}
+
+void video_line_tables_step(void)
+{
+    static const uint8_t length[8] = {1, 2, 2, 4, 4, 4, 2, 4};
+    static const uint8_t offset[8][4] = {{0, 0, 0, 0}, {0, 1, 0, 1}, {0, 0, 0, 0}, {0, 0, 1, 1},
+                                         {0, 1, 2, 3}, {0, 1, 0, 1}, {0, 0, 0, 0}, {0, 0, 1, 1}};
+    int n, k;
+
+    for (n = 0; n < 8; n++) {
+        const VideoLineTable *t = &table[n];
+
+        if (!(line_tables >> n & 1) || run[n].done || !run[n].write)
+            continue;
+        for (k = 0; k < length[t->mode & 7]; k++) {
+            uint8_t v = t->indirect ? bank_byte(t->indirect_bank, run[n].values++) : bank_byte(t->bank, run[n].at++);
+
+            video_register((uint8_t)(t->target + offset[t->mode & 7][k]), v);
+        }
+    }
+    for (n = 0; n < 8; n++) {
+        if (!(line_tables >> n & 1) || run[n].done)
+            continue;
+        run[n].count--;
+        run[n].write = run[n].count >> 7;
+        reload(n);
+    }
 }
