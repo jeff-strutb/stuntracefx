@@ -767,7 +767,7 @@ void old_abi_FxCarCollide(void);
 void old_abi_FxWheelUpdate(void);
 void old_abi_FxPartsUpdate(void);
 void old_abi_FxCollideModel(void);
-static long phys_cases, phys_differ, phys_runaway;
+static long phys_cases, phys_differ, phys_runaway, run_cases, run_differ;
 static uint8_t phys_old[0x10000], phys_entry[0x10000];
 
 static void maybe(uint16_t at, uint16_t bits)
@@ -1158,6 +1158,25 @@ int main(int argc, char **argv)
             routines[r].run();
             fx_pixels_flush();
             memcpy(mine, pakram, sizeof mine);
+            {
+                /* a program the S-CPU starts: the same by where it starts */
+                unsigned long at = strtoul(routines[r].file, NULL, 16);
+
+                memcpy(pakram, entry_raw, sizeof entry_raw);
+                fx_screen.mode = in.scmr & 3;
+                fx_screen.height = (uint8_t)((in.scmr & 0x20 ? 2 : 0) | (in.scmr & 0x04 ? 1 : 0));
+                fx_screen.base = in.scbr;
+                fx_colour = in.colr;
+                fx_plot_options = in.por;
+                for (i = 0; i < 2; i++)
+                    fx_pixels_set((int)i, in.pix[i].offset, in.pix[i].bitpend, in.pix[i].data);
+                if (fx_run((uint8_t)(at >> 16), (uint16_t)at)) {
+                    fx_pixels_flush();
+                    run_cases++;
+                    if (memcmp(pakram, mine, sizeof mine) && ++run_differ <= 5)
+                        fprintf(stderr, "%s call %ld: not the same run by where it starts\n", routines[r].name, calls);
+                }
+            }
             memcpy(pakram, theirs, sizeof theirs);
             written_out(&out);
             memcpy(theirs, pakram, sizeof theirs);
@@ -1209,7 +1228,9 @@ int main(int argc, char **argv)
     }
     printf("fx_check: %ld calls, %ld differ; %ld synthetic models, %ld differ, %ld ran away in the decomp; %ld unpack variants, %ld differ\n",
            calls, differ, syn_cases, syn_differ, syn_runaway, unpack_cases, unpack_differ);
+    if (run_cases)
+        printf("fx_check: %ld calls run by where they start, %ld differ\n", run_cases, run_differ);
     if (phys_cases)
         printf("fx_check: %ld physics variants, %ld differ, %ld ran away in the decomp\n", phys_cases, phys_differ, phys_runaway);
-    return differ != 0 || syn_differ != 0 || unpack_differ != 0 || phys_differ != 0 || calls == 0;
+    return differ != 0 || syn_differ != 0 || unpack_differ != 0 || phys_differ != 0 || run_differ != 0 || calls == 0;
 }

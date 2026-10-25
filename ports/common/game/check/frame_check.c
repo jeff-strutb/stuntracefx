@@ -1,4 +1,4 @@
-/* old: render/model.c render/raster.c render/polygon.c render/points.c render/fx_points.c render/project.c render/matrix.c render/arith.c render/angle.c math/fx_math.c render/frame.c render/effects.c render/text.c render/bitmap.c render/screen.c object/fx_record.c data/unpack.c gsu/fx_init.c
+/* old: render/model.c render/raster.c render/polygon.c render/points.c render/fx_points.c render/project.c render/matrix.c render/arith.c render/angle.c math/fx_math.c render/frame.c render/effects.c render/text.c render/bitmap.c render/screen.c object/fx_record.c data/unpack.c gsu/fx_init.c render/unused.c
  *
  * frame_check.c: the port's frame drawing (render/fx_frame.c, fx_text.c)
  * against the decomp's Super FX routines on random states: the weather,
@@ -36,7 +36,7 @@
 
 #define OLD(name) void old_abi_##name(void);
 OLD(FxWeatherDraw) OLD(FxParticlesDraw) OLD(FxEffectsAdd) OLD(FxObjectSprite) OLD(FxEffectsRun) OLD(FxTextDraw)
-OLD(FxTextNotice) OLD(FxUnpackProgram) OLD(FxInit)
+OLD(FxTextNotice) OLD(FxUnpackProgram) OLD(FxInit) OLD(FxClearScreenIfSet) OLD(FxClear6000IfSet) OLD(FxMatrixFromAnglesProgram)
 
 static uint64_t rng = 0x5D2B7C94618E1F3Aull;
 
@@ -445,6 +445,18 @@ int main(int argc, char **argv)
         fresh();
         old_run(old_abi_FxInit);
         fx_init_program();
+        same_ram();
+    }
+    CASE("FxClearScreenIfSet / FxClear6000IfSet / FxMatrixFromAnglesProgram, by where they start") {
+        static const uint16_t starts[3] = {0xAECA, 0xAEE1, 0x8325};
+        void (*const olds[3])(void) = {old_abi_FxClearScreenIfSet, old_abi_FxClear6000IfSet, old_abi_FxMatrixFromAnglesProgram};
+        int w = (int)(rnd() % 3);
+
+        fresh();
+        pakram[0x01C4] = (uint8_t)((rnd() & 1) ? rnd() : 0);
+        old_run(olds[w]);
+        if (!fx_run(1, starts[w]))
+            fail("no program at $01:%04X", starts[w]);
         same_ram();
     }
 

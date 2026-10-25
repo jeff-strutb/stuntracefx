@@ -36,7 +36,7 @@
 OLD(FxSumsClear) OLD(FxSumsRotateLocal) OLD(FxSumsApply) OLD(FxSumsPushWorld) OLD(FxSumsPushLocal) OLD(FxPushApply)
 OLD(FxPushesApply) OLD(FxPushAt4) OLD(FxPushAt2) OLD(FxPushAt1) OLD(FxPushAtHalf) OLD(FxPushAtQuarter) OLD(FxPushAt4Twist)
 OLD(FxHitAddScaled) OLD(FxHitAddUnit) OLD(FxSumScale) OLD(FxRecordMove)
-OLD(FxPoolTake) OLD(FxPoolsMerge) OLD(FxListSweep) OLD(FxListClearBit0) OLD(FxObjectFree) OLD(FxRecordNew426) OLD(FxRecordNew424)
+OLD(FxPoolTake) OLD(FxPoolsMerge) OLD(FxPoolsMergeProgram) OLD(FxListSweep) OLD(FxListClearBit0) OLD(FxObjectFree) OLD(FxRecordNew426) OLD(FxRecordNew424)
 OLD(FxRecordNew426B) OLD(FxRecordNew42D) OLD(FxRecordNewCamera) OLD(FxRecordNew422) OLD(FxCollidePush) OLD(FxRecordsApart)
 OLD(FxContactNote) OLD(FxRecordTouches) OLD(FxAllTouches)
 OLD(FxPushSet) OLD(FxRecordHoldY) OLD(FxBearingTo) OLD(FxRecordAlignment) OLD(FxRecordRaise6A) OLD(FxRecordLower82)
@@ -482,6 +482,15 @@ int main(int argc, char **argv)
         r = fx_pool_take(head, size);
         same_ram();
         same_reg("R1", r, old_gsu.r[1]);
+    }
+    CASE("FxPoolsMergeProgram, by where it starts") {
+        fresh();
+        pool(0x1098, 0x1098 + 0x300);
+        pool(0x1D70, 0x1D70 + 0x200);
+        old_run(old_abi_FxPoolsMergeProgram);
+        if (!fx_run(4, 0x888E))
+            fail("no program at $04:888E");
+        same_ram();
     }
     CASE("FxPoolsMerge") {
         fresh();
