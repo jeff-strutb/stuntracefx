@@ -38,6 +38,7 @@
 #include "game.h"
 #include "render.h"
 #include "model.h"
+#include "physics.h"
 
 typedef struct {
     uint16_t r[16], sfr;
@@ -737,6 +738,7 @@ static void diag_frame(const RecState *in)
 static void run_effects_add(void) { fx_effects_add(cur.r[0], cur.r[1], cur.r[2], cur.r[3]); }
 static void run_weather(void) { fx_weather_draw(cur.r[0], cur.r[1]); }
 static void run_particles(void) { fx_particles_draw(cur.r[2]); }
+static void run_collide_model(void) { fx_collide_model(cur.r[9], cur.r[7]); }
 
 #define BITMAP(name, w, h) \
     static void run_##name(void) { if (cur.rombr == 0x15) fx_draw_bitmap((uint16_t)(cur.r[14] - 0x8000), w, h, cur.r[4], cur.r[2], cur.r[9]); }
@@ -785,6 +787,7 @@ int main(int argc, char **argv)
         {"01F062.grec", "FxDrawBitmap64x16", run_b64x16},
         {"01F3E4.grec", "FxDrawBitmap16x24", run_b16x24},
         {"01CF42.grec", "FxUnpackProgram", fx_unpack_program},
+        {"049C3D.grec", "FxCollideModel", run_collide_model},
     };
     const char *only = getenv("ONLY");
 

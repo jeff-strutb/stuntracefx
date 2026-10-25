@@ -52,6 +52,7 @@ int fx_records_apart(uint16_t a, uint16_t b);
 void fx_contact_note(uint16_t owner, uint16_t other);
 void fx_record_touches(uint16_t rec);
 void fx_all_touches(void);
+int fx_collide_model(uint16_t rec, uint16_t other);
 
 /* ---- object/fx_record.c ---- */
 uint16_t fx_push_set(int16_t amount);
