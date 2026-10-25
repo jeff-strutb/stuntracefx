@@ -11,7 +11,9 @@
 
 #define ATAN_TABLE 0x009E40u   /* angle words by tangent / 64, 257 entries */
 
-FxDiv fx_divide(uint32_t n, uint16_t d)
+/* The 16 passes: the quotient, and the partial remainder as the last pass
+   leaves it (one shift ahead). */
+static FxDiv divide_passes(uint32_t n, uint16_t d)
 {
     uint16_t hi = (uint16_t)(n >> 16), lo = (uint16_t)n;
     FxDiv o;
@@ -30,8 +32,56 @@ FxDiv fx_divide(uint32_t n, uint16_t d)
         hi = (uint16_t)(hi << 1 | top);
     }
     o.quot = lo;
-    o.rem = (uint16_t)(hi >> 1);
+    o.rem = hi;
     return o;
+}
+
+FxDiv fx_divide(uint32_t n, uint16_t d)
+{
+    FxDiv o = divide_passes(n, d);
+
+    o.rem = (uint16_t)(o.rem >> 1);
+    return o;
+}
+
+FxDiv fx_divide_signed(uint32_t n, uint16_t d)
+{
+    bool negative = ((n >> 16) ^ d) & 0x8000;
+    FxDiv o;
+
+    if (d & 0x8000)
+        d = (uint16_t)-d;
+    if (n & 0x80000000u)
+        n = -n;
+    o = divide_passes(n, d);
+    if (negative)
+        o.quot = (uint16_t)-o.quot;
+    return o;
+}
+
+/* The pair halved, then each over d with 8 bits of fraction; the first
+   held at $3FFF when it would pass it (or when its high byte already
+   reaches d), the second then scaled by $3FFF over the first instead. */
+void fx_ratio_clamp(int16_t *x, int16_t *y, uint16_t d)
+{
+    uint16_t a = (uint16_t)asr16(*x, 1), b = (uint16_t)asr16(*y, 1), dd;
+    uint32_t v;
+
+    if ((a >> 8) < d) {
+        dd = d;
+        a = fx_divide_halved_if_large((uint32_t)a << 8, &dd).quot;
+        dd = d;
+        b = fx_divide_halved_if_large((uint32_t)b << 8, &dd).quot;
+        if (a <= 0x3FFF) {
+            *x = (int16_t)a;
+            *y = (int16_t)b;
+            return;
+        }
+    }
+    v = ((uint32_t)b << 14) - b;
+    dd = a;
+    *y = (int16_t)fx_divide_halved_if_large(v, &dd).quot;
+    *x = 0x3FFF;
 }
 
 FxDiv fx_divide_halved_if_large(uint32_t n, uint16_t *d)
@@ -148,10 +198,19 @@ void fx_matrix_transpose(int16_t m[9])
     }
 }
 
-/* A 1.15 product: bits 15-30 of the signed product. */
-static int16_t mul15(int16_t a, int16_t b)
+int16_t mul15(int16_t a, int16_t b)
 {
     return wrap16(asr32((int32_t)a * b, 15));
+}
+
+int16_t fmult(int16_t a, int16_t b)
+{
+    return wrap16(asr32((int32_t)a * b, 16));
+}
+
+int16_t div2(int16_t v)
+{
+    return v == -1 ? 0 : asr16(v, 1);
 }
 
 void fx_matrix_from_angles(const uint16_t angles[3], int16_t m[9])

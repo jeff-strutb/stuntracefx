@@ -171,6 +171,22 @@ typedef struct {
     uint16_t root, rem;
 } FxSqrt;
 
+/* n / d signed, on the magnitudes (a negative n negated as 32 bits), the
+   quotient negated when the signs differ; the remainder is left as the
+   passes leave it, twice the true one plus the last bit shifted in. */
+FxDiv fx_divide_signed(uint32_t n, uint16_t d);
+
+/* The pair (x, y) halved and turned into ratios over d with 8 bits of
+   fraction, the first held at $3FFF (and the second scaled to keep the
+   pair's ratio) when it would pass it. */
+void fx_ratio_clamp(int16_t *x, int16_t *y, uint16_t d);
+
+/* The Super FX's products: a * b >> 15 (FMULT, ROL: 1.15) and a * b >> 16
+   (FMULT), and DIV2 (a halving that rounds -1 to 0). */
+int16_t mul15(int16_t a, int16_t b);
+int16_t fmult(int16_t a, int16_t b);
+int16_t div2(int16_t v);
+
 /* The integer square root of n and n - root * root (kept to 16 bits). */
 FxSqrt fx_sqrt(uint32_t n);
 

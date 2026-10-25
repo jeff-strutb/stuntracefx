@@ -154,6 +154,43 @@ typedef struct PACKED {
 #define sound_port1_count   W8(0x0DCE)
 #define sound_muted         W8(0x0E4E)
 
+/* ---- the Super FX's work in the game pak RAM (bank $70); the names are
+   the decomp's (src/stuntracefx/render), and like work RAM's many
+   addresses serve different routines differently. The Super FX's words
+   are at even addresses (one at an odd address would have its high byte
+   at the address XOR 1, not after it; the game makes none). ---- */
+#define FXW(a)  (*(sw16 *)&pakram[(uint16_t)(a)])          /* a signed word */
+#define FXU(a)  (*(w16 *)&pakram[(uint16_t)(a)])           /* an unsigned word */
+#define fx_angles           ((w16 *)&pakram[0x0020])       /* three angles for a matrix */
+#define fx_vector_out       ((sw16 *)&pakram[0x0026])      /* a rotated vector; also a points offset */
+#define fx_angle_in_x       FXW(0x002C)
+#define fx_vector_in_y      FXW(0x002C)
+#define fx_vector_in_z      FXW(0x002E)
+#define fx_length_in_z      FXW(0x002E)
+#define fx_screen_centre_x  FXW(0x0034)
+#define fx_screen_centre_y  FXW(0x0036)
+#define fx_edges            ((sw16 *)&pakram[0x0038])      /* left, right, top, bottom */
+#define fx_angle_out        FXU(0x0040)
+#define fx_vertex_count     FXU(0x0040)
+#define fx_model_variant    FXU(0x0044)
+#define fx_pairs_end        FXU(0x005A)                    /* the pair list + 4; the polygon output */
+#define fx_vector_in_x      FXW(0x0068)
+#define fx_length_in_x      FXW(0x0068)
+#define fx_angle_in_y       FXW(0x0068)
+#define fx_length_out       FXU(0x006A)
+#define fx_slot_count       pakram[0x01C8]
+#define fx_screen_start     FXU(0x021A)
+#define fx_list_head        FXU(0x023C)
+#define fx_matrix           ((sw16 *)&pakram[0x00E4])      /* 3x3, row by row, 1.15 */
+#define fx_vectors          ((sw16 *)&pakram[0x0116])      /* three vectors */
+#define fx_entry_table      FXU(0x1092)
+#define FX_SLOTS            0x0AAAu                         /* $1E bytes each */
+#define FX_SLOT_SIZE        0x1Eu
+#define FX_POINTS           0x0340u                         /* three words a point */
+#define FX_RECORDS          0x0826u                         /* ten bytes each */
+#define FX_MODEL_POINTS     0x2488u
+#define FX_TABLE_2702       0x2702u
+
 /* ---- the save ---- */
 #define save_records        (*(SaveRecords *)&pakram[0xFC6D])
 #define save_table_sums     ((uint8_t *)&pakram[0xFC2D])  /* by class */
