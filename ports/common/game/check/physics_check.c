@@ -1,4 +1,4 @@
-/* old: object/fx_sums.c object/fx_motion.c object/fx_pool.c object/fx_collide.c object/fx_record.c math/fx_math.c math/fx_rotate.c
+/* old: object/fx_sums.c object/fx_motion.c object/fx_pool.c object/fx_collide.c object/fx_record.c object/fx_car.c race/fx_traffic.c race/fx_rank.c math/fx_math.c math/fx_rotate.c
  *
  * physics_check.c: the port's Super FX physics (object/fx_*.c) against
  * the decomp's routines on random states. Each runs on the same game pak
@@ -40,7 +40,8 @@ OLD(FxPoolTake) OLD(FxPoolsMerge) OLD(FxListSweep) OLD(FxListClearBit0) OLD(FxOb
 OLD(FxRecordNew426B) OLD(FxRecordNew42D) OLD(FxRecordNewCamera) OLD(FxRecordNew422) OLD(FxCollidePush) OLD(FxRecordsApart)
 OLD(FxContactNote) OLD(FxRecordTouches) OLD(FxAllTouches)
 OLD(FxPushSet) OLD(FxRecordHoldY) OLD(FxBearingTo) OLD(FxRecordAlignment) OLD(FxRecordRaise6A) OLD(FxRecordLower82)
-OLD(FxTimersProgram)
+OLD(FxTimersProgram) OLD(FxCarMoveParts) OLD(FxCarPose) OLD(FxCarNew) OLD(FxCarHit) OLD(FxTrafficSides)
+OLD(FxSpreadCars) OLD(FxNearestCar) OLD(FxRankCars)
 
 static uint64_t rng = 0x5D2B7C94618E1F3Aull;
 
@@ -249,6 +250,44 @@ static void records(int n)
             FXU(c + 0x0E) = FXU(recs[k] + 0x18);
             FXU(recs[k] + 0x18) = c;
         }
+    }
+}
+
+/* the records also a list of cars from $262E (through +$74), with
+   parts, speeds, laps and the like */
+static void cars(void)
+{
+    int k, j;
+
+    FXU(0x262E) = nrecs ? recs[0] : 0;
+    for (k = 0; k < nrecs; k++) {
+        uint16_t r = recs[k];
+
+        FXU(r + 0x74) = k + 1 < nrecs ? recs[k + 1] : 0;
+        FXW(r + 0x4A) = within(-0x100, 0x800);
+        FXU(r + 0x42) = (uint16_t)(rnd() & 3);
+        FXU(r + 0x16) = (rnd() & 7) ? (uint16_t)(rnd() & 0xFF) : 0x0400;
+        FXW(r + 0x7A) = within(0, 3);
+        FXW(r + 0x86) = within(0, 6);
+        FXW(r + 0x84) = (rnd() & 1) ? within(-2, 2) : (int16_t)rnd();
+        FXU(r + 0x88) = (uint16_t)rnd();
+        FXW(r + 0x8C) = (rnd() & 3) ? within(0, 0x1200) : 0;
+        FXW(r + 0x34) = (int16_t)rnd();
+        for (j = 0; j < 3; j++)
+            FXW(r + 0x24 + 2 * j) = (int16_t)rnd();
+        FXU(r + 0x3E) = 0;
+    }
+    for (k = 0; k < 9; k++)
+        FXW(0x00E4 + 2 * k) = (int16_t)rnd();
+    /* parts of the first car, records in $5000 on */
+    for (k = (int)(rnd() % 4); k > 0; k--) {
+        uint16_t p = (uint16_t)(0x5000 + 0x60 * k);
+
+        FXU(p + 0x34) = FXU(recs[0] + 0x3E);
+        FXU(recs[0] + 0x3E) = p;
+        FXU(p + 0x46) = (rnd() & 3) ? 0 : 0x0400;
+        for (j = 0; j < 3; j++)
+            FXW(p + 0x3C + 2 * j) = within(-0x200, 0x200);
     }
 }
 
@@ -571,6 +610,82 @@ int main(int argc, char **argv)
         FXU(0x238E) = (uint16_t)(0x3000 + 2 * (rnd() % 0x400));
         old_run(w == 0 ? old_abi_FxRecordRaise6A : w == 1 ? old_abi_FxRecordLower82 : old_abi_FxTimersProgram);
         (w == 0 ? fx_record_raise_6a : w == 1 ? fx_record_lower_82 : fx_timers_program)();
+        same_ram();
+    }
+
+    CASE("FxCarMoveParts / FxCarPose") {
+        int pose = rnd() & 1;
+
+        fresh();
+        records(1 + (int)(rnd() % 4));
+        cars();
+        old_gsu.r[8] = recs[0];
+        old_run(pose ? old_abi_FxCarPose : old_abi_FxCarMoveParts);
+        (pose ? fx_car_pose : fx_car_move_parts)(recs[0]);
+        same_ram();
+    }
+    CASE("FxCarNew") {
+        static const uint16_t scripts[10] = {0x81B9, 0x853D, 0x82E5, 0x8411, 0x8669, 0x876E, 0x8AA8, 0x8886, 0x8990, 0x9000};
+
+        fresh();
+        pool(0x1098, 0x1098 + 0x400);
+        {
+            static const uint16_t sizes[4] = {0x98, 0x9A, 0x9C, 0x300};
+
+            FXU(0x109A) = sizes[rnd() % 4];   /* the head block big enough for a car and its parts, or not */
+            FXU(0x1098) = 0;                  /* and alone: the blocks after it now overlap it */
+        }
+        records((int)(rnd() % 3));
+        cars();
+        FXU(0x238E) = scripts[rnd() % 10];
+        old_run(old_abi_FxCarNew);
+        fx_car_new();
+        if (getenv("SHOWCAR"))
+            fprintf(stderr, "car %04X (decomp %04X)\n", FXU(0x238E), old_p[0x238E] | old_p[0x238F] << 8);
+        same_ram();
+    }
+    CASE("FxCarHit") {
+        fresh();
+        records(1 + (int)(rnd() % 4));
+        cars();
+        FXU(recs[0] + 0x64) = (rnd() & 7) ? 0 : 8;
+        FXU(recs[0] + 0x40) = (rnd() & 3) ? (uint16_t)(rnd() & 0xDDFE) : (uint16_t)rnd();
+        FXU(recs[0] + 0x8A) = (rnd() & 7) ? 0 : 0x0200;
+        FXW(recs[0] + 0x82) = within(0, 0x220);
+        FXU(0x263C) = rnd() & 1;
+        FXU(0x2476) = (rnd() & 1) ? recs[0] : 0;
+        for (k = 0; k < 3; k++)
+            FXW(0x2334 + 2 * k) = (rnd() & 1) ? within(-0x800, 0x800) : (int16_t)rnd();
+        FXW(0x2678) = (int16_t)rnd();
+        FXW(0x263E) = within(0, 0xD0);
+        old_gsu.r[8] = recs[0];
+        old_run(old_abi_FxCarHit);
+        fx_car_hit(recs[0]);
+        same_ram();
+    }
+    CASE("FxTrafficSides / FxSpreadCars") {
+        int spread = rnd() & 1;
+
+        fresh();
+        records(1 + (int)(rnd() % 6));
+        cars();
+        old_gsu.r[8] = recs[0];
+        old_run(spread ? old_abi_FxSpreadCars : old_abi_FxTrafficSides);
+        (spread ? fx_spread_cars : fx_traffic_sides)(recs[0]);
+        same_ram();
+    }
+    CASE("FxNearestCar / FxRankCars") {
+        int rank = rnd() & 1;
+
+        fresh();
+        records((int)(rnd() % 7));
+        cars();
+        FXU(0x2476) = nrecs && (rnd() & 7) ? recs[rnd() % nrecs] : 0;
+        if (FXU(0x2476))
+            FXU(FXU(0x2476) + 0x64) = (rnd() & 3) ? 0 : 8;
+        FXW(0x2642) = (rnd() & 1) ? -1 : within(0, 0x120);
+        old_run(rank ? old_abi_FxRankCars : old_abi_FxNearestCar);
+        (rank ? fx_rank_cars : fx_nearest_car)();
         same_ram();
     }
 

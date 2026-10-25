@@ -62,6 +62,18 @@ void fx_record_raise_6a(void);      /* programs the S-CPU starts */
 void fx_record_lower_82(void);
 void fx_timers_program(void);
 
+/* ---- object/fx_car.c ---- */
+void fx_car_move_parts(uint16_t car);
+void fx_car_pose(uint16_t car);
+void fx_car_new(void);              /* a program the S-CPU starts */
+void fx_car_hit(uint16_t car);
+
+/* ---- race/fx_traffic.c, race/fx_rank.c ---- */
+void fx_traffic_sides(uint16_t car);
+void fx_spread_cars(uint16_t car);
+void fx_nearest_car(void);
+void fx_rank_cars(void);
+
 /* ---- object/fx_motion.c ---- */
 void fx_record_move(uint16_t rec, uint16_t kind);
 
