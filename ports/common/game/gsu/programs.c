@@ -1099,3 +1099,50 @@ void gsu_glyphs_four(int b)
         gsu_inputs_200(0x0F, 0x07, 0x08);
     glyphs_f15b(0x0028, 0x0018, 0x0020, b ? pb : pa, 4);
 }
+
+/* ---- the view's setup ---- */
+
+/* ViewSetupTail (03:AE73): the random number state seeded ($E6 from
+   $1A6C, then $A7, $55, $7F), the view's state cleared, the view reset and
+   its parameters to the renderer. (ReadTable9022, which it also calls,
+   keeps nothing.) */
+void view_setup_tail(void)
+{
+    static const uint8_t dp[8] = {0x9C, 0xBD, 0x99, 0x9F, 0xA0, 0xA1, 0x9D, 0xD3};
+    static const uint16_t clear[5] = {0x0665, 0x0667, 0x0669, 0x035D, 0x035E};
+    int i;
+
+    W8(0x00E6) = W8(0x1A6C);
+    W8(0x00E7) = 0xA7;
+    W8(0x00E8) = 0x55;
+    W8(0x00E9) = 0x7F;
+    for (i = 0; i < 8; i++)
+        W8(dp[i]) = 0;
+    for (i = 0; i < 5; i++)
+        W8(clear[i]) = 0;
+    W8(0x05FA) = 0;
+    view_reset();
+    gsu_params_from_dp();
+}
+
+/* ViewDefaults: the default view: $01D0 = $1234, $01C4 = 1, $108C = 0;
+   the direct page's view parameters ($2A-$35, $CE, $D0); then the setup
+   tail. */
+void view_defaults(void)
+{
+    FXU(0x01D0) = 0x1234;
+    FXU(0x01C4) = 0x0001;
+    FXU(0x108C) = 0x0000;
+    W8(0x00A0) = 0x80;
+    W8(0x05EF) = 0xFF;
+    W8(0x0000) = 0x00;
+    W16(0x002A) = 0x0000;
+    W16(0x002E) = 0x0067;
+    W16(0x002C) = 0x0000;
+    W16(0x0030) = 0x0058;
+    W16(0x00CE) = 0x0034;
+    W16(0x00D0) = 0x002C;
+    W16(0x0034) = 0x5D17;
+    W16(0x0032) = 0x9D89;
+    view_setup_tail();
+}

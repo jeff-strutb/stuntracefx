@@ -1,4 +1,4 @@
-/* old: gsu/run.c gsu/params.c gsu/screen.c gsu/programs.c render/unused.c render/matrix.c render/arith.c render/angle.c math/fx_math.c gsu/fx_init.c data/unpack.c render/sort.c render/hud.c render/points.c render/fx_points.c render/project.c render/table.c hud/lap_time.c audio/sound_queue.c
+/* old: gsu/run.c gsu/params.c gsu/screen.c gsu/programs.c render/unused.c render/matrix.c render/arith.c render/angle.c math/fx_math.c gsu/fx_init.c data/unpack.c render/sort.c render/hud.c render/points.c render/fx_points.c render/project.c render/table.c hud/lap_time.c audio/sound_queue.c system/misc.c
  *
  * gsu_check.c: the port's S-CPU side of the Super FX (gsu/glue.c) against
  * the decomp's, on random states. The decomp's S-CPU code starts the
@@ -67,7 +67,7 @@ OLD(GlyphListMessageAndTime) OLD(HudHoldDraw) OLD(ObjectGsu80BCThen81E3) OLD(Obj
 OLD(FxGlyph8x8) OLD(FxGlyph24x32Bank04) OLD(FxGlyph16x32) OLD(FxSprite16x32) OLD(FxGlyph16x16)
 OLD(GlyphWordAt1C28) OLD(GlyphGrid1A) OLD(GlyphGrid1D) OLD(GlyphSlideThree) OLD(GlyphSpritesDrawAll) OLD(HudTimesPackedDraw)
 OLD(HudLapDigitsDraw) OLD(HudLeadWordDraw) OLD(HudTimesDraw) OLD(HudBlankDraw) OLD(GlyphSpritesSlideOut) OLD(GlyphSpritesSlideIn)
-OLD(GsuF15BFourA) OLD(GsuF15BFourB) OLD(BigSpritesNine) OLD(BigSpritesRow6B)
+OLD(GsuF15BFourA) OLD(GsuF15BFourB) OLD(BigSpritesNine) OLD(BigSpritesRow6B) OLD(ViewDefaults)
 
 static uint64_t rng = 0x6A09E667F3BCC909ull;
 
@@ -203,7 +203,8 @@ static int scratch;                 /* the case's routines count in direct page 
 
 static int counted(size_t i)
 {
-    return i == 0xFE || i == 0xFF || i == 0x1F21 || i == 0x1F22 || (scratch && i >= 0xF1 && i <= 0xF4);
+    return i == 0xFE || i == 0xFF || i == 0x1F21 || i == 0x1F22 || (scratch && i >= 0xF1 && i <= 0xF4)
+           || (scratch == 2 && i == 0x64);
 }
 
 static void same_ram(void)
@@ -617,6 +618,17 @@ int main(int argc, char **argv)
         case 14: big_sprites_nine(); break;
         case 15: big_sprites_row6b(); break;
         }
+        same_ram();
+        scratch = 0;
+    }
+
+    CASE("ViewDefaults") {
+        fresh();
+        GUARD;
+        scratch = 2;                            /* ReadTable9022's count in direct page $64 */
+        old_cpu.db = 0x03;
+        old_run(old_abi_ViewDefaults);
+        view_defaults();
         same_ram();
         scratch = 0;
     }

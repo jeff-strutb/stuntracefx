@@ -73,5 +73,7 @@ void hud_blank_draw(void);
 void glyph_sprites_slide_out(void);
 void glyph_sprites_slide_in(void);
 void gsu_glyphs_four(int b);
+void view_setup_tail(void);
+void view_defaults(void);
 
 #endif
