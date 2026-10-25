@@ -424,6 +424,57 @@ static void sandbox_write(uint32_t off, uint8_t v)
     bm_put(&cur->cw, cur->gen, off, v, 0);
 }
 
+/* SFXBOX_GSU_RECORD=DIR: each call of a watched routine (at most
+   SFXBOX_RECORD_MAX of each, default 16) that the S-CPU did not disturb,
+   appended to DIR/ADDR.grec, for checking a rewrite of the routine on the
+   original's own calls: "GRC1", then for the entry and the exit the
+   registers R0-R15, SFR, ROMBR, RAMBR, SCBR, SCMR, COLR, POR, the ROM
+   buffer, CBR and both pixel caches (offset, pending bits, eight pixels),
+   then the game pak RAM's size and its bytes at the entry and at the exit
+   (a store still buffered at either counted as done). */
+static void rec_state(FILE *f, const struct GsuState *s)
+{
+    fwrite(s->r, 2, 16, f);
+    fwrite(&s->sfr, 2, 1, f);
+    uint8_t b[7] = {s->rombr, s->rambr, s->scbr, s->scmr, s->colr, s->por, s->romdr};
+    fwrite(b, 1, 7, f);
+    fwrite(&s->cbr, 2, 1, f);
+    for (int i = 0; i < 2; i++) {
+        fwrite(&s->pixel[i].offset, 2, 1, f);
+        fwrite(&s->pixel[i].bitpend, 1, 1, f);
+        fwrite(s->pixel[i].data, 1, 8, f);
+    }
+}
+
+static void gsu_record(Watch *w, const struct GsuState *fin, uint32_t exit_off)
+{
+    static const char *dir;
+    static long max = -1;
+    static int *count;
+    if (max < 0) {
+        dir = getenv("SFXBOX_GSU_RECORD");
+        max = getenv("SFXBOX_RECORD_MAX") ? atol(getenv("SFXBOX_RECORD_MAX")) : 16;
+        count = calloc((size_t)nrt + 1, sizeof *count);
+    }
+    if (!dir || w->foreign || count[w->idx] >= max) return;
+    count[w->idx]++;
+    char path[1024];
+    snprintf(path, sizeof path, "%s/%06X.grec", dir, rt[w->idx].addr);
+    FILE *f = fopen(path, "ab");
+    if (!f) return;
+    fwrite("GRC1", 1, 4, f);
+    rec_state(f, &w->entry);
+    rec_state(f, fin);
+    fwrite(&ram_n, 4, 1, f);
+    for (uint32_t off = 0; off < ram_n; off++) {
+        uint8_t v = entry_value(w, off);
+        fputc(v, f);
+    }
+    for (uint32_t off = 0; off < ram_n; off++)
+        fputc(off == exit_off ? fin->ramdr : ram[off], f);
+    fclose(f);
+}
+
 static void finish(Watch *w)
 {
     Stat *st = &stats[w->idx];
@@ -470,6 +521,7 @@ static void finish(Watch *w)
         if (!bm_get(&w->cw, w->gen, off, &cv)) cv = entry_value(w, off);
         if (ov != cv) WHY(" [70:%05X]=%02X/%02X", off, cv, ov);
     }
+    gsu_record(w, &fin, exit_off);
     if (c_bad == 1) WHY(" access-off-the-bus");
     if (c_bad == 2) WHY(" runaway");
     if (!bad) { st->match++; return; }
