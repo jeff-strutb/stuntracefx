@@ -140,6 +140,8 @@ void ppu_write(uint16_t reg, uint8_t v)
         bbus((uint8_t)reg, v);
     } else if (reg >= 0x4300 && reg < 0x4380) {
         ppu.dma[reg - 0x4300] = v;
+    } else if (reg == 0x420C) {
+        ppu.hdmaen = v;
     } else if (reg == 0x420B) {
         for (c = 0; c < 8; c++)
             if (v >> c & 1)
@@ -186,6 +188,7 @@ int ppu_differs(char *out, unsigned size)
 
 void ppu_to_port(void)
 {
+    video_line_tables_on(ppu.hdmaen);
     ppu_screen(video_screen());
     video_store_write(0, ppu.vram, sizeof ppu.vram);
     video_colours(0, ppu.cgram, 256);
@@ -247,6 +250,10 @@ int ppu_screen_differs(char *out, unsigned size)
     const VideoScreen *b = video_screen();
 
     ppu_screen(&a);
+    if (video_line_tables() != ppu.hdmaen) {
+        snprintf(out, size, "line tables %02X, the decomp's %02X", video_line_tables(), ppu.hdmaen);
+        return 1;
+    }
 #define F(f) if (a.f != b->f) { snprintf(out, size, #f " %u, the decomp's %u", (unsigned)b->f, (unsigned)a.f); return 1; }
     F(brightness) F(blank) F(mode) F(layer3_priority) F(sprite_tiles) F(sprite_gap) F(sprite_sizes)
     F(main_layers) F(sub_layers) F(window_layers) F(window_sub_layers) F(colour_clip) F(colour_prevent)

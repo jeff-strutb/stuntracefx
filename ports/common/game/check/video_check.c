@@ -1,4 +1,4 @@
-/* old: video/dma.c
+/* old: video/dma.c system/frame_updates.c
  *
  * video_check.c: the port's video (video/) against the decomp's, on
  * random states: the decomp's writes to the video hardware go to the
@@ -32,7 +32,9 @@
 #define OLD(name) void old_abi_##name(void);
 OLD(VramDmaFromBank7F) OLD(VramDmaFromGsuRam) OLD(VramDmaRowsFromGsuRam) OLD(VramDmaWideRowsFromGsuRam)
 OLD(VramWriteRowFromGsuRam) OLD(CoursePictureToVram) OLD(VramUploadGsuBuffer) OLD(OamDma) OLD(OamDmaAll)
-OLD(CgramDma) OLD(CgramDmaAll)
+OLD(CgramDma) OLD(CgramDmaAll) OLD(OamDmaIfPending) OLD(CgramDmaIfPending) OLD(ByteWritesIfPending)
+OLD(VramDmaQueueAdd) OLD(VramDmaQueueFlush) OLD(AnimTilesQueueNext) OLD(WordListAAppend) OLD(WordListBAppend)
+OLD(FrameByteWritePush) OLD(FrameInputAndCountEnd)
 
 static uint64_t rng = 0xBB67AE8584CAA73Bull;
 
@@ -83,8 +85,10 @@ static void fresh(void)
         ppu.hofs[i] = (uint16_t)(rnd() & 0x3FF), ppu.vofs[i] = (uint16_t)(rnd() & 0x3FF);
     for (i = 0; i < 3; i++)
         ppu.fixed[i] = (uint8_t)(rnd() & 0x1F);
+    ppu.hdmaen = (uint8_t)rnd();
     ppu.vmain = 0x80;                   /* the game's standing setting: words, a step of 1 */
     ppu_to_port();
+    video_registers_reset();
     memset(&old_cpu, 0, sizeof old_cpu);
     old_cpu.a = (uint16_t)rnd();
     old_cpu.x = (uint16_t)rnd();
@@ -213,6 +217,80 @@ int main(int argc, char **argv)
         case 1: old_run(old_abi_OamDmaAll); video_sprites_all(); break;
         case 2: at = (uint16_t)rnd(); old_cpu.a = at, old_cpu.x = first, old_cpu.y = size; old_run(old_abi_CgramDma); video_colours_from(at, (uint8_t)first, size); break;
         case 3: old_run(old_abi_CgramDmaAll); video_colours_all(); break;
+        }
+        same();
+    }
+
+    CASE("settings written as data") {
+        int k, m = (int)(1 + rnd() % 24);
+
+        fresh();
+        old_run(old_abi_OamDmaAll);             /* (only to take the RAM; then both the same) */
+        memcpy(wram, old_w, sizeof wram);
+        for (k = 0; k < m; k++) {
+            static const uint8_t regs[] = {0x00, 0x01, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E,
+                                           0x0F, 0x10, 0x11, 0x12, 0x13, 0x14, 0x21, 0x22, 0x22, 0x22, 0x23, 0x24,
+                                           0x25, 0x26, 0x27, 0x28, 0x29, 0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x2F, 0x30,
+                                           0x31, 0x32, 0x32};
+            uint8_t r = regs[rnd() % sizeof regs], v = (uint8_t)rnd();
+
+            ppu_write((uint16_t)(0x2100 + r), v);
+            video_register(r, v);
+        }
+        video_sprites_all();
+        old_ppu = ppu;
+        same();
+    }
+
+    CASE("the frame's updates") {
+        int w = (int)(rnd() % 11), k;
+
+        fresh();
+        old_cpu.p &= (uint8_t)~(P_M | P_X);
+        if (rnd() & 1)
+            W8(0x11D7) = (uint8_t)(rnd() & 0x0F);
+        W16(0x162D) = (uint16_t)(4 * (rnd() % 33));
+        for (k = 0; k < 32; k++) {              /* byte writes: settings, the per-line switch, work RAM */
+            static const uint16_t regs[] = {0x2100, 0x2105, 0x210D, 0x210E, 0x2121, 0x2122, 0x2126, 0x212C, 0x2131, 0x2132, 0x420C};
+            uint16_t at = (rnd() & 1) ? regs[rnd() % (sizeof regs / sizeof regs[0])] : (uint16_t)(0x0100 + rnd() % 0x1400);
+
+            W16(0x162F + 4 * k) = at;
+        }
+        W16(0x16AF) = (uint16_t)(8 * (rnd() % 0x41));
+        for (k = 0; k < 64; k++) {              /* transfers: from work RAM, the game pak RAM, the ROM */
+            static const uint8_t banks[] = {0x7E, 0x7F, 0x70, 0x01, 0x1C, 0x1F, 0x83};   /* (the ROM is 32 banks) */
+            uint8_t bank = banks[rnd() % sizeof banks];
+
+            W8(0x16BB + 8 * k) = bank;
+            W16(0x16B9 + 8 * k) = (uint16_t)(((bank & 0x7F) < 0x40 && bank != 0x70) ? 0x8000 + rnd() % 0x7000 : rnd());
+            W16(0x16BE + 8 * k) = (uint16_t)(2 * (1 + rnd() % 0x200));    /* (the game queues none empty) */
+        }
+        W8(0x16B5) = (uint8_t)((rnd() & 1) ? 0x7E : 0x7F);
+        W16(0x1191) = (uint16_t)(2 * (rnd() % 9));
+        W16(0x1193) = (uint16_t)(2 * (rnd() % 9));
+        if (w == 7)
+            W16(0x162D) = (uint16_t)(4 * (rnd() % 32));
+        old_cpu.a = (uint16_t)rnd();
+        old_cpu.x = (uint16_t)(0x0100 + rnd() % 0x1400);
+        {
+            void (*const f[11])(void) = {old_abi_OamDmaIfPending, old_abi_CgramDmaIfPending, old_abi_ByteWritesIfPending,
+                old_abi_VramDmaQueueAdd, old_abi_VramDmaQueueFlush, old_abi_AnimTilesQueueNext, old_abi_WordListAAppend,
+                old_abi_FrameByteWritePush, old_abi_FrameInputAndCountEnd, old_abi_WordListBAppend, old_abi_VramDmaQueueFlush};
+            uint16_t a = old_cpu.a, x = old_cpu.x;
+
+            old_run(f[w]);
+            switch (w) {
+            case 0: frame_sprites_if_pending(); break;
+            case 1: frame_colours_if_pending(); break;
+            case 2: frame_byte_writes_if_pending(0x00); break;
+            case 3: frame_transfer_queue(); break;
+            case 4: case 10: frame_transfers_if_pending(); break;
+            case 5: frame_anim_tiles_next(); break;
+            case 6: frame_word_list_append(0, a); break;
+            case 7: frame_byte_write_push(x, (uint8_t)a); break;
+            case 8: frame_menu_end(); break;
+            case 9: frame_word_list_append(1, a); break;
+            }
         }
         same();
     }

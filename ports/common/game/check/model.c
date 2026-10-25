@@ -133,7 +133,7 @@ void old_wr8(uint32_t a, uint8_t v)
         }
         return;
     }
-    if ((o >= 0x2100 && o < 0x2134) || (o >= 0x4300 && o < 0x4380) || o == 0x420B) {
+    if ((o >= 0x2100 && o < 0x2134) || (o >= 0x4300 && o < 0x4380) || o == 0x420B || o == 0x420C) {
         ppu_write(o, v);                /* the video hardware (the checks' model of it) */
         if (o != 0x211B && o != 0x211C)
             return;

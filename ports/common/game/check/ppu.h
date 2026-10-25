@@ -18,7 +18,8 @@ typedef struct {
     uint16_t vaddr, oaddr, oaddr_reload;
     uint16_t hofs[4], vofs[4];
     uint8_t ofs_latch, hofs_latch;
-    uint8_t fixed[3];                   /* the fixed colour's red, green, blue */
+    uint8_t fixed[3];
+    uint8_t hdmaen;                   /* the fixed colour's red, green, blue */
     uint8_t vmain, cgaddr, cg_latch, cg_high, oam_latch;
     int cg_second;
 } Ppu;

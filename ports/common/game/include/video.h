@@ -92,6 +92,15 @@ VideoScreen *video_screen(void);
    time). */
 void video_colour_at_line(uint8_t n, uint16_t colour);
 
+/* A setting the game writes as data (a register of the screen, $2100 +
+   `reg`, and its value), read by meaning (video/registers.c). */
+void video_register(uint8_t reg, uint8_t v);
+void video_registers_reset(void);
+
+/* The per-line tables the game has set up, on or off (bit n: table n). */
+void video_line_tables_on(uint8_t mask);
+uint8_t video_line_tables(void);
+
 /* ---- the frame ---- */
 
 /* A new frame: its settings start as the last one's ended. */
@@ -111,5 +120,16 @@ void video_sprites_from(uint16_t at, uint16_t n);
 void video_sprites_all(void);
 void video_colours_from(uint16_t at, uint8_t first, uint16_t n);
 void video_colours_all(void);
+
+/* ---- video/frame_updates.c: the updates applied as a frame ends ---- */
+void frame_sprites_if_pending(void);
+void frame_colours_if_pending(void);
+void frame_byte_writes_if_pending(uint8_t bank);
+void frame_byte_write_push(uint16_t at, uint8_t v);
+void frame_transfer_queue(void);
+void frame_transfers_if_pending(void);
+void frame_anim_tiles_next(void);
+void frame_word_list_append(int b, uint16_t v);
+void frame_menu_end(void);
 
 #endif
