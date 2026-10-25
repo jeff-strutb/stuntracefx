@@ -1,4 +1,4 @@
-/* old: render/model.c render/raster.c render/polygon.c render/points.c render/fx_points.c render/project.c render/matrix.c render/arith.c render/angle.c math/fx_math.c render/frame.c render/effects.c render/text.c render/bitmap.c render/screen.c object/fx_record.c
+/* old: render/model.c render/raster.c render/polygon.c render/points.c render/fx_points.c render/project.c render/matrix.c render/arith.c render/angle.c math/fx_math.c render/frame.c render/effects.c render/text.c render/bitmap.c render/screen.c object/fx_record.c data/unpack.c
  * ldflags: -Wl,--wrap=fx_draw_list_program -Wl,--wrap=old_abi_FxDrawList -Wl,--wrap=fx_polygon_draw -Wl,--wrap=old_abi_FxPolygonDraw
  *
  * fx_check.c: the port's Super FX programs replayed on the original's own
@@ -687,6 +687,42 @@ static void part(const char *name, void (*old)(void), void (*port)(void), const 
     fx_colour = old_gsu.colr, fx_plot_options = old_gsu.por;
 }
 
+/* each recorded unpack's data again to other places, with and without a
+   word added, by the decomp and the port */
+void old_abi_FxUnpackProgram(void);
+static long unpack_cases, unpack_differ;
+
+static void unpack_variants(long n)
+{
+    static uint8_t entry[0x10000], start[0x10000], old[0x10000];
+    long k;
+    size_t a;
+
+    memcpy(entry, pakram, sizeof entry);
+    for (k = 0; k < n; k++) {
+        memcpy(pakram, entry, sizeof entry);
+        rng = rng * 6364136223846793005ull + 1442695040888963407ull;
+        FXU(0x002C) = (uint16_t)(0x0400 + (rng >> 33) % 0xF000);
+        FXU(0x00A2) = (rng >> 20 & 1) ? (uint16_t)(rng >> 24) : 0;
+        memcpy(start, pakram, sizeof start);
+        memset(&old_gsu, 0, sizeof old_gsu);
+        old_abi_FxUnpackProgram();
+        memcpy(old, pakram, sizeof old);
+        memcpy(pakram, start, sizeof start);
+        fx_unpack_program();
+        unpack_cases++;
+        for (a = 0; a < 0x10000; a++)
+            if (pakram[a] != old[a]) {
+                if (++unpack_differ <= 5)
+                    fprintf(stderr, "unpack variant: dest %04X add %04X src %02X:%04X end %04X: $%04zX = %02X, the decomp's %02X\n",
+                            start[0x2C] | start[0x2D] << 8, start[0xA2] | start[0xA3] << 8, start[0x6A],
+                            start[0x68] | start[0x69] << 8, old[0x60] | old[0x61] << 8, a, pakram[a], old[a]);
+                break;
+            }
+    }
+    memcpy(pakram, entry, sizeof entry);
+}
+
 static void diag_frame(const RecState *in)
 {
     if (pakram[0x01C4])
@@ -748,6 +784,7 @@ int main(int argc, char **argv)
         {"01E9DE.grec", "FxDrawBitmap120x16", run_b120x16},
         {"01F062.grec", "FxDrawBitmap64x16", run_b64x16},
         {"01F3E4.grec", "FxDrawBitmap16x24", run_b16x24},
+        {"01CF42.grec", "FxUnpackProgram", fx_unpack_program},
     };
     const char *only = getenv("ONLY");
 
@@ -796,6 +833,8 @@ int main(int argc, char **argv)
             if (getenv("DUMP") && atol(getenv("DUMP")) == calls) {
                 memcpy(entry_copy, pakram, sizeof entry_copy);
             }
+            if (routines[r].run == fx_unpack_program)
+                unpack_variants(atol(argv[2]) > 0 ? atol(argv[2]) : 0);
             if (getenv("DIAGF") && atol(getenv("DIAGF")) == calls && routines[r].run == fx_frame_program) {
                 memcpy(entry_copy, pakram, sizeof entry_copy);
                 diag_frame(&in);
@@ -864,7 +903,7 @@ int main(int argc, char **argv)
         if (l)
             fclose(l);
     }
-    printf("fx_check: %ld calls, %ld differ; %ld synthetic models, %ld differ, %ld ran away in the decomp\n", calls, differ,
-           syn_cases, syn_differ, syn_runaway);
-    return differ != 0 || syn_differ != 0 || calls == 0;
+    printf("fx_check: %ld calls, %ld differ; %ld synthetic models, %ld differ, %ld ran away in the decomp; %ld unpack variants, %ld differ\n",
+           calls, differ, syn_cases, syn_differ, syn_runaway, unpack_cases, unpack_differ);
+    return differ != 0 || syn_differ != 0 || unpack_differ != 0 || calls == 0;
 }

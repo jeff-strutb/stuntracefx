@@ -61,6 +61,12 @@ void map_markers(uint8_t origin_x, uint8_t origin_y, uint16_t sprite, int16_t st
 void map_markers_panel_a(void);
 void map_markers_panel_b(void);
 
+/* ---- data/fx_unpack.c ---- */
+void fx_unpack_program(void);       /* the Super FX's unpacker, inputs at $002C-$006A, $00A2 */
+
+/* ---- render/fx_init.c ---- */
+void fx_init_program(void);         /* the Super FX's RAM set up at power on */
+
 /* ---- hud/race_text.c ---- */
 void oam_class_name(void);
 

@@ -1,4 +1,4 @@
-/* old: render/model.c render/raster.c render/polygon.c render/points.c render/fx_points.c render/project.c render/matrix.c render/arith.c render/angle.c math/fx_math.c render/frame.c render/effects.c render/text.c render/bitmap.c render/screen.c object/fx_record.c
+/* old: render/model.c render/raster.c render/polygon.c render/points.c render/fx_points.c render/project.c render/matrix.c render/arith.c render/angle.c math/fx_math.c render/frame.c render/effects.c render/text.c render/bitmap.c render/screen.c object/fx_record.c data/unpack.c gsu/fx_init.c
  *
  * frame_check.c: the port's frame drawing (render/fx_frame.c, fx_text.c)
  * against the decomp's Super FX routines on random states: the weather,
@@ -36,7 +36,7 @@
 
 #define OLD(name) void old_abi_##name(void);
 OLD(FxWeatherDraw) OLD(FxParticlesDraw) OLD(FxEffectsAdd) OLD(FxObjectSprite) OLD(FxEffectsRun) OLD(FxTextDraw)
-OLD(FxTextNotice)
+OLD(FxTextNotice) OLD(FxUnpackProgram) OLD(FxInit)
 
 static uint64_t rng = 0x5D2B7C94618E1F3Aull;
 
@@ -152,6 +152,114 @@ static void followed(void)
 {
     FXU(0x247A) = 0x3000;
     FXW(0x304A) = (rnd() & 3) ? within(-0x40, 0x600) : (int16_t)rnd();
+}
+
+/* ---- a packed stream for the unpacker, every form of command in it ---- */
+
+static uint8_t bitv[1 << 16];
+static unsigned nbits;
+
+static void put(unsigned v, int n)        /* n bits, the highest first */
+{
+    while (n--)
+        bitv[nbits++] = (uint8_t)(v >> n & 1);
+}
+
+static void literal_count(unsigned n, int any)
+{
+    unsigned form = any ? rnd() % 4 : 0;
+
+    if (n >= 1 && n <= 6 && form < 2)
+        put(n, 3);
+    else if (n >= 7 && n <= 22 && form < 3)
+        put(7, 3), put(0, 1), put(n - 7, 4);
+    else if (n >= 1 && n <= 1023 && form < 3)
+        put(7, 3), put(1, 1), put(n, 10);
+    else
+        put(7, 3), put(1, 1), put(0, 10), put((rnd() & 3) << 16 | n, 18);
+}
+
+/* the stream for `size` bytes: literal runs and copies; returns the
+   address (bank $1F) its end is at */
+static uint16_t packed(unsigned size)
+{
+    uint8_t *rom = rom_copy + 0x1F * 0x8000;
+    unsigned left = size, i, q;
+    uint32_t w;
+
+    nbits = 0;
+    for (;;) {
+        unsigned n = left ? (rnd() & 1 ? rnd() % (left < 30 ? left : 30) : 0) : 0;
+
+        if (!left) {
+            put(0, 3);
+            break;
+        }
+        if (rnd() % 6 == 0 || left <= 2)
+            n = left;
+        if (n)
+            literal_count(n, 1);
+        else
+            put(0, 3);
+        for (i = 0; i < n; i++)
+            put(rnd() & 0xFF, 8);
+        left -= n;
+        if (!left)
+            break;
+        {
+            unsigned c = rnd() % 4, len, width = 8, wcode = rnd() % 3;
+
+            if (c == 0) {
+                put(0, 2), len = 2;
+            } else if (c == 1) {
+                put(1, 2), len = 3, width = rnd() & 1 ? 8 : 14, put(width == 8, 1);
+            } else {
+                if (c == 2) {
+                    put(2, 2), len = 4;
+                } else {
+                    unsigned c2 = rnd() % 4;
+
+                    put(3, 2), put(c2, 2);
+                    len = c2 == 3 ? rnd() % 256 : c2 == 2 ? 7 + rnd() % 4 : c2 + 5;
+                    if (c2 == 3)
+                        put(len, 8);
+                    else if (c2 == 2)
+                        put(len - 7, 2);
+                }
+                width = wcode == 0 ? 16 : wcode == 1 ? 8 : 12;
+                put(wcode != 0, 1);
+                if (wcode)
+                    put(wcode == 1, 1);
+            }
+            if ((len ? len : 1) > left) {   /* too long: start again shorter */
+                nbits = 0;
+                left = size;
+                continue;
+            }
+            put(rnd() & ((1u << width) - 1), (int)width);
+            left -= len ? len : 1;
+        }
+    }
+    /* the stream backward from $FFF0: the size, two spare bytes, 31 bits
+       under a marker, then 32 bits at a time */
+    q = 0xFFF0;
+    rom[(q - 1) & 0x7FFF] = (uint8_t)size, rom[(q - 2) & 0x7FFF] = (uint8_t)(size >> 8);
+    rom[(q - 3) & 0x7FFF] = (uint8_t)rnd(), rom[(q - 4) & 0x7FFF] = (uint8_t)rnd();
+    w = 0x80000000u;
+    for (i = 0; i < 31; i++)
+        w |= (uint32_t)(i < nbits ? bitv[i] : rnd() & 1) << i;
+    q -= 4;
+    for (;;) {
+        rom[(q - 1) & 0x7FFF] = (uint8_t)w, rom[(q - 2) & 0x7FFF] = (uint8_t)(w >> 8);
+        rom[(q - 3) & 0x7FFF] = (uint8_t)(w >> 16), rom[(q - 4) & 0x7FFF] = (uint8_t)(w >> 24);
+        q -= 4;
+        if (i >= nbits)
+            break;
+        w = 0;
+        for (unsigned k = 0; k < 32; k++, i++)
+            w |= (uint32_t)(i < nbits ? bitv[i] : rnd() & 1) << k;
+    }
+    return 0xFFF0;
 }
 
 #define CASE(name) model_current = name; for (i = 0; i < n && (!getenv("ONLY") || !strcmp(getenv("ONLY"), name)) && (iteration = i, 1); i++)
@@ -317,6 +425,26 @@ int main(int argc, char **argv)
         FXU(0x3196) = (uint16_t)(rnd() % 8);
         old_run(old_abi_FxTextNotice);
         fx_text_notice();
+        same_ram();
+    }
+
+    CASE("FxUnpackProgram") {
+        unsigned size = (rnd() & 3) ? 1 + rnd() % 300 : 1 + rnd() % 3000;
+
+        fresh();
+        FXU(0x0068) = packed(size);
+        FXU(0x006A) = 0x1F;
+        FXU(0x002C) = (uint16_t)(0x3000 + rnd() % 0x8000);
+        FXU(0x00A2) = (rnd() & 1) ? (uint16_t)rnd() : 0;
+        old_run(old_abi_FxUnpackProgram);
+        fx_unpack_program();
+        same_ram();
+    }
+
+    CASE("FxInit") {
+        fresh();
+        old_run(old_abi_FxInit);
+        fx_init_program();
         same_ram();
     }
 
