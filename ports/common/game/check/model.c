@@ -35,7 +35,8 @@ Regs65816 old_cpu;
 RegsGSU old_gsu;
 int model_io_n;
 uint32_t model_io[4096];
-static uint8_t m7_latch, m7b, wrmpya;
+static uint8_t m7_latch, m7b, wrmpya, gsu_pbr;
+void (*model_gsu_start)(uint8_t bank, uint16_t start);
 static uint16_t m7a, wrdiv, rddiv, rdmpy;
 
 void model_reset(void)
@@ -87,6 +88,7 @@ uint8_t old_rd8(uint32_t a)
     case 0x2136: return (uint8_t)(p >> 16);
     case 0x4214: return (uint8_t)rddiv;
     case 0x4215: return (uint8_t)(rddiv >> 8);
+    case 0x3030: case 0x3031: return 0;    /* the Super FX's status: stopped */
     case 0x4216: return (uint8_t)rdmpy;
     case 0x4217: return (uint8_t)(rdmpy >> 8);
     }
@@ -119,9 +121,25 @@ void old_wr8(uint32_t a, uint8_t v)
     }
     if (model_io_n < 4096)
         model_io[model_io_n++] = (uint32_t)o << 8 | v;
+    if (o >= 0x3000 && o < 0x3020) {        /* the Super FX's registers; R15's high byte starts it */
+        uint16_t *r = &old_gsu.r[(o - 0x3000) >> 1];
+
+        *r = (o & 1) ? (uint16_t)((*r & 0x00FF) | v << 8) : (uint16_t)((*r & 0xFF00) | v);
+        if (o == 0x301F) {
+            if (!model_gsu_start)
+                die("Super FX start", a);
+            model_gsu_start(gsu_pbr, *r);
+        }
+        return;
+    }
     switch (o) {
     case 0x211B: m7a = (uint16_t)(v << 8 | m7_latch); m7_latch = v; return;
     case 0x211C: m7b = v; m7_latch = v; return;
+    case 0x3030: case 0x3031: return;     /* the status cleared */
+    case 0x3034: gsu_pbr = v; return;
+    case 0x3038: old_gsu.scbr = v; return;
+    case 0x303A: old_gsu.scmr = v; return;
+    case 0x303B: return;                  /* (the high byte of a 16-bit store to SCMR) */
     case 0x4202: wrmpya = v; return;
     case 0x4203: rdmpy = (uint16_t)(wrmpya * v); return;
     case 0x4204: wrdiv = (uint16_t)((wrdiv & 0xFF00) | v); return;

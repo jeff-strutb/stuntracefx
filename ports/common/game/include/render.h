@@ -23,7 +23,6 @@ void fx_screen_clear(void);
 void fx_clear_screen_if_set(void);       /* programs the S-CPU starts (gsu/fx_run.c) */
 void fx_clear_6000_if_set(void);
 void fx_matrix_from_angles_program(void);
-int fx_run(uint8_t bank, uint16_t start);
 uint16_t fx_project_point(int16_t *x, int16_t *y, int16_t *z);
 void fx_project_scaled(int16_t *x, int16_t *y, int16_t *z, int16_t *size);
 uint16_t fx_project_vertex(int16_t *x, int16_t *y, int16_t z);

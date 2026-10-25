@@ -8,6 +8,7 @@
 #include "game.h"
 #include "render.h"
 #include "physics.h"
+#include "glue.h"
 
 /* $01:AECA, $01:AEE1: $1A00 words cleared from $2C00 or from $6000 when
    the byte $01C4 is set */

@@ -24,5 +24,8 @@ void model_pixels_flush(void);
 extern int model_trace;
 extern uint8_t model_cover[0x10000];
 extern int model_covering;
+/* the decomp's program at bank:start run, when the S-CPU starts the Super
+   FX (unset: the check stops) */
+extern void (*model_gsu_start)(uint8_t bank, uint16_t start);
 void model_pixels_set(int i, uint16_t offset, uint8_t bitpend, const uint8_t data[8]);
 #endif
