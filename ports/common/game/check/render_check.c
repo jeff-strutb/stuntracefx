@@ -1,4 +1,4 @@
-/* old: render/angle.c render/arith.c render/points.c render/fx_points.c render/table.c render/table_2702.c render/screen.c render/sort.c render/project.c render/matrix.c render/polygon.c math/fx_math.c */
+/* old: render/angle.c render/arith.c render/points.c render/fx_points.c render/table.c render/table_2702.c render/screen.c render/sort.c render/project.c render/matrix.c render/polygon.c render/raster.c math/fx_math.c */
 /*
  * render_check.c: the port's renderer geometry (render/fx_geom.c) against
  * the decomp's Super FX routines, on random states.
@@ -11,6 +11,9 @@
  *
  *   render_check ROM [N]
  */
+#include <math.h>
+#include <signal.h>
+#include <unistd.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -40,7 +43,7 @@ OLD(FxLengthProgram) OLD(FxTableEntryWords) OLD(FxTable2702Program) OLD(FxScreen
 OLD(FxProjectScaled) OLD(FxProjectVertex) OLD(FxSortObjectsProgram) OLD(FxPointsGather) OLD(FxModelPoints)
 OLD(FxSegmentCrossZ) OLD(FxRatioClamp) OLD(FxDivideSigned)
 OLD(FxPolygonClipTop) OLD(FxPolygonClipBottom) OLD(FxPolygonClipRight) OLD(FxPolygonClipLeft) OLD(FxPolygonClipNear)
-OLD(FxPolygonProject) OLD(FxPolygonNearClip) OLD(FxPolygonDraw)
+OLD(FxPolygonProject) OLD(FxPolygonNearClip) OLD(FxPolygonDraw) OLD(FxDrawList)
 
 static uint64_t rng = 0x8E1F3A5D2B7C9461ull;
 
@@ -80,9 +83,24 @@ static void fresh(void)
 }
 
 /* the stack and the clip routines' save words: not compared */
+static int list_scratch;    /* FxDrawList's own work in its list and words */
+
 static int scratch(size_t a)
 {
+    if (list_scratch && ((a >= 0x005E && a < 0x00D6) || (a >= 0x0700 && a < 0x0D00)))
+        return 1;
     return (a >= 0x0240 && a < 0x0280) || (a >= 0x008A && a < 0x00A2) || a == 0x001A || a == 0x001B;
+}
+
+/* a case that runs away is reported, not left spinning */
+static volatile const char *side = "";
+static long iteration;
+
+static void runaway(int sig)
+{
+    (void)sig;
+    fprintf(stderr, "render_check: %s, case %ld: %s ran away\n", model_current, iteration, side);
+    _exit(3);
 }
 
 static uint8_t start_p[sizeof pakram], old_p[sizeof pakram];
@@ -95,7 +113,7 @@ static void fail(const char *fmt, ...)
     if (++failed > 25)
         return;
     va_start(ap, fmt);
-    fprintf(stderr, "%s: ", model_current);
+    fprintf(stderr, "%s, case %ld: ", model_current, iteration);
     vfprintf(stderr, fmt, ap);
     fputc('\n', stderr);
     va_end(ap);
@@ -104,7 +122,10 @@ static void fail(const char *fmt, ...)
 static void old_run(void (*f)(void))
 {
     memcpy(start_p, pakram, sizeof pakram);
+    side = "the decomp's routine";
+    alarm(5);
     f();
+    side = "the port's";
     memcpy(old_p, pakram, sizeof pakram);
     memcpy(pakram, start_p, sizeof pakram);
 }
@@ -198,7 +219,92 @@ static void slopes(void)
     FXW(0x0094) = (int16_t)(0x1000 + rnd() % 0x6000);
 }
 
-#define CASE(name) model_current = name; for (i = 0; i < n; i++)
+/* a convex polygon's vertices around (cx, cy), either way round */
+static int convex(int n, uint8_t *xy)
+{
+    double cx = rnd() % 256, cy = rnd() % 200, r = 1 + rnd() % ((rnd() & 3) ? 60 : 300), a0 = rnd() % 628 / 100.0;
+    int k, dir = (rnd() & 1) ? 1 : -1;
+
+    for (k = 0; k < n; k++) {
+        double a = a0 + dir * 6.2832 * k / n;
+        int x = (int)(cx + r * cos(a)), y = (int)(cy + r * sin(a));
+
+        xy[2 * k] = (uint8_t)(x < 0 ? 0 : x > 255 ? 255 : x);
+        xy[2 * k + 1] = (uint8_t)(y < 0 ? 0 : y > 255 ? 255 : y);
+    }
+    return n;
+}
+
+/* points kept inside the game's screens: 128 rows, and 216 columns (the
+   8-bit screen at $9400 reaches the end of the game pak RAM there) */
+static void on_screen(int n, uint8_t *xy)
+{
+    int k;
+
+    for (k = 0; k < n; k++) {
+        xy[2 * k] = (uint8_t)(xy[2 * k] * 215 / 255);
+        xy[2 * k + 1] = (uint8_t)(xy[2 * k + 1] * 127 / 255);
+    }
+}
+
+/* a draw list of a few shapes at $08AA: flat polygons, lines, textured
+   polygons (plot options within what the game uses: no sprite layout) */
+static void draw_list(void)
+{
+    uint16_t at = FX_DRAW_LIST;
+    int shapes = 1 + (int)(rnd() % 5), sh, k;
+    uint8_t xy[32];
+
+    for (sh = 0; sh < shapes; sh++) {
+        int kind = (int)(rnd() % 3), n = 3 + (int)(rnd() % 6);
+
+        if (kind == 0) {
+            convex(n, xy);
+            on_screen(n, xy);
+            pakram[at++] = (uint8_t)n;
+            pakram[at++] = (uint8_t)rnd();
+            for (k = 0; k < n; k++) {
+                pakram[at++] = xy[2 * k];
+                pakram[at++] = 0;
+                pakram[at++] = xy[2 * k + 1];
+                pakram[at++] = 0;
+            }
+        } else if (kind == 1) {
+            pakram[at++] = 2;
+            pakram[at++] = (uint8_t)rnd();
+            for (k = 0; k < 4; k++) {
+                pakram[at++] = (uint8_t)(k & 1 ? rnd() % 128 : rnd() % 216);
+                pakram[at++] = 0;
+            }
+        } else {
+            static const uint16_t masks[] = {0xFFFF, 0x0F0F, 0x1F1F, 0x3F3F, 0x7F7F, 0x0707};
+
+            convex(n, xy);
+            on_screen(n, xy);
+            pakram[at++] = (uint8_t)~n;
+            pakram[at++] = (uint8_t)(rnd() % 0x20);
+            pakram[at++] = (uint8_t)rnd();
+            pakram[at++] = (uint8_t)(rnd() & 0x0F);
+            FXU(at) = (uint16_t)(0x8000 + (rnd() & 0x7FFF));
+            at = (uint16_t)(at + 2);
+            FXU(at) = masks[rnd() % 6];
+            at = (uint16_t)(at + 2);
+            for (k = 0; k < n; k++) {
+                pakram[at++] = xy[2 * k];
+                pakram[at++] = 0;
+                pakram[at++] = xy[2 * k + 1];
+                pakram[at++] = 0;
+                pakram[at++] = 0;               /* u and v: the queuing code's words, value in the high byte */
+                pakram[at++] = (uint8_t)rnd();
+                pakram[at++] = 0;
+                pakram[at++] = (uint8_t)rnd();
+            }
+        }
+    }
+    fx_draw_list_end = at;
+}
+
+#define CASE(name) model_current = name; for (i = 0; i < n && (!getenv("ONLY") || !strcmp(getenv("ONLY"), name)) && (iteration = i, 1); i++)
 
 int main(int argc, char **argv)
 {
@@ -209,6 +315,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "usage: render_check ROM [N]\n");
         return 2;
     }
+    signal(SIGALRM, runaway);
     model_load_rom(argv[1]);
     memcpy(rom_copy, srfx_rom_image, sizeof rom_copy);
     srfx_rom_image = rom_copy;
@@ -523,6 +630,29 @@ int main(int argc, char **argv)
         r = fx_polygon_draw(codes, bank, script);
         same_ram();
         same("count", r, old_gsu.r[0]);
+    }
+
+    CASE("FxDrawList") {
+        static const uint8_t bases[2] = {0x0B, 0x25};
+        uint8_t md = (rnd() & 1) ? 1 : 3, ht = 0;      /* the game's: SCMR $01 or $03 */
+
+        fresh();
+        draw_list();
+        old_gsu.scmr = (uint8_t)(md | (ht & 1 ? 0x04 : 0) | (ht & 2 ? 0x20 : 0));
+        old_gsu.scbr = bases[rnd() & 1];
+        fx_screen.mode = md;
+        fx_screen.height = ht;
+        fx_screen.base = old_gsu.scbr;
+        model_pixels_empty();
+        old_run(old_abi_FxDrawList);
+        memcpy(pakram, old_p, sizeof pakram);       /* the decomp's pixels still in its caches, written out */
+        model_pixels_flush();
+        memcpy(old_p, pakram, sizeof pakram);
+        memcpy(pakram, start_p, sizeof pakram);
+        fx_draw_list_program();
+        list_scratch = 1;
+        same_ram();
+        list_scratch = 0;
     }
 
     printf("render_check: %ld cases, %ld differ\n", cases, failed);

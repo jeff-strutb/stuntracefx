@@ -177,6 +177,8 @@ typedef struct PACKED {
 #define fx_count_save       FXU(0x0098)
 #define fx_points_n         FXU(0x0146)
 #define fx_codes            FXU(0x014A)                    /* outcodes ORed; the sides to clip */
+#define fx_draw_list_end    FXU(0x005C)                    /* past the frame's last queued shape */
+#define FX_DRAW_LIST        0x08AAu
 #define FX_LIST_A           0x0688u
 #define FX_LIST_B           0x082Au
 #define fx_model_variant    FXU(0x0044)

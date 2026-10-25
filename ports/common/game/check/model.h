@@ -18,4 +18,7 @@ void model_load_rom(const char *path);
 extern int model_io_n;
 extern uint32_t model_io[4096];
 void model_reset(void);
+/* the Super FX's pixel caches emptied, or written out to the RAM */
+void model_pixels_empty(void);
+void model_pixels_flush(void);
 #endif

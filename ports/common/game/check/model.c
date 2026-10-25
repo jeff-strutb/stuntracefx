@@ -27,6 +27,7 @@
 
 #include "state.h"
 #include "model.h"
+#include "gsu_clock.h"
 
 const uint8_t *srfx_rom_image;
 const char *model_current = "";
@@ -160,5 +161,60 @@ void old_gsu_cache(uint16_t r15) { (void)r15; }
 void old_gsu_cyc(uint32_t c) { (void)c; }
 void old_gsu_time(int w) { (void)w; }
 void old_gsu_buffer(int w) { (void)w; }
-void old_gsu_plot(uint8_t x, uint8_t y) { (void)x; (void)y; die("plot", 0); }
-uint8_t old_gsu_rpix(uint8_t x, uint8_t y) { (void)x; (void)y; die("rpix", 0); return 0; }
+/* PLOT and RPIX through the Super FX's two pixel caches (the sfxbox
+   model, tools/stuntracefx/sfxbox/gsu_clock.c), on the game pak RAM */
+static uint8_t pix_read(GsuClock *c, uint32_t a) { (void)c; return pakram[(uint16_t)a]; }
+static void pix_write(GsuClock *c, uint32_t a, uint8_t v) { (void)c; pakram[(uint16_t)a] = v; }
+static GsuClock pixels = {.pix_read = pix_read, .pix_write = pix_write};
+
+static GsuScreen model_screen(void)
+{
+    unsigned ht = (old_gsu.scmr & 0x20 ? 2u : 0u) | (old_gsu.scmr & 0x04 ? 1u : 0u);
+    GsuScreen s = {(uint8_t)(old_gsu.por & 0x10 ? 3 : ht), (uint8_t)(old_gsu.scmr & 3), old_gsu.scbr};
+
+    return s;
+}
+
+void old_gsu_plot(uint8_t x, uint8_t y)
+{
+    unsigned md = old_gsu.scmr & 3u;
+    uint8_t color = old_gsu.colr;
+    GsuScreen s = model_screen();
+
+    if (!(old_gsu.por & 0x01)) {
+        if (md == 3) {
+            if (old_gsu.por & 0x08) {
+                if ((old_gsu.colr & 0x0F) == 0)
+                    return;
+            } else if (old_gsu.colr == 0)
+                return;
+        } else if ((old_gsu.colr & 0x0F) == 0)
+            return;
+    }
+    if ((old_gsu.por & 0x02) && md != 3) {
+        if ((x ^ y) & 1)
+            color >>= 4;
+        color &= 0x0F;
+    }
+    gsuclk_plot(&pixels, &s, x, y, color);
+}
+
+uint8_t old_gsu_rpix(uint8_t x, uint8_t y)
+{
+    GsuScreen s = model_screen();
+
+    return gsuclk_rpix(&pixels, &s, x, y);
+}
+
+void model_pixels_empty(void)
+{
+    pixels.pix[0].bitpend = pixels.pix[1].bitpend = 0;
+    pixels.pix[0].offset = pixels.pix[1].offset = 0xFFFF;
+}
+
+void model_pixels_flush(void)
+{
+    GsuScreen s = model_screen();
+
+    gsuclk_rpix(&pixels, &s, 0, 0);
+}

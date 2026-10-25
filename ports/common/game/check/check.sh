@@ -40,7 +40,8 @@ for f in $(find $G -name '*.c' -not -path "$G/check/*" | sort); do
   $CC $CFLAGS -Wall -Wextra -I$G/include -c "$f" -o "$o"
   NEW="$NEW $o"
 done
-$CC $CFLAGS -w -Isrc/stuntracefx/include -I$G/include -I$G/check -c $G/check/model.c -o "$OUT/model.o"
+$CC $CFLAGS -w -Isrc/stuntracefx/include -I$G/include -I$G/check -Itools/stuntracefx/sfxbox -c $G/check/model.c -o "$OUT/model.o"
+$CC $CFLAGS -w -Itools/stuntracefx/sfxbox -c tools/stuntracefx/sfxbox/gsu_clock.c -o "$OUT/gsu_clock.o"
 $CC $CFLAGS -Wall -Isrc/stuntracefx/include -I$G/include -I$G/check $G/check/${NAME}_check.c \
-  "$OUT/model.o" "$OUT/stubs.c" $NEW $OLD -o "$OUT/${NAME}_check"
+  "$OUT/model.o" "$OUT/gsu_clock.o" "$OUT/stubs.c" $NEW $OLD -o "$OUT/${NAME}_check" -lm
 "$OUT/${NAME}_check" "$ROM" ${2:-20000} ${3:-}
