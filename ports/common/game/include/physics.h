@@ -53,6 +53,11 @@ void fx_contact_note(uint16_t owner, uint16_t other);
 void fx_record_touches(uint16_t rec);
 void fx_all_touches(void);
 int fx_collide_model(uint16_t rec, uint16_t other);
+void fx_record_collide(uint16_t rec);
+void fx_object_mark_touched(uint16_t rec);
+void fx_object_fall(uint16_t rec);
+void fx_car_handler(uint16_t car);
+void fx_physics_program(void);
 
 /* ---- object/fx_record.c ---- */
 uint16_t fx_push_set(int16_t amount);

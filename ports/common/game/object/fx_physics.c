@@ -16,6 +16,7 @@
 #define fx_push_turn        FXU(0x247E)
 #define fx_collide_model_at FXU(0x2486)     /* the record collided with */
 #define fx_variant          FXU(0x0044)     /* the model variant of the record collided with */
+#define FX_ALL_RECORDS      0x2332u
 
 /* ---- a record's collisions ---- */
 
@@ -233,4 +234,182 @@ int fx_collide_model(uint16_t rec, uint16_t other)
     }
 done:
     return contacts_any_touch();
+}
+
+/* Record `rec` against each record it touches (its contact list, +$18):
+   a model's faces, or another record's box. The pushes taken from them
+   are summed, the record's own push (from its y) added, and the sums
+   applied to it. $239C keeps the first hit's depth (a model's push
+   negated). */
+void fx_record_collide(uint16_t rec)
+{
+    uint16_t c;
+
+    fx_push_turn = 0;
+    fx_hit_depth = 0;
+    fx_sums_clear();
+    FXU(rec + 0x1C) &= (uint16_t)~1;
+    for (c = FXU(rec + 0x18); c; c = FXU(c + 0x0E)) {
+        uint16_t other = FXU(c + 0x0C);
+        int16_t depth;
+
+        fx_collide_model_at = other;
+        FXU(c + 0x10) &= (uint16_t)~2;
+        fx_push_amount = 0;
+        if (!(FXU(other + 0x16) & 0x10)) {
+            if (!fx_collide_model(rec, other))
+                continue;
+            fx_pushes_apply();
+            depth = wrap16(-fx_push_amount);
+        } else {
+            uint16_t at = FX_PUSH;
+
+            fx_collide_push(c, other, rec);
+            fx_push_apply(&at);
+            depth = fx_push_amount;
+        }
+        if (!fx_hit_depth)
+            fx_hit_depth = depth;
+        if (!depth)
+            continue;
+        if (fx_push_flags & 0x20)
+            FXU(rec + 0x2C) |= 0x20;
+        FXU(c + 0x10) |= 2;
+    }
+    fx_push_set(FXW(rec + 0x20));
+    {
+        uint16_t at = FX_PUSH;
+
+        if (fx_push_apply(&at)) {
+            FXU(rec + 0x1C) |= 1;
+            if (!fx_hit_depth)
+                fx_hit_depth = fx_push_amount;
+        }
+    }
+    fx_sums_apply(rec);
+}
+
+/* ---- the record handlers ---- */
+
+/* each sum's speed less a 2^`n`th of itself, x and z (+$2E, +$32) */
+static void damp(uint16_t rec, int n)
+{
+    int k, i;
+
+    for (k = 0; k < 2; k++) {
+        uint16_t at = (uint16_t)(rec + (k ? 0x32 : 0x2E));
+        int16_t v = FXW(at), d = v;
+
+        for (i = 0; i < n; i++)
+            d = div2(d);
+        FXW(at) = wrap16(v - d);
+    }
+}
+
+/* 04:907A: falls ($78 a step), and bounces off what it hits: its fall
+   less the depth, its speeds less an eighth */
+static void object_bounce(uint16_t rec)
+{
+    FXW(rec + 0x30) = wrap16(FXW(rec + 0x30) + 0x78);
+    fx_record_move(rec, 3);
+    fx_record_collide(rec);
+    if (!fx_hit_depth)
+        return;
+    if (fx_hit_depth > 0)
+        FXW(rec + 0x30) = wrap16(FXW(rec + 0x30) - fx_hit_depth);
+    damp(rec, 3);
+}
+
+/* 04:90E8: marks each contact touched */
+void fx_object_mark_touched(uint16_t rec)
+{
+    uint16_t c;
+
+    for (c = FXU(rec + 0x18); c; c = FXU(c + 0x0E))
+        FXU(c + 0x10) |= 2;
+}
+
+/* 04:910A: falls while it touches something, its speeds less a quarter
+   when it hits */
+void fx_object_fall(uint16_t rec)
+{
+    if (FXU(rec + 0x18))
+        FXW(rec + 0x30) = wrap16(FXW(rec + 0x30) + 0x78);
+    fx_record_move(rec, 3);
+    fx_record_collide(rec);
+    if (fx_hit_depth)
+        damp(rec, 2);
+}
+
+/* 04:9185: drops ($3C a step, no z speed) until it lands, where it stays
+   (its handler cleared); x and z stay put while it falls */
+static void object_drop(uint16_t rec)
+{
+    int16_t x, z;
+
+    FXW(rec + 0x30) = wrap16(FXW(rec + 0x30) + 0x3C);
+    FXU(rec + 0x32) = 0;
+    fx_record_move(rec, 3);
+    x = FXW(rec + 0x1E), z = FXW(rec + 0x22);
+    fx_record_collide(rec);
+    if (!fx_hit_depth) {
+        FXW(rec + 0x1E) = x, FXW(rec + 0x22) = z;
+    } else {
+        FXU(rec + 0x0A) = 0;
+    }
+}
+
+void fx_car_handler(uint16_t car) { (void)car; }
+
+static void handler(uint16_t at, uint16_t rec)
+{
+    switch (at) {
+    case 0x907A: object_bounce(rec); break;
+    case 0x90E8: fx_object_mark_touched(rec); break;
+    case 0x910A: fx_object_fall(rec); break;
+    case 0x916D: fx_record_collide(rec); break;
+    case 0x9185: object_drop(rec); break;
+    case 0xB1A1: fx_car_handler(rec); break;
+    }
+}
+
+/* The program the S-CPU starts once a race frame, while $246C is set:
+   the frame counted ($2470; $2472 counts down to the next look for what
+   touches what), then each record's handler (twice, $263C 0 then 1, when
+   +$1C has bit 3), and the record freed after unless +$1C has bit 2
+   (cleared for the next frame); then the cars ranked and the nearest
+   found. $246E is $FFFF while it runs. */
+void fx_physics_program(void)
+{
+    uint16_t rec;
+
+    if (!FXU(0x246C))
+        return;
+    if (FXU(0x2472))
+        FXU(0x2472)--;
+    FXU(0x2470)++;
+    FXU(0x246E) = 0xFFFF;
+    if (!FXU(0x2472))
+        fx_all_touches();
+    for (rec = FXU(FX_ALL_RECORDS); rec;) {
+        uint16_t at = FXU(rec + 0x0A), next;
+
+        if (at) {
+            if (FXU(rec + 0x1C) & 8) {
+                fx_hit_on = 0;
+                handler(at, rec);
+            }
+            fx_hit_on = 1;
+            handler(at, rec);
+        }
+        next = FXU(rec + 4);
+        if (FXU(rec + 0x1C) & 4)
+            FXU(rec + 0x1C) &= (uint16_t)~4;
+        else
+            fx_object_free(rec);
+        rec = next;
+    }
+    fx_rank_cars();
+    fx_nearest_car();
+    FXU(0x246E) = 0;
 }
