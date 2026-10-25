@@ -18,4 +18,24 @@ void gsu_records_upload(void);
 void gsu_screen_flip(void);
 void gsu_screen_toggle(void);
 
+/* gsu/programs.c */
+void gsu_unpack_to(uint16_t in68, uint16_t in6a, uint16_t dest);
+uint16_t gsu_object_length(uint16_t obj);
+void gsu_vector_turn(void);
+uint16_t gsu_vector_angle(void);
+void gsu_view_matrix(void);
+void view_matrix_update_and_save(void);
+void view_update_and_sort(void);
+void view_reset(void);
+void gsu_noise_ramp(void);
+void gsu_glyph_f329(uint16_t n);
+void gsu_glyph_f329_sequence(uint16_t at);
+void gsu_player_picture(int player);
+void gsu_picture_rise(uint16_t y, int split);
+void gsu_digit_pair_0e74(void);
+void gsu_glyphs_three(void);
+void gsu_glyphs_five(void);
+int gsu_sprite_fa1b_from_tables(void);
+void gsu_sprites_fa5a_three(void);
+
 #endif
