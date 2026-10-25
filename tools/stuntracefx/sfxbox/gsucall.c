@@ -230,7 +230,7 @@ void gsu_wr8(uint32_t a, uint8_t v)
 }
 
 /* ---- the pixel caches and the Super FX's time: the port's model
-   (ports/common/snes/gsu_clock.c), which here also times the C against the
+   (gsu_clock.c), which here also times the C against the
    original ---- */
 
 static uint8_t pix_read(GsuClock *c, uint32_t a) { (void)c; in_pixels = 1; uint8_t v = gsu_rd8(a); in_pixels = 0; return v; }

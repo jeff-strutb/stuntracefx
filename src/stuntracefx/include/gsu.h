@@ -57,7 +57,7 @@ uint8_t gsu_rpix(uint8_t x, uint8_t y);
    (the RAM buffer), its R14 writes and ROM-buffer reads, MULT and FMULT,
    PLOT and RPIX (the pixel caches). The runtime prices each as the GSU-1
    does (a byte from the code cache, a cache line's fill, a byte outside
-   it; the buffers' waits; ports/common/snes/gsu_clock.h). gsu_cyc states
+   it; the buffers' waits; tools/stuntracefx/sfxbox/gsu_clock.h). gsu_cyc states
    any clocks beyond those (master clocks, 21.47 MHz). The stated forms of
    a branch and a loop, as machine.h's cyc_then and cyc_loop. */
 void gsu_code(uint32_t addr, uint32_t n);
