@@ -44,6 +44,7 @@ uint16_t fx_polygon_clip_screen(uint16_t n);
 void fx_model_draw(void);
 void fx_model_draw_flagged(void);
 void fx_model_draw_with_flags(uint16_t flags);
+void fx_sprite_material(uint8_t index);
 
 /* ---- render/fx_screen.c ---- */
 /* The screen as the S-CPU has set it up: its colour depth (SCMR's mode:
@@ -56,5 +57,52 @@ extern FxScreen fx_screen;
 void fx_screen_put(const FxScreen *s, uint8_t x, uint8_t y, uint8_t colour);
 uint8_t fx_screen_get(const FxScreen *s, uint8_t x, uint8_t y);
 void fx_draw_list_program(void);
+extern uint8_t fx_colour, fx_plot_options;
+void fx_set_colour(uint8_t v);
+void fx_plot(uint8_t x, uint8_t y);
+void fx_plot_put(uint8_t x, uint8_t y, uint8_t c);
+uint8_t fx_read_pixel(uint8_t x, uint8_t y);
+void fx_pixels_flush(void);
+void fx_pixels_set(int i, uint16_t row, uint8_t pending, const uint8_t colours[8]);
+
+/* ---- render/fx_frame.c ---- */
+void fx_frame_program(void);
+void fx_objects_draw(void);
+void fx_object_sprite(void);
+void fx_effects_add(uint16_t kind, uint16_t life, uint16_t key, uint16_t count);
+void fx_particles_draw(uint16_t key);
+void fx_weather_draw(uint16_t kind, uint16_t drops);
+void fx_effects_run(void);
+void fx_text_notice(void);
+
+/* ---- render/fx_text.c ---- */
+uint16_t fx_draw_bitmap(uint16_t at, int w, int h, uint16_t x, uint16_t y, uint16_t palette);
+void fx_text_draw(void);
+void fx_text_program(void);
+
+/* ---- render/fx_hud.c: programs the S-CPU starts, inputs at $0200-$021D ---- */
+void fx_glyph_rows_from_bottom(void);
+void fx_glyph_rows_from_top(void);
+void fx_glyph_8x16(void);
+void fx_glyph_8x8(void);
+void fx_glyph_24x16(void);
+void fx_glyph_16x16(void);
+void fx_glyph_16x32(void);
+void fx_glyph_24x32_bank04(void);
+void fx_glyph_16x32_double(void);
+void fx_picture_rise_split_40(void);
+void fx_picture_rise_split_60(void);
+void fx_picture_rise_40(void);
+void fx_picture_rise_60(void);
+void fx_scaled_sprite_13(void);
+void fx_scaled_sprite_12(void);
+void fx_scaled_sprite_eighth(void);
+void fx_scaled_sprite_advance(void);
+void fx_sprite_24x40(void);
+void fx_sprite_16x32(void);
+void fx_noise_fill(void);
+void fx_noise_fill_screen(void);
+void fx_tiles_2bpp_to_4bpp_high(void);
+void fx_tiles_2bpp_to_4bpp_low(void);
 
 #endif

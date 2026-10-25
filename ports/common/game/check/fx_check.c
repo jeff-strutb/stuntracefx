@@ -1,4 +1,4 @@
-/* old: render/model.c render/raster.c render/polygon.c render/points.c render/fx_points.c render/project.c render/matrix.c render/arith.c render/angle.c math/fx_math.c
+/* old: render/model.c render/raster.c render/polygon.c render/points.c render/fx_points.c render/project.c render/matrix.c render/arith.c render/angle.c math/fx_math.c render/frame.c render/effects.c render/text.c render/bitmap.c render/screen.c object/fx_record.c
  * ldflags: -Wl,--wrap=fx_draw_list_program -Wl,--wrap=old_abi_FxDrawList -Wl,--wrap=fx_polygon_draw -Wl,--wrap=old_abi_FxPolygonDraw
  *
  * fx_check.c: the port's Super FX programs replayed on the original's own
@@ -80,7 +80,7 @@ static void written_out(const RecState *s)
     model_pixels_flush();
 }
 
-static uint8_t mine[0x10000], theirs[0x10000], entry_copy[0x10000];
+static uint8_t mine[0x10000], theirs[0x10000], entry_copy[0x10000], entry_raw[0x10000];
 
 /* DIAG: the decomp's interpreter and the port's run on the same entry,
    each draw list as it is handed to the drawing kept and compared */
@@ -602,7 +602,16 @@ static void syn_run(const RecState *in, const uint8_t *entry, long n)
         model_pixels_flush();
         memcpy(syn_old, pakram, 0x10000);
         memcpy(pakram, syn_entry, 0x10000);
+        {
+            static const uint8_t zero[8];
+
+            fx_pixels_set(0, 0xFFFF, 0, zero);
+            fx_pixels_set(1, 0xFFFF, 0, zero);
+            fx_colour = in->colr;
+            fx_plot_options = in->por;
+        }
         fx_model_draw();
+        fx_pixels_flush();
         syn_cases++;
         for (a = 0; a < 0x10000; a++) {
             if (pakram[a] == syn_old[a])
@@ -635,6 +644,74 @@ static void syn_run(const RecState *in, const uint8_t *entry, long n)
     }
 }
 
+/* the recorded call's entry state, for the routines that take registers */
+static RecState cur;
+
+void old_abi_FxObjectsDraw(void);
+void old_abi_FxEffectsRun(void);
+void old_abi_FxTextNotice(void);
+void old_abi_FxWeatherDraw(void);
+void old_abi_FxParticlesDraw(void);
+void old_abi_FxEffectsAdd(void);
+
+/* DIAGF=n: frame call n's parts run by the decomp and the port from the
+   same state (the decomp's result going on to the next part), the first
+   differences of each shown */
+static void part(const char *name, void (*old)(void), void (*port)(void), const RecState *in)
+{
+    static uint8_t before[0x10000], after_old[0x10000];
+    unsigned i, shown = 0;
+
+    memcpy(before, pakram, sizeof before);
+    memcpy(old_gsu.r, in->r, sizeof in->r);
+    old_gsu.r[10] = 0x0240;
+    old_gsu.r[11] = 0xFFF0;
+    old_gsu.rombr = in->rombr, old_gsu.rambr = in->rambr, old_gsu.scmr = in->scmr, old_gsu.scbr = in->scbr;
+    old_gsu.colr = fx_colour, old_gsu.por = fx_plot_options;
+    model_pixels_empty();
+    old();
+    model_pixels_flush();
+    memcpy(after_old, pakram, sizeof after_old);
+    {
+        uint8_t c = old_gsu.colr, p = old_gsu.por;
+
+        memcpy(pakram, before, sizeof before);
+        port();
+        old_gsu.colr = c, old_gsu.por = p;
+    }
+    for (i = 0; i < 0x10000; i++)
+        if (pakram[i] != after_old[i] && !(i >= 0x240 && i < 0x2A0) && shown++ < 12)
+            fprintf(stderr, "%s: $%04X = %02X, the decomp's %02X (entry %02X)\n", name, i, pakram[i], after_old[i], before[i]);
+    fprintf(stderr, "%s: %u bytes differ\n", name, shown);
+    memcpy(pakram, after_old, sizeof after_old);
+    fx_colour = old_gsu.colr, fx_plot_options = old_gsu.por;
+}
+
+static void diag_frame(const RecState *in)
+{
+    if (pakram[0x01C4])
+        fx_screen_clear();
+    FXU(0x01B4) = 0;
+    part("objects", old_abi_FxObjectsDraw, fx_objects_draw, in);
+    fx_plot_options = 0;
+    part("effects", old_abi_FxEffectsRun, fx_effects_run, in);
+    part("text", old_abi_FxTextNotice, fx_text_notice, in);
+}
+
+static void run_effects_add(void) { fx_effects_add(cur.r[0], cur.r[1], cur.r[2], cur.r[3]); }
+static void run_weather(void) { fx_weather_draw(cur.r[0], cur.r[1]); }
+static void run_particles(void) { fx_particles_draw(cur.r[2]); }
+
+#define BITMAP(name, w, h) \
+    static void run_##name(void) { if (cur.rombr == 0x15) fx_draw_bitmap((uint16_t)(cur.r[14] - 0x8000), w, h, cur.r[4], cur.r[2], cur.r[9]); }
+BITMAP(b16x32, 16, 32)
+BITMAP(b8x16, 8, 16)
+BITMAP(b120x24, 120, 24)
+BITMAP(b120x32, 120, 32)
+BITMAP(b120x16, 120, 16)
+BITMAP(b64x16, 64, 16)
+BITMAP(b16x24, 16, 24)
+
 int main(int argc, char **argv)
 {
     long calls = 0, differ = 0;
@@ -648,19 +725,37 @@ int main(int argc, char **argv)
     model_load_rom(argv[1]);
     memcpy(rom_copy, srfx_rom_image, sizeof rom_copy);
     srfx_rom_image = rom_copy;
-    for (r = 0; r < 3; r++) {
-        static const struct {
-            const char *file, *name;
-            void (*run)(void);
-        } routines[] = {
-            {"018561.grec", "FxModelDraw", fx_model_draw},
-            {"01AB13.grec", "FxFrameProgram", NULL},
-            {"01A931.grec", "FxDrawList", fx_draw_list_program},
-        };
+    static const struct {
+        const char *file, *name;
+        void (*run)(void);
+    } routines[] = {
+        {"018561.grec", "FxModelDraw", fx_model_draw},
+        {"01A931.grec", "FxDrawList", fx_draw_list_program},
+        {"01AB13.grec", "FxFrameProgram", fx_frame_program},
+        {"01AB81.grec", "FxObjectsDraw", fx_objects_draw},
+        {"01B0D9.grec", "FxObjectSprite", fx_object_sprite},
+        {"01B6D5.grec", "FxEffectsAdd", run_effects_add},
+        {"01BA13.grec", "FxParticlesDraw", run_particles},
+        {"01BC7D.grec", "FxWeatherDraw", run_weather},
+        {"01BF6D.grec", "FxEffectsRun", fx_effects_run},
+        {"01D12F.grec", "FxTextNotice", fx_text_notice},
+        {"01D307.grec", "FxTextProgram", fx_text_program},
+        {"01D311.grec", "FxTextDraw", fx_text_draw},
+        {"01D4E4.grec", "FxDrawBitmap16x32", run_b16x32},
+        {"01D5D2.grec", "FxDrawBitmap8x16", run_b8x16},
+        {"01DCD6.grec", "FxDrawBitmap120x24", run_b120x24},
+        {"01E35A.grec", "FxDrawBitmap120x32", run_b120x32},
+        {"01E9DE.grec", "FxDrawBitmap120x16", run_b120x16},
+        {"01F062.grec", "FxDrawBitmap64x16", run_b64x16},
+        {"01F3E4.grec", "FxDrawBitmap16x24", run_b16x24},
+    };
+    const char *only = getenv("ONLY");
+
+    for (r = 0; r < (int)(sizeof routines / sizeof routines[0]); r++) {
         FILE *f;
         char magic[4];
 
-        if (!routines[r].run)
+        if (only && !strstr(only, routines[r].name))
             continue;
         snprintf(path, sizeof path, "%s/%s", argv[3], routines[r].file);
         f = fopen(path, "rb");
@@ -680,7 +775,11 @@ int main(int argc, char **argv)
             if (fread(pakram, 1, n, f) != n || fread(theirs, 1, n, f) != n)
                 break;
             calls++;
+            cur = in;
+            memcpy(entry_raw, pakram, sizeof entry_raw);
             written_out(&in);
+            fx_colour = in.colr;
+            fx_plot_options = in.por;
             fx_screen.mode = in.scmr & 3;
             fx_screen.height = (uint8_t)((in.scmr & 0x20 ? 2 : 0) | (in.scmr & 0x04 ? 1 : 0));
             fx_screen.base = in.scbr;
@@ -697,7 +796,24 @@ int main(int argc, char **argv)
             if (getenv("DUMP") && atol(getenv("DUMP")) == calls) {
                 memcpy(entry_copy, pakram, sizeof entry_copy);
             }
+            if (getenv("DIAGF") && atol(getenv("DIAGF")) == calls && routines[r].run == fx_frame_program) {
+                memcpy(entry_copy, pakram, sizeof entry_copy);
+                diag_frame(&in);
+                memcpy(pakram, entry_copy, sizeof entry_copy);
+                fx_colour = in.colr;
+                fx_plot_options = in.por;
+            }
+            /* the port's run: the caches' pixels pending, as on the Super FX */
+            memcpy(pakram, entry_raw, sizeof entry_raw);
+            fx_screen.mode = in.scmr & 3;
+            fx_screen.height = (uint8_t)((in.scmr & 0x20 ? 2 : 0) | (in.scmr & 0x04 ? 1 : 0));
+            fx_screen.base = in.scbr;
+            fx_colour = in.colr;
+            fx_plot_options = in.por;
+            for (i = 0; i < 2; i++)
+                fx_pixels_set((int)i, in.pix[i].offset, in.pix[i].bitpend, in.pix[i].data);
             routines[r].run();
+            fx_pixels_flush();
             memcpy(mine, pakram, sizeof mine);
             memcpy(pakram, theirs, sizeof theirs);
             written_out(&out);
@@ -722,6 +838,8 @@ int main(int argc, char **argv)
                     || i == 0xA0 || i == 0xA1)
                     continue;
                 if (i >= 0x5E && i < 0x70)      /* FxDrawList's walk: R10, the edges' places, rows, slopes */
+                    continue;
+                if (i >= 0x0240 && i < 0x02A0)  /* the programs' R10 stack */
                     continue;
                 if (!shown++)
                     differ++;

@@ -200,7 +200,15 @@ uint16_t fx_project_point(int16_t *x, int16_t *y, int16_t *z)
     return (uint16_t)((code ^ 0x1F) << 8 | code);
 }
 
-#define FX_SCALE_TABLE 0x14896Cu    /* the scale for each even depth */
+#define FX_SCALE_TABLE 0x896Cu      /* in bank $14: the scale for each even depth */
+
+/* the scale for an even depth, its address kept to 16 bits as R14 */
+static int16_t scale_at(uint16_t z)
+{
+    uint16_t at = (uint16_t)(FX_SCALE_TABLE + z);
+
+    return (int16_t)(rom_at(0x140000u | at)[0] | rom_at(0x140000u | (uint16_t)(at + 1))[0] << 8);
+}
 
 /* (x, y) and a size at depth z, through the scale table: x and y moved to
    the screen centre. */
@@ -221,7 +229,7 @@ void fx_project_scaled(int16_t *x, int16_t *y, int16_t *z, int16_t *size)
         *z = wrap16(*z * 2);
     }
     *z = (int16_t)(*z & ~1);
-    scale = (int16_t)rom_word(FX_SCALE_TABLE + (uint16_t)*z);
+    scale = scale_at((uint16_t)*z);
     *x = wrap16(fmult(*x, scale) + fx_screen_centre_x);
     *y = wrap16(fmult(*y, scale) + fx_screen_centre_y);
     *size = fmult(*size, scale);
@@ -245,7 +253,7 @@ uint16_t fx_project_vertex(int16_t *x, int16_t *y, int16_t z)
     if (wrap16(0x0100 - z) >= 0)
         return fx_project_point(x, y, &z);
     z = (int16_t)(z & ~1);
-    scale = (int16_t)rom_word(FX_SCALE_TABLE + (uint16_t)z);
+    scale = scale_at((uint16_t)z);
     *x = wrap16(fmult(*x, scale) + fx_screen_centre_x);
     *y = wrap16(fmult(*y, scale) + fx_screen_centre_y);
     if (*x < 0)

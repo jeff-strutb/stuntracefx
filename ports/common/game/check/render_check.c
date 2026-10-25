@@ -705,7 +705,14 @@ int main(int argc, char **argv)
         model_pixels_flush();
         memcpy(old_p, pakram, sizeof pakram);
         memcpy(pakram, start_p, sizeof pakram);
+        {
+            static const uint8_t zero[8];
+
+            fx_pixels_set(0, 0xFFFF, 0, zero);
+            fx_pixels_set(1, 0xFFFF, 0, zero);
+        }
         fx_draw_list_program();
+        fx_pixels_flush();
         list_scratch = 1;
         same_ram();
         list_scratch = 0;

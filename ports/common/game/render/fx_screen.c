@@ -58,16 +58,140 @@ uint8_t fx_screen_get(const FxScreen *s, uint8_t x, uint8_t y)
     return c;
 }
 
-static void put_pixel(void *ctx, uint8_t x, uint8_t y, uint8_t colour)
+/* The plot colour and options (CMODE): bit 0 colour 0 written too, 1
+   dither, 2 the colour's high nibble from the source's high nibble, 3 the
+   high nibble kept, 4 the sprite layout. */
+uint8_t fx_colour, fx_plot_options;
+
+static FxScreen plot_screen(void)
 {
-    fx_screen_put((const FxScreen *)ctx, x, y, colour);
+    FxScreen s = fx_screen;
+
+    if (fx_plot_options & 0x10)
+        s.height = 3;
+    return s;
 }
 
+/* COLOR and GETC: the plot colour from a byte, as the options shape it. */
+void fx_set_colour(uint8_t v)
+{
+    if (fx_plot_options & 0x04)
+        fx_colour = (uint8_t)((fx_colour & 0xF0) | v >> 4);
+    else if (fx_plot_options & 0x08)
+        fx_colour = (uint8_t)((fx_colour & 0xF0) | (v & 0x0F));
+    else
+        fx_colour = v;
+}
+
+/* The Super FX's two pixel caches: PLOT gathers the pixels of one row of
+   eight (one character's row) and writes them out when it moves to
+   another row, or when RPIX reads, through the screen as it is set up at
+   that time; pixels left in them when a program stops are written by a
+   later one. */
+static struct {
+    uint16_t row;           /* y * 32 + x / 8 */
+    uint8_t set;            /* the pixels plotted, bit 7 the leftmost */
+    uint8_t c[8];
+} cache[2] = {{0xFFFF, 0, {0}}, {0xFFFF, 0, {0}}};
+
+static void cache_write(int i)
+{
+    FxScreen s = plot_screen();
+    uint8_t x0 = (uint8_t)(cache[i].row << 3), y = (uint8_t)(cache[i].row >> 5);
+    int k;
+
+    if (!cache[i].set)
+        return;
+    for (k = 0; k < 8; k++)
+        if (cache[i].set & 0x80 >> k)
+            fx_screen_put(&s, (uint8_t)(x0 + k), y, cache[i].c[k]);
+    cache[i].set = 0;
+}
+
+static void cache_next(void)
+{
+    cache_write(1);
+    cache[1] = cache[0];
+    cache[0].set = 0;
+}
+
+void fx_pixels_flush(void)
+{
+    cache_write(1);
+    cache_write(0);
+}
+
+/* A cache as the Super FX holds it: its row, the pixels pending (bit 0
+   the rightmost) and their colours (the rightmost first). */
+void fx_pixels_set(int i, uint16_t row, uint8_t pending, const uint8_t colours[8])
+{
+    int k;
+
+    cache[i].row = row;
+    cache[i].set = 0;
+    for (k = 0; k < 8; k++) {
+        cache[i].c[k] = colours[7 - k];
+        if (pending & 1 << (7 - k))
+            cache[i].set |= (uint8_t)(0x80 >> k);
+    }
+}
+
+/* PLOT: colour 0 (its low nibble outside 8 bits, or with the high nibble
+   kept) is not written unless option 0 is set; dither takes the high
+   nibble on odd pixels. */
+void fx_plot(uint8_t x, uint8_t y)
+{
+    uint8_t c = fx_colour, md = fx_screen.mode;
+
+    if (!(fx_plot_options & 0x01)) {
+        if (md == 3 ? ((fx_plot_options & 0x08) ? !(c & 0x0F) : !c) : !(c & 0x0F))
+            return;
+    }
+    if ((fx_plot_options & 0x02) && md != 3) {
+        if ((x ^ y) & 1)
+            c >>= 4;
+        c &= 0x0F;
+    }
+    fx_plot_put(x, y, c);
+}
+
+/* A pixel of a colour PLOT's rules have already shaped, into the caches. */
+void fx_plot_put(uint8_t x, uint8_t y, uint8_t c)
+{
+    uint16_t row = (uint16_t)(y << 5 | x >> 3);
+
+    if (row != cache[0].row) {
+        cache_next();
+        cache[0].row = row;
+    }
+    cache[0].c[x & 7] = c;
+    cache[0].set |= (uint8_t)(0x80 >> (x & 7));
+    if (cache[0].set == 0xFF)
+        cache_next();
+}
+
+/* RPIX: the caches written out, then the colour of a pixel. */
+uint8_t fx_read_pixel(uint8_t x, uint8_t y)
+{
+    FxScreen s = plot_screen();
+
+    fx_pixels_flush();
+    return fx_screen_get(&s, x, y);
+}
+
+static void put_pixel(void *ctx, uint8_t x, uint8_t y, uint8_t colour)
+{
+    (void)ctx;
+    fx_plot_put(x, y, colour);
+}
+
+/* each row drawn with its shape's plot options set, as CMODE sets them */
 static void put_span(void *ctx, const FxSpan *s)
 {
     const FxDrawSource *src = (const FxDrawSource *)ctx;
 
-    fx_fill_span_pixels(src, put_pixel, &fx_screen, s);
+    fx_plot_options = s->options;
+    fx_fill_span_pixels(src, put_pixel, 0, s);
 }
 
 /* The frame's queued shapes (the list at $08AA up to fx_draw_list_end)

@@ -442,19 +442,15 @@ static int16_t material(uint16_t m)
     return shade(m, h);
 }
 
-/* A sprite's material (its byte at m): as a face's, with no colour kept
-   and shading only when the model's flags have bit 15. */
-static void sprite_material(uint16_t m)
+/* A sprite's colour (and texture) from its material, as a face's. (A
+   flat material also sets the plot colour, by shade; no sprite plots
+   before setting its own, so that is left out.) */
+void fx_sprite_material(uint8_t index)
 {
     uint16_t w;
     uint8_t c1;
 
-    if ((fx_model_flags & 0x2000) && !(fx_model_flags & 0x1000)) {
-        fx_face_colour = 0;
-        fx_face_kind = 0;
-        return;
-    }
-    w = material_word(rb(fx_model_bank, m));
+    w = material_word(index);
     if (w & 0x8000) {
         fx_face_kind = 0xFFFE;
         fx_face_colour = (uint16_t)(0x0800 | (hib(w) & 15) << 4);
@@ -574,7 +570,14 @@ static uint16_t sprite(uint16_t pos)
     FXW(0x00BE) = wrap16(FXW(FX_POINTS + 4 + j) + fx_vector_out[2]);
     if (wrap16(FXW(0x00BE) - 0x20) < 0)
         return (uint16_t)(pos + 2);
-    sprite_material(pos);
+    if ((fx_model_flags & 0x2000) && !(fx_model_flags & 0x1000)) {
+        fx_plot_options = 0;
+        fx_colour = 9;
+        fx_face_colour = 0;
+        fx_face_kind = 0;
+    } else {
+        fx_sprite_material(rb(fx_model_bank, pos));
+    }
     FXU(0x00C8) = (uint16_t)((fx_tex_mask & 0xFF) + 1);
     FXU(0x00CE) = FXU(0x00C8) & 0x40 ? 0x0080 : 0x0100;
     FXU(0x00D2) = 0;
