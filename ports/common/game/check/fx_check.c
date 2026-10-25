@@ -776,6 +776,67 @@ static void maybe(uint16_t at, uint16_t bits)
         FXU(at) ^= bits;
 }
 
+
+/* a model for collisions in ROM bank 0 at $FE00 (put back after each
+   variant): the header of the record's own model, if it has one, with a
+   face list made up here: maybe the $3C commands, then faces of 3 to 5
+   points with random flags (the slot, the variant bit $40, behind $80),
+   normals and points, and new lists */
+#define SYN_SHAPE 0xFE00u
+static uint8_t shape_saved[0x100];
+
+static void syn_shape(uint16_t rec)
+{
+    uint8_t *rom = rom_copy + (SYN_SHAPE & 0x7FFF);
+    uint16_t real = FXU(rec + 0x14), at = 0x40;
+    int k, f;
+
+    if (!real || (real & 0x8000) == 0)
+        return;
+    for (k = 0; k < 0x0D; k++)
+        rom[k] = rom_copy[(real + k) & 0x7FFF];
+    rom[3] = (uint8_t)(SYN_SHAPE + 0x40), rom[4] = (uint8_t)((SYN_SHAPE + 0x40) >> 8);
+    if (!rom[0x0C] && !rom[0x0D])
+        rom[0x0C] = 1;
+    rom[at++] = 0;
+    rom[at++] = 0;
+    if (rnd() & 1) {
+        rom[at++] = 0x3C;
+        for (k = (int)(rnd() % 4); k > 0; k--) {
+            static const uint8_t cmds[3] = {0x40, 0x28, 0x44}, lens[3] = {1, 5, 3};
+            int c = (int)(rnd() % 3), j;
+
+            rom[at++] = cmds[c];
+            for (j = 1; j < lens[c]; j++)
+                rom[at++] = (uint8_t)rnd();
+        }
+        rom[at++] = (rnd() & 7) ? 1 : 0;
+    } else {
+        rom[at++] = 0x7F;
+    }
+    for (f = (int)(rnd() % 12); f > 0 && at < 0xE0; f--) {
+        int size = 3 + (int)(rnd() % 3), j;
+
+        if (!(rnd() % 6)) {
+            rom[at++] = 0x80;
+            rom[at++] = 1;
+            continue;
+        }
+        rom[at++] = (uint8_t)size;
+        rom[at++] = (rnd() % 5) ? (uint8_t)((rnd() % 19 + 1) | (rnd() & 1 ? 0x40 : 0) | (rnd() % 4 ? 0 : 0x80) | (rnd() & 1 ? 0x20 : 0)) : 0;
+        rom[at++] = (uint8_t)rnd(), rom[at++] = (uint8_t)rnd();
+        for (j = 0; j < 3; j++)
+            rom[at++] = (uint8_t)rnd();
+        for (j = 0; j < size; j++)
+            rom[at++] = (uint8_t)(rnd() % 4);
+    }
+    rom[at++] = 0x80;
+    rom[at++] = 0;
+    FXU(rec + 0x14) = SYN_SHAPE;
+    if (rnd() & 1)
+        FXU(0x2380) = 0;
+}
+
 static void vary_car(uint16_t car)
 {
     static const uint16_t surface[] = {0x100, 4, 1, 0x42, 0x80, 0x40, 0x20, 2};
@@ -804,8 +865,8 @@ static void vary_car(uint16_t car)
         FXW(car + 0x26) = (int16_t)((rnd() & 1) ? 0x2100 : -0x2100);
     if (!(rnd() & 3))
         FXW(car + 0x28) = (int16_t)((rnd() & 1) ? 0x2100 : -0x2100);
-    if (!(rnd() & 3))
-        FXU(car + 0x8E) = car;
+    /* the body: a record (in the game, the car itself; recorded cars without body parts hold any word) */
+    FXU(car + 0x8E) = car;
     for (p = FXU(car + 0x3E); p; p = FXU(p + 0x34)) {
         if (!(rnd() & 3))
             FXU(p + 0x46) ^= 0x800;
@@ -815,12 +876,20 @@ static void vary_car(uint16_t car)
     for (c = FXU(car + 0x18); c; c = FXU(c + 0x0E)) {
         uint16_t o = FXU(c + 0x0C);
 
-        maybe(o + 0x16, 0x10), maybe(o + 0x16, 2), maybe(o + 0x16, 0x20), maybe(o + 0x1A, 2), maybe(o + 0x5E, 1);
+        maybe(o + 0x16, 0x10), maybe(o + 0x16, 0x20), maybe(o + 0x1A, 2), maybe(o + 0x5E, 1);
+        if (rnd() & 1) {                /* a car (with parts) or not: kept this step, as a car keeps itself */
+            FXU(o + 0x16) ^= 2;
+            FXU(o + 0x1C) |= 4;
+        }
         maybe(o + 0x64, 3);
         if (!(rnd() & 3))
             FXU(o + 0x24) = (uint16_t)rnd();
         if (!(rnd() & 3))
             FXU(o + 0x12) = (uint16_t)(rnd() & 3);
+        if (!(rnd() & 3)) {             /* the car's own model, for what it touches */
+            FXU(car + 0x14) = FXU(o + 0x14);
+            syn_shape(car);
+        }
     }
 }
 
@@ -837,15 +906,28 @@ static void vary(const RecState *in, void (*old)(void))
         if (!(rnd() & 3))
             FXU(0x2472) = (uint16_t)(rnd() % 3);
         for (r = FXU(0x2332); r && k < 64; r = FXU(r + 4), k++) {
-            if (FXU(r + 0x0A) == 0xB1A1)
+            if (FXU(r + 0x0A) == 0xB1A1) {
                 vary_car(r);
-            else if (FXU(r + 0x0A) && (rnd() & 1))
-                FXU(r + 0x0A) = handlers[rnd() % 5];
-            maybe(r + 0x1C, 8), maybe(r + 0x1C, 4);
+            } else if (FXU(r + 0x0A)) {
+                if (rnd() & 1)
+                    FXU(r + 0x0A) = handlers[rnd() % 5];
+                /* kept or freed this step; not a car's part (the car keeps those). A record with
+                   children is kept: freed, its stale children and contacts leave pointers anywhere,
+                   odd ones too, which the game's even records never give (the replays cover it as
+                   recorded) */
+                if (!(FXU(r + 0x16) & 2))
+                    maybe(r + 0x1C, 4);
+                else
+                    FXU(r + 0x1C) |= 4;
+            }
+            maybe(r + 0x1C, 8);
         }
     } else if (old == old_abi_FxCollideModel) {
-        FXU(in->r[7] + 0x24) = (uint16_t)rnd();
+        if (rnd() & 1)
+            FXU(in->r[7] + 0x24) = (uint16_t)rnd();
         FXU(in->r[7] + 0x12) = (uint16_t)(rnd() & 3);
+        if (rnd() & 1)
+            syn_shape(in->r[7]);
     } else {
         vary_car(in->r[8]);
         if (old == old_abi_FxWheelUpdate) {
@@ -855,6 +937,14 @@ static void vary(const RecState *in, void (*old)(void))
                 if (!(rnd() & 7))
                     FXU(0x2652 + 2 * r) = (uint16_t)rnd();
             FXU(0x2654) = (uint16_t)(2 * (rnd() % 6));
+            if (FXU(in->r[9] + 0x18)) {
+                uint16_t o = FXU(FXU(in->r[9] + 0x18) + 0x0C);
+
+                if (rnd() & 1)
+                    FXU(o + 0x24) = (uint16_t)rnd();
+                if (rnd() & 1)
+                    syn_shape(o);
+            }
         }
     }
 }
@@ -868,6 +958,7 @@ static void phys_variants(const RecState *in, const uint8_t *entry, void (*old)(
         int shown = 0;
 
         memcpy(pakram, entry, 0x10000);
+        memcpy(shape_saved, rom_copy + (SYN_SHAPE & 0x7FFF), sizeof shape_saved);
         vary(in, old);
         memcpy(phys_entry, pakram, 0x10000);
         memcpy(old_gsu.r, in->r, sizeof in->r);
@@ -876,6 +967,7 @@ static void phys_variants(const RecState *in, const uint8_t *entry, void (*old)(
         if (sigsetjmp(syn_escape, 1)) {
             phys_runaway++;
             phys_cases++;
+            memcpy(rom_copy + (SYN_SHAPE & 0x7FFF), shape_saved, sizeof shape_saved);
             continue;
         }
         alarm(5);
@@ -883,11 +975,23 @@ static void phys_variants(const RecState *in, const uint8_t *entry, void (*old)(
         alarm(0);
         memcpy(phys_old, pakram, 0x10000);
         memcpy(pakram, phys_entry, 0x10000);
+        if (sigsetjmp(syn_escape, 1)) {
+            if (++phys_differ <= 10)
+                fprintf(stderr, "%s variant %ld: the port ran away\n", model_current, phys_cases + 1);
+            phys_cases++;
+            memcpy(rom_copy + (SYN_SHAPE & 0x7FFF), shape_saved, sizeof shape_saved);
+            continue;
+        }
+        alarm(5);
         port();
+        alarm(0);
+        memcpy(rom_copy + (SYN_SHAPE & 0x7FFF), shape_saved, sizeof shape_saved);
         phys_cases++;
         for (a = 0; a < 0x10000; a++) {
             if (pakram[a] == phys_old[a] || (a >= in->r[10] && a < in->r[10] + 0x60u && a < 0x0340) || (a >= 0x0240 && a < 0x02A0))
                 continue;
+            if (getenv("ALLVAR") && shown < 16)
+                fprintf(stderr, "  $%04zX = %02X, the decomp's %02X (entry %02X)\n", a, pakram[a], phys_old[a], phys_entry[a]);
             if (!shown++ && ++phys_differ <= 10)
                 fprintf(stderr, "%s variant %ld: $%04zX = %02X, the decomp's %02X (entry %02X)\n", model_current, phys_cases, a,
                         pakram[a], phys_old[a], phys_entry[a]);
