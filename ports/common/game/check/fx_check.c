@@ -975,6 +975,9 @@ static void vary(const RecState *in, void (*old)(void))
 
                 if (rnd() & 1)
                     FXU(o + 0x24) = (uint16_t)rnd();
+                if (rnd() & 1)                  /* the ground's kind: its surface bits */
+                    FXU(o + 0x16) = (uint16_t)((FXU(o + 0x16) & ~0x7840) | (rnd() & 0x3800) | (rnd() & 1 ? 0x40 : 0)
+                                               | (rnd() & 1 ? 0x4000 : 0));
                 if (rnd() & 1)
                     syn_shape(o);
             }
