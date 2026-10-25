@@ -1,4 +1,4 @@
-/* old: render/model.c render/raster.c render/polygon.c render/points.c render/fx_points.c render/project.c render/matrix.c render/arith.c render/angle.c math/fx_math.c render/frame.c render/effects.c render/text.c render/bitmap.c render/screen.c object/fx_record.c data/unpack.c
+/* old: render/model.c render/raster.c render/polygon.c render/points.c render/fx_points.c render/project.c render/matrix.c render/arith.c render/angle.c math/fx_math.c render/frame.c render/effects.c render/text.c render/bitmap.c render/screen.c object/fx_record.c data/unpack.c object/fx_physics.c object/fx_sums.c object/fx_motion.c object/fx_pool.c object/fx_collide.c object/fx_car.c race/fx_traffic.c race/fx_rank.c race/fx_course.c race/fx_drive.c render/table.c math/fx_rotate.c
  * ldflags: -Wl,--wrap=fx_draw_list_program -Wl,--wrap=old_abi_FxDrawList -Wl,--wrap=fx_polygon_draw -Wl,--wrap=old_abi_FxPolygonDraw
  *
  * fx_check.c: the port's Super FX programs replayed on the original's own
@@ -759,6 +759,142 @@ BITMAP(b120x16, 120, 16)
 BITMAP(b64x16, 64, 16)
 BITMAP(b16x24, 16, 24)
 
+/* ---- the physics program's variants: a recorded call's state with the
+   flags that pick its branches changed, run by the decomp and the port ---- */
+void old_abi_FxPhysicsProgram(void);
+void old_abi_FxCarHandler(void);
+void old_abi_FxCarCollide(void);
+void old_abi_FxWheelUpdate(void);
+void old_abi_FxPartsUpdate(void);
+void old_abi_FxCollideModel(void);
+static long phys_cases, phys_differ, phys_runaway;
+static uint8_t phys_old[0x10000], phys_entry[0x10000];
+
+static void maybe(uint16_t at, uint16_t bits)
+{
+    if (rnd() & 1)
+        FXU(at) ^= bits;
+}
+
+static void vary_car(uint16_t car)
+{
+    static const uint16_t surface[] = {0x100, 4, 1, 0x42, 0x80, 0x40, 0x20, 2};
+    uint16_t c, p;
+
+    maybe(car + 0x16, 0x400), maybe(car + 0x16, 0x10);
+    maybe(car + 0x1C, 0x20), maybe(car + 0x1C, 0x10), maybe(car + 0x1C, 0x08), maybe(car + 0x1C, 0x40);
+    maybe(car + 0x64, 1), maybe(car + 0x64, 8), maybe(car + 0x64, 0x10);
+    maybe(car + 0x70, 4), maybe(car + 0x70, 8), maybe(car + 0x70, 0x80);
+    maybe(car + 0x40, 0x2000), maybe(car + 0x40, 0x10), maybe(car + 0x40, 4);
+    maybe(car + 0x2C, 0x40), maybe(car + 0x2C, 0x400);
+    maybe(car + 0x8A, surface[rnd() % 8]), maybe(car + 0x8A, surface[rnd() % 8]);
+    if (rnd() & 1)
+        FXU(car + 0x42) = (uint16_t)(rnd() & 0x0FFF);
+    if (rnd() & 1)
+        FXU(car + 0x44) = (uint16_t)(rnd() % 7);
+    if (rnd() & 1)
+        FXU(car + 0x5E) = (uint16_t)(rnd() % 3);
+    if (rnd() & 3)
+        FXU(car + 0x54) = (uint16_t)(rnd() & 1);
+    if (rnd() & 1)
+        FXU(car + 0x7C) = (uint16_t)(rnd() & 1);
+    if (rnd() & 1)
+        FXW(car + 0x4A) = (int16_t)((int)(rnd() % 0x1000) - 0x800);
+    if (!(rnd() & 3))
+        FXW(car + 0x26) = (int16_t)((rnd() & 1) ? 0x2100 : -0x2100);
+    if (!(rnd() & 3))
+        FXW(car + 0x28) = (int16_t)((rnd() & 1) ? 0x2100 : -0x2100);
+    if (!(rnd() & 3))
+        FXU(car + 0x8E) = car;
+    for (p = FXU(car + 0x3E); p; p = FXU(p + 0x34)) {
+        if (!(rnd() & 3))
+            FXU(p + 0x46) ^= 0x800;
+        maybe(p + 0x46, 4), maybe(p + 0x46, 0x200), maybe(p + 0x46, 0x80), maybe(p + 0x46, 2);
+        maybe(p + 0x46, 8), maybe(p + 0x46, 0x100), maybe(p + 0x46, 1);
+    }
+    for (c = FXU(car + 0x18); c; c = FXU(c + 0x0E)) {
+        uint16_t o = FXU(c + 0x0C);
+
+        maybe(o + 0x16, 0x10), maybe(o + 0x16, 2), maybe(o + 0x16, 0x20), maybe(o + 0x1A, 2), maybe(o + 0x5E, 1);
+        maybe(o + 0x64, 3);
+        if (!(rnd() & 3))
+            FXU(o + 0x24) = (uint16_t)rnd();
+        if (!(rnd() & 3))
+            FXU(o + 0x12) = (uint16_t)(rnd() & 3);
+    }
+}
+
+static void vary(const RecState *in, void (*old)(void))
+{
+    uint16_t r;
+
+    pakram[0x26F4] = (uint8_t)(rnd() % 4);
+    FXU(0x2470) = (uint16_t)rnd();
+    if (old == old_abi_FxPhysicsProgram) {
+        static const uint16_t handlers[5] = {0x907A, 0x90E8, 0x910A, 0x916D, 0x9185};
+        int k = 0;
+
+        if (!(rnd() & 3))
+            FXU(0x2472) = (uint16_t)(rnd() % 3);
+        for (r = FXU(0x2332); r && k < 64; r = FXU(r + 4), k++) {
+            if (FXU(r + 0x0A) == 0xB1A1)
+                vary_car(r);
+            else if (FXU(r + 0x0A) && (rnd() & 1))
+                FXU(r + 0x0A) = handlers[rnd() % 5];
+            maybe(r + 0x1C, 8), maybe(r + 0x1C, 4);
+        }
+    } else if (old == old_abi_FxCollideModel) {
+        FXU(in->r[7] + 0x24) = (uint16_t)rnd();
+        FXU(in->r[7] + 0x12) = (uint16_t)(rnd() & 3);
+    } else {
+        vary_car(in->r[8]);
+        if (old == old_abi_FxWheelUpdate) {
+            maybe(in->r[9] + 0x46, 0x200), maybe(in->r[9] + 0x46, 0x80), maybe(in->r[9] + 0x46, 2), maybe(in->r[9] + 0x46, 8);
+            maybe(in->r[9] + 0x46, 0x100), maybe(in->r[9] + 0x46, 1);
+            for (r = 0; r < 19; r++)
+                if (!(rnd() & 7))
+                    FXU(0x2652 + 2 * r) = (uint16_t)rnd();
+            FXU(0x2654) = (uint16_t)(2 * (rnd() % 6));
+        }
+    }
+}
+
+static void phys_variants(const RecState *in, const uint8_t *entry, void (*old)(void), void (*port)(void), long n)
+{
+    long i;
+
+    for (i = 0; i < n; i++) {
+        size_t a;
+        int shown = 0;
+
+        memcpy(pakram, entry, 0x10000);
+        vary(in, old);
+        memcpy(phys_entry, pakram, 0x10000);
+        memcpy(old_gsu.r, in->r, sizeof in->r);
+        old_gsu.rombr = in->rombr, old_gsu.rambr = in->rambr;
+        signal(SIGALRM, syn_alarm);
+        if (sigsetjmp(syn_escape, 1)) {
+            phys_runaway++;
+            phys_cases++;
+            continue;
+        }
+        alarm(5);
+        old();
+        alarm(0);
+        memcpy(phys_old, pakram, 0x10000);
+        memcpy(pakram, phys_entry, 0x10000);
+        port();
+        phys_cases++;
+        for (a = 0; a < 0x10000; a++) {
+            if (pakram[a] == phys_old[a] || (a >= in->r[10] && a < in->r[10] + 0x60u && a < 0x0340) || (a >= 0x0240 && a < 0x02A0))
+                continue;
+            if (!shown++ && ++phys_differ <= 10)
+                fprintf(stderr, "%s variant %ld: $%04zX = %02X, the decomp's %02X (entry %02X)\n", model_current, phys_cases, a,
+                        pakram[a], phys_old[a], phys_entry[a]);
+        }
+    }
+}
+
 int main(int argc, char **argv)
 {
     long calls = 0, differ = 0;
@@ -775,6 +911,7 @@ int main(int argc, char **argv)
     static const struct {
         const char *file, *name;
         void (*run)(void);
+        void (*old)(void);
     } routines[] = {
         {"018561.grec", "FxModelDraw", fx_model_draw},
         {"01A931.grec", "FxDrawList", fx_draw_list_program},
@@ -796,17 +933,17 @@ int main(int argc, char **argv)
         {"01F062.grec", "FxDrawBitmap64x16", run_b64x16},
         {"01F3E4.grec", "FxDrawBitmap16x24", run_b16x24},
         {"01CF42.grec", "FxUnpackProgram", fx_unpack_program},
-        {"049C3D.grec", "FxCollideModel", run_collide_model},
+        {"049C3D.grec", "FxCollideModel", run_collide_model, old_abi_FxCollideModel},
         {"0491FF.grec", "FxRecordCollide", run_record_collide},
         {"0490E8.grec", "FxObjectMarkTouched", run_mark_touched},
         {"04910A.grec", "FxObjectFall", run_fall},
         {"04AF54.grec", "FxContactResolve", run_contact},
         {"04AEFF.grec", "FxContactsResolve", run_contacts},
-        {"04A893.grec", "FxWheelUpdate", run_wheel},
-        {"04A607.grec", "FxPartsUpdate", run_parts},
-        {"04BD20.grec", "FxCarCollide", run_car_collide},
-        {"04B1A1.grec", "FxCarHandler", run_car},
-        {"048FCA.grec", "FxPhysicsProgram", fx_physics_program},
+        {"04A893.grec", "FxWheelUpdate", run_wheel, old_abi_FxWheelUpdate},
+        {"04A607.grec", "FxPartsUpdate", run_parts, old_abi_FxPartsUpdate},
+        {"04BD20.grec", "FxCarCollide", run_car_collide, old_abi_FxCarCollide},
+        {"04B1A1.grec", "FxCarHandler", run_car, old_abi_FxCarHandler},
+        {"048FCA.grec", "FxPhysicsProgram", fx_physics_program, old_abi_FxPhysicsProgram},
     };
     const char *only = getenv("ONLY");
 
@@ -854,6 +991,11 @@ int main(int argc, char **argv)
             }
             if (getenv("DUMP") && atol(getenv("DUMP")) == calls) {
                 memcpy(entry_copy, pakram, sizeof entry_copy);
+            }
+            if (routines[r].old && atol(argv[2]) > 0) {
+                memcpy(entry_copy, pakram, sizeof entry_copy);
+                phys_variants(&in, entry_raw, routines[r].old, routines[r].run, atol(argv[2]));
+                memcpy(pakram, entry_copy, sizeof entry_copy);
             }
             if (routines[r].run == fx_unpack_program)
                 unpack_variants(atol(argv[2]) > 0 ? atol(argv[2]) : 0);
@@ -927,5 +1069,7 @@ int main(int argc, char **argv)
     }
     printf("fx_check: %ld calls, %ld differ; %ld synthetic models, %ld differ, %ld ran away in the decomp; %ld unpack variants, %ld differ\n",
            calls, differ, syn_cases, syn_differ, syn_runaway, unpack_cases, unpack_differ);
-    return differ != 0 || syn_differ != 0 || unpack_differ != 0 || calls == 0;
+    if (phys_cases)
+        printf("fx_check: %ld physics variants, %ld differ, %ld ran away in the decomp\n", phys_cases, phys_differ, phys_runaway);
+    return differ != 0 || syn_differ != 0 || unpack_differ != 0 || phys_differ != 0 || calls == 0;
 }
