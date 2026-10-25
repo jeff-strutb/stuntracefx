@@ -37,6 +37,8 @@ uint16_t fx_polygon_clip_near(int16_t near);
 uint16_t fx_polygon_project(void);
 uint16_t fx_polygon_near_clip(void);
 uint16_t fx_polygon_draw(uint16_t outcodes, uint8_t bank, uint16_t script);
+uint16_t fx_polygon_gather(uint16_t n, uint8_t bank, uint16_t script);
+uint16_t fx_polygon_clip_screen(uint16_t n);
 
 /* ---- render/fx_screen.c ---- */
 /* The screen as the S-CPU has set it up: its colour depth (SCMR's mode:

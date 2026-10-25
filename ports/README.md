@@ -47,4 +47,4 @@ game; until then the decomp's routine serves those callers.
 | hud | 44 of 47 (not RaceHudSetup, RaceHudSetupTwoPlayers, HudCountMove19EE: they wait on the video interface and the Super FX) | 761 k random states against the decomp and 14,250 of the original's own calls (228 scripts), 0 differ |
 | audio | the sound queue (3 of 213) | with hud |
 | video | the bar gauges and SpriteYOnScreen | with hud |
-| render (Super FX) | 31 of 166: the geometry (matrices, angles, lengths, projection, sorting, point tables), polygon clipping and projection, and the draw list (flat, line and textured shapes into the screen bitmap) | 81 k random states against the decomp, 0 differ |
+| render (Super FX) | 33 of 166: the geometry (matrices, angles, lengths, projection, sorting, point tables), polygon gathering, clipping (near plane and screen sides) and projection, and the draw list (flat, line and textured shapes into the screen bitmap) | 121 k random states against the decomp, 0 differ |

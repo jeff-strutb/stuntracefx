@@ -43,7 +43,7 @@ OLD(FxLengthProgram) OLD(FxTableEntryWords) OLD(FxTable2702Program) OLD(FxScreen
 OLD(FxProjectScaled) OLD(FxProjectVertex) OLD(FxSortObjectsProgram) OLD(FxPointsGather) OLD(FxModelPoints)
 OLD(FxSegmentCrossZ) OLD(FxRatioClamp) OLD(FxDivideSigned)
 OLD(FxPolygonClipTop) OLD(FxPolygonClipBottom) OLD(FxPolygonClipRight) OLD(FxPolygonClipLeft) OLD(FxPolygonClipNear)
-OLD(FxPolygonProject) OLD(FxPolygonNearClip) OLD(FxPolygonDraw) OLD(FxDrawList)
+OLD(FxPolygonProject) OLD(FxPolygonNearClip) OLD(FxPolygonDraw) OLD(FxDrawList) OLD(FxPolygonGather) OLD(FxPolygonClipScreen)
 
 static uint64_t rng = 0x8E1F3A5D2B7C9461ull;
 
@@ -217,6 +217,18 @@ static void slopes(void)
 {
     FXW(0x0092) = (int16_t)(0x1000 + rnd() % 0x6000);
     FXW(0x0094) = (int16_t)(0x1000 + rnd() % 0x6000);
+}
+
+/* the game's view: centred in a screen of 216 by 128 (sometimes another) */
+static void view(void)
+{
+    if (rnd() & 3) {
+        fx_screen_centre_x = 108, fx_screen_centre_y = 64;
+        fx_edges[0] = 0, fx_edges[1] = 216, fx_edges[2] = 0, fx_edges[3] = 128;
+    } else {
+        fx_edges[0] = (int16_t)(rnd() % 50), fx_edges[1] = (int16_t)(150 + rnd() % 100);
+        fx_edges[2] = (int16_t)(rnd() % 50), fx_edges[3] = (int16_t)(80 + rnd() % 100);
+    }
 }
 
 /* a convex polygon's vertices around (cx, cy), either way round */
@@ -628,6 +640,50 @@ int main(int argc, char **argv)
         old_gsu.rombr = bank;
         old_run(old_abi_FxPolygonDraw);
         r = fx_polygon_draw(codes, bank, script);
+        same_ram();
+        same("count", r, old_gsu.r[0]);
+    }
+
+    CASE("FxPolygonGather") {
+        uint16_t r, n = (uint16_t)((rnd() & 7) ? 3 + rnd() % 6 : 2), script = (uint16_t)(0x8000 + (rnd() & 0x7FC0) + 16);
+        uint8_t bank = (uint8_t)(rnd() % 0x20);
+        int k;
+
+        fresh();
+        view();
+        fx_pairs_end = (uint16_t)(0x4000 + (rnd() & 0x0FFE));
+        for (k = 0; k < 3; k++)
+            fx_vector_out[k] = (int16_t)(rnd() % 201 - 100);
+        if (rnd() & 1)
+            fx_vector_out[2] = (int16_t)(1000 + rnd() % 3000);
+        for (k = 0; k < 256 * 3; k++)           /* the points the index bytes name, some behind, some at z = 0 */
+            FXW(FX_POINTS + 2 * k) = (int16_t)(k % 3 == 2 && rnd() % 4 == 0 ? -fx_vector_out[2] : rnd() % 2001 - 1000);
+        old_gsu.r[0] = n;
+        old_gsu.r[14] = script;
+        old_gsu.rombr = bank;
+        old_gsu.romdr = rom_at((uint32_t)bank << 16 | script)[0];     /* the buffer as R14's last write left it */
+        old_run(old_abi_FxPolygonGather);
+        r = fx_polygon_gather(n, bank, script);
+        same_ram();
+        same("count", r, old_gsu.r[0]);
+    }
+
+    CASE("FxPolygonClipScreen") {
+        uint16_t r, n = (uint16_t)((rnd() & 7) ? 3 + rnd() % 8 : 2), at;
+        int k, wide = (rnd() & 3) ? 300 : 30000;
+
+        fresh();
+        view();
+        fx_pairs_end = (uint16_t)(0x4000 + (rnd() & 0x0FFC));
+        at = fx_pairs_end;
+        for (k = 0; k < n; k++) {
+            FXW(at + 4 * k) = (int16_t)(rnd() % (2 * wide + 1) - wide + 108);
+            FXW(at + 4 * k + 2) = (int16_t)(rnd() % (2 * wide + 1) - wide + 64);
+        }
+        fx_codes = (uint16_t)((rnd() & 3) ? 0x0F : rnd() & 0x0F);
+        old_gsu.r[0] = n;
+        old_run(old_abi_FxPolygonClipScreen);
+        r = fx_polygon_clip_screen(n);
         same_ram();
         same("count", r, old_gsu.r[0]);
     }

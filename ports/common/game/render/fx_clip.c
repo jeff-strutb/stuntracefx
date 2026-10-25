@@ -360,3 +360,231 @@ none:
     fx_vertex_count = 0;
     return 0;
 }
+
+/* ---- a face of the object's own points to the screen ---- */
+
+typedef struct {
+    int16_t x, y, z;
+} FxPoint;
+
+static FxPoint point_at(uint16_t at)
+{
+    FxPoint p = {FXW(at), FXW(at + 2), FXW(at + 4)};
+
+    return p;
+}
+
+static void point_put(uint16_t at, const FxPoint *p)
+{
+    FXW(at) = p->x;
+    FXW(at + 2) = p->y;
+    FXW(at + 4) = p->z;
+}
+
+/* where a-b crosses z = 0, as fx_segment_cross_z */
+static void point_cross(FxPoint *a, FxPoint *b)
+{
+    int16_t pa[3] = {a->x, a->y, a->z}, pb[3] = {b->x, b->y, b->z};
+
+    fx_segment_cross_z(pa, pb);
+    a->x = pa[0], a->y = pa[1], a->z = pa[2];
+    b->x = pb[0], b->y = pb[1], b->z = pb[2];
+}
+
+/* A shape of n points (their index bytes at bank:script) to the screen:
+   each point (FX_POINTS, six bytes an index) moved by the object's
+   position (fx_vector_out) into the list at fx_pairs_end; clipped to z >=
+   0 into FX_LIST_A, fx_vertex_count the count left (a line's two ends
+   kept, crossed where one is behind, whatever they are); each vertex then
+   projected (fx_project_vertex) back to fx_pairs_end as x and y words,
+   the outcodes ORed into fx_codes. Returns the count, or 0 when fewer
+   than 3 are left or every vertex is outside one side of the view (a bit
+   of $0F00 clear in the ORed codes). */
+uint16_t fx_polygon_gather(uint16_t n, uint8_t bank, uint16_t script)
+{
+    uint16_t list = fx_pairs_end, at = list, out = FX_LIST_A, k = n;
+
+    do {
+        FxPoint p = point_at((uint16_t)(FX_POINTS + rom_at((uint32_t)bank << 16 | script++)[0] * 6));
+
+        p.x = wrap16(p.x + fx_vector_out[0]);
+        p.y = wrap16(p.y + fx_vector_out[1]);
+        p.z = wrap16(p.z + fx_vector_out[2]);
+        point_put(at, &p);
+        at = (uint16_t)(at + 6);
+    } while (--k);
+    fx_vertex_count = 0;
+    if (n == 2) {
+        FxPoint a = point_at(list), b = point_at((uint16_t)(list + 6));
+
+        point_cross(&a, &b);
+        point_put(out, &a);
+        point_put((uint16_t)(out + 6), &b);
+        fx_vertex_count = 2;
+    } else {
+        at = list;
+        k = n;
+        do {
+            FxPoint a = point_at(at), b;
+
+            at = (uint16_t)(k == 1 ? list : at + 6);
+            b = point_at(at);
+            if ((a.z & b.z) < 0)
+                continue;
+            if (a.z >= 0) {
+                point_put(out, &a);
+                out = (uint16_t)(out + 6);
+                fx_vertex_count++;
+                if (b.z < 0) {
+                    point_cross(&a, &b);
+                    point_put(out, &b);
+                    out = (uint16_t)(out + 6);
+                    fx_vertex_count++;
+                }
+            } else {
+                point_cross(&a, &b);
+                point_put(out, &a);
+                out = (uint16_t)(out + 6);
+                fx_vertex_count++;
+            }
+        } while (--k);
+        if (wrap16(fx_vertex_count - 3) < 0)
+            return 0;
+    }
+    fx_codes = 0;
+    at = FX_LIST_A;
+    out = list;
+    k = fx_vertex_count;
+    do {
+        FxPoint p = point_at(at);
+
+        fx_codes |= fx_project_vertex(&p.x, &p.y, p.z);
+        FXW(out) = p.x;
+        FXW(out + 2) = p.y;
+        out = (uint16_t)(out + 4);
+        at = (uint16_t)(at + 6);
+    } while (--k);
+    return (fx_codes & 0x0F00) == 0x0F00 ? fx_vertex_count : 0;
+}
+
+/* ---- a projected polygon clipped to the screen's sides ---- */
+
+/* A side of the screen (its word among fx_edges): `y` for a row (top,
+   bottom); `strict` for the far ones (right, bottom), whose inside is at
+   or before them, compared within 16 bits; `inset` puts a crossing one
+   row inside (a line's bottom). */
+typedef struct {
+    int edge;
+    bool y, strict, inset;
+} FxSide;
+
+static bool side_inside(const FxSide *s, const int16_t v[2])
+{
+    int16_t at = v[s->y], edge = fx_edges[s->edge];
+
+    return s->strict ? wrap16(at - edge) <= 0 : at >= edge;
+}
+
+/* where in-out crosses the side, from the inside end: the other axis
+   moved by (side - in) times its difference over this one's
+   (fx_divide_signed) */
+static void side_cross(const FxSide *s, const int16_t in[2], const int16_t out_[2], int16_t at[2])
+{
+    int a = s->y, o = !s->y;
+    uint16_t d_a = (uint16_t)(out_[a] - in[a]), d_o = (uint16_t)(out_[o] - in[o]);
+    int32_t p = (int32_t)wrap16(fx_edges[s->edge] - in[a]) * (int16_t)d_o;
+
+    at[o] = wrap16(fx_divide_signed((uint32_t)p, d_a).quot + in[o]);
+    at[a] = wrap16(fx_edges[s->edge] - s->inset);
+}
+
+static void pair_put(uint16_t *at, const int16_t v[2])
+{
+    FXW(*at) = v[0];
+    FXW(*at + 2) = v[1];
+    *at = (uint16_t)(*at + 4);
+}
+
+/* The fx_vertex_count vertices (x, y words) at `in` clipped against the
+   side into `out`, fx_count_save counted from what it held to the
+   vertices written; the first vertex is first copied after the last (at
+   its count's low byte, signed, times four), and fx_vertex_count ends 0. */
+static void side_clip(const FxSide *s, uint16_t in, uint16_t out)
+{
+    uint16_t at = in;
+
+    FXW((uint16_t)(in + (int8_t)fx_vertex_count * 4)) = FXW(in);
+    FXW((uint16_t)(in + (int8_t)fx_vertex_count * 4 + 2)) = FXW(in + 2);
+    do {
+        int16_t a[2] = {FXW(at), FXW(at + 2)}, b[2] = {FXW(at + 4), FXW(at + 6)}, c[2];
+
+        at = (uint16_t)(at + 4);
+        if (!side_inside(s, a)) {
+            if (!side_inside(s, b)) {
+                fx_count_save--;
+            } else {
+                side_cross(s, b, a, c);
+                pair_put(&out, c);
+            }
+        } else if (side_inside(s, b)) {
+            pair_put(&out, a);
+        } else {
+            fx_count_save++;
+            pair_put(&out, a);
+            side_cross(s, a, b, c);
+            pair_put(&out, c);
+        }
+    } while (--fx_vertex_count);
+}
+
+/* The projected polygon at fx_pairs_end (n vertices, x and y words)
+   clipped against the sides of the screen its outcodes in fx_codes cross
+   (bit 2 left, 3 right, 0 top, 1 bottom), between it and FX_LIST_A
+   (fx_list_in and fx_list_out, swapped after each side), and left at
+   fx_pairs_end again. Returns the count, or 0 when fewer than 3 are left.
+   A line (fewer than 3) goes against all four sides, from fx_pairs_end
+   to FX_LIST_A and back twice, as a polygon of its ends (so a crossing
+   is found from each), and returns 2, or 0 when fewer than 2 are left. */
+uint16_t fx_polygon_clip_screen(uint16_t n)
+{
+    static const FxSide line_sides[4] = {{0, 0, 0, 0}, {1, 0, 1, 0}, {2, 1, 0, 0}, {3, 1, 1, 1}};
+    static const FxSide sides[4] = {{0, 0, 0, 0}, {1, 0, 1, 0}, {2, 1, 0, 0}, {3, 1, 1, 0}};
+    static const uint16_t bit[4] = {4, 8, 1, 2};
+    uint16_t list = fx_pairs_end;
+    int i;
+
+    fx_list_in = list;
+    fx_list_out = FX_LIST_A;
+    fx_count_save = n;
+    if (wrap16(n - 3) < 0) {
+        for (i = 0; i < 4; i++) {
+            fx_vertex_count = n;
+            side_clip(&line_sides[i], i & 1 ? FX_LIST_A : list, i & 1 ? list : FX_LIST_A);
+            n = fx_count_save;
+            if (wrap16(n - 2) < 0)
+                return 0;
+        }
+        return 2;
+    }
+    for (i = 0; i < 4; i++)
+        if (fx_codes & bit[i]) {
+            fx_vertex_count = n;
+            side_clip(&sides[i], fx_list_in, fx_list_out);
+            lists_swap();
+            n = fx_count_save;
+            if (wrap16(n - 3) < 0)
+                return 0;
+        }
+    if (fx_list_in != list) {
+        uint16_t from = fx_list_in, to = fx_list_out, k = n;
+
+        do {
+            FXW(to) = FXW(from);
+            FXW(to + 2) = FXW(from + 2);
+            to = (uint16_t)(to + 4);
+            from = (uint16_t)(from + 4);
+        } while (--k);
+        n = fx_count_save;
+    }
+    return n;
+}
