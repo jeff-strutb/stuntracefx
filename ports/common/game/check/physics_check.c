@@ -1,4 +1,4 @@
-/* old: object/fx_sums.c object/fx_motion.c math/fx_math.c math/fx_rotate.c
+/* old: object/fx_sums.c object/fx_motion.c object/fx_pool.c object/fx_collide.c object/fx_record.c math/fx_math.c math/fx_rotate.c
  *
  * physics_check.c: the port's Super FX physics (object/fx_*.c) against
  * the decomp's routines on random states. Each runs on the same game pak
@@ -36,6 +36,9 @@
 OLD(FxSumsClear) OLD(FxSumsRotateLocal) OLD(FxSumsApply) OLD(FxSumsPushWorld) OLD(FxSumsPushLocal) OLD(FxPushApply)
 OLD(FxPushesApply) OLD(FxPushAt4) OLD(FxPushAt2) OLD(FxPushAt1) OLD(FxPushAtHalf) OLD(FxPushAtQuarter) OLD(FxPushAt4Twist)
 OLD(FxHitAddScaled) OLD(FxHitAddUnit) OLD(FxSumScale) OLD(FxRecordMove)
+OLD(FxPoolTake) OLD(FxPoolsMerge) OLD(FxListSweep) OLD(FxListClearBit0) OLD(FxObjectFree) OLD(FxRecordNew426) OLD(FxRecordNew424)
+OLD(FxRecordNew426B) OLD(FxRecordNew42D) OLD(FxRecordNewCamera) OLD(FxRecordNew422) OLD(FxCollidePush) OLD(FxRecordsApart)
+OLD(FxContactNote) OLD(FxRecordTouches) OLD(FxAllTouches)
 
 static uint64_t rng = 0x5D2B7C94618E1F3Aull;
 
@@ -177,6 +180,76 @@ static void sums(void)
     }
 }
 
+/* a pool's chain from `head`: blocks of random sizes one after another up
+   to `end`, each free, in use (its size negated) or cut off the chain */
+static void pool(uint16_t head, uint16_t end)
+{
+    uint16_t b = head, last = head;
+
+    FXU(head) = 0;
+    while (b + 8 < end) {
+        uint16_t size = (uint16_t)(8 + 2 * (rnd() % 24)), kind = rnd() % 4;
+
+        if (b + size > end)
+            size = (uint16_t)(end - b);
+        if (kind == 3 && b != head) {               /* cut from the one before: off the chain */
+            FXU(b + 2) = size;
+        } else {
+            FXU(b + 2) = kind == 2 ? (uint16_t)-size : size;
+            if (b != head)
+                FXU(last) = b;
+            FXU(b) = 0;
+            last = b;
+        }
+        b = (uint16_t)(b + size);
+    }
+}
+
+/* n records at $3000 on, $90 bytes apart, on the list of all records,
+   near each other, with random flags, sizes and contact lists */
+static uint16_t recs[12];
+static int nrecs;
+
+static void records(int n)
+{
+    int k, j;
+
+    nrecs = n;
+    FXU(0x2332) = n ? 0x3000 : 0;
+    for (k = 0; k < n; k++) {
+        uint16_t r = recs[k] = (uint16_t)(0x3000 + 0x90 * k);
+
+        FXU(r + 4) = k + 1 < n ? (uint16_t)(r + 0x90) : 0;
+        FXU(r + 6) = k ? (uint16_t)(r - 0x90) : 0;
+        FXU(r + 8) = (rnd() & 1) ? 0x1098 : 0x1D70;
+        FXW(r + 2) = (rnd() & 1) ? -0x34 : 0x34;
+        for (j = 0; j < 3; j++) {
+            FXW(r + 0x1E + 2 * j) = within(-0x300, 0x300);
+            FXW(r + 0x0C + 2 * j) = within(0x40, 0x200);
+            FXW(r + 0x2E + 2 * j) = within(-0x800, 0x800);
+        }
+        FXU(r + 0x16) = (uint16_t)(rnd() & 0x00FF);
+        FXU(r + 0x1A) = (uint16_t)(rnd() & rnd() & 0x00FF);
+        FXU(r + 0x2A) = (uint16_t)within(1, 0x200);
+        FXU(r + 0x18) = 0;
+        FXU(r + 0x3E) = 0;
+    }
+    /* contacts: blocks cut from the first pool's region */
+    for (k = 0; k < n; k++) {
+        int m = (int)(rnd() % 3);
+
+        for (j = 0; j < m; j++) {
+            uint16_t c = (uint16_t)(0x2000 + 0x40 * (k * 3 + j));
+
+            FXU(c + 2) = (rnd() & 1) ? 0x12 : (uint16_t)-0x12;
+            FXU(c + 0x0C) = recs[rnd() % n];
+            FXU(c + 0x10) = (uint16_t)(rnd() & 7);
+            FXU(c + 0x0E) = FXU(recs[k] + 0x18);
+            FXU(recs[k] + 0x18) = c;
+        }
+    }
+}
+
 #define CASE(name) model_current = name; for (i = 0; i < n && (!getenv("ONLY") || !strcmp(getenv("ONLY"), name)) && (iteration = i, 1); i++)
 
 int main(int argc, char **argv)
@@ -308,6 +381,136 @@ int main(int argc, char **argv)
         old_gsu.r[1] = kind;
         old_run(old_abi_FxRecordMove);
         fx_record_move(rec, kind);
+        same_ram();
+    }
+
+    CASE("FxPoolTake") {
+        uint16_t head = (rnd() & 1) ? 0x1098 : 0x1D70, size = (uint16_t)(4 + 2 * (rnd() % 40)), r;
+
+        fresh();
+        pool(0x1098, 0x1098 + 0x300);
+        pool(0x1D70, 0x1D70 + 0x200);
+        records((int)(rnd() % 4));
+        old_gsu.r[3] = head;
+        old_gsu.r[4] = size;
+        old_run(old_abi_FxPoolTake);
+        r = fx_pool_take(head, size);
+        same_ram();
+        same_reg("R1", r, old_gsu.r[1]);
+    }
+    CASE("FxPoolsMerge") {
+        fresh();
+        pool(0x1098, 0x1098 + 0x300);
+        pool(0x1D70, 0x1D70 + 0x200);
+        old_run(old_abi_FxPoolsMerge);
+        fx_pools_merge();
+        same_ram();
+    }
+    CASE("FxListClearBit0 / FxListSweep") {
+        int sweep = rnd() & 1;
+
+        fresh();
+        pool(0x1098, 0x1098 + 0x300);
+        records(1 + (int)(rnd() % 6));
+        k = (int)(rnd() % nrecs);
+        old_gsu.r[6] = recs[k];
+        old_run(sweep ? old_abi_FxListSweep : old_abi_FxListClearBit0);
+        (sweep ? fx_list_sweep : fx_list_clear_bit0)(recs[k]);
+        same_ram();
+    }
+    CASE("FxObjectFree") {
+        uint16_t r;
+
+        fresh();
+        pool(0x1098, 0x1098 + 0x300);
+        pool(0x1D70, 0x1D70 + 0x200);
+        records(1 + (int)(rnd() % 8));
+        r = recs[rnd() % nrecs];
+        if (rnd() & 1) {                    /* children, linked through +$34, some with their own */
+            for (k = 0; k < nrecs; k++)
+                if (recs[k] != r && (rnd() & 1)) {
+                    FXU(recs[k] + 0x34) = FXU(r + 0x3E);
+                    FXU(r + 0x3E) = recs[k];
+                    FXU(recs[k] + 0x16) &= (uint16_t)~2;
+                }
+            FXU(r + 0x16) |= 2;
+        } else {
+            FXU(r + 0x16) &= (uint16_t)~2;
+        }
+        old_gsu.r[1] = r;
+        old_run(old_abi_FxObjectFree);
+        fx_object_free(r);
+        same_ram();
+    }
+    CASE("FxRecordNew*") {
+        static void (*const olds[6])(void) = {old_abi_FxRecordNew426, old_abi_FxRecordNew424, old_abi_FxRecordNew426B,
+                                              old_abi_FxRecordNew42D, old_abi_FxRecordNewCamera, old_abi_FxRecordNew422};
+        static void (*const ports[6])(void) = {fx_record_new_426, fx_record_new_424, fx_record_new_426b, fx_record_new_42d,
+                                               fx_record_new_camera, fx_record_new_422};
+        int w = (int)(rnd() % 6);
+
+        fresh();
+        pool(0x1098, 0x1098 + 0x300);
+        pool(0x1D70, 0x1D70 + 0x200);
+        records((int)(rnd() % 4));
+        if (rnd() & 1)
+            FXU(0x2398) = 0;
+        old_run(olds[w]);
+        ports[w]();
+        same_ram();
+    }
+    CASE("FxCollidePush") {
+        fresh();
+        records(3);
+        old_gsu.r[1] = 0x2000;
+        for (k = 0; k < 4; k++)
+            FXW(0x2004 + 2 * k) = within(-0x400, 0x400);
+        old_gsu.r[7] = recs[0];
+        old_gsu.r[9] = recs[1];
+        old_run(old_abi_FxCollidePush);
+        fx_collide_push(0x2000, recs[0], recs[1]);
+        same_ram();
+    }
+    CASE("FxRecordsApart") {
+        int a;
+
+        fresh();
+        records(3);
+        old_gsu.r[7] = recs[0];
+        old_gsu.r[8] = recs[1];
+        old_run(old_abi_FxRecordsApart);
+        a = fx_records_apart(recs[0], recs[1]);
+        same_ram();
+        same_reg("R0", (uint16_t)a, old_gsu.r[0]);
+    }
+    CASE("FxContactNote") {
+        fresh();
+        pool(0x1098, 0x1098 + ((rnd() & 3) ? 0x300 : 0x20));
+        records(4);
+        {
+            uint16_t owner = recs[rnd() % 4], other = recs[rnd() % 4];
+
+            old_gsu.r[6] = owner;
+            old_gsu.r[8] = other;
+            old_run(old_abi_FxContactNote);
+            fx_contact_note(owner, other);
+        }
+        same_ram();
+    }
+    CASE("FxRecordTouches / FxAllTouches") {
+        int all = rnd() & 1;
+        uint16_t r;
+
+        fresh();
+        pool(0x1098, 0x1098 + 0x300);
+        records(2 + (int)(rnd() % 6));
+        r = recs[rnd() % nrecs];
+        old_gsu.r[1] = r;
+        old_run(all ? old_abi_FxAllTouches : old_abi_FxRecordTouches);
+        if (all)
+            fx_all_touches();
+        else
+            fx_record_touches(r);
         same_ram();
     }
 

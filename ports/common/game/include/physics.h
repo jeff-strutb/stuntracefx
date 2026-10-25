@@ -32,6 +32,27 @@ void fx_hit_add_scaled(int16_t v[3], int16_t scale);
 void fx_hit_add_unit(int16_t v[3]);
 void fx_sum_scale(int16_t scale);
 
+/* ---- object/fx_pool.c ---- */
+uint16_t fx_pool_block(uint16_t head, uint16_t size);
+uint16_t fx_pool_take(uint16_t head, uint16_t size);
+void fx_pools_merge(void);
+void fx_list_clear_bit0(uint16_t owner);
+void fx_list_sweep(uint16_t owner);
+void fx_object_free(uint16_t rec);
+void fx_record_new_426(void);       /* programs the S-CPU starts: the new record at $238E */
+void fx_record_new_424(void);
+void fx_record_new_426b(void);
+void fx_record_new_42d(void);
+void fx_record_new_camera(void);
+void fx_record_new_422(void);
+
+/* ---- object/fx_collide.c ---- */
+void fx_collide_push(uint16_t contact, uint16_t other, uint16_t rec);
+int fx_records_apart(uint16_t a, uint16_t b);
+void fx_contact_note(uint16_t owner, uint16_t other);
+void fx_record_touches(uint16_t rec);
+void fx_all_touches(void);
+
 /* ---- object/fx_motion.c ---- */
 void fx_record_move(uint16_t rec, uint16_t kind);
 
