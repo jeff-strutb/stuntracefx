@@ -59,7 +59,8 @@ build_bsnes() {
     fetch bsnes "$BSNES_URL" "$BSNES_PIN"
     make -C "$tc/src/bsnes/bsnes" target=libretro binary=library -j "$jobs" >/dev/null 2>&1
     mkdir -p "$tc/bsnes"
-    cp "$tc/src/bsnes/bsnes/out/bsnes_libretro.dylib" "$tc/bsnes/"
+    # the core under one name on every OS (a .so on Linux): the tools dlopen it by this name
+    cp "$tc"/src/bsnes/bsnes/out/bsnes_libretro.* "$tc/bsnes/bsnes_libretro.dylib"
     make -C "$top/tools/stuntracefx/sfxbox" >/dev/null
     echo "bsnes core + sfxbox built"
 }

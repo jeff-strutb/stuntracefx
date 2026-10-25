@@ -134,6 +134,7 @@ typedef struct {
     uint16_t exit_s, irq_s;
     struct SfxboxRegs entry;
     Map undo, orig, cw;
+    Map in;                  /* SFXBOX_RECORD: RAM bytes the call read before writing them */
     IoLog oread, owrite, cwrite;
     IoLog oseq, cseq;        /* work RAM accesses in order (SFXBOX_SEQ): addr | 1 << 24 for a write */
     int cread;
@@ -290,6 +291,68 @@ static void seq_compare(Watch *w, const Routine *r)
     }
 }
 
+/* SFXBOX_RECORD=DIR: each call of a watched routine (at most
+   SFXBOX_RECORD_MAX of each, default 16) appended to DIR/ADDR.rec, for
+   checking a rewrite of the routine on the original's own calls: the
+   registers in and out, how the call was disturbed, the RAM bytes it read
+   before writing them (its inputs), the RAM it left changed, and its
+   hardware reads and writes in order. RAM addresses are norm()'s. */
+static const char *rec_dir;
+static long rec_max = 16;
+static int *rec_count;
+
+static void rec_put(FILE *f, const void *p, size_t n) { fwrite(p, 1, n, f); }
+
+static void rec_map(FILE *f, Map *m, Watch *w, int final)
+{
+    uint32_t n = 0;
+    for (int i = 0; i < m->n; i++)
+        if (!final || !is_scratch(w, m->key[m->order[i]])) n++;
+    rec_put(f, &n, 4);
+    for (int i = 0; i < m->n; i++) {
+        uint32_t k = m->key[m->order[i]];
+        if (final && is_scratch(w, k)) continue;
+        rec_put(f, &k, 4);
+        rec_put(f, &m->val[m->order[i]], 1);
+    }
+}
+
+static void rec_io(FILE *f, IoLog *l)
+{
+    uint32_t n = (uint32_t)l->n;
+    rec_put(f, &n, 4);
+    for (int i = 0; i < l->n; i++) {
+        uint16_t a = (uint16_t)l->e[i].addr;
+        rec_put(f, &a, 2);
+        rec_put(f, &l->e[i].v, 1);
+    }
+}
+
+static void record(Watch *w, const struct SfxboxRegs *out)
+{
+    char path[1024];
+    FILE *f;
+    uint8_t flags = (uint8_t)(!!w->interrupted | !!w->dma << 1 | !!w->gsu << 2 | !!w->needs_asm << 3 | !!w->overflow << 4
+                              | !!w->stack_reset << 5);
+    if (rec_count[w->idx] >= rec_max)
+        return;
+    rec_count[w->idx]++;
+    snprintf(path, sizeof path, "%s/%06X.rec", rec_dir, routines[w->idx].addr);
+    if (!(f = fopen(path, "ab")))
+        return;
+    rec_put(f, "SRC1", 4);
+    rec_put(f, &routines[w->idx].addr, 4);
+    rec_put(f, &w->entry, sizeof w->entry);
+    rec_put(f, out, sizeof *out);
+    rec_put(f, &w->exit_s, 2);
+    rec_put(f, &flags, 1);
+    rec_map(f, &w->in, w, 0);
+    rec_map(f, &w->orig, w, 1);
+    rec_io(f, &w->oread);
+    rec_io(f, &w->owrite);
+    fclose(f);
+}
+
 static void finish(Watch *w)
 {
     Stat *st = &stats[w->idx];
@@ -297,6 +360,7 @@ static void finish(Watch *w)
     struct SfxboxRegs out;
     core_regs(&out);
     st->calls++;
+    if (rec_dir) record(w, &out);
 
     cpu.a = w->entry.a; cpu.x = w->entry.x; cpu.y = w->entry.y; cpu.s = w->entry.s; cpu.d = w->entry.d;
     cpu.db = w->entry.db; cpu.p = w->entry.p; cpu.e = w->entry.e; cpu.pc = w->entry.pc; cpu.unwound = 0;
@@ -438,7 +502,7 @@ static void on_insn(uint32_t pc)
     w->idx = idx; w->entry = r;
     w->in_irq = w->interrupted = w->dma = w->gsu = w->needs_asm = w->overflow = 0;
     w->stack_reset = 0;
-    map_clear(&w->undo); map_clear(&w->orig);
+    map_clear(&w->undo); map_clear(&w->orig); map_clear(&w->in);
     w->oread.n = w->owrite.n = w->oseq.n = 0;
     depth++;
 }
@@ -467,6 +531,14 @@ static void on_write(uint32_t addr, uint8_t data, int kind)
 static void on_read(uint32_t addr, uint8_t data)
 {
     if (!depth) return;
+    if (rec_dir) {
+        uint32_t n = norm(addr);
+        if (n >> 24 == R_WRAM || n >> 24 == R_GSURAM)
+            for (int i = 0; i < depth; i++) {
+                uint8_t v;
+                if (!ws[i].in_irq && !map_get(&ws[i].orig, n, &v)) map_put(&ws[i].in, n, data, 1);
+            }
+    }
     if (seq_on && norm(addr) >> 24 == R_WRAM) {
         uint32_t n = norm(addr) & 0xFFFFFF;
         for (int i = 0; i < depth; i++) if (!ws[i].in_irq) io_add(&ws[i].oseq, n, 0);
@@ -570,6 +642,9 @@ int check_begin(void *core, const char *lib, const char *only, const char *repor
     report = fopen(report_path, "w");
     if (!report) return -1;
     seq_on = getenv("SFXBOX_SEQ") != NULL;
+    rec_dir = getenv("SFXBOX_RECORD");
+    if (getenv("SFXBOX_RECORD_MAX")) rec_max = atol(getenv("SFXBOX_RECORD_MAX"));
+    rec_count = calloc((size_t)(nroutines ? nroutines : 1), sizeof *rec_count);
     seq_bad = calloc((size_t)(nroutines ? nroutines : 1), sizeof *seq_bad);
     static struct SfxboxCallbacks cb = {on_insn, on_write, on_read, on_interrupt};
     set_cb(&cb);
