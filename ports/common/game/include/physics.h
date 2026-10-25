@@ -74,6 +74,18 @@ void fx_spread_cars(uint16_t car);
 void fx_nearest_car(void);
 void fx_rank_cars(void);
 
+/* ---- race/fx_course.c, race/fx_drive.c ---- */
+void fx_course_entry_read(uint16_t at, uint16_t w[4]);
+void fx_lap_segment(uint16_t car);
+uint16_t fx_course_nearest(int16_t x, int16_t y, int16_t z, uint16_t *at, uint16_t w[3]);
+uint16_t fx_course_next_entry(uint16_t car, uint16_t n, uint16_t *at, uint16_t w[4]);
+uint16_t fx_record_heading_ahead(uint16_t car);
+int16_t fx_course_next_distance(uint16_t car, uint16_t n);
+void fx_car_place_on_segment(uint16_t car);
+void fx_car_catch_up(uint16_t car);
+void fx_drive_decide(uint16_t car, int16_t x, int16_t z, int16_t want);
+int16_t fx_steer_from_input(uint16_t car, uint16_t bits);
+
 /* ---- object/fx_motion.c ---- */
 void fx_record_move(uint16_t rec, uint16_t kind);
 

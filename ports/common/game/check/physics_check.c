@@ -1,4 +1,4 @@
-/* old: object/fx_sums.c object/fx_motion.c object/fx_pool.c object/fx_collide.c object/fx_record.c object/fx_car.c race/fx_traffic.c race/fx_rank.c math/fx_math.c math/fx_rotate.c
+/* old: object/fx_sums.c object/fx_motion.c object/fx_pool.c object/fx_collide.c object/fx_record.c object/fx_car.c race/fx_traffic.c race/fx_rank.c race/fx_course.c race/fx_drive.c render/table.c math/fx_math.c math/fx_rotate.c
  *
  * physics_check.c: the port's Super FX physics (object/fx_*.c) against
  * the decomp's routines on random states. Each runs on the same game pak
@@ -41,7 +41,9 @@ OLD(FxRecordNew426B) OLD(FxRecordNew42D) OLD(FxRecordNewCamera) OLD(FxRecordNew4
 OLD(FxContactNote) OLD(FxRecordTouches) OLD(FxAllTouches)
 OLD(FxPushSet) OLD(FxRecordHoldY) OLD(FxBearingTo) OLD(FxRecordAlignment) OLD(FxRecordRaise6A) OLD(FxRecordLower82)
 OLD(FxTimersProgram) OLD(FxCarMoveParts) OLD(FxCarPose) OLD(FxCarNew) OLD(FxCarHit) OLD(FxTrafficSides)
-OLD(FxSpreadCars) OLD(FxNearestCar) OLD(FxRankCars)
+OLD(FxSpreadCars) OLD(FxNearestCar) OLD(FxRankCars) OLD(FxLapSegment) OLD(FxCourseNearest) OLD(FxCourseNextEntry)
+OLD(FxRecordHeadingAhead) OLD(FxCourseNextDistance) OLD(FxCarPlaceOnSegment) OLD(FxCarCatchUp) OLD(FxDriveDecide)
+OLD(FxSteerFromInput)
 
 static uint64_t rng = 0x5D2B7C94618E1F3Aull;
 
@@ -286,9 +288,51 @@ static void cars(void)
         FXU(p + 0x34) = FXU(recs[0] + 0x3E);
         FXU(recs[0] + 0x3E) = p;
         FXU(p + 0x46) = (rnd() & 3) ? 0 : 0x0400;
+        FXU(p + 0x18) = 0;                          /* no contacts */
         for (j = 0; j < 3; j++)
             FXW(p + 0x3C + 2 * j) = within(-0x200, 0x200);
     }
+}
+
+/* a segment table of n entries at $1F:9000, near the records */
+static uint16_t table_n;
+
+static void table(void)
+{
+    uint8_t *t = rom_copy + 0x1F * 0x8000 + 0x1000;
+    int k, j;
+
+    table_n = (uint16_t)((rnd() & 15) ? 1 + rnd() % 20 : 0);
+    t[0] = (uint8_t)table_n, t[1] = (uint8_t)(table_n >> 8);
+    for (k = 0; k < (int)table_n; k++)
+        for (j = 0; j < 4; j++) {
+            int16_t v = (rnd() & 7) ? within(-0x600, 0x600) : (int16_t)rnd();
+
+            t[2 + 8 * k + 2 * j] = (uint8_t)v, t[3 + 8 * k + 2 * j] = (uint8_t)((uint16_t)v >> 8);
+        }
+    if (table_n > 2 && (rnd() & 1))              /* two entries alike: equally near */
+        memcpy(t + 2 + 8 * (rnd() % table_n), t + 2 + 8 * (rnd() % table_n), 8);
+    FXU(0x1092) = (rnd() & 15) ? 0x9000 : 0;
+    pakram[0x1094] = 0x1F;
+    for (k = 0; k < nrecs; k++) {
+        FXU(recs[k] + 0x58) = (uint16_t)(table_n ? 1 + rnd() % table_n : 0);
+        FXU(recs[k] + 0x86) = (uint16_t)(table_n ? 1 + rnd() % table_n : 0);
+        FXU(recs[k] + 0x70) = (rnd() & 7) ? 0 : 2;
+        FXU(recs[k] + 0x72) = (uint16_t)((rnd() & 7) ? rnd() % 40 : 0xFFFF);
+        FXU(recs[k] + 0x40) = (uint16_t)(rnd() & rnd());
+        FXW(recs[k] + 0x7E) = within(-45, 25);
+        FXW(recs[k] + 0x7C) = (rnd() & 1) ? 0 : within(1, 30);
+        FXW(recs[k] + 0x3A) = within(-0x1200, 0x1200);
+        FXU(recs[k] + 0x44) = (rnd() & 3) ? 0 : 1;
+    }
+    if (nrecs)
+        FXU(recs[0] + 0x58) = table_n ? FXU(recs[0] + 0x58) : 0;
+    pakram[0x26F4] = (uint8_t)(rnd() % 4);
+    FXU(0x2476) = nrecs ? recs[rnd() % nrecs] : 0;
+    for (k = 0; k < nrecs; k++)
+        FXU(recs[k] + 0x88) = (uint16_t)(1 + rnd() % 6);
+    for (k = 0; k < 5; k++)
+        FXW(0x2662 + 2 * k) = within(0, 0x300);
 }
 
 #define CASE(name) model_current = name; for (i = 0; i < n && (!getenv("ONLY") || !strcmp(getenv("ONLY"), name)) && (iteration = i, 1); i++)
@@ -687,6 +731,118 @@ int main(int argc, char **argv)
         old_run(rank ? old_abi_FxRankCars : old_abi_FxNearestCar);
         (rank ? fx_rank_cars : fx_nearest_car)();
         same_ram();
+    }
+
+    CASE("FxLapSegment / FxCourseNearest / FxCourseNextEntry") {
+        int w = (int)(rnd() % 3);
+
+        fresh();
+        records(2);
+        cars();
+        table();
+        if (w == 0) {
+            old_gsu.r[8] = recs[0];
+            old_run(old_abi_FxLapSegment);
+            fx_lap_segment(recs[0]);
+            same_ram();
+        } else if (w == 1) {
+            int16_t x = within(-0x700, 0x700), y = within(-0x700, 0x700), z = within(-0x700, 0x700);
+            uint16_t at = 0x1234, wd[3] = {1, 2, 3}, n;
+
+            old_gsu.r[1] = (uint16_t)x, old_gsu.r[2] = (uint16_t)y, old_gsu.r[3] = (uint16_t)z, old_gsu.r[5] = at;
+            old_run(old_abi_FxCourseNearest);
+            n = fx_course_nearest(x, y, z, &at, wd);
+            same_ram();
+            same_reg("R0", n, old_gsu.r[0]);
+            if (n) {
+                same_reg("R5", at, old_gsu.r[5]);
+                for (k = 0; k < 3; k++)
+                    same_reg("R1-R3", wd[k], old_gsu.r[1 + k]);
+            }
+        } else if (table_n && FXU(0x1092)) {
+            uint16_t n = (uint16_t)(1 + rnd() % table_n), at = (uint16_t)(0x9002 + (n - 1) * 8), wd[4], m;
+
+            old_gsu.r[0] = n, old_gsu.r[5] = at, old_gsu.r[8] = recs[0];
+            old_run(old_abi_FxCourseNextEntry);
+            m = fx_course_next_entry(recs[0], n, &at, wd);
+            same_ram();
+            same_reg("R0", m, old_gsu.r[0]);
+            same_reg("R5", at, old_gsu.r[5]);
+            for (k = 0; k < 4; k++)
+                same_reg("R1-R4", wd[k], old_gsu.r[1 + k]);
+        }
+    }
+    CASE("FxRecordHeadingAhead / FxCourseNextDistance") {
+        int w = rnd() & 1;
+        uint16_t r;
+
+        fresh();
+        records(2);
+        cars();
+        table();
+        if (!table_n || !FXU(0x1092))
+            continue;
+        old_gsu.r[8] = recs[0];
+        if (w) {
+            old_run(old_abi_FxRecordHeadingAhead);
+            r = fx_record_heading_ahead(recs[0]);
+        } else {
+            uint16_t n = (uint16_t)(1 + rnd() % table_n);
+
+            old_gsu.r[0] = n;
+            old_run(old_abi_FxCourseNextDistance);
+            r = (uint16_t)fx_course_next_distance(recs[0], n);
+        }
+        same_ram();
+        same_reg("R0", r, old_gsu.r[0]);
+    }
+    CASE("FxCarPlaceOnSegment / FxCarCatchUp") {
+        int w = rnd() & 1;
+
+        fresh();
+        pool(0x1098, 0x1098 + 0x300);
+        records(1 + (int)(rnd() % 4));
+        cars();
+        table();
+        if (!table_n || !FXU(0x1092))
+            continue;
+        old_gsu.r[8] = recs[0];
+        old_run(w ? old_abi_FxCarCatchUp : old_abi_FxCarPlaceOnSegment);
+        (w ? fx_car_catch_up : fx_car_place_on_segment)(recs[0]);
+        same_ram();
+    }
+    CASE("FxDriveDecide / FxSteerFromInput") {
+        int w = rnd() & 1;
+
+        fresh();
+        records(1);
+        cars();
+        table();
+        FXW(recs[0] + 0x4A) = (rnd() & 1) ? within(-20, 260) : within(-0x300, 0x300);
+        if (w) {
+            int16_t x = within(-0x700, 0x700), z = within(-0x700, 0x700), want = within(0, 0x300);
+
+            if (rnd() & 1) {                        /* the error at a limit, give or take one */
+                static const int16_t limits[4] = {0x038E, -0x038E, 0x0FA4, -0x0FA4};
+                int16_t err = wrap16((int16_t)fx_bearing_to(recs[0], x, z) - FXW(recs[0] + 0x24));
+
+                FXW(recs[0] + 0x3A) = wrap16(err - limits[rnd() % 4] - within(-1, 1));
+            }
+            old_gsu.r[1] = (uint16_t)x, old_gsu.r[3] = (uint16_t)z, old_gsu.r[4] = (uint16_t)want, old_gsu.r[8] = recs[0];
+            old_run(old_abi_FxDriveDecide);
+            fx_drive_decide(recs[0], x, z, want);
+            same_ram();
+        } else {
+            uint16_t bits = (uint16_t)(rnd() & 0x0F), v;
+
+            if (rnd() & 3)
+                FXU(recs[0] + 0x40) &= (uint16_t)~0x0400;
+            old_gsu.r[2] = bits, old_gsu.r[8] = recs[0];
+            old_run(old_abi_FxSteerFromInput);
+            v = (uint16_t)fx_steer_from_input(recs[0], bits);
+            same_ram();
+            same_reg("R3", v, old_gsu.r[3]);
+        }
     }
 
     printf("physics_check: %ld cases, %ld differ\n", cases, failed);
