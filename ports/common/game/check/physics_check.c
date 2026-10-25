@@ -1,0 +1,316 @@
+/* old: object/fx_sums.c object/fx_motion.c math/fx_math.c math/fx_rotate.c
+ *
+ * physics_check.c: the port's Super FX physics (object/fx_*.c) against
+ * the decomp's routines on random states. Each runs on the same game pak
+ * RAM and registers; the RAM is compared, the Super FX's stack aside, and
+ * the registers a caller uses.
+ *
+ *   check/check.sh physics N
+ */
+#include <signal.h>
+#include <unistd.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define gsu old_gsu
+#define gsu_rd8 old_gsu_rd8
+#define gsu_wr8 old_gsu_wr8
+#define gsu_plot old_gsu_plot
+#define gsu_rpix old_gsu_rpix
+#define gsu_code old_gsu_code
+#define gsu_cache old_gsu_cache
+#define gsu_cyc old_gsu_cyc
+#define gsu_time old_gsu_time
+#define gsu_buffer old_gsu_buffer
+#include "gsu.h"
+#undef gsu
+
+#include "game.h"
+#include "render.h"
+#include "physics.h"
+#include "model.h"
+
+#define OLD(name) void old_abi_##name(void);
+OLD(FxSumsClear) OLD(FxSumsRotateLocal) OLD(FxSumsApply) OLD(FxSumsPushWorld) OLD(FxSumsPushLocal) OLD(FxPushApply)
+OLD(FxPushesApply) OLD(FxPushAt4) OLD(FxPushAt2) OLD(FxPushAt1) OLD(FxPushAtHalf) OLD(FxPushAtQuarter) OLD(FxPushAt4Twist)
+OLD(FxHitAddScaled) OLD(FxHitAddUnit) OLD(FxSumScale) OLD(FxRecordMove)
+
+static uint64_t rng = 0x5D2B7C94618E1F3Aull;
+
+static uint32_t rnd(void)
+{
+    rng ^= rng << 13;
+    rng ^= rng >> 7;
+    rng ^= rng << 17;
+    return (uint32_t)(rng >> 16);
+}
+
+static int16_t within(int lo, int hi)
+{
+    return (int16_t)(lo + (int)(rnd() % (unsigned)(hi - lo + 1)));
+}
+
+static uint8_t rom_copy[0x100000];
+static uint8_t start_p[sizeof pakram], old_p[sizeof pakram];
+static long cases, failed, iteration;
+static volatile const char *side = "";
+
+static void runaway(int sig)
+{
+    (void)sig;
+    fprintf(stderr, "physics_check: %s, case %ld: %s ran away\n", model_current, iteration, side);
+    _exit(3);
+}
+
+/* random RAM and registers, the game's screen, the view's edges */
+static void fresh(void)
+{
+    static const uint8_t bases[2] = {0x0B, 0x25};
+    static const uint8_t zero[8];
+    size_t i;
+
+    for (i = 0; i < sizeof pakram; i++)
+        pakram[i] = (uint8_t)rnd();
+    memset(&old_gsu, 0, sizeof old_gsu);
+    for (i = 0; i < 16; i++)
+        old_gsu.r[i] = (uint16_t)rnd();
+    old_gsu.r[10] = 0x0240;
+    old_gsu.r[11] = 0xFFF0;
+    old_gsu.scmr = (rnd() & 1) ? 1 : 3;
+    old_gsu.scbr = bases[rnd() & 1];
+    old_gsu.colr = (uint8_t)rnd();
+    old_gsu.por = (uint8_t)(rnd() & 0x0F);
+    fx_screen.mode = old_gsu.scmr & 3;
+    fx_screen.height = 0;
+    fx_screen.base = old_gsu.scbr;
+    fx_colour = old_gsu.colr;
+    fx_plot_options = old_gsu.por;
+    fx_pixels_set(0, 0xFFFF, 0, zero);
+    fx_pixels_set(1, 0xFFFF, 0, zero);
+    FXU(0x001C) = (uint16_t)(rnd() % 0x20);
+    if (rnd() & 3) {
+        fx_screen_centre_x = 108, fx_screen_centre_y = 64;
+        fx_edges[0] = 0, fx_edges[1] = 216, fx_edges[2] = 0, fx_edges[3] = 128;
+    } else {
+        fx_screen_centre_x = within(40, 160), fx_screen_centre_y = within(30, 100);
+        fx_edges[0] = within(0, 50), fx_edges[1] = within(150, 216);
+        fx_edges[2] = within(0, 50), fx_edges[3] = within(80, 128);
+    }
+}
+
+static void fail(const char *fmt, ...)
+{
+    va_list ap;
+
+    if (++failed > 25)
+        return;
+    va_start(ap, fmt);
+    fprintf(stderr, "%s, case %ld: ", model_current, iteration);
+    vfprintf(stderr, fmt, ap);
+    fputc('\n', stderr);
+    va_end(ap);
+}
+
+/* the decomp's routine, its pixels written out; then the RAM put back for
+   the port's */
+static void old_run(void (*f)(void))
+{
+    memcpy(start_p, pakram, sizeof pakram);
+    model_pixels_empty();
+    side = "the decomp's routine";
+    alarm(5);
+    f();
+    model_pixels_flush();
+    side = "the port's";
+    memcpy(old_p, pakram, sizeof pakram);
+    memcpy(pakram, start_p, sizeof pakram);
+}
+
+static void same_ram(void)
+{
+    size_t i;
+
+    fx_pixels_flush();
+    alarm(0);
+    cases++;
+    for (i = 0; i < sizeof pakram; i++)
+        if (pakram[i] != old_p[i] && !(i >= 0x0240 && i < 0x02A0)) {
+            fail("game pak RAM $%04zX = %02X, the decomp's %02X (was %02X)", i, pakram[i], old_p[i], start_p[i]);
+            if (getenv("ALLDIFF"))
+                for (i++; i < sizeof pakram; i++)
+                    if (pakram[i] != old_p[i] && !(i >= 0x0240 && i < 0x02A0))
+                        fprintf(stderr, "  $%04zX = %02X, the decomp's %02X (was %02X)\n", i, pakram[i], old_p[i], start_p[i]);
+            return;
+        }
+}
+
+static void same_reg(const char *what, uint16_t mine, uint16_t theirs)
+{
+    if (mine != theirs)
+        fail("%s %04X, the decomp's %04X", what, mine, theirs);
+}
+
+/* a random world and own-axes sum, matrix, push slots, turn */
+static void sums(void)
+{
+    int k;
+
+    for (k = 0; k < 6; k++)
+        FXW(0x2340 + 2 * k) = (rnd() & 3) ? within(-0x3000, 0x3000) : (int16_t)rnd();
+    for (k = 0; k < 9; k++)
+        FXW(0x00E4 + 2 * k) = (int16_t)rnd();
+    if (rnd() & 1)
+        for (k = 0; k < 6; k++)
+            FXU(0x2340 + 2 * k) = 0;
+    for (k = 0; k < 20; k++) {
+        uint16_t p = (uint16_t)(0x23A4 + 10 * k);
+
+        FXU(p) = (rnd() & 3) == 0 ? 0 : (rnd() & 7) == 0 ? (uint16_t)rnd() : (uint16_t)(rnd() & 0xFF);
+        FXW(p + 2) = (rnd() & 7) == 0 ? 0x7D00 : (rnd() & 3) == 0 ? (int16_t)rnd() : within(0, 0x4000);
+    }
+    {
+        static const uint16_t turns[6] = {0, 0x40, 0x80, 0xC0, 0x20, 0xE7};
+
+        FXU(0x247E) = (rnd() & 7) ? turns[rnd() % 6] : (uint16_t)(rnd() & 0xFF);
+    }
+}
+
+#define CASE(name) model_current = name; for (i = 0; i < n && (!getenv("ONLY") || !strcmp(getenv("ONLY"), name)) && (iteration = i, 1); i++)
+
+int main(int argc, char **argv)
+{
+    long n = argc > 2 ? atol(argv[2]) : 20000, i;
+    int k;
+
+    if (argc < 2) {
+        fprintf(stderr, "usage: physics_check ROM [N]\n");
+        return 2;
+    }
+    signal(SIGALRM, runaway);
+    model_load_rom(argv[1]);
+    memcpy(rom_copy, srfx_rom_image, sizeof rom_copy);
+    srfx_rom_image = rom_copy;
+
+    CASE("FxSumsClear") {
+        fresh();
+        old_run(old_abi_FxSumsClear);
+        fx_sums_clear();
+        same_ram();
+    }
+    CASE("FxSumsRotateLocal") {
+        fresh();
+        sums();
+        old_run(old_abi_FxSumsRotateLocal);
+        fx_sums_rotate_local();
+        same_ram();
+    }
+    CASE("FxSumsApply") {
+        uint16_t rec = (uint16_t)(0x3000 + (rnd() % 0x800) * 2);
+
+        fresh();
+        sums();
+        old_gsu.r[9] = rec;
+        old_run(old_abi_FxSumsApply);
+        fx_sums_apply(rec);
+        same_ram();
+    }
+    CASE("FxSumsPushWorld / FxSumsPushLocal") {
+        int16_t v[3];
+        int local = rnd() & 1;
+
+        fresh();
+        sums();
+        for (k = 0; k < 3; k++)
+            v[k] = (rnd() & 1) ? within(-6000, 6000) : (int16_t)rnd();
+        if (!(rnd() & 7))
+            v[rnd() % 3] = (rnd() & 1) ? 5000 : -5000;
+        for (k = 0; k < 3; k++)
+            old_gsu.r[4 + k] = (uint16_t)v[k];
+        old_run(local ? old_abi_FxSumsPushLocal : old_abi_FxSumsPushWorld);
+        (local ? fx_sums_push_local : fx_sums_push_world)(v);
+        same_ram();
+        for (k = 0; k < 3; k++)
+            same_reg("R4-R6", (uint16_t)v[k], old_gsu.r[4 + k]);
+    }
+    CASE("FxPushApply") {
+        uint16_t at = (uint16_t)(0x23A4 + 10 * (rnd() % 20)), r0;
+
+        fresh();
+        sums();
+        for (k = 0; k < 3; k++)
+            FXW(at + 4 + 2 * k) = (int16_t)rnd();
+        old_gsu.r[3] = at;
+        old_run(old_abi_FxPushApply);
+        r0 = fx_push_apply(&at);
+        same_ram();
+        same_reg("R0", r0, old_gsu.r[0]);
+        same_reg("R3", at, old_gsu.r[3]);
+    }
+    CASE("FxPushesApply") {
+        uint16_t r0;
+
+        fresh();
+        sums();
+        old_run(old_abi_FxPushesApply);
+        r0 = fx_pushes_apply();
+        same_ram();
+        same_reg("R0", r0, old_gsu.r[0]);
+    }
+    CASE("FxPushAt*") {
+        static void (*const olds[6])(void) = {old_abi_FxPushAt4, old_abi_FxPushAt2, old_abi_FxPushAt1, old_abi_FxPushAtHalf,
+                                              old_abi_FxPushAtQuarter, old_abi_FxPushAt4Twist};
+        int16_t p[3];
+        int w = (int)(rnd() % 6);
+
+        fresh();
+        sums();
+        for (k = 0; k < 3; k++)
+            old_gsu.r[1 + k] = (uint16_t)(p[k] = (rnd() & 1) ? within(-0x400, 0x400) : (int16_t)rnd());
+        old_run(olds[w]);
+        fx_push_at((uint16_t)(2 * w), p);
+        same_ram();
+    }
+    CASE("FxHitAddScaled / FxHitAddUnit") {
+        int16_t v[3], s = (int16_t)rnd();
+        int unit = rnd() & 1;
+
+        fresh();
+        sums();
+        for (k = 0; k < 3; k++)
+            v[k] = (rnd() & 3) ? (int16_t)rnd() : 0;
+        for (k = 0; k < 3; k++)
+            old_gsu.r[1 + k] = (uint16_t)v[k];
+        old_gsu.r[6] = (uint16_t)s;
+        old_run(unit ? old_abi_FxHitAddUnit : old_abi_FxHitAddScaled);
+        if (unit)
+            fx_hit_add_unit(v);
+        else
+            fx_hit_add_scaled(v, s);
+        same_ram();
+    }
+    CASE("FxSumScale") {
+        int16_t s = (int16_t)rnd();
+
+        fresh();
+        sums();
+        old_gsu.r[6] = (uint16_t)s;
+        old_run(old_abi_FxSumScale);
+        fx_sum_scale(s);
+        same_ram();
+    }
+    CASE("FxRecordMove") {
+        uint16_t rec = (uint16_t)(0x3000 + (rnd() % 0x800) * 2), kind = (rnd() & 1) ? 6 : (uint16_t)(rnd() % 8);
+
+        fresh();
+        old_gsu.r[8] = rec;
+        old_gsu.r[1] = kind;
+        old_run(old_abi_FxRecordMove);
+        fx_record_move(rec, kind);
+        same_ram();
+    }
+
+    printf("physics_check: %ld cases, %ld differ\n", cases, failed);
+    return failed != 0;
+}
