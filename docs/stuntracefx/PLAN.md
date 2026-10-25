@@ -221,9 +221,7 @@ Bookkeeping:
     notes) when found, not only into session notes.
 19. No provenance traces anywhere: files, comments, tool output, commit messages. No
     em dashes. No attribution trailers. provcheck runs from the first commit.
-20. Ports never edit decomp source (`src/`). The native port lifts its own
-    copy (`ports/stuntracefx/game`) and checks it against the original; see
-    `ports/stuntracefx/PLAN.md`.
+20. Ports never edit decomp source (`src/`).
 21. Parallelise long runs across the cores; heavy jobs one at a time.
 
 ## 7. Risks named now
@@ -239,5 +237,4 @@ Bookkeeping:
   address both labelled.
 - Emulator accuracy. Two cores, control scripts.
 - The C writes the machine model directly (WRAM, GSU RAM, PPU registers). The
-  first port supplied the same model natively; the native port replaces it
-  with its own components (`ports/stuntracefx/PLAN.md`).
+  first port supplied the same model natively.

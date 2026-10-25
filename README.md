@@ -102,8 +102,7 @@ produced these bytes, so no C can rebuild them. Each routine therefore has two
 sources:
 
 - **C, the decompilation.** Readable C per routine, certified behaviour exact
-  against the running original (T3). The native port (below) is built from
-  its own copy and never edits it.
+  against the running original (T3).
 - **Assembly, the byte-exact companion.** Symbolic, commented assembly that
   rebuilds the ROM byte for byte (T4). It is the reading the C is written
   from, and the byte-exact rebuild proves that reading is right.
@@ -145,61 +144,6 @@ raster effect a line off, a sound a frame late. Cycle exact closes that
 last gap. It is a complete record of how the original *runs*, not only of
 what it computes, and it gives a native port the original's exact pacing to
 keep, or to drop on purpose.
-
-## Native port (in progress)
-
-**The decompilation is done; the native port built from it is under way.**
-`ports/stuntracefx` runs the game as a native 64-bit program on its own
-copy of the decomp's C (`ports/stuntracefx/game`); the decompilation in
-`src/` and `asm/` never changes for it. The goal is zero emulation: the
-game's own code as plain C over native parts, with no console model, no
-processor registers and nothing drawn in software, at the original's
-pacing.
-
-Where it stands (2026-10-24):
-
-- **Plays the whole game** on macOS (a Windows target builds from the same
-  tree), with the player's own ROM checked by SHA-1 and built into the
-  executable; nothing derived from the cartridge is committed.
-- **Picture on the GPU.** The 2D layers, sprites and colour effects are
-  composed on Metal, Vulkan or OpenGL, identical to the reference renderer
-  on every frame of the 21 plays the checks run. The Super FX's polygons are
-  drawn on the GPU from the game's own draw lists, every pixel equal to the
-  Super FX's.
-- **Sound** through the port's own mixer: identical to the original's DSP
-  for the attract mode's first 126,206 samples, then 1-2 levels off on one
-  channel (open).
-- **Pacing** is the original's: race frames take as many video frames as
-  they did on the console, from the time the C states.
-- **Plain C, step 1 done: the game's C carries its own registers.** The
-  port's copy used to work on an emulated 65816 register file; every
-  S-CPU routine now works on a copy of the registers it carries, and no
-  game code outside the verification harness's adapters touches the
-  register file (`python3 ports/stuntracefx/tools/plainc.py`: 0 left,
-  from 17,415). Code that leaves through its caller's frame says where it
-  lands (`cpu_leave_to`), and the hand-off to the machine (computed calls,
-  the branch to itself, restarts) is the runtime's
-  (`ports/stuntracefx/runtime/carried_ends.c`); a computed call to an
-  address with no carried form is a fatal error in the port. Each step
-  was checked three ways: every routine of the whole game against the
-  previous commit's from random states (every memory access, every clock,
-  every exit register), every play byte for byte against the reference
-  port, and the decomp's full gate.
-- **Still to do:** the rest of the plain-C phase (typed work RAM, a frame loop
-  with no interrupts, the Super FX programs and the sound drivers as
-  native code); removing the console model (`ports/common/snes`) and every
-  other stepping stone; widescreen and field of view; and last, as a
-  remaster option, high-resolution polygons.
-
-```sh
-ports/stuntracefx/package_app.sh                    # macOS: Stunt Race FX.app
-HOST=null ports/stuntracefx/link.sh                 # headless, for the checks
-python3 ports/stuntracefx/tools/same.py             # every play byte for byte against the reference port
-```
-
-The plan and its rules are in [ports/stuntracefx/PLAN.md](ports/stuntracefx/PLAN.md),
-the current state and every check in
-[ports/stuntracefx/HANDOFF.md](ports/stuntracefx/HANDOFF.md).
 
 ## Current Status
 
@@ -333,12 +277,6 @@ passes the provenance check.
     tools/common/                git hooks, provenance check
     tools/toolchains/            pinned asar and bsnes (staged by setup.sh), local patches
     docs/stuntracefx/            plan, standard, handbook, dated notes
-    ports/stuntracefx/           the native port: its copy of the game's C,
-                                 runtime, build, checks, plan and handoff
-    ports/common/                what any port shares: hosts (macOS, Windows,
-                                 headless), the picture's records, GPU
-                                 renderers, the mixer, and the console model
-                                 the port is removing
     reference/                   ROMs and witness clones (not tracked)
     build/                       everything generated
 
