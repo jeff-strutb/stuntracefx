@@ -28,6 +28,7 @@
 #include "state.h"
 #include "model.h"
 #include "gsu_clock.h"
+#include "ppu.h"
 
 const uint8_t *srfx_rom_image;
 const char *model_current = "";
@@ -131,6 +132,11 @@ void old_wr8(uint32_t a, uint8_t v)
             model_gsu_start(gsu_pbr, *r);
         }
         return;
+    }
+    if ((o >= 0x2100 && o < 0x2134) || (o >= 0x4300 && o < 0x4380) || o == 0x420B) {
+        ppu_write(o, v);                /* the video hardware (the checks' model of it) */
+        if (o != 0x211B && o != 0x211C)
+            return;
     }
     switch (o) {
     case 0x211B: m7a = (uint16_t)(v << 8 | m7_latch); m7_latch = v; return;
