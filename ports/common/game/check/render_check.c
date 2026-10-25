@@ -1,4 +1,4 @@
-/* old: render/angle.c render/arith.c render/points.c render/fx_points.c render/table.c render/table_2702.c render/screen.c render/sort.c render/project.c render/matrix.c math/fx_math.c */
+/* old: render/angle.c render/arith.c render/points.c render/fx_points.c render/table.c render/table_2702.c render/screen.c render/sort.c render/project.c render/matrix.c render/polygon.c math/fx_math.c */
 /*
  * render_check.c: the port's renderer geometry (render/fx_geom.c) against
  * the decomp's Super FX routines, on random states.
@@ -39,6 +39,8 @@ OLD(FxMatrixFromAngles01) OLD(FxMatrixFromAnglesProgram) OLD(FxMatrixTranspose) 
 OLD(FxLengthProgram) OLD(FxTableEntryWords) OLD(FxTable2702Program) OLD(FxScreenClear) OLD(FxProjectPoint)
 OLD(FxProjectScaled) OLD(FxProjectVertex) OLD(FxSortObjectsProgram) OLD(FxPointsGather) OLD(FxModelPoints)
 OLD(FxSegmentCrossZ) OLD(FxRatioClamp) OLD(FxDivideSigned)
+OLD(FxPolygonClipTop) OLD(FxPolygonClipBottom) OLD(FxPolygonClipRight) OLD(FxPolygonClipLeft) OLD(FxPolygonClipNear)
+OLD(FxPolygonProject) OLD(FxPolygonNearClip) OLD(FxPolygonDraw)
 
 static uint64_t rng = 0x8E1F3A5D2B7C9461ull;
 
@@ -74,12 +76,13 @@ static void fresh(void)
         old_gsu.r[i] = (uint16_t)rnd();
     old_gsu.r[10] = 0x0240;                 /* the stack, where the programs keep it */
     old_gsu.rambr = 0;
+    FXU(0x001C) = (uint16_t)(rnd() % 0x20);  /* the ROM bank a caller keeps there */
 }
 
 /* the stack and the clip routines' save words: not compared */
 static int scratch(size_t a)
 {
-    return (a >= 0x0240 && a < 0x0280) || (a >= 0x008A && a < 0x00A2);
+    return (a >= 0x0240 && a < 0x0280) || (a >= 0x008A && a < 0x00A2) || a == 0x001A || a == 0x001B;
 }
 
 static uint8_t start_p[sizeof pakram], old_p[sizeof pakram];
@@ -166,6 +169,33 @@ static uint16_t make_script(void)
     }
     p[n++] = (uint8_t)(0x40 + rnd() % 0x30);    /* the end */
     return at;
+}
+
+/* a polygon of n vertices in the list at `at`, its coordinates around the
+   planes (z near |x| and |y| times a few), the lists set for it */
+static void polygon(uint16_t at, int n)
+{
+    int16_t scale = (int16_t)(1 << (rnd() % 12));
+    int k;
+
+    fx_vertex_count = (uint16_t)n;
+    fx_list_in = at;
+    fx_list_out = at == FX_LIST_A ? FX_LIST_B : FX_LIST_A;
+    for (k = 0; k < n; k++) {
+        uint16_t v = (uint16_t)(at + 10 * k);
+
+        FXW(v) = (int16_t)((int16_t)(rnd() % 2001 - 1000) * scale / 64);
+        FXW(v + 2) = (int16_t)((int16_t)(rnd() % 2001 - 1000) * scale / 64);
+        FXW(v + 4) = (int16_t)((int16_t)(rnd() % 2001 - 600) * scale / 64);
+        FXW(v + 6) = small16();
+        FXW(v + 8) = small16();
+    }
+}
+
+static void slopes(void)
+{
+    FXW(0x0092) = (int16_t)(0x1000 + rnd() % 0x6000);
+    FXW(0x0094) = (int16_t)(0x1000 + rnd() % 0x6000);
 }
 
 #define CASE(name) model_current = name; for (i = 0; i < n; i++)
@@ -424,6 +454,75 @@ int main(int argc, char **argv)
                 same("first end", (uint16_t)a[k], old_gsu.r[1 + k]);
                 same("second end", (uint16_t)b[k], old_gsu.r[4 + k]);
             }
+    }
+
+    for (int which = 0; which < 5; which++) {
+        static void (*const old[5])(void) = {old_abi_FxPolygonClipTop, old_abi_FxPolygonClipBottom,
+                                             old_abi_FxPolygonClipRight, old_abi_FxPolygonClipLeft,
+                                             old_abi_FxPolygonClipNear};
+        static uint16_t (*const mine[4])(void) = {fx_polygon_clip_top, fx_polygon_clip_bottom, fx_polygon_clip_right,
+                                                  fx_polygon_clip_left};
+        static const char *names[5] = {"FxPolygonClipTop", "FxPolygonClipBottom", "FxPolygonClipRight",
+                                       "FxPolygonClipLeft", "FxPolygonClipNear"};
+
+        CASE(names[which]) {
+            uint16_t r;
+            int16_t near = (int16_t)(rnd() % 801 - 400);
+
+            fresh();
+            slopes();
+            polygon((rnd() & 1) ? FX_LIST_A : FX_LIST_B, (rnd() & 15) ? 3 + (int)(rnd() % 7) : 2);
+            old_gsu.r[0] = (uint16_t)near;
+            old_run(old[which]);
+            r = which < 4 ? mine[which]() : fx_polygon_clip_near(near);
+            same_ram();
+            same("count", r, old_gsu.r[0]);
+        }
+    }
+    CASE("FxPolygonProject") {
+        uint16_t end;
+
+        fresh();
+        polygon((rnd() & 1) ? FX_LIST_A : FX_LIST_B, 3 + (int)(rnd() % 7));
+        fx_pairs_end = (uint16_t)(0x4000 + (rnd() & 0x0FFE));
+        old_run(old_abi_FxPolygonProject);
+        end = fx_polygon_project();
+        same_ram();
+        same("output end", end, old_gsu.r[8]);
+    }
+    CASE("FxPolygonNearClip") {
+        uint16_t r;
+
+        fresh();
+        polygon((rnd() & 1) ? FX_LIST_A : FX_LIST_B, 3 + (int)(rnd() % 7));
+        fx_pairs_end = (uint16_t)(0x4000 + (rnd() & 0x0FFE));
+        old_run(old_abi_FxPolygonNearClip);
+        r = fx_polygon_near_clip();
+        same_ram();
+        same("count", r, old_gsu.r[0]);
+    }
+    CASE("FxPolygonDraw") {
+        uint16_t r, n = (uint16_t)(3 + rnd() % 6), script = (uint16_t)(0x8000 + (rnd() & 0x7FC0) + 16);
+        uint8_t bank = (uint8_t)(rnd() % 0x20);
+        int k;
+
+        fresh();
+        slopes();
+        fx_points_n = n;
+        fx_pairs_end = (uint16_t)(0x4000 + (rnd() & 0x0FFE));
+        for (k = 0; k < 256 * 3; k++)           /* the points the index bytes name, around the planes */
+            FXW(FX_POINTS + 2 * k) = (int16_t)(rnd() % 2001 - 1000);
+        for (k = 0; k < 3; k++)
+            fx_vector_out[k] = (int16_t)(rnd() % 201 - 100);
+        uint16_t codes = (uint16_t)(rnd() & 0x1F);
+
+        old_gsu.r[5] = codes;
+        old_gsu.r[14] = script;
+        old_gsu.rombr = bank;
+        old_run(old_abi_FxPolygonDraw);
+        r = fx_polygon_draw(codes, bank, script);
+        same_ram();
+        same("count", r, old_gsu.r[0]);
     }
 
     printf("render_check: %ld cases, %ld differ\n", cases, failed);

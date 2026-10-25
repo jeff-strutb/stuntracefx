@@ -172,6 +172,13 @@ typedef struct PACKED {
 #define fx_edges            ((sw16 *)&pakram[0x0038])      /* left, right, top, bottom */
 #define fx_angle_out        FXU(0x0040)
 #define fx_vertex_count     FXU(0x0040)
+#define fx_list_in          FXU(0x0060)                    /* the vertex list being read */
+#define fx_list_out         FXU(0x0062)                    /* and the one being written */
+#define fx_count_save       FXU(0x0098)
+#define fx_points_n         FXU(0x0146)
+#define fx_codes            FXU(0x014A)                    /* outcodes ORed; the sides to clip */
+#define FX_LIST_A           0x0688u
+#define FX_LIST_B           0x082Au
 #define fx_model_variant    FXU(0x0044)
 #define fx_pairs_end        FXU(0x005A)                    /* the pair list + 4; the polygon output */
 #define fx_vector_in_x      FXW(0x0068)

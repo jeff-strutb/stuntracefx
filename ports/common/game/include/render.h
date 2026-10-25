@@ -28,4 +28,14 @@ uint16_t fx_points_gather(uint16_t count, uint8_t bank, uint16_t script);
 uint16_t fx_model_points(uint8_t bank, uint16_t script, uint16_t *end);
 int fx_segment_cross_z(int16_t a[3], int16_t b[3]);
 
+/* ---- render/fx_clip.c ---- */
+uint16_t fx_polygon_clip_top(void);
+uint16_t fx_polygon_clip_bottom(void);
+uint16_t fx_polygon_clip_right(void);
+uint16_t fx_polygon_clip_left(void);
+uint16_t fx_polygon_clip_near(int16_t near);
+uint16_t fx_polygon_project(void);
+uint16_t fx_polygon_near_clip(void);
+uint16_t fx_polygon_draw(uint16_t outcodes, uint8_t bank, uint16_t script);
+
 #endif
