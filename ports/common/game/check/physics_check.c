@@ -39,6 +39,8 @@ OLD(FxHitAddScaled) OLD(FxHitAddUnit) OLD(FxSumScale) OLD(FxRecordMove)
 OLD(FxPoolTake) OLD(FxPoolsMerge) OLD(FxListSweep) OLD(FxListClearBit0) OLD(FxObjectFree) OLD(FxRecordNew426) OLD(FxRecordNew424)
 OLD(FxRecordNew426B) OLD(FxRecordNew42D) OLD(FxRecordNewCamera) OLD(FxRecordNew422) OLD(FxCollidePush) OLD(FxRecordsApart)
 OLD(FxContactNote) OLD(FxRecordTouches) OLD(FxAllTouches)
+OLD(FxPushSet) OLD(FxRecordHoldY) OLD(FxBearingTo) OLD(FxRecordAlignment) OLD(FxRecordRaise6A) OLD(FxRecordLower82)
+OLD(FxTimersProgram)
 
 static uint64_t rng = 0x5D2B7C94618E1F3Aull;
 
@@ -518,6 +520,57 @@ int main(int argc, char **argv)
             fx_all_touches();
         else
             fx_record_touches(r);
+        same_ram();
+    }
+
+    CASE("FxPushSet") {
+        int16_t a = (int16_t)rnd();
+        uint16_t on;
+
+        fresh();
+        old_gsu.r[2] = (uint16_t)a;
+        old_run(old_abi_FxPushSet);
+        on = fx_push_set(a);
+        same_ram();
+        same_reg("R0", on, old_gsu.r[0]);
+    }
+    CASE("FxRecordHoldY / FxRecordAlignment") {
+        uint16_t r = (uint16_t)(0x3000 + 2 * (rnd() % 0x400));
+        int which = rnd() & 1;
+
+        fresh();
+        for (k = 0; k < 9; k++)
+            FXW(0x00E4 + 2 * k) = (int16_t)rnd();
+        if (rnd() & 1)
+            FXW(r + 0x4A) = within(-12, 12);
+        if (!(rnd() & 7))
+            for (k = 0; k < 3; k++)
+                FXU(r + 0x2E + 2 * k) = 0;
+        old_gsu.r[8] = r;
+        old_run(which ? old_abi_FxRecordAlignment : old_abi_FxRecordHoldY);
+        (which ? fx_record_alignment : fx_record_hold_y)(r);
+        same_ram();
+    }
+    CASE("FxBearingTo") {
+        uint16_t r = (uint16_t)(0x3000 + 2 * (rnd() % 0x400)), a;
+        int16_t x = (int16_t)rnd(), z = (int16_t)rnd();
+
+        fresh();
+        if (rnd() & 1)
+            z = FXW(r + 0x22);
+        old_gsu.r[8] = r, old_gsu.r[1] = (uint16_t)x, old_gsu.r[3] = (uint16_t)z;
+        old_run(old_abi_FxBearingTo);
+        a = fx_bearing_to(r, x, z);
+        same_ram();
+        same_reg("R0", a, old_gsu.r[0]);
+    }
+    CASE("FxRecordRaise6A / FxRecordLower82 / FxTimersProgram") {
+        int w = (int)(rnd() % 3);
+
+        fresh();
+        FXU(0x238E) = (uint16_t)(0x3000 + 2 * (rnd() % 0x400));
+        old_run(w == 0 ? old_abi_FxRecordRaise6A : w == 1 ? old_abi_FxRecordLower82 : old_abi_FxTimersProgram);
+        (w == 0 ? fx_record_raise_6a : w == 1 ? fx_record_lower_82 : fx_timers_program)();
         same_ram();
     }
 

@@ -53,6 +53,15 @@ void fx_contact_note(uint16_t owner, uint16_t other);
 void fx_record_touches(uint16_t rec);
 void fx_all_touches(void);
 
+/* ---- object/fx_record.c ---- */
+uint16_t fx_push_set(int16_t amount);
+void fx_record_hold_y(uint16_t rec);
+uint16_t fx_bearing_to(uint16_t rec, int16_t x, int16_t z);
+void fx_record_alignment(uint16_t rec);
+void fx_record_raise_6a(void);      /* programs the S-CPU starts */
+void fx_record_lower_82(void);
+void fx_timers_program(void);
+
 /* ---- object/fx_motion.c ---- */
 void fx_record_move(uint16_t rec, uint16_t kind);
 
