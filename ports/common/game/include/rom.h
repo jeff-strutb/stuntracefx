@@ -34,4 +34,9 @@ static inline uint16_t ram_code_word(uint16_t addr)
     return rom_word(0x028000u + (uint16_t)(addr - 0xA2D9u));
 }
 
+static inline uint8_t ram_code_byte(uint16_t addr)
+{
+    return *rom_at(0x028000u + (uint16_t)(addr - 0xA2D9u));
+}
+
 #endif

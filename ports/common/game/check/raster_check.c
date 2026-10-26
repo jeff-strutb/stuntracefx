@@ -1,4 +1,4 @@
-/* old: video/fade.c video/palette.c video/dma.c
+/* old: video/fade.c video/palette.c video/dma.c video/windows.c video/window_hdma.c video/colour_math.c object/object.c
  *
  * raster_check.c: the port's frame work (what the original does in its
  * raster interrupt: the fade, the palettes, the windows, the uploads) against
@@ -35,6 +35,9 @@
 OLD(FadeStepFixed) OLD(FadeStep) OLD(RasterColours) OLD(RasterPaletteUpload) OLD(RasterColoursCycling)
 OLD(RasterColoursE4) OLD(RasterColoursUnless0D22) OLD(PaletteCycle) OLD(PaletteKeptColoursStep)
 OLD(PlayerColoursFlash) OLD(StatusColourPick) OLD(PalettesStep)
+OLD(WindowsSetupSelect) OLD(WindowHdmaNormal) OLD(WindowHdmaBands) OLD(WindowLayoutStepForScreen) OLD(BobWindowsRun)
+OLD(WindowSweepIfOn) OLD(WindowSlideOrOscillate) OLD(WindowBandsAnimate) OLD(WindowSplitAnimate) OLD(WindowSlideCheck)
+OLD(WindowHdmaFFDD) OLD(WindowHdmaFFD1) OLD(WindowHdmaFFD5) OLD(WindowHdmaFFD9)
 
 static uint64_t rng = 0x3C6EF372FE94F82Bull;
 
@@ -216,6 +219,77 @@ int main(int argc, char **argv)
         default: palettes_step();
         }
         same();
+    }
+    CASE("the windows") {
+        static void (*const olds[])(void) = {
+            old_abi_WindowsSetupSelect, old_abi_WindowHdmaNormal, old_abi_WindowHdmaBands, old_abi_WindowLayoutStepForScreen,
+            old_abi_BobWindowsRun, old_abi_WindowSweepIfOn, old_abi_WindowSlideOrOscillate, old_abi_WindowBandsAnimate,
+            old_abi_WindowSplitAnimate, old_abi_WindowSlideCheck, old_abi_WindowHdmaFFDD, old_abi_WindowHdmaFFD1,
+            old_abi_WindowHdmaFFD5, old_abi_WindowHdmaFFD9,
+        };
+        static void (*const news[])(void) = {
+            windows_setup_select, window_table_normal, window_table_bands, window_layout_step_for_screen,
+            bob_windows_run, window_sweep_if_on, window_slide_or_oscillate, window_bands_animate,
+            window_split_animate, window_slide_check, window_table_ffdd, window_table_ffd1,
+            window_table_ffd5, window_table_ffd9,
+        };
+        static const char *const names[] = {
+            "WindowsSetupSelect", "WindowHdmaNormal", "WindowHdmaBands", "WindowLayoutStepForScreen", "BobWindowsRun",
+            "WindowSweepIfOn", "WindowSlideOrOscillate", "WindowBandsAnimate", "WindowSplitAnimate", "WindowSlideCheck",
+            "WindowHdmaFFDD", "WindowHdmaFFD1", "WindowHdmaFFD5", "WindowHdmaFFD9",
+        };
+        int k = (int)(rnd() % 14), j;
+        uint16_t o;
+
+        model_current = names[k];
+
+        fresh();
+        W8(0x19A9) = (uint8_t)(rnd() & 1 ? (rnd() % 5) * 2 : rnd());
+        W8(0x19D8) = (uint8_t)(rnd() & 1 ? 0 : rnd() & 3 ? rnd() % 7 : rnd());
+        W8(0x19BC) = (uint8_t)(rnd() & 3 ? rnd() : 0xFF);
+        W8(0x19DF) = (uint8_t)(rnd() & 1 ? rnd() & 1 : rnd());
+        W8(0x0D62) = (uint8_t)(rnd() & 1);
+        W8(0x0D2E) = (uint8_t)(rnd() & 1 ? 0 : rnd());
+        W16(0x19B6) = (uint16_t)(rnd() % 12 * 2);
+        W8(0x19BD) = (uint8_t)(rnd() & 1 ? (rnd() & 1 ? 1 : 0xFF) : rnd());
+        W16(0x19B8) = (uint16_t)(rnd() & 1 ? 2 : 0xFFFE);
+        W8(0x19D5) = (uint8_t)(rnd() % 6);
+        if (rnd() & 1)
+            W16(0x19D9) = (uint16_t)(W16(0x19D4) + W16(0x19D6));
+        if (rnd() & 1)
+            W16(0x19D9) = (uint16_t)(W16(0x19DB) + W16(0x19DD));
+        for (j = 0; j < 2; j++) {
+            uint16_t obj = (uint16_t)(rnd() & 0x7FE), l1 = (uint16_t)(0x0300 + (rnd() & 0x7FE)), l2 = (uint16_t)(0x0300 + (rnd() & 0x7FE));
+
+            W16(j ? 0x034A : 0x0346) = obj;
+            W16(0x204F + obj) = l1;
+            W16(0x204F + l1) = l2;
+        }
+        W8(0x19D1) = (uint8_t)(rnd() % 4 * 2);
+        W8(0x02) = (uint8_t)(rnd() % 4 * 2);
+        W16(0x19C3) = (uint16_t)(0xE000 + (rnd() & 0x0FFF));
+        W16(0x19C5) = (uint16_t)(rnd() & 1 ? rnd() & 0xFF : -(rnd() & 0xFF));
+        if (rnd() & 1)
+            W16(0x19C5) = (uint16_t)(0xE000 - W16(0x19C3));
+        for (o = 0x1A08; o < 0x1A24; o++)
+            if (rnd() & 1)
+                W8(o) = (uint8_t)(rnd() & 3);
+        if (rnd() & 1) {                /* the moving windows near where they turn */
+            for (j = 0; j < 2; j++) {
+                W8(0x1A1C + j) = (uint8_t)(0x14 + rnd() % 10), W8(0x1A20 + j) = (uint8_t)(rnd() & 1 ? 2 : 0xFE);
+                W8(0x1A15 + j) = (uint8_t)(0xE6 + rnd() % 14), W8(0x1A19 + j) = (uint8_t)(rnd() & 1 ? 2 : 0xFE);
+                W8(0x1A08 + j) = (uint8_t)(0x3E + rnd() % 6), W8(0x1A0C + j) = (uint8_t)(rnd() & 1 ? 1 : 0xFF);
+                W8(0x1A1E + j) = W8(0x1A17 + j) = 1;
+            }
+            W8(0x0DDA) = (uint8_t)((1 + rnd() % 3) << 5);
+            W8(0x1A0E) = W8(0x0DDA) >> 5;
+            W8(0x1A0A) = (uint8_t)(ram_code_byte((uint16_t)(0xD30D + W8(0x1A0E) - 1)) - 1);
+        }
+        old_cpu.p = (uint8_t)(old_cpu.p | (rnd() & (P_M | P_X)));
+        old_run(olds[k]);
+        news[k]();
+        same();
+        model_current = "the windows";
     }
     printf("raster_check: %ld cases, %ld differ\n", cases, failed);
     return failed != 0;
