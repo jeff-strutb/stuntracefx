@@ -6,7 +6,7 @@
 #ifndef SRFX_RUNTIME_REMASTER_H
 #define SRFX_RUNTIME_REMASTER_H
 
-enum { RM_OPT_FRAMERATE, RM_OPT_WIDESCREEN, RM_OPT_COUNT };
+enum { RM_OPT_FRAMERATE, RM_OPT_WIDESCREEN, RM_OPT_AUTOACCEL, RM_OPT_COUNT };
 
 void rm_options_load(void);
 int rm_option(int which);
