@@ -1431,6 +1431,7 @@ void abi_RaceLoop(void)
     for (;;) {
         op_sep(P_M);
         b = (uint32_t)cpu.db << 16;
+        rm_step_over();               /* frames of its own (remaster.h) */
         do
             { cyc(first ? 60 : 68); first = 0; op_lda8(b | 0x0D52); }
         while (!(uint8_t)cpu.a);

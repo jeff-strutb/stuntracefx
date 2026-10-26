@@ -120,6 +120,7 @@ void cpu_restart(uint32_t at, void (*entry)(void))
     (void)at;
     next_entry = entry;
     in_interrupt = 0;
+    snes_set_untimed(0);        /* the untimed code it leaves (snes.h) ends here */
     port_longjmp(top);
 }
 

@@ -6,6 +6,7 @@
 #include "hw.h"
 #include "cpu_ops.h"
 #include "assets.h"
+#include "remaster.h"
 
 /*
  * @routine 03:ED89 TilemapRowFromGsuRam
@@ -1412,6 +1413,7 @@ void abi_ChampionshipScreenLoop(void)
     do {
         op_sep(P_M | P_X);
         b = (uint32_t)cpu.db << 16;
+        rm_step_over();               /* frames of its own (remaster.h) */
         do
             { cyc(24); op_lda8(b | 0x0D52); }
         while (cyc_loop(22, !(uint8_t)cpu.a));

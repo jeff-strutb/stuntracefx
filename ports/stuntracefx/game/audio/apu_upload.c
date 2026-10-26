@@ -12,6 +12,7 @@
 #include "cpu_ops.h"
 #include "hw.h"
 #include "wram.h"
+#include "remaster.h"
 
 /*
  * @routine 04:D788 ApuUploadNextByte
@@ -180,7 +181,10 @@ void ApuUpload(uint8_t bank, uint16_t addr)
 
 void abi_ApuUpload(void)
 {
-    ApuUploadEnd end = apu_upload((uint8_t)cpu.a, cpu.y);
+    ApuUploadEnd end;
+
+    rm_step_over();             /* a load for a screen to come (remaster.h) */
+    end = apu_upload((uint8_t)cpu.a, cpu.y);
 
     cpu.a = end.kick;
     cpu.x = 0;

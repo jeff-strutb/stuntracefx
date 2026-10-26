@@ -35,6 +35,7 @@
 
 #include "host.h"
 #include "rm_options.h"
+#include "remaster.h"
 #include "snes.h"
 #include "video.h"
 #include "rr.h"
@@ -293,19 +294,44 @@ static uint16_t keys;
    steps a tick at a time (game/include/remaster.h). Not in the attract's
    demos ($10DA set), which replay the original's buttons frame by frame.
    The option is taken at each frame's end. */
-static int rm_on;
-static long rm_race_at = -100;
+static int rm_on;                       /* Frame rate 60 */
+static int rm_pace;                     /* video frames a race frame: 1 at 60; 0 the original's */
+static int rm_share_on;                 /* the steps shared out over RM_TICKS ticks */
+/* each field's carried share (rm_share), by its address: work RAM, the
+   Super FX's RAM */
+static int8_t rm_carry_w[0x20000], rm_carry_s[0x10000];
 
-int rm_tick60(void) { return rm_on && frame_no - rm_race_at <= 2; }
+/* a race frame running as a tick: untimed, from rm_race_frame */
+int rm_tick60(void) { return rm_pace && snes_untimed(); }
+
+int32_t rm_share(uint32_t field, int32_t d)
+{
+    int8_t *c;
+    int32_t t, q;
+    if (!rm_share_on || !snes_untimed())
+        return d;
+    c = (field >> 16 & 0xFE) == 0x70 ? &rm_carry_s[field & 0xFFFF]
+                                      : &rm_carry_w[field & 0x1FFFF];
+    t = d + *c;
+    q = t >= 0 ? t / RM_TICKS : -((RM_TICKS - 1 - t) / RM_TICKS);   /* floor */
+    *c = (int8_t)(t - q * RM_TICKS);
+    return q;
+}
 
 void rm_race_frame(void)
 {
-    if (!rm_on)
+    int n;
+    if (!rm_pace)
         return;
     snes_set_untimed(0);
-    snes_wait_vblank();                 /* the tick */
-    rm_race_at = frame_no;
+    for (n = 0; n < rm_pace; n++)       /* the tick */
+        snes_wait_vblank();
     snes_set_untimed(1);
+}
+
+void rm_step_over(void)
+{
+    snes_set_untimed(0);
 }
 
 void rm_race_frame_end(void)
@@ -313,9 +339,17 @@ void rm_race_frame_end(void)
     snes_set_untimed(0);
 }
 
+/* At each frame's end. RM_REF_PACE=N (a check, not an option): the
+   original's whole steps, untimed, one each N video frames, to compare a
+   run at 60 with the original at a steady pace. */
 static void rm_apply(void)
 {
+    static int ref = -1;
+    if (ref < 0)
+        ref = getenv("RM_REF_PACE") ? atoi(getenv("RM_REF_PACE")) : 0;
     rm_on = rm_option(RM_OPT_FRAMERATE) && snes_wram()[0x10DA] == 0;
+    rm_pace = ref ? ref : rm_on;
+    rm_share_on = rm_on && !ref;
 }
 
 static void key(int vk, int down)
@@ -438,12 +472,23 @@ static uint32_t fnv(const uint8_t *p, size_t n, uint32_t h)
     return h;
 }
 
+/* --simlog FILE: at each race frame's start, work RAM (128 KB) and the
+   Super FX's RAM (64 KB) as they stand: the simulation's state a step at a
+   time, for finding what the steps change */
+static FILE *simlog_f;
+
 static void pacing_write(uint32_t addr, uint8_t value)
 {
     uint8_t bank = (uint8_t)(addr >> 16);
     const uint8_t *w = snes_wram();
     (void)value;
     if ((addr & 0xFFFF) != 0x06D4 || !(bank == 0x7E || (bank & 0x7F) < 0x40))
+        return;
+    if (simlog_f) {
+        fwrite(w, 1, 0x20000, simlog_f);
+        fwrite(snes_sfx_ram(), 1, 0x10000, simlog_f);
+    }
+    if (!pacing_f)
         return;
     fprintf(pacing_f, "%ld %06X %u %08x %08x\n", frame_no, 0u, w[0x306],
             fnv(w + 0x300, 0x20000 - 0x300, fnv(w, 0x100, 2166136261u)),
@@ -621,6 +666,21 @@ static void frame(void)
     uint16_t b0 = 0, b1 = 0;
     frame_no++;
     rm_apply();
+    {
+        /* RM_TRACE=FILE (a check): each video frame, the player's car as
+           the view takes it (direct page $C5, $C7, $C9) and the race time
+           ($0E66 minutes, $0E64 seconds, $0E62 the fraction, BCD) */
+        static FILE *tf;
+        static int t = -1;
+        if (t < 0)
+            t = getenv("RM_TRACE") && (tf = fopen(getenv("RM_TRACE"), "w"));
+        if (t) {
+            const uint8_t *w = snes_wram();
+            fprintf(tf, "%ld %d %d %d %02X:%02X.%04X\n", frame_no, (int16_t)(w[0xC5] | w[0xC6] << 8),
+                    (int16_t)(w[0xC7] | w[0xC8] << 8), (int16_t)(w[0xC9] | w[0xCA] << 8), w[0xE66], w[0xE64],
+                    w[0xE62] | w[0xE63] << 8);
+        }
+    }
     if (headless) {
         int more;
         static int gc = -1;
@@ -700,6 +760,13 @@ int main(int argc, char **argv)
                 fprintf(stderr, "port: cannot write %s\n", argv[i]);
                 return 2;
             }
+        }
+        else if (!strcmp(argv[i], "--simlog") && i + 1 < argc) {
+            if (!(simlog_f = fopen(argv[++i], "wb"))) {
+                fprintf(stderr, "port: cannot write %s\n", argv[i]);
+                return 1;
+            }
+            snes_write_hook = pacing_write;
         }
         else if (!strcmp(argv[i], "--pacing") && i + 1 < argc) {
             if (!(pacing_f = fopen(argv[++i], "w"))) {

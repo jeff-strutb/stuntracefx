@@ -8,6 +8,7 @@
 #include "hw.h"
 #include "cpu_ops.h"
 #include "assets.h"
+#include "remaster.h"
 
 void abi_CarFinishSound(void);
 
@@ -1798,6 +1799,7 @@ void abi_RaceEndCountdownOn(void);
 static void race_end_vblank(uint32_t b, uint32_t branch)
 {
     cyc(branch);                        /* the branch back to the top, if any */
+    rm_step_over();                   /* frames of its own (remaster.h) */
     do {
         op_sep(P_M);
         cyc(46);

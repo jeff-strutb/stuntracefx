@@ -6,6 +6,7 @@
 #include "native.h"
 #include "cpu_ops.h"
 #include "hw.h"
+#include "remaster.h"
 
 void abi_SoundPort1QueuePush(void);
 void abi_SoftResetApu(void);
@@ -109,6 +110,7 @@ void abi_SoftResetCheck(void)
         fresh = 1;
     }
     do {
+        rm_step_over();               /* frames of its own (remaster.h) */
         do
             { cyc(fresh ? 24 : 46); fresh = 0; op_lda8(b | RESET_TICK); }
         while (!(uint8_t)cpu.a);

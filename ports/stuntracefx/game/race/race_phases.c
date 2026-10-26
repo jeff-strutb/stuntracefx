@@ -9,6 +9,7 @@
 #include "machine.h"
 #include "native.h"
 #include "cpu_ops.h"
+#include "remaster.h"
 
 void abi_SoundPort0QueuePush(void);
 void abi_SoundPort0QueuePushX8(void);
@@ -499,7 +500,10 @@ void abi_PanelDelayCount(void)
     op_lda8(b | 0x0D5F);
     cpu.p |= P_C;
     cyc(38);
-    cpu.a = (uint16_t)((cpu.a & 0xFF00) | op_sbc8((uint8_t)cpu.a, rd8(b | 0x0306), &cpu.p));
+    /* Remaster, Frame rate 60: a race frame is a tick with no vertical
+       blank inside it ($0306 still 0 here), so the delay counts the
+       tick's video frames, $06D4 */
+    cpu.a = (uint16_t)((cpu.a & 0xFF00) | op_sbc8((uint8_t)cpu.a, rd8(b | (rm_tick60() ? 0x06D4 : 0x0306)), &cpu.p));
     cyc(8);
     wr8(b | 0x0D5F, (uint8_t)cpu.a);
     cyc(42);
@@ -2317,6 +2321,7 @@ void abi_RaceEndVideoReset(void)
  */
 void abi_RaceEndLeave(void)
 {
+    rm_step_over();                     /* the race left (remaster.h) */
     cyc(24);
     op_lda8(((uint32_t)cpu.db << 16) | 0x0E5C);
     if (!(uint8_t)cpu.a) {

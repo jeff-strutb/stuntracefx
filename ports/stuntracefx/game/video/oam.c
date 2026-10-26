@@ -8,6 +8,7 @@
 #include "wram.h"
 #include "cpu_ops.h"
 #include "assets.h"
+#include "remaster.h"
 
 /*
  * @routine 07:C4D2 OamHideRange
@@ -2205,6 +2206,7 @@ void abi_OamHighBits18(void);
 static void stage_loop(uint32_t b, void (*dispatch)(void))
 {
     do {
+        rm_step_over();               /* frames of its own (remaster.h) */
         do {
             op_sep(P_M);
             cyc(46);
@@ -2797,6 +2799,7 @@ void abi_OverlaySpritesState0(void)
 static void oam_wait_tick(uint32_t b, uint32_t again)
 {
     op_sep(P_M);
+    rm_step_over();                   /* frames of its own (remaster.h) */
     do
         { cyc(24); op_lda8(b | 0x0D52); }
     while (cyc_loop(22, cyc_loop(again, !(uint8_t)cpu.a)));
