@@ -14,6 +14,7 @@
  */
 #include <stdbool.h>
 #include "records.h"
+#include "oam.h"
 
 /* A records entry as the records panel reads it: a score word (for Stunt
    Trax, the score; for the other courses, a packed time) and a name word. */
@@ -438,4 +439,669 @@ void stunt_record_time(void)
     for (i = 0; i < 48; i++)
         sum = (uint8_t)(sum + P8(0xFCD0 + base + i));
     P8(0xFC33 + course) = sum;
+}
+
+/* ---- the save's checks: SaveValidate and what it runs ---- */
+
+/* SaveRecordSumB: the sum of the five bytes of the record at pak $FC5E + x. */
+uint8_t save_record_sum_b(uint8_t x)
+{
+    return record_sum5(0xFC5E, x);
+}
+
+/* SaveSumsRecordsB: the sums of the first three records at $FC5E go to the
+   sum bytes $FC43-$FC45; returns the fourth record's sum. */
+uint8_t save_sums_records_b(void)
+{
+    unsigned i;
+
+    for (i = 0; i < 3; i++)
+        P8(0xFC43 + i) = save_record_sum_b((uint8_t)(i * 5));
+    return save_record_sum_b(15);
+}
+
+/* Checks `count` records of five bytes at pak `base` against their sum
+   bytes at `sums`. A record whose sum differs, or whose first byte is 0, is
+   reset to FF FF 00 00 00 with sum byte $FE. Returns the last record's first
+   byte, or $FE when the last record was reset. */
+static uint8_t records_check(uint16_t base, uint16_t sums, unsigned count)
+{
+    uint8_t x = 0, a = 0;
+    unsigned y;
+
+    for (y = 0; y < count; y++, x = (uint8_t)(x + 5)) {
+        a = record_sum5(base, x);
+        if (a == P8(sums + y)) {
+            a = P8(base + x);
+            if (a)
+                continue;
+        }
+        P8(base + x) = 0xFF;
+        P8(base + x + 1) = 0xFF;
+        P8(base + x + 2) = 0x00;
+        P8(base + x + 3) = 0x00;
+        P8(base + x + 4) = 0x00;
+        P8(sums + y) = 0xFE;
+        a = 0xFE;
+    }
+    return a;
+}
+
+/* SaveRecordsCheckA: the four records at $FC4A against their sums at $FC46. */
+uint8_t save_records_check_a(void)
+{
+    return records_check(0xFC4A, 0xFC46, 4);
+}
+
+/* SaveRecordsCheckB: the three records at $FC5E against their sums at $FC43. */
+uint8_t save_records_check_b(void)
+{
+    return records_check(0xFC5E, 0xFC43, 3);
+}
+
+/*
+ * SaveBlocksCheck: blocks 12-15 (48 bytes each, at pak $FCD0 + 48 * block,
+ * which wraps past $FFFF into $0F10 onward). Each entry's second byte must
+ * be below $41, and the 8-bit sum of the 48 bytes must equal the block's
+ * sum byte at $FC33 + block. A block that fails is reset to twelve entries
+ * of 00 00 FF FF, with sum byte $E8.
+ */
+void save_blocks_check(void)
+{
+    uint8_t blk;
+
+    for (blk = 12; blk < 16; blk++) {
+        uint16_t base = (uint16_t)(blk * 48), x;
+        uint8_t sum = 0, v;
+        unsigned i;
+        bool bad = false;
+
+        for (i = 0, x = base; i < 12; i++, x = (uint16_t)(x + 4)) {
+            sum = (uint8_t)(sum + P8((uint16_t)(0xFCD0 + x)));
+            v = P8((uint16_t)(0xFCD1 + x));
+            if (v >= 0x41) {
+                bad = true;
+                break;
+            }
+            sum = (uint8_t)(sum + v + P8((uint16_t)(0xFCD2 + x)) + P8((uint16_t)(0xFCD3 + x)));
+        }
+        if (!bad && sum == P8(0xFC33 + blk))
+            continue;
+        for (i = 0, x = base; i < 12; i++, x = (uint16_t)(x + 4)) {
+            P8((uint16_t)(0xFCD0 + x)) = 0x00;
+            P8((uint16_t)(0xFCD1 + x)) = 0x00;
+            P8((uint16_t)(0xFCD2 + x)) = 0xFF;
+            P8((uint16_t)(0xFCD3 + x)) = 0xFF;
+        }
+        P8(0xFC33 + blk) = 0xE8;
+    }
+}
+
+/*
+ * SaveTablesCheck: the three save tables, last first. Table k is twelve
+ * two-byte entries at pak $FC88 + 24k (each second byte $1F or more) and
+ * nine bytes at $FC6D + 9k; the 8-bit sum of its 33 bytes must equal the
+ * sum byte at $FC2D + k. A failing table is reset to 24 bytes of $FF and
+ * nine of 0, with sum byte $E8.
+ */
+void save_tables_check(void)
+{
+    static const uint8_t first[3] = {0x00, 0x18, 0x30};
+    static const uint8_t second[3] = {0x00, 0x09, 0x12};
+    int k;
+
+    for (k = 2; k >= 0; k--) {
+        uint16_t x, idx;
+        uint8_t sum = 0, v;
+        unsigned i;
+        bool bad = false;
+
+        for (i = 0, x = first[k]; i < 12; i++, x = (uint16_t)(x + 2)) {
+            sum = (uint8_t)(sum + P8((uint16_t)(0xFC88 + x)));
+            v = P8((uint16_t)(0xFC89 + x));
+            if (v < 0x1F) {
+                bad = true;
+                break;
+            }
+            sum = (uint8_t)(sum + v);
+        }
+        if (!bad) {
+            for (i = 0, idx = second[k]; i < 9; i++, idx++)
+                sum = (uint8_t)(sum + P8((uint16_t)(0xFC6D + idx)));
+            if (P8(0xFC2D + k) == sum)
+                continue;
+        }
+        for (i = 0, x = first[k]; i < 24; i++, x = (uint16_t)(x + 1))
+            P8((uint16_t)(0xFC88 + x)) = 0xFF;
+        for (i = 0, idx = second[k]; i < 9; i++, idx++)
+            P8((uint16_t)(0xFC6D + idx)) = 0x00;
+        P8(0xFC2D + k) = 0xE8;
+    }
+}
+
+/*
+ * One entry byte of SaveBlocksValidate: $FF passes; otherwise the byte fails
+ * by its position: byte 0 with its low seven bits $64 or more; byte 1 with
+ * its low five bits $1E or more, or its top three bits 0; byte 2 with its
+ * low five bits $1C or more. Byte 3's test (low two bits $38 or more) can
+ * never be true.
+ */
+static bool entry_byte_bad(uint8_t v, unsigned which)
+{
+    if (v == 0xFF)
+        return false;
+    switch (which) {
+    case 0: return (v & 0x7F) >= 0x64;
+    case 1: return (v & 0x1F) >= 0x1E || (v & 0xE0) == 0x00;
+    case 2: return (v & 0x1F) >= 0x1C;
+    default: return (v & 0x03) >= 0x38;
+    }
+}
+
+/* A block that fails (SaveBlocksValidate): $1FFE = $11; its 48 bytes at pak
+   $FCD0 + base = $FF; its four group bytes at $FFD0 + 4 * block = $FF; its
+   sum byte $CC. The block is then checked again. */
+static void block_reset(uint8_t blk, uint16_t base)
+{
+    unsigned i, j;
+
+    W8(0x1FFE) = 0x11;
+    for (i = 0; i < 48; i++)
+        P8((uint16_t)(0xFCD0 + base + i)) = 0xFF;
+    for (j = 0; j < 4; j++)
+        P8((uint16_t)(0xFFD0 + 4 * blk + j)) = 0xFF;
+    P8(0xFC33 + blk) = 0xCC;
+}
+
+/* SaveBlocksValidate's loop from block `blk`: each block's check is the sum
+   of its four group bytes at $FFD0 + 4 * block plus its 48 entry bytes,
+   which must equal its sum byte at $FC33 + block, and every entry byte must
+   pass entry_byte_bad. A failing block is reset (block_reset) and checked
+   again, from the top of the loop; `reset_first` makes the first pass a
+   reset (SaveBlocksFourthBad). Blocks run to 11. */
+static void blocks_validate_from(uint8_t blk, bool reset_first)
+{
+    for (;;) {
+        uint16_t base = (uint16_t)(blk * 48), x;
+        uint8_t sum = 0, v;
+        unsigned i, j;
+        bool bad = reset_first;
+
+        reset_first = false;
+        if (!bad) {
+            for (j = 0; j < 4; j++)
+                sum = (uint8_t)(sum + P8((uint16_t)(0xFFD0 + 4 * blk + j)));
+            for (i = 0, x = base; i < 12 && !bad; i++, x = (uint16_t)(x + 4)) {
+                for (j = 0; j < 4; j++) {
+                    v = P8((uint16_t)(0xFCD0 + x + j));
+                    if (entry_byte_bad(v, j)) {
+                        bad = true;
+                        break;
+                    }
+                    sum = (uint8_t)(sum + v);
+                }
+            }
+            if (!bad && sum != P8(0xFC33 + blk))
+                bad = true;
+        }
+        if (bad) {
+            block_reset(blk, base);
+            continue;
+        }
+        blk++;
+        if (blk >= 12)
+            return;
+    }
+}
+
+/* SaveBlocksValidate: blocks 0-11. */
+void save_blocks_validate(void)
+{
+    blocks_validate_from(0, false);
+}
+
+/* SaveBlocksFourthBad: a fourth entry byte's failure (which cannot happen)
+   resets block `blk` as a failure does, then the rest of the validation runs
+   from it. */
+void save_blocks_fourth_bad(uint8_t blk)
+{
+    blocks_validate_from(blk, true);
+}
+
+/* SaveValidate: the whole save: the tables, blocks 0-11, blocks 12-15, and
+   the two record sets. */
+void save_validate(void)
+{
+    save_tables_check();
+    save_blocks_validate();
+    save_blocks_check();
+    save_records_check_b();
+    save_records_check_a();
+}
+
+/* The unlock bytes of the save, in the order their checksum adds them. */
+static const uint16_t unlock_bytes[10] = {
+    0xFC0B, 0xFC0F, 0xFC06, 0xFC07, 0xFC0C, 0xFC0D, 0xFC0E, 0xFC08, 0xFC09, 0xFC0A};
+
+/* The unlock checksum: an 8-bit add chain, each add taking the carry of the
+   one before it. */
+static uint8_t unlock_checksum(void)
+{
+    unsigned s = P8(unlock_bytes[0]), c = 0, i;
+
+    for (i = 1; i < 10; i++) {
+        s = s + P8(unlock_bytes[i]) + c;
+        c = s >> 8;
+        s &= 0xFF;
+    }
+    return (uint8_t)s;
+}
+
+/*
+ * SaveUnlocksCheck: when the unlock bytes ($FC06-$FC0F) fail their checksum
+ * at $FC14, they and the checksum word ($FC14-$FC15) are cleared; then the
+ * whole save is validated (save_validate).
+ */
+void save_unlocks_check(void)
+{
+    unsigned i;
+
+    if (unlock_checksum() != P8(0xFC14)) {
+        for (i = 0; i < 10; i++)
+            P8(unlock_bytes[i]) = 0x00;
+        P8(0xFC14) = 0x00;
+        P8(0xFC15) = 0x00;
+    }
+    save_validate();
+}
+
+/* ---- the records panel's characters, rows, compares and special courses ---- */
+
+/* RecordNameLetters: the three 5-bit letters of `letters` (bits 0-4, 5-9,
+   10-14), each + $0A, into the tile bytes at y + $039F, + 4 and + 8. */
+void record_name_letters(uint16_t letters, uint16_t y)
+{
+    unsigned i;
+    static const uint8_t shift[3] = {0, 5, 10};
+
+    for (i = 0; i < 3; i++)
+        W8((uint16_t)(0x039F + 4 * i + y)) = (uint8_t)(((letters >> shift[i]) & 0x1F) + 0x0A);
+}
+
+/* RecordNameLettersSmall: as record_name_letters, from y + $03B3. */
+void record_name_letters_small(uint16_t letters, uint16_t y)
+{
+    unsigned i;
+    static const uint8_t shift[3] = {0, 5, 10};
+
+    for (i = 0; i < 3; i++)
+        W8((uint16_t)(0x03B3 + 4 * i + y)) = (uint8_t)(((letters >> shift[i]) & 0x1F) + 0x0A);
+}
+
+/* RecordTagCarSet: the car's piece set for a record's tag t (its time
+   offset, 0-$2F): 0 below $0C, 3 below $18, 6 below $24, else 9. */
+uint8_t record_tag_car_set(uint8_t t)
+{
+    if (t >= 0x24)
+        return 0x09;
+    if (t >= 0x18)
+        return 0x06;
+    if (t >= 0x0C)
+        return 0x03;
+    return 0x00;
+}
+
+/* A large digit d (0-15) at sprite offset y: its top tile $50 + d at `at`
+   and its bottom tile $60 + d four bytes on. */
+static void large_digit(uint16_t at, uint16_t y, uint8_t d)
+{
+    W8((uint16_t)(at + y)) = (uint8_t)(d + 0x50);
+    W8((uint16_t)(at + 4 + y)) = (uint8_t)(d + 0x60);
+}
+
+/* RecordTimeDigitsLarge: the packed time as five large digits: minutes at
+   y + $0387, seconds at $0397 and $039F, hundredths at $03AF and $03B7. */
+void record_time_digits_large(uint16_t packed, uint16_t y)
+{
+    BcdTime t = time_unpack(packed);
+
+    large_digit(0x0387, y, t.min & 0x0F);
+    large_digit(0x0397, y, t.sec >> 4);
+    large_digit(0x039F, y, t.sec & 0x0F);
+    large_digit(0x03AF, y, t.hund >> 4);
+    large_digit(0x03B7, y, t.hund & 0x0F);
+}
+
+/* RecordTimeDigitsSmall: the packed time as five small digits: minutes at
+   y + $0383, seconds at $038B and $038F, hundredths at $0397 and $039B. */
+void record_time_digits_small(uint16_t packed, uint16_t y)
+{
+    BcdTime t = time_unpack(packed);
+
+    W8((uint16_t)(0x0383 + y)) = t.min & 0x0F;
+    W8((uint16_t)(0x038B + y)) = t.sec >> 4;
+    W8((uint16_t)(0x038F + y)) = t.sec & 0x0F;
+    W8((uint16_t)(0x0397 + y)) = t.hund >> 4;
+    W8((uint16_t)(0x039B + y)) = t.hund & 0x0F;
+}
+
+/*
+ * RecordScoreDigits: a Stunt Trax score. The low byte's low nibble at
+ * y + $03A3 and its high nibble at $039F. Below $4000 the high byte's two
+ * nibbles at $038B and $0387, and $F0 at $0382 and $039A. From $4000 on,
+ * the word PERFECT in seven tile words from y + $0383, four bytes apart.
+ */
+void record_score_digits(uint16_t score, uint16_t y)
+{
+    static const uint16_t perfect[7] = {0x3619, 0x360E, 0x361B, 0x360F, 0x360E, 0x360C, 0x361D};
+    unsigned i;
+
+    W8((uint16_t)(0x03A3 + y)) = (uint8_t)(score & 0x0F);
+    W8((uint16_t)(0x039F + y)) = (uint8_t)((score & 0xFF) >> 4);
+    if (score >= 0x4000) {
+        for (i = 0; i < 7; i++)
+            W16((uint16_t)(0x0383 + 4 * i + y)) = perfect[i];
+        return;
+    }
+    W8((uint16_t)(0x038B + y)) = (uint8_t)((score >> 8) & 0x0F);
+    W8((uint16_t)(0x0387 + y)) = (uint8_t)((score >> 8) >> 4);
+    W8((uint16_t)(0x0382 + y)) = 0xF0;
+    W8((uint16_t)(0x039A + y)) = 0xF0;
+}
+
+/* RecordLetterTile: the top tile of large letter `letter` (0-31, + $0A so
+   the letters follow the ten digits): $50 + the low four bits, + $20 for
+   each of bits 4-5 doubled (the sheet's rows of 16). */
+uint16_t record_letter_tile(uint16_t letter)
+{
+    uint16_t v = (uint16_t)(letter + 0x0A);
+
+    return (uint16_t)(((v & 0x0F) | ((v & 0x30) << 1)) + 0x50);
+}
+
+/* A large letter at sprite offset y: its top tile at `at`, its bottom tile
+   (+ $10) four bytes on. */
+static void large_letter(uint16_t at, uint16_t y, uint16_t letter)
+{
+    uint8_t t = (uint8_t)record_letter_tile(letter);
+
+    W8((uint16_t)(at + y)) = t;
+    W8((uint16_t)(at + 4 + y)) = (uint8_t)(t + 0x10);
+}
+
+/* RecordNameLettersLarge: the three letters as large letters, at y + $03BF,
+   $03C7 and $03CF. */
+void record_name_letters_large(uint16_t letters, uint16_t y)
+{
+    large_letter(0x03BF, y, letters & 0x1F);
+    large_letter(0x03C7, y, (letters >> 5) & 0x1F);
+    large_letter(0x03CF, y, (letters >> 10) & 0x1F);
+}
+
+/*
+ * RecordRowDraw: one records row from sprite number `sprite` (its offset
+ * y = sprite * 4). `index` is the time's byte offset in the record times
+ * (page + time, low byte); the name entry is its two letter bytes (name0,
+ * name1) and its car byte. The seconds byte at the index being $FF hides
+ * the row's first three sprites. Otherwise the three time bytes become digit
+ * tiles, the car's three sprites are drawn (position $10BD = $57 and $10BF
+ * set by the caller, the piece set from $10BB and $10C3), and the name's
+ * letters go four bytes on from y.
+ */
+void record_row_draw(uint16_t sprite, uint8_t index, uint8_t name0, uint8_t name1, uint8_t car)
+{
+    uint16_t y = (uint16_t)(sprite << 2), x = index, ty = y, set;
+    unsigned i;
+    static const uint16_t hi[3] = {0x039B, 0x038F, 0x0383}, lo[3] = {0x039F, 0x0393, 0x0387};
+
+    if (W8(0x0F77 + x) == 0xFF) {
+        W8((uint16_t)(0x0376 + y)) = 0xF0;
+        W8((uint16_t)(0x037A + y)) = 0xF0;
+        W8((uint16_t)(0x037E + y)) = 0xF0;
+        return;
+    }
+    for (i = 0; i < 3; i++) {
+        W8((uint16_t)(hi[i] + y)) = (uint8_t)(W8(0x0F76 + i + x) >> 4);
+        W8((uint16_t)(lo[i] + y)) = (uint8_t)(W8(0x0F76 + i + x) & 0x0F);
+    }
+    W16(0x10C3) = (uint16_t)((3 * car) & 0x0F);
+    W16(0x10BD) = 0x0057;
+    W16(0x10C5) = 0x0000;
+    sprite_pieces3(0x7E, &x, &ty, &set);
+    record_name_letters((uint16_t)(name0 | (name1 << 8)), (uint16_t)(y + 4));
+}
+
+/* Row n (0-2): its name entry ($10CF + n * 3), its screen Y ($7C + n * $11)
+   at $10BF, then the row drawn from the sprite in $0D75 + n * 2 with the
+   time index (page + time). */
+static void record_row(unsigned n, uint8_t page, uint8_t time)
+{
+    uint8_t index = (uint8_t)(page + time);
+
+    W8(0x10BF) = (uint8_t)(0x7C + n * 0x11);
+    record_row_draw(W16(0x0D75 + 2 * n), index, W8(0x10CF + 3 * n), W8(0x10CF + 3 * n + 1),
+                    W8(0x10CF + 3 * n + 2));
+}
+
+/* RecordRow1 / RecordRow2 / RecordRow3: a records row. `page` is the page's
+   offset and `time` the time's offset in the group. */
+void record_row1(uint8_t page, uint8_t time)
+{
+    record_row(0, page, time);
+}
+
+void record_row2(uint8_t page, uint8_t time)
+{
+    record_row(1, page, time);
+}
+
+void record_row3(uint8_t page, uint8_t time)
+{
+    record_row(2, page, time);
+}
+
+/* RecordRow1Time0, RecordRow2Time4, RecordRow3Time8: the first time of each
+   group (offsets 0, $0C and $18). */
+void record_row1_time0(uint8_t page)
+{
+    record_row(0, page, 0x00);
+}
+
+void record_row2_time4(uint8_t page)
+{
+    record_row(1, page, 0x0C);
+}
+
+void record_row3_time8(uint8_t page)
+{
+    record_row(2, page, 0x18);
+}
+
+/* RecordRowsGroupFirsts: the three rows with each group's first time. */
+void record_rows_group_firsts(uint8_t page)
+{
+    record_row1_time0(page);
+    record_row2_time4(page);
+    record_row3_time8(page);
+}
+
+/* RecordRowsFirstTimes: the three rows with the times 0, 1 and 2 (offsets
+   0, 3 and 6). */
+void record_rows_first_times(uint8_t page)
+{
+    unsigned n;
+
+    for (n = 0; n < 3; n++)
+        record_row(n, page, (uint8_t)(n * 3));
+}
+
+/* $0FA3 takes the compare's result `r`; then sound $35 on port 0 unless the
+   flag at $0E57 is set. */
+static void compare_result(uint8_t r)
+{
+    W8(0x0FA3) = r;
+    if (W8(0x0E57) == 0)
+        sound_queue(0x35);
+}
+
+/*
+ * RecordTimeCompare: the record time at $0F5B + x (BCD, its digits at
+ * $0F64-$0F68 as minutes, seconds, hundredths) against the best time's
+ * digits at $0F69-$0F6D, most significant first: $0FA3 = $FF when it is
+ * better, 1 when it is worse or when there is no best time ($0F2B = $FFFF),
+ * 0 when equal.
+ */
+void record_time_compare(uint16_t x)
+{
+    uint8_t v, m;
+    unsigned i;
+
+    if (W16(0x0F2B) == 0xFFFF) {
+        compare_result(0x01);
+        return;
+    }
+    v = W8(0x0F5B + x);
+    W8(0x0F68) = v & 0x0F;
+    W8(0x0F67) = v >> 4;
+    v = W8(0x0F5C + x);
+    W8(0x0F66) = v & 0x0F;
+    W8(0x0F65) = v >> 4;
+    v = W8(0x0F5D + x);
+    W8(0x0F64) = v & 0x0F;
+    for (i = 0; i < 5; i++) {
+        v = W8(0x0F64 + i);
+        m = W8(0x0F69 + i);
+        if (v < m) {
+            compare_result(0xFF);
+            return;
+        }
+        if (v != m) {
+            compare_result(0x01);
+            return;
+        }
+    }
+    compare_result(0x00);
+}
+
+/* By the mode at $0D2B: 0 queues sound $35 on port 0; 2 queues it too (the
+   player's sound, the same call); any other mode compares the record time at
+   `x` (record_time_compare). */
+static void record_compare_by_mode(uint16_t x)
+{
+    uint16_t mode = W16(0x0D2B);
+
+    if (mode == 0x0000 || mode == 0x0002)
+        sound_queue(0x35);
+    else
+        record_time_compare(x);
+}
+
+/* RecordCompareTime0 / RecordCompareTime1: record time 0 (offset 0) or 1
+   (offset 3) against the best time, by the mode. */
+void record_compare_time0(void)
+{
+    record_compare_by_mode(0x0000);
+}
+
+void record_compare_time1(void)
+{
+    record_compare_by_mode(0x0003);
+}
+
+/*
+ * SpecialRecordsChecksum: the sum byte of a special course's records: the
+ * sum (mod 256) of its four packed lap times at $70:FFD0 + course * 4 (none
+ * for course $0C or more) and its 48 bytes from $70:FCD0 + $0D14, stored at
+ * $70:FC33 + course.
+ */
+void special_records_checksum(void)
+{
+    uint8_t course = W8(0x0E3D), sum = 0;
+    uint16_t base = W16(0x0D14);
+    unsigned i;
+
+    if (course < 0x0C)
+        for (i = 0; i < 4; i++)
+            sum = (uint8_t)(sum + P8(0xFFD0 + 4 * course + i));
+    for (i = 0; i < 48; i++)
+        sum = (uint8_t)(sum + P8((uint16_t)(0xFCD0 + base + i)));
+    P8(0xFC33 + course) = sum;
+}
+
+/* One lap's packed time (TimePackBcd) from the three BCD bytes at work RAM
+   `at` (hundredths, seconds, minutes). */
+static uint16_t special_pack(uint16_t at)
+{
+    BcdTime t = {W8(at), W8((uint16_t)(at + 1)), W8((uint16_t)(at + 2))};
+
+    return time_pack(t);
+}
+
+/*
+ * SpecialRecordInsert: the packed time t as a special course's record for
+ * car $0D89, in the course's entries at $70:FCD0 + course * 48 + car * 12
+ * (each a score word and a name word $0F11, best first). t below the first
+ * moves the others down (the third is lost) and tags the car's first place;
+ * then, unless t is still above another of the course's entries, the lap
+ * times ($0EF0 and $0EF3, packed) are kept at $70:FFD0 + course * 4. t below
+ * the second or the third likewise (tags 4 and 8). Not below the third: the
+ * tag $10C7 = $FFFF and nothing else. The checksum follows each change. The
+ * mode at $0D2B = 0 sets the word at $0F6E + the low byte of $0D48 * 2 to
+ * that offset. A course $0C or more, or a car 4 or more, changes no entries.
+ */
+void special_record_insert(uint16_t t)
+{
+    uint16_t course, car, base, x, n, at;
+
+    if (W16(0x0D2B) == 0x0000) {
+        uint16_t v = (uint16_t)((uint16_t)(W16(0x0D48) << 1) & 0x00FF);
+
+        W16(0x0F6E + v) = v;
+    }
+    course = W8(0x0E3D);
+    if (course >= 0x0C)
+        return;
+    base = (uint16_t)(course * 48);
+    W16(0x0D14) = base;
+    car = W8(0x0D89);
+    if (car >= 4)
+        return;
+    x = (uint16_t)(base + 12 * car);
+
+    if (t < P16(0xFCD0 + x)) {
+        record_tag(0);
+        special_move(x, 4, 8);
+        special_move(x, 6, 10);
+        special_move(x, 0, 4);
+        special_move(x, 2, 6);
+        P16(0xFCD0 + x + 2) = W16(0x0F11);
+        P16(0xFCD0 + x) = t;
+        for (n = 0, at = base; n < 12; n++, at = (uint16_t)(at + 4)) {
+            if (at != x && t >= P16(0xFCD0 + at)) {
+                special_records_checksum();
+                return;
+            }
+        }
+        P16(0xFFD0 + 4 * course) = special_pack(0x0EF0);
+        P16(0xFFD2 + 4 * course) = special_pack(0x0EF3);
+        special_records_checksum();
+        return;
+    }
+    if (t < P16(0xFCD0 + x + 4)) {
+        record_tag(4);
+        special_move(x, 4, 8);
+        special_move(x, 6, 10);
+        P16(0xFCD0 + x + 4) = t;
+        P16(0xFCD0 + x + 6) = W16(0x0F11);
+        special_records_checksum();
+        return;
+    }
+    if (t >= P16(0xFCD0 + x + 8)) {
+        W16(0x10C7) = 0xFFFF;
+        return;
+    }
+    P16(0xFCD0 + x + 8) = t;
+    record_tag(8);
+    P16(0xFCD0 + x + 10) = W16(0x0F11);
+    special_records_checksum();
 }
