@@ -230,6 +230,13 @@ Each a commit; each verified before the next. (C) is nativeshvc's work.
 3. (C) wide PPU screen, sprite X bit, VRAM; (C) extended Super FX screen.
    Check, game side: the extensions on at the original's size (256 x 224,
    208 x 128 view, focal 128) give the original's run exactly (same.py 0).
+   **Game side so far (88c2c004):** the focal length is a parameter of the
+   projection (FxRatioClamp, the scale-table multiplies) and the planes
+   follow it, the 45 degree cull widens with it; checked with PORT_FOCAL
+   on the original view (PORT_FOCALCHECK: the division at 128 equal to
+   the original's on 431,812 calls; untimed, whole races end in identical
+   work RAM at focal 96, 128 and 160). Waiting on the console's wider
+   screens: edges, centre, the bitmap's size and place.
 4. The wide 3D at focal 128: wide edges and planes, the bitmap wide, the
    uploads. Checks, from saved states, one frame each way: the wide
    bitmap's centre 208 x 128 against the original's, differing only on
