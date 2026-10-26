@@ -98,4 +98,15 @@ void digit_tiles_1184(void);
    ($19D8 = 2). */
 void times_keep_and_advance(uint8_t bank);
 
+/* 17 rows of 26 entries from the buffer at $7F:93D7 (row r from offset
+   $40 r) to VRAM from $5C00, one 32-entry row apart, then BG2's scroll from
+   band 0. Returns the high byte of that band's vertical scroll. */
+uint8_t tilemap_rows_to_5c00(uint8_t bank);
+
+/* The backdrop's rows (BackdropRowsUpdate): the buffer picked by $0D7F gets
+   17 rows of 32 entries from the backdrop map, and its scroll pair and
+   $0D96 are set. Returns the map offset after the last row, or $20C0 after
+   the fill that follows the map's end. */
+uint16_t backdrop_rows_update(uint8_t bank);
+
 #endif

@@ -1,4 +1,4 @@
-/* old: video/tilemap.c math/random.c
+/* old: video/tilemap.c video/scroll.c object/object.c math/rotate.c math/scale.c math/random.c object/gsu_record.c
  *
  * tilemap_check.c: the port's tilemap buffers and uploads (video/tilemap.c)
  * against the decomp's, on random states: the decomp's writes to VRAM and
@@ -31,10 +31,13 @@
 #include "game.h"
 #include "video.h"
 #include "tilemap.h"
+#include "objects.h"
+#include "rom.h"
 #include "model.h"
 #include "ppu.h"
 
 #define OLD(name) void old_abi_##name(void);
+OLD(TilemapRowsTo5C00) OLD(BackdropRowsUpdate)
 OLD(TilemapRowFromGsuRam) OLD(VramDmaTileFromGsuRam) OLD(VramFillGradient)
 OLD(VramFrameRows2B0) OLD(VramFrameRows1B0) OLD(VramPictureRows2B0) OLD(VramPictureRows1B0)
 OLD(ScreenFrameAndPictures) OLD(VramNoiseTiles) OLD(TilemapRowFrom7FBBD7) OLD(TilemapRowFromFB4E)
@@ -80,6 +83,21 @@ static void set_word(uint8_t bank, uint16_t at, uint16_t v)
 {
     set_byte(bank, at, (uint8_t)v);
     set_byte(bank, (uint16_t)(at + 1), (uint8_t)(v >> 8));
+}
+
+/* a word the backdrop's routines read: bank 0 and $7E share the low work
+   RAM, so it is set in $7E and $7F */
+static void set_word_all_banks(uint16_t at, uint16_t v)
+{
+    set_word(0x7E, at, v);
+    set_word(0x7F, at, v);
+}
+
+/* an object's address in the low work RAM (a record of the object table
+   that the links walk) */
+static uint16_t low_record(void)
+{
+    return (uint16_t)(1 + 0x62 * (rnd() % 0x20));
 }
 
 /* the data bank the routines are run in: the game's buffers are in $7E or
@@ -413,6 +431,47 @@ int main(int argc, char **argv)
         old_cpu.db = bank;
         old_run(old_abi_TimesKeepAndAdvance);
         times_keep_and_advance(bank);
+        same();
+    }
+
+    CASE("TilemapRowsTo5C00") {
+        uint8_t bank = (uint8_t)(rnd() % 3 == 0 ? 0x00 : pick_bank());     /* the PPU at bank 0, else work RAM */
+
+        fresh();
+        old_cpu.db = bank;
+        old_run(old_abi_TilemapRowsTo5C00);
+        expect(tilemap_rows_to_5c00(bank) == (uint8_t)old_cpu.a, "the vertical scroll's high byte differs");
+        same();
+    }
+
+    CASE("BackdropRowsUpdate") {
+        uint8_t bank = (uint8_t)(rnd() % 3 == 0 ? 0x00 : pick_bank());
+        unsigned k;
+
+        fresh();
+        /* the backdrop's words: the buffer picked ($0D7F, 0 or 1), the view's
+           angle ($06CD, $0 to $1FF as BackdropAnglesFromView leaves it), the
+           heading ($06CF, $7FF at most) and $0DA2; bank 0 and $7E share the
+           low work RAM, so each word is set in $7E and $7F alike */
+        set_word_all_banks(0x0D7F, (uint16_t)(rnd() & 1));
+        set_word_all_banks(0x06CD, (uint16_t)(rnd() % 0x200));
+        set_word_all_banks(0x06CF, (uint16_t)(rnd() & 0x07FF));
+        set_word_all_banks(0x0DA2, (uint16_t)rnd());
+        /* the object links: the record two links on from $0346 has bit 14 set or clear */
+        for (k = 0; k < 0x20; k++)
+            OBJ_W(1 + 0x62 * k, 0x4F) = low_record();        /* every record links on to another */
+        W16(0x0346) = low_record();
+        OBJ_W(W16(0x0346), 0x4F) = low_record();
+        if (rnd() & 1)
+            W16(OBJ_W(OBJ_W(W16(0x0346), 0x4F), 0x4F)) |= 0x4000;
+        else
+            W16(OBJ_W(OBJ_W(W16(0x0346), 0x4F), 0x4F)) &= 0xBFFF;
+        /* the table in the work RAM code copy the routine reads at $7E:E811 */
+        set_word(0x7E, 0xE811, ram_code_word(0xE811));
+        set_word(0x7E, 0xE813, ram_code_word(0xE813));
+        old_cpu.db = bank;
+        old_run(old_abi_BackdropRowsUpdate);
+        expect(backdrop_rows_update(bank) == old_cpu.a, "the next map offset (A) differs");
         same();
     }
 

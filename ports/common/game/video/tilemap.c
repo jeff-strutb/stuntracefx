@@ -17,6 +17,8 @@
 #include "game.h"
 #include "video.h"
 #include "tilemap.h"
+#include "object_more.h"
+#include "rom.h"
 
 /* The work RAM index of an address in a bank: $7E is the low 64 K of work
    RAM, $7F the high 64 K. */
@@ -367,4 +369,76 @@ void times_keep_and_advance(uint8_t bank)
     put_byte(bank, 0x0D23, 0x02);
     put_byte(bank, 0x19DF, 0x00);
     put_byte(bank, 0x19D8, 0x02);
+}
+
+/* 17 rows of 26 entries from the buffer at $7F:93D7 (row r from offset $40
+   r) to VRAM from $5C00, one 32-entry row apart; each row's address goes to
+   VMADDL first. Then BG2's scroll from band 0. Returns the high byte of that
+   band's vertical scroll, as the game leaves A. In a work RAM bank the
+   VMAIN, VMADDL and VMDATA writes land in that bank's work RAM. */
+uint8_t tilemap_rows_to_5c00(uint8_t bank)
+{
+    unsigned r, i;
+
+    if (bank != 0)
+        put_byte(bank, 0x2115, 0x80);
+    for (r = 0; r < 17; r++) {
+        uint16_t row = (uint16_t)(0x5C00 + 0x20 * r), vram = row;
+        uint16_t off = (uint16_t)(0x40 * r);
+
+        if (bank != 0)
+            put_word(bank, 0x2116, row);
+        for (i = 0; i < 26; i++) {
+            uint16_t v = get_word(0x7F, (uint16_t)(0x93D7 + off + 2 * i));
+
+            if (bank == 0)
+                vram_put(&vram, v);
+            else
+                put_word(bank, 0x2118, v);
+        }
+    }
+    bg2_scroll_from_table(0);
+    return bank_byte(0x00, 0x0D8F);
+}
+
+/* The backdrop's rows. The S-CPU's multiplier gives the map row: $0140 (the
+   M7A operand the game sets) times the row (at most 63), low word. The buffer
+   picked by $0D7F (0 or 1) gets its scroll pair and $0D96 (twice the angle
+   at $06CD plus $42, at most $300). Then 17 rows of 32 entries are copied
+   from the map at $7F:93D7 by tilemap_row_to_e3d7, each row $100 further on
+   in the map; once the map offset reaches $2800 the rest of the buffer is
+   filled with $20C0. Returns the map offset after the last row, or $20C0 after
+   a fill. */
+uint16_t backdrop_rows_update(uint8_t bank)
+{
+    uint16_t sel = get_word(0x00, 0x0D7F), x = (uint16_t)(sel << 1), y, h, s, row, a = 0, end;
+    unsigned rows = 17;
+
+    object_link_flag_4000_step();
+    h = get_word(0x00, 0x06CD);
+    s = (uint16_t)((h << 1) + 0x42 + (h >> 15));
+    put_word(bank, 0x0D96, s < 0x0300 ? s : 0x0300);
+    put_word(bank, (uint16_t)(0x0D8E + x), (uint16_t)((h & 0x0007) - 0x20 + ram_code_word((uint16_t)(0xE811 + x))));
+    put_word(bank, (uint16_t)(0x0D92 + x), (uint16_t)(((get_word(bank, 0x06CF) >> 1) & 0x0007) - 0x18));
+    row = (uint16_t)(((uint16_t)(get_word(bank, 0x06CD) + get_word(bank, 0x0DA2))) >> 3) & 0x003F;
+    x = (uint16_t)(((get_word(bank, 0x06CF) >> 3) & 0x00FE) + (uint16_t)(0x0140 * row));
+    sel = get_word(0x00, 0x0D7F);
+    y = sel ? 0x0440 : 0x0000;
+    end = sel ? 0x0880 : 0x0440;
+    for (;;) {
+        if (x >= 0x2800) {
+            a = 0x20C0;
+            do {
+                put_word(0x7F, (uint16_t)(0xE3D7 + y), a);
+                y = (uint16_t)(y + 2);
+            } while (y < end);
+            break;
+        }
+        tilemap_row_to_e3d7(0x7F, &x, &y);
+        x = (uint16_t)(x + 0x0100);
+        a = x;
+        if (--rows == 0)
+            break;
+    }
+    return a;
 }
