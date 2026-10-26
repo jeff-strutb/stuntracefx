@@ -11,3 +11,6 @@ int nshvc_untimed(void) { return snes_untimed(); }
 void nshvc_wait_vblank(void) { snes_wait_vblank(); }
 const char *nshvc_save_dir(void) { return host_save_dir(); }
 uint8_t nshvc_peek(uint32_t addr) { return snes_peek(addr); }
+uint8_t *nshvc_wram(void) { return (uint8_t *)snes_wram(); }
+uint8_t *nshvc_sram(void) { return snes_sfx_ram(); }
+void nshvc_hold_interrupts(int on) { snes_hold_interrupts(on); }

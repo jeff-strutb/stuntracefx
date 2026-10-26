@@ -182,6 +182,24 @@ static void write_file(const char *name, const char *ext, const void *p, size_t 
     fclose(f);
 }
 
+/* a picture of SNES_WIDTH x SNES_HEIGHT (0xRRGGBB) as out_dir/name.ppm */
+static void write_ppm(const char *name, const uint32_t *px)
+{
+    char path[1024];
+    FILE *f;
+    int i;
+    snprintf(path, sizeof path, "%s/%s.ppm", out_dir, name);
+    f = fopen(path, "wb");
+    if (!f)
+        snes_fatal("cannot write %s", path);
+    fprintf(f, "P6\n%d %d\n255\n", SNES_WIDTH, SNES_HEIGHT);
+    for (i = 0; i < SNES_WIDTH * SNES_HEIGHT; i++) {
+        uint8_t rgb[3] = { (uint8_t)(px[i] >> 16), (uint8_t)(px[i] >> 8), (uint8_t)px[i] };
+        fwrite(rgb, 1, 3, f);
+    }
+    fclose(f);
+}
+
 static void shot(const char *name)
 {
     const uint32_t *px = vid_picture();
@@ -571,10 +589,133 @@ static void gpu_check(void)
     }
 }
 
+/* ---- the in-between frames (game/remaster/tween.c) ----
+   The 3D drawn again between the last two ticks is shown in place of the
+   shown buffer's bytes in VRAM: a copy of the frame with them put where
+   the buffer's upload put them (the race upload stages, video/dma.c: the
+   buffer at $2C00 to VRAM bytes $0000 on; the one at $9400 in three
+   parts, to $4400, $6800 and $8A00), in each of its copies of VRAM. */
+/* RM_RATE's count of the frames the window was handed */
+static long presents;
+
+static VidFrame tween_f;
+static uint8_t tween_px[RM_TWEEN_BYTES];
+
+static const VidFrame *tween_frame(const VidFrame *f, uint16_t shown)
+{
+    int v;
+    unsigned o, b;
+    memcpy(&tween_f, f, sizeof tween_f);
+    for (v = 0; v < tween_f.versions && v < VID_VERSIONS; v++) {
+        uint8_t *vram = (uint8_t *)tween_f.vram[v];
+        for (o = 0; o < RM_TWEEN_BYTES; o++) {
+            b = shown == 0x2C00 ? o : o < 0x2400 ? 0x4400 + o : o < 0x4600 ? 0x6800 + (o - 0x2400) : 0x8A00 + (o - 0x4600);
+            vram[b ^ 0] = tween_px[o];      /* the copies are words, low byte first */
+        }
+    }
+    return &tween_f;
+}
+
+/* the 3D at num/den of the way through the last tick, as a frame to
+   compose; NULL when the last frame was not a race tick */
+static const VidFrame *tween_at(int num, int den)
+{
+    uint16_t shown;
+    if (!rm_tween(num, den, tween_px, &shown))
+        return NULL;
+    return tween_frame(vid_frame(), shown);
+}
+
+/* RM_TWEEN_CHECK=1 (headless, a GPU RENDER): at each race tick, the 3D
+   drawn anew at the end of the way (1/1); the next race tick draws from
+   the state this one ended with, so the buffer it shows must hold the
+   same bytes, byte for byte (the 2D around it, the fades, the HUD, is the
+   frame's own and not compared). RM_TWEEN_SHOT=N writes the N-th such
+   tick composed as tween_N_k.ppm at k/4 of the way, k = 0..4 (k = 0 its
+   own frame), and RM_TWEEN_SHOTS=M the M ticks from it. */
+static long tw_frames = -1, tw_bad, tw_bytes, tw_first = -1;
+
+static void tween_report(void)
+{
+    fprintf(stderr, "tweencheck: %s, %ld ticks, %ld differ (first at frame %ld), %ld bytes\n", rr_name(),
+            tw_frames, tw_bad, tw_first, tw_bytes);
+}
+
+static void tween_compose(const VidFrame *f, uint32_t *got)
+{
+    static const int d[4] = { 0, 0, VID_WIDTH, VID_HEIGHT };
+    RrPicture p;
+    picture_of(f, &p);
+    rr_begin(0xFF000000u);
+    rr_compose(&p, d);
+    rr_present();
+    rr_read(got);
+}
+
+static void tween_check(void)
+{
+    static uint32_t *b;
+    static uint8_t ahead_px[RM_TWEEN_BYTES];
+    static long ticks, shot = -2, ahead = -1;
+    const uint8_t *ram = snes_sfx_ram();
+    uint16_t shown;
+    int tw, th, y;
+    long bad = 0;
+    unsigned o;
+    if (tw_frames < 0) {
+        if (!port_rr_headless()) {
+            fprintf(stderr, "tweencheck: the renderer cannot open\n");
+            exit(2);
+        }
+        atexit(tween_report);
+        tw_frames = 0;
+        shot = getenv("RM_TWEEN_SHOT") ? atol(getenv("RM_TWEEN_SHOT")) : -1;
+    }
+    rr_target(&tw, &th);
+    if (!b)
+        b = (uint32_t *)malloc((size_t)tw * (size_t)th * 4);
+    if (!rm_tween_ready()) {
+        ahead = -1;
+        return;
+    }
+    if (++ticks >= shot && ticks < shot + (getenv("RM_TWEEN_SHOTS") ? atol(getenv("RM_TWEEN_SHOTS")) : 1)) {
+        int k;
+        for (k = 0; k <= 4; k++) {
+            char name[64];
+            uint32_t *pic = (uint32_t *)malloc(VID_WIDTH * VID_HEIGHT * 4);
+            tween_compose(k ? tween_at(k, 4) : vid_frame(), b);
+            for (y = 0; y < VID_HEIGHT; y++)
+                memcpy(pic + y * VID_WIDTH, b + y * tw, VID_WIDTH * 4);
+            snprintf(name, sizeof name, "tween_%ld_%d", ticks, k);
+            write_ppm(name, pic);
+            free(pic);
+        }
+    }
+    if (!rm_tween(1, 1, tween_px, &shown))
+        return;
+    if (ahead == frame_no - 1) {        /* the last tick's 1/1 against the buffer this one shows */
+        for (o = 0; o < RM_TWEEN_BYTES; o++)
+            if (ahead_px[o] != ram[(uint16_t)(shown + o)])
+                bad++;
+        tw_frames++;
+        if (bad) {
+            if (tw_bad < 20 || getenv("RM_TWEEN_ALL"))
+                fprintf(stderr, "tweencheck: frame %ld (tick %ld, race %u): %ld bytes differ\n", frame_no, ticks,
+                        rm_tick_count(), bad);
+            tw_bad++;
+            tw_bytes += bad;
+            if (tw_first < 0)
+                tw_first = frame_no;
+        }
+    }
+    memcpy(ahead_px, tween_px, sizeof ahead_px);
+    ahead = frame_no;
+}
+
 /* the frame on the window: the picture composed on the GPU from the
    frame's record, at the original's 4:3 (its 256 x 224 pixels, 8:7 each),
    as large as the window holds, centred, sharp bilinear */
-static void show(void)
+static void show_frame(const VidFrame *f, int apply)
 {
     int tw, th, w, h, d[4];
     RrPicture p;
@@ -589,16 +730,56 @@ static void show(void)
     d[1] = (th - h) / 2;
     d[2] = d[0] + w;
     d[3] = d[1] + h;
-    picture_of(vid_frame(), &p);
-    canvas_gpu_apply(vid_frame());
+    picture_of(f, &p);
+    if (apply)
+        canvas_gpu_apply(f);
     rr_begin(0xFF000000u);
     rr_compose(&p, d);
     rr_present();
+    presents++;
     rr_self_check(tw, th, d);
+}
+
+static void show(void)
+{
+    show_frame(vid_frame(), 1);
+}
+
+/* The display's refreshes (host_refresh_wait): when the next is seen.
+   RM_DISPLAY_HZ=N (a check) makes them a timer's instead, N a second, or
+   RM_DISPLAY_HZ=LO-HI one at a random rate in that range each time (a
+   variable-refresh display); with PORT_NOVSYNC the window shows them all. */
+__attribute__((weak)) uint64_t host_refresh_wait(void) { return 0; }
+
+static uint64_t refresh_wait(void)
+{
+    static int lo = -1, hi;
+    static uint64_t last;
+    uint64_t now, period;
+    if (lo < 0) {
+        const char *e = getenv("RM_DISPLAY_HZ");
+        lo = hi = 0;
+        if (e && sscanf(e, "%d-%d", &lo, &hi) < 2)
+            hi = lo;
+    }
+    if (lo <= 0)
+        return host_refresh_wait();
+    /* the wait ends at a refresh; the frame drawn then is seen at the next */
+    now = host_ticks_ns();
+    period = 1000000000ull / (uint64_t)(lo + (hi > lo ? rand() % (hi - lo + 1) : 0));
+    if (last < now)
+        last = now;
+    while ((now = host_ticks_ns()) < last) {
+        if (last - now > 1000000ull)
+            host_sleep_ms((uint32_t)((last - now) / 1000000ull));
+    }
+    return last += period;
 }
 
 static void frame(void)
 {
+    static uint64_t refresh_next;       /* a refresh waited for, its frame not yet drawn */
+    int paced;
     uint16_t b0 = 0, b1 = 0;
     frame_no++;
     rm_frame_end();
@@ -634,8 +815,13 @@ static void frame(void)
         static int gc = -1;
         if (gc < 0)
             gc = getenv("PORT_GPUCHECK") != NULL;
+        static int tc = -1;
+        if (tc < 0)
+            tc = getenv("RM_TWEEN_CHECK") != NULL;
         if (gc && frame_no > 1)
             gpu_check();
+        else if (tc && frame_no > 1)
+            tween_check();
         if (sound_f)
             sound_drain();
         more = script_frame(&b0, &b1);
@@ -647,7 +833,15 @@ static void frame(void)
         }
         return;
     }
-    show();
+    /* Remaster, Frame rate 60 in a race: the frames go to the display's
+       refreshes (below); else this tick's frame at once */
+    paced = rm_tween_ready();
+    if (paced)
+        canvas_gpu_apply(vid_frame());
+    else {
+        refresh_next = 0;
+        show();
+    }
     host_set_driving(driving_now());
     {
         host_event e;
@@ -675,17 +869,18 @@ static void frame(void)
         static int on = -1;
         static uint64_t t0;
         static unsigned ticks0;
-        static long f0;
+        static long f0, p0;
         if (on < 0)
             on = getenv("RM_RATE") != NULL;
         if (on) {
             uint64_t now = host_ticks_ns();
             if (!t0)
-                t0 = now, ticks0 = rm_tick_count(), f0 = frame_no;
+                t0 = now, ticks0 = rm_tick_count(), f0 = frame_no, p0 = presents;
             else if (now - t0 >= 1000000000ull) {
-                fprintf(stderr, "rate: %.1f video frames/s, %.1f ticks/s at 60, frame %ld\n",
-                        (frame_no - f0) * 1e9 / (double)(now - t0), (rm_tick_count() - ticks0) * 1e9 / (double)(now - t0), frame_no);
-                t0 = now, ticks0 = rm_tick_count(), f0 = frame_no;
+                fprintf(stderr, "rate: %.1f video frames/s, %.1f ticks/s at 60, %.1f shown/s, frame %ld\n",
+                        (frame_no - f0) * 1e9 / (double)(now - t0), (rm_tick_count() - ticks0) * 1e9 / (double)(now - t0),
+                        (presents - p0) * 1e9 / (double)(now - t0), frame_no);
+                t0 = now, ticks0 = rm_tick_count(), f0 = frame_no, p0 = presents;
             }
         }
     }
@@ -697,6 +892,34 @@ static void frame(void)
         if (!next_due || now > next_due + 100000000ull)
             next_due = now;
         next_due += FRAME_NS;
+        if (paced) {
+            /* Remaster, Frame rate 60: at each of the display's refreshes,
+               whenever it comes (any rate, a variable one), the 3D drawn
+               anew at the place between this tick's start and end that the
+               refresh is seen at (tween.c). A refresh seen after the next
+               tick is due goes to that tick, run now; one gone while a
+               tick ran is let go; behind, the ticks first. */
+            uint64_t t0 = next_due - FRAME_NS, at;
+            const VidFrame *t;
+            for (;;) {
+                if (host_ticks_ns() >= next_due)
+                    return;
+                at = refresh_next ? refresh_next : refresh_wait();
+                refresh_next = 0;
+                if (!at) {                      /* no refresh signal: this tick's frame */
+                    show_frame(vid_frame(), 0);
+                    break;
+                }
+                if (at >= next_due) {
+                    refresh_next = at;
+                    return;
+                }
+                if (at <= host_ticks_ns())
+                    continue;
+                t = at > t0 ? tween_at((int)((at - t0) * 4096 / FRAME_NS), 4096) : NULL;
+                show_frame(t ? t : vid_frame(), 0);
+            }
+        }
         while ((now = host_ticks_ns()) < next_due) {
             uint64_t left = next_due - now;
             if (left > 2000000ull)

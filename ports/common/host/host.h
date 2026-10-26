@@ -40,6 +40,11 @@ void     host_thread_interactive(void);
 int         host_mkdir(const char *path);
 /* where the player's saves and settings go (made by host_init) */
 const char *host_save_dir(void);
+/* the display's next refresh: waits until the window can take a frame for
+ * it and returns when (on host_ticks_ns's clock) that frame is seen, at
+ * whatever rate the display runs, a variable one included; 0 where the host
+ * has no refresh signal (no window shown, a host without one) */
+uint64_t host_refresh_wait(void);
 /* where the program's own files are: a macOS app's Resources, else the
  * executable's folder (PORT_RESDIR overrides) */
 const char *host_resource_dir(void);

@@ -6,6 +6,7 @@
  * frame code sends the oldest byte of each queue to its APU port (0 or 1)
  * when the sound CPU has taken the previous one.
  */
+#include "remaster.h"
 #include "machine.h"
 #include "cpu_ops.h"
 #include "hw.h"
@@ -170,6 +171,8 @@ void abi_SoundPort1QueuePushX8(void)
  */
 void SoundReset(void)
 {
+    if (rm_redrawing())                 /* Remaster: a HUD redraw reaches no port (remaster.h) */
+        return;
     cyc(92);
     wr8(SOUND_MUTED, 0);
     cyc(32);

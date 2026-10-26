@@ -170,6 +170,9 @@ int snes_untimed(void);
    the joypads' read, the frame hook), interrupts taken along the way: how
    untimed code ends its frame. Untimed stays as it was. */
 void snes_wait_vblank(void);
+/* Interrupts held (on) or let through again: for code run between frames,
+   from the frame hook (an in-between frame's draw), which must take none */
+void snes_hold_interrupts(int on);
 
 /* The machine's state at a frame boundary, for comparisons with the
    original: work RAM (128 KB) and the Super FX RAM. */

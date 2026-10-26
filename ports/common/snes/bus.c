@@ -253,8 +253,16 @@ void snes_tick(unsigned clocks)
 
 void snes_cart_irq(int level) { cart_irq = level; }
 
+/* snes_hold_interrupts: code run between frames (from the frame hook)
+   takes no interrupt; they wait for it to end */
+static int held;
+
+void snes_hold_interrupts(int on) { held = on; }
+
 static void check_interrupts(void)
 {
+    if (held)
+        return;
     if (nmi_pending) {
         nmi_pending = 0;
         dbg_nmis++;

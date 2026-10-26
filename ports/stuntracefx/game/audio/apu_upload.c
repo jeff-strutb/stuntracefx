@@ -99,6 +99,11 @@ static ApuUploadEnd apu_upload(uint8_t bank, uint16_t addr)
     uint16_t offset = 0;
     uint8_t kick = 0xCC;
 
+    if (rm_redrawing()) {               /* Remaster: a HUD redraw reaches no port (remaster.h) */
+        end.offset = 0;
+        end.kick = 0;
+        return end;
+    }
     cyc(38);
     wr16(APU_STREAM_PTR, addr);
     cyc(16);

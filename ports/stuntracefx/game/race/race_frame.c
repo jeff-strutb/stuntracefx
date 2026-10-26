@@ -1130,6 +1130,61 @@ static void frame_time(uint8_t db, uint8_t p0)
     op_plp(p0);
 }
 
+/* Remaster, Frame rate 60 (remaster.h): the 3D drawn again from the state
+   as it stands (an in-between frame's blended positions, game/remaster/
+   tween.c), as RaceFrameRun draws it and nothing else: the view from
+   player 1's car, the draw list (the bucket triggers, ObjectDrawListBuild,
+   the records to the Super FX), the view matrix and the sort (program
+   $AEF8), HUD panel B's frame (FrameRunGsuAB13B: the parameters, program
+   $01:AB13, the HUD's digits, gauges and map markers), then the text
+   program or the HUD as its step drew it (rm_hud_redraw), into the buffer
+   the Super FX draws in. No physics, no object handlers, no upload.
+   Untimed; the caller keeps and puts back the state. */
+void abi_BucketTriggersFromView(void);
+void abi_ObjectDrawListBuild(void);
+void abi_BucketTriggersFixedArea(void);
+void abi_GsuRecordsUpload(void);
+void abi_GsuParamsUpdate(void);
+
+void RmTweenDraw(void)
+{
+    uint32_t b;
+
+    op_sep(P_M);
+    op_rep(P_X);
+    cpu.db = 0x02;
+    cpu.d = 0x0000;
+    frame_view_from(0x0346);
+    op_sep(P_M);
+    op_rep(P_X);
+    b = (uint32_t)cpu.db << 16;
+    wr8(b | 0x1F07, 0x00);
+    wr8(0x70246C, 0xFF);
+    wr8(0x70246D, 0xFF);
+    cpu.db = 0x00;
+    abi_BucketTriggersFromView();
+    abi_ObjectDrawListBuild();
+    abi_BucketTriggersFixedArea();
+    abi_GsuRecordsUpload();
+    cpu.db = 0x02;
+    op_sep(P_M);
+    op_rep(P_X);
+    abi_ViewUpdateAndGsuAEF8();
+    op_sep(P_M);
+    b = (uint32_t)cpu.db << 16;
+    wr8(b | 0x1F07, 0x01);
+    wr16(b | 0x1AE8, 0x0000);
+    op_sep(P_M);
+    abi_FrameRunGsuAB13B();
+    if (rd16(0x702732)) {
+        op_sep(P_M);
+        cpu.a = (uint16_t)((cpu.a & 0xFF00) | 0x01);
+        cpu.x = 0xD307;
+        abi_GsuRun();
+    } else
+        rm_hud_redraw_in(0);
+}
+
 /*
  * @routine 02:D7CD RaceFrameRun
  * WHAT IT DOES: One frame of a race: takes the frames counted since the last
@@ -1156,7 +1211,8 @@ void abi_RaceFrameRun(void)
     uint32_t b;
 
     rm_race_frame();
-
+    if (rm_tick60())
+        rm_tween_tick_start();          /* Remaster: the tick's start kept for in-between frames */
     frame_start();
     frame_view_from(0x0346);
     (cyc(62), abi_PlayerControlsFrame());
@@ -1207,7 +1263,7 @@ void abi_RaceFrameRun(void)
     } else {
         cyc(106);
         op_sep(P_M);
-        call_routine(0x07DAA7, 1);
+        RmRaceHud();                    /* RaceSoundsAndHud (Remaster: redrawn each tick, remaster.h) */
         cyc(46);
     }
     abi_GsuScreenToggle();

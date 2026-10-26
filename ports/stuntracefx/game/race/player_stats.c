@@ -1535,15 +1535,17 @@ void abi_RaceSoundsAndHud(void)
 {
     uint8_t p0 = cpu.p, db0 = cpu.db;
 
-    if (!rm_step_due())                 /* Remaster: on the step's tick (remaster.h) */
+    if (!rm_step_due())                 /* Remaster: on the step's tick, or a redraw (remaster.h) */
         return;
     cpu.db = 0x07;
     cpu.p = nz8(cpu.p, 0x07);
     op_sep(P_M | P_X);
-    (cyc(140), abi_SoftResetCheck());
+    if (!rm_redrawing())
+        (cyc(140), abi_SoftResetCheck());
     cpu.y = 0x0000;
     cpu.p = nz8(cpu.p, 0);
-    (cyc(78), abi_EngineSoundsPlayer1());
+    if (!rm_redrawing())
+        (cyc(78), abi_EngineSoundsPlayer1());
     cyc(24);
     op_lda8(0x070D2B);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | (uint8_t)(cpu.a << 1));

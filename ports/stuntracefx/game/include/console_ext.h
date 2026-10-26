@@ -20,5 +20,12 @@ const char *nshvc_save_dir(void);
 /* a byte of the address space as it stands, with no time and no side
    effect (between frames) */
 uint8_t nshvc_peek(uint32_t addr);
+/* The work RAM (128 KB) and the cartridge's RAM (the Super FX's, 64 KB)
+   as the console holds them: for keeping and putting back the game's
+   state around work done between frames (the in-between frames' draw) */
+uint8_t *nshvc_wram(void);
+uint8_t *nshvc_sram(void);
+/* Interrupts held while code runs between frames (from the frame hook) */
+void nshvc_hold_interrupts(int on);
 
 #endif

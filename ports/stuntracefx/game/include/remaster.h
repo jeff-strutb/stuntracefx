@@ -27,6 +27,26 @@ int rm_sharing(void);
    commands) runs on these ticks only, so it keeps the original's timing
    exactly. */
 int rm_step_due(void);
+/* The race's HUD (RaceSoundsAndHud, 07:DAA7, in place of its call in
+   RaceFrameRun): most of it is drawn into the Super FX's buffer, which the
+   3D program clears each frame, by routines that also do its counting. At
+   60 it runs on the step's tick as the original's frame did, the work RAM
+   it started from kept; each other tick, and each in-between frame
+   (tween.c), runs it again from that RAM into the buffer being drawn and
+   puts everything back but the pixels (rm_hud_redraw), so the HUD looks
+   as its step drew it on every frame shown. */
+void RmRaceHud(void);
+void rm_hud_redraw(void);
+/* the same with the interrupts already held by the caller (tween.c) */
+void rm_hud_redraw_in(int hold);
+/* draw() run as a redraw (rm_redrawing holds): 0 when it reached a wait
+   for a frame and was let go there, the state to be put back by the
+   caller */
+int rm_redraw_run(void (*draw)(void));
+/* Whether a redraw is running: the step's work is done again (rm_step_due
+   holds), the soft reset and engine sounds are not, nor anything that
+   reaches the APU's ports */
+int rm_redrawing(void);
 /* rm_step_due for work whose original steps were k video frames: the
    menus' 3D screens (RaceFrameStep's) took 4 */
 int rm_step_due_every(unsigned k);
@@ -76,5 +96,25 @@ void rm_frame_end(void);
 void RmRaceScreenShow(void);
 /* the menus' 3D picture to the display at once: system/vblank_updates.c */
 void RmMenuPictureShow(void);
+
+/* The in-between frames (game/remaster/tween.c): the state at a one-player
+   race tick's start kept (RaceFrameRun); at each frame's end whether the
+   frame shown was such a tick; and the 3D drawn again at num/den of the way
+   from the tick's start to its end, the state put back after (the
+   runtime shows what it drew in place of the shown buffer's bytes in
+   VRAM; untimed, interrupts held) */
+void rm_tween_tick_start(void);
+void rm_tween_frame_end(void);
+int rm_tween_ready(void);
+#define RM_TWEEN_BYTES 0x6800    /* a race screen buffer: 208 x 128 pixels as characters */
+/* draws it into the buffer the Super FX draws in next, gives its bytes and
+   the start of the buffer shown ($2C00 or $9400); 0 when not ready */
+int rm_tween(int num, int den, uint8_t *pixels, uint16_t *shown);
+/* whether the option shares the steps out (Frame rate 60, not the
+   reference pace) */
+int rm_sharing_on(void);
+/* whether the S-CPU is in a race frame's wait for its tick (the frame
+   hook's clean point for an in-between draw) */
+int rm_in_tick_wait(void);
 
 #endif

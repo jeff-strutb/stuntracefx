@@ -10,7 +10,9 @@
  *
  * PORT_SAVEDIR names the save folder (default ~/Library/Application
  * Support/<app>); PORT_NOACTIVATE=1 opens the window without taking the
- * focus (test runs).
+ * focus (test runs); PORT_NOVSYNC=1 shows each frame at once, not held to
+ * the screen's refresh, and PORT_NOSHOW=1 composes the frames but shows
+ * none (checks of a rate the screen does not run).
  */
 #import <Cocoa/Cocoa.h>
 #import <QuartzCore/QuartzCore.h>
@@ -225,6 +227,25 @@ static float s_aspect;
 
 static PortWindowDelegate *s_delegate;
 
+/* the display's refreshes: a display link on the view, at the most frames
+   a second the screen it is on shows (macOS 14 on; earlier, none) */
+@interface PortRefresh : NSObject {
+@public
+    CFTimeInterval target;
+    int fired;
+}
+@end
+
+@implementation PortRefresh
+- (void)step:(CADisplayLink *)link
+{
+    target = link.targetTimestamp;
+    fired = 1;
+}
+@end
+
+static PortRefresh *s_refresh;
+
 int host_window_open(int width, int height, const char *title)
 {
     @autoreleasepool {
@@ -267,7 +288,39 @@ void host_window_close(void)
 
 int host_window_visible(void)
 {
-    return s_win && ([s_win occlusionState] & NSWindowOcclusionStateVisible) != 0;
+    static int noshow = -1;
+    if (noshow < 0)
+        noshow = getenv("PORT_NOSHOW") != NULL;
+    return !noshow && s_win && ([s_win occlusionState] & NSWindowOcclusionStateVisible) != 0;
+}
+
+uint64_t host_refresh_wait(void)
+{
+    if (@available(macOS 14.0, *)) {
+        @autoreleasepool {
+            static CADisplayLink *link;
+            CFTimeInterval until;
+            if (!s_view || !host_window_visible())
+                return 0;
+            if (!link) {
+                float most = (float)[[s_win screen] maximumFramesPerSecond];
+                s_refresh = [PortRefresh new];
+                link = [s_view displayLinkWithTarget:s_refresh selector:@selector(step:)];
+                [link setPreferredFrameRateRange:CAFrameRateRangeMake(most < 60 ? most : 60, most, most)];
+                [link addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
+            }
+            /* the run loop turned until the link fires (a hidden window's
+               stops: none within a tenth of a second is none) */
+            s_refresh->fired = 0;
+            until = CACurrentMediaTime() + 0.1;
+            while (!s_refresh->fired && CACurrentMediaTime() < until)
+                CFRunLoopRunInMode(kCFRunLoopDefaultMode, until - CACurrentMediaTime(), true);
+            if (!s_refresh->fired)
+                return 0;
+            return host_ticks_ns() + (uint64_t)(int64_t)((s_refresh->target - CACurrentMediaTime()) * 1e9);
+        }
+    }
+    return 0;
 }
 
 /* the window's CAMetalLayer, for a renderer that draws with Metal or
@@ -282,6 +335,8 @@ CAMetalLayer *host_metal_layer(void)
         [ml setPixelFormat:MTLPixelFormatBGRA8Unorm];
         [ml setFramebufferOnly:NO];            /* the renderer copies its frame in */
         [ml setMagnificationFilter:kCAFilterNearest];
+        if (getenv("PORT_NOVSYNC"))            /* a check: presents not held to the screen's refresh */
+            [ml setDisplaySyncEnabled:NO];
         [s_view setLayer:ml];
         [s_view setWantsLayer:YES];
         [ml setContentsScale:[s_win backingScaleFactor]];

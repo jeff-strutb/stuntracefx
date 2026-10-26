@@ -253,6 +253,8 @@ void abi_SoftResetApu(void)
 {
     uint8_t p0 = cpu.p, p1;
 
+    if (rm_redrawing())                 /* Remaster: a HUD redraw reaches no port (remaster.h) */
+        return;
     op_sep(P_M);
     op_rep(P_X);
     cyc(162);
