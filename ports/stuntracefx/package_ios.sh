@@ -65,6 +65,31 @@ cat > "$APP/Info.plist" <<EOP
 </plist>
 EOP
 printf 'APPL????' > "$APP/PkgInfo"
+# the Settings app's page: Auto-Accelerate (host/ios PortTouch)
+mkdir -p "$APP/Settings.bundle"
+cat > "$APP/Settings.bundle/Root.plist" <<'EOP'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>PreferenceSpecifiers</key>
+  <array>
+    <dict>
+      <key>Type</key><string>PSGroupSpecifier</string>
+      <key>Title</key><string>Touch Driving</string>
+      <key>FooterText</key><string>The car accelerates by itself while you drive; the brake pedal lets go of it. Off: a finger on the wheel holds the accelerator.</string>
+    </dict>
+    <dict>
+      <key>Type</key><string>PSToggleSwitchSpecifier</string>
+      <key>Title</key><string>Auto-Accelerate</string>
+      <key>Key</key><string>autoAccelerate</string>
+      <key>DefaultValue</key><true/>
+    </dict>
+  </array>
+  <key>StringsTable</key><string>Root</string>
+</dict>
+</plist>
+EOP
 if [ "$SDK" = iphoneos ]; then
   [ -n "$IOS_SIGN" ] && [ -f "$IOS_PROFILE" ] || { echo "package_ios: iphoneos needs IOS_SIGN and IOS_PROFILE" >&2; exit 2; }
   cp "$IOS_PROFILE" "$APP/embedded.mobileprovision"

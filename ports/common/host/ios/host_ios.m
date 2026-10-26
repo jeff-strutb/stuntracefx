@@ -179,18 +179,20 @@ static void kb_event(long u, int down)
  * for that button (runtime/main.c key()).
  *
  * While the player drives (host_set_driving):
- *   the wheel  a finger right of the brake zone holds the accelerator (B)
- *              for as long as it stays on the glass; moving it sideways
+ *   the gas    on by itself (the Settings app's Auto-Accelerate, on unless
+ *              turned off): B is held all the while, let go while the brake
+ *              is (the pedal wins). Turned off, the wheel's finger holds it
+ *              for as long as it stays on the glass, and lifting coasts.
+ *   the wheel  a finger right of the pedals; moving it sideways
  *              steers, full lock at 90 points either side, the neutral point
  *              sliding along when the finger goes past the lock so the thumb
  *              never runs out of room. The pad is digital: past a fifth of
  *              the lock it is Left or Right, at nine tenths also L or R (the
  *              hard turn). A wheel drawn where the finger landed turns with
- *              the steering. Lifting the finger coasts.
- *   the brake  a finger on the left of the screen holds A: the car brakes
- *              and, slow enough, reverses (the game's own rule).
- *   the boost  a finger on the boost pad (right, above the wheel's reach)
- *              holds Y.
+ *              the steering.
+ *   the pedals the left 30% of the screen, two pedals one above the other:
+ *              the lower holds A, the brake (slow enough, the car reverses:
+ *              the game's own rule); the upper holds Y, the boost.
  *   pause      the button at the top centre, or a tap with two fingers:
  *              START.
  * Elsewhere (menus, the pause menu, the title): a swipe is the d-pad, the
@@ -308,10 +310,18 @@ static UIControl *pause_button(void)
     return b;
 }
 
+/* the Settings app's Auto-Accelerate (Settings.bundle, package_ios.sh), on
+   until turned off */
+static BOOL auto_accelerate(void)
+{
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{ [NSUserDefaults.standardUserDefaults registerDefaults:@{ @"autoAccelerate": @YES }]; });
+    return [NSUserDefaults.standardUserDefaults boolForKey:@"autoAccelerate"];
+}
+
 typedef enum { ROLE_NONE, ROLE_WHEEL, ROLE_BRAKE, ROLE_BOOST, ROLE_MENU } Role;
 
 @interface PortTouch : UIView
-@property (nonatomic) BOOL padConnected;   /* a controller: the pedals and pause are not drawn (they still work) */
 - (void)reset;
 @end
 
@@ -319,6 +329,7 @@ typedef enum { ROLE_NONE, ROLE_WHEEL, ROLE_BRAKE, ROLE_BOOST, ROLE_MENU } Role;
     NSMutableDictionary<NSValue *, NSArray *> *_fingers;   /* touch -> role, start x, start y, time */
     CGPoint _wheelOrigin;
     int _steerKeys;                        /* the steering keys held: bits Left, Right, L, R */
+    BOOL _gas;                             /* B held for the accelerator */
     double _gestureBegan;
     int _gestureFingers;
     BOOL _gestureMoved;
@@ -329,7 +340,8 @@ typedef enum { ROLE_NONE, ROLE_WHEEL, ROLE_BRAKE, ROLE_BOOST, ROLE_MENU } Role;
 }
 
 static const CGFloat k_steer_range = 90;   /* points of sideways travel to full lock */
-static const CGFloat k_brake_zone = 0.3;   /* the left of the screen that brakes */
+static const CGFloat k_brake_zone = 0.3;   /* the left of the screen: the pedals */
+static const CGFloat k_boost_above = 0.45; /* the pedals' split: the boost above this much of the height */
 static const CGFloat k_wheel_size = 160;
 static const CGFloat k_wheel_degrees = 120;
 static const double k_tap_seconds = 0.25;
@@ -344,7 +356,7 @@ static const CGFloat k_swipe_points = 30;
     self.backgroundColor = UIColor.clearColor;
     _fingers = [NSMutableDictionary new];
     _brake = pedal_view(CGRectMake(0, 0, 84, 128), 0xE84A3C, @"BRAKE");
-    _boost = pedal_view(CGRectMake(0, 0, 84, 76), 0x4AA8F5, @"BOOST");
+    _boost = pedal_view(CGRectMake(0, 0, 84, 112), 0x4AA8F5, @"BOOST");
     _wheel = wheel_view(k_wheel_size);
     _pause = pause_button();
     _brake.hidden = _boost.hidden = _wheel.hidden = _pause.hidden = YES;
@@ -363,9 +375,9 @@ static const CGFloat k_swipe_points = 30;
     CGRect b = self.bounds;
     UIEdgeInsets s = self.safeAreaInsets;
     [super layoutSubviews];
-    _brake.center = CGPointMake(round(b.size.width * k_brake_zone * 0.5), round(b.size.height * 0.62));
-    _boost.center = CGPointMake(round(b.size.width - s.right - 16 - _boost.bounds.size.width / 2),
-                                round(MAX(s.top, 6) + 24 + 44 + _boost.bounds.size.height / 2));
+    _brake.center = CGPointMake(round(b.size.width * k_brake_zone * 0.5), round(b.size.height * 0.7));
+    _boost.center = CGPointMake(_brake.center.x, round(b.size.height * 0.27));
+    (void)s;
     _pause.center = CGPointMake(round(b.size.width / 2), round(MAX(s.top, 6) + 24));
 }
 
@@ -376,13 +388,14 @@ static const CGFloat k_swipe_points = 30;
 - (void)tick
 {
     BOOL d = atomic_load(&s_driving) != 0;
-    BOOL show = d && !self.padConnected;
+    BOOL show = d;
     if (d != _driving) {
         _driving = d;
         [self reset];
         if (getenv("PORT_INPUTLOG"))
             fprintf(stderr, "input: touch %s\n", d ? "drives" : "is the menus'");
     }
+    [self gas];                            /* (Auto-Accelerate may have changed in Settings) */
     if (_brake.hidden == show) {
         _brake.hidden = _boost.hidden = _pause.hidden = !show;
         [self setNeedsLayout];
@@ -401,13 +414,24 @@ static const CGFloat k_swipe_points = 30;
 {
     if (_driving) {
         if (p.x < self.bounds.size.width * k_brake_zone)
-            return ROLE_BRAKE;
-        if (CGRectContainsPoint(CGRectInset(_boost.frame, -12, -12), p))
-            return ROLE_BOOST;
+            return p.y < self.bounds.size.height * k_boost_above ? ROLE_BOOST : ROLE_BRAKE;
         return [self has:ROLE_WHEEL] ? ROLE_NONE : ROLE_WHEEL;
     }
     return [self has:ROLE_MENU] ? ROLE_NONE : ROLE_MENU;
 }
+
+/* B, the accelerator: held while driving with Auto-Accelerate (or, without
+   it, while the wheel's finger is down), unless the brake is */
+- (void)gas
+{
+    BOOL on = _driving && !self.hasBrake && (auto_accelerate() || [self has:ROLE_WHEEL]);
+    if (on != _gas) {
+        _gas = on;
+        key_event(VK_B, on);
+    }
+}
+
+- (BOOL)hasBrake { return [self has:ROLE_BRAKE]; }
 
 /* the steering keys for s (-1 left .. 1 right): Left or Right past a fifth
    of the lock, and L or R at nine tenths */
@@ -444,7 +468,6 @@ static const CGFloat k_swipe_points = 30;
         switch (r) {
         case ROLE_WHEEL:
             _wheelOrigin = p;
-            key_event(VK_B, 1);
             _wheel.center = p;
             _wheel.transform = CGAffineTransformIdentity;
             _wheel.hidden = NO;
@@ -464,6 +487,7 @@ static const CGFloat k_swipe_points = 30;
             fprintf(stderr, "input: touch at %.0f,%.0f of %.0fx%.0f: role %d\n", p.x, p.y, self.bounds.size.width,
                     self.bounds.size.height, (int)r);
     }
+    [self gas];
 }
 
 - (void)touchesMoved:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)ev
@@ -510,7 +534,6 @@ static const CGFloat k_swipe_points = 30;
         [_fingers removeObjectForKey:key];
         switch ([f[0] intValue]) {
         case ROLE_WHEEL:
-            key_event(VK_B, 0);
             [self steer:0];
             _wheel.hidden = YES;
             break;
@@ -544,6 +567,7 @@ static const CGFloat k_swipe_points = 30;
             break;
         }
     }
+    [self gas];
     if (_fingers.count == 0 && !cancelled && !_gestureMoved && _gestureFingers == 2 &&
         now - _gestureBegan <= k_tap_seconds + 0.15)
         key_pulse(_driving ? VK_START : VK_Y);                     /* pause; in the menus, back */
@@ -553,7 +577,6 @@ static const CGFloat k_swipe_points = 30;
 {
     for (NSValue *k in _fingers.allKeys) {
         switch ([_fingers[k][0] intValue]) {
-        case ROLE_WHEEL: key_event(VK_B, 0); break;
         case ROLE_BRAKE: key_event(VK_A, 0); break;
         case ROLE_BOOST: key_event(VK_Y, 0); break;
         default: break;
@@ -561,6 +584,10 @@ static const CGFloat k_swipe_points = 30;
     }
     [_fingers removeAllObjects];
     [self steer:0];
+    if (_gas) {                            /* the next screen refresh presses it again */
+        _gas = NO;
+        key_event(VK_B, 0);
+    }
     _wheel.hidden = YES;
     pedal_pressed(_brake, NO);
     pedal_pressed(_boost, NO);
@@ -677,15 +704,6 @@ static void *game_thread(void *p)
     exit(port_main(1, argv));
 }
 
-static void controls_for_pads(void)
-{
-    int pad = 0;
-    for (GCController *c in GCController.controllers)
-        if (c.extendedGamepad)
-            pad = 1;
-    s_controls.padConnected = pad;
-}
-
 static void app_active(void)
 {
     pthread_mutex_lock(&s_pm);
@@ -743,13 +761,6 @@ static void app_inactive(void)
     self.window.rootViewController = [PortViewController new];
     self.window.backgroundColor = [UIColor blackColor];
     [self.window makeKeyAndVisible];
-    [[NSNotificationCenter defaultCenter] addObserverForName:GCControllerDidConnectNotification object:nil
-                                                       queue:[NSOperationQueue mainQueue]
-                                                  usingBlock:^(NSNotification *n) { (void)n; controls_for_pads(); }];
-    [[NSNotificationCenter defaultCenter] addObserverForName:GCControllerDidDisconnectNotification object:nil
-                                                       queue:[NSOperationQueue mainQueue]
-                                                  usingBlock:^(NSNotification *n) { (void)n; controls_for_pads(); }];
-    controls_for_pads();
 }
 - (void)sceneDidBecomeActive:(UIScene *)scene
 {
