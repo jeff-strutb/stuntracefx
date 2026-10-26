@@ -38,6 +38,7 @@ void abi_SpcTremoloBetweenTicks(void);
 void abi_SpcTremoloFactor(void);
 void abi_SpcVolumeCalc(void);
 void abi_SpcSfxFrame(void);
+void abi_SpcBSfxFrame(void);
 void abi_SpcPort1Remap(void);
 void abi_SpcChannelGuards(void);
 void abi_SpcStaggeredChecks(void);
@@ -482,8 +483,9 @@ L0897:
     /* 08A5 bcc $08B1 */
     if (!spc.c) { spc_cyc(4); goto L08B1; }
     spc_cyc(2);
-    /* 08A7 call $10B0 */
-    spc_call(abi_SpcSfxFrame, 0x08AA, 5, 1, 2);
+    /* 08A7 call $10B0 (the race driver's SpcSfxFrame, or the battle
+       driver's SpcBSfxFrame once it is uploaded over it: spc.h) */
+    spc_call(spc_battle_resident ? abi_SpcBSfxFrame : abi_SpcSfxFrame, 0x08AA, 5, 1, 2);
     /* 08AA cmp $4C,$4D */
     spc_cyc(3);
     { uint8_t r = spc_rd(spc_dp(0x4D)); spc_cmp((spc_cyc(2), spc_rd(spc_dp(0x4C))), r); }

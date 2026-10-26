@@ -84,6 +84,12 @@ static inline void spc_call(void (*abi)(void), uint16_t ret, unsigned first, uns
    checks end the call there and take `entry` on its own. */
 void spc_restart(uint16_t at, void (*entry)(void));
 
+/* Which driver's code is in the SPC700's RAM at $10B0-$260E: 1 once the
+   battle driver's block list ($1A:F091) is uploaded over the race
+   driver's, 0 once a block of any other list covers $10B0 again (apu_upload.c sets it as the blocks go out). The race
+   driver's CALL $10B0 (SpcReset) reaches whichever is there. */
+extern int spc_battle_resident;
+
 /* JMP $FFC0: the console's boot ROM (the SPC700's own, not the game's): it
    takes the next upload from the S-CPU by its transfer protocol and runs
    it. Never returns. */

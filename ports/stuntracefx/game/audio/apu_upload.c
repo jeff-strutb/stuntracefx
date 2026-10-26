@@ -12,6 +12,9 @@
 #include "hw.h"
 #include "wram.h"
 #include "remaster.h"
+#include "spc.h"
+
+int spc_battle_resident;
 
 /*
  * @routine 04:D788 ApuUploadNextByte
@@ -121,11 +124,17 @@ static ApuUploadEnd apu_upload(uint8_t bank, uint16_t addr)
         uint8_t more = length != 0;
         uint8_t index = 0;
         unsigned carry = 1;
+        uint8_t to_lo, to_hi;
 
         cyc(80);
-        wr8(APUIO2, cyc_then(24, ApuUploadNextByte(&offset)));
+        wr8(APUIO2, cyc_then(24, to_lo = ApuUploadNextByte(&offset)));
         cyc(46);
-        wr8(APUIO3, cyc_then(24, ApuUploadNextByte(&offset)));
+        wr8(APUIO3, cyc_then(24, to_hi = ApuUploadNextByte(&offset)));
+        {   /* the driver now at $10B0 (spc.h) */
+            uint16_t to = (uint16_t)(to_lo | to_hi << 8);
+            if (more && to <= 0x10B0 && (uint32_t)to + length > 0x10B0)
+                spc_battle_resident = bank == 0x1A && addr == 0xF091;
+        }
         cyc(78);
         wr8(APUIO1, more);
         cyc(68);
