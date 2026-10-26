@@ -4,7 +4,7 @@
  * The game keeps its own loop on the main thread, so this host never runs
  * [NSApp run]: each host_poll_event drains Cocoa's queue itself. Frames
  * are drawn by the renderer (render/metal or render/vulkan) into the
- * view's CAMetalLayer (host_macos_metal_layer), one drawable pixel per
+ * view's CAMetalLayer (host_metal_layer), one drawable pixel per
  * window pixel; or arrive as ARGB pixels through host_present (the software
  * renderer) and are shown as the view's layer contents.
  *
@@ -272,7 +272,7 @@ int host_window_visible(void)
 
 /* the window's CAMetalLayer, for a renderer that draws with Metal or
    Vulkan (MoltenVK): the view's layer becomes a Metal layer */
-CAMetalLayer *host_macos_metal_layer(void)
+CAMetalLayer *host_metal_layer(void)
 {
     static CAMetalLayer *ml;
     if (!s_view)
@@ -293,9 +293,9 @@ CAMetalLayer *host_macos_metal_layer(void)
 
 /* the Metal layer's drawable kept at the view's size in pixels, so the
    renderer draws one pixel per window pixel; *w x *h is that size */
-void host_macos_layer_fit(int *w, int *h)
+void host_metal_layer_fit(int *w, int *h)
 {
-    CAMetalLayer *ml = host_macos_metal_layer();
+    CAMetalLayer *ml = host_metal_layer();
     CGFloat sc;
     CGSize b, want;
     *w = *h = 0;
@@ -312,8 +312,8 @@ void host_macos_layer_fit(int *w, int *h)
     *h = (int)want.height;
 }
 
-void *host_window_handle(void) { return (__bridge void *)host_macos_metal_layer(); }
-void host_window_pixels(int *w, int *h) { host_macos_layer_fit(w, h); }
+void *host_window_handle(void) { return (__bridge void *)host_metal_layer(); }
+void host_window_pixels(int *w, int *h) { host_metal_layer_fit(w, h); }
 
 /* a picture of ARGB pixels (0xAARRGGBB, top row first) onto the window, at
    the shape `aspect` (width over height): drawn into the largest rectangle

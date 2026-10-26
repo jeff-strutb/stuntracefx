@@ -3,6 +3,8 @@
 # from the decomp's C and checked against the original), the machine layer (ports/common/snes), the port's
 # runtime (ports/stuntracefx/runtime) and one host (ports/common/host).
 #   env: HOST     null (default: headless, for tests) | macos | windows |
+#                 ios (the iOS app's executable: CC aimed at iOS, the game's
+#                 main() is port_main; package_ios.sh makes the app) |
 #                 lib (a static library, libstuntracefx.a, for an app that
 #                 brings its own host: main() is srfx_main)
 #        CC       the compiler; one aimed at Windows (x86_64-w64-mingw32-gcc)
@@ -78,6 +80,8 @@ done
 for f in ports/common/snes/*.c ports/common/video/*.c ports/common/audio/*.c ports/stuntracefx/runtime/*.c "$OUT/gen/routines.c"; do
   if [ "$HOST" = lib ] && [ "$f" = ports/stuntracefx/runtime/main.c ]; then
     compile "$f" "-Wall $INC -Dmain=srfx_main"
+  elif [ "$HOST" = ios ] && [ "$f" = ports/stuntracefx/runtime/main.c ]; then
+    compile "$f" "-Wall $INC -Dmain=port_main"
   else
     compile "$f" "-Wall $INC"
   fi
@@ -92,7 +96,7 @@ compile "$OSHOST" "-Wall -Iports/common/host"
 
 # the renderer
 case "$HOST" in
-  macos|lib) RENDER=${RENDER:-metal};;
+  macos|ios|lib) RENDER=${RENDER:-metal};;
   windows)   RENDER=${RENDER:-gl};;
   *)         RENDER=${RENDER:-soft};;
 esac
@@ -128,6 +132,8 @@ case "$HOST" in
            ports/common/host/windows/game_rc.sh "Stunt Race FX" "Stunt Race FX.exe" "$OUT/obj/game.res.o"
            OBJS="$OBJS $OUT/obj/game.res.o"
            LIBS="$LIBS -lole32 -luuid -lxinput9_1_0 -lshell32 -lgdi32 -luser32 -mwindows";;
+  ios)     compile ports/common/host/ios/host_ios.m "-Wall -fobjc-arc -Iports/common/host"
+           LIBS="$LIBS -framework UIKit -framework CoreGraphics -framework QuartzCore -framework AudioToolbox -framework AVFoundation -framework GameController";;
   lib)     ;;
   *) echo "link: unknown HOST $HOST" >&2; exit 2;;
 esac

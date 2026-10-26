@@ -9,9 +9,12 @@
  *   host/null     a headless window, input and audio (tests, comparisons)
  *   host/macos    a Cocoa window, keyboard and game controllers, Core Audio
  *   host/windows  a Win32 window, keyboard, XInput controllers, WASAPI
+ *   host/ios      the iOS app: a full-screen view, touch controls, keyboard
+ *                 and game controllers, RemoteIO (the game's main runs on a
+ *                 thread of its own as port_main)
  *
- * An app that brings its own host (an iOS app, a builder) links none of the
- * window hosts and supplies these functions itself.
+ * An app that brings its own host (a builder) links none of the window
+ * hosts and supplies these functions itself.
  *
  * The same interface as the Boss Rally and Top Gear Rally ports' hosts, less
  * what only those games need (a CD, the network, decoded music files).
@@ -60,7 +63,7 @@ void host_window_close(void);
 /* 1 while any of the window can be seen (not minimised, hidden or covered) */
 int  host_window_visible(void);
 /* the window for a renderer that draws on it itself (ports/common/render):
-   the OS's handle (a CAMetalLayer on macOS, an HWND on Windows; NULL
+   the OS's handle (a CAMetalLayer on macOS and iOS, an HWND on Windows; NULL
    without a window) and its drawable size in pixels */
 void *host_window_handle(void);
 void host_window_pixels(int *w, int *h);

@@ -1,5 +1,5 @@
 /*
- * rr_metal.m: the renderer backend on Metal (macOS), the Boss Rally port's
+ * rr_metal.m: the renderer backend on Metal (macOS, iOS), the Boss Rally port's
  * design: the frame is drawn into an offscreen target the size of the
  * window's drawable, then copied into the window's CAMetalLayer. Pictures
  * go on with the sharp bilinear shader (rr_size.h's weight, in the shader:
@@ -18,12 +18,12 @@
 #include "compose_src.h"
 #include "fill_src.h"
 
-CAMetalLayer *host_macos_metal_layer(void);
-void host_macos_layer_fit(int *w, int *h);
+CAMetalLayer *host_metal_layer(void);
+void host_metal_layer_fit(int *w, int *h);
 /* without a window host (HOST=null) there is no layer: frames are drawn
    offscreen and read back, never shown */
-__attribute__((weak)) CAMetalLayer *host_macos_metal_layer(void) { return nil; }
-__attribute__((weak)) void host_macos_layer_fit(int *w, int *h) { *w = *h = 0; }
+__attribute__((weak)) CAMetalLayer *host_metal_layer(void) { return nil; }
+__attribute__((weak)) void host_metal_layer_fit(int *w, int *h) { *w = *h = 0; }
 
 static NSString *const k_src = @
 "#include <metal_stdlib>\n"
@@ -219,11 +219,11 @@ int rr_open(void)
         for (i = 0; i < 3; i++)
             s_vb[i] = [s_dev newBufferWithLength:VB_SIZE options:MTLResourceStorageModeShared];
         s_inflight = dispatch_semaphore_create(3);
-        ml = host_macos_metal_layer();
+        ml = host_metal_layer();
         if (ml) {
             [ml setDevice:s_dev];
             [ml setMaximumDrawableCount:3];
-            host_macos_layer_fit(&w, &h);
+            host_metal_layer_fit(&w, &h);
         }
         if (!ml || w < 1 || h < 1)
             rr_headless_size(&w, &h);
@@ -238,10 +238,10 @@ const char *rr_name(void) { return "metal"; }
 
 void rr_target(int *w, int *h)
 {
-    CAMetalLayer *ml = host_macos_metal_layer();
+    CAMetalLayer *ml = host_metal_layer();
     if (ml && !s_cmd) {                    /* the next frame at the window's size */
         int fw, fh;
-        host_macos_layer_fit(&fw, &fh);
+        host_metal_layer_fit(&fw, &fh);
         if (fw > 0 && fh > 0 && (fw != s_rw || fh != s_rh))
             targets(fw, fh);
     }
@@ -531,7 +531,7 @@ int rr_fill_read(uint16_t *canvas)
 void rr_present(void)
 {
     @autoreleasepool {
-        CAMetalLayer *ml = host_window_visible() ? host_macos_metal_layer() : nil;
+        CAMetalLayer *ml = host_window_visible() ? host_metal_layer() : nil;
         if (!s_enc)
             return;
         [s_enc endEncoding];
