@@ -95,6 +95,9 @@ if [ "$SDK" = iphoneos ]; then
   cp "$IOS_PROFILE" "$APP/embedded.mobileprovision"
   security cms -D -i "$IOS_PROFILE" > "$OUT/profile.plist"
   /usr/libexec/PlistBuddy -x -c 'Print :Entitlements' "$OUT/profile.plist" > "$OUT/entitlements.plist"
+  # a wildcard profile's app id (TEAM.*) names this app in the signature
+  TEAM=$(/usr/libexec/PlistBuddy -c 'Print :TeamIdentifier:0' "$OUT/profile.plist")
+  /usr/libexec/PlistBuddy -c "Set :application-identifier $TEAM.com.strutb.stuntracefx" "$OUT/entitlements.plist"
   codesign --force --sign "$IOS_SIGN" --entitlements "$OUT/entitlements.plist" "$APP"
 else
   codesign --force --sign - "$APP"
