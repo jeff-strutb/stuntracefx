@@ -48,6 +48,11 @@ static unsigned rm_ticks;               /* ticks run, sharing */
 
 unsigned rm_tick_count(void) { return rm_ticks; }
 
+int rm_step_due_every(unsigned k)
+{
+    return !rm_sharing() || rm_ticks % k == k - 1;
+}
+
 int rm_step_due(void)
 {
     return !rm_sharing() || rm_ticks % RM_TICKS == RM_TICKS - 1;
@@ -63,6 +68,15 @@ void rm_race_frame(void)
     nshvc_set_untimed(0);
     for (n = 0; n < rm_pace; n++)       /* the tick */
         nshvc_wait_vblank();
+    nshvc_set_untimed(1);
+}
+
+void rm_race_frame_paced(void)
+{
+    if (!rm_pace)
+        return;
+    if (rm_share_on)
+        rm_ticks++;
     nshvc_set_untimed(1);
 }
 

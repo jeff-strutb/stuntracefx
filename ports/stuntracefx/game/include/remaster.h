@@ -7,6 +7,7 @@
 #define SRFX_REMASTER_H
 
 #include <stdint.h>
+#include "remaster.h"
 
 /* Frame rate 60: a game frame each video frame, the simulation's steps a
    tick each, RM_TICKS of them to the original's one: the original's race
@@ -26,6 +27,10 @@ int rm_sharing(void);
    commands) runs on these ticks only, so it keeps the original's timing
    exactly. */
 int rm_step_due(void);
+/* rm_step_due for work whose original steps were k video frames: the
+   menus' 3D screens (RaceFrameStep's) took 4 */
+int rm_step_due_every(unsigned k);
+#define RM_MENU_TICKS 4
 /* the ticks run at 60 so far */
 unsigned rm_tick_count(void);
 /* rm_share of d * mul / RM_SHARE_ONE: for a change that is a fraction of
@@ -56,6 +61,10 @@ static inline uint16_t rm_share_fx_by(uint16_t addr, uint16_t d, int32_t mul)
    untimed, as native code, until rm_race_frame_end. */
 void rm_race_frame(void);
 void rm_race_frame_end(void);
+/* rm_race_frame for a frame its caller paces itself (the menus' 3D
+   screens wait for the vertical blank in their own loop): untimed, with
+   no wait of its own */
+void rm_race_frame_paced(void);
 /* The step is over though the race frame runs on: its code waits for
    the vertical blank itself (the pause, the end's fades) or leaves the
    race (the results and the screens they open). From here it runs frames
@@ -65,5 +74,7 @@ void rm_step_over(void);
 void rm_frame_end(void);
 /* the finished screen to the display at once: video/dma.c */
 void RmRaceScreenShow(void);
+/* the menus' 3D picture to the display at once: system/vblank_updates.c */
+void RmMenuPictureShow(void);
 
 #endif

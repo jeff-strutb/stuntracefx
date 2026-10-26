@@ -1150,6 +1150,13 @@ void RmRaceScreenShow(void)
     int n;
 
     for (n = 0; n < 32; n++) {          /* a runaway's guard */
+        if (rd8(b | 0x0D22)) {          /* the split screen (the menus'): its stages, $0D23 */
+            at = rd8(b | 0x0D23);
+            split_stage(b);
+            if (rd8(b | 0x0D23) == at)
+                break;
+            continue;
+        }
         at = rd16(b | 0x0D7D);
         race_stage(b);
         if (rd16(b | 0x0D7D) == at)

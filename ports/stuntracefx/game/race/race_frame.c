@@ -44,6 +44,7 @@ void abi_RaceFrameStep(void)
     uint16_t arg = cpu.a, w;
     uint8_t v;
 
+    rm_race_frame_paced();
     cpu.p |= P_M;
     cpu.p &= (uint8_t)~P_X;
     cpu.db = 0x03;
@@ -65,7 +66,8 @@ void abi_RaceFrameStep(void)
     cyc(200);
     w = rd16(0x000037 + 0x1A64);
     cyc(60);
-    wr16(0x000037 + 0x1A64, (uint16_t)(w + 0x0400));
+    /* Remaster: the turn of a step of RM_MENU_TICKS video frames, a tick's share */
+    wr16(0x000037 + 0x1A64, (uint16_t)(w + rm_share_by(0x000037 + 0x1A64, 0x0400, RM_SHARE_ONE * RM_TICKS / RM_MENU_TICKS)));
     (cyc(62), abi_CameraFollowStep());
     (cyc(62), abi_ObjectFaceTied());
     cpu.db = 0x03;
@@ -86,10 +88,13 @@ void abi_RaceFrameStep(void)
         (cyc(46), abi_GsuScreenFlip());
         cyc(46);
         wr8(0x030357, 0x00);
+        if (rm_tick60())
+            RmMenuPictureShow();        /* Remaster: the picture to the display at once, as the blank takes it */
     } else { cyc(80); }
     cyc(100);
     cpu.db = db;
     cpu.p = p;
+    rm_race_frame_end();
 }
 
 /*

@@ -93,6 +93,21 @@ uint16_t GsuPictureUploadStep(uint8_t bank, int *copied)
     return a;
 }
 
+/* Remaster, Frame rate 60 (remaster.h): the picture's stages one after
+   another to the stage that waits (6), so the picture just finished goes
+   to the display at once, not a stage a frame. Untimed, after the menus'
+   3D frame's flip (RaceFrameStep). */
+void RmMenuPictureShow(void)
+{
+    int copied = 1, n;
+    uint16_t a = cpu.a, x = cpu.x, y = cpu.y;
+    uint8_t p = cpu.p;
+
+    for (n = 0; n < 8 && copied; n++)   /* a runaway's guard */
+        GsuPictureUploadStep(cpu.db, &copied);
+    cpu.a = a; cpu.x = x; cpu.y = y; cpu.p = p;
+}
+
 void abi_GsuPictureUploadStep(void)
 {
     int copied;
