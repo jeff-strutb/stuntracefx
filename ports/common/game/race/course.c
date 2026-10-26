@@ -2,14 +2,15 @@
  * course.c: the course select and the course screens. The course number
  * comes from the menu's selections; the cursors move by the pads; the
  * records panel and the window's zoom step through their states, and the
- * scroll's counts wipe in and out. Routines that reach the menu's sprites,
- * the records' loading or the zoom into a course are not ported here yet
- * (see course.h).
+ * scroll's counts wipe in and out, and the zoom into a course starts.
+ * Routines that reach the menu's sprites, the records' loading and totals,
+ * or the window's edges are not ported here yet (see course.h).
  */
 #include <stdbool.h>
 #include <string.h>
 #include "game.h"
 #include "smallvideo.h"
+#include "oam.h"
 #include "course.h"
 
 /* The game's RAM these routines keep (work RAM unless marked). */
@@ -379,4 +380,183 @@ void course_screen_zoom_in(void)
 void course_screen_state8(void)
 {
     screen_state = 0x08;
+}
+
+#define SOUND_ZOOM          0x24            /* the course window's zoom start */
+
+/* The course window's zoom from box x to target y: the window set up,
+   colour maths $A3, the large sprites hidden, the screen state 4 and the
+   zoom's sound. */
+static void course_zoom(uint16_t x, uint16_t y)
+{
+    course_window_zoom_setup(x, y);
+    colour_math_a3();
+    oam_buffer_hide_large_long();
+    screen_state = 0x04;
+    sound_queue(SOUND_ZOOM);
+}
+
+/* The course picked by the cursor (word at $0D48) from the four-entry ROM
+   list at `list`, its byte stored as the course number ($0E3D, a word
+   store); then the zoom from the box at the cursor times 8 plus $80. */
+static void course_choose(uint16_t list, uint16_t y)
+{
+    uint16_t cursor = W16(0x0D48);
+
+    W16(0x0E3D) = (uint16_t)(rom_word(0x030000u + list + cursor) & 0x00FF);
+    course_zoom((uint16_t)((uint16_t)(cursor << 3) + 0x0080), y);
+}
+
+/* Courses below $0C: the box is the course times 8 (plus $40 with the HUD
+   mode $0D2B set, target $18; else target 0). */
+static void course_zoom_race(uint16_t a)
+{
+    a = (uint16_t)(a << 3);
+    if (W16(0x0D2B))
+        course_zoom((uint16_t)(a + 0x0040), 0x0018);
+    else
+        course_zoom(a, 0x0000);
+}
+
+/* The box at a plus $A8, target $20 (the course $15 and the others by the
+   callers' a). */
+static void course_zoom_box(uint16_t a)
+{
+    course_zoom((uint16_t)(a + 0x00A8), 0x0020);
+}
+
+void course_zoom_stunt(void)
+{
+    course_choose(0xFB86, 0x0008);
+}
+
+void course_zoom_battle(void)
+{
+    course_choose(0xFB8A, 0x0010);
+}
+
+void course_zoom_from_selection4(void)
+{
+    uint8_t v = course_from_selection();
+
+    if (v < 0x0C)
+        course_zoom_race((uint16_t)(v - 4));        /* 16-bit: wraps below course 4 */
+    else if (v == 0x15)
+        course_zoom_box(0x0000);
+    else
+        course_zoom_box(0x0008);
+}
+
+void course_zoom_from_selection(void)
+{
+    uint8_t v = course_from_selection();
+
+    if (v < 0x0C)
+        course_zoom_race(v);
+    else if (v == 0x15)
+        course_zoom_box(0x0008);
+    else
+        course_zoom_box(0x0000);
+}
+
+/* The time-up select's zoom: the course from the list at $FB86, then the
+   box at (cursor - 2) times 8 plus $80, target 8. */
+void course_zoom_time_up(void)
+{
+    uint16_t cursor = W16(0x0D48);
+
+    W16(0x0E3D) = (uint16_t)(rom_word(0x03FB86u + cursor) & 0x00FF);
+    course_zoom((uint16_t)((uint16_t)((uint16_t)(cursor - 2) << 3) + 0x0080), 0x0008);
+}
+
+/* The time-up select's zoom with the flag set: the course stepped on within
+   $17-$19 (to $18-$1A), else $17; then the box $A0, target 8. */
+void course_zoom_time_up_next(void)
+{
+    uint16_t c = W16(0x0E3D);
+    uint16_t next = 0x0017;
+
+    if (c >= 0x0017 && (uint16_t)(c + 1) < 0x001B)
+        next = (uint16_t)(c + 1);
+    W16(0x0E3D) = next;
+    course_zoom(0x00A0, 0x0008);
+}
+
+/* The records panel's shown state: counts $0D42 down; at 0 the screen goes
+   to state 2 and the zoom into the course starts (page 1 with the
+   four-course zoom); otherwise, with no course override, the level column
+   pulses. */
+void course_records_shown(void)
+{
+    uint8_t v = (uint8_t)(records_count - 1);
+
+    records_count = v;
+    if (!v) {
+        screen_state = 0x02;
+        if (select_page)
+            course_zoom_from_selection4();
+        else
+            course_zoom_from_selection();
+        return;
+    }
+    if (course_override)
+        return;
+    records_pulse();
+}
+
+/* One step of the course window's blend down (BlendStepDown): the factor
+   moves down by one and the four scaled edges follow; nothing when it is
+   already 0. */
+static void blend_step_down(void)
+{
+    uint16_t base[4], target[4], out[4];
+    uint16_t factor = blend_factor;
+    int i;
+
+    for (i = 0; i < 4; i++) {
+        base[i] = window_base(i);
+        target[i] = window_target(i);
+    }
+    if (blend_step(&factor, blend_limit, false, base, target, out)) {
+        blend_factor = factor;
+        for (i = 0; i < 4; i++)
+            window_scaled(i) = out[i];
+    }
+}
+
+/* The blend one step down; true when the factor is then 0. */
+static bool course_fade_step(void)
+{
+    blend_step_down();
+    return blend_factor == 0;
+}
+
+/* The records panel's state, the count 0, the screen state and colour maths
+   off. */
+static void fade_done(uint8_t panel, uint8_t state)
+{
+    records_state = panel;
+    records_count = 0x00;
+    screen_state = state;
+    colour_math_off_long();
+}
+
+void course_screen_fade_leave(void)
+{
+    if (course_fade_step())
+        fade_done(0x08, 0x00);
+}
+
+void course_screen_fade_back(void)
+{
+    if (!course_fade_step())
+        return;
+    fade_done(0x06, 0x02);
+    if (W8(0x0D2B))                     /* only in HUD mode 0 */
+        return;
+    if (W8(0x0D24) == 0x03)             /* not when all the courses are open */
+        return;
+    if (course_override)
+        return;
+    sound_queue(SOUND_RECORDS);
 }

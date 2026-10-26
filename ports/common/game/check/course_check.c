@@ -1,4 +1,4 @@
-/* old: race/course.c video/colour_math.c audio/sound_queue.c system/raster.c
+/* old: race/course.c video/colour_math.c audio/sound_queue.c system/raster.c video/oam.c math/scale.c
  *
  * course_check.c: the port's course routines (race/course.c) against the
  * decomp's, on random states: work RAM and game pak RAM random, the pads
@@ -41,6 +41,9 @@ OLD(CourseRecordsOpening) OLD(CourseRecordsReopen) OLD(CourseRecordsClosing)
 OLD(CourseScreenWipeOut) OLD(CourseScreenWipeIn) OLD(CoursePreviewReset)
 OLD(CourseScreenStartSpeed) OLD(CourseScreenStartAll) OLD(CourseScreenStartBattle) OLD(CourseScreenStartStunt)
 OLD(CourseScreenNothing) OLD(CourseScreenZoomOut) OLD(CourseScreenZoomIn) OLD(CourseScreenState8)
+OLD(CourseZoomStunt) OLD(CourseZoomBattle) OLD(CourseZoomFromSelection4) OLD(CourseZoomFromSelection)
+OLD(CourseZoomTimeUp) OLD(CourseZoomTimeUpNext) OLD(CourseRecordsShown)
+OLD(CourseScreenFadeLeave) OLD(CourseScreenFadeBack)
 
 /* the handlers the decomp reaches by address: the cursor's table ($02:EC28,
    places 0-3) and the fade's ($02:EC18, the open places at 2 and 3) */
@@ -352,6 +355,74 @@ int main(int argc, char **argv)
         W16(0x13440) = (uint16_t)rnd();
         old_run(old_abi_CourseScreenZoomIn);
         course_screen_zoom_in();
+        same();
+    }
+    CASE("CourseZoomStunt / Battle / TimeUp / TimeUpNext") {
+        int k = (int)(rnd() % 4);
+
+        fresh();
+        random_cursor();
+        W16(0x0D48) = (uint16_t)(rnd() % 4);                 /* the cursor word: the place, high byte 0 */
+        W16(0x0D2B) = rnd() & 1 ? 0x0001 : 0x0000;           /* the HUD mode word, both zoom boxes */
+        W16(0x0E3D) = (uint16_t)(rnd() % 0x30);              /* the course, for the time-up next step */
+        old_run(k == 0 ? old_abi_CourseZoomStunt : k == 1 ? old_abi_CourseZoomBattle
+                : k == 2 ? old_abi_CourseZoomTimeUp : old_abi_CourseZoomTimeUpNext);
+        switch (k) {
+        case 0: course_zoom_stunt(); break;
+        case 1: course_zoom_battle(); break;
+        case 2: course_zoom_time_up(); break;
+        default: course_zoom_time_up_next(); break;
+        }
+        same();
+    }
+    CASE("CourseZoomFromSelection4 / CourseZoomFromSelection") {
+        int k = (int)(rnd() & 1);
+
+        fresh();
+        W8(0x0D4A) = (uint8_t)(rnd() % 3);
+        W8(0x0D48) = (uint8_t)(rnd() % 4);
+        W8(0x0D4C) = rnd() % 4 == 0 ? (uint8_t)(1 + rnd() % 255) : 0;
+        W8(0x0D63) = (uint8_t)(rnd() & 1);
+        W16(0x0D2B) = rnd() & 1 ? 0x0001 : 0x0000;
+        old_run(k ? old_abi_CourseZoomFromSelection4 : old_abi_CourseZoomFromSelection);
+        if (k)
+            course_zoom_from_selection4();
+        else
+            course_zoom_from_selection();
+        same();
+    }
+    CASE("CourseRecordsShown") {
+        fresh();
+        W8(0x0D42) = (uint8_t)(rnd() % 0x2B);              /* counting down: 0 ends the panel */
+        W8(0x0D4A) = (uint8_t)(rnd() % 3);
+        W8(0x0D48) = (uint8_t)(rnd() % 4);
+        W8(0x0D63) = (uint8_t)(rnd() & 1);
+        W8(0x0D4C) = rnd() % 4 == 0 ? (uint8_t)(1 + rnd() % 255) : 0;
+        W16(0x0D2B) = rnd() & 1 ? 0x0001 : 0x0000;
+        old_run(old_abi_CourseRecordsShown);
+        course_records_shown();
+        same();
+    }
+    CASE("CourseScreenFadeLeave / CourseScreenFadeBack") {
+        int k = (int)(rnd() & 1);
+
+        fresh();
+        /* the blend as the zoom leaves it: limit 15, the factor 0-15 mostly */
+        W16(0x1340A) = rnd() % 8 ? 0x000F : (uint16_t)rnd();
+        W16(0x13408) = rnd() % 8 ? (uint16_t)(rnd() % 16) : (uint16_t)rnd();
+        for (int j = 0; j < 4; j++) {
+            W16(0x13442 + 2 * j) = (uint16_t)rnd();        /* the bases */
+            W16(0x1343A + 2 * j) = (uint16_t)rnd();        /* the targets */
+        }
+        W8(0x0D2B) = rnd() & 1 ? 0x00 : 0x01;
+        W8(0x0D24) = (uint8_t)(rnd() % 5);
+        W8(0x0D4C) = rnd() % 4 == 0 ? 0x01 : 0x00;
+        W8(0x0D40) = (uint8_t)rnd();
+        old_run(k ? old_abi_CourseScreenFadeBack : old_abi_CourseScreenFadeLeave);
+        if (k)
+            course_screen_fade_back();
+        else
+            course_screen_fade_leave();
         same();
     }
     printf("course_check: %ld cases, %ld differ\n", cases, failed);

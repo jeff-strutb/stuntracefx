@@ -1,7 +1,7 @@
 /*
  * course.h: the course select's cursors, the course screens' states and
  * the records panel (race/course.c). Routines that reach the menu's
- * sprites, the records' loading or the zoom into a course are not here.
+ * sprites, the records' loading or totals, or the window's edges are not here.
  */
 #ifndef SRFX_COURSE_H
 #define SRFX_COURSE_H
@@ -68,5 +68,28 @@ void course_screen_zoom_in(void);
 
 /* The course screens' state 8. */
 void course_screen_state8(void);
+
+/* The zoom into a course from the cursor's list (stunt: $FB86, target 8;
+   battle: $FB8A, target $10), from the menu's selections (the course below
+   $0C from its box, $15 and the others by their boxes), and the time-up
+   select's two zooms. Each stores the course number and starts the zoom
+   (screen state 4, the sound $24). */
+void course_zoom_stunt(void);
+void course_zoom_battle(void);
+void course_zoom_from_selection4(void);
+void course_zoom_from_selection(void);
+void course_zoom_time_up(void);
+void course_zoom_time_up_next(void);
+
+/* The records panel's shown state (counts down; at 0, state 2 and the zoom
+   into the course; else the level column pulses). */
+void course_records_shown(void);
+
+/* The blend one step down, then the records panel's state 8 (leave) or 6
+   (back) with the screen state 0 or 2 and colour maths off when the blend
+   is 0; the back one also sounds $2D in HUD mode 0 with the courses not all
+   open and no course override. */
+void course_screen_fade_leave(void);
+void course_screen_fade_back(void);
 
 #endif
