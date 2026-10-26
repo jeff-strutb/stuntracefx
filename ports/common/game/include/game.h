@@ -52,6 +52,7 @@ void window_slide_or_oscillate(void);
 void window_bands_animate(void);
 void window_split_animate(void);
 void window_slide_check(void);
+void window_table_7f(void);
 void hud_draw_time(void);
 /* ---- the sound ports (audio/ports.c), the pads (input/pads.c) ---- */
 extern uint8_t sound_in[4], sound_out[4];

@@ -723,3 +723,30 @@ void window_slide_check(void)
     W16(0x19C9) = W16(0x200Eu + W16(0x0346));
     W8(0x0D45) |= 0x20;
 }
+
+/* The split window's bands in bank $7F from its four scaled edges ($3433
+   left, $3435 top, $3437 right, $3439 bottom, $3434 and $3438 the
+   width's ends): the width and its middle, the top line, the left edges
+   stepping in a line a band and the right ones out, mirrored, and the
+   middle bands' height ((bottom - top - 6) / 2, a borrow taking one
+   more). */
+void window_table_7f(void)
+{
+    uint8_t a = (uint8_t)(W8(0x13438) - W8(0x13434)), b;
+    int i;
+    static const uint16_t left[4][2] = {{0x3420, 0x3423}, {0x341D, 0x3426}, {0x341A, 0x3429}, {0x3417, 0x342C}};
+    static const uint16_t right[4][2] = {{0x3421, 0x3424}, {0x341E, 0x3427}, {0x341B, 0x342A}, {0x3418, 0x342D}};
+
+    W8(0x13402) = a;
+    W8(0x13406) = (uint8_t)((a >> 1) + W8(0x13434));
+    a = W8(0x13435) >> 1;
+    W8(0x13410) = a;
+    W8(0x13413) = (uint8_t)(a + 1);
+    for (i = 0, a = W8(0x13433); i < 4; i++, a++)
+        W8(0x10000u + left[i][0]) = W8(0x10000u + left[i][1]) = a;
+    for (i = 0, a = W8(0x13437); i < 4; i++, a--)
+        W8(0x10000u + right[i][0]) = W8(0x10000u + right[i][1]) = a;
+    b = W8(0x13435);
+    a = (uint8_t)(W8(0x13439) - b - 6 - (W8(0x13439) < b));
+    W8(0x1341F) = W8(0x13422) = a >> 1;
+}

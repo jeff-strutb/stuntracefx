@@ -1,4 +1,4 @@
-/* old: video/fade.c video/palette.c video/dma.c video/windows.c video/window_hdma.c video/colour_math.c object/object.c audio/sound_queue.c input/joypad.c race/time.c video/scroll.c video/gradient.c video/tilemap.c
+/* old: video/fade.c video/palette.c video/dma.c video/windows.c video/window_hdma.c video/colour_math.c object/object.c audio/sound_queue.c input/joypad.c race/time.c video/scroll.c video/gradient.c video/tilemap.c video/oam.c system/vblank_updates.c system/frame_updates.c system/approach.c system/raster.c
  *
  * raster_check.c: the port's frame work (what the original does in its
  * raster interrupt: the fade, the palettes, the windows, the uploads) against
@@ -39,7 +39,7 @@ OLD(WindowsSetupSelect) OLD(WindowHdmaNormal) OLD(WindowHdmaBands) OLD(WindowLay
 OLD(WindowSweepIfOn) OLD(WindowSlideOrOscillate) OLD(WindowBandsAnimate) OLD(WindowSplitAnimate) OLD(WindowSlideCheck)
 OLD(WindowHdmaFFDD) OLD(WindowHdmaFFD1) OLD(WindowHdmaFFD5) OLD(WindowHdmaFFD9)
 OLD(SoundPortsSend) OLD(JoypadRead) OLD(JoypadAccumulate) OLD(FrameSoundAndJoypads) OLD(RaceClockStep)
-OLD(Bg2ScrollFromTable) OLD(GradientPointersToBank7F) OLD(NmiFrameUpload)
+OLD(Bg2ScrollFromTable) OLD(GradientPointersToBank7F) OLD(NmiFrameUpload) OLD(OamDirectStage) OLD(VblankUpdates) OLD(FrameCountAndPortsEnd) OLD(WindowTable7F)
 
 static uint64_t rng = 0x3C6EF372FE94F82Bull;
 
@@ -129,7 +129,7 @@ static void same(void)
 
     cases++;
     for (i = 0; i < sizeof wram; i++)
-        if (wram[i] != old_w[i] && !(scratch_f9 && (i == 0xF9 || i == 0xFA))) {
+        if (wram[i] != old_w[i] && !(scratch_f9 && i >= 0xF9 && i <= 0xFC)) {
             fail("work RAM $%05zX = %02X, the decomp's %02X (was %02X)", i, wram[i], old_w[i], start_w[i]);
             return;
         }
@@ -368,6 +368,43 @@ int main(int argc, char **argv)
         W16(0x10A0) = (uint16_t)(0x8000 + (rnd() & 0x3FFF));
         old_run(old_abi_NmiFrameUpload);
         nmi_frame_upload();
+        same();
+    }
+    CASE("OamDirectStage") {
+        fresh();
+        W8(0x0D2B) = (uint8_t)(rnd() & 1 ? 1 : rnd() & 3);
+        W16(0x0E5D) = (uint16_t)(rnd() & 1 ? 0 : rnd());
+        W8(0x0D54) = (uint8_t)(rnd() % 6 * 2);
+        W8(0x0E16) = (uint8_t)(rnd() & 1 ? 0xAC : rnd());
+        W8(0x0E12) = (uint8_t)(rnd() & 1 ? 0x1F : rnd());
+        W8(0x0E0B) = (uint8_t)(rnd() & 1 ? 0x2A : rnd());
+        W8(0x0D57) = (uint8_t)(rnd() & 1 ? (rnd() & 1 ? 0x10 : 0xD0) : rnd());
+        old_run(old_abi_OamDirectStage);
+        oam_direct_stage();
+        same();
+    }
+    CASE("VblankUpdates / FrameCountAndPortsEnd / WindowTable7F") {
+        int k = (int)(rnd() % 3);
+
+        fresh();
+        scratch_f9 = 1;
+        W16(0x0D7D) = (uint16_t)(rnd() & 1 ? rnd() % 7 * 2 : rnd() & 0xFF);
+        W16(0x1905) = (uint16_t)(rnd() & 1 ? rnd() % 4 : rnd());
+        W16(0x1907) = (uint16_t)(rnd() & 1 ? rnd() % 12 * 4 : rnd());
+        W8(0x11D7) = (uint8_t)rnd();
+        W8(0x11D7) &= (uint8_t)~0x0F;   /* no queued uploads: their own checks are video_check's */
+        W16(0x18B9) = (uint16_t)(rnd() & 1 ? 0 : rnd());
+        W16(0x1901) = (uint16_t)(rnd() % 6);
+        W16(0x1903) = (uint16_t)(rnd() & 1 ? 0 : rnd());
+        W16(0x18FF) = (uint16_t)(rnd() & 1);
+        old_cpu.p &= (uint8_t)~P_M;
+        old_cpu.p |= P_X;
+        old_run(k == 0 ? old_abi_VblankUpdates : k == 1 ? old_abi_FrameCountAndPortsEnd : old_abi_WindowTable7F);
+        switch (k) {
+        case 0: vblank_updates(); break;
+        case 1: frame_count_and_ports_end(); break;
+        default: window_table_7f();
+        }
         same();
     }
     printf("raster_check: %ld cases, %ld differ\n", cases, failed);

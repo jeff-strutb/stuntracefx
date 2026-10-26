@@ -142,6 +142,10 @@ void video_colours_all(void);
 
 /* ---- video/frame_upload.c: the uploads between frames ---- */
 void nmi_frame_upload(void);
+/* video/vblank.c, video/oam_direct.c */
+void vblank_updates(void);
+void frame_count_and_ports_end(void);
+void oam_direct_stage(void);
 
 /* ---- video/frame_updates.c: the updates applied as a frame ends ---- */
 void frame_sprites_if_pending(void);
