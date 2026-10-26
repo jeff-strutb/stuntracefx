@@ -82,6 +82,9 @@ static void driving_checks(void)
 {
     const float wheel_x = 600, wheel_y = 250;
     set_driving(1);
+    expect("no touch screen yet: nothing pressed", 0);
+    touch(9, 0, 600, 250);                     /* a first touch, then lifted */
+    touch(9, 2, 600, 250);
     expect("driving, Auto-Accelerate: the gas alone", NSHVC_B);
     touch(1, 0, wheel_x, wheel_y);
     expect("the wheel down, centred", NSHVC_B);

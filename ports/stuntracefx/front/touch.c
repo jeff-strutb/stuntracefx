@@ -28,7 +28,9 @@
  * up is Down); a tap is B and START together (every menu's confirm); a tap
  * with two fingers is Y (back).
  *
- * Time is counted in the console's frames, 1/60 s each.
+ * Nothing is pressed until a first touch: a window with no touch screen
+ * (a keyboard, a pad, a headless check) gets no gas. Time is counted in the
+ * console's frames, 1/60 s each.
  */
 #include <math.h>
 #include <stdio.h>
@@ -62,11 +64,14 @@ static int gesture_fingers, gesture_moved;
 static uint16_t held;                       /* buttons held by fingers */
 static uint16_t pulse;                      /* buttons pressed a moment */
 static uint32_t pulse_until;
-static uint16_t sent = 0xFFFF;
+static uint16_t sent;
+static int touched;                         /* a touch has been seen: there is a touch screen */
 
 static void send(void)
 {
     uint16_t b = (uint16_t)(held | (gas ? NSHVC_B : 0) | (front_frames() < pulse_until ? pulse : 0));
+    if (!touched)
+        return;
     if (b != sent) {
         sent = b;
         front_buttons(b);
@@ -251,6 +256,7 @@ static void ended(int id, float x, float y, int cancelled)
 void touch_input(const nshvc_touch *t, int n)
 {
     int i;
+    touched = 1;
     for (i = 0; i < n; i++) {
         if (t[i].phase == 0)
             began(t[i].id, t[i].x, t[i].y);
