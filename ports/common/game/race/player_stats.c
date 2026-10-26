@@ -5,6 +5,7 @@
  */
 #include "game.h"
 #include "glue.h"
+#include "gsu_record.h"
 #include "player_stats.h"
 #include "smallvideo.h"
 
@@ -39,6 +40,54 @@ uint16_t speed_sample_add(uint16_t player, uint16_t speed)
     W16(sum + 2) = (uint16_t)h;
     W16(cnt) = (uint16_t)(W16(cnt) + 1);
     return (uint16_t)h;
+}
+
+/* A byte and a word of a car's record (in the game pak RAM) at `off`. */
+static uint8_t rec_byte(uint16_t rec, uint16_t off)
+{
+    return P8((uint16_t)(rec + off));
+}
+
+static uint16_t rec_word(uint16_t rec, uint16_t off)
+{
+    return P16((uint16_t)(rec + off));
+}
+
+/* The figures of player `player` from its car's record at `rec`, unless $0E57
+   is set: the record's bytes at $40-$43 and $4E go to the player's slots at
+   $0DEC, $0DEE, $0DF0, $0DF2 and $0DF6; the record's speed (+$4A) is sampled;
+   the record's +$82 / 8 is the gauge's value $0DF9 and its position (kept to
+   $3F, then 2n + $30) $0DFB; the record's +$6A / 8 goes to $0E05, +$7A to
+   $0DE8 and the low nibble of +$88 to $0DF4. The record's bits $40 are kept
+   (record_bits_60_pair) in every case. */
+void player_stats_from_record(uint16_t player, uint16_t rec)
+{
+    uint8_t v;
+
+    if (!W8(0x0E57)) {
+        W8(0x0DEC + player) = rec_byte(rec, 0x40);
+        W8(0x0DEE + player) = rec_byte(rec, 0x41);
+        W8(0x0DF0 + player) = rec_byte(rec, 0x42);
+        W8(0x0DF2 + player) = rec_byte(rec, 0x43);
+        W8(0x0DF6 + player) = rec_byte(rec, 0x4E);
+        v = (uint8_t)(rec_word(rec, 0x82) >> 3);
+        W8(0x0DF9 + player) = v;
+        if (v >= 0x3F)
+            v = 0x3F;
+        W8(0x0DFB + player) = (uint8_t)((v << 1) + 0x30);
+        speed_sample_add(player, rec_word(rec, 0x4A));
+        W8(0x0E05 + player) = (uint8_t)(rec_word(rec, 0x6A) >> 3);
+        W8(0x0DE8 + player) = rec_byte(rec, 0x7A);
+        W8(0x0DF4 + player) = rec_byte(rec, 0x88) & 0x0F;
+    }
+    record_bits_60_pair();
+}
+
+/* Player 0's figures from its record at $2476, then $0E5F = $FF. */
+void player_stats_and_palette_animate(void)
+{
+    player_stats_from_record(0, P16(0x2476));
+    W8(0x0E5F) = 0xFF;
 }
 
 /* The stunt courses ($0C-$0F, in $0E3D) each set their bit in the save's

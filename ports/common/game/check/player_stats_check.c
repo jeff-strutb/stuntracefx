@@ -1,4 +1,4 @@
-/* old: race/player_stats.c save/checksum.c gsu/run.c gsu/params.c gsu/screen.c gsu/programs.c render/unused.c render/matrix.c render/arith.c render/angle.c math/fx_math.c gsu/fx_init.c data/unpack.c render/sort.c render/hud.c render/points.c render/fx_points.c render/project.c render/table.c hud/lap_time.c audio/sound_queue.c system/misc.c
+/* old: race/player_stats.c object/gsu_record.c save/checksum.c gsu/run.c gsu/params.c gsu/screen.c gsu/programs.c render/unused.c render/matrix.c render/arith.c render/angle.c math/fx_math.c gsu/fx_init.c data/unpack.c render/sort.c render/hud.c render/points.c render/fx_points.c render/project.c render/table.c hud/lap_time.c audio/sound_queue.c system/misc.c
  *
  * player_stats_check.c: the port's race/player_stats.c against the decomp's,
  * on random states: the speed sample and its totals, the Stunt Trax panel's
@@ -48,7 +48,7 @@
 #include "model.h"
 
 #define OLD(name) void old_abi_##name(void);
-OLD(SpeedSampleAdd) OLD(TimeUpPhaseStart) OLD(StuntCourseMark) OLD(StuntPanelCount) OLD(StuntPanelShow)
+OLD(SpeedSampleAdd) OLD(PlayerStatsFromRecord) OLD(PlayerStatsAndPaletteAnimate) OLD(GsuRecordBits60) OLD(TimeUpPhaseStart) OLD(StuntCourseMark) OLD(StuntPanelCount) OLD(StuntPanelShow)
 OLD(TimeUpPhaseSlideIn) OLD(TimeUpPhaseSlideOut) OLD(GlyphRowsAt32) OLD(GlyphSpritesSlideIn) OLD(GlyphSpritesSlideOut)
 OLD(FxClearScreenIfSet) OLD(FxClear6000IfSet) OLD(FxMatrixFromAnglesProgram) OLD(FxInit)
 OLD(FxUnpackProgram) OLD(FxLengthProgram) OLD(FxMatrixRotateProgram) OLD(FxAngleProgram) OLD(FxSortObjectsProgram)
@@ -264,6 +264,29 @@ int main(int argc, char **argv)
         same_ram();
         if (v != old_cpu.a)
             fail("A %04X, the decomp's %04X", v, old_cpu.a);
+    }
+    CASE("PlayerStatsFromRecord / PlayerStatsAndPaletteAnimate") {
+        int k = (int)(rnd() & 1);
+        uint16_t p = k ? 0 : (uint16_t)(rnd() & 1);
+        /* the records at $70:2476 and $70:2478 (GsuRecordBits60 reads both) */
+        uint16_t rec = (uint16_t)(0x1100 + 2 * (rnd() % 0x200));
+
+        fresh();
+        GUARD;
+        P16(0x2476) = rec;
+        P16(0x2478) = (uint16_t)(0x1100 + 2 * (rnd() % 0x200));
+        W8(0x0E57) = rnd() % 4 ? 0x00 : (uint8_t)(1 + rnd() % 0xFF);   /* mostly the figures are copied */
+        random_total(p);
+        old_cpu.x = rec;
+        old_cpu.y = p;
+        old_cpu.p |= P_M;
+        old_cpu.p &= (uint8_t)~P_X;
+        old_run(k ? old_abi_PlayerStatsAndPaletteAnimate : old_abi_PlayerStatsFromRecord);
+        if (k)
+            player_stats_and_palette_animate();
+        else
+            player_stats_from_record(p, rec);
+        same_ram();
     }
     CASE("TimeUpPhaseStart") {
         fresh();

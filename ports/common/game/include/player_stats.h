@@ -14,6 +14,17 @@
    sample is not counted. Returns the total's high word. */
 uint16_t speed_sample_add(uint16_t player, uint16_t speed);
 
+/* The figures of player `player` (0 or 1) from its car's record at `rec` in
+   the game pak RAM, unless $0E57 is set: the record's bytes and words to the
+   player's slots, a speed sample from the record's speed, the gauge position,
+   and the record's bits $40 kept (record_bits_60_pair, which runs in every
+   case). */
+void player_stats_from_record(uint16_t player, uint16_t rec);
+
+/* Player 0's figures from its record at $2476 (player_stats_from_record),
+   then $0E5F = $FF. */
+void player_stats_and_palette_animate(void);
+
 /* The end of the Stunt Trax panel once all eight stunts are done: the bit
    for the course ($0C-$0F) in the save's byte $FC06, then the save's
    checksum. Any other course: nothing. */
