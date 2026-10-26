@@ -10,6 +10,7 @@
 
 static const struct { const char *name; int def; } k_opt[RM_OPT_COUNT] = {
     [RM_OPT_FRAMERATE] = { "framerate", 0 },   /* 0 the original's, 1 60 a second */
+    [RM_OPT_WIDESCREEN] = { "widescreen", 1 }, /* 1 a race fills the window, 0 the original's 4:3 */
 };
 static int value[RM_OPT_COUNT], forced[RM_OPT_COUNT], loaded;
 

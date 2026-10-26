@@ -326,6 +326,11 @@ static void key(int vk, int down)
         fprintf(stderr, "remaster: frame rate %s\n", rm_option(RM_OPT_FRAMERATE) ? "60" : "original");
         return;
     }
+    if (vk == 0x71 && down) {           /* F2 */
+        rm_option_set(RM_OPT_WIDESCREEN, !rm_option(RM_OPT_WIDESCREEN));
+        fprintf(stderr, "remaster: widescreen %s\n", rm_option(RM_OPT_WIDESCREEN) ? "on" : "off (4:3)");
+        return;
+    }
     switch (vk) {
     case 0x26: m = SNES_UP; break;
     case 0x28: m = SNES_DOWN; break;
