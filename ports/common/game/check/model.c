@@ -170,6 +170,7 @@ void old_wr8(uint32_t a, uint8_t v)
     case 0x211C: m7b = v; m7_latch = v; return;
     case 0x2140: case 0x2141: case 0x2142: case 0x2143: model_sound_out[o - 0x2140] = v; return;
     case 0x4016: return;                  /* the joypads' latch */
+    case 0x4200: return;                  /* the interrupts and the joypads' auto-read (the port has no interrupts) */
     case 0x4207: model_htime = (uint16_t)((model_htime & 0x100) | v); return;
     case 0x4208: model_htime = (uint16_t)((model_htime & 0xFF) | (v & 1) << 8); return;
     case 0x4209: model_vtime = (uint16_t)((model_vtime & 0x100) | v); return;
