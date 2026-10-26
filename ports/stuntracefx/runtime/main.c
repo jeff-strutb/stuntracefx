@@ -741,8 +741,35 @@ static void frame(void)
                 keys = 0;
         }
     }
-    snes_set_joypad(0, (uint16_t)(keys | pad_buttons(0)));
-    snes_set_joypad(1, pad_buttons(1));
+    {
+        /* --script in a window (a check): its buttons with the player's,
+           its shots and dumps at their frames; the window stays open
+           after it ends */
+        uint16_t s0 = 0, s1 = 0;
+        if (nsteps)
+            script_frame(&s0, &s1);
+        snes_set_joypad(0, (uint16_t)(keys | pad_buttons(0) | s0));
+        snes_set_joypad(1, (uint16_t)(pad_buttons(1) | s1));
+    }
+    {
+        /* RM_RATE=1 (a check): race frames and video frames each second */
+        static int on = -1;
+        static uint64_t t0;
+        static unsigned ticks0;
+        static long f0;
+        if (on < 0)
+            on = getenv("RM_RATE") != NULL;
+        if (on) {
+            uint64_t now = host_ticks_ns();
+            if (!t0)
+                t0 = now, ticks0 = rm_ticks, f0 = frame_no;
+            else if (now - t0 >= 1000000000ull) {
+                fprintf(stderr, "rate: %.1f video frames/s, %.1f ticks/s at 60, frame %ld\n",
+                        (frame_no - f0) * 1e9 / (double)(now - t0), (rm_ticks - ticks0) * 1e9 / (double)(now - t0), frame_no);
+                t0 = now, ticks0 = rm_ticks, f0 = frame_no;
+            }
+        }
+    }
     if (frame_no % 120 == 0)
         save_write(0);
     /* the pace: each frame due 1/60.0988 s after the last */
