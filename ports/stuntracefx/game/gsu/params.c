@@ -2,6 +2,7 @@
  * params.c: the parameter block in Super FX RAM that the renderer reads.
  */
 #include "machine.h"
+#include "widescreen.h"
 
 /*
  * @routine 7E:E2C9 GsuParamsUpdate
@@ -48,8 +49,9 @@ uint16_t GsuParamsFromDp(uint8_t bank)
 {
     static const uint8_t from[8] = {0xCE, 0xD0, 0x2A, 0x2E, 0x2C, 0x30, 0x32, 0x34};
     static const uint32_t to[8] = {0x700034, 0x700036, 0x700038, 0x70003A, 0x70003C, 0x70003E, 0x700092, 0x700094};
-    uint16_t v = 0;
+    uint16_t v = 0, w[6], planes[2];
     unsigned i;
+    int wide = 0;
 
     cyc(17422);
     wr8((uint32_t)bank << 16 | 0x05EF, 0xFF);
@@ -57,8 +59,12 @@ uint16_t GsuParamsFromDp(uint8_t bank)
     for (i = 0; i < 8; i++) {
         cyc(16);
         v = rd16(from[i]);
+        if (i < 6)
+            w[i] = v;
+        else if (i == 6)
+            wide = ws_view_planes(w, planes);
         cyc(32);
-        wr16(to[i], v);
+        wr16(to[i], i >= 6 && wide ? planes[i - 6] : v);   /* Widescreen: the wide view's planes */
     }
     cyc(44);
     return v;

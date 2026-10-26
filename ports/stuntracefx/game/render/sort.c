@@ -12,6 +12,7 @@
  */
 #include "gsu.h"
 #include "gsu_ops.h"
+#include "widescreen.h"
 
 #define FX_SLOTS 0x0AAAu
 #define FX_SLOT_SIZE 0x1Eu
@@ -182,7 +183,7 @@ void FxSortObjectsProgram(void)
         gsu.r[0] = absolute((gsu_ldw(gsu_code_then(0x01afa6, 5, field(0x12, GSU_COPY(9))))), GSU_COPY(1));
         gsu.r[0] = gsu_sub(gsu.r[0], gsu.r[1], 0);
         gsu_sub(gsu.r[0], gsu.r[3], 0);
-        if (!gsu.s)
+        if (!gsu.s && !ws_cull_keeps(gsu.r[0], gsu.r[3]))     /* Widescreen: past 45 degrees */
             { gsu_code(0x01afb2, 9); gsu_code(0x01b01f, 1); goto next; } else { gsu_code(0x01afb2, 5); gsu_code(0x01afbb, 1); }
         /* The depth key, and the slot into the list. */
         gsu.r[0] = (gsu_ldw(gsu_code_then(0x01afbc, 5, field(0x08, GSU_COPY(10)))));

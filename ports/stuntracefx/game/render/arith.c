@@ -11,7 +11,9 @@
  * remainder shifted left one, with the bit shifted out of it dropped each
  * pass, so the remainder is exact only while it fits in 15 bits.
  */
+#include <stdlib.h>
 #include "gsu.h"
+#include "widescreen.h"
 #include "gsu_ops.h"
 
 uint16_t FxDivideHalving(uint16_t hi, uint16_t lo, uint16_t *divisor, uint16_t *remainder, int copy);
@@ -268,14 +270,71 @@ void abi_FxDivideHalving(void)
  * last FxDivideHalving leaves them; S and Z from R10; the last RAM address
  * R10.
  */
+/* FxDivideHalving's quotient, from a 32-bit dividend: both halved first
+   when either has its top bit set. */
+static uint16_t halved_quotient(uint32_t v, uint16_t d)
+{
+    if (v & 0x80000000u || d & 0x8000) {
+        v >>= 1;
+        d >>= 1;
+    }
+    return (uint16_t)(v / d);
+}
+
+/* FxRatioClamp's results at focal length f (Widescreen): a * 2f / d and
+   b * 2f / d (the halved pair), held as the original holds them; f = 128
+   is the original's arithmetic exactly (a << 8 is a * 256). */
+static void ratio_at_focal(uint16_t a, uint16_t b, uint16_t d, int f, uint16_t *x, uint16_t *y)
+{
+    uint32_t na = (uint32_t)a * 2u * (uint32_t)f, qa, qb;
+
+    if ((na >> 16) < d) {
+        qa = halved_quotient(na, d);
+        qb = halved_quotient((uint32_t)b * 2u * (uint32_t)f, d);
+        if (qa <= 0x3FFF) {
+            *x = (uint16_t)qa;
+            *y = (uint16_t)qb;
+            return;
+        }
+        *y = halved_quotient((qb << 14) - qb, (uint16_t)qa);
+    } else {
+        *y = halved_quotient(((uint32_t)b << 14) - b, a);
+    }
+    *x = 0x3FFF;
+}
+
+/* After the original's results: at another focal length they are replaced;
+   under PORT_FOCALCHECK the focal arithmetic at 128 is held against them. */
+static void ratio_focal(uint16_t a, uint16_t b, uint16_t d, uint16_t *x, uint16_t *y)
+{
+    uint16_t fx, fy;
+    int f = ws_focal();
+
+    if (f != 128) {
+        uint16_t ox = *x, oy = *y;
+
+        ratio_at_focal(a, b, d, f, x, y);
+        /* PORT_FOCALCHECK: unclamped, each result the original's times f /
+           128, to the one the two divisions' rounding allows */
+        if (ws_focal_check() && *x < 0x3FFF && ox < 0x3FFF)
+            ws_focal_checked(labs((long)*x * 128 - (long)ox * f) < 2 * 128 + f &&
+                             labs((long)*y * 128 - (long)oy * f) < 2 * 128 + f, a, b, d);
+        return;
+    }
+    if (ws_focal_check()) {
+        ratio_at_focal(a, b, d, 128, &fx, &fy);
+        ws_focal_checked(fx == *x && fy == *y, a, b, d);
+    }
+}
+
 void FxRatioClamp(uint16_t *x, uint16_t *y, uint16_t d, uint16_t *ret, int copy)
 {
-    uint16_t a, b;
+    uint16_t a, b, a0, b0;
 
     gsu_code(0x019659, 2);
     gsu_push(&gsu.r[10], gsu.r[11]);            /* the return address */
-    a = (uint16_t)((int16_t)*x >> 1);
-    b = (uint16_t)((int16_t)*y >> 1);
+    a = a0 = (uint16_t)((int16_t)*x >> 1);
+    b = b0 = (uint16_t)((int16_t)*y >> 1);
 
     /* each division leaves R0, R4, R6, R12, R13 and the flags; R11 is
        the return address of the last call (LINK) */
@@ -289,6 +348,7 @@ void FxRatioClamp(uint16_t *x, uint16_t *y, uint16_t d, uint16_t *ret, int copy)
             b = halving_divide(b >> 8, (uint16_t)(b << 8), d, 0x96D6, GSU_COPY(1));
             *x = a;
             *y = b;
+            ratio_focal(a0, b0, d, x, y);
             gsu_code(0x019688, 7);
             gsu_pull(&gsu.r[10]);               /* the return address, into R15 */
             return;
@@ -306,6 +366,7 @@ void FxRatioClamp(uint16_t *x, uint16_t *y, uint16_t d, uint16_t *ret, int copy)
         *y = halving_divide((uint16_t)(v >> 16), (uint16_t)v, a, 0x96D6, GSU_COPY(1));
         *x = 0x3FFF;
     }
+    ratio_focal(a0, b0, d, x, y);
     gsu_code(0x0196b6, 10);
     gsu_pull(&gsu.r[10]);                       /* the return address, into R15 */
 }

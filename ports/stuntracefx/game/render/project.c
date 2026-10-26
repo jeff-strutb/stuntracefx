@@ -5,6 +5,7 @@
  */
 #include "gsu.h"
 #include "gsu_ops.h"
+#include "widescreen.h"
 
 #define FX_CENTRE 0x0034u   /* the screen centre: X at $34, Y at $36 */
 #define FX_EDGES 0x0038u    /* the edges: X at $38 and $3A, Y at $3C and $3E */
@@ -238,6 +239,19 @@ void abi_FxProjectPoint(void)
 
 #define FX_SCALE_TABLE 0x896Cu  /* $14:896C: the scale for each even depth */
 
+/* FMULT by the depth's scale (2^23 / depth, so focal length 128), at the
+   view's focal length f (Widescreen): v * scale * f >> 23, which at f = 128
+   is FMULT's own high word. */
+static uint16_t scale_mult(uint16_t v, uint16_t scale)
+{
+    int f = ws_focal();
+
+    if (f == 128)
+        return gsu_fmult(v, scale);
+    gsu_fmult(v, scale);                    /* its flags and time */
+    return (uint16_t)(int16_t)(((int64_t)(int16_t)v * (int16_t)scale * f) >> 23);
+}
+
 /*
  * @routine 01:B2A4 FxProjectScaled
  * WHAT IT DOES: Projects a point and a size at a depth: X (R1), Y (R2) and
@@ -290,17 +304,17 @@ void FxProjectScaled(int copy)
     gsu_code(0x01b2d6, 3);
     gsu.r[6] = gsu_getbh(gsu.r[6]);
     gsu_code(0x01b2d9, 2);
-    gsu.r[0] = gsu_fmult(gsu.r[1], gsu.r[6]);
+    gsu.r[0] = scale_mult(gsu.r[1], gsu.r[6]);
     gsu_code(0x01b2db, 3);
     gsu.r[1] = gsu_ldw(FX_CENTRE);
     gsu.r[1] = gsu_add(gsu.r[1], gsu.r[0], 0);
     gsu_code(0x01b2de, 4);
-    gsu.r[0] = gsu_fmult(gsu.r[2], gsu.r[6]);
+    gsu.r[0] = scale_mult(gsu.r[2], gsu.r[6]);
     gsu_code(0x01b2e2, 3);
     gsu.r[2] = gsu_ldw(FX_CENTRE + 2);
     gsu.r[2] = gsu_add(gsu.r[2], gsu.r[0], 0);
     gsu_code(0x01b2e5, 4);
-    gsu.r[0] = gsu_fmult(gsu.r[5], gsu.r[6]);
+    gsu.r[0] = scale_mult(gsu.r[5], gsu.r[6]);
     gsu.r[5] = gsu.r[0];
     gsu_code(0x01b2e9, 4);
 }
@@ -387,13 +401,13 @@ void abi_FxProjectVertex(void)
     gsu_code(0x018c21, 3);
     gsu.r[6] = gsu_getbh(gsu.r[6]);
     gsu_code(0x018c24, 2);
-    gsu.r[0] = gsu_fmult(gsu.r[1], gsu.r[6]);
+    gsu.r[0] = scale_mult(gsu.r[1], gsu.r[6]);
     gsu_code(0x018c26, 3);
     gsu.r[1] = gsu_ldw(FX_CENTRE);
     gsu.r[0] = gsu_add(gsu.r[0], gsu.r[1], 0);
     gsu.r[1] = gsu.r[0];
     gsu_code(0x018c29, 5);
-    gsu.r[0] = gsu_fmult(gsu.r[2], gsu.r[6]);
+    gsu.r[0] = scale_mult(gsu.r[2], gsu.r[6]);
     gsu_code(0x018c2e, 3);
     gsu.r[2] = gsu_ldw(FX_CENTRE + 2);
     gsu.r[0] = gsu_add(gsu.r[0], gsu.r[2], 0);
