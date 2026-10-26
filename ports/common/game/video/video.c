@@ -117,9 +117,8 @@ void video_frame_begin(void)
 
 void video_screen_at(unsigned l, VideoScreen *s, uint16_t palette[256])
 {
-    if (l >= VIDEO_LINES)
-        l = VIDEO_LINES - 1;
-    carry(VIDEO_LINES - 1);
+    if (l > line)                       /* not changed since: the current line's */
+        l = line;
     *s = screen[l];
     memcpy(palette, colours[l], sizeof colours[0]);
 }

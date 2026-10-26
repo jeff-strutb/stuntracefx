@@ -198,6 +198,34 @@ static void apu_write(uint16_t address, uint8_t data, int phase)
                        (uint8_t)(dsp_samples >> 24), (uint8_t)phase, (uint8_t)address, (uint8_t)(address >> 8), data };
     fwrite(rec, 1, 8, apulog_f);
 }
+/* --ppulog FILE: what the picture is made from, for the native renderer's
+   check: the core's snapshot at power-on (sfxbox_core_snapshot), then
+   each access to the picture's registers ($2100-$213F) from either the
+   processor or the transfer channels, 12 bytes (little-endian): the frame
+   (32 bits), the beam's line and dot (16 bits each), the register's low
+   byte, the value, the kind (0 a processor write, 2 a channel write, 3 a
+   processor read), 0. A shot adds a mark: the register $FF, the value the
+   length of the shot's name, the name following in the next records (12
+   bytes each, the last padded with zeros). */
+static FILE *ppulog_f;
+static void (*sfxbox_core_beam_p)(int *, int *);
+static void ppulog_record(uint32_t addr, uint8_t data, int kind)
+{
+    int v, h; sfxbox_core_beam_p(&v, &h);
+    uint32_t f = (uint32_t)frames;
+    uint8_t rec[12] = { (uint8_t)f, (uint8_t)(f >> 8), (uint8_t)(f >> 16), (uint8_t)(f >> 24),
+                        (uint8_t)v, (uint8_t)(v >> 8), (uint8_t)h, (uint8_t)(h >> 8),
+                        (uint8_t)addr, data, (uint8_t)kind, 0 };
+    fwrite(rec, 1, 12, ppulog_f);
+}
+static void ppulog_write(uint32_t addr, uint8_t data, int kind)
+{
+    if (!(addr & 0x400000) && (addr & 0xffc0) == 0x2100) ppulog_record(addr, data, kind);
+}
+static void ppulog_read(uint32_t addr, uint8_t data)
+{
+    if (!(addr & 0x400000) && (addr & 0xffc0) == 0x2100 && (addr & 0xff) >= 0x34) ppulog_record(addr, data, 3);
+}
 static void audio(int16_t l, int16_t r) { (void)l; (void)r; }
 static size_t audio_batch(const int16_t *d, size_t n) { (void)d; return n; }
 static void poll(void) {}
@@ -244,6 +272,13 @@ static void write_file(const char *name, const char *ext, const void *p, size_t 
 
 static void shot(const char *name) {
     if (lockstep && lockstep_role() == 2) return;
+    if (ppulog_f) {
+        char pad[12 * 22] = {0};
+        size_t n = strlen(name) < 255 ? strlen(name) : 255;
+        ppulog_record(0x21ff, (uint8_t)n, 0);
+        memcpy(pad, name, n < sizeof pad ? n : sizeof pad);
+        fwrite(pad, 1, (n + 11) / 12 * 12, ppulog_f);
+    }
     char path[4096]; snprintf(path, sizeof path, "%s/%s.ppm", outdir, name);
     FILE *f = fopen(path, "wb"); if (!f) die("cannot write %s", path);
     fprintf(f, "P6\n%u %u\n255\n", fw, fh);
@@ -784,6 +819,9 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--apulog") && i + 1 < argc) {
             if (!(apulog_f = fopen(argv[++i], "wb"))) die("cannot write %s", argv[i]);
         }
+        else if (!strcmp(argv[i], "--ppulog") && i + 1 < argc) {
+            if (!(ppulog_f = fopen(argv[++i], "wb"))) die("cannot write %s", argv[i]);
+        }
         else if (!strcmp(argv[i], "--sound") && i + 1 < argc) {
             if (!(sound_f = fopen(argv[++i], "wb"))) die("cannot write %s", argv[i]);
         }
@@ -839,6 +877,19 @@ int main(int argc, char **argv) {
         if (!a || n != 65536) die("no APU RAM view");
         fwrite(a, 1, n, apulog_f);
     }
+    if (ppulog_f) {
+        struct Cb { void (*insn)(uint32_t); void (*write)(uint32_t, uint8_t, int); void (*read)(uint32_t, uint8_t);
+                    void (*interrupt)(uint32_t, uint16_t); void (*timing)(int, int, uint32_t); };
+        static struct Cb cb = { NULL, ppulog_write, ppulog_read, NULL, NULL };
+        void (*set_cb)(const struct Cb *) = dlsym(core, "sfxbox_set_callbacks");
+        void (*snap)(uint8_t *) = dlsym(core, "sfxbox_core_snapshot");
+        *(void **)&sfxbox_core_beam_p = dlsym(core, "sfxbox_core_beam");
+        if (!set_cb || !snap || !sfxbox_core_beam_p) die("missing symbol sfxbox_core_beam (the core predates patch 0015)");
+        static uint8_t s[0x20000 + 0x10000 + 0x10000 + 544 + 512 + 0x10000];
+        snap(s);
+        fwrite(s, 1, sizeof s, ppulog_f);
+        set_cb(&cb);
+    }
     if (checklib) {
         char rp[4096]; snprintf(rp, sizeof rp, "%s/check.txt", outdir);
         if (check_begin(core, checklib, only, rp)) die("check setup failed");
@@ -863,6 +914,7 @@ int main(int argc, char **argv) {
     if (pacing_f) fclose(pacing_f);
     if (sound_f) fclose(sound_f);
     if (apulog_f) fclose(apulog_f);
+    if (ppulog_f) fclose(ppulog_f);
     if (voices_f) fclose(voices_f);
     printf("frames %ld\n", frames);
     return 0;

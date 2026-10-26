@@ -75,7 +75,7 @@ typedef struct {
     uint8_t window_layers;              /* bit n: layer n clipped by the windows on the main screen */
     uint8_t window_sub_layers;
     uint8_t window_use[6];              /* each of the 4 layers, the sprites and the colour window: */
-                                        /* bit 0 window 1 on, 1 inverted, 2 window 2 on, 3 inverted */
+                                        /* bit 0 window 1 inverted, 1 on, 2 window 2 inverted, 3 on */
     uint8_t window_logic[6];            /* how the two combine: 0 or, 1 and, 2 xor, 3 xnor */
     uint8_t colour_clip, colour_prevent;/* where colours are cut to black / maths kept off: 0-3 */
     uint8_t colour_sub_screen;          /* add or subtract the sub screen (else the fixed colour) */
@@ -120,6 +120,12 @@ void video_line_tables_step(void);
 void video_frame_begin(void);
 /* The settings in force at a line (for the platform's drawing). */
 void video_screen_at(unsigned line, VideoScreen *s, uint16_t palette[256]);
+
+/* ---- video/render.c: the picture drawn ---- */
+/* A line, or all of them, in 15-bit colour (red in the low bits), the
+   brightness applied. */
+void video_render_line(unsigned line, uint16_t out[256]);
+void video_render(uint16_t out[VIDEO_LINES][256]);
 
 /* ---- video/uploads.c: the game's graphics sent ---- */
 void video_from_bank_7f(uint16_t n, uint16_t at, uint16_t word);

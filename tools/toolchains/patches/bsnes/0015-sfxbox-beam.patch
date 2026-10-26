@@ -1,0 +1,22 @@
+--- a/bsnes/emulator/sfxbox.hpp
++++ b/bsnes/emulator/sfxbox.hpp
+@@ -96,6 +96,7 @@
+ // OAM 544, CGRAM 512, APU RAM 64K, in that order.
+ enum { SFXBOX_SNAPSHOT_SIZE = 0x20000 + 0x10000 + 0x10000 + 544 + 512 + 0x10000 };
+ void sfxbox_core_snapshot(uint8_t* out);
++void sfxbox_core_beam(int* v, int* h);
+ 
+ // ---- Super FX ----
+ // Events from the Super FX for the harness (target-libretro/sfxbox.cpp keeps
+--- a/bsnes/sfc/cpu/cpu.cpp
++++ b/bsnes/sfc/cpu/cpu.cpp
+@@ -8,6 +8,9 @@
+ }
+ 
+ extern "C" uint32_t sfxbox_core_clock(void) { return SuperFamicom::cpu.sfxboxClock(); }
++//The beam's position now: the line (0 at the top of the picture's
++//frame) and the dot within it.
++extern "C" void sfxbox_core_beam(int* v, int* h) { *v = SuperFamicom::cpu.vcounter(); *h = SuperFamicom::cpu.hcounter(); }
+ extern "C" void sfxbox_core_charge(uint32_t clocks) { SuperFamicom::cpu.sfxboxCharge(clocks); }
+ extern "C" uint8_t sfxbox_core_access(int write, uint32_t addr, uint8_t data) {
+   if(write) { SuperFamicom::cpu.write(addr, data); return data; }
