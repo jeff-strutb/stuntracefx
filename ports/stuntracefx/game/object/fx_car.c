@@ -956,43 +956,92 @@ cleared:
 }
 
 /* Remaster, Frame rate 60 (remaster.h): the hit is judged once a step, on
-   the step's tick, from the step's average push. A wall's push grows with
-   how far the car has gone into it; the original's car goes a whole step
-   in before it answers, a tick's a sixth as far, so a tick's push alone
-   is smaller for the same crash. What a step's pushes add up to does not
-   depend on the step's length: the speed into the wall they take away.
-   Each run of the step (+$1C bit 3 runs a car twice, $263C 0 then 1) is
-   summed apart, as the original sums its two. */
-static int32_t rm_hit_sum[0x8000 >> 4][2][3];
+   the step's tick, from a step's time of pushes. A wall's push grows with
+   how far the car has gone into it: the original's car goes a whole step
+   in before the wall answers, so a crash's push lands on one step; a
+   tick goes a sixth as far, and the push is spread over the ticks around
+   the moment of impact, which a step's boundary may cut in two. What
+   RM_TICKS ticks of pushes add up to does not depend on the step's
+   length (the speed into the wall they take away), so the hit is the
+   strongest RM_TICKS ticks in a row since the last one judged, averaged:
+   the step the original's crash would have been. A tick counts towards
+   one judged hit only. Each run of the step (+$1C bit 3 runs a car twice,
+   $263C 0 then 1) is kept apart, as the original sums its two. */
+typedef struct {
+    unsigned tick[2 * RM_TICKS];        /* 0: none */
+    int16_t push[2 * RM_TICKS][3];
+    unsigned judged;                    /* the last tick of the last hit judged */
+} RmHits;
+static RmHits rm_hits[0x8000 >> 4][2];
+/* the hit times 1.1: measured over ten race plays (RM_HIT_SCALE / 10) */
+#define RM_HIT_SCALE 11
+
+/* how strong a hit's pushes are, as FxCarHit weighs them */
+static int32_t rm_hit_weight(const int32_t v[3])
+{
+    return (v[0] < 0 ? -v[0] : v[0]) / 8 + (v[1] < 0 ? -v[1] : v[1]) / 4 + (v[2] < 0 ? -v[2] : v[2]) / 8;
+}
+
+/* the step's hit into v[3]: the strongest RM_TICKS ticks in a row kept
+   since the last judged */
+static void rm_hit_of_step(RmHits *h, unsigned now, int32_t v[3])
+{
+    int32_t best = -1, w[3];
+    unsigned end, k, j, last = 0;
+
+    v[0] = v[1] = v[2] = 0;
+    for (end = now; end + 2 * RM_TICKS > now && end > h->judged && end >= RM_TICKS; end--) {
+        w[0] = w[1] = w[2] = 0;
+        for (k = 0; k < RM_TICKS; k++) {
+            unsigned t = end - k;
+            j = t % (2 * RM_TICKS);
+            if (t > h->judged && h->tick[j] == t) {
+                w[0] += h->push[j][0];
+                w[1] += h->push[j][1];
+                w[2] += h->push[j][2];
+            }
+        }
+        if (rm_hit_weight(w) > best) {
+            best = rm_hit_weight(w);
+            memcpy(v, w, sizeof w);
+            last = end;
+        }
+    }
+    h->judged = last ? last : now;
+}
 
 void abi_FxCarHit(void)
 {
     uint16_t ret = gsu.r[11];
     uint16_t tick[3] = {0, 0, 0};
-    int32_t *sum = NULL;
+    RmHits *h = NULL;
     FxRegs g;
     int i;
 
     if (rm_sharing()) {
-        sum = rm_hit_sum[(gsu.r[8] >> 4) & 0x7FF][gsu_rd8(gsu_ram(FX_HIT_ON)) | gsu_rd8(gsu_ram(FX_HIT_ON + 1)) ? 1 : 0];
+        unsigned now = rm_tick_count(), j = now % (2 * RM_TICKS);
+        int32_t v[3];
+
+        h = &rm_hits[(gsu.r[8] >> 4) & 0x7FF][gsu_rd8(gsu_ram(FX_HIT_ON)) | gsu_rd8(gsu_ram(FX_HIT_ON + 1)) ? 1 : 0];
+        h->tick[j] = now;
         for (i = 0; i < 3; i++) {
             uint16_t a = (uint16_t)(FX_HIT_X + 2 * i);
             tick[i] = (uint16_t)(gsu_rd8(gsu_ram(a)) | gsu_rd8(gsu_ram((uint16_t)(a + 1))) << 8);
-            sum[i] += (int16_t)tick[i];
+            h->push[j][i] = (int16_t)tick[i];
         }
         if (!rm_step_due())
             { gsu_code(0x040000 | ret, 1); return; }
+        rm_hit_of_step(h, now, v);
         for (i = 0; i < 3; i++) {
-            uint16_t v = (uint16_t)(sum[i] / RM_TICKS), a = (uint16_t)(FX_HIT_X + 2 * i);
-            gsu_wr8(gsu_ram(a), (uint8_t)v);
-            gsu_wr8(gsu_ram((uint16_t)(a + 1)), (uint8_t)(v >> 8));
-            sum[i] = 0;
+            uint16_t x = (uint16_t)(v[i] * RM_HIT_SCALE / (RM_TICKS * 10)), a = (uint16_t)(FX_HIT_X + 2 * i);
+            gsu_wr8(gsu_ram(a), (uint8_t)x);
+            gsu_wr8(gsu_ram((uint16_t)(a + 1)), (uint8_t)(x >> 8));
         }
     }
     memcpy(g.r, gsu.r, sizeof g.r);
     g = FxCarHit(g, GSU_COPY(0));
     memcpy(gsu.r, g.r, 15 * sizeof g.r[0]);
-    if (sum)                            /* the tick's own pushes back for its move */
+    if (h)                              /* the tick's own pushes back for its move */
         for (i = 0; i < 3; i++) {
             uint16_t a = (uint16_t)(FX_HIT_X + 2 * i);
             gsu_wr8(gsu_ram(a), (uint8_t)tick[i]);

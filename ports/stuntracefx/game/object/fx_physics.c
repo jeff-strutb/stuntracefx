@@ -27,6 +27,67 @@ static uint16_t rm_beyond[8], rm_kept, rm_beyond_car;
 static unsigned rm_beyond_tick;
 /* a jump asked for in a step not yet reached its tick, by the car's record */
 static uint8_t rm_jump_asked[0x8000];
+
+/* The car's collisions where its step would carry it: the original moves
+   a car a whole step, then meets what it has gone into, as deep as a
+   step takes it, and is pushed out as hard; a tick goes a sixth as far.
+   So, sharing, the car is put ahead by the rest of its step's move (its
+   velocity / 8 for the ticks left in the step) for FxCarCollide and back
+   after it, by the same amount, so what the collision did stands. A car
+   resting on a wall has no move into it left: its contact is as before. */
+static uint16_t rm_ahead_by[3];
+static void rm_ahead_move(uint16_t rec, int on);
+static uint16_t rm_word(uint16_t a);
+
+/* the rest of the car's step move: velocity / 8 for the ticks left */
+static void rm_ahead_set(uint16_t car)
+{
+    int left = RM_TICKS - 1 - (int)(rm_tick_count() % RM_TICKS), i;
+    for (i = 0; i < 3; i++)
+        rm_ahead_by[i] = (uint16_t)((int16_t)rm_word((uint16_t)(car + 0x2E + 2 * i)) * left / (8 * RM_TICKS));
+}
+
+static void rm_ahead(uint16_t car, int on)
+{
+    if (!rm_sharing())
+        return;
+    if (on)
+        rm_ahead_set(car);
+    rm_ahead_move(car, on);
+}
+
+/* the word at Super FX RAM a */
+static uint16_t rm_word(uint16_t a)
+{
+    return (uint16_t)(gsu_rd8(gsu_ram(a)) | gsu_rd8(gsu_ram((uint16_t)(a + 1))) << 8);
+}
+
+/* record rec's position moved on (on) or back by rm_ahead_by */
+static void rm_ahead_move(uint16_t rec, int on)
+{
+    int i;
+    for (i = 0; i < 3; i++) {
+        uint16_t a = (uint16_t)(rec + 0x1E + 2 * i), p = rm_word(a);
+        p = (uint16_t)(on ? p + rm_ahead_by[i] : p - rm_ahead_by[i]);
+        gsu_wr8(gsu_ram(a), (uint8_t)p);
+        gsu_wr8(gsu_ram((uint16_t)(a + 1)), (uint8_t)(p >> 8));
+    }
+}
+
+/* The same for the car's parts (its wheels: their touches are the
+   course's walls and ground), for FxPartsUpdate: each part (the list at
+   the car's +$3E, linked by +$34) by the car's step left. */
+static void rm_ahead_parts(uint16_t car, int on)
+{
+    uint16_t part;
+    int n;
+    if (!rm_sharing())
+        return;
+    if (on)
+        rm_ahead_set(car);
+    for (part = rm_word((uint16_t)(car + 0x3E)), n = 0; part && n < 16; part = rm_word((uint16_t)(part + 0x34)), n++)
+        rm_ahead_move(part, on);
+}
 /* the control bits of the step's ticks so far, by the car's record */
 static uint8_t rm_steer_bits[0x8000];
 
@@ -5280,10 +5341,12 @@ lB5FF:
     gsu_code(0x04b612, 4); gsu_code(0x04a4ed, 1);
     abi_FxCarMoveParts();
 lB616:
+    rm_ahead_parts(R[8], 1);
     R[11] = 0xB61B;
     gsu_code(0x04b617, 4); gsu_code(0x04a607, 1);
     goto lA607;
 lB61B:
+    rm_ahead_parts(R[8], 0);
     R[11] = 0xB620;
     gsu_code(0x04b61c, 4); gsu_code(0x04bc7b, 1);
     abi_FxRecordHoldY();
@@ -5328,10 +5391,12 @@ lB620:
     gsu_code(0x04b652, 2);
     gsu_sbk(R[0]);
 lB653:
+    rm_ahead(R[8], 1);
     R[11] = 0xB658;
     gsu_code(0x04b654, 4); gsu_code(0x04bd20, 1);
     goto lBD20;
 lB658:
+    rm_ahead(R[8], 0);
     R[11] = 0xB65D;
     gsu_code(0x04b659, 4); gsu_code(0x04bcba, 1);
     abi_FxRecordAlignment();
