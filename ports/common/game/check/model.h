@@ -19,6 +19,14 @@ void model_load_rom(const char *path);
    them, and as last written */
 extern uint16_t model_pads[2], model_htime, model_vtime;   /* the raster interrupt's dot and line */
 extern uint8_t model_sound_in[4], model_sound_out[4];
+/* the decomp's routines a check lets its code call by address (handlers
+   kept in RAM, routines reached through tables) */
+typedef struct {
+    uint32_t addr;
+    void (*run)(void);
+} ModelRoutine;
+extern const ModelRoutine *model_routines;
+extern int model_nroutines;
 extern int model_io_n;
 extern uint32_t model_io[4096];
 void model_reset(void);

@@ -64,6 +64,23 @@ static void die(const char *what, uint32_t a)
     exit(2);
 }
 
+const ModelRoutine *model_routines;
+int model_nroutines;
+
+/* The decomp's call by address, to the routines the check names. */
+void old_call_routine(uint32_t addr, int long_call)
+{
+    int i;
+
+    (void)long_call;
+    for (i = 0; i < model_nroutines; i++)
+        if (model_routines[i].addr == addr) {
+            model_routines[i].run();
+            return;
+        }
+    die("routine", addr);
+}
+
 uint16_t model_pads[2], model_htime, model_vtime;
 uint8_t model_sound_in[4], model_sound_out[4];
 

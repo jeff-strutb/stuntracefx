@@ -31,7 +31,7 @@ for o in $OLD; do objcopy --redefine-syms="$OUT/rename" "$o"; done
 DEF=$(nm $OLD | awk 'NF==3 && $2 ~ /^[TDBRC]$/ {print $3}' | sort -u)
 { echo '#include <stdio.h>'; echo '#include <stdlib.h>'
   nm -u $OLD | awk '{print $2}' | sort -u | grep '^old_' | while read s; do
-    case "$s" in old_rd8|old_wr8|old_cyc|old_cpu_idle|old_cpu|old_gsu|old_gsu_*) continue;; esac
+    case "$s" in old_rd8|old_wr8|old_cyc|old_cpu_idle|old_cpu|old_gsu|old_gsu_*|old_call_routine) continue;; esac
     echo "$DEF" | grep -qx "$s" && continue
     echo "void $s(void) { fprintf(stderr, \"check: the decomp's code called $s, outside the check\\\\n\"); exit(2); }"
   done; } > "$OUT/stubs.c"
