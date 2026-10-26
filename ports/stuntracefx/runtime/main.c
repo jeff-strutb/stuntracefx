@@ -285,90 +285,9 @@ static void save_write(int force)
 /* ---- input ---- */
 static uint16_t keys;
 
-/* ---- the Remaster Options (rm_options.h) ----
-   Frame rate 60 (F1 toggles it): the race's loop runs a game frame each
-   tick, 1/60 s. A race frame waits for its tick (the vertical blank's
-   start), then runs as native code (the console untimed: snes.h), its
-   Super FX programs to their STOPs; at its end its screen goes to the
-   display at once (the game's upload stages in one go), and the simulation
-   steps a tick at a time (game/include/remaster.h). Not in the attract's
-   demos ($10DA set), which replay the original's buttons frame by frame.
-   The option is taken at each frame's end. */
-static int rm_on;                       /* Frame rate 60 */
-static int rm_pace;                     /* video frames a race frame: 1 at 60; 0 the original's */
-static int rm_share_on;                 /* the steps shared out over RM_TICKS ticks */
-/* each field's carried share (rm_share), by its address: work RAM, the
-   Super FX's RAM; in 1/RM_SHARE_ONE of a unit */
-static int32_t rm_carry_w[0x20000], rm_carry_s[0x10000];
-
-int rm_tick60(void) { return rm_pace && snes_untimed(); }
-
-int rm_sharing(void) { return rm_share_on && snes_untimed(); }
-
-int32_t rm_share_by(uint32_t field, int32_t d, int32_t mul)
-{
-    int32_t *c;
-    int64_t t, q, one = (int64_t)RM_SHARE_ONE * RM_TICKS;
-    if (!rm_sharing())
-        return d;
-    c = (field >> 16 & 0xFE) == 0x70 ? &rm_carry_s[field & 0xFFFF]
-                                      : &rm_carry_w[field & 0x1FFFF];
-    t = (int64_t)d * mul + *c;
-    q = t >= 0 ? t / one : -((one - 1 - t) / one);  /* floor */
-    *c = (int32_t)(t - q * one);
-    return (int32_t)q;
-}
-
-int32_t rm_share(uint32_t field, int32_t d)
-{
-    return rm_share_by(field, d, RM_SHARE_ONE);
-}
-
-static unsigned rm_ticks;               /* ticks run, sharing */
-
-unsigned rm_tick_count(void) { return rm_ticks; }
-
-int rm_step_due(void)
-{
-    return !rm_sharing() || rm_ticks % RM_TICKS == RM_TICKS - 1;
-}
-
-void rm_race_frame(void)
-{
-    int n;
-    if (!rm_pace)
-        return;
-    if (rm_share_on)
-        rm_ticks++;
-    snes_set_untimed(0);
-    for (n = 0; n < rm_pace; n++)       /* the tick */
-        snes_wait_vblank();
-    snes_set_untimed(1);
-}
-
-void rm_step_over(void)
-{
-    snes_set_untimed(0);
-}
-
-void rm_race_frame_end(void)
-{
-    snes_set_untimed(0);
-}
-
-/* At each frame's end. RM_REF_PACE=N (a check, not an option): the
-   original's whole steps, untimed, one each N video frames, to compare a
-   run at 60 with the original at a steady pace. */
-static void rm_apply(void)
-{
-    static int ref = -1;
-    if (ref < 0)
-        ref = getenv("RM_REF_PACE") ? atoi(getenv("RM_REF_PACE")) : 0;
-    rm_on = rm_option(RM_OPT_FRAMERATE) && snes_wram()[0x10DA] == 0;
-    rm_pace = ref ? ref : rm_on;
-    rm_share_on = rm_on && !ref;
-}
-
+/* ---- the Remaster Options (game/remaster) ----
+   F1 Frame rate 60, F2 Widescreen; the game takes them at each frame's
+   end (rm_frame_end). */
 static void key(int vk, int down)
 {
     uint16_t m = 0;
@@ -682,7 +601,7 @@ static void frame(void)
 {
     uint16_t b0 = 0, b1 = 0;
     frame_no++;
-    rm_apply();
+    rm_frame_end();
     {
         /* RM_TRACE=FILE (a check): each video frame, the player's car as
            the view takes it (direct page $C5, $C7, $C9) and the race time
@@ -762,11 +681,11 @@ static void frame(void)
         if (on) {
             uint64_t now = host_ticks_ns();
             if (!t0)
-                t0 = now, ticks0 = rm_ticks, f0 = frame_no;
+                t0 = now, ticks0 = rm_tick_count(), f0 = frame_no;
             else if (now - t0 >= 1000000000ull) {
                 fprintf(stderr, "rate: %.1f video frames/s, %.1f ticks/s at 60, frame %ld\n",
-                        (frame_no - f0) * 1e9 / (double)(now - t0), (rm_ticks - ticks0) * 1e9 / (double)(now - t0), frame_no);
-                t0 = now, ticks0 = rm_ticks, f0 = frame_no;
+                        (frame_no - f0) * 1e9 / (double)(now - t0), (rm_tick_count() - ticks0) * 1e9 / (double)(now - t0), frame_no);
+                t0 = now, ticks0 = rm_tick_count(), f0 = frame_no;
             }
         }
     }

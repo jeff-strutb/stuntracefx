@@ -1,11 +1,12 @@
 /*
- * rm_options.c: the Remaster Options (rm_options.h).
+ * options.c: the Remaster Options (rm_options.h), kept in the console's
+ * save folder.
  */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "host.h"
+#include "console_ext.h"
 #include "rm_options.h"
 
 static const struct { const char *name; int def; } k_opt[RM_OPT_COUNT] = {
@@ -16,7 +17,7 @@ static int value[RM_OPT_COUNT], forced[RM_OPT_COUNT], loaded;
 
 static void cfg_path(char *out, size_t n)
 {
-    snprintf(out, n, "%s/remaster.cfg", host_save_dir());
+    snprintf(out, n, "%s/remaster.cfg", nshvc_save_dir());
 }
 
 void rm_options_load(void)

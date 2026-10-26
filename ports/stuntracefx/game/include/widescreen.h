@@ -1,6 +1,6 @@
 /*
  * widescreen.h: the race's wide view (WIDESCREEN.md), as the game's C asks
- * for it; runtime/rm_view.c answers. While no wider view is in force every
+ * for it; game/remaster/view.c answers. While no wider view is in force every
  * answer is the original's: focal length 128, the view's words as the game
  * set them, the sort's 45 degree cull.
  *

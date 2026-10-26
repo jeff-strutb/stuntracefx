@@ -1,5 +1,5 @@
 /*
- * rm_view.c: the race's wide view (game/include/widescreen.h).
+ * view.c: the race's wide view (game/include/widescreen.h).
  *
  * The view is eight words (WIDESCREEN.md, the audit): the screen centre,
  * the edges, and the frustum planes' slopes. With focal length f, half-width

@@ -68,11 +68,6 @@ void fx_fill_span(const FxDrawSource *src, FxCanvas *c, const FxSpan *s);
 /* the whole list drawn into c: the two above */
 void fx_draw_list(const FxDrawSource *src, FxCanvas *c);
 
-/* FxDrawList starting and done: the port's check of this file's fill
-   against the Super FX's (PORT_FXCHECK=1; nothing otherwise) */
-void fx_list_begin(void);
-void fx_list_end(void);
-
 /* the noise fill's generator, one step (07:EEBB) */
 uint16_t fx_noise_step(uint16_t s);
 

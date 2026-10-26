@@ -1,6 +1,7 @@
 /*
- * remaster.h: the Remaster Options the game's C asks about (the runtime's
- * rm_options.c keeps them; main.c applies them). Off, the game is the original's, exactly.
+ * remaster.h: the Remaster Options the game's C asks about (game/remaster:
+ * options.c keeps them, remaster.c applies them). Off, the game is the
+ * original's, exactly.
  */
 #ifndef SRFX_REMASTER_H
 #define SRFX_REMASTER_H
@@ -56,6 +57,8 @@ void rm_race_frame_end(void);
    race (the results and the screens they open). From here it runs frames
    of its own on the console's time; the next race frame is a tick again. */
 void rm_step_over(void);
+/* the options taken, at each frame's end (the front end calls it) */
+void rm_frame_end(void);
 /* the finished screen to the display at once: video/dma.c */
 void RmRaceScreenShow(void);
 

@@ -1969,13 +1969,12 @@ void abi_FxDrawList(void)
 {
     int minus;
 
-    fx_list_begin();
     gsu_code(0x01a932, 3);
     R[1] = gsu_ldw(FX_LIST_END);
     R[0] = DRAW_LIST;
     R[0] = gsu_sub(R[0], R[1], 0);
     if (gsu.z)
-        { gsu_code(0x01a935, 8); gsu_code(0x010000 | R[11], 1); fx_list_end(); return; } else { gsu_code(0x01a935, 6); gsu_code(0x01a93d, 1); }
+        { gsu_code(0x01a935, 8); gsu_code(0x010000 | R[11], 1); return; } else { gsu_code(0x01a935, 6); gsu_code(0x01a93d, 1); }
     gsu_code(0x01a93e, 2);
     gsu_push(&R[10], R[11]);
     gsu_code(0x01a940, 5);
@@ -2036,7 +2035,6 @@ void abi_FxDrawList(void)
         R[10] = gsu_ldw(FX_LIST_STACK);
         gsu_code(0x01a92d, 4);
         gsu_code(0x010000 | gsu_pull(&R[10]), 1);
-        fx_list_end();
         return;
     }
 }
