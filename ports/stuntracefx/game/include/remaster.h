@@ -39,6 +39,8 @@ int32_t rm_share_by(uint32_t field, int32_t d, int32_t mul);
 #define RM_DECAY_4  4602            /* c = 1/4 */
 #define RM_DECAY_8  4327            /* c = 1/8 */
 #define RM_DECAY_16 4207            /* c = 1/16 */
+#define RM_CAM_5_64 4236            /* c = 5/64 */
+#define RM_CAM_5_128 4164           /* c = 5/128 */
 /* rm_share for a signed word of the Super FX's RAM (bank $70) */
 static inline uint16_t rm_share_fx(uint16_t addr, uint16_t d)
 {

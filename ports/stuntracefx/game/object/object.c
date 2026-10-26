@@ -150,6 +150,8 @@ void abi_ObjectCopyPositionFrom(void)
  * Entry: M 8-bit, X 16-bit; DB = the object table's bank. Exit: A = the new
  * +$10; flags from the last add; M 8-bit.
  */
+static int apply_whole;                 /* Remaster: ObjectApplyVelocityWhole */
+
 static uint16_t apply_velocity(uint8_t bank, uint16_t obj, uint8_t *p)
 {
     uint16_t r = 0;
@@ -162,7 +164,8 @@ static uint16_t apply_velocity(uint8_t bank, uint16_t obj, uint8_t *p)
         uint32_t s;
 
         /* Remaster: a tick's share of the step's move (remaster.h) */
-        b = (uint16_t)rm_share(field(bank, obj, (uint16_t)(0x0C + 2 * i)), (int16_t)b);
+        if (!apply_whole)
+            b = (uint16_t)rm_share(field(bank, obj, (uint16_t)(0x0C + 2 * i)), (int16_t)b);
         s = (uint32_t)a + b;
         r = (uint16_t)s;
         wr16(field(bank, obj, (uint16_t)(0x0C + 2 * i)), cyc_then(30, r));
@@ -186,6 +189,16 @@ void abi_ObjectApplyVelocity(void)
 
     cpu.a = apply_velocity(cpu.db, cpu.x, &p);
     cpu.p = (uint8_t)(p | P_M);
+}
+
+/* Remaster (remaster.h): ObjectApplyVelocity for an object placed afresh
+   each step (on another object's position) and then put off it by its
+   velocity: an offset, not a move, so whole at 60 too */
+void abi_ObjectApplyVelocityWhole(void)
+{
+    apply_whole = 1;
+    abi_ObjectApplyVelocity();
+    apply_whole = 0;
 }
 
 /*

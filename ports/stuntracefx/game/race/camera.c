@@ -3,6 +3,7 @@
  * (its target) with a lag set by mode bits.
  */
 #include "machine.h"
+#include "remaster.h"
 
 void abi_Gsu8325(void);
 void abi_Gsu82CE(void);
@@ -183,6 +184,7 @@ void abi_CameraFollowStep(void)
         cyc(46);
         uint16_t rec = rd16(0x700042 + g);
         unsigned jmp = 0;
+        int32_t ease = RM_SHARE_ONE * RM_TICKS;    /* the whole lag: at once */
 
         if ((rec & 0x000C) && !(rd16(cyc_then(100, b | CAM_FLAGS)) & 0x0200)) {
             jmp = 24; /* ends in JMP .pitch */
@@ -191,6 +193,7 @@ void abi_CameraFollowStep(void)
             cyc(118);
             a = (uint16_t)(a - rd16(CAM(r, 0x16)));
             a = asr_n(a, 1);
+            a = (uint16_t)rm_share_by(CAM(r, 0x16), (int16_t)a, RM_DECAY_2);   /* Remaster */
             cyc(42);
             a = (uint16_t)(a + rd16(CAM(r, 0x16)));
         } else {
@@ -214,10 +217,12 @@ void abi_CameraFollowStep(void)
                     w = (uint16_t)(~w + 1);
                 cyc(36 + 24 + (((w - 0x7EF4) & 0x8000) ? 16 : 22) + 24);
                 a = asr_round(rd16(b | CAM_LAG), cyc_then(22, (w - 0x7EF4) & 0x8000 ? 2 : 1));
+                ease = (w - 0x7EF4) & 0x8000 ? RM_DECAY_4 : RM_DECAY_2;
                 break;
             case 0x0800:
                 cyc(174);
                 a = asr_round(rd16(b | CAM_LAG), cyc_then(22, 2));
+                ease = RM_DECAY_4;
                 break;
             case 0x0C00:
                 cyc(214);
@@ -225,6 +230,7 @@ void abi_CameraFollowStep(void)
                 (cyc(62), abi_ScaleFiveThirtySeconds());
                 cyc(22); /* BRA */
                 a = asr_round(cpu.a, 1);
+                ease = RM_CAM_5_64;
                 break;
             case 0x1000:
                 cyc(254);
@@ -232,6 +238,7 @@ void abi_CameraFollowStep(void)
                 (cyc(62), abi_ScaleFiveThirtySeconds());
                 cyc(0);
                 a = asr_round(cpu.a, 2);
+                ease = RM_CAM_5_128;
                 break;
             default:
                 cyc(248);
@@ -239,6 +246,8 @@ void abi_CameraFollowStep(void)
                 cyc(22); /* BRA */
                 break;
             }
+            /* Remaster: the tick's own fraction of the turn's ease (remaster.h) */
+            a = (uint16_t)rm_share_by(CAM(r, 0x16), (int16_t)a, ease);
             cyc(36);
             a = (uint16_t)(a + rd16(CAM(r, 0x16)));
         }
@@ -291,6 +300,7 @@ void abi_CameraFollowStep(void)
         a = (uint16_t)(a + rd16(0x0000B7));
         cyc(36);
         a = asr_n((uint16_t)(a - rd16(CAM(r, 0x08))), 2);
+        a = (uint16_t)rm_share_by(CAM(r, 0x08), (int16_t)a, RM_DECAY_4);   /* Remaster */
         cyc(48);
         a = add16(a, rd16(CAM(r, 0x08)), &p);
         cyc(22);
@@ -301,6 +311,7 @@ void abi_CameraFollowStep(void)
         a = (uint16_t)(a + rd16(0x0000B9));
         cyc(36);
         a = asr_n((uint16_t)(a - rd16(CAM(r, 0x0A))), 3);
+        a = (uint16_t)rm_share_by(CAM(r, 0x0A), (int16_t)a, RM_DECAY_8);   /* Remaster */
         cyc(54);
         a = add16(a, rd16(CAM(r, 0x0A)), &p);
         cyc(22);
@@ -311,6 +322,7 @@ void abi_CameraFollowStep(void)
         a = (uint16_t)(a + rd16(0x0000BB));
         cyc(36);
         a = asr_n((uint16_t)(a - rd16(CAM(r, 0x0C))), 2);
+        a = (uint16_t)rm_share_by(CAM(r, 0x0C), (int16_t)a, RM_DECAY_4);   /* Remaster */
         cyc(48);
         a = add16(a, rd16(CAM(r, 0x0C)), &p);
         cyc(22);
@@ -332,7 +344,11 @@ void abi_CameraFollowStep(void)
         if (f & 0x0010) {
             cyc(36);
             a = (uint16_t)(a - rd16(CAM(r, 0x0A)));
-            a = asr_n(a, (a & 0x8000) ? 1 : 2);
+            {
+                int32_t e = (a & 0x8000) ? RM_DECAY_2 : RM_DECAY_4;
+                a = asr_n(a, (a & 0x8000) ? 1 : 2);
+                a = (uint16_t)rm_share_by(CAM(r, 0x0A), (int16_t)a, e);   /* Remaster */
+            }
             cyc(64);
             a = add16(a, rd16(CAM(r, 0x0A)), &p);
         }

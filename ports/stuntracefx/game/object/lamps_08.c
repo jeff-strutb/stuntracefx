@@ -26,6 +26,7 @@ void abi_ApproachSixteenthMin16Byte(void);
 void abi_ApproachEighthMin8(void);
 void abi_ObjectCopyPositionFrom(void);
 void abi_ObjectApplyVelocity(void);
+void abi_ObjectApplyVelocityWhole(void);
 void abi_GsuRecordNew42D(void);
 void abi_GsuRecordPosition(void);
 void abi_RecordNextContact(void);
@@ -420,7 +421,7 @@ static void spray_piece_step(void)
     cpu.y = rd16(cyc_then(30, F(0x2027, cpu.x)));
     cpu.p = nz16(cpu.p, cpu.y);
     (cyc(62), abi_ObjectCopyPositionFrom());
-    (cyc(62), abi_ObjectApplyVelocity());
+    (cyc(62), abi_ObjectApplyVelocityWhole());   /* Remaster: an offset (remaster.h) */
     cpu.p &= (uint8_t)~P_M;
     op_lda16(cyc_then(52, F(0x2030, cpu.x)));
     cyc(16);

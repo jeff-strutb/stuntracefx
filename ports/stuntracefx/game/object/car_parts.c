@@ -11,6 +11,7 @@
  */
 #include "machine.h"
 #include "cpu_ops.h"
+#include "remaster.h"
 
 void abi_RotateXY(void);
 void abi_RotateXZFrom08(void);
@@ -408,6 +409,29 @@ void abi_PartDetachStep(void)
     detach_frame();
 }
 
+/* Remaster (remaster.h): a field the original eased by its step's
+   fraction, back to its value before (kept at was_at) plus the tick's own
+   fraction of that change */
+static void rm_eased16(uint32_t addr, uint32_t was_at, int32_t mul)
+{
+    uint16_t was;
+
+    if (!rm_sharing())
+        return;
+    was = rd16(was_at);
+    wr16(addr, (uint16_t)(was + rm_share_by(addr, (int16_t)(uint16_t)(rd16(addr) - was), mul)));
+}
+
+static void rm_eased8(uint32_t addr, uint32_t was_at, int32_t mul)
+{
+    uint8_t was;
+
+    if (!rm_sharing())
+        return;
+    was = rd8(was_at);
+    wr8(addr, (uint8_t)(was + rm_share_by(addr, (int8_t)(uint8_t)(rd8(addr) - was), mul)));
+}
+
 /* 08:AE0F: the returning part's frame (see PartReturnStep). */
 static void return_frame(void)
 {
@@ -445,6 +469,7 @@ static void return_frame(void)
             op_lda16(t[i]);
             abi_ApproachQuarterMin4();
             wr16(F(f[i], cpu.x), cyc_then(30, cpu.a));
+            rm_eased16(F(f[i], cpu.x), 0x00003E, RM_DECAY_4);
             cpu.p |= P_M;
         }
         cyc(22);
@@ -454,6 +479,7 @@ static void return_frame(void)
             ld8(cyc_then(14, F(0x2014 + i, cpu.y)));
             (cyc(62), abi_ApproachQuarterMin4Byte());
             wr8(F(0x2014 + i, cpu.x), cyc_then(30, (uint8_t)cpu.a));
+            rm_eased8(F(0x2014 + i, cpu.x), 0x00003E, RM_DECAY_4);
         }
         cyc(62);
     }

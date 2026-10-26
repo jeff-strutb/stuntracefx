@@ -9,6 +9,22 @@
  */
 #include "machine.h"
 #include "cpu_ops.h"
+#include "remaster.h"
+
+/* Remaster, Frame rate 60 (remaster.h): the per-step helpers of the
+   objects' frames: a move or growth a tick's share at a time; a count
+   only on the tick that completes a step (between, a countdown reads as
+   not run out, so its event keeps the original's step); an ease by the
+   tick's own fraction of it. */
+static void add8s(uint32_t addr, uint8_t v);
+static void add16s(uint32_t addr, uint16_t v);
+static void add16_vias(uint32_t dst, uint32_t src);
+static uint8_t dec8s(uint32_t addr);
+static void inc8s(uint32_t addr);
+static int ease8s(uint32_t addr, uint8_t target, void (*to)(void));
+void abi_ApproachEighthMin8Byte(void);
+void abi_ApproachHalfMin2Byte(void);
+
 
 void abi_ObjectSpawn(void);
 void abi_ObjectCopyPositionTo(void);
@@ -384,7 +400,7 @@ static void counter_show(uint16_t o)
     v = ld8(cyc_then(22, F(0x2048, o)));
     cmp8(0x00);
     if (v)
-        { cyc(60); dec8(F(0x2048, o)); } else { cyc(64); }
+        { cyc(60); dec8s(F(0x2048, o)); } else { cyc(64); }
     cyc(22);
     v = ld8(F(0x2048, o));
     wr8(db() | 0x1F58, cyc_then(24, v));
@@ -405,9 +421,11 @@ static void counter_tick(void)
     cmp8(0x00);
     if (v) {
         cyc(60);
-        dec8(F(0x2049, o));
+        dec8s(F(0x2049, o));
         return;
     } else { cyc(70); }
+    if (!rm_step_due())                 /* Remaster: on the step's tick */
+        return;
     st8i(F(0x2049, o), 0x02);
     cpu.y = rd16(cyc_then(30, F(0x2027, o)));
     cpu.p = nz16(cpu.p, cpu.y);
@@ -430,7 +448,7 @@ static void counter_tick(void)
     v = ld8(F(0x2048, o));
     cmp8(0x09);
     if (v != 0x09)
-        { cyc(22); inc8(F(0x2048, o)); } else { cyc(64); }
+        { cyc(22); inc8s(F(0x2048, o)); } else { cyc(64); }
     cyc(22);
     v = ld8(F(0x2048, o));
     wr8(db() | 0x1F58, cyc_then(24, v));
@@ -467,14 +485,14 @@ static void counter_slide(void)
     cmp8(0x00);
     if (v) {
         cyc(60);
-        dec8(F(0x200A, o));
+        dec8s(F(0x200A, o));
         v = ld8(cyc_then(22, F(0x2015, o)));
         cyc(16);
         wr8(0x00003E, v);
         lda8(0x40);
         (cyc(58), abi_ApproachQuarterMin4Byte());
         wr8(F(0x2015, o), cyc_then(30, (uint8_t)cpu.a));
-        add16(F(0x200C, o), cyc_then(22, 0x005A));
+        add16s(F(0x200C, o), cyc_then(22, 0x005A));
     } else { cyc(42); }
     counter_tick();
 }
@@ -538,7 +556,7 @@ void abi_ObjectScoreCounterStep(void)
 static void piece_frame(void)
 {
     (cyc(62), abi_ObjectSyncFromRecord());
-    if (dec8(cyc_then(22, F(0x200A, cpu.x))) == 0)
+    if (dec8s(cyc_then(22, F(0x200A, cpu.x))) == 0)
         { cyc(84); abi_ObjectRelease(); cyc(44); } else { cyc(92); }
 }
 
@@ -656,11 +674,11 @@ void abi_ObjectFireworkBurst(void)
    released with sound $56 and bursts into four sparks. */
 static void shell_frame(void)
 {
-    if (dec8(cyc_then(22, F(0x200A, cpu.x))) == 0)
+    if (dec8s(cyc_then(22, F(0x200A, cpu.x))) == 0)
         { cyc(84); abi_ObjectRelease(); cyc(22); } else { cyc(70); }
-    add16(F(0x2014, cpu.x), 0x000C);
-    add16(F(0x2015, cpu.x), cyc_then(44, 0x000C));
-    add16(F(0x2016, cpu.x), cyc_then(44, 0x000C));
+    add16s(F(0x2014, cpu.x), 0x000C);
+    add16s(F(0x2015, cpu.x), cyc_then(44, 0x000C));
+    add16s(F(0x2016, cpu.x), cyc_then(44, 0x000C));
     (cyc(84), abi_ObjectSyncFromRecord());
     lda8((uint8_t)(cpu.a & 0x01));
     if (!(uint8_t)cpu.a)
@@ -953,15 +971,15 @@ static void bumper_frame(void)
 
     if (v) {
         cyc(22);
-        add8(F(0x2015, cpu.x), 0x06);
-        add8(F(0x2014, cpu.x), 0x0A);
-        add8(F(0x2016, cpu.x), 0x0A);
-        add8(F(0x2048, cpu.x), 0xFF);
+        add8s(F(0x2015, cpu.x), 0x06);
+        add8s(F(0x2014, cpu.x), 0x0A);
+        add8s(F(0x2016, cpu.x), 0x0A);
+        add8s(F(0x2048, cpu.x), 0xFF);
         cyc(24);                        /* JMP */
-    } else if (!(cyc(30), ease8(F(0x2014, cpu.x), 0x00, abi_ApproachHalfMin2Byte))) {
+    } else if (!(cyc(30), ease8s(F(0x2014, cpu.x), 0x00, abi_ApproachHalfMin2Byte))) {
         cyc(4);
-        ease8(F(0x2016, cpu.x), 0x00, abi_ApproachHalfMin2Byte);
-        add8(F(0x2015, cpu.x), 0x0C);
+        ease8s(F(0x2016, cpu.x), 0x00, abi_ApproachHalfMin2Byte);
+        add8s(F(0x2015, cpu.x), 0x0C);
     } else { cyc(48); }
     if (!hit()) {
         cyc(18);
@@ -1043,7 +1061,7 @@ static void switch_frame(void)
 
     lda8((uint8_t)(ld8(cyc_then(22, F(0x2025, cpu.x))) & 0x01));
     if ((uint8_t)cpu.a)
-        cyc(ease8(F(0x2048, cpu.x), 0x03, ease_d07c) ? 70 : 44);   /* BCC taken or not, JML */
+        cyc(ease8s(F(0x2048, cpu.x), 0x03, ease_d07c) ? 70 : 44);   /* BCC taken or not, JML */
     else
         cyc(66);
     v = ld8(F(0x2048, cpu.x));
@@ -1057,7 +1075,7 @@ static void switch_frame(void)
     if (!hit())
         { cyc(62); return; } else { cyc(12); }
     or8(F(0x2025, cpu.x), 0x01);
-    add8(F(0x2015, cpu.x), 0x0C);
+    add8s(F(0x2015, cpu.x), 0x0C);
     cyc(58);
     lda8(0x55);
     abi_SoundPort0QueuePush();
@@ -1328,7 +1346,7 @@ static void post2_frame(void)
     op_lda16(cyc_then(94, F(0x2010, cpu.x)));
     wr16(F(0x2027, cpu.y), cyc_then(30, cpu.a));
     cpu.p |= P_M;
-    add16(F(0x2027, cpu.y), cyc_then(44, 0xDD00));
+    add16s(F(0x2027, cpu.y), cyc_then(44, 0xDD00));
     cyc(66);
 }
 
@@ -1408,7 +1426,7 @@ static void ball_follow(void)
     cpu.p = nz16(cpu.p, cpu.y);
     ease16(F(0x200C, cpu.x), F(0x200C, cpu.y), abi_ApproachQuarterMin4);
     (cyc(22), ease16(F(0x2010, cpu.x), F(0x2010, cpu.y), ease_cdc1));
-    add16(F(0x2010, cpu.x), cyc_then(44, 0xFC80));
+    add16s(F(0x2010, cpu.x), cyc_then(44, 0xFC80));
 }
 
 /*
@@ -1429,9 +1447,9 @@ void abi_ObjectBallFollowPlayer(void)
    (03:D07C). */
 static void ball_drop(uint16_t dz, uint16_t dy, uint8_t t)
 {
-    add16(F(0x2010, cpu.x), cyc_then(72, dz));
-    add16(F(0x200E, cpu.x), cyc_then(44, dy));
-    (cyc(4), ease8(F(0x2014, cpu.x), t, ease_d07c));
+    add16s(F(0x2010, cpu.x), cyc_then(72, dz));
+    add16s(F(0x200E, cpu.x), cyc_then(44, dy));
+    (cyc(4), ease8s(F(0x2014, cpu.x), t, ease_d07c));
 }
 
 /* 09:95FC: the rising ball's step, its life +$0A counted down and the
@@ -1439,7 +1457,7 @@ static void ball_drop(uint16_t dz, uint16_t dy, uint8_t t)
 static void ball_rise(void)
 {
     ball_drop(0xFFB0, 0xFF10, 0xC0);
-    if (dec8(cyc_then(22, F(0x200A, cpu.x))) == 0)
+    if (dec8s(cyc_then(22, F(0x200A, cpu.x))) == 0)
         { cyc(84); abi_ObjectRelease(); cyc(42); } else { cyc(90); }   /* RTS */
 }
 
@@ -1501,7 +1519,7 @@ void abi_ObjectSkyBallStep(void)
 
         if (v) {
             cyc(44);
-            dec8(F(0x2049, cpu.x));
+            dec8s(F(0x2049, cpu.x));
             ball_follow();
             cyc(86);                    /* SEP, RTS, BRA */
         } else {
@@ -1546,8 +1564,8 @@ static void drop_frame(void)
 {
     uint16_t sx;
 
-    add8(F(0x2015, cpu.x), 0x10);
-    add8(F(0x2014, cpu.x), 0x10);
+    add8s(F(0x2015, cpu.x), 0x10);
+    add8s(F(0x2014, cpu.x), 0x10);
     (cyc(62), abi_ObjectSyncFromRecord());
     lda8((uint8_t)(cpu.a & 0x01));
     if (!(uint8_t)cpu.a)
@@ -1670,6 +1688,58 @@ static void add16_via(uint32_t dst, uint32_t src)
     cyc(30);
     wr16(dst, cpu.a);
     cpu.p |= P_M;
+}
+
+static void add8s(uint32_t addr, uint8_t v)
+{
+    add8(addr, (uint8_t)rm_share(addr, (int8_t)v));
+}
+
+static void add16s(uint32_t addr, uint16_t v)
+{
+    add16(addr, (uint16_t)rm_share(addr, (int16_t)v));
+}
+
+static void add16_vias(uint32_t dst, uint32_t src)
+{
+    uint16_t v;
+
+    if (!rm_sharing()) {
+        add16_via(dst, src);
+        return;
+    }
+    v = rd16(src);
+    wr16(db() | 0x1F4C, v);
+    add16(dst, (uint16_t)rm_share(dst, (int16_t)v));
+}
+
+static uint8_t dec8s(uint32_t addr)
+{
+    if (!rm_step_due())
+        return 1;
+    return dec8(addr);
+}
+
+static void inc8s(uint32_t addr)
+{
+    if (rm_step_due())
+        inc8(addr);
+}
+
+static int ease8s(uint32_t addr, uint8_t target, void (*to)(void))
+{
+    uint8_t was, now;
+    int c;
+    int32_t mul = to == abi_ApproachEighthMin8Byte ? RM_DECAY_8 : to == abi_ApproachHalfMin2Byte ? RM_DECAY_2
+                : to == ease_d07c ? RM_DECAY_16 : RM_SHARE_ONE;
+
+    if (!rm_sharing())
+        return ease8(addr, target, to);
+    was = rd8(addr);
+    c = ease8(addr, target, to);
+    now = rd8(addr);
+    wr8(addr, (uint8_t)(was + rm_share_by(addr, (int8_t)(uint8_t)(now - was), mul)));
+    return c;
 }
 
 /* A cannon ball: a new object of kind $AA34 linked to object X (+$27),
@@ -1850,9 +1920,9 @@ static void ball_home(void)
 {
     (cyc(46), ease16(F(0x200C, cpu.x), F(0x200C, cpu.y), abi_ApproachQuarterMin4));
     (cyc(22), ease16(F(0x2010, cpu.x), F(0x2010, cpu.y), abi_ApproachQuarterMin4));
-    add16_via(F(0x2010, cpu.x), F(0x202B, cpu.x));
+    add16_vias(F(0x2010, cpu.x), F(0x202B, cpu.x));
     (cyc(22), ease16(F(0x200E, cpu.x), F(0x200E, cpu.y), ease_cdc1));
-    add16_via(F(0x200E, cpu.x), F(0x2029, cpu.x));
+    add16_vias(F(0x200E, cpu.x), F(0x2029, cpu.x));
 }
 
 /*
@@ -1873,9 +1943,9 @@ void abi_ObjectCannonBallHome(void)
    runs out. */
 static void ball_fly(uint16_t dx)
 {
-    add16_via(F(0x2010, cpu.x), F(0x202B, cpu.x));
-    add16(F(0x200C, cpu.x), cyc_then(44, dx));
-    if (dec8(cyc_then(44, F(0x200A, cpu.x))) == 0)
+    add16_vias(F(0x2010, cpu.x), F(0x202B, cpu.x));
+    add16s(F(0x200C, cpu.x), cyc_then(44, dx));
+    if (dec8s(cyc_then(44, F(0x200A, cpu.x))) == 0)
         { cyc(84); abi_ObjectRelease(); cyc(42); } else { cyc(90); }   /* RTS */
 }
 
@@ -1915,7 +1985,7 @@ static void cannon_ball_frame(uint16_t dx)
     v = ld8(cyc_then(22, F(0x2049, cpu.x)));
     if (v) {
         cyc(44);
-        dec8(F(0x2049, cpu.x));
+        dec8s(F(0x2049, cpu.x));
         ball_home();
         cyc(148);
     } else {
@@ -2208,8 +2278,8 @@ static void wave_home(void)
     (cyc(46), ease16(F(0x200C, cpu.x), F(0x200C, cpu.y), abi_ApproachQuarterMin4));
     (cyc(22), ease16(F(0x2010, cpu.x), F(0x2010, cpu.y), abi_ApproachQuarterMin4));
     (cyc(22), ease16(F(0x200E, cpu.x), F(0x200E, cpu.y), abi_ApproachQuarterMin4));
-    add16_via(F(0x200E, cpu.x), F(0x2029, cpu.x));
-    if (dec8(cyc_then(44, F(0x200A, cpu.x))) == 0)
+    add16_vias(F(0x200E, cpu.x), F(0x2029, cpu.x));
+    if (dec8s(cyc_then(44, F(0x200A, cpu.x))) == 0)
         { cyc(84); abi_ObjectRelease(); cyc(42); } else { cyc(90); }   /* RTS */
 }
 
@@ -2250,7 +2320,7 @@ static void sparkle_frame(void)
 {
     uint8_t v;
 
-    if (dec8(cyc_then(22, F(0x200A, cpu.x))) == 0)
+    if (dec8s(cyc_then(22, F(0x200A, cpu.x))) == 0)
         { cyc(84); abi_ObjectRelease(); cyc(22); } else { cyc(70); }
     v = ld8(F(0x2018, cpu.x));
     cpu.p &= (uint8_t)~P_C;
@@ -2320,11 +2390,11 @@ static void big_ball_frame(void)
     lda8((uint8_t)(ld8(cyc_then(22, F(0x2025, cpu.x))) & 0x01));
     if ((uint8_t)cpu.a) {
         cyc(18);
-        add8(F(0x2016, cpu.x), 0x18);
-        add8(F(0x2015, cpu.x), 0x18);
-        add16(F(0x2010, cpu.x), cyc_then(22, 0xFFCE));
-        add16(F(0x200C, cpu.x), cyc_then(44, 0x028A));
-        add16(F(0x200E, cpu.x), cyc_then(44, 0xFF06));
+        add8s(F(0x2016, cpu.x), 0x18);
+        add8s(F(0x2015, cpu.x), 0x18);
+        add16s(F(0x2010, cpu.x), cyc_then(22, 0xFFCE));
+        add16s(F(0x200C, cpu.x), cyc_then(44, 0x028A));
+        add16s(F(0x200E, cpu.x), cyc_then(44, 0xFF06));
         sparkle();
         cyc(64);
     } else {
@@ -3519,7 +3589,7 @@ static void bonus_marker_frame(void)
         { cyc(72); return; }
     if (!lap_is_next(0x00))
         { cyc(34); return; }
-    inc8(db() | 0x1A06);
+    inc8s(db() | 0x1A06);
     lda8(0x01);
     abi_GsuRecordFlags8ASet();
     cpu.p |= P_M;
@@ -3901,7 +3971,7 @@ void abi_ObjectTimeGateStep(void)
  */
 void abi_ObjectPopMarkerStep(void)
 {
-    add8(F(0x2014, cpu.x), 0xF8);
+    add8s(F(0x2014, cpu.x), 0xF8);
     (cyc(62), abi_ObjectRebucket());
     cyc(44);
 }
@@ -3989,8 +4059,8 @@ static void lap_ball_record(uint16_t kind)
    plays sound $25 and leaves a following spark ($B7A8). */
 static void ball_up_frame(void)
 {
-    add8(F(0x2015, cpu.x), 0x10);
-    add8(F(0x2014, cpu.x), 0x10);
+    add8s(F(0x2015, cpu.x), 0x10);
+    add8s(F(0x2014, cpu.x), 0x10);
     if (!synced())
         { cyc(66); return; } else { cyc(10); }
     for (;;) {
@@ -4085,11 +4155,11 @@ void abi_ObjectSparkFollow(void)
     cpu.p = nz16(cpu.p, cpu.y);
     (cyc(62), abi_ObjectCopyPositionFrom());
     (cyc(22), life_down(22));
-    add16(F(0x200E, cpu.x), 0xFF40);
-    add16(F(0x2027, cpu.x), cyc_then(44, 0xFFD8));
-    add16_via(F(0x200E, cpu.x), F(0x2027, cpu.x));
-    add8(F(0x2015, cpu.x), cyc_then(22, 0x10));
-    add8(F(0x2014, cpu.x), 0x10);
+    add16s(F(0x200E, cpu.x), 0xFF40);
+    add16s(F(0x2027, cpu.x), cyc_then(44, 0xFFD8));
+    add16_vias(F(0x200E, cpu.x), F(0x2027, cpu.x));
+    add8s(F(0x2015, cpu.x), cyc_then(22, 0x10));
+    add8s(F(0x2014, cpu.x), 0x10);
     (cyc(62), abi_ObjectRebucket());
     cyc(44);
 }
@@ -4099,8 +4169,8 @@ void abi_ObjectSparkFollow(void)
    and a following spark $B7C4. */
 static void ball_down_frame(void)
 {
-    add8(F(0x2015, cpu.x), 0x10);
-    add8(F(0x2014, cpu.x), 0x10);
+    add8s(F(0x2015, cpu.x), 0x10);
+    add8s(F(0x2014, cpu.x), 0x10);
     if (!synced())
         { cyc(34); return; }
     if ((cyc(6), !next_contact()))
@@ -4471,7 +4541,7 @@ void abi_ObjectCountUpTo2(void)
     cyc(22);
     cmp8(0x02);
     if (v != 0x02)
-        inc8(F(0x2048, cpu.x)); else { cyc(42); }
+        inc8s(F(0x2048, cpu.x)); else { cyc(42); }
     cyc(22);
     v = ld8(F(0x2048, cpu.x));
     wr8(db() | 0x1F58, cyc_then(24, v));
@@ -4485,22 +4555,24 @@ void abi_ObjectCountUpTo2(void)
    the scale +$15 grown by 4. */
 static void bob_frame(void)
 {
-    cpu.p &= (uint8_t)~P_M;
-    op_lda16(cyc_then(52, F(0x2027, cpu.x)));
-    op_add16(rd16(cyc_then(44, F(0x2029, cpu.x))));
-    wr16(F(0x2027, cpu.x), cyc_then(30, cpu.a));
-    op_cmp16(0x0010);
-    if (cpu.a == 0x0010 || (cyc(34), (op_cmp16(0xFFF0), cpu.a == 0xFFF0))) {
-        op_lda16(cyc_then(76, F(0x2029, cpu.x)));
-        cpu.a ^= 0xFFFF;
-        cpu.p = nz16(cpu.p, cpu.a);
-        cpu.a++;
-        cpu.p = nz16(cpu.p, cpu.a);
-        wr16(F(0x2029, cpu.x), cyc_then(68, cpu.a));
-    } else { cyc(52); }
+    if (rm_step_due()) {                /* Remaster: the offset on the step's tick */
+        cpu.p &= (uint8_t)~P_M;
+        op_lda16(cyc_then(52, F(0x2027, cpu.x)));
+        op_add16(rd16(cyc_then(44, F(0x2029, cpu.x))));
+        wr16(F(0x2027, cpu.x), cyc_then(30, cpu.a));
+        op_cmp16(0x0010);
+        if (cpu.a == 0x0010 || (cyc(34), (op_cmp16(0xFFF0), cpu.a == 0xFFF0))) {
+            op_lda16(cyc_then(76, F(0x2029, cpu.x)));
+            cpu.a ^= 0xFFFF;
+            cpu.p = nz16(cpu.p, cpu.a);
+            cpu.a++;
+            cpu.p = nz16(cpu.p, cpu.a);
+            wr16(F(0x2029, cpu.x), cyc_then(68, cpu.a));
+        } else { cyc(52); }
+    }
     cpu.p |= P_M;
-    add16_via(F(0x200E, cpu.x), F(0x2027, cpu.x));
-    add8(F(0x2015, cpu.x), cyc_then(22, 0x04));
+    add16_vias(F(0x200E, cpu.x), F(0x2027, cpu.x));
+    add8s(F(0x2015, cpu.x), cyc_then(22, 0x04));
     (cyc(62), abi_ObjectRebucket());
     cyc(44);
 }
@@ -4542,11 +4614,11 @@ void abi_ObjectBobStep(void)
 static void burst_piece_frame(void)
 {
     (cyc(62), abi_ObjectSyncFromRecord());
-    if (!dec8(cyc_then(22, F(0x200A, cpu.x))))
+    if (!dec8s(cyc_then(22, F(0x200A, cpu.x))))
         { cyc(84); abi_ObjectRelease(); } else { cyc(48); }
-    add8(F(0x2014, cpu.x), 0x18);
-    add8(F(0x2015, cpu.x), 0x18);
-    add8(F(0x2016, cpu.x), 0x18);
+    add8s(F(0x2014, cpu.x), 0x18);
+    add8s(F(0x2015, cpu.x), 0x18);
+    add8s(F(0x2016, cpu.x), 0x18);
     cyc(44);
 }
 
@@ -4596,11 +4668,11 @@ void abi_ObjectBreakablePieceStep(void)
    with sound $5A and bursts it into eight pieces (09:D79C). */
 static void breakable_frame(void)
 {
-    if (!dec8(cyc_then(22, F(0x200A, cpu.x))))
+    if (!dec8s(cyc_then(22, F(0x200A, cpu.x))))
         { cyc(84); abi_ObjectRelease(); cyc(22); } else { cyc(70); }
-    add16(F(0x2014, cpu.x), 0x000C);
-    add16(F(0x2015, cpu.x), cyc_then(44, 0x000C));
-    add16(F(0x2016, cpu.x), cyc_then(44, 0x000C));
+    add16s(F(0x2014, cpu.x), 0x000C);
+    add16s(F(0x2015, cpu.x), cyc_then(44, 0x000C));
+    add16s(F(0x2016, cpu.x), cyc_then(44, 0x000C));
     if (!(cyc(22), hit()))
         { cyc(62); return; } else { cyc(36); }
     (cyc(38), abi_ObjectRelease());
@@ -4825,20 +4897,20 @@ static void swing_frame(void)
 {
     if (bit25(0x01)) {
         cyc(66);
-        add16(F(0x200C, cpu.x), 0x0028);
-        (cyc(4), ease8(F(0x2015, cpu.x), 0xC0, abi_ApproachEighthMin8Byte));
+        add16s(F(0x200C, cpu.x), 0x0028);
+        (cyc(4), ease8s(F(0x2015, cpu.x), 0xC0, abi_ApproachEighthMin8Byte));
         cyc(22);
     } else {
         cyc(40);
-        add16(F(0x200C, cpu.x), 0xFFD8);
-        (cyc(4), ease8(F(0x2015, cpu.x), 0x40, abi_ApproachEighthMin8Byte));
+        add16s(F(0x200C, cpu.x), 0xFFD8);
+        (cyc(4), ease8s(F(0x2015, cpu.x), 0x40, abi_ApproachEighthMin8Byte));
         cyc(46);                        /* JMP */
     }
     if (ld8(F(0x200A, cpu.x))) {
         cyc(44);
-        dec8(F(0x200A, cpu.x));
+        dec8s(F(0x200A, cpu.x));
         cyc(86);                        /* JMP, JSL */
-    } else {
+    } else if (rm_step_due()) {         /* Remaster: on the step's tick */
         cyc(70);
         eor8(F(0x2025, cpu.x), 0x01);
         st8i(F(0x200A, cpu.x), cyc_then(6, 0x50));
@@ -4945,7 +5017,7 @@ void abi_LapCrowdSpawn2(void)
    paths (REP 22, JSL 62, RTS 42); the skipped release costs BEQ and JML. */
 static void life_down(unsigned next)
 {
-    if (!dec8(F(0x200A, cpu.x)))
+    if (!dec8s(F(0x200A, cpu.x)))
         { cyc(84); abi_ObjectRelease(); cyc(next); } else { cyc(48 + next); }
 }
 
@@ -4959,8 +5031,8 @@ static void life_down(unsigned next)
  */
 void abi_LapCrowdMove0(void)
 {
-    add16(F(0x200C, cpu.x), cyc_then(82, 0xFF4C));
-    add16(F(0x200E, cpu.x), cyc_then(44, 0xFFF6));
+    add16s(F(0x200C, cpu.x), cyc_then(82, 0xFF4C));
+    add16s(F(0x200E, cpu.x), cyc_then(44, 0xFFF6));
     (cyc(44), life_down(42));
 }
 
@@ -4973,9 +5045,9 @@ void abi_LapCrowdMove0(void)
  */
 void abi_LapCrowdMove1(void)
 {
-    add16(F(0x200C, cpu.x), cyc_then(82, 0x0104));
-    add16(F(0x200E, cpu.x), cyc_then(44, 0xFFF6));
-    add16(F(0x2010, cpu.x), cyc_then(44, 0x00C8));
+    add16s(F(0x200C, cpu.x), cyc_then(82, 0x0104));
+    add16s(F(0x200E, cpu.x), cyc_then(44, 0xFFF6));
+    add16s(F(0x2010, cpu.x), cyc_then(44, 0x00C8));
     (cyc(44), life_down(42));
 }
 
@@ -4988,8 +5060,8 @@ void abi_LapCrowdMove1(void)
  */
 void abi_LapCrowdMove2(void)
 {
-    add16(F(0x200E, cpu.x), cyc_then(82, 0xFFF3));
-    add16(F(0x2010, cpu.x), cyc_then(44, 0x00C8));
+    add16s(F(0x200E, cpu.x), cyc_then(82, 0xFFF3));
+    add16s(F(0x2010, cpu.x), cyc_then(44, 0x00C8));
     (cyc(44), life_down(42));
 }
 
@@ -5164,17 +5236,19 @@ void abi_ObjectFloaterSpawnerStep(void)
 void abi_ObjectFloaterStep(void)
 {
     (cyc(62), abi_ObjectRebucket());
-    add8(F(0x2015, cpu.x), cyc_then(0, 0x08));
+    add8s(F(0x2015, cpu.x), cyc_then(0, 0x08));
     if (bit25(0x01))
-        { cyc(66); add16(F(0x200E, cpu.x), 0xFFEC); cyc(44); /* SEP */ }
+        { cyc(66); add16s(F(0x200E, cpu.x), 0xFFEC); cyc(44); /* SEP */ }
     else
-        { cyc(40); add16(F(0x200E, cpu.x), 0x0014); cyc(68); /* SEP, JMP */ }
+        { cyc(40); add16s(F(0x200E, cpu.x), 0x0014); cyc(68); /* SEP, JMP */ }
     if (ld8(F(0x200A, cpu.x))) {
         cyc(44);
-        dec8(F(0x200A, cpu.x));
+        dec8s(F(0x200A, cpu.x));
         cyc(68);                        /* JMP, RTL */
         return;
     } else { cyc(70); }
+    if (!rm_step_due())                 /* Remaster: on the step's tick */
+        return;
     eor8(F(0x2025, cpu.x), 0x01);
     st8i(F(0x200A, cpu.x), cyc_then(6, 0x28));
     cyc(44);
@@ -5423,7 +5497,7 @@ void abi_ObjectRingStepZSign(void)
  */
 void abi_ObjectRingCentreStep(void)
 {
-    add8(F(0x2015, cpu.x), 0x01);
+    add8s(F(0x2015, cpu.x), 0x01);
     (cyc(62), abi_ObjectRebucket());
     cyc(44);
 }
@@ -5550,8 +5624,8 @@ void abi_ObjectSpinnerStepZSign(void)
  */
 void abi_ObjectSpinnerCentreStep(void)
 {
-    add8(F(0x2015, cpu.x), 0xF8);
-    add8(F(0x2014, cpu.x), 0x0C);
+    add8s(F(0x2015, cpu.x), 0xF8);
+    add8s(F(0x2014, cpu.x), 0x0C);
     (cyc(62), abi_ObjectRebucket());
     cyc(44);
 }
@@ -5673,9 +5747,9 @@ void abi_LapSignSpawn2(void)
    rebucketed. */
 static void sign_frame(uint16_t dx, uint16_t dy, uint16_t dz)
 {
-    add16(F(0x200C, cpu.x), cyc_then(22, dx));
-    add16(F(0x200E, cpu.x), cyc_then(44, dy));
-    add16(F(0x2010, cpu.x), cyc_then(44, dz));
+    add16s(F(0x200C, cpu.x), cyc_then(22, dx));
+    add16s(F(0x200E, cpu.x), cyc_then(44, dy));
+    add16s(F(0x2010, cpu.x), cyc_then(44, dz));
     (cyc(44), life_down(62));
     abi_ObjectRebucket();
     cyc(44);
@@ -5830,7 +5904,7 @@ plain:
     and8(F(0x2025, cpu.x), 0xFE);
 cyc(24);
 step:
-    add8(F(0x2016, cpu.x), 0xAA);
+    add8s(F(0x2016, cpu.x), 0xAA);
     cyc(62);
     abi_ObjectRebucket();
     cyc(44);
@@ -5925,7 +5999,7 @@ void abi_ObjectFanStepZSign(void)
  */
 void abi_ObjectFanCentreStep(void)
 {
-    add8(F(0x2016, cpu.x), 0xF8);
+    add8s(F(0x2016, cpu.x), 0xF8);
     (cyc(62), abi_ObjectRebucket());
     cyc(44);
 }
@@ -6016,7 +6090,7 @@ void abi_ObjectWheelStepZSign(void)
  */
 void abi_ObjectWheelCentreStep(void)
 {
-    add8(F(0x2016, cpu.x), 0x08);
+    add8s(F(0x2016, cpu.x), 0x08);
     (cyc(62), abi_ObjectRebucket());
     cyc(44);
 }
@@ -6093,6 +6167,8 @@ static void colour_cycle6(void)
 {
     uint8_t v;
 
+    if (!rm_step_due())                 /* Remaster: a step at a time */
+        return;
     if (colour_step(0x06)) {
         cyc(8);
         cpu.p |= P_C;
@@ -6143,6 +6219,7 @@ static int rail_slide(uint16_t step)
     if (cpu.a == t)
         { cyc(70); return 1; }
     cpu.p &= (uint8_t)~P_M;
+    step = (uint16_t)rm_share(F(0x2010, cpu.x), (int16_t)step);   /* Remaster: a tick's share */
     if (cpu.p & P_N)
         op_add16(step);
     else
@@ -6204,7 +6281,7 @@ void abi_RailRise(void)
     copy16(F(0x2027, cpu.x), F(0x2010, cpu.x));
     colour_from_dp0(cyc_then(22, F(0x205A, cpu.x)));
     st16i(F(0x2004, cpu.x), cyc_then(22, 0xB2D8));
-    add16(F(0x2027, cpu.x), cyc_then(44, 0x0500));
+    add16s(F(0x2027, cpu.x), cyc_then(44, 0x0500));
     cyc(44);
     handler(cpu.x, 0xD498);
     abi_RailRiseStep();
@@ -6229,18 +6306,20 @@ static void rail_drop_frame(void)
 {
     uint8_t v;
 
-    if (colour_step(0x07)) {
-        lda8(0x07);
-        lda8(0x06);
-        lda8(0x86);
-        wr8(F(0x205A, cpu.x), cyc_then(96, 0x86));
-        (cyc(24), abi_RailRise());
-        return;
+    if (rm_step_due()) {                /* Remaster: the colour, its count, a step at a time */
+        if (colour_step(0x07)) {
+            lda8(0x07);
+            lda8(0x06);
+            lda8(0x86);
+            wr8(F(0x205A, cpu.x), cyc_then(96, 0x86));
+            (cyc(24), abi_RailRise());
+            return;
+        }
+        v = (uint8_t)(cpu.a | 0x80);
+        lda8(v);
+        wr8(F(0x205A, cpu.x), cyc_then(112, v));
     }
-    v = (uint8_t)(cpu.a | 0x80);
-    lda8(v);
-    wr8(F(0x205A, cpu.x), cyc_then(112, v));
-    add16(F(0x2010, cpu.x), cyc_then(22, 0x0040));
+    add16s(F(0x2010, cpu.x), cyc_then(22, 0x0040));
     (cyc(84), abi_ObjectSyncToRecord());
     cyc(44);
 }
@@ -6382,7 +6461,7 @@ void abi_ObjectFinaleGateStep(void)
  */
 void abi_ObjectScaleUp6(void)
 {
-    add8(F(0x2015, cpu.x), 0x06);
+    add8s(F(0x2015, cpu.x), 0x06);
     cyc(44);
 }
 
@@ -6968,8 +7047,8 @@ static void bump_post_frame(void)
 {
     if (ld8(cyc_then(22, F(0x2048, cpu.x)))) {
         cyc(22);
-        add8(F(0x2015, cpu.x), 0x06);
-        add8(F(0x2048, cpu.x), 0xFF);
+        add8s(F(0x2015, cpu.x), 0x06);
+        add8s(F(0x2048, cpu.x), 0xFF);
     } else { cyc(48); }
     if (!hit()) {
         cyc(18);
@@ -7074,10 +7153,11 @@ void abi_GateSlideStep(void)
         return;
     }
     cpu.p &= (uint8_t)~P_M;
+    t = (uint16_t)rm_share(F(0x200C, cpu.x), 0x0280);           /* Remaster: a tick's share */
     if (cpu.p & P_N)
-        op_add16(0x0280);
+        op_add16(t);
     else
-        { cyc(10); op_sub16(0x0280); }
+        { cyc(10); op_sub16(t); }
     wr16(F(0x200C, cpu.x), cyc_then(172, cpu.a));
     cpu.p |= P_M;
     cyc(44);
@@ -7114,7 +7194,7 @@ static void slide_lap_frame(void)
     }
     cmp8(0x02);
     if (lap == 0x02) {
-        ease8(F(0x2015, cpu.x), 0x80, abi_ApproachHalfMin2Byte);
+        ease8s(F(0x2015, cpu.x), 0x80, abi_ApproachHalfMin2Byte);
         cyc(44);
     } else { cyc(80); }
 }
@@ -7195,13 +7275,13 @@ static void meter_frame(void)
             cyc(22);
             cmp8(0x07);
             if (v != 0x07)
-                inc8(F(0x2048, cpu.x)); else { cyc(42); }
+                inc8s(F(0x2048, cpu.x)); else { cyc(42); }
         } else {
             cyc(6);
             v = ld8(F(0x2048, cpu.x));
             cmp8(0x00);
             if (v != 0x00)
-                { cyc(60); dec8(F(0x2048, cpu.x)); } else { cyc(64); }
+                { cyc(60); dec8s(F(0x2048, cpu.x)); } else { cyc(64); }
         }
         cyc(22);
         show48();
@@ -7325,7 +7405,7 @@ void abi_TrailFlip(void)
     cyc(46);
     op_lda16((0x70004A + cpu.x) & 0xFFFFFF);
     if (cpu.a & 0x8000)
-        { cyc(16); add16(F(0x2015, cpu.y), 0x0080); } else { cyc(22); }
+        { cyc(16); add16s(F(0x2015, cpu.y), 0x0080); } else { cyc(22); }
     cyc(106);
     cpu.p |= P_M;
     cpu.x = sx;
@@ -7346,12 +7426,12 @@ static void trail_frame(uint16_t dz, uint16_t dx, uint16_t mx)
         cpu.p = nz16(cpu.p, cpu.y);
         ld8(cyc_then(22, F(0x2015, cpu.y)));
         wr8(F(0x2015, cpu.x), cyc_then(30, (uint8_t)cpu.a));
-        add8(F(0x2015, cpu.x), 0x80);
+        add8s(F(0x2015, cpu.x), 0x80);
         ease16(F(0x2010, cpu.x), F(0x2010, cpu.y), ease_cdc1);
-        add16(F(0x2010, cpu.x), cyc_then(44, dz));
+        add16s(F(0x2010, cpu.x), cyc_then(44, dz));
         (cyc(22), ease16(F(0x200C, cpu.x), F(0x200C, cpu.y), abi_ApproachQuarterMin4));
         if (dx)
-            { cyc(44); add16(F(0x200C, cpu.x), dx); }
+            { cyc(44); add16s(F(0x200C, cpu.x), dx); }
         cyc(28);
         st8i(F(0x200A, cpu.x), 0x1A);
         abi_TrailFlip();
@@ -7361,10 +7441,10 @@ static void trail_frame(uint16_t dz, uint16_t dx, uint16_t mx)
     } else { cyc(44); }
     if (ld8(F(0x200A, cpu.x))) {
         cyc(22);
-        add8(F(0x200A, cpu.x), 0xFF);
-        add16(F(0x2010, cpu.x), cyc_then(22, 0xFF00));
+        add8s(F(0x200A, cpu.x), 0xFF);
+        add16s(F(0x2010, cpu.x), cyc_then(22, 0xFF00));
         if (mx)
-            { cyc(44); add16(F(0x200C, cpu.x), mx); }
+            { cyc(44); add16s(F(0x200C, cpu.x), mx); }
     } else { cyc(26); }
     cyc(84);
     abi_ObjectRebucket();
@@ -8177,6 +8257,8 @@ static void colour_cycle(uint8_t n)
 {
     uint8_t v;
 
+    if (!rm_step_due())                 /* Remaster: a step at a time */
+        return;
     cyc(22);
     if (colour_step(n)) {
         cyc(8);
@@ -8544,23 +8626,25 @@ void abi_ObjectShatterShard6YSign(void)
    +$15 grows by 8. */
 static void bounce_colour(uint16_t lim, uint16_t pos)
 {
-    cpu.p &= (uint8_t)~P_M;
-    op_lda16(cyc_then(52, F(0x2027, cpu.x)));
-    op_add16(rd16(cyc_then(44, F(0x2029, cpu.x))));
-    wr16(F(0x2027, cpu.x), cyc_then(30, cpu.a));
-    op_cmp16(lim);
-    if (cpu.a == lim || (cyc(34), (op_cmp16((uint16_t)-lim), cpu.a == (uint16_t)-lim))) {
-        op_lda16(cyc_then(76, F(0x2029, cpu.x)));
-        cpu.a ^= 0xFFFF;
-        cpu.p = nz16(cpu.p, cpu.a);
-        cpu.a++;
-        cpu.p = nz16(cpu.p, cpu.a);
-        wr16(F(0x2029, cpu.x), cyc_then(68, cpu.a));
-    } else { cyc(52); }
+    if (rm_step_due()) {                /* Remaster: the offset on the step's tick */
+        cpu.p &= (uint8_t)~P_M;
+        op_lda16(cyc_then(52, F(0x2027, cpu.x)));
+        op_add16(rd16(cyc_then(44, F(0x2029, cpu.x))));
+        wr16(F(0x2027, cpu.x), cyc_then(30, cpu.a));
+        op_cmp16(lim);
+        if (cpu.a == lim || (cyc(34), (op_cmp16((uint16_t)-lim), cpu.a == (uint16_t)-lim))) {
+            op_lda16(cyc_then(76, F(0x2029, cpu.x)));
+            cpu.a ^= 0xFFFF;
+            cpu.p = nz16(cpu.p, cpu.a);
+            cpu.a++;
+            cpu.p = nz16(cpu.p, cpu.a);
+            wr16(F(0x2029, cpu.x), cyc_then(68, cpu.a));
+        } else { cyc(52); }
+    }
     cpu.p |= P_M;
-    add16_via(F(pos, cpu.x), F(0x2027, cpu.x));
+    add16_vias(F(pos, cpu.x), F(0x2027, cpu.x));
     colour_cycle(0x0A);
-    add8(F(0x2015, cpu.x), 0x08);
+    add8s(F(0x2015, cpu.x), 0x08);
     cyc(42);
 }
 
@@ -8834,7 +8918,7 @@ void abi_ObjectPuffFollow(void)
     wr16(F(0x200E, cpu.x), cyc_then(30, cpu.a));
     cpu.p |= P_M;
     cyc(44);
-    if (!dec8(F(0x200A, cpu.x)))
+    if (!dec8s(F(0x200A, cpu.x)))
         { cyc(84); abi_ObjectRelease(); cyc(44); }
     else
         cyc(92);
@@ -9093,16 +9177,16 @@ void abi_ObjectShardStep(void)
     op_asl16();
     wr16(db() | 0x05F2, cyc_then(52, cpu.a));
     op_lda16(cyc_then(30, F(0x200C, cpu.x)));
-    op_add16(rd16(cyc_then(26, dp(0x04))));
+    op_add16((uint16_t)rm_share(F(0x200C, cpu.x), (int16_t)rd16(cyc_then(26, dp(0x04)))));   /* Remaster */
     wr16(F(0x200C, cpu.x), cyc_then(30, cpu.a));
     op_lda16(cyc_then(30, F(0x2010, cpu.x)));
-    op_add16(rd16(cyc_then(38, db() | 0x05F2)));
+    op_add16((uint16_t)rm_share(F(0x2010, cpu.x), (int16_t)rd16(cyc_then(38, db() | 0x05F2))));   /* Remaster */
     wr16(F(0x2010, cpu.x), cyc_then(30, cpu.a));
     op_lda16(cyc_then(30, F(0x200E, cpu.x)));
-    op_add16(rd16(cyc_then(26, dp(0x0A))));
+    op_add16((uint16_t)rm_share(F(0x200E, cpu.x), (int16_t)rd16(cyc_then(26, dp(0x0A)))));   /* Remaster */
     wr16(F(0x200E, cpu.x), cyc_then(30, cpu.a));
     cpu.p |= P_M;
-    add8(F(0x2015, cpu.x), cyc_then(22, 0x12));
+    add8s(F(0x2015, cpu.x), cyc_then(22, 0x12));
     (cyc(22), life_down(62));
     abi_ObjectRebucket();
     cyc(44);
@@ -9124,10 +9208,10 @@ void abi_ObjectRisingSpark(void)
     cpu.p = nz16(cpu.p, cpu.y);
     (cyc(62), abi_ObjectCopyPositionFrom());
     (cyc(22), life_down(22));
-    add16(F(0x200E, cpu.x), 0xFF80);
-    add16(F(0x2027, cpu.x), cyc_then(44, 0xFFD8));
-    add16_via(F(0x200E, cpu.x), F(0x2027, cpu.x));
-    add8(F(0x2015, cpu.x), cyc_then(22, 0x12));
+    add16s(F(0x200E, cpu.x), 0xFF80);
+    add16s(F(0x2027, cpu.x), cyc_then(44, 0xFFD8));
+    add16_vias(F(0x200E, cpu.x), F(0x2027, cpu.x));
+    add8s(F(0x2015, cpu.x), cyc_then(22, 0x12));
     (cyc(62), abi_ObjectRebucket());
     cyc(44);
 }

@@ -7,6 +7,7 @@
  * +$14/+$15/+$16.
  */
 #include "machine.h"
+#include "remaster.h"
 
 void abi_ObjectGsu81E3(void);
 void abi_ObjectGsu80BCThen81E3(void);
@@ -40,6 +41,7 @@ static void ease_half(uint8_t bank, uint16_t rec, uint16_t off, uint16_t v)
     uint16_t old = rd16(cyc_then(126, absidx(bank, off, rec))), a;
 
     a = asr16((uint16_t)(v - old));
+    a = (uint16_t)rm_share_by(absidx(bank, off, rec), (int16_t)a, RM_DECAY_2);   /* Remaster: the tick's fraction */
     old = rd16(cyc_then(44, absidx(bank, off, rec)));
     wr16(absidx(bank, off, rec), cyc_then(30, (uint16_t)(a + old)));
 }
@@ -86,6 +88,7 @@ void ObjectFaceTied(void)
             abi_ObjectGsu80BCThen81E3();
             old = rd16(cyc_then(22, absidx(bank, 0x000E, rec)));
             a = asr16(asr16((uint16_t)(cpu.a - old)));
+            a = (uint16_t)rm_share_by(absidx(bank, 0x000E, rec), (int16_t)a, RM_DECAY_4);   /* Remaster */
             a = (uint16_t)(a + rd16(cyc_then(44, absidx(bank, 0x000E, rec))));
         }
         wr16(absidx(bank, 0x000E, rec), cyc_then(30, a));

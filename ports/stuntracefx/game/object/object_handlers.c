@@ -11,6 +11,7 @@
 #include "machine.h"
 #include "cpu_ops.h"
 #include "assets.h"
+#include "remaster.h"
 
 void abi_ObjectSpawn(void);
 void abi_ObjectCopyPositionTo(void);
@@ -149,11 +150,37 @@ static void sync_36(void)
     cyc(44);
 }
 
+/* Remaster (remaster.h): a field the original eased by its step's
+   fraction, back to its value before (kept at was_at) plus the tick's own
+   fraction of that change */
+static void rm_eased16(uint32_t addr, uint32_t was_at, int32_t mul)
+{
+    uint16_t was;
+
+    if (!rm_sharing())
+        return;
+    was = rd16(was_at);
+    wr16(addr, (uint16_t)(was + rm_share_by(addr, (int16_t)(uint16_t)(rd16(addr) - was), mul)));
+}
+
+static void rm_eased8(uint32_t addr, uint32_t was_at, int32_t mul)
+{
+    uint8_t was;
+
+    if (!rm_sharing())
+        return;
+    was = rd8(was_at);
+    wr8(addr, (uint8_t)(was + rm_share_by(addr, (int8_t)(uint8_t)(rd8(addr) - was), mul)));
+}
+
 /* LDA +$48,X: whether the count has run out (0); otherwise it is counted
    down (DEC +$48,X). */
 static int count_down(void)
 {
     uint32_t b = db();
+
+    if (!rm_step_due())                 /* Remaster: counts the original's steps; between, not out */
+        return 0;
     cyc(30);
     uint8_t v = rd8(b | (uint16_t)(0x2048 + cpu.x));
 
@@ -380,6 +407,8 @@ void abi_ObjectBlinkerFade(void)
     uint16_t x;
     uint8_t v, p;
 
+    if (!rm_step_due())                 /* Remaster: its count and colour a step at a time */
+        return;
     if (count_down()) {
         x = cpu.x;
         cpu.p &= (uint8_t)~P_M;
@@ -981,6 +1010,7 @@ void abi_ObjectVelocityFromRecordOf(void);
 void abi_ObjectSpawnChanceD460(void);
 void abi_ApproachQuarterMin4(void);
 void abi_ObjectApplyVelocity(void);
+void abi_ObjectApplyVelocityWhole(void);
 
 /*
  * @routine 08:BA57 ObjectChildrenSpawn
@@ -1271,6 +1301,7 @@ void abi_ObjectChildReturn(void)
     abi_ApproachQuarterMin4();
     cyc(30);
     wr16(b | (uint16_t)(0x200C + cpu.x), cpu.a);
+    rm_eased16(b | (uint16_t)(0x200C + cpu.x), 0x00003E, RM_DECAY_4);
     cyc(74);
     wr16(0x00003E, cyc_then(16, rd16(b | (uint16_t)(0x200E + cpu.x))));
     cyc(16);
@@ -1278,6 +1309,7 @@ void abi_ObjectChildReturn(void)
     abi_ApproachQuarterMin4();
     cyc(30);
     wr16(b | (uint16_t)(0x200E + cpu.x), cpu.a);
+    rm_eased16(b | (uint16_t)(0x200E + cpu.x), 0x00003E, RM_DECAY_4);
     cyc(74);
     wr16(0x00003E, cyc_then(16, rd16(b | (uint16_t)(0x2010 + cpu.x))));
     cyc(24);
@@ -1285,6 +1317,7 @@ void abi_ObjectChildReturn(void)
     abi_ApproachQuarterMin4();
     cyc(30);
     wr16(b | (uint16_t)(0x2010 + cpu.x), cpu.a);
+    rm_eased16(b | (uint16_t)(0x2010 + cpu.x), 0x00003E, RM_DECAY_4);
     cpu.p |= P_M;
     (cyc(84), abi_ObjectApplyVelocity());
     (cyc(62), abi_ObjectRebucket());
@@ -1552,12 +1585,12 @@ void abi_ObjectPieceFall(void)
     cyc(24);
     v = rd8(b | 0x1F59);
     cpu.p = (uint8_t)((nz8(cpu.p, (uint8_t)((uint8_t)cpu.a - v)) & ~P_C) | ((uint8_t)cpu.a >= v ? (cyc(48), P_C) : 0));
-    if ((uint8_t)cpu.a == v) {
+    if ((uint8_t)cpu.a == v && rm_step_due()) {   /* Remaster: its count a step at a time */
         abi_ObjectReleaseLong();
         return;
     }
     cyc(52);
-    v = (uint8_t)(rd8(b | (uint16_t)(0x2048 + cpu.x)) + 1);
+    v = (uint8_t)(rd8(b | (uint16_t)(0x2048 + cpu.x)) + (rm_step_due() ? 1 : 0));
     cyc(6);
     wr8(b | (uint16_t)(0x2048 + cpu.x), v);
     cpu.p = nz8(cpu.p, v);
@@ -2449,7 +2482,7 @@ void abi_ObjectAttachFollow(void)
     wr8(b | (uint16_t)(0x2015 + cpu.y), (uint8_t)cpu.a);
     cpu.x = obj;
     cpu.p = nz16(cpu.p, obj);
-    (cyc(98), abi_ObjectApplyVelocity());
+    (cyc(98), abi_ObjectApplyVelocityWhole());
     (cyc(62), abi_ObjectRebucket());
     cyc(30);
     lda8((uint8_t)(rd8(b | (uint16_t)(0x2024 + cpu.x)) & 0xDF));
@@ -2913,7 +2946,7 @@ state2:
     cpu.y = rd16(b | (uint16_t)(0x2006 + cpu.x));
     cpu.p = nz16(cpu.p, cpu.y);
     (cyc(62), abi_ObjectCopyPositionFrom());
-    (cyc(62), abi_ObjectApplyVelocity());
+    (cyc(62), abi_ObjectApplyVelocityWhole());
     cyc(30);
     lda8((uint8_t)(rd8(b | (uint16_t)(0x2024 + cpu.x)) & 0x7F));
     cyc(16);
@@ -3170,6 +3203,8 @@ void abi_PlayerCarEvents(void)
     uint32_t to_c4a2 = 104, tail = 78, sparkle = 186;
     int16_t lvl;
 
+    if (!rm_step_due())                 /* Remaster: the car's events once a step (remaster.h) */
+        return;
     cyc(24);
     wr16(b | 0x1F18, obj);
     cpu.p &= (uint8_t)~P_M;
@@ -3847,6 +3882,10 @@ void abi_ObjectLampDrop(void)
     uint32_t b = db();
     uint8_t p, v;
 
+    if (!rm_step_due()) {               /* Remaster: its count a step at a time; placed each tick */
+        lamp_place();
+        return;
+    }
     cyc(30);
     v = rd8(b | (uint16_t)(0x2048 + cpu.x));
     p = (uint8_t)(cpu.p & ~P_C);
@@ -5233,6 +5272,8 @@ void abi_CameraDirectorWait(void)
     uint8_t v;
 
     cyc(30);
+    if (!rm_step_due())                 /* Remaster: its wait a step at a time */
+        { director_tail(); return; }
     op_lda8(b | (uint16_t)(0x2048 + cpu.x));
     if (!(uint8_t)cpu.a) {
         cyc(2);
