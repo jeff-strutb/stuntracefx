@@ -36,6 +36,20 @@ uint8_t bcd_sub8(uint8_t a, uint8_t m, bool *carry)
     return (uint8_t)r;
 }
 
+uint16_t bcd_add16(uint16_t a, uint16_t m, bool *carry)
+{
+    uint8_t lo = bcd_add8((uint8_t)a, (uint8_t)m, carry);
+
+    return (uint16_t)(bcd_add8((uint8_t)(a >> 8), (uint8_t)(m >> 8), carry) << 8 | lo);
+}
+
+uint16_t bcd_sub16(uint16_t a, uint16_t m, bool *carry)
+{
+    uint8_t lo = bcd_sub8((uint8_t)a, (uint8_t)m, carry);
+
+    return (uint16_t)(bcd_sub8((uint8_t)(a >> 8), (uint8_t)(m >> 8), carry) << 8 | lo);
+}
+
 uint16_t binary_to_bcd(uint16_t v)
 {
     return (uint16_t)(v / 1000 * 0x1000 + v % 1000 / 100 * 0x100 + v % 100 / 10 * 0x10 + v % 10);

@@ -37,6 +37,8 @@ static inline int16_t wrap16(int32_t v)
    (out: set on a carry, or on no borrow). */
 uint8_t bcd_add8(uint8_t a, uint8_t m, bool *carry);
 uint8_t bcd_sub8(uint8_t a, uint8_t m, bool *carry);
+uint16_t bcd_add16(uint16_t a, uint16_t m, bool *carry);
+uint16_t bcd_sub16(uint16_t a, uint16_t m, bool *carry);
 
 /* A binary value as four BCD digits, each counted as the original counts
    it (a value of 10000 or more puts 10 or more in the top digit), and back

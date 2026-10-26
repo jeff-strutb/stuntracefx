@@ -1,4 +1,4 @@
-/* old: video/fade.c video/palette.c video/dma.c video/windows.c video/window_hdma.c video/colour_math.c object/object.c
+/* old: video/fade.c video/palette.c video/dma.c video/windows.c video/window_hdma.c video/colour_math.c object/object.c audio/sound_queue.c input/joypad.c race/time.c video/scroll.c video/gradient.c
  *
  * raster_check.c: the port's frame work (what the original does in its
  * raster interrupt: the fade, the palettes, the windows, the uploads) against
@@ -38,6 +38,8 @@ OLD(PlayerColoursFlash) OLD(StatusColourPick) OLD(PalettesStep)
 OLD(WindowsSetupSelect) OLD(WindowHdmaNormal) OLD(WindowHdmaBands) OLD(WindowLayoutStepForScreen) OLD(BobWindowsRun)
 OLD(WindowSweepIfOn) OLD(WindowSlideOrOscillate) OLD(WindowBandsAnimate) OLD(WindowSplitAnimate) OLD(WindowSlideCheck)
 OLD(WindowHdmaFFDD) OLD(WindowHdmaFFD1) OLD(WindowHdmaFFD5) OLD(WindowHdmaFFD9)
+OLD(SoundPortsSend) OLD(JoypadRead) OLD(JoypadAccumulate) OLD(FrameSoundAndJoypads) OLD(RaceClockStep)
+OLD(Bg2ScrollFromTable) OLD(GradientPointersToBank7F)
 
 static uint64_t rng = 0x3C6EF372FE94F82Bull;
 
@@ -91,7 +93,13 @@ static void fresh(void)
     ppu.hdmaen = (uint8_t)rnd();
     memcpy(&wram[0xA2D9], rom_at(0x028000), 0x54A6);  /* the code and tables the game runs from work RAM */
     ppu.vmain = 0x80;
-    scratch_f9 = 0;                   /* the game's standing setting: words, a step of 1 */
+    scratch_f9 = 0;
+    for (i = 0; i < 4; i++) {
+        model_sound_in[i] = sound_in[i] = (uint8_t)(rnd() & 1 ? 0 : rnd());
+        model_sound_out[i] = sound_out[i] = (uint8_t)rnd();
+    }
+    for (i = 0; i < 2; i++)
+        model_pads[i] = pads[i] = (uint16_t)(rnd() & 0xFFF0);                   /* the game's standing setting: words, a step of 1 */
     ppu_to_port();
     video_registers_reset();
     memset(&old_cpu, 0, sizeof old_cpu);
@@ -128,6 +136,11 @@ static void same(void)
     for (i = 0; i < sizeof pakram; i++)
         if (pakram[i] != old_p[i]) {
             fail("game pak RAM $%04zX = %02X, the decomp's %02X (was %02X)", i, pakram[i], old_p[i], start_p[i]);
+            return;
+        }
+    for (i = 0; i < 4; i++)
+        if (sound_out[i] != model_sound_out[i]) {
+            fail("sound port %zu = %02X, the decomp's %02X", i, sound_out[i], model_sound_out[i]);
             return;
         }
     if (ppu_differs(what, sizeof what) || ppu_screen_differs(what, sizeof what))
@@ -290,6 +303,58 @@ int main(int argc, char **argv)
         news[k]();
         same();
         model_current = "the windows";
+    }
+    CASE("SoundPortsSend / JoypadRead / JoypadAccumulate / FrameSoundAndJoypads") {
+        int k = (int)(rnd() % 4);
+
+        fresh();
+        if (rnd() & 1)
+            W8(0x10E2) = W8(0x10E3) = 0;
+        if (rnd() & 1)
+            W8(0x10DA) = W8(0x10DC) = 0;
+        W8(0x0DCC) = (uint8_t)(rnd() % 17), W8(0x0DCE) = (uint8_t)(rnd() % 17);
+        W8(0x0DC8) = (uint8_t)(rnd() & 15), W8(0x0DCA) = (uint8_t)(rnd() & 15);
+        old_cpu.p |= P_X;
+        old_run(k == 0 ? old_abi_SoundPortsSend : k == 1 ? old_abi_JoypadRead : k == 2 ? old_abi_JoypadAccumulate
+                : old_abi_FrameSoundAndJoypads);
+        switch (k) {
+        case 0: sound_ports_send(); break;
+        case 1: joypad_read(); break;
+        case 2: joypad_accumulate(); break;
+        default: frame_sound_and_joypads();
+        }
+        same();
+    }
+    CASE("RaceClockStep") {
+        static const uint16_t near[] = {0x0059, 0x0058, 0x0009, 0x0000, 0x0001, 0x9999, 0x9990};
+
+        fresh();
+        W8(0x0E5B) = (uint8_t)(rnd() & 3 ? 1 : 0);
+        if (rnd() & 1) {
+            W16(0x0E62) = near[rnd() % 7], W16(0x0E64) = near[rnd() % 7], W16(0x0E66) = near[rnd() % 7];
+            W16(0x0E68) = near[rnd() % 7], W16(0x0E70) = near[rnd() % 7];
+            W16(0x0D29) = (uint16_t)(rnd() & 1 ? 0x0167 : 0x0333);
+        }
+        old_run(old_abi_RaceClockStep);
+        race_clock_step();
+        same();
+    }
+    CASE("Bg2ScrollFromTable / GradientPointersToBank7F") {
+        int wide = (int)(rnd() & 1);
+        uint16_t band = (uint16_t)(rnd() & (wide ? 0x3F : 0xFF));
+
+        fresh();
+        old_cpu.p |= P_M;
+        old_cpu.p = wide ? (uint8_t)(old_cpu.p & ~P_X) : (uint8_t)(old_cpu.p | P_X);
+        old_cpu.x = (uint16_t)(wide ? band : (rnd() & 0xFF00) | band);
+        if (rnd() & 1) {
+            old_run(old_abi_Bg2ScrollFromTable);
+            bg2_scroll_from_table(band);
+        } else {
+            old_run(old_abi_GradientPointersToBank7F);
+            gradient_pointers_to_bank_7f();
+        }
+        same();
     }
     printf("raster_check: %ld cases, %ld differ\n", cases, failed);
     return failed != 0;

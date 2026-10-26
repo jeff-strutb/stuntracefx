@@ -64,6 +64,9 @@ static void die(const char *what, uint32_t a)
     exit(2);
 }
 
+uint16_t model_pads[2];
+uint8_t model_sound_in[4], model_sound_out[4];
+
 uint8_t old_rd8(uint32_t a)
 {
     uint8_t bank = (uint8_t)(a >> 16);
@@ -92,6 +95,10 @@ uint8_t old_rd8(uint32_t a)
     case 0x3030: case 0x3031: return 0;    /* the Super FX's status: stopped */
     case 0x4216: return (uint8_t)rdmpy;
     case 0x4217: return (uint8_t)(rdmpy >> 8);
+    case 0x4218: case 0x4219: case 0x421A: case 0x421B:
+        return (uint8_t)(model_pads[(o - 0x4218) >> 1] >> ((o & 1) * 8));
+    case 0x2140: case 0x2141: case 0x2142: case 0x2143:
+        return model_sound_in[o - 0x2140];
     }
     die("read", a);
     return 0;
@@ -141,6 +148,7 @@ void old_wr8(uint32_t a, uint8_t v)
     switch (o) {
     case 0x211B: m7a = (uint16_t)(v << 8 | m7_latch); m7_latch = v; return;
     case 0x211C: m7b = v; m7_latch = v; return;
+    case 0x2140: case 0x2141: case 0x2142: case 0x2143: model_sound_out[o - 0x2140] = v; return;
     case 0x3030: case 0x3031: return;     /* the status cleared */
     case 0x3034: gsu_pbr = v; return;
     case 0x3038: old_gsu.scbr = v; return;

@@ -53,6 +53,16 @@ void window_bands_animate(void);
 void window_split_animate(void);
 void window_slide_check(void);
 void hud_draw_time(void);
+/* ---- the sound ports (audio/ports.c), the pads (input/pads.c) ---- */
+extern uint8_t sound_in[4], sound_out[4];
+extern uint16_t pads[2];
+void sound_ports_send(void);
+void joypad_read(void);
+void joypad_accumulate(void);
+void frame_sound_and_joypads(void);
+void race_clock_step(void);
+void bg2_scroll_from_table(uint16_t band);
+void gradient_pointers_to_bank_7f(void);
 void hud_draw_count(void);
 void hud_draw_number3(uint8_t n, uint16_t sprite);
 void hud_draw_speed_a(void);
