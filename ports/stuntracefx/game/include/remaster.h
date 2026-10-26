@@ -97,8 +97,8 @@ void RmRaceScreenShow(void);
 /* the menus' 3D picture to the display at once: system/vblank_updates.c */
 void RmMenuPictureShow(void);
 
-/* The in-between frames (game/remaster/tween.c): the state at a one-player
-   race tick's start kept (RaceFrameRun); at each frame's end whether the
+/* The in-between frames (game/remaster/tween.c): the state at a race tick's
+   start kept (one player or two) (RaceFrameRun); at each frame's end whether the
    frame shown was such a tick; and the 3D drawn again at num/den of the way
    from the tick's start to its end, the state put back after (the
    runtime shows what it drew in place of the shown buffer's bytes in
@@ -110,6 +110,11 @@ int rm_tween_ready(void);
 /* draws it into the buffer the Super FX draws in next, gives its bytes and
    the start of the buffer shown ($2C00 or $9400); 0 when not ready */
 int rm_tween(int num, int den, uint8_t *pixels, uint16_t *shown);
+/* the same for one or two players: the buffers drawn into at_2c00 (the
+   buffer at $2C00) and at_9400 ($9400), RM_TWEEN_BYTES each; the mask of
+   those drawn (1 $2C00, 2 $9400; a two-player race draws both, player 1
+   in the buffer $021A gives at the tick's start), 0 when not ready */
+int rm_tween_buffers(int num, int den, uint8_t *at_2c00, uint8_t *at_9400);
 /* whether the option shares the steps out (Frame rate 60, not the
    reference pace) */
 int rm_sharing_on(void);

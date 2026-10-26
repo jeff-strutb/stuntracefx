@@ -633,12 +633,27 @@ static const VidFrame *tween_at(int num, int den)
    frame's own and not compared). RM_TWEEN_SHOT=N writes the N-th such
    tick composed as tween_N_k.ppm at k/4 of the way, k = 0..4 (k = 0 its
    own frame), and RM_TWEEN_SHOTS=M the M ticks from it. */
-static long tw_frames = -1, tw_bad, tw_bytes, tw_first = -1;
+static long tw_frames = -1, tw_bad, tw_bytes, tw_first = -1, tw_step;
 
 static void tween_report(void)
 {
-    fprintf(stderr, "tweencheck: %s, %ld ticks, %ld differ (first at frame %ld), %ld bytes\n", rr_name(),
-            tw_frames, tw_bad, tw_first, tw_bytes);
+    fprintf(stderr, "tweencheck: %s, %ld ticks, %ld differ (first at frame %ld), %ld bytes; %ld of them by a step\n",
+            rr_name(), tw_frames, tw_bad, tw_first, tw_bytes, tw_step);
+}
+
+/* a tick whose picture differs from the tween's: by a step when the step's
+   work (the HUD, the players' stats) changed it between the two, which the
+   tween keeps for the step's own tick; listed unless so (RM_TWEEN_ALL: all) */
+static void tween_differs(long frame_no, long ticks, int f, int step, long bad)
+{
+    if ((!step && tw_bad - tw_step < 20) || getenv("RM_TWEEN_ALL"))
+        fprintf(stderr, "tweencheck: frame %ld (tick %ld, race %u) at %d/1%s: %ld bytes differ\n", frame_no, ticks,
+                rm_tick_count(), f, step ? " by a step" : "", bad);
+    tw_bad++;
+    tw_step += step;
+    tw_bytes += bad;
+    if (tw_first < 0)
+        tw_first = frame_no;
 }
 
 static void tween_compose(const VidFrame *f, uint32_t *got)
@@ -655,10 +670,10 @@ static void tween_compose(const VidFrame *f, uint32_t *got)
 static void tween_check(void)
 {
     static uint32_t *b;
-    static uint8_t ahead_px[RM_TWEEN_BYTES];
+    static uint8_t ahead_px[2][RM_TWEEN_BYTES];
+    static int ahead_mask;
     static long ticks, shot = -2, ahead = -1;
     const uint8_t *ram = snes_sfx_ram();
-    uint16_t shown;
     int tw, th, y;
     long bad = 0;
     unsigned o;
@@ -691,24 +706,59 @@ static void tween_check(void)
             free(pic);
         }
     }
-    if (!rm_tween(1, 1, tween_px, &shown))
-        return;
-    if (ahead == frame_no - 1) {        /* the last tick's 1/1 against the buffer this one shows */
-        for (o = 0; o < RM_TWEEN_BYTES; o++)
-            if (ahead_px[o] != ram[(uint16_t)(shown + o)])
+    if (ahead == frame_no - 1) {        /* the last tick's 1/1 against what this one drew in each buffer */
+        for (o = 0; o < RM_TWEEN_BYTES; o++) {
+            if ((ahead_mask & 1) && ahead_px[0][o] != ram[(uint16_t)(0x2C00 + o)])
                 bad++;
-        tw_frames++;
-        if (bad) {
-            if (tw_bad < 20 || getenv("RM_TWEEN_ALL"))
-                fprintf(stderr, "tweencheck: frame %ld (tick %ld, race %u): %ld bytes differ\n", frame_no, ticks,
-                        rm_tick_count(), bad);
-            tw_bad++;
-            tw_bytes += bad;
-            if (tw_first < 0)
-                tw_first = frame_no;
+            if ((ahead_mask & 2) && ahead_px[1][o] != ram[(uint16_t)(0x9400 + o)])
+                bad++;
         }
+        tw_frames++;
+        if (bad && getenv("RM_TWEEN_DUMP") && atol(getenv("RM_TWEEN_DUMP")) == frame_no) {
+            /* RM_TWEEN_DUMP=N: at frame N, the last tick's 1/1 and this tick's buffers */
+            write_file("tween_ahead", ".bin", ahead_px[0], sizeof ahead_px);
+            write_file("tween_drawn", ".bin", ram + 0x2C00, RM_TWEEN_BYTES);
+            write_file("tween_drawn2", ".bin", ram + 0x9400, RM_TWEEN_BYTES);
+        }
+        if (bad)            /* this tick's picture: the step's HUD on its tick */
+            tween_differs(frame_no, ticks, 1, rm_tick_count() % RM_TICKS == RM_TICKS - 1, bad);
     }
-    memcpy(ahead_px, tween_px, sizeof ahead_px);
+    if (snes_wram()[0x0D62]) {
+        /* two players: the tick draws after its physics, so its own
+           picture is the end of the way (1/1) and the last tick's the start
+           (0/1) */
+        static uint8_t last[2][RM_TWEEN_BYTES], px[2][RM_TWEEN_BYTES];
+        static long last_at = -1;
+        int f, m;
+        for (f = 0; f <= 1; f++) {
+            if (!f && last_at != frame_no - 1)
+                continue;
+            if (!(m = rm_tween_buffers(f, 1, px[0], px[1])))
+                break;
+            bad = 0;
+            for (o = 0; o < RM_TWEEN_BYTES; o++) {
+                if (px[0][o] != (f ? ram[(uint16_t)(0x2C00 + o)] : last[0][o]))
+                    bad++;
+                if (px[1][o] != (f ? ram[(uint16_t)(0x9400 + o)] : last[1][o]))
+                    bad++;
+            }
+            tw_frames++;
+            if (bad && getenv("RM_TWEEN_DUMP") && atol(getenv("RM_TWEEN_DUMP")) == frame_no) {
+                write_file("tween_px", ".bin", px[0], sizeof px);
+                write_file("tween_want", ".bin", f ? ram + 0x2C00 : last[0], RM_TWEEN_BYTES);
+                write_file("tween_want2", ".bin", f ? ram + 0x9400 : last[1], RM_TWEEN_BYTES);
+            }
+            if (bad)        /* the stats the step set after its pictures: 1/1 on its tick, 0/1 the next */
+                tween_differs(frame_no, ticks, f, rm_tick_count() % RM_TICKS == (f ? RM_TICKS - 1 : 0), bad);
+        }
+        memcpy(last[0], ram + 0x2C00, RM_TWEEN_BYTES);
+        memcpy(last[1], ram + 0x9400, RM_TWEEN_BYTES);
+        last_at = frame_no;
+        ahead = -1;
+        return;
+    }
+    if (!(ahead_mask = rm_tween_buffers(1, 1, ahead_px[0], ahead_px[1])))
+        return;
     ahead = frame_no;
 }
 

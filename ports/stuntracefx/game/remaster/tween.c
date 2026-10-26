@@ -18,6 +18,7 @@
 #include "remaster.h"
 
 void RmTweenDraw(void);
+void RmTweenDrawTwoPlayers(void);
 
 static uint8_t was_w[0x20000], was_s[0x10000], kept_w[0x20000], kept_s[0x10000];
 static unsigned was_tick;                   /* the tick the kept start is of */
@@ -46,11 +47,14 @@ void rm_tween_frame_end(void)
 int rm_tween_ready(void)
 {
     /* only from a race frame's wait for its tick (the race frame done, the
-       Super FX idle) and not inside an interrupt handler, which may be
-       part way through giving the Super FX's RAM to DMA (about 1 tick in
-       100 at the vertical blank's start) */
+       Super FX idle), and with the Super FX's ROM and RAM its own (SCMR
+       bits 4 and 3), as the race frame leaves them: not while the NMI's
+       upload has them part way through a DMA of a buffer (about 1 tick in
+       100 at the vertical blank's start). An interrupt handler that leaves
+       them alone (a two-player race's split screen IRQ, at the frame's
+       end every frame) is no bar. */
     return was_ok && shown_tick && was_tick == rm_tick_count() && rm_sharing_on() && rm_in_tick_wait() &&
-           !(cpu.p & P_I);
+           (gsu.scmr & 0x18) == 0x18;
 }
 
 /* the word at a of `to` set num/den of the way from `was` to `now` */
@@ -84,12 +88,26 @@ static uint16_t word(const uint8_t *m, unsigned a)
     return (uint16_t)(m[a] | m[a + 1] << 8);
 }
 
-int rm_tween(int num, int den, uint8_t *pixels, uint16_t *shown)
+/* the view's record of the car at `slot`: two links (+$4F) on from it */
+static void between_view(uint8_t *w, unsigned slot, int num, int den)
+{
+    unsigned rec = word(w, slot), i;
+    rec = word(w, 0x204F + rec);
+    rec = word(w, 0x204F + rec);
+    if (rec >= 0x1FE0)
+        return;
+    for (i = 0; i < 3; i++)
+        between16(w, kept_w, was_w, rec + 0x08 + 2 * i, num, den, 0);
+    for (i = 0; i < 3; i++)
+        between16(w, kept_w, was_w, rec + 0x0E + 2 * i, num, den, 1);
+}
+
+int rm_tween_buffers(int num, int den, uint8_t *at_2c00, uint8_t *at_9400)
 {
     uint8_t *w = nshvc_wram(), *s = nshvc_sram();
     Regs65816 cpu_kept = cpu;
     RegsGSU gsu_kept = gsu;
-    int untimed = nshvc_untimed(), i, n, drew;
+    int untimed = nshvc_untimed(), i, n, drew, two = w[0x0D62] != 0, mask;
     unsigned k, rec;
 
     if (!rm_tween_ready())
@@ -101,16 +119,11 @@ int rm_tween(int num, int den, uint8_t *pixels, uint16_t *shown)
        drawn, its frames, its looks), its positions and angles set back
        toward the tick's start */
 
-    /* the view's record: two links (+$4F) on from player 1's car ($0346) */
-    rec = word(w, 0x0346);
-    rec = word(w, 0x204F + rec);
-    rec = word(w, 0x204F + rec);
-    if (rec < 0x1FE0) {
-        for (i = 0; i < 3; i++)
-            between16(w, kept_w, was_w, rec + 0x08 + 2 * i, num, den, 0);
-        for (i = 0; i < 3; i++)
-            between16(w, kept_w, was_w, rec + 0x0E + 2 * i, num, den, 1);
-    }
+    /* the views' records: player 1's car ($0346), and player 2's ($034A)
+       in a two-player race */
+    between_view(w, 0x0346, num, den);
+    if (two)
+        between_view(w, 0x034A, num, den);
     /* the objects: positions +$0C/+$0E/+$10, angles +$14/+$15/+$16 */
     for (k = 0; k < 0x136; k++) {
         unsigned o = 0x2000 + 1 + k * 0x62;
@@ -135,19 +148,31 @@ int rm_tween(int num, int den, uint8_t *pixels, uint16_t *shown)
 
     nshvc_hold_interrupts(1);
     nshvc_set_untimed(1);
-    drew = rm_redraw_run(RmTweenDraw);  /* a redraw: no port, no wait (remaster.h) */
+    drew = rm_redraw_run(two ? RmTweenDrawTwoPlayers : RmTweenDraw);  /* a redraw: no port, no wait (remaster.h) */
     nshvc_set_untimed(untimed);
     nshvc_hold_interrupts(0);
-    {   /* the buffer drawn in (its start at $021A, the one the Super FX draws
-           in next), and the one shown (the other) */
-        uint16_t drawn = word(s, 0x021A);
-        *shown = drawn == 0x2C00 ? 0x9400 : 0x2C00;
-        memcpy(pixels, s + drawn, RM_TWEEN_BYTES);
-    }
+    /* one player: the buffer drawn in (its start at $021A, the one the
+       Super FX draws in next); two players: both, one player's each */
+    mask = !drew ? 0 : two ? 3 : word(s, 0x021A) == 0x2C00 ? 1 : 2;
+    if (mask & 1)
+        memcpy(at_2c00, s + 0x2C00, RM_TWEEN_BYTES);
+    if (mask & 2)
+        memcpy(at_9400, s + 0x9400, RM_TWEEN_BYTES);
 
     memcpy(w, kept_w, sizeof kept_w);
     memcpy(s, kept_s, sizeof kept_s);
     cpu = cpu_kept;
     gsu = gsu_kept;
-    return drew;
+    return mask;
+}
+
+int rm_tween(int num, int den, uint8_t *pixels, uint16_t *shown)
+{
+    int mask;
+
+    if (nshvc_wram()[0x0D62])           /* two players draw two: rm_tween_buffers */
+        return 0;
+    mask = rm_tween_buffers(num, den, pixels, pixels);
+    *shown = mask == 1 ? 0x9400 : 0x2C00;
+    return mask != 0;
 }

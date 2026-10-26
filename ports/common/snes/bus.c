@@ -31,8 +31,11 @@ void wr8(uint32_t addr, uint8_t value);
 
 uint64_t snes_clock;
 /* snes_set_untimed: the S-CPU's code (outside its interrupt handlers),
-   its DMA and the Super FX keep no time: the beam stands while they run */
-static int untimed, in_handler;
+   its DMA and the Super FX keep no time: the beam stands while they run.
+   Code run from the frame hook with interrupts held (snes_hold_interrupts)
+   keeps none even when the frame ends inside a handler. */
+static int untimed, in_handler, held;
+#define UNTIMED (untimed && (!in_handler || held))
 static uint32_t vblanks;           /* vertical blanks begun */
 static uint32_t untimed_reads;     /* reads since the last write, untimed */
 uint8_t snes_mdr;
@@ -240,11 +243,11 @@ void snes_set_untimed(int on)
     untimed_reads = 0;
 }
 
-int snes_untimed(void) { return untimed && !in_handler; }
+int snes_untimed(void) { return UNTIMED; }
 
 void snes_tick(unsigned clocks)
 {
-    if (untimed && !in_handler)
+    if (UNTIMED)
         return;
     snes_clock += clocks;
     if (snes_clock >= next_event)
@@ -255,7 +258,6 @@ void snes_cart_irq(int level) { cart_irq = level; }
 
 /* snes_hold_interrupts: code run between frames (from the frame hook)
    takes no interrupt; they wait for it to end */
-static int held;
 
 void snes_hold_interrupts(int on) { held = on; }
 
@@ -679,7 +681,7 @@ static uint8_t access_rd(uint32_t addr)
     second = last_was_read && addr == ((last_read + 1) & 0xFFFFFF);
     if (!second)
         check_interrupts();
-    if (untimed && !in_handler) {
+    if (UNTIMED) {
         /* code with no time that reads and reads and writes nothing waits
            for something that time would bring: it never comes */
         if (++untimed_reads > 20000000)

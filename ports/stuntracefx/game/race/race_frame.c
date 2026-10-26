@@ -1146,6 +1146,9 @@ void abi_BucketTriggersFixedArea(void);
 void abi_GsuRecordsUpload(void);
 void abi_GsuParamsUpdate(void);
 
+void abi_GsuScreenFlipMenu(void);
+void abi_FrameRunGsuAB13A(void);
+
 void RmTweenDraw(void)
 {
     uint32_t b;
@@ -1183,6 +1186,61 @@ void RmTweenDraw(void)
         abi_GsuRun();
     } else
         rm_hud_redraw_in(0);
+}
+
+/* The same for a two-player race, as RaceFrameRunTwoPlayers draws it:
+   player 1's view, draw list, view matrix and sort; player 2's view, then
+   HUD panel B's frame (FrameRunGsuAB13B: player 1's picture, and with
+   $0D62 set player 2's draw list while it draws) into one buffer; the
+   switch (GsuScreenFlipMenu), player 2's view matrix and sort, $06CF less
+   $140 and HUD panel A's frame (FrameRunGsuAB13A: player 2's picture)
+   into the other; the switch back. The players' stats, phases and sounds
+   are the step's (RaceSoundsPlayer1/2 run on its tick only) and are not
+   run. Untimed; the caller keeps and puts back the state. */
+void RmTweenDrawTwoPlayers(void)
+{
+    uint32_t b;
+
+    op_sep(P_M);
+    op_rep(P_X);
+    cpu.db = 0x02;
+    cpu.d = 0x0000;
+    frame_view_from(0x0346);
+    op_sep(P_M);
+    op_rep(P_X);
+    b = (uint32_t)cpu.db << 16;
+    wr8(b | 0x1F07, 0x00);
+    wr8(0x70246C, 0xFF);
+    wr8(0x70246D, 0xFF);
+    cpu.db = 0x00;
+    abi_BucketTriggersFromView();
+    abi_ObjectDrawListBuild();
+    abi_BucketTriggersFixedArea();
+    abi_GsuRecordsUpload();
+    cpu.db = 0x02;
+    op_sep(P_M);
+    op_rep(P_X);
+    abi_ViewUpdateAndGsuAEF8();
+    op_rep(P_M);
+    abi_BackdropAnglesFromView();
+    frame_view_from(0x034A);
+    op_sep(P_M);
+    b = (uint32_t)cpu.db << 16;
+    wr8(b | 0x1F07, 0x01);
+    wr16(b | 0x1AE8, 0x0000);
+    op_sep(P_M);
+    abi_FrameRunGsuAB13B();
+    op_sep(P_M);
+    abi_GsuScreenFlipMenu();
+    op_sep(P_M);
+    abi_ViewUpdateAndGsuAEF8();
+    abi_BackdropAnglesFromView();
+    b = (uint32_t)cpu.db << 16;
+    wr16(b | 0x06CF, (uint16_t)(rd16(b | 0x06CF) - 0x0140));
+    op_sep(P_M);
+    abi_FrameRunGsuAB13A();
+    op_sep(P_M);
+    abi_GsuScreenFlipMenu();
 }
 
 /*
@@ -1310,7 +1368,8 @@ void abi_RaceFrameRunTwoPlayers(void)
     uint32_t b;
 
     rm_race_frame();
-
+    if (rm_tick60())
+        rm_tween_tick_start();          /* Remaster: the tick's start kept for in-between frames */
     frame_start();
     op_sep(P_M);
     op_rep(P_X);
