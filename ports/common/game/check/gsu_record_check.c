@@ -1,4 +1,4 @@
-/* old: object/gsu_record.c object/fx_pool.c object/fx_record.c gsu/run.c math/scale.c
+/* old: object/gsu_record.c object/fx_pool.c object/fx_record.c gsu/run.c math/scale.c object/object.c math/random.c audio/sound_queue.c
  *
  * gsu_record_check.c: the port's object records (object/gsu_record.c)
  * against the decomp's, on random states. Each case runs the decomp's
@@ -53,6 +53,12 @@ OLD(GsuRecordNewCamera) OLD(GsuRecordNew426) OLD(GsuRecordFlags8ASet) OLD(GsuRec
 OLD(RecordContactFlags) OLD(GsuRecordLand) OLD(RecordNextContact) OLD(RecordContactSummary)
 OLD(ObjectPoseFromRecord) OLD(GsuRecordSet2AHigh)
 OLD(FxRecordNew422) OLD(FxRecordNew424) OLD(FxRecordNew426) OLD(FxRecordNew42D) OLD(FxRecordNewCamera)
+OLD(FxRecordNew426B) OLD(FxRecordRaise6A) OLD(FxRecordLower82)
+OLD(GsuRecordLower82) OLD(GsuRecordRaise6A) OLD(ObjectTurnFromRecord)
+OLD(ObjectSyncFromRecord) OLD(ObjectSyncToRecord) OLD(ObjectSyncAngles) OLD(ObjectSyncFromRecordFall)
+OLD(ObjectSyncFallStep) OLD(ObjectRecordMarkStep) OLD(ObjectSpinStep) OLD(ObjectSpinRecord)
+OLD(ObjectSpinSetup)
+OLD(RecordButtonSequence) OLD(CarControlsToRecord) OLD(PlayerControlsFrame)
 
 static uint64_t rng = 0x3C6EF372FE94F82Bull;
 
@@ -99,6 +105,9 @@ static void old_start(uint8_t bank, uint16_t start)
         {0x048C0A, old_abi_FxRecordNew424},
         {0x048C6C, old_abi_FxRecordNewCamera},
         {0x048C95, old_abi_FxRecordNew42D},
+        {0x048C3B, old_abi_FxRecordNew426B},
+        {0x04BF51, old_abi_FxRecordRaise6A},
+        {0x04BF75, old_abi_FxRecordLower82},
     };
     uint32_t at = (uint32_t)(bank & 0x7F) << 16 | start;
     unsigned i;
@@ -291,6 +300,117 @@ static uint16_t object_rec(uint16_t obj)
 
     obj_record(obj) = rec;
     return rec;
+}
+
+
+/* ---- object table with buckets, as object_more_check builds it: `n` used
+   objects (in a random order) each in a bucket, with parent, link and
+   position fields; the rest free. The record of each (+$22) is set by the
+   case. ---- */
+static uint16_t used[0x136];
+static int nused;
+
+static uint16_t obj_at(int i)
+{
+    return (uint16_t)(1 + 0x62 * i);
+}
+
+static uint16_t some_used(void)
+{
+    return nused ? used[rnd() % (unsigned)nused] : obj_of();
+}
+
+static void fresh_objects(int n)
+{
+    int order[0x136], i, j;
+    size_t k;
+
+    for (k = 0; k < sizeof wram; k++)
+        wram[k] = (uint8_t)rnd();
+    for (k = 0; k < sizeof pakram; k++)
+        pakram[k] = (uint8_t)rnd();
+    for (k = 0xA2D9; k <= 0xF77F; k++)           /* the code copy, as at power on */
+        wram[k] = ram_code_byte((uint16_t)k);
+    for (i = 0; i < 0x136; i++)
+        order[i] = i;
+    for (i = 0x135; i > 0; i--) {
+        int t;
+
+        j = (int)(rnd() % (unsigned)(i + 1));
+        t = order[i], order[i] = order[j], order[j] = t;
+    }
+    nused = n;
+    for (i = 0; i < n; i++) {
+        used[i] = obj_at(order[i]);
+        obj_next(used[i]) = i + 1 < n ? obj_at(order[i + 1]) : 0;
+        obj_prev(used[i]) = i ? obj_at(order[i - 1]) : 0;
+    }
+    objects_used = n ? used[0] : 0;
+    objects_last = n ? used[n - 1 - (int)(rnd() % (unsigned)n)] : 0;
+    for (i = n; i < 0x136; i++)
+        obj_next(obj_at(order[i])) = i + 1 < 0x136 ? obj_at(order[i + 1]) : 0;
+    objects_free = n < 0x136 ? obj_at(order[n]) : 0;
+    for (k = 0x10000; k < 0x10800; k++)           /* the bucket heads, all empty */
+        wram[k] = 0;
+    for (i = 0; i < n; i++)
+        OBJ_W(used[i], 0x40) = (uint16_t)(rnd() % 0x40 * 2);
+    for (i = 0; i < n; i++)                       /* a record for most, so the lists read valid ones */
+        OBJ_W(used[i], 0x22) = rnd() % 5 ? rec_addr() : 0;
+    for (i = 0; i < n; i++) {
+        OBJ_W(used[i], 0x27) = some_used();
+        OBJ_W(used[i], 0x06) = some_used();
+        OBJ_W(used[i], 0x4F) = some_used();
+        object_bucket_insert(used[i]);
+    }
+    W8(0x0CEE) = (uint8_t)(rnd() % 0x50);
+    memset(&old_cpu, 0, sizeof old_cpu);
+    old_cpu.db = 0x7E;
+    old_cpu.p = P_M;
+    poll_counts = 0;
+    model_pixels_empty();
+}
+
+/* A used object given a record (or none, one time in five). */
+static uint16_t used_with_record(void)
+{
+    uint16_t obj = some_used();
+
+    obj_record(obj) = rnd() % 5 ? rec_addr() : 0;
+    return obj;
+}
+
+/* The linked-object handler's state, as object_more_check shapes it for the
+   object `obj` (its record's +$88 and +$42 and the $0DD6 table). */
+static void linked_state(uint16_t obj)
+{
+    uint16_t y;
+
+    for (y = 0; y < 2; y++)
+        W8(0x0DD6 + y) = (uint8_t)(rnd() % 4 == 0 ? (uint8_t)rnd() : (rnd() % 2 ? 0x08 : (rnd() % 2 ? 0x0C : 0x0A)));
+    W8(0x0E59) = (uint8_t)(rnd() & 1);
+    W8(0x19ED) = (uint8_t)(rnd() & 1 ? 0x08 : rnd());
+    if (obj_record(obj)) {
+        P8(0x88 + obj_record(obj)) = (uint8_t)(rnd() % 6);
+        P16(0x42 + obj_record(obj)) = (uint16_t)rnd();
+    }
+    if (rnd() & 1) {
+        W16(0x1AEE) = 0x0001;
+    } else {
+        W16(0x1AEE) = 0x0000;
+        W16(0xFFB8) = 2;
+        W16(0xFFAE) = some_used();
+    }
+}
+
+/* The pools the record programs take from and the records list, on an
+   object table already built (as fresh_pools does on fresh()). */
+static void pools_on_objects(void)
+{
+    poll_counts = 1;
+    pool_chain(0x1098, 0x1398);
+    pool_chain(0x1D70, 0x1F70);
+    records_list((int)(rnd() % 4));
+    P16(0x2398) = (rnd() & 1) ? 0 : (uint16_t)(0x3800 + 2 * (rnd() % 0x400));
 }
 
 #define CASE(name) model_current = name; for (i = 0; i < n && (!getenv("ONLY") || !strcmp(getenv("ONLY"), name)) && (iteration = i, 1); i++)
@@ -621,6 +741,187 @@ int main(int argc, char **argv)
         old_cpu.a = value;
         old_run(old_abi_GsuRecordSet2AHigh);
         r = record_set_2a_high(obj, value);
+        same();
+        reg("A", r, old_cpu.a, 0xFFFF);
+    }
+    CASE("GsuRecordLower82 / GsuRecordRaise6A") {
+        uint16_t rec = rec_addr(), r;
+        uint8_t amount = (uint8_t)rnd();
+        int raise = (int)(rnd() & 1);
+
+        fresh();
+        poll_counts = 1;                    /* the program's poll counts and R10 stack */
+        W16(0x0346) = obj_of();
+        P16(0x2476) = rnd() & 1 ? rec : rec_addr();
+        if (rnd() & 1)
+            P16(rec + 0x40) |= 0x0001;
+        else
+            P16(rec + 0x40) &= (uint16_t)~0x0001;
+        old_cpu.y = rec;
+        old_cpu.a = amount;
+        if (raise) {
+            old_run(old_abi_GsuRecordRaise6A);
+            r = record_raise_6a(rec, amount);
+        } else {
+            old_run(old_abi_GsuRecordLower82);
+            r = record_lower_82(rec, amount);
+        }
+        same();
+        reg("A", r, old_cpu.a, 0xFFFF);
+    }
+    CASE("ObjectTurnFromRecord") {
+        uint16_t rec = rec_addr(), obj = obj_of(), r;
+
+        fresh();
+        W8(0x1A75) = (uint8_t)rnd();
+        W8(0x1A77) = (uint8_t)rnd();
+        W8(0x1AB0) = (uint8_t)rnd();
+        W8(0x0D62) = rnd() % 2 ? 0 : (uint8_t)(1 + rnd() % 255);
+        old_cpu.x = rec;
+        old_cpu.y = obj;
+        old_run(old_abi_ObjectTurnFromRecord);
+        r = object_turn_from_record(rec, obj);
+        same();
+        reg("A", r, old_cpu.a, 0xFFFF);
+    }
+    CASE("ObjectSyncFromRecord / ObjectSyncToRecord / ObjectSyncAngles") {
+        static uint16_t (*const port_sync[3])(uint16_t, uint16_t *, bool *) = {
+            object_sync_from_record, object_sync_to_record, object_sync_angles};
+        static void (*const olds[3])(void) = {old_abi_ObjectSyncFromRecord, old_abi_ObjectSyncToRecord,
+                                              old_abi_ObjectSyncAngles};
+        int w = (int)(rnd() % 3);
+        uint16_t obj, y = 0, r;
+        bool carry = false;
+
+        fresh_objects((int)(1 + rnd() % 0x80));
+        obj = used_with_record();
+        W16(0x1F3C) = (uint16_t)rnd();
+        old_cpu.x = obj;
+        old_cpu.y = (uint16_t)rnd();
+        old_run(olds[w]);
+        r = port_sync[w](obj, &y, &carry);
+        same();
+        reg("A", r, old_cpu.a, 0xFFFF);
+        reg("Y", y, old_cpu.y, 0xFFFF);
+        reg("carry", carry, (old_cpu.p & P_C) != 0, 1);
+    }
+    CASE("ObjectSyncFromRecordFall / ObjectSyncFallStep") {
+        int step = (int)(rnd() & 1);
+        uint16_t obj, y = 0, r = 0;
+
+        fresh_objects((int)(1 + rnd() % 0x80));
+        obj = used_with_record();
+        if (!obj_record(obj))
+            obj_record(obj) = rec_addr();
+        old_cpu.x = obj;
+        old_cpu.y = (uint16_t)rnd();
+        if (step) {
+            old_run(old_abi_ObjectSyncFallStep);
+            object_sync_fall_step(obj);
+        } else {
+            old_run(old_abi_ObjectSyncFromRecordFall);
+            r = object_sync_from_record_fall(obj, &y);
+            reg("A", r, old_cpu.a, 0xFFFF);
+            reg("Y", y, old_cpu.y, 0xFFFF);
+        }
+        same();
+    }
+    CASE("ObjectRecordMarkStep") {
+        uint16_t obj;
+
+        fresh_objects((int)(1 + rnd() % 0x80));
+        obj = used_with_record();
+        old_cpu.x = obj;
+        old_run(old_abi_ObjectRecordMarkStep);
+        object_record_mark_step(obj);
+        same();
+    }
+    CASE("ObjectSpinStep") {
+        uint16_t obj;
+
+        fresh_objects((int)(1 + rnd() % 0x80));
+        obj = used_with_record();
+        old_cpu.x = obj;
+        old_run(old_abi_ObjectSpinStep);
+        object_spin_step(obj);
+        same();
+    }
+    CASE("ObjectSpinRecord / ObjectSpinSetup") {
+        int setup = (int)(rnd() & 1);
+        uint16_t obj;
+
+        fresh_objects((int)(1 + rnd() % 0x80));
+        pools_on_objects();
+        obj = used_with_record();
+        old_cpu.x = obj;
+        if (setup) {
+            old_run(old_abi_ObjectSpinSetup);
+            object_spin_setup(obj);
+        } else {
+            old_run(old_abi_ObjectSpinRecord);
+            object_spin_record(obj);
+        }
+        same();
+    }
+    CASE("RecordButtonSequence") {
+        uint16_t rec = rec_addr(), r;
+
+        fresh();
+        poll_counts = 1;
+        W16(0x1A33) = (uint16_t)(rnd() % 20);
+        W16(0x1A35) = (uint16_t)(rnd() % 5);
+        W16(0x1AF0) = (uint16_t)((rnd() & rnd()) | (rnd() & 0x0040));
+        P16(rec + 0x40) = (uint16_t)rnd();
+        old_cpu.x = rec;
+        old_run(old_abi_RecordButtonSequence);
+        r = record_button_sequence(rec);
+        same();
+        reg("A", r, old_cpu.a, 0xFFFF);
+    }
+    CASE("CarControlsToRecord") {
+        uint16_t obj;
+
+        fresh_objects((int)(1 + rnd() % 0x80));
+        pools_on_objects();
+        obj = used_with_record();
+        OBJ_W(obj, 0x4F) = some_used();
+        *OBJ(obj, 0x25) = (uint8_t)(rnd() % 4 == 0 ? ((uint8_t)rnd() | 0x04) : ((uint8_t)rnd() & 0xFB));
+        OBJ_W(obj, 0x29) = rnd() % 3 == 0 ? (uint16_t)rnd() : (uint16_t)(rnd() % 14);
+        if (obj_record(obj)) {
+            if (rnd() % 4 == 0)
+                P16(obj_record(obj) + 0x1C) |= 0x0010;
+            P16(obj_record(obj) + 0x6A) = rnd() % 2 ? 0 : (uint16_t)rnd();
+            P16(obj_record(obj) + 0x5E) = rnd() % 2 ? 0 : (uint16_t)rnd();
+        }
+        W16(0x1AF0) = (uint16_t)rnd();
+        W16(0x1AF2) = (uint16_t)rnd();
+        W8(0x0D62) = rnd() % 2 ? 0 : (uint8_t)(1 + rnd() % 255);
+        W8(0x0D53) = rnd() % 4 ? 0 : (uint8_t)(1 + rnd() % 255);
+        W8(0x1A5D) = (uint8_t)(rnd() & 1);
+        old_cpu.x = obj;
+        old_run(old_abi_CarControlsToRecord);
+        car_controls_to_record(obj);
+        same();
+    }
+    CASE("PlayerControlsFrame") {
+        uint16_t r;
+
+        fresh_objects((int)(2 + rnd() % 0x80));
+        pools_on_objects();
+        W16(0x0346) = used_with_record();
+        W16(0x034A) = used_with_record();
+        OBJ_W(W16(0x0346), 0x4F) = some_used();
+        OBJ_W(W16(0x034A), 0x4F) = some_used();
+        W16(0x0309) = (uint16_t)rnd();
+        W16(0x030D) = (uint16_t)rnd();
+        W16(0x1F23) = (uint16_t)rnd();
+        W16(0x1F25) = (uint16_t)rnd();
+        W8(0x0D62) = rnd() % 2 ? 0 : (uint8_t)(1 + rnd() % 255);
+        W8(0x0D53) = rnd() % 4 ? 0 : (uint8_t)(1 + rnd() % 255);
+        linked_state(W16(0x0346));
+        linked_state(W16(0x034A));
+        old_run(old_abi_PlayerControlsFrame);
+        r = player_controls_frame();
         same();
         reg("A", r, old_cpu.a, 0xFFFF);
     }

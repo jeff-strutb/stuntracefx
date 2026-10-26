@@ -11,6 +11,7 @@
 #include "objects.h"
 #include "fixmath.h"
 #include "glue.h"
+#include "object_more.h"
 #include "gsu_record.h"
 
 /* A field of a record: the record at `rec` (in the game pak RAM), `off`. */
@@ -490,4 +491,495 @@ uint16_t record_contact_summary(uint16_t obj, uint16_t *last)
         *last = e;
     }
     return contact_flags_sum();
+}
+
+/* ---- the Super FX programs that take an amount and a record ---- */
+
+/* The amount and the record the program at bank $04 reads from the game pak
+   RAM ($70:2390 and $70:238E, see program_record). */
+#define program_amount  P16(0x2390)
+
+/* The screen mode GsuRun leaves in A: the shadow the S-CPU keeps. */
+#define gsu_mode_out    W8(0x0374)
+
+/* Runs the program at bank $04 `program` on the record `rec` (the record
+   read from $70:238E). Flags the object at $0346 when `rec` is the record at
+   $70:2476. Returns A: `rec`'s high byte over the screen mode. */
+static uint16_t record_amount_go(uint16_t rec, uint16_t program)
+{
+    object_flag40_if_match(rec);
+    gsu_run(0x04, program);
+    return (uint16_t)((rec & 0xFF00) | gsu_mode_out);
+}
+
+/* The record and the amount (as the high byte) into the program's inputs,
+   then the program. */
+static uint16_t record_amount_run(uint16_t rec, uint8_t amount, uint16_t program)
+{
+    program_amount = (uint16_t)(amount << 8);
+    program_record = rec;
+    return record_amount_go(rec, program);
+}
+
+/* Lowers the record's +$82 by the amount A (Super FX program $04:BF75).
+   Returns A: the record's high byte over the screen mode. */
+uint16_t record_lower_82(uint16_t rec, uint8_t amount)
+{
+    return record_amount_run(rec, amount, 0xBF75);
+}
+
+/* Raises the record's +$6A by the amount A (Super FX program $04:BF51), unless
+   bit 0 of +$40 is set. Returns 1 when it is set, else as record_lower_82. */
+uint16_t record_raise_6a(uint16_t rec, uint8_t amount)
+{
+    program_amount = (uint16_t)(amount << 8);
+    program_record = rec;
+    if (REC_W(rec, 0x40) & 0x0001)
+        return 0x0001;
+    return record_amount_go(program_record, 0xBF51);
+}
+
+/* ---- the object's position and turn from its record ---- */
+
+/* The object's turn from its record: +$5D = the record's +$29 byte + 8 + a
+   lean step, +$18 and (with $0D62 set) +$19 from the $08:C056 table for the
+   heading in $1F5A; the record's +$25 byte is the object's +$15. `rec` is
+   the record, `obj` the object. Returns A: +$5D's high byte over the low
+   byte of the last table value (0 when $0D62 is clear). */
+uint16_t object_turn_from_record(uint16_t rec, uint16_t obj)
+{
+    uint8_t a, sum, t;
+    uint16_t w;
+
+    *OBJ(obj, 0x16) = REC_B(rec, 0x29);
+    *OBJ(obj, 0x15) = REC_B(rec, 0x25);
+    W8(0x1F5A) = (uint8_t)-W8(0x1A75);
+    W8(0x1F2B) = W8(0x1A77);
+    sum = (uint8_t)(*OBJ(obj, 0x16) + W8(0x1F2B));
+    a = (uint8_t)((sum >> 1) | (sum & 0x80));
+    if (a & 0x80)
+        a = (uint8_t)-(uint8_t)((uint8_t)-a & 0xFC);
+    a &= 0xFC;
+    if (!((uint8_t)(a - 0x08) & 0x80))
+        a = 0x08;
+    if ((uint8_t)(a - 0xF8) & 0x80)
+        a = 0xF8;
+    W8(0x1F58) = a;
+    t = (uint8_t)(*OBJ(obj, 0x15) - W8(0x1F5A));
+    if (t & 0x80)
+        t = (uint8_t)-t;
+    if (!((uint8_t)(t - 0x40) & 0x80))
+        W8(0x1F58) = (uint8_t)-W8(0x1F58);
+    w = (W8(0x1F58) & 0x80) ? (uint16_t)(W8(0x1F58) | 0xFF00) : W8(0x1F58);
+    w = (uint16_t)(w + 8 + OBJ_W(obj, 0x29));
+    OBJ_W(obj, 0x5D) = w;
+    object_table_c056(obj);
+    *OBJ(obj, 0x18) = (uint8_t)(W8(0x1F5A) | 0x80);
+    if (!W8(0x0D62))
+        return (uint16_t)(w & 0xFF00);
+    W8(0x1F5A) = (uint8_t)-W8(0x1AB0);
+    object_table_c056(obj);
+    a = (uint8_t)(W8(0x1F5A) | 0x80);
+    *OBJ(obj, 0x19) = a;
+    return (uint16_t)((w & 0xFF00) | a);
+}
+
+/* Sets the record's +$24 high byte from the object's heading (+$15) and its
+   +$12 from +$5A's low 7 bits. */
+static void record_heading_from(uint16_t obj, uint16_t rec)
+{
+    REC_W(rec, 0x24) = (uint16_t)(*OBJ(obj, 0x15) << 8);
+    REC_W(rec, 0x12) = OBJ_W(obj, 0x5A) & 0x007F;
+}
+
+/* The end of the sync routines: $1F3C is the record's +$18 (`y`); when it is
+   zero A is kept, else A's low byte becomes 1. Carry is clear. */
+static uint16_t sync_tail(uint16_t a, uint16_t *y, bool *carry)
+{
+    *carry = false;
+    *y = W16(0x1F3C);
+    if (!*y)
+        return a;
+    return (uint16_t)((a & 0xFF00) | 0x0001);
+}
+
+/* No record: `y` is the object, $1F3C is zero, A is zero and carry is set. */
+static uint16_t sync_none(uint16_t obj, uint16_t *y, bool *carry)
+{
+    *y = obj;
+    W16(0x1F3C) = 0;
+    *carry = true;
+    return 0;
+}
+
+/* The start of the sync routines: the object is rebucketed and its record
+   marked (record_mark_flag4). Returns the record, 0 for none. */
+static uint16_t sync_start(uint16_t obj)
+{
+    object_rebucket(obj);
+    record_mark_flag4(obj);
+    return obj_record(obj);
+}
+
+/* The object takes its position and heading back from its record, and the
+   record's bit 1 of +$1C becomes bit 1 of the object's +$24. `y` is the
+   record's +$18 and `carry` is set when there is no record. */
+uint16_t object_sync_from_record(uint16_t obj, uint16_t *y, bool *carry)
+{
+    uint16_t rec = sync_start(obj), a;
+
+    *OBJ(obj, 0x24) &= 0xFD;
+    if (!rec)
+        return sync_none(obj, y, carry);
+    W16(0x1F3C) = REC_W(rec, 0x18);
+    record_heading_from(obj, rec);
+    OBJ_W(obj, 0x0C) = REC_W(rec, 0x1E);
+    OBJ_W(obj, 0x0E) = REC_W(rec, 0x20);
+    OBJ_W(obj, 0x10) = REC_W(rec, 0x22);
+    a = REC_W(rec, 0x1C) & 0x0002;
+    if (a) {
+        *OBJ(obj, 0x24) |= 0x02;
+        a = *OBJ(obj, 0x24);
+    }
+    return sync_tail(a, y, carry);
+}
+
+/* As object_sync_from_record the other way: the object's position goes to
+   its record (+$1E, +$20, +$22); +$24 is left alone. */
+uint16_t object_sync_to_record(uint16_t obj, uint16_t *y, bool *carry)
+{
+    uint16_t rec = sync_start(obj), a;
+
+    if (!rec)
+        return sync_none(obj, y, carry);
+    record_heading_from(obj, rec);
+    W16(0x1F3C) = REC_W(rec, 0x18);
+    REC_W(rec, 0x1E) = OBJ_W(obj, 0x0C);
+    REC_W(rec, 0x20) = OBJ_W(obj, 0x0E);
+    a = OBJ_W(obj, 0x10);
+    REC_W(rec, 0x22) = a;
+    return sync_tail(a, y, carry);
+}
+
+/* The object's heading and +$12 go to its record; nothing else moves. A is
+   the record's +$18. */
+uint16_t object_sync_angles(uint16_t obj, uint16_t *y, bool *carry)
+{
+    uint16_t rec = sync_start(obj), a;
+
+    if (!rec)
+        return sync_none(obj, y, carry);
+    record_heading_from(obj, rec);
+    a = REC_W(rec, 0x18);
+    W16(0x1F3C) = a;
+    return sync_tail(a, y, carry);
+}
+
+/* A falling object: as object_sync_from_record for an object whose record is
+   there (its record is not tested), with its Y speed (+$30) added to the
+   record's +$20 before it goes to the object's +$0E. */
+uint16_t object_sync_from_record_fall(uint16_t obj, uint16_t *y)
+{
+    uint16_t rec, v;
+    bool carry;
+
+    object_rebucket(obj);
+    record_mark_flag4(obj);
+    rec = obj_record(obj);
+    record_heading_from(obj, rec);
+    W16(0x1F3C) = REC_W(rec, 0x18);
+    OBJ_W(obj, 0x0C) = REC_W(rec, 0x1E);
+    v = (uint16_t)(REC_W(rec, 0x20) + OBJ_W(obj, 0x30));
+    OBJ_W(obj, 0x0E) = v;
+    v = REC_W(rec, 0x22);
+    OBJ_W(obj, 0x10) = v;
+    return sync_tail(v, y, &carry);
+}
+
+/* The handler of a falling object: object_sync_from_record_fall. */
+void object_sync_fall_step(uint16_t obj)
+{
+    uint16_t y;
+
+    object_sync_from_record_fall(obj, &y);
+}
+
+/* The record's handler: rebuckets the object and marks its record. */
+void object_record_mark_step(uint16_t obj)
+{
+    object_rebucket(obj);
+    record_mark_flag4(obj);
+}
+
+/* The spinning object's handler: its heading turns by one; with a record,
+   the record's +$24 takes the heading's low byte; then it follows its
+   record. */
+void object_spin_step(uint16_t obj)
+{
+    uint16_t rec, y;
+    bool carry;
+
+    *OBJ(obj, 0x15) = (uint8_t)(*OBJ(obj, 0x15) + 1);
+    rec = obj_record(obj);
+    if (rec)
+        REC_W(rec, 0x24) = OBJ_W(obj, 0x15) & 0x00FF;
+    object_sync_from_record(obj, &y, &carry);
+}
+
+/* The spinning object gets its record (mode 2, +$2A high byte $20) and takes
+   its first step. */
+void object_spin_record(uint16_t obj)
+{
+    record_new_424(obj);
+    record_set_mode_2(obj);
+    record_set_2a_high(obj, 0x20);
+    object_spin_step(obj);
+}
+
+/* The handler of object `obj`: +$1A = `h`, +$1C = $08. */
+static void set_handler_08(uint16_t obj, uint16_t h)
+{
+    OBJ_W(obj, 0x1A) = h;
+    *OBJ(obj, 0x1C) = 0x08;
+}
+
+/* Sets up a spinning object: +$1D = $CDD0, +$1F = $08, the step handler, then
+   its record. */
+void object_spin_setup(uint16_t obj)
+{
+    OBJ_W(obj, 0x1D) = 0xCDD0;
+    *OBJ(obj, 0x1F) = 0x08;
+    set_handler_08(obj, 0xCDDE);
+    object_spin_record(obj);
+}
+
+/* ---- the buttons: a record's button sequence and the car's controls ---- */
+
+/* The button words: the buttons held this frame and last frame, and the
+   sequence's frame counter and stage ($1A33, $1A35). */
+#define ctl_input       W16(0x1AF0)
+#define ctl_prev        W16(0x1AF2)
+#define seq_count       W16(0x1A33)
+#define seq_stage       W16(0x1A35)
+
+/* Watches the buttons for the four-press sequence (see the decomp's notes):
+   bit 6, then bit 7, then bit 14 within 5 frames of each, then bit 11 within
+   12 to 16 frames. The full sequence plays sound $48 and gives the record bit
+   13 of +$40, $180 at +$6A and $1000 at +$400. Too slow, too early or done:
+   back to the start. Returns A. */
+uint16_t record_button_sequence(uint16_t rec)
+{
+    static const uint16_t press[3] = {0x0040, 0x0080, 0x4000};
+    uint16_t n, s, in;
+
+    n = (uint16_t)(seq_count + 1);
+    seq_count = n;
+    s = seq_stage;
+    if (s <= 2) {
+        n = seq_count;
+        if (!((uint16_t)(n - 5) & 0x8000))
+            goto reset;
+        in = ctl_input;
+        if (!(in & press[s]))
+            return in;
+        seq_count = 0;
+        seq_stage = (uint16_t)(seq_stage + 1);
+        return in;
+    }
+    if (s == 3) {
+        n = seq_count;
+        if (!((uint16_t)(n - 0x11) & 0x8000))
+            goto reset;
+        in = ctl_input;
+        if (!(in & 0x0800))
+            return in;
+        n = seq_count;
+        if ((uint16_t)(n - 0x0C) & 0x8000)
+            goto reset;
+    }
+    sound_queue(0x48);
+    REC_W(rec, 0x40) |= 0x2000;
+    REC_W(rec, 0x6A) = 0x0180;
+    REC_W(rec, 0x400) = 0x1000;
+    n = 0x1000;
+reset:
+    seq_count = 0;
+    seq_stage = 0;
+    return n;
+}
+
+/* The player's flag word: $1A60 for player 2 ($1A5D set), else $1A5E. */
+static uint16_t player_word(void)
+{
+    return W8(0x1A5D) ? 0x1A60 : 0x1A5E;
+}
+
+/* Clears bit 4 of the player's flag word. */
+static void player_flag_clear(void)
+{
+    uint16_t pw = player_word();
+
+    if (W16(pw) & 0x0010)
+        W16(pw) &= 0xFFEF;
+}
+
+/* Sets bits m1 and m2 (when not 0) of the +$25 flags of the object's linked
+   object (+$4F). */
+static void linked_flags(uint16_t obj, uint8_t m1, uint8_t m2)
+{
+    uint16_t link = OBJ_W(obj, 0x4F);
+
+    *OBJ(link, 0x25) |= m1;
+    if (m2)
+        *OBJ(link, 0x25) |= m2;
+}
+
+/* A car's controls: the player's buttons (ctl_input, ctl_prev) into the car's
+   record. A car with bit 2 of +$25 only marks its record (+$40 bit 9, and +$42
+   kept to $D800 unless bit 12). Otherwise, unless the record's +$1C has bit 4:
+   SELECT runs the button sequence and sets bit 0 of the linked object's +$25
+   (and bit 1 with L and R held); in a two-player race the car's +$29 counts up
+   to a random limit $6E-$71 ($1F2B), and is reset to $FFFF by B, Y, A or X once
+   it is past 9; at the limit the record's +$64 gets bit 3 and the linked object
+   bits 0 and 1. Then, with $0D53 clear and +$42 bit 12 clear, the record's
+   +$40 loses bit 9, +$42 keeps only $D800, and the buttons held set +$42 bits:
+   LEFT 0 (else RIGHT 1), L 2 (else R 3), A $2040 (and $20 below speed $32 at
+   +$4A), Y $400 when +$6A is not 0 (else sound $5E and the player's flag $10,
+   once), B $10; X newly pressed 7 when +$5E is 0 and +$40 bit 8 is clear.
+   Without Y the player's flag $10 is cleared. With +$40 bit 8 set, DOWN takes
+   $600 from +$26 and UP adds it. `obj` is the car; its record is read from its
+   +$22. The data bank is $7E. */
+void car_controls_to_record(uint16_t obj)
+{
+    static const uint16_t clear_timer[4] = {0x8000, 0x4000, 0x0080, 0x0040};
+    uint16_t rec, o29, lim, link;
+    int i;
+
+    W16(0x1F18) = obj;
+    rec = obj_record(obj);
+    if (*OBJ(obj, 0x25) & 0x04) {
+        if (rec) {
+            REC_W(rec, 0x40) |= 0x0200;
+            if (!(REC_W(rec, 0x42) & 0x1000))
+                REC_W(rec, 0x42) &= 0xD800;
+        }
+        return;
+    }
+    if (!rec || (REC_W(rec, 0x1C) & 0x0010))
+        return;
+
+    if (ctl_input & 0x2000) {
+        record_button_sequence(rec);
+        if (!(ctl_prev & 0x2000)) {
+            link = OBJ_W(obj, 0x4F);
+            *OBJ(link, 0x25) |= 0x01;
+            if (W8(0x1AF0) & 0x20) {
+                if (W8(0x1AF0) & 0x10)
+                    *OBJ(link, 0x25) |= 0x02;
+            }
+        }
+    }
+
+    if (W8(0x0D62)) {
+        lim = W16(0x1F2B) = (uint16_t)((random_step(&wram[0xE6]) & 0x03) + 0x6E);
+        o29 = OBJ_W(obj, 0x29);
+        if (!(o29 & 0x8000)) {
+            if ((uint16_t)(o29 - lim) & 0x8000) {
+                o29 = (uint16_t)(o29 + 1);
+                OBJ_W(obj, 0x29) = o29;
+                if (!((uint16_t)(o29 - 10) & 0x8000)) {
+                    for (i = 0; i < 4; i++)
+                        if (ctl_input & clear_timer[i])
+                            break;
+                    if (i < 4)
+                        OBJ_W(obj, 0x29) = 0xFFFF;
+                }
+            } else if (!(REC_W(rec, 0x64) & 0x0008)) {
+                REC_W(rec, 0x64) |= 0x0008;
+                linked_flags(obj, 0x01, 0x02);
+            }
+        }
+    }
+
+    if (W8(0x0D53))
+        return;
+    REC_W(rec, 0x40) &= 0xFDFF;
+    if (REC_W(rec, 0x42) & 0x1000)
+        return;
+    REC_W(rec, 0x42) &= 0xD800;
+    if (ctl_input & 0x0200)
+        REC_W(rec, 0x42) |= 0x0001;
+    else if (ctl_input & 0x0100)
+        REC_W(rec, 0x42) |= 0x0002;
+    if (ctl_input & 0x0020)
+        REC_W(rec, 0x42) |= 0x0004;
+    else if (ctl_input & 0x0010)
+        REC_W(rec, 0x42) |= 0x0008;
+    if (ctl_input & 0x0080) {
+        REC_W(rec, 0x42) |= 0x2040;
+        if ((uint16_t)(REC_W(rec, 0x4A) - 0x32) & 0x8000)
+            REC_W(rec, 0x42) |= 0x0020;
+    }
+    if (ctl_input & 0x4000) {
+        if (REC_W(rec, 0x6A)) {
+            REC_W(rec, 0x42) |= 0x0400;
+            player_flag_clear();
+        } else {
+            uint16_t pw = player_word(), v = W16(pw);
+
+            if (!(v & 0x0010)) {
+                sound_queue(0x5E);
+                v |= 0x0010;
+                W16(pw) = v;
+            }
+        }
+    } else {
+        player_flag_clear();
+    }
+    if ((ctl_input & 0x0040) && !(ctl_prev & 0x0040)) {
+        if (REC_W(rec, 0x5E) == 0 && !(REC_W(rec, 0x40) & 0x0100))
+            REC_W(rec, 0x42) |= 0x0080;
+    }
+    if (ctl_input & 0x8000)
+        REC_W(rec, 0x42) |= 0x0010;
+    if (REC_W(rec, 0x40) & 0x0100) {
+        if (ctl_input & 0x0400)
+            REC_W(rec, 0x26) = (uint16_t)(REC_W(rec, 0x26) - 0x0600);
+        if (ctl_input & 0x0800)
+            REC_W(rec, 0x26) = (uint16_t)(REC_W(rec, 0x26) + 0x0600);
+    }
+}
+
+/* One player's controls: the buttons held and last frame (at `held` and
+   `prev`) into $1AF0 and $1AF2, the player into $1A5D, then the car's controls
+   and the car's linked object handler. */
+static void player_controls(uint16_t held, uint16_t prev, uint8_t player, uint16_t car)
+{
+    uint16_t obj, y = player;
+
+    W16(0x1AF0) = W16(held);
+    W16(0x1AF2) = W16(prev);
+    W8(0x1A5D) = player;
+    obj = W16(car);
+    car_controls_to_record(obj);
+    object_linked_handler_by_state(obj, &y, 0);
+}
+
+/* The players' controls for a race frame: player 1, and player 2 when $0D62
+   is set, from the buttons held this frame ($0309, $030D) and last frame
+   ($1F23, $1F25); then this frame's buttons become last frame's and $0309 and
+   $030D are cleared. Returns player 2's buttons as read before the clear. */
+uint16_t player_controls_frame(void)
+{
+    uint16_t a;
+
+    player_controls(0x0309, 0x1F23, 0, 0x0346);
+    if (W8(0x0D62))
+        player_controls(0x030D, 0x1F25, 1, 0x034A);
+    W16(0x1F23) = W16(0x0309);
+    a = W16(0x030D);
+    W16(0x1F25) = a;
+    W16(0x0309) = 0;
+    W16(0x030D) = 0;
+    return a;
 }
