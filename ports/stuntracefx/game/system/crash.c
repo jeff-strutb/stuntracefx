@@ -9,7 +9,6 @@
  * forever.
  */
 #include "machine.h"
-#include "native.h"
 #include "hw.h"
 #include "cpu_ops.h"
 #include "assets.h"
@@ -29,76 +28,76 @@ static void crash_body(uint8_t bank, uint16_t code)
     /* Through the caller's data bank: from bank $7E or $7F these four land
        in work RAM, and interrupts and HDMA stay on. */
     cyc(46);
-    hw_wr((uint32_t)bank << 16 | (uint16_t)NMITIMEN, 0x00);
+    wr8((uint32_t)bank << 16 | (uint16_t)NMITIMEN, 0x00);
     cyc(24);
-    hdmaen_wr((uint32_t)bank << 16 | (uint16_t)HDMAEN, 0x00);
+    wr8((uint32_t)bank << 16 | (uint16_t)HDMAEN, 0x00);
     cpu.p |= P_I;
     cyc(38);
-    ppu_wr((uint32_t)bank << 16 | (uint16_t)TM, 0x00);
+    wr8((uint32_t)bank << 16 | (uint16_t)TM, 0x00);
     cyc(24);
-    ppu_wr((uint32_t)bank << 16 | (uint16_t)TS, 0x00);
+    wr8((uint32_t)bank << 16 | (uint16_t)TS, 0x00);
     cyc(150);
-    ppu_wr(INIDISP, 0x80);
+    wr8(INIDISP, 0x80);
     cyc(24);
-    ppu_wr(CGADD, 0x00);
+    wr8(CGADD, 0x00);
     cyc(24);
-    ppu_wr(CGDATA, cyc_then(24, rd8(CRASH_COLOUR)));
+    wr8(CGDATA, cyc_then(24, rd8(CRASH_COLOUR)));
     cyc(24);
-    ppu_wr(CGDATA, cyc_then(24, rd8(CRASH_COLOUR + 1)));
+    wr8(CGDATA, cyc_then(24, rd8(CRASH_COLOUR + 1)));
     cyc(40);
-    ppu_wr(BG1SC, 0x40);
+    wr8(BG1SC, 0x40);
     cyc(40);
-    ppu_wr(BG12NBA, 0x00);
+    wr8(BG12NBA, 0x00);
     cyc(24);
-    ppu_wr(W12SEL, 0x00);
+    wr8(W12SEL, 0x00);
     cyc(24);
-    ppu_wr(W34SEL, 0x00);
+    wr8(W34SEL, 0x00);
     cyc(24);
-    ppu_wr(WOBJSEL, 0x00);
+    wr8(WOBJSEL, 0x00);
     cyc(24);
-    ppu_wr(WBGLOG, 0x00);
+    wr8(WBGLOG, 0x00);
     cyc(24);
-    ppu_wr(WOBJLOG, 0x00);
+    wr8(WOBJLOG, 0x00);
     cyc(24);
-    ppu_wr(TMW, 0x00);
+    wr8(TMW, 0x00);
     cyc(24);
-    ppu_wr(TSW, 0x00);
+    wr8(TSW, 0x00);
     cyc(24);
-    ppu_wr(WH0, 0x00);
+    wr8(WH0, 0x00);
     cyc(24);
-    ppu_wr(WH1, 0x00);
+    wr8(WH1, 0x00);
     cyc(40);
-    ppu_wr(BGMODE, 0x01);
+    wr8(BGMODE, 0x01);
     cyc(40);
-    ppu_wr(TM, 0x01);
+    wr8(TM, 0x01);
     cyc(24);
-    ppu_wr(TS, 0x00);
+    wr8(TS, 0x00);
     cyc(24);
-    ppu_wr(CGADSUB, 0x00);
+    wr8(CGADSUB, 0x00);
     cyc(24);
-    ppu_wr(COLDATA, 0x00);
+    wr8(COLDATA, 0x00);
     cyc(24);
-    dma_wr(DMAP1, 0x00);
+    wr8(DMAP1, 0x00);
     cyc(40);
-    dma_wr(BBAD1, 0x00);
+    wr8(BBAD1, 0x00);
     cyc(40);
-    dma_wr(A1B1, 0x00);
+    wr8(A1B1, 0x00);
     cyc(48);
-    dma_wr16(A1T1L, 0x812E);
+    wr16(A1T1L, 0x812E);
     cyc(24);
-    dma_wr(DASB1, 0x00);
+    wr8(DASB1, 0x00);
     cyc(24);
-    ppu_wr(BG1VOFS, 0x00);
+    wr8(BG1VOFS, 0x00);
     cyc(24);
-    ppu_wr(BG1VOFS, 0x00);
+    wr8(BG1VOFS, 0x00);
     cyc(40);
-    ppu_wr(BG1HOFS, 0xF9);
+    wr8(BG1HOFS, 0xF9);
     cyc(40);
-    ppu_wr(BG1HOFS, 0xFF);
+    wr8(BG1HOFS, 0xFF);
     cyc(40);
-    ppu_wr(INIDISP, 0x0F);
+    wr8(INIDISP, 0x0F);
     cyc(40);
-    hdmaen_wr(HDMAEN, 0x02);
+    wr8(HDMAEN, 0x02);
     for (;;) {
         cyc(92);
         delay_turns(20000);
@@ -120,11 +119,11 @@ static void crash_body(uint8_t bank, uint16_t code)
         cyc(102);
         wr16(CRASH_SCROLL, cyc_then(24, (uint16_t)(step + rd16(CRASH_SCROLL))));
         cyc(46);
-        ppu_wr(BG1VOFS, cyc_then(24, rd8(CRASH_SCROLL)));
+        wr8(BG1VOFS, cyc_then(24, rd8(CRASH_SCROLL)));
         cyc(24);
-        ppu_wr(BG1VOFS, cyc_then(24, rd8(CRASH_SCROLL + 1)));
+        wr8(BG1VOFS, cyc_then(24, rd8(CRASH_SCROLL + 1)));
         cyc(40);
-        hw_wr(APUIO0, 0x03);
+        wr8(APUIO0, 0x03);
     }
 }
 

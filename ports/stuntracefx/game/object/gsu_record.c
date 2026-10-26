@@ -5,8 +5,8 @@
  * +$0C/+$0E/+$10 the position, +$16 flags, +$1A a mode word.
  */
 #include "machine.h"
+#include "controls.h"
 #include "cpu_ops.h"
-#include "native.h"
 
 void abi_ObjectChildFollow(void);
 

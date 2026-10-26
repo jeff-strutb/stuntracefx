@@ -6,7 +6,6 @@
  * at $0866 and sent to VRAM $2FA0.
  */
 #include "machine.h"
-#include "native.h"
 #include "hw.h"
 #include "cpu_ops.h"
 
@@ -65,14 +64,14 @@ uint8_t PaletteLoad70(uint8_t bank, uint8_t index, uint16_t *x)
     uint16_t o = (uint16_t)(index << 5), y;
     uint8_t v = 0;
 
-    ppu_wr(dbw(bank, 0x2121), cyc_then(206, 0x70));
+    wr8(dbw(bank, 0x2121), cyc_then(206, 0x70));
     for (y = 0; y != 0x20; y = (uint16_t)(y + 2)) {
         cyc(y ? 166 : 88); /* wrap: INX INX INY INY CPY BNE, then LDA long */
         v = rd8(PALETTES + o);
-        ppu_wr(dbw(bank, 0x2122), v);
+        wr8(dbw(bank, 0x2122), v);
         cyc(64);
         v = rd8(PALETTES + 1 + o);
-        ppu_wr(dbw(bank, 0x2122), v);
+        wr8(dbw(bank, 0x2122), v);
         o = (uint16_t)(o + 2);
     }
     cyc(126);
@@ -118,7 +117,7 @@ uint16_t PaletteToBuffers(uint8_t index, uint16_t *x)
     }
     *x = o;
     cyc(150);
-    w = (uint16_t)((w & 0xFF00) | hw_rd(TIMEUP));
+    w = (uint16_t)((w & 0xFF00) | rd8(TIMEUP));
     cyc(94); /* REP, CLI, PLB, PLP, RTL */
     return w;
 }
@@ -240,8 +239,8 @@ void abi_Set7EBC2AValues(void)
  */
 void ScreenBlankAndWait(uint8_t bank)
 {
-    hdmaen_wr(dbw(bank, 0x420C), cyc_then(90, 0x00));
-    ppu_wr(dbw(bank, 0x2100), cyc_then(40, 0x80));
+    wr8(dbw(bank, 0x420C), cyc_then(90, 0x00));
+    wr8(dbw(bank, 0x2100), cyc_then(40, 0x80));
     cyc(62); /* JSL */
     Set7EBC2BTrio(0x80);
     wr8(dbw(bank, 0x06E3), cyc_then(40, 0x96));
@@ -300,11 +299,10 @@ void HardwareRegsInit02(void)
             : (r == 0x2101 || r == 0x2115 || (r == 0x211B && writes[i - 1].reg == 0x211A) ||
                r == 0x2130 || r == 0x2132 || r == 0x4201) ? 40 : 24);
         if ((r >= 0x4202 && r <= 0x4206) || r == 0x211B || r == 0x211C)
-            io_wr8(r, writes[i].v);             /* the multiply units: as C */
+            wr8(r, writes[i].v);             /* the multiply units: as C */
         else
-            reg_wr(r, writes[i].v);
+            wr8(r, writes[i].v);
     }
-    ppu_mul_factor = 0x0100;                     /* M7A: $00, then $01 */
     cyc(70);
 }
 
@@ -455,14 +453,14 @@ void abi_TileRowBuildLong(void)
  */
 void TileRowUpload(uint8_t bank)
 {
-    ppu_wr(dbw(bank, 0x2115), cyc_then(40, 0x80));
-    dma_wr(dbw(bank, 0x4301), cyc_then(40, 0x18));
-    dma_wr16(dbw(bank, 0x4302), cyc_then(48, ROW));
-    dma_wr(dbw(bank, 0x4304), cyc_then(24, 0x00));
-    ppu_wr16(dbw(bank, 0x2116), cyc_then(48, 0x2FA0));
-    dma_wr16(dbw(bank, 0x4305), cyc_then(48, 0x0040));
-    dma_wr(dbw(bank, 0x4300), cyc_then(40, 0x01));
-    mdmaen_wr(dbw(bank, 0x420B), cyc_then(40, 0x01));
+    wr8(dbw(bank, 0x2115), cyc_then(40, 0x80));
+    wr8(dbw(bank, 0x4301), cyc_then(40, 0x18));
+    wr16(dbw(bank, 0x4302), cyc_then(48, ROW));
+    wr8(dbw(bank, 0x4304), cyc_then(24, 0x00));
+    wr16(dbw(bank, 0x2116), cyc_then(48, 0x2FA0));
+    wr16(dbw(bank, 0x4305), cyc_then(48, 0x0040));
+    wr8(dbw(bank, 0x4300), cyc_then(40, 0x01));
+    wr8(dbw(bank, 0x420B), cyc_then(40, 0x01));
     cyc(42); /* RTS */
 }
 
@@ -526,27 +524,27 @@ uint16_t UnusedScreenTiles(void)
     unsigned i;
 
     cyc(150);
-    ppu_wr(0x002115, 0x80);
+    wr8(0x002115, 0x80);
     cyc(70);
-    ppu_wr16(0x002116, 0x2C40);
+    wr16(0x002116, 0x2C40);
     for (y = 0; y != 0x10; y++) {
         cyc(y ? 212 : 126); /* the first row follows LDA, LDY, PHA */
-        ppu_wr16(0x002118, 0x39A0);
+        wr16(0x002118, 0x39A0);
         cyc(24);
-        ppu_wr16(0x002118, 0x39A0);
+        wr16(0x002118, 0x39A0);
         cyc(24);
-        ppu_wr16(0x002118, 0x39A0);
+        wr16(0x002118, 0x39A0);
         for (x = 0; x != 0x1A; x++) {
             cyc(x ? 122 : 84); /* CLC, ADC, INX, CPX, BNE taken */
-            ppu_wr16(0x002118, a);
+            wr16(0x002118, a);
             a = (uint16_t)(a + 0x10);
         }
         cyc(170);
-        ppu_wr16(0x002118, 0x39A0);
+        wr16(0x002118, 0x39A0);
         cyc(24);
-        ppu_wr16(0x002118, 0x39A0);
+        wr16(0x002118, 0x39A0);
         cyc(24);
-        ppu_wr16(0x002118, 0x39A0);
+        wr16(0x002118, 0x39A0);
         a = (uint16_t)(a - 0x019F);
     }
     cyc(160);
@@ -555,22 +553,22 @@ uint16_t UnusedScreenTiles(void)
         cyc(40);
         for (i = 0; i < 10; i++) {
             cyc(48);
-            ppu_wr16(0x002116, marks[i][0]);
+            wr16(0x002116, marks[i][0]);
             cyc(48);
-            ppu_wr16(0x002118, marks[i][1]);
+            wr16(0x002118, marks[i][1]);
         }
         r = 0x2A86;
     } else { cyc(46); }
     cyc(48);
-    ppu_wr16(0x002116, 0x1A00);
+    wr16(0x002116, 0x1A00);
     cyc(12);
     for (y = 0x10; y; y--)
-        { cyc(60); ppu_wr16(0x002118, 0xFFFF); }
+        { cyc(60); wr16(0x002118, 0xFFFF); }
     cyc(78);
-    ppu_wr16(0x002116, 0x4A00);
+    wr16(0x002116, 0x4A00);
     cyc(12);
     for (y = 0x10; y; y--)
-        { cyc(60); ppu_wr16(0x002118, 0xFFFF); }
+        { cyc(60); wr16(0x002118, 0xFFFF); }
     cyc(124);
     return r;
 }
@@ -598,7 +596,7 @@ void abi_UnusedScreenTilesLocked(void)
 
     (cyc(98), abi_UnusedScreenTiles());
     cyc(32);
-    cpu.a = (uint16_t)((cpu.a & 0xFF00) | hw_rd(TIMEUP));
+    cpu.a = (uint16_t)((cpu.a & 0xFF00) | rd8(TIMEUP));
     cyc(44);
     op_plp(p);
 }
@@ -638,43 +636,43 @@ void abi_UnusedScreenSetup(void)
     op_sep(P_M | P_X);
     cpu.p |= P_I;
     cyc(38);
-    hw_wr(b | 0x4200, 0x00);
+    wr8(b | 0x4200, 0x00);
     cyc(16);
     wr8(0x000000, 0x00);
     cyc(24);
     wr8(b | 0x084C, 0x00);
     cyc(24);
-    hw_rd(b | 0x4211);
+    rd8(b | 0x4211);
     op_rep(P_M);
     cyc(32);
-    hw_rd16(0x003030);
+    rd16(0x003030);
     cyc(48);
     wr16(b | 0x0374, 0x0021);
     (cyc(62), abi_ScreenBlankAndWait());
     cyc(24);
-    ppu_wr16(b | 0x2121, 0x0000);
+    wr16(b | 0x2121, 0x0000);
     cyc(24);
-    ppu_wr16(b | 0x2116, 0x0000);
+    wr16(b | 0x2116, 0x0000);
     cyc(24);
-    ppu_wr16(b | 0x2117, 0x0000);
+    wr16(b | 0x2117, 0x0000);
     cyc(48);
-    ppu_wr16(b | 0x2100, 0x0080);
+    wr16(b | 0x2100, 0x0080);
     cyc(24);
-    ppu_wr16(b | 0x2115, 0x0080);
+    wr16(b | 0x2115, 0x0080);
     for (i = 0x7F; i; i--)
         { cyc(i == 0x7F ? 20 : 46); /* later rounds: DEX, BNE, LDY after DEY, BNE */
           for (j = 0x100; j; j--) {
             cyc(60);
-            ppu_wr16(b | 0x2118, 0x0000);
+            wr16(b | 0x2118, 0x0000);
             cyc(24);
-            ppu_wr16(b | 0x2119, 0x0000);
+            wr16(b | 0x2119, 0x0000);
         } }
     op_rep(P_M | P_X);
     cyc(108);
-    ppu_wr16(b | 0x2116, 0x2C00);
+    wr16(b | 0x2116, 0x2C00);
     cyc(12);
     for (i = 0x400; i; i--)
-        { cyc(60); ppu_wr16(b | 0x2118, 0x01A1); }
+        { cyc(60); wr16(b | 0x2118, 0x01A1); }
     cyc(136);
     op_sep(P_M);
     abi_UnusedScreenTiles();
@@ -689,20 +687,20 @@ void abi_UnusedScreenSetup(void)
     cyc(16);
     v = rd8(0x000049);
     cyc(52);
-    hw_wr(b | 0x3038, (uint8_t)(v >> 2));
+    wr8(b | 0x3038, (uint8_t)(v >> 2));
     cyc(16);
     v = rd8(0x00004F);
     cpu.p = (uint8_t)((cpu.p & ~P_C) | (v & 0x08 ? P_C : 0));
     cyc(96);
-    ppu_wr(b | 0x210B, (uint8_t)(v >> 4 | 0x50));
+    wr8(b | 0x210B, (uint8_t)(v >> 4 | 0x50));
     cyc(40);
-    ppu_wr(b | 0x2101, 0x03);
+    wr8(b | 0x2101, 0x03);
     cyc(40);
-    ppu_wr(b | 0x2107, 0x2C);
+    wr8(b | 0x2107, 0x2C);
     cyc(40);
-    ppu_wr(b | 0x2108, 0x73);
+    wr8(b | 0x2108, 0x73);
     cyc(40);
-    ppu_wr(b | 0x2105, 0x02);
+    wr8(b | 0x2105, 0x02);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | 0x02);
     (cyc(62), abi_TileRowBuildLong());
     (cyc(62), abi_TileRowUploadLong());
@@ -711,83 +709,83 @@ void abi_UnusedScreenSetup(void)
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | 0x01);
     (cyc(100), abi_PaletteLoad70());
     cyc(40);
-    dma_wr(b | 0x4301, 0x22);
+    wr8(b | 0x4301, 0x22);
     cyc(40);
-    ppu_wr(b | 0x2121, 0x80);
+    wr8(b | 0x2121, 0x80);
     cyc(48);
-    dma_wr16(b | 0x4302, 0xFA17);
+    wr16(b | 0x4302, 0xFA17);
     cyc(40);
-    dma_wr(b | 0x4304, 0x7F);
+    wr8(b | 0x4304, 0x7F);
     cyc(48);
-    dma_wr16(b | 0x4305, 0x0100);
+    wr16(b | 0x4305, 0x0100);
     cyc(40);
-    dma_wr(b | 0x4300, 0x00);
+    wr8(b | 0x4300, 0x00);
     cyc(40);
-    mdmaen_wr(b | 0x420B, 0x01);
+    wr8(b | 0x420B, 0x01);
     cyc(24);
-    ppu_wr(b | 0x2123, 0x00);
+    wr8(b | 0x2123, 0x00);
     cyc(24);
-    ppu_wr(b | 0x2124, 0x00);
+    wr8(b | 0x2124, 0x00);
     cyc(40);
-    ppu_wr(b | 0x2125, 0x20);
+    wr8(b | 0x2125, 0x20);
     cyc(24);
-    ppu_wr(b | 0x212A, 0x00);
+    wr8(b | 0x212A, 0x00);
     cyc(40);
-    ppu_wr(b | 0x212B, 0x0C);
+    wr8(b | 0x212B, 0x0C);
     cyc(24);
-    ppu_wr(b | 0x212E, 0x00);
+    wr8(b | 0x212E, 0x00);
     cyc(24);
-    ppu_wr(b | 0x212F, 0x00);
+    wr8(b | 0x212F, 0x00);
     cyc(24);
-    ppu_wr(b | 0x2126, 0x00);
+    wr8(b | 0x2126, 0x00);
     cyc(24);
-    ppu_wr(b | 0x2127, 0x00);
+    wr8(b | 0x2127, 0x00);
     cyc(40);
-    ppu_wr(b | 0x212C, 0x17);
+    wr8(b | 0x212C, 0x17);
     cyc(40);
-    ppu_wr(b | 0x212D, 0x07);
+    wr8(b | 0x212D, 0x07);
     (cyc(62), abi_Set7EBC2AValues());
     op_sep(P_M);
     cyc(62);
-    dma_wr(b | 0x4310, 0x00);
+    wr8(b | 0x4310, 0x00);
     cyc(40);
-    dma_wr(b | 0x4311, 0x00);
+    wr8(b | 0x4311, 0x00);
     cyc(48);
-    dma_wr16(b | 0x4312, 0xBC28);
+    wr16(b | 0x4312, 0xBC28);
     cyc(40);
-    dma_wr(b | 0x4314, 0x7E);
+    wr8(b | 0x4314, 0x7E);
     cyc(24);
-    dma_wr(b | 0x4317, 0x00);
+    wr8(b | 0x4317, 0x00);
     cyc(40);
-    dma_wr(b | 0x4320, 0x02);
+    wr8(b | 0x4320, 0x02);
     cyc(40);
-    dma_wr(b | 0x4321, 0x0F);
+    wr8(b | 0x4321, 0x0F);
     cyc(48);
-    dma_wr16(b | 0x4322, 0xBC50);
+    wr16(b | 0x4322, 0xBC50);
     cyc(40);
-    dma_wr(b | 0x4324, 0x7E);
+    wr8(b | 0x4324, 0x7E);
     cyc(24);
-    dma_wr(b | 0x4327, 0x00);
+    wr8(b | 0x4327, 0x00);
     cyc(40);
-    dma_wr(b | 0x4330, 0x01);
+    wr8(b | 0x4330, 0x01);
     cyc(40);
-    dma_wr(b | 0x4331, 0x26);
+    wr8(b | 0x4331, 0x26);
     cyc(48);
-    dma_wr16(b | 0x4332, 0xB7A0);
+    wr16(b | 0x4332, 0xB7A0);
     cyc(40);
-    dma_wr(b | 0x4334, 0x7E);
+    wr8(b | 0x4334, 0x7E);
     cyc(24);
-    dma_wr(b | 0x4337, 0x00);
+    wr8(b | 0x4337, 0x00);
     cyc(40);
-    dma_wr(b | 0x4340, 0x02);
+    wr8(b | 0x4340, 0x02);
     cyc(40);
-    dma_wr(b | 0x4341, 0x10);
+    wr8(b | 0x4341, 0x10);
     cyc(48);
-    dma_wr16(b | 0x4342, 0xC22E);
+    wr16(b | 0x4342, 0xC22E);
     cyc(40);
-    dma_wr(b | 0x4344, 0x7E);
+    wr8(b | 0x4344, 0x7E);
     cyc(24);
-    dma_wr(b | 0x4347, 0x00);
+    wr8(b | 0x4347, 0x00);
     cyc(40);
     wr8(b | 0x0316, 0x1E);
     cyc(48);
@@ -803,17 +801,17 @@ void abi_UnusedScreenSetup(void)
     (cyc(62), abi_ScrollRegsClear());
     op_sep(P_M);
     cyc(70);
-    hw_wr16(b | 0x4209, 0x008F);
+    wr16(b | 0x4209, 0x008F);
     cyc(48);
-    hw_wr16(b | 0x4207, 0x0000);
+    wr16(b | 0x4207, 0x0000);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | 0x80);
     (cyc(78), abi_Set7EBC2BTrio());
     cyc(24);
-    ppu_wr(b | 0x2100, 0x80);
+    wr8(b | 0x2100, 0x80);
     cyc(24);
     wr8(b | 0x084C, 0x00);
     cyc(40);
-    hdmaen_wr(b | 0x420C, 0x02);
+    wr8(b | 0x420C, 0x02);
     cyc(40);
     wr8(b | 0x06E3, 0xBE);
     (cyc(62), abi_WaitScanline());
@@ -821,13 +819,13 @@ void abi_UnusedScreenSetup(void)
     wr8(b | 0x06E3, 0x64);
     (cyc(62), abi_WaitScanline());
     cyc(68);
-    hw_rd(b | 0x4210);
+    rd8(b | 0x4210);
     cyc(40);
-    hw_wr(b | 0x4200, 0x31);
+    wr8(b | 0x4200, 0x31);
     cyc(40);
     wr8(b | 0x05D9, 0xFF);
     cyc(32);
-    v = hw_rd(TIMEUP);
+    v = rd8(TIMEUP);
     a = (uint16_t)((cpu.a & 0xFF00) | v);
     cpu.a = a;
     cpu.x = 0x0000;

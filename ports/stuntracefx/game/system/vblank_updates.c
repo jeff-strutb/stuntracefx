@@ -6,7 +6,6 @@
  * brightness step.
  */
 #include "machine.h"
-#include "native.h"
 #include "hw.h"
 
 uint8_t VramDmaWideRowsFromGsuRam(uint8_t rows_less_one, uint16_t src, uint16_t vram, uint16_t *next);
@@ -46,7 +45,7 @@ static uint8_t upload_done(uint8_t bank, uint8_t sc)
     uint8_t f;
 
     wr8(dbw(bank, 0x0357), cyc_then(62, 0x01));
-    ppu_wr(dbw(bank, BG1SC), cyc_then(40, sc));
+    wr8(dbw(bank, BG1SC), cyc_then(40, sc));
     f = (uint8_t)(rd8(cyc_then(24, dbw(bank, 0x11D7))) | 0x20);
     wr8(dbw(bank, 0x11D7), cyc_then(40, f));
     return f;
@@ -219,9 +218,9 @@ uint16_t WindowOpenCloseStep(uint8_t bank, uint8_t *p)
     t = 0x0000;
     wr16(WINDOW_MODE, t);
     wr16(0x7EFD65, t);
-    ppu_wr(dbw(bank, CGADD), 0x00);
-    ppu_wr(dbw(bank, CGDATA), 0x00);
-    ppu_wr(dbw(bank, CGDATA), 0x00);
+    wr8(dbw(bank, CGADD), 0x00);
+    wr8(dbw(bank, CGDATA), 0x00);
+    wr8(dbw(bank, CGDATA), 0x00);
     *p = nz16(*p, t);
     return t;
 }
@@ -258,11 +257,11 @@ static uint16_t blink_colour(uint8_t bank, uint8_t *last)
     } else { cyc(46); }
     cyc(32);
     x = (uint16_t)(rd16(0x0018FF) << 1);
-    ppu_wr(dbw(bank, CGADD), cyc_then(90, 0xD9));
-    ppu_wr(dbw(bank, CGDATA), cyc_then(24, rd8(cyc_then(32, BLINK_COLOURS + x))));
+    wr8(dbw(bank, CGADD), cyc_then(90, 0xD9));
+    wr8(dbw(bank, CGDATA), cyc_then(24, rd8(cyc_then(32, BLINK_COLOURS + x))));
     cyc(32);
     *last = rd8(BLINK_COLOURS + 1 + x);
-    ppu_wr(dbw(bank, CGDATA), cyc_then(24, *last));
+    wr8(dbw(bank, CGDATA), cyc_then(24, *last));
     return x;
 }
 
@@ -274,7 +273,7 @@ static uint8_t vblank_end(uint8_t bank)
 
     wr8(dbw(bank, 0x11D7), cyc_then(40, (uint8_t)(rd8(cyc_then(46, dbw(bank, 0x11D7))) & 0xDF)));
     do
-        v = (uint8_t)(hw_rd(cyc_then(24, dbw(bank, HVBJOY))) & 0x01);
+        v = (uint8_t)(rd8(cyc_then(24, dbw(bank, HVBJOY))) & 0x01);
     while (cyc_loop(38, v));
     cyc(104);
     return v;

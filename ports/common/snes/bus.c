@@ -427,8 +427,25 @@ static uint8_t counters_read(uint8_t reg)
 }
 
 /* ---- the B bus --------------------------------------------------------------------- */
+/* The PPU's multiplier: M7A (16-bit, signed) times the last byte written
+   to M7B (signed), the product at MPYL/M/H ($2134-$2136). M7A-M7Y take
+   their two bytes through one latch. */
+static uint8_t m7_latch, m7b;
+static int16_t m7a;
+
+static void m7_write(uint8_t reg, uint8_t v)
+{
+    if (reg == 0x1B)
+        m7a = (int16_t)(v << 8 | m7_latch);
+    else if (reg == 0x1C)
+        m7b = v;
+    m7_latch = v;
+}
+
 uint8_t bus_read_b(uint8_t reg)
 {
+    if (reg >= 0x34 && reg <= 0x36)
+        return (uint8_t)((uint32_t)((int32_t)m7a * (int8_t)m7b) >> (8 * (reg - 0x34)));
     if (reg >= 0x34 && reg < 0x40)
         return counters_read(reg);
     if (reg >= 0x40 && reg < 0x80) {
@@ -446,6 +463,8 @@ uint8_t bus_read_b(uint8_t reg)
 void bus_write_b(uint8_t reg, uint8_t v)
 {
     if (reg < 0x34) {
+        if (reg >= 0x1B && reg <= 0x20)
+            m7_write(reg, v);
         vid_reg(reg, v);
         return;
     }

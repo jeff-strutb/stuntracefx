@@ -4,14 +4,13 @@
  * the callers keep in the I/O banks.
  */
 #include "machine.h"
-#include "native.h"
 #include "hw.h"
 #include "cpu_ops.h"
 #include "assets.h"
 
 static void io8(uint8_t bank, uint32_t reg, uint8_t v)
 {
-    reg_wr((uint32_t)bank << 16 | (reg & 0xFFFF), v);
+    wr8((uint32_t)bank << 16 | (reg & 0xFFFF), v);
 }
 
 /*
@@ -224,17 +223,17 @@ void VideoStartUploads(uint8_t bank)
     cyc(24);
     rd8(b | 0x1073);
     cyc(54);
-    hw_rd16(GSU_SFR);
+    rd16(GSU_SFR);
     cyc(48);
     wr16(b | 0x0374, 0x0003);
     cyc(40);
     io8(bank, VMAIN, 0x80);
     cyc(48);
-    ppu_wr16(b | (VMADDL & 0xFFFF), 0x0000);
+    wr16(b | (VMADDL & 0xFFFF), 0x0000);
     cyc(70);
     DmaFromDescriptor(bank, 0xF873);
     cyc(48);
-    ppu_wr16(b | (VMADDL & 0xFFFF), 0x7C00);
+    wr16(b | (VMADDL & 0xFFFF), 0x7C00);
     cyc(70);
     DmaFromDescriptor(bank, 0xF87A);
     cyc(72);
@@ -289,23 +288,23 @@ static void video_gsu_ram_dma(uint16_t src, uint16_t vram, uint16_t size)
 
     cpu.p &= (uint8_t)~P_M;
     cyc(80);
-    dma_wr16(DMAP0, 0x1801);
+    wr16(DMAP0, 0x1801);
     cyc(56);
-    dma_wr16(A1T0L, src);
+    wr16(A1T0L, src);
     cyc(56);
-    ppu_wr16(VMADDL, vram);
+    wr16(VMADDL, vram);
     cpu.a = size;
     cyc(56);
-    dma_wr16(DAS0L, size);
+    wr16(DAS0L, size);
     cpu.p |= P_M;
     cyc(70);
-    ppu_wr(VMAIN, 0x80);
+    wr8(VMAIN, 0x80);
     cyc(48);
-    dma_wr(A1B0, 0x70);
+    wr8(A1B0, 0x70);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | 0x01);
     cpu.p = nz8(cpu.p, 0x01);
     cyc(48);
-    mdmaen_wr(MDMAEN, 0x01);
+    wr8(MDMAEN, 0x01);
     op_plp(p);
     cyc(28);
 }
@@ -555,12 +554,12 @@ mode0:
     cpu.p = nz16(cpu.p, cpu.x);
     cpu.a = 0x5B40;
     cyc(130);
-    ppu_wr16(b | 0x2116, 0x5B40);
+    wr16(b | 0x2116, 0x5B40);
     for (y = 0x0080; y; y--) {
         cyc(32);
         cpu.a = rd16(0x703000 + cpu.x);
         cyc(24);
-        ppu_wr16(b | 0x2118, cpu.a);
+        wr16(b | 0x2118, cpu.a);
         cpu.x = (uint16_t)(cpu.x + 2);
         cyc(64);
     }

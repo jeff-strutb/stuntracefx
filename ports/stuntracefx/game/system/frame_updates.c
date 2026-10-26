@@ -9,7 +9,6 @@
  * and the VRAM transfer queue at $16B9 (bit 1).
  */
 #include "machine.h"
-#include "native.h"
 #include "hw.h"
 #include "wram.h"
 
@@ -35,19 +34,19 @@ static uint8_t oam_dma_if_pending(int *ran)
     if (!*ran)
         { cyc(38); return 0; }
     cyc(56);
-    dma_wr(DMAP0, 0x00);
+    wr8(DMAP0, 0x00);
     cyc(40);
-    dma_wr(DMAP0 + 1, 0x04);
+    wr8(DMAP0 + 1, 0x04);
     cyc(48);
-    dma_wr16(A1T0L, OAM_BUFFER);
+    wr16(A1T0L, OAM_BUFFER);
     cyc(40);
-    dma_wr(A1B0, 0x00);
+    wr8(A1B0, 0x00);
     cyc(48);
-    dma_wr16(DAS0L, 0x0220);
+    wr16(DAS0L, 0x0220);
     cyc(48);
-    ppu_wr16(OAMADDL, 0x0000);
+    wr16(OAMADDL, 0x0000);
     cyc(40);
-    mdmaen_wr(MDMAEN, 0x01);
+    wr8(MDMAEN, 0x01);
     cyc(24);
     flags = rd8(FRAME_UPDATE_FLAGS) & 0xFB;
     cyc(40);
@@ -90,19 +89,19 @@ static uint8_t cgram_dma_if_pending(int *ran)
     if (!*ran)
         { cyc(38); return 0; }
     cyc(56);
-    dma_wr(DMAP0, 0x00);
+    wr8(DMAP0, 0x00);
     cyc(40);
-    dma_wr(DMAP0 + 1, 0x22);
+    wr8(DMAP0 + 1, 0x22);
     cyc(48);
-    dma_wr16(A1T0L, (uint16_t)PALETTE_BUFFER);
+    wr16(A1T0L, (uint16_t)PALETTE_BUFFER);
     cyc(40);
-    dma_wr(A1B0, (uint8_t)(PALETTE_BUFFER >> 16));
+    wr8(A1B0, (uint8_t)(PALETTE_BUFFER >> 16));
     cyc(48);
-    dma_wr16(DAS0L, 0x0200);
+    wr16(DAS0L, 0x0200);
     cyc(24);
-    ppu_wr(CGADD, 0x00);
+    wr8(CGADD, 0x00);
     cyc(40);
-    mdmaen_wr(MDMAEN, 0x01);
+    wr8(MDMAEN, 0x01);
     cyc(24);
     flags = rd8(FRAME_UPDATE_FLAGS) & 0xF7;
     cyc(40);
@@ -165,7 +164,7 @@ static ByteWritesEnd byte_writes_if_pending(uint8_t bank, uint16_t x0, uint16_t 
                 cyc(46);
                 end.a = rd16(BYTE_WRITES + 2 + x);
                 cyc(52);
-                reg_wr((uint32_t)bank << 16 | end.y, (uint8_t)end.a);
+                wr8((uint32_t)bank << 16 | end.y, (uint8_t)end.a);
                 x = (uint16_t)(x - 4);
             } while (cyc_loop(32, !(x & 0x8000)));
             cyc(34);
@@ -337,26 +336,26 @@ static FlushEnd vram_dma_queue_flush(void)
         { cyc(38); return end; }
     end.ran = 1;
     cyc(72);
-    ppu_wr(VMAIN, 0x80);
+    wr8(VMAIN, 0x80);
     cyc(40);
-    dma_wr(DMAP0 + 1, 0x18);
+    wr8(DMAP0 + 1, 0x18);
     cyc(46);
     x = (uint16_t)(rd16(0x0016AF) - 8);
     end.a = x;
     if (!(x & 0x8000)) {
         do {
             cyc(122);
-            dma_wr16(A1T0L, cyc_then(24, rd16(0x0016B9 + x)));
+            wr16(A1T0L, cyc_then(24, rd16(0x0016B9 + x)));
             cyc(32);
-            ppu_wr16(VMADDL, cyc_then(24, rd16(0x0016BC + x)));
+            wr16(VMADDL, cyc_then(24, rd16(0x0016BC + x)));
             cyc(32);
-            dma_wr16(DAS0L, cyc_then(24, rd16(0x0016BE + x)));
+            wr16(DAS0L, cyc_then(24, rd16(0x0016BE + x)));
             cyc(54);
-            dma_wr(A1B0, cyc_then(24, rd8(0x0016BB + x)));
+            wr8(A1B0, cyc_then(24, rd8(0x0016BB + x)));
             cyc(40);
-            dma_wr(DMAP0, 0x01);
+            wr8(DMAP0, 0x01);
             cyc(24);
-            mdmaen_wr(MDMAEN, 0x01);
+            wr8(MDMAEN, 0x01);
             x = (uint16_t)(x - 8);
         } while (cyc_loop(42, !(x & 0x8000)));
         cyc(44);
@@ -455,7 +454,7 @@ static uint8_t frame_input_and_count_end(uint8_t bank, uint16_t *hi, uint16_t *x
     cyc(24);
     v = rd8(b | 0x11DA);
     cyc(24);
-    ppu_wr(b | 0x2100, v);
+    wr8(b | 0x2100, v);
     return v;
 }
 
@@ -532,7 +531,7 @@ uint8_t FrameCountAndPortsEnd(uint8_t bank, uint16_t *high, int *checked)
     cyc(68);
     lum = rd8(b | 0x11DA);
     cyc(24);
-    ppu_wr(b | INIDISP, lum);
+    wr8(b | INIDISP, lum);
     return lum;
 }
 

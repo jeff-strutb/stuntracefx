@@ -8,7 +8,6 @@
  * and then give ROM and RAM back to the Super FX.
  */
 #include "machine.h"
-#include "native.h"
 #include "hw.h"
 #include "draw_list.h"
 #include "wram.h"
@@ -19,13 +18,13 @@
 static void vram_channel(uint16_t size, uint16_t src, uint16_t vram)
 {
     cyc(24);
-    dma_wr16(DAS0L, size);
+    wr16(DAS0L, size);
     cyc(24);
-    dma_wr16(A1T0L, src);
+    wr16(A1T0L, src);
     cyc(24);
-    ppu_wr16(VMADDL, vram);
+    wr16(VMADDL, vram);
     cyc(48);
-    dma_wr16(DMAP0, 0x1801);
+    wr16(DMAP0, 0x1801);
 }
 
 /*
@@ -41,11 +40,11 @@ void VramDmaFromBank7F(uint16_t size, uint16_t src, uint16_t vram)
 {
     vram_channel(size, src, vram);
     cyc(62);
-    dma_wr(A1B0, 0x7F);
+    wr8(A1B0, 0x7F);
     cyc(40);
-    ppu_wr(VMAIN, 0x80);
+    wr8(VMAIN, 0x80);
     cyc(40);
-    mdmaen_wr(MDMAEN, 0x01);
+    wr8(MDMAEN, 0x01);
     cyc(42);
 }
 
@@ -73,17 +72,17 @@ uint8_t VramDmaFromGsuRam(uint16_t size, uint16_t src, uint16_t vram)
 
     vram_channel(size, src, vram);
     cyc(62);
-    dma_wr(A1B0, 0x70);
+    wr8(A1B0, 0x70);
     cyc(40);
-    ppu_wr(VMAIN, 0x80);
+    wr8(VMAIN, 0x80);
     cyc(24);
-    hw_wr(GSU_SCMR, cyc_then(40, rd8(GSU_SCMR_SHADOW) & 0xF7));
+    wr8(GSU_SCMR, cyc_then(40, rd8(GSU_SCMR_SHADOW) & 0xF7));
     cyc(40);
-    mdmaen_wr(MDMAEN, 0x01);
+    wr8(MDMAEN, 0x01);
     cyc(24);
     mode = rd8(GSU_SCMR_SHADOW) | 0x18;
     cyc(40);
-    hw_wr(GSU_SCMR, mode);
+    wr8(GSU_SCMR, mode);
     cyc(42);
     return mode;
 }
@@ -114,24 +113,23 @@ uint16_t VramDmaRowsFromGsuRam(uint16_t src, uint16_t vram, uint8_t rows)
 {
     uint16_t mode;
 
-    fx_op_upload(1);
     cyc(24);
-    ppu_wr16(VMADDL, vram);
+    wr16(VMADDL, vram);
     cyc(48);
-    dma_wr16(DMAP0, 0x1801);
+    wr16(DMAP0, 0x1801);
     cyc(62);
-    dma_wr(A1B0, 0x70);
+    wr8(A1B0, 0x70);
     cyc(40);
-    ppu_wr(VMAIN, 0x80);
+    wr8(VMAIN, 0x80);
     cyc(54);
-    hw_wr16(GSU_SCMR, cyc_then(48, rd16(GSU_SCMR_SHADOW) & 0xFFF7));
+    wr16(GSU_SCMR, cyc_then(48, rd16(GSU_SCMR_SHADOW) & 0xFFF7));
     for (;;) {
         cyc(60);
-        dma_wr16(A1T0L, src);
+        wr16(A1T0L, src);
         cyc(70);
-        dma_wr16(DAS0L, 0x0140);
+        wr16(DAS0L, 0x0140);
         cyc(62);
-        mdmaen_wr(MDMAEN, 0x01);
+        wr8(MDMAEN, 0x01);
         if (--rows == 0)
             break; else { cyc(54); }
         src = (uint16_t)(src + 0x0200);
@@ -139,8 +137,7 @@ uint16_t VramDmaRowsFromGsuRam(uint16_t src, uint16_t vram, uint8_t rows)
     cyc(60);
     mode = rd16(GSU_SCMR_SHADOW) | 0x0018;
     cyc(48);
-    hw_wr16(GSU_SCMR, mode);
-    fx_op_upload(0);
+    wr16(GSU_SCMR, mode);
     return mode;
 }
 
@@ -173,19 +170,19 @@ void abi_VramDmaRowsFromGsuRam(void)
 void OamDma(uint16_t src, uint16_t size)
 {
     cyc(24);
-    dma_wr16(A1T0L, src);
+    wr16(A1T0L, src);
     cyc(40);
-    ppu_wr(OAMADDL, 0x00);
+    wr8(OAMADDL, 0x00);
     cyc(24);
-    ppu_wr(OAMADDH, 0x00);
+    wr8(OAMADDH, 0x00);
     cyc(24);
-    dma_wr16(DAS0L, size);
+    wr16(DAS0L, size);
     cyc(48);
-    dma_wr16(DMAP0, 0x0400);
+    wr16(DMAP0, 0x0400);
     cyc(40);
-    dma_wr(A1B0, 0x00);
+    wr8(A1B0, 0x00);
     cyc(40);
-    mdmaen_wr(MDMAEN, 0x01);
+    wr8(MDMAEN, 0x01);
     cyc(42);
 }
 
@@ -232,17 +229,17 @@ void abi_OamDmaAll(void)
 void CgramDma(uint16_t src, uint8_t colour, uint16_t size)
 {
     cyc(24);
-    dma_wr16(A1T0L, src);
+    wr16(A1T0L, src);
     cyc(24);
-    dma_wr16(DAS0L, size);
+    wr16(DAS0L, size);
     cyc(48);
-    dma_wr16(DMAP0, 0x2200);
+    wr16(DMAP0, 0x2200);
     cyc(46);
-    ppu_wr(CGADD, colour);
+    wr8(CGADD, colour);
     cyc(40);
-    dma_wr(A1B0, 0x7E);
+    wr8(A1B0, 0x7E);
     cyc(40);
-    mdmaen_wr(MDMAEN, 0x01);
+    wr8(MDMAEN, 0x01);
 }
 
 void abi_CgramDma(void)
@@ -295,14 +292,14 @@ static uint16_t vram_write_row(uint16_t vram, uint16_t *x)
     unsigned i;
 
     cyc(68);
-    ppu_wr16(VMADDL, vram);
+    wr16(VMADDL, vram);
     cyc(40);
     src = rd16(0x000002);
     for (i = 0; i < 64; i++) {
         cyc(32);
         w = rd16(0x703000 + (uint16_t)(src + 2 * i));
         cyc(24);
-        ppu_wr16(0x002118, w);
+        wr16(0x002118, w);
         cyc(64);
     }
     *x = (uint16_t)(src + 0x80);
@@ -352,41 +349,39 @@ uint8_t VramDmaWideRowsFromGsuRam(uint8_t rows_less_one, uint16_t src, uint16_t 
     uint8_t mode;
     uint16_t s;
 
-    fx_op_upload(1);
     cyc(238);
-    hw_wr(GSU_SCMR, cyc_then(40, rd8(GSU_SCMR_SHADOW) & 0xF7));
+    wr8(GSU_SCMR, cyc_then(40, rd8(GSU_SCMR_SHADOW) & 0xF7));
     cyc(38);
     wr16(0x0000FB, src);
     cyc(24);
-    ppu_wr16(VMADDL, vram);
+    wr16(VMADDL, vram);
     cyc(84);
-    ppu_wr(VMAIN, 0x80);
+    wr8(VMAIN, 0x80);
     cyc(40);
-    dma_wr(DMAP0 + 1, 0x18);
+    wr8(DMAP0 + 1, 0x18);
     cyc(40);
-    dma_wr(A1B0, 0x70);
+    wr8(A1B0, 0x70);
     cyc(40);
-    dma_wr(DMAP0, 0x01);
+    wr8(DMAP0, 0x01);
     cyc(14);
     do {
         cyc(84);
-        dma_wr16(DAS0L, 0x02C0);
+        wr16(DAS0L, 0x02C0);
         cyc(16);
         s = rd16(0x0000FB);
         cyc(24);
-        dma_wr16(A1T0L, s);
+        wr16(A1T0L, s);
         s = (uint16_t)(s + 0x0400);
         cyc(54);
         wr16(0x0000FB, s);
         cyc(24);
-        mdmaen_wr(MDMAEN, 0x01);
+        wr8(MDMAEN, 0x01);
     } while (!(--rows_less_one & 0x80));
     cyc(76);
     mode = rd8(GSU_SCMR_SHADOW) | 0x18;
     cyc(40);
-    hw_wr(GSU_SCMR, mode);
+    wr8(GSU_SCMR, mode);
     *next = s;
-    fx_op_upload(0);
     cyc(70);
     return mode;
 }
@@ -417,21 +412,21 @@ static int vram_upload_gsu_buffer(uint16_t *src)
     if (rd8(0x000D32) == 0)
         { cyc(22); return 0; }
     cyc(56);
-    ppu_wr(VMAIN, 0x80);
+    wr8(VMAIN, 0x80);
     cyc(48);
-    ppu_wr16(VMADDL, 0x6600);
+    wr16(VMADDL, 0x6600);
     cyc(48);
-    dma_wr16(DMAP0, 0x1801);
+    wr16(DMAP0, 0x1801);
     cyc(40);
-    dma_wr(A1B0, 0x70);
+    wr8(A1B0, 0x70);
     cyc(48);
-    dma_wr16(DAS0L, 0x0C00);
+    wr16(DAS0L, 0x0C00);
     cyc(24);
     *src = rd8(0x000D7F) ? (cyc(16), 0x4000) : 0xD000;
     cyc(70);
-    dma_wr16(A1T0L, *src);
+    wr16(A1T0L, *src);
     cyc(40);
-    mdmaen_wr(MDMAEN, 0x01);
+    wr8(MDMAEN, 0x01);
     cyc(24);
     wr8(0x000D32, 0x00);
     return 1;
@@ -476,9 +471,9 @@ void DmaFromDescriptor(uint8_t bank, uint16_t desc)
     wr16(0x0000FB, desc);
     cyc(2);
     for (y = 6; y >= 0; y--)
-        { cyc(106); dma_wr(DMAP0 + (unsigned)y, rd8((uint32_t)bank << 16 | (uint16_t)(desc + y))); }
+        { cyc(106); wr8(DMAP0 + (unsigned)y, rd8((uint32_t)bank << 16 | (uint16_t)(desc + y))); }
     cyc(70);
-    mdmaen_wr(MDMAEN, 0x01);
+    wr8(MDMAEN, 0x01);
     cyc(70);
 }
 
@@ -682,7 +677,7 @@ static void put8(uint32_t addr, uint8_t v)
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
     cpu.p = nz8(cpu.p, v);
     cyc(40);
-    reg_wr(addr, v);
+    wr8(addr, v);
 }
 
 /* LDA abs / STA reg with M 8-bit. */
@@ -694,7 +689,7 @@ static void copy8(uint32_t to, uint32_t from)
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
     cpu.p = nz8(cpu.p, v);
     cyc(24);
-    reg_wr(to, v);
+    wr8(to, v);
 }
 
 /* The stage at $A800: sprites to OAM when $0D28 is set (and $0D54 clear),
@@ -768,17 +763,17 @@ static void split_picture(uint32_t b, uint16_t x)
     cpu.x = x;
     cpu.p = nz16(cpu.p, x);
     cyc(92);
-    ppu_wr16(VMADDL, x);
+    wr16(VMADDL, x);
     cpu.x = 0x1680;
     cyc(48);
-    dma_wr16(DAS0L, 0x1680);
+    wr16(DAS0L, 0x1680);
     cpu.x = 0x9BD7;
     cyc(48);
-    dma_wr16(A1T0L, 0x9BD7);
+    wr16(A1T0L, 0x9BD7);
     cpu.x = 0x1801;
     cpu.p = nz16(cpu.p, 0x1801);
     cyc(48);
-    dma_wr16(DMAP0, 0x1801);
+    wr16(DMAP0, 0x1801);
     put8(A1B0, 0x7F);
     put8(VMAIN, 0x80);
     cyc(24);
@@ -786,20 +781,20 @@ static void split_picture(uint32_t b, uint16_t x)
     cpu.a &= 0xFFF7;
     cpu.p = nz8(cpu.p, (uint8_t)cpu.a);
     cyc(40);
-    hw_wr(GSU_SCMR, (uint8_t)cpu.a);
+    wr8(GSU_SCMR, (uint8_t)cpu.a);
     put8(MDMAEN, 0x01);
     cyc(24);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | rd8(b | 0x0374));
     cpu.a |= 0x0018;
     cpu.p = nz8(cpu.p, (uint8_t)cpu.a);
     cyc(40);
-    hw_wr(GSU_SCMR, (uint8_t)cpu.a);
+    wr8(GSU_SCMR, (uint8_t)cpu.a);
     cyc(22);
     put8(BG12NBA, 0x70);
     put8(b | 0x0D23, 0x10);
     put8(CGADD, 0x00);
     for (i = 1; i < 7; i++)
-        { cyc(24); ppu_wr(CGADD, 0x00); }
+        { cyc(24); wr8(CGADD, 0x00); }
     put8(CGDATA, 0xC4);
     cyc(32);
     wr8(0x7EFD65, 0xC4);
@@ -884,17 +879,17 @@ static void split_stage(uint32_t b)
         cpu.p &= (uint8_t)~P_M;
         cpu.a = 0x0800;
         cyc(70);
-        dma_wr16(DAS0L, 0x0800);
+        wr16(DAS0L, 0x0800);
         cpu.a = 0x93D7;
         cyc(48);
-        dma_wr16(A1T0L, 0x93D7);
+        wr16(A1T0L, 0x93D7);
         cpu.a = 0x7800;
         cyc(48);
-        ppu_wr16(VMADDL, 0x7800);
+        wr16(VMADDL, 0x7800);
         cpu.a = 0x1801;
         cpu.p = nz16(cpu.p, 0x1801);
         cyc(48);
-        dma_wr16(DMAP0, 0x1801);
+        wr16(DMAP0, 0x1801);
         cpu.p |= P_M;
         cyc(22);
         put8(A1B0, 0x7F);
@@ -904,14 +899,14 @@ static void split_stage(uint32_t b)
         cpu.a &= 0xFFF7;
         cpu.p = nz8(cpu.p, (uint8_t)cpu.a);
         cyc(40);
-        hw_wr(GSU_SCMR, (uint8_t)cpu.a);
+        wr8(GSU_SCMR, (uint8_t)cpu.a);
         put8(MDMAEN, 0x01);
         cyc(24);
         cpu.a = (uint16_t)((cpu.a & 0xFF00) | rd8(b | 0x0374));
         cpu.a |= 0x0018;
         cpu.p = nz8(cpu.p, (uint8_t)cpu.a);
         cyc(40);
-        hw_wr(GSU_SCMR, (uint8_t)cpu.a);
+        wr8(GSU_SCMR, (uint8_t)cpu.a);
         break;
     case 0xAA5F: {
         uint16_t src;
@@ -921,18 +916,18 @@ static void split_stage(uint32_t b)
         src = rd16(b | 0x10A0);
         cpu.x = src;
         cyc(24);
-        dma_wr16(A1T0L, src);
+        wr16(A1T0L, src);
         put8(A1B0, 0x7F);
         cpu.x = 0x0C00;
         cyc(48);
-        dma_wr16(DAS0L, 0x0C00);
+        wr16(DAS0L, 0x0C00);
         cpu.x = 0x6600;
         cyc(48);
-        ppu_wr16(VMADDL, 0x6600);
+        wr16(VMADDL, 0x6600);
         cpu.x = 0x1801;
         cpu.p = nz16(cpu.p, 0x1801);
         cyc(48);
-        dma_wr16(DMAP0, 0x1801);
+        wr16(DMAP0, 0x1801);
         put8(VMAIN, 0x80);
         put8(MDMAEN, 0x01);
         put8(b | 0x0D23, 0x02);
@@ -1011,9 +1006,7 @@ static int race_stage(uint32_t b)
         } else { cyc(22); }
         next_stage(b, 0x0002);
         ld3(0x2200, 0x2C00, 0x0000, 0x2200);
-        fx_op_upload(1);                /* a third of the race screen */
         abi_VramDmaFromGsuRam();
-        fx_op_upload(0);
         cpu.p &= (uint8_t)~(P_M | P_X);
         cyc(22);
         ld3(0x0200, 0xE3D7, 0x5BC0, 0x5BC0);
@@ -1024,9 +1017,7 @@ static int race_stage(uint32_t b)
         delay_a(1);
         next_stage(b, 0x0004);
         ld3(0x2200, 0x4E00, 0x1100, 0x2200);
-        fx_op_upload(1);                /* a third of the race screen */
         abi_VramDmaFromGsuRam();
-        fx_op_upload(0);
         cpu.p &= (uint8_t)~(P_M | P_X);
         cyc(22);
         ld3(0x0240, 0xE5D7, 0x5CC0, 0x5CC0);
@@ -1042,9 +1033,7 @@ static int race_stage(uint32_t b)
         cyc(32);
         wr16(0x7F348D, cpu.a);
         ld3(0x2400, 0x7000, 0x2200, 0x2400);
-        fx_op_upload(1);                /* a third of the race screen */
         abi_VramDmaFromGsuRam();
-        fx_op_upload(0);
         cpu.p |= P_M;
         cyc(22);
         put8(BG12NBA, 0x60);
@@ -1074,9 +1063,7 @@ static int race_stage(uint32_t b)
         delay_a(1);
         next_stage(b, 0x0008);
         ld3(0x2200, 0xB800, 0x3400, 0x2200);
-        fx_op_upload(1);                /* a third of the race screen */
         abi_VramDmaFromGsuRam();
-        fx_op_upload(0);
         cpu.p &= (uint8_t)~(P_M | P_X);
         cyc(22);
         ld3(0x0200, 0xE817, 0x5DE0, 0x5DE0);
@@ -1086,9 +1073,7 @@ static int race_stage(uint32_t b)
         delay_a(1);
         next_stage(b, 0x000A);
         ld3(0x2200, 0xDA00, 0x4500, 0x2200);
-        fx_op_upload(1);                /* a third of the race screen */
         abi_VramDmaFromGsuRam();
-        fx_op_upload(0);
         cpu.p &= (uint8_t)~(P_M | P_X);
         cyc(22);
         ld3(0x0240, 0xEA17, 0x5EE0, 0x5EE0);
@@ -1106,9 +1091,7 @@ static int race_stage(uint32_t b)
         cyc(32);
         wr16(0x7F348D, cpu.a);
         ld3(0x2400, 0x9400, 0x2200, 0x2400);
-        fx_op_upload(1);                /* a third of the race screen */
         abi_VramDmaFromGsuRam();
-        fx_op_upload(0);
         cpu.p |= P_M;
         cyc(22);
         copy8(BG2HOFS, b | 0x0D94);
@@ -1213,7 +1196,7 @@ void abi_VramRowsCopyUnused(void)
         cyc(30);
         op_lda16(b | cpu.x);
         cyc(32);
-        ppu_wr16(0x002118, cpu.a);
+        wr16(0x002118, cpu.a);
         cpu.x = (uint16_t)(cpu.x + 2);
         cpu.y = (uint16_t)(cpu.y - 1);
         cpu.p = nz16(cpu.p, cpu.y);
@@ -1258,13 +1241,13 @@ void VramClearWords(uint8_t bank, uint16_t at, uint16_t n)
     int first = 1;
 
     cyc(48);
-    ppu_wr16(b | 0x2115, 0x0080);
+    wr16(b | 0x2115, 0x0080);
     cyc(24);
-    ppu_wr16(b | 0x2116, at);
+    wr16(b | 0x2116, at);
     do {
         cyc(first ? 48 : 60); /* LDA #0 first, else DEX, BNE taken */
         first = 0;
-        ppu_wr16(b | 0x2118, 0x0000);
+        wr16(b | 0x2118, 0x0000);
         n = (uint16_t)(n - 1);
     } while (n);
     cyc(72);

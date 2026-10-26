@@ -6,7 +6,6 @@
  * calls.
  */
 #include "machine.h"
-#include "native.h"
 #include "hw.h"
 #include "cpu_ops.h"
 
@@ -30,22 +29,22 @@ static void halt(void)
     int first = 1;
 
     cyc(70);
-    ppu_wr(INIDISP, 0x0F);
+    wr8(INIDISP, 0x0F);
     cyc(48);
-    hdmaen_wr(HDMAEN, 0x00);
+    wr8(HDMAEN, 0x00);
     cyc(32);
-    hw_wr(NMITIMEN, 0x00);
+    wr8(NMITIMEN, 0x00);
     cyc(32);
-    ppu_wr(TM, 0x00);
+    wr8(TM, 0x00);
     for (;;) {
         cyc(first ? 84 : 210);              /* the first round: LDX, TXY, TXA; then INY, nine NOPs, JMP, TXA */
-        ppu_wr(CGADD, 0x00);
+        wr8(CGADD, 0x00);
         cyc(32);
-        ppu_wr(CGADD, 0x00);
+        wr8(CGADD, 0x00);
         cyc(46);
-        ppu_wr(CGDATA, (uint8_t)y);
+        wr8(CGDATA, (uint8_t)y);
         cyc(32);
-        ppu_wr(CGDATA, (uint8_t)y);
+        wr8(CGDATA, (uint8_t)y);
         y = (uint16_t)(y + 1);
         first = 0;
     }
@@ -120,7 +119,7 @@ void DebugByteHalt(void)
     cyc(94);
     for (;;) {
         cyc(70);
-        ppu_wr(INIDISP, 0x0F);
+        wr8(INIDISP, 0x0F);
         cyc(40);
         wr8(b | 0x0D61, 0x0F);
         cyc(32);
@@ -143,7 +142,7 @@ void DebugByteHalt(void)
         cyc(24);
         v = (uint16_t)(rd16(b | 0x0374) & 0xFFF7);
         cyc(48);
-        hw_wr16(b | 0x303A, v);
+        wr16(b | 0x303A, v);
         cyc(56);
         wr16(0x70021A, 0x2C00);
         cyc(16);
@@ -152,12 +151,12 @@ void DebugByteHalt(void)
         v = (uint16_t)(rd16(b | 0x0374) | 0x0018);
         cpu.a = v;
         cyc(48);
-        hw_wr16(b | 0x303A, v);
+        wr16(b | 0x303A, v);
         op_sep(P_M);
         cpu.a = (uint16_t)((cpu.a & 0xFF00) | 0x0B);
         cpu.p = nz8(cpu.p, 0x0B);
         cyc(70);
-        hw_wr(GSU_SCBR, 0x0B);
+        wr8(GSU_SCBR, 0x0B);
     }
 }
 

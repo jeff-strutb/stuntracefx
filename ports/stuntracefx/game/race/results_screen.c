@@ -8,7 +8,6 @@
  * course, car: $0DD4) and the car choice.
  */
 #include "machine.h"
-#include "native.h"
 #include "cpu_ops.h"
 #include "assets.h"
 
@@ -1202,7 +1201,7 @@ void abi_ResultsChampionScreen(void)
     wr16(b | 0x0D92, 0xFFE8);
     op_lda16_imm(0x005C);
     cyc(10);
-    ppu_wr16(b | 0x2108, 0x005C);
+    wr16(b | 0x2108, 0x005C);
     op_sep(P_M);
     cyc(22);
     inc8_mem(b | 0x0D59);

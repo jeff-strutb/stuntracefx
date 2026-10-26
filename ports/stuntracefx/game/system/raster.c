@@ -2,7 +2,6 @@
  * raster.c: waiting on the PPU's beam inside the raster interrupt.
  */
 #include "machine.h"
-#include "native.h"
 #include "hw.h"
 #include "draw_list.h"
 #include "cpu_ops.h"
@@ -21,7 +20,7 @@ uint8_t WaitHBlank(void)
 
     cyc(0);
     do
-        { cyc(24); v = hw_rd(HVBJOY); }
+        { cyc(24); v = rd8(HVBJOY); }
     while (cyc_loop(38, !(v & 0x40)));
     cyc(74);
     return v;
@@ -52,11 +51,11 @@ void WaitScanline(uint8_t bank)
     wr8(b | 0x06E4, 0x00);
     do {
         cyc(46);
-        hw_rd(SLHV);
+        rd8(SLHV);
         cyc(24);
-        lo = hw_rd(OPVCT);
+        lo = rd8(OPVCT);
         cyc(44);
-        hw_rd(OPVCT);
+        rd8(OPVCT);
     } while (cyc_loop(22, lo != rd8(cyc_then(44, b | 0x06E3))));
     cyc(182);
 }
@@ -81,7 +80,7 @@ void abi_WaitScanline(void)
 static void put7f(uint32_t addr, uint8_t v)
 {
     cyc(12);
-    reg_wr(addr, v);
+    wr8(addr, v);
     cyc(20);
 }
 
@@ -219,7 +218,7 @@ static void put8(uint32_t addr, uint8_t v)
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
     cpu.p = nz8(cpu.p, v);
     cyc(40);
-    reg_wr(addr, v);
+    wr8(addr, v);
 }
 
 /* LDA from / STA to with M 8-bit. */
@@ -231,7 +230,7 @@ static void copy8(uint32_t to, uint32_t from)
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
     cpu.p = nz8(cpu.p, v);
     cyc(24);
-    reg_wr(to, v);
+    wr8(to, v);
 }
 
 /* LDA TIMEUP: acknowledges the raster interrupt. */
@@ -265,7 +264,7 @@ static void hblank_inline(void)
     uint8_t v;
 
     do
-        { cyc(24); v = hw_rd(HVBJOY); }
+        { cyc(24); v = rd8(HVBJOY); }
     while (cyc_loop(38, !(v & 0x40)));
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
     cpu.p = (uint8_t)(nz8(cpu.p, v) & ~P_Z);
@@ -396,16 +395,16 @@ void abi_RasterStage(void)
         op_rep(P_M);
         op_lda16_imm(0x1000);
         cyc(10);
-        dma_wr16(DAS0L, 0x1000);
+        wr16(DAS0L, 0x1000);
         op_lda16_imm(0x93D7);
         cyc(10);
-        dma_wr16(A1T0L, 0x93D7);
+        wr16(A1T0L, 0x93D7);
         op_lda16_imm(0x5000);
         cyc(10);
-        ppu_wr16(VMADDL, 0x5000);
+        wr16(VMADDL, 0x5000);
         op_lda16_imm(0x1801);
         cyc(10);
-        dma_wr16(DMAP0, 0x1801);
+        wr16(DMAP0, 0x1801);
         op_sep(P_M);
         cyc(22);
         put8(A1B0, 0x7F);
@@ -426,9 +425,7 @@ void abi_RasterStage(void)
             cpu.x = 0x2C00;
             cpu.y = 0x0400;
             op_lda16_imm(0x0800);
-            fx_op_upload(1);
             (cyc(80), abi_VramDmaFromGsuRam());
-            fx_op_upload(0);
             op_rep(P_M);
             op_lda16_imm(0xFFFF);
             cyc(18);
@@ -446,7 +443,7 @@ void abi_RasterStage(void)
         ldx8(rd8(b | 0x0D61));
         hblank_inline();
         cyc(56);
-        ppu_wr(INIDISP, (uint8_t)cpu.x);
+        wr8(INIDISP, (uint8_t)cpu.x);
         put8(HTIMEL, 0x30);
         put8(VTIMEL, 0xC0);
         irq_ack();
@@ -483,7 +480,7 @@ void abi_RasterStage(void)
         ldx8(0x80);
         hblank_inline();
         cyc(56);
-        ppu_wr(INIDISP, (uint8_t)cpu.x);
+        wr8(INIDISP, (uint8_t)cpu.x);
         (cyc(46), abi_NmiFrameUpload());
         (cyc(46), abi_OamDirectStage());
         (cyc(46), abi_RasterColoursUnless0D22());
@@ -504,11 +501,11 @@ void abi_RasterStage(void)
         ldx8(cyc_then(46, rd8(b | 0x0D61)));
         abi_WaitHBlank();
         cyc(24);
-        ppu_wr(INIDISP, (uint8_t)cpu.x);
+        wr8(INIDISP, (uint8_t)cpu.x);
         put8(VTIMEL, 0x6F);
         put8(HTIMEH, 0x00);
         cyc(24);
-        hw_wr(VTIMEH, 0x00);
+        wr8(VTIMEH, 0x00);
         put8(HTIMEL, 0x10);
         irq_ack();
         put8(b | 0x0D3F, 0x0A);
@@ -537,7 +534,7 @@ void abi_RasterStage(void)
         ldx8(0x80);
         abi_WaitHBlank();
         cyc(38);
-        ppu_wr(INIDISP, (uint8_t)cpu.x);
+        wr8(INIDISP, (uint8_t)cpu.x);
         put8(VTIMEL, 0x77);
         irq_ack();
         put8(b | 0x0D3F, 0x0C);
@@ -565,7 +562,7 @@ void abi_RasterStage(void)
         ldx8(cyc_then(46, rd8(b | 0x0D61)));
         abi_WaitHBlank();
         cyc(24);
-        ppu_wr(INIDISP, (uint8_t)cpu.x);
+        wr8(INIDISP, (uint8_t)cpu.x);
         put8(VTIMEL, 0xD7);
         irq_ack();
         put8(b | 0x0D3F, 0x0E);
@@ -585,7 +582,7 @@ void abi_RasterStage(void)
         ldx8(0x80);
         abi_WaitHBlank();
         cyc(24);
-        ppu_wr(INIDISP, (uint8_t)cpu.x);
+        wr8(INIDISP, (uint8_t)cpu.x);
         (cyc(46), abi_NmiFrameUpload());
         (cyc(62), abi_OamDmaAll());
         (cyc(62), abi_WindowLayoutStepForScreen());
@@ -728,12 +725,12 @@ static uint16_t time_stamp(void)
     cyc(76);
     wr16(0x001A37, f);
     cyc(54);
-    hw_rd(0x002137);
+    rd8(0x002137);
     cpu.p &= (uint8_t)~P_I;
     cyc(46);
-    lo = hw_rd(0x00213D);
+    lo = rd8(0x00213D);
     cyc(52);
-    hi = hw_rd(0x00213D);
+    hi = rd8(0x00213D);
     v = (uint16_t)(((hi << 8) | lo) & 0x01FF);
     if (!((uint16_t)(v - 0x0100) & 0x8000))
         v = 0x00FF;

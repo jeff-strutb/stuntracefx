@@ -2,7 +2,6 @@
  * scroll.c: BG scroll registers set by the raster interrupt.
  */
 #include "machine.h"
-#include "native.h"
 #include "hw.h"
 
 /* BG2 scroll pairs in work RAM, indexed by the screen band: horizontal at
@@ -30,15 +29,15 @@ static uint8_t bg2_scroll(uint16_t band, int wide)
     uint8_t v;
 
     cyc(abs_x(BG2_SCROLL_X, band, wide));
-    ppu_wr(BG2HOFS, cyc_then(24, rd8(BG2_SCROLL_X + band)));
+    wr8(BG2HOFS, cyc_then(24, rd8(BG2_SCROLL_X + band)));
     cyc(abs_x(BG2_SCROLL_X + 1, band, wide));
-    ppu_wr(BG2HOFS, cyc_then(24, rd8(BG2_SCROLL_X + 1 + band)));
+    wr8(BG2HOFS, cyc_then(24, rd8(BG2_SCROLL_X + 1 + band)));
     cyc(abs_x(BG2_SCROLL_Y, band, wide));
-    ppu_wr(BG2VOFS, cyc_then(24, rd8(BG2_SCROLL_Y + band)));
+    wr8(BG2VOFS, cyc_then(24, rd8(BG2_SCROLL_Y + band)));
     cyc(abs_x(BG2_SCROLL_Y + 1, band, wide));
     v = rd8(BG2_SCROLL_Y + 1 + band);
     cyc(24);
-    ppu_wr(BG2VOFS, v);
+    wr8(BG2VOFS, v);
     return v;
 }
 

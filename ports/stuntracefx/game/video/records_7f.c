@@ -4,7 +4,6 @@
  * from position lists in bank $09 that end with $FF.
  */
 #include "machine.h"
-#include "native.h"
 #include "hw.h"
 #include "assets.h"
 
@@ -101,22 +100,22 @@ uint16_t Records7FFromF170(uint8_t bank)
         { cyc(52); for (k = 0; k < 8; k++)
             { cyc(72); wr8(to[k] + i, rd8(from[k] + i)); } }
     cyc(86);
-    hw_wr(b | (WMADDH & 0xFFFF), 0x7F);
+    wr8(b | (WMADDH & 0xFFFF), 0x7F);
     cyc(70);
-    hw_wr16(b | (WMADDL & 0xFFFF), 0x5187);
+    wr16(b | (WMADDL & 0xFFFF), 0x5187);
     cyc(40);
-    dma_wr(b | (DMAP0 & 0xFFFF), 0x00);
+    wr8(b | (DMAP0 & 0xFFFF), 0x00);
     cyc(40);
-    dma_wr(b | (BBAD0 & 0xFFFF), 0x80);
+    wr8(b | (BBAD0 & 0xFFFF), 0x80);
     cyc(48);
-    dma_wr16(b | (A1T0L & 0xFFFF), 0xF849);
+    wr16(b | (A1T0L & 0xFFFF), 0xF849);
     cyc(40);
-    dma_wr(b | (A1B0 & 0xFFFF), 0x09);
+    wr8(b | (A1B0 & 0xFFFF), 0x09);
     cyc(48);
-    dma_wr16(b | (DAS0L & 0xFFFF), 0x0040);
+    wr16(b | (DAS0L & 0xFFFF), 0x0040);
     cyc(48);
-    mdmaen_wr(b | (MDMAEN & 0xFFFF), 0x01);   /* a 16-bit store: HDMAEN after */
-    hdmaen_wr(b | (HDMAEN & 0xFFFF), 0x00);
+    wr8(b | (MDMAEN & 0xFFFF), 0x01);   /* a 16-bit store: HDMAEN after */
+    wr8(b | (HDMAEN & 0xFFFF), 0x00);
     return (uint16_t)(y & 0x00FF);
 }
 

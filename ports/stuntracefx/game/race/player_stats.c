@@ -4,7 +4,6 @@
  * race phase dispatchers that run after them.
  */
 #include "machine.h"
-#include "native.h"
 #include "hw.h"
 #include "cpu_ops.h"
 #include "assets.h"
@@ -40,14 +39,13 @@ void SpeedSampleAdd(uint8_t bank, uint16_t speed, uint16_t player, uint8_t *p, u
     if (speed >= 0x8000)
         { cyc(32); speed = (uint16_t)(~speed + 1); }
     cyc(92);
-    io_wr8(b | M7A, (uint8_t)speed);
+    wr8(b | M7A, (uint8_t)speed);
     cyc(44);
-    io_wr8(b | M7A, (uint8_t)(speed >> 8));
-    ppu_mul_factor = (int16_t)speed;
+    wr8(b | M7A, (uint8_t)(speed >> 8));
     cyc(40);
-    io_wr8(b | M7B, 0x3C);
+    wr8(b | M7B, 0x3C);
     cyc(46);
-    m = io_rd16(b | MPYM, (uint16_t)(ppu_mul(0x3C) >> 8));
+    m = rd16(b | MPYM);
     v = m < 0x00FF ? (uint8_t)m : (cyc(18), 0xFF);
     cyc(98);
     wr8(b | (uint16_t)(0x0DDA + player), v);

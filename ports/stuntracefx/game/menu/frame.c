@@ -4,7 +4,6 @@
  * once it has applied the frame's updates.
  */
 #include "machine.h"
-#include "native.h"
 #include "hw.h"
 #include "cpu_ops.h"
 
@@ -78,7 +77,7 @@ void abi_MenuDimOnL(void)
     cpu.a = 0x0004;
     cpu.p = nz8(cpu.p, 0x04);
     cyc(110);
-    ppu_wr(INIDISP, 0x04);
+    wr8(INIDISP, 0x04);
     cyc(64);                            /* REP, RTS */
 }
 
@@ -241,7 +240,7 @@ static void region_stop(void)
 void MenuRegionCheck(void)
 {
     cyc(178);
-    uint8_t p = cpu.p, db = cpu.db, s = hw_rd(STAT78) & 0x10;
+    uint8_t p = cpu.p, db = cpu.db, s = rd8(STAT78) & 0x10;
 
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | s);
     if (!s) {
@@ -369,13 +368,13 @@ void MenuScreen0Run(void)
     } while (cpu.a == 0xFFFF);
     b = (uint32_t)cpu.db << 16;
     cyc(102);
-    ppu_wr(b | (uint16_t)INIDISP, 0x80);
+    wr8(b | (uint16_t)INIDISP, 0x80);
     cyc(24);
-    hw_wr(b | (uint16_t)NMITIMEN, 0x00);
+    wr8(b | (uint16_t)NMITIMEN, 0x00);
     cyc(24);
-    hdmaen_wr(b | (uint16_t)HDMAEN, 0x00);
+    wr8(b | (uint16_t)HDMAEN, 0x00);
     cyc(24);
-    mdmaen_wr(b | (uint16_t)MDMAEN, 0x00);
+    wr8(b | (uint16_t)MDMAEN, 0x00);
     cpu.a = 0x0080;
     cpu.p = (uint8_t)((cpu.p & ~(P_Z | P_C)) | P_N | P_M);
     cyc(44);

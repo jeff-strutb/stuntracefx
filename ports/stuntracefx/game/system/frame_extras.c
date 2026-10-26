@@ -5,7 +5,6 @@
  * unit_frame_extras calls them.
  */
 #include "machine.h"
-#include "native.h"
 #include "cpu_ops.h"
 
 void abi_RaceFrameRun(void);
@@ -27,7 +26,7 @@ static void wait_start(uint32_t b, int held, int first)
         abi_WaitScanline();
         cpu.p = (uint8_t)((cpu.p | P_M) & ~P_X);
         cyc(68);
-        j = hw_rd(b | 0x4219);
+        j = rd8(b | 0x4219);
         cpu.a = (uint16_t)((cpu.a & 0xFF00) | j);
     } while (cyc_loop(6, ((j & 0x10) != 0) != held));
 }

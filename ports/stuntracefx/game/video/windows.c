@@ -3,7 +3,6 @@
  * between.
  */
 #include "machine.h"
-#include "native.h"
 #include "cpu_ops.h"
 #include "hw.h"
 
@@ -18,19 +17,19 @@
 void WindowsColourAddBg12(void)
 {
     cyc(70);
-    ppu_wr(W12SEL, 0x99);
+    wr8(W12SEL, 0x99);
     cyc(48);
-    ppu_wr(WOBJSEL, 0x30);
+    wr8(WOBJSEL, 0x30);
     cyc(48);
-    ppu_wr(CGWSEL, 0x22);
+    wr8(CGWSEL, 0x22);
     cyc(48);
-    ppu_wr(CGADSUB, 0x03);
+    wr8(CGADSUB, 0x03);
     cyc(48);
-    ppu_wr(WBGLOG, 0x00);
+    wr8(WBGLOG, 0x00);
     cyc(48);
-    ppu_wr(WOBJLOG, 0x01);
+    wr8(WOBJLOG, 0x01);
     cyc(48);
-    ppu_wr(TMW, 0x17);
+    wr8(TMW, 0x17);
     cyc(42);
 }
 
@@ -51,19 +50,19 @@ void abi_WindowsColourAddBg12(void)
 void WindowsColourWindowOnly(void)
 {
     cyc(70);
-    ppu_wr(W12SEL, 0x00);
+    wr8(W12SEL, 0x00);
     cyc(32);
-    ppu_wr(W34SEL, 0x00);
+    wr8(W34SEL, 0x00);
     cyc(48);
-    ppu_wr(WOBJSEL, 0x20);
+    wr8(WOBJSEL, 0x20);
     cyc(48);
-    ppu_wr(CGWSEL, 0x10);
+    wr8(CGWSEL, 0x10);
     cyc(48);
-    ppu_wr(WBGLOG, 0x00);
+    wr8(WBGLOG, 0x00);
     cyc(48);
-    ppu_wr(WOBJLOG, 0x00);
+    wr8(WOBJLOG, 0x00);
     cyc(48);
-    ppu_wr(TMW, 0x03);
+    wr8(TMW, 0x03);
     cyc(42);
 }
 
@@ -85,21 +84,21 @@ void abi_WindowsColourWindowOnly(void)
 void WindowsAllInverted(void)
 {
     cyc(70);
-    ppu_wr(CGADSUB, 0xBF);
+    wr8(CGADSUB, 0xBF);
     cyc(48);
-    ppu_wr(W12SEL, 0xAA);
+    wr8(W12SEL, 0xAA);
     cyc(32);
-    ppu_wr(W34SEL, 0xAA);
+    wr8(W34SEL, 0xAA);
     cyc(48);
-    ppu_wr(WOBJSEL, 0xAA);
+    wr8(WOBJSEL, 0xAA);
     cyc(48);
-    ppu_wr(CGWSEL, 0x10);
+    wr8(CGWSEL, 0x10);
     cyc(48);
-    ppu_wr(WBGLOG, 0x00);
+    wr8(WBGLOG, 0x00);
     cyc(32);
-    ppu_wr(WOBJLOG, 0x00);
+    wr8(WOBJLOG, 0x00);
     cyc(48);
-    ppu_wr(TMW, 0x1F);
+    wr8(TMW, 0x1F);
     cyc(42);
 }
 
@@ -117,7 +116,7 @@ void ColourMathSub83Windowed(void);
 static void windows_colour_add03(void)
 {
     cyc(146);
-    ppu_wr(CGADSUB, 0x03);
+    wr8(CGADSUB, 0x03);
     (cyc(46), WindowsColourWindowOnly());
     cyc(42);                            /* RTS */
 }
@@ -134,21 +133,21 @@ static void windows_colour_add03(void)
 void WindowsColourSub81(void)
 {
     cyc(146);
-    ppu_wr(CGADSUB, 0x81);
+    wr8(CGADSUB, 0x81);
     cyc(48);
-    ppu_wr(W12SEL, 0x00);
+    wr8(W12SEL, 0x00);
     cyc(32);
-    ppu_wr(W34SEL, 0x00);
+    wr8(W34SEL, 0x00);
     cyc(48);
-    ppu_wr(WOBJSEL, 0x20);
+    wr8(WOBJSEL, 0x20);
     cyc(48);
-    ppu_wr(CGWSEL, 0x10);
+    wr8(CGWSEL, 0x10);
     cyc(48);
-    ppu_wr(WBGLOG, 0x00);
+    wr8(WBGLOG, 0x00);
     cyc(48);
-    ppu_wr(WOBJLOG, 0x00);
+    wr8(WOBJLOG, 0x00);
     cyc(48);
-    ppu_wr(TMW, 0x01);
+    wr8(TMW, 0x01);
     cyc(42);                            /* RTS */
 }
 
@@ -734,7 +733,7 @@ void abi_WindowsColourSubtract3(void)
     op_sep(P_M);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | 0x03);
     cpu.p = nz8(cpu.p, 0x03);
-    ppu_wr(0x002131, 0x03);
+    wr8(0x002131, 0x03);
     (cyc(46), abi_WindowsColourWindowOnly());
     cyc(42);                            /* RTS */
 }

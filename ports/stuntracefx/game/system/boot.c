@@ -3,7 +3,6 @@
  * the start after a soft reset and the session's loop.
  */
 #include "machine.h"
-#include "native.h"
 #include "cpu_ops.h"
 #include "hw.h"
 #include "assets.h"
@@ -133,11 +132,10 @@ void abi_HardwareRegsInit(void)
         cyc(i == 0 || reg == 0x2101 || reg == 0x2115 || (reg == 0x211B && !writes[i].v)
             || reg == 0x2130 || reg == 0x2132 || reg == 0x4201 ? 40 : 24);
         if ((reg >= 0x4202 && reg <= 0x4206) || reg == 0x211B || reg == 0x211C)
-            io_wr8(b | reg, writes[i].v);   /* the multiply units: as C */
+            wr8(b | reg, writes[i].v);   /* the multiply units: as C */
         else
-            reg_wr(b | reg, writes[i].v);
+            wr8(b | reg, writes[i].v);
     }
-    ppu_mul_factor = 0x0100;                 /* M7A: $00, then $01 */
     cyc(44);
     cpu.a = (uint16_t)(cpu.a & 0xFF00);
     cpu.x = 0x00FF;
@@ -226,9 +224,9 @@ static void boot_blank(uint32_t b)
 {
     op_sep(P_M);
     cyc(96);
-    hdmaen_wr(b | HDMAEN, 0x00);
+    wr8(b | HDMAEN, 0x00);
     boot_lda8(0x80);
-    ppu_wr(b | INIDISP, 0x80);
+    wr8(b | INIDISP, 0x80);
     cpu.p |= P_I;
 }
 
@@ -237,21 +235,21 @@ static void boot_dma(uint32_t b, uint16_t to, uint8_t wbank, uint8_t from_bank, 
 {
     boot_ldx(0x8000);
     cyc(26);
-    dma_wr16(b | 0x4300, 0x8000);
+    wr16(b | 0x4300, 0x8000);
     boot_ldy(to);
     cyc(48);
-    hw_wr16(b | WMADDL, to);
+    wr16(b | WMADDL, to);
     boot_lda8(wbank);
-    hw_wr(b | WMADDH, wbank);
+    wr8(b | WMADDH, wbank);
     cyc(24);
-    dma_wr16(b | 0x4302, 0x8000);
+    wr16(b | 0x4302, 0x8000);
     boot_lda8(from_bank);
-    dma_wr(b | 0x4304, from_bank);
+    wr8(b | 0x4304, from_bank);
     boot_ldy(count);
     cyc(48);
-    dma_wr16(b | 0x4305, count);
+    wr16(b | 0x4305, count);
     boot_lda8(0x01);
-    mdmaen_wr(b | MDMAEN, 0x01);
+    wr8(b | MDMAEN, 0x01);
 }
 
 enum { BOOT_COLD, BOOT_START, BOOT_WARM, BOOT_RACE, BOOT_ATTRACT, BOOT_SOFT, BOOT_SOFT_REST };
@@ -334,11 +332,11 @@ start:
     cyc(22);
     wr8(b | 0x0374, 0x01);
     boot_lda8(0x01);
-    hw_wr(b | 0x3039, 0x01);
+    wr8(b | 0x3039, 0x01);
     boot_lda8(0x20);
-    hw_wr(b | 0x3037, 0x20);
+    wr8(b | 0x3037, 0x20);
     boot_lda8(0x0B);
-    hw_wr(b | 0x3038, 0x0B);
+    wr8(b | 0x3038, 0x0B);
     (cyc(62), abi_MenuScreen0Run());
     op_rep(P_M | P_X);
     op_lda16_imm(0x0003);
@@ -397,7 +395,7 @@ attract:
     b = (uint32_t)cpu.db << 16;
     boot_lda8(0x01);
     cyc(22);
-    hw_wr(b | 0x3039, 0x01);
+    wr8(b | 0x3039, 0x01);
     boot_lda8(0x01);
     cyc(8);
     wr8(0x7EFF65, 0x01);
@@ -465,15 +463,15 @@ soft_rest:
     b = (uint32_t)cpu.db << 16;
     boot_lda8(0x06);
     cyc(22);
-    hw_wr(b | APUIO1, 0x06);
+    wr8(b | APUIO1, 0x06);
     boot_lda8(0x80);
-    ppu_wr(b | INIDISP, 0x80);
+    wr8(b | INIDISP, 0x80);
     cyc(24);
-    hw_wr(b | NMITIMEN, 0x00);
+    wr8(b | NMITIMEN, 0x00);
     cyc(24);
-    mdmaen_wr(b | MDMAEN, 0x00);
+    wr8(b | MDMAEN, 0x00);
     cyc(24);
-    hdmaen_wr(b | HDMAEN, 0x00);
+    wr8(b | HDMAEN, 0x00);
     op_sep(P_M);
     op_rep(P_X);
     boot_clear(abi_WramFillZeroLong, 86, 64, 62);

@@ -73,20 +73,7 @@ void fx_draw_list(const FxDrawSource *src, FxCanvas *c);
 void fx_list_begin(void);
 void fx_list_end(void);
 
-/* The screen's operations, in the order the Super FX makes them: the
-   buffer cleared to colour 0 (FxScreenClear), and the rows of the drawers
-   other than the draw lists' (whose rows come from fx_list_spans). */
-void fx_op_clear(void);
-void fx_op_span(const FxSpan *s);
-/* a row through a palette (kinds 3, 4), the palette the four bytes at
-   palette in the RAM as the row is drawn; a noise row (kind 5), the ramp
-   the low bytes of the eight words at ramp */
-void fx_op_palette_span(FxSpan *s, uint16_t palette);
-void fx_op_ramp_span(FxSpan *s, uint16_t ramp);
 /* the noise fill's generator, one step (07:EEBB) */
 uint16_t fx_noise_step(uint16_t s);
-/* the S-CPU copying the screen to VRAM (VramDmaRowsFromGsuRam,
-   VramDmaWideRowsFromGsuRam): on 1 as it starts, 0 as it ends */
-void fx_op_upload(int on);
 
 #endif

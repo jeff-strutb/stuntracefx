@@ -4,7 +4,6 @@
  * the matching offset (0 or 8).
  */
 #include "machine.h"
-#include "native.h"
 #include "hw.h"
 
 /*
@@ -37,7 +36,7 @@ uint16_t GsuScreenFlip(uint8_t bank)
         wr16(b | 0x0D7D, 0x0000);
     }
     cyc(24);
-    hw_wr16(b | (GSU_SCMR & 0xFFFF), cyc_then(48, (uint16_t)(rd16(b | 0x0374) & 0xFFF7)));
+    wr16(b | (GSU_SCMR & 0xFFFF), cyc_then(48, (uint16_t)(rd16(b | 0x0374) & 0xFFF7)));
     cyc(56);
     wr16(0x70021A, 0x2C00);
     cyc(16);
@@ -45,9 +44,9 @@ uint16_t GsuScreenFlip(uint8_t bank)
     cyc(24);
     mode = (uint16_t)(rd16(b | 0x0374) | 0x0018);
     cyc(48);
-    hw_wr16(b | (GSU_SCMR & 0xFFFF), mode);
+    wr16(b | (GSU_SCMR & 0xFFFF), mode);
     cyc(70);
-    hw_wr(GSU_SCBR, 0x0B);
+    wr8(GSU_SCBR, 0x0B);
     cyc(42);
     return (uint16_t)((mode & 0xFF00) | 0x0B);
 }
@@ -89,7 +88,7 @@ uint16_t GsuScreenFlipMenu(uint8_t bank)
         base = 0x25;
     }
     cyc(24);
-    hw_wr16(b | (GSU_SCMR & 0xFFFF), cyc_then(48, (uint16_t)(rd16(b | 0x0374) & 0xFFF7)));
+    wr16(b | (GSU_SCMR & 0xFFFF), cyc_then(48, (uint16_t)(rd16(b | 0x0374) & 0xFFF7)));
     cyc(56);
     wr16(0x70021A, start);
     cyc(16);
@@ -97,9 +96,9 @@ uint16_t GsuScreenFlipMenu(uint8_t bank)
     cyc(24);
     mode = (uint16_t)(rd16(b | 0x0374) | 0x0018);
     cyc(48);
-    hw_wr16(b | (GSU_SCMR & 0xFFFF), mode);
+    wr16(b | (GSU_SCMR & 0xFFFF), mode);
     cyc(70);
-    hw_wr(GSU_SCBR, base);
+    wr8(GSU_SCBR, base);
     cyc(42);
     return (uint16_t)((mode & 0xFF00) | base);
 }
@@ -141,7 +140,7 @@ uint16_t GsuScreenToggle(uint8_t bank)
         base = 0x25;
     }
     cyc(24);
-    hw_wr16(b | (GSU_SCMR & 0xFFFF), cyc_then(48, (uint16_t)(rd16(b | 0x0374) & 0xFFF7)));
+    wr16(b | (GSU_SCMR & 0xFFFF), cyc_then(48, (uint16_t)(rd16(b | 0x0374) & 0xFFF7)));
     cyc(56);
     wr16(0x70021A, start);
     cyc(16);
@@ -149,9 +148,9 @@ uint16_t GsuScreenToggle(uint8_t bank)
     cyc(24);
     mode = (uint16_t)(rd16(b | 0x0374) | 0x0018);
     cyc(48);
-    hw_wr16(b | (GSU_SCMR & 0xFFFF), mode);
+    wr16(b | (GSU_SCMR & 0xFFFF), mode);
     cyc(70);
-    hw_wr(GSU_SCBR, base);
+    wr8(GSU_SCBR, base);
     cyc(42);
     return (uint16_t)((mode & 0xFF00) | base);
 }

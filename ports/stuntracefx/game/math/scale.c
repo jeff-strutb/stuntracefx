@@ -2,7 +2,6 @@
  * scale.c: fixed scalings of signed 16-bit values.
  */
 #include "machine.h"
-#include "native.h"
 #include "hw.h"
 #include "cpu_ops.h"
 
@@ -236,22 +235,21 @@ uint16_t Mode7ScaleProduct(uint16_t value, int positive)
     uint8_t d, m;
 
     cyc(40);
-    io_wr16(WRDIVL, n = positive ? value : (cyc(44), (uint16_t)-value));
+    wr16(WRDIVL, n = positive ? value : (cyc(44), (uint16_t)-value));
     cyc(54);
-    io_wr8(WRDIVB, d = cyc_then(24, rd8(0x7F340A)));
+    wr8(WRDIVB, d = cyc_then(24, rd8(0x7F340A)));
     cyc(144);
-    q = io_rd16(RDDIVL, cpu_div(n, d));
+    q = rd16(RDDIVL);
     if (!positive)
         { cyc(16); q = (uint16_t)-q; }
     cyc(68);
-    io_wr8(M7A, (uint8_t)q);
+    wr8(M7A, (uint8_t)q);
     cyc(44);
-    io_wr8(M7A, (uint8_t)(q >> 8));
-    ppu_mul_factor = (int16_t)q;
+    wr8(M7A, (uint8_t)(q >> 8));
     cyc(32);
-    io_wr8(M7B, m = cyc_then(24, rd8(0x7F3408)));
+    wr8(M7B, m = cyc_then(24, rd8(0x7F3408)));
     cyc(46);
-    return cyc_then(42, io_rd16(MPYL, (uint16_t)ppu_mul(m)));
+    return cyc_then(42, rd16(MPYL));
 }
 
 void abi_Mode7ScaleProduct(void)
