@@ -24,6 +24,18 @@ void sprite_bar4(uint8_t value, uint16_t pos, uint16_t sprite);
 void sprite_bar6(uint8_t value, uint16_t pos, uint16_t sprite);
 
 /* ---- hud/digits.c ---- */
+void fade_step_fixed(void);
+void fade_step(void);
+void raster_colours(void);
+void raster_palette_upload(void);
+void raster_colours_cycling(uint16_t x);
+void raster_colours_e4(uint16_t x);
+void raster_colours_unless_0d22(void);
+void palette_cycle(void);
+void palette_kept_colours_step(uint16_t x, uint16_t y);
+void player_colours_flash(uint8_t level, uint16_t y);
+void status_colour_pick(uint16_t y);
+void palettes_step(void);
 void hud_draw_time(void);
 void hud_draw_count(void);
 void hud_draw_number3(uint8_t n, uint16_t sprite);

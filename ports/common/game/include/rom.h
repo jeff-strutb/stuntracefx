@@ -26,4 +26,12 @@ static inline uint16_t rom_word(uint32_t addr)
     return (uint16_t)(p[0] | p[1] << 8);
 }
 
+/* A word of the tables the original runs from work RAM ($7E:A2D9 on,
+   copied there from $02:8000 at power on), read where the cartridge
+   keeps them, by the work RAM address the original reads. */
+static inline uint16_t ram_code_word(uint16_t addr)
+{
+    return rom_word(0x028000u + (uint16_t)(addr - 0xA2D9u));
+}
+
 #endif

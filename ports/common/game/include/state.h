@@ -89,6 +89,10 @@ typedef struct PACKED {
 #define object_list     ((w16 *)&wram[0xFFBD])     /* object offsets, 0 ends it */
 
 /* ---- the race and its HUD ---- */
+#define frame_count         W8(0x0E3B)   /* up by one each frame */
+#define palette_animate     W8(0x0E5F)   /* nonzero: the animated colours in use */
+#define fade_level          W16(0x0D60)  /* high byte the brightness, bit 15 blanked */
+#define fade_out            W8(0x0E3A)   /* 0 fading in */
 #define hud_mode            W8(0x0D2B)   /* 0 Speed Trax, 1 Stunt Trax, 2 Battle Trax, 3 all courses */
 #define wram_0D24           W8(0x0D24)
 #define wram_0D4A           W8(0x0D4A)   /* the class (0-2) the records are kept by */
