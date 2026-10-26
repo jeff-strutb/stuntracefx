@@ -44,6 +44,9 @@ void rm_hud_redraw_in(int hold);
    when that picture's redraw reached the HUD's own loop (TIME UP), after
    which the redraws stop */
 extern int rm_tween_start_side;
+/* the Super FX's RAM at the tick's end, while tween.c draws: what the
+   HUD's redraw reads, as the tick's own redraw after its objects did */
+const uint8_t *rm_tween_end_sram(void);
 /* draw() run as a redraw (rm_redrawing holds): 0 when it reached a wait
    for a frame and was let go there, the state to be put back by the
    caller */

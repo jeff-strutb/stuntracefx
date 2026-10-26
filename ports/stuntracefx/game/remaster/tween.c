@@ -105,6 +105,8 @@ static void between_view(uint8_t *w, unsigned slot, int num, int den)
         between16(w, kept_w, was_w, rec + 0x0E + 2 * i, num, den, 1);
 }
 
+const uint8_t *rm_tween_end_sram(void) { return kept_s; }
+
 int rm_tween_buffers(int num, int den, uint8_t *at_2c00, uint8_t *at_9400)
 {
     uint8_t *w = nshvc_wram(), *s = nshvc_sram();

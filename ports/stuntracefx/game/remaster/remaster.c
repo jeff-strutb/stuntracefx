@@ -142,6 +142,10 @@ void rm_hud_redraw_in(int hold)
     memcpy(now_s, s, 0x2C00);
     memcpy(now_s + 0x2C00, s + 0xFC00, 0x400);
     memcpy(w, hud_w, sizeof hud_w);
+    if (rm_tween_start_side) {          /* an in-between frame: the RAM the tick's redraw read, its end's */
+        memcpy(s, rm_tween_end_sram(), 0x2C00);
+        memcpy(s + 0xFC00, rm_tween_end_sram() + 0xFC00, 0x400);
+    }
     cpu = hud_cpu;
     if (hold)
         nshvc_hold_interrupts(1);

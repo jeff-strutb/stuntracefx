@@ -633,12 +633,12 @@ static const VidFrame *tween_at(int num, int den)
    frame's own and not compared). RM_TWEEN_SHOT=N writes the N-th such
    tick composed as tween_N_k.ppm at k/4 of the way, k = 0..4 (k = 0 its
    own frame), and RM_TWEEN_SHOTS=M the M ticks from it. */
-static long tw_frames = -1, tw_bad, tw_bytes, tw_first = -1, tw_step, tw_text;
+static long tw_frames = -1, tw_bad, tw_bytes, tw_first = -1, tw_step, tw_own;
 
 static void tween_report(void)
 {
     fprintf(stderr, "tweencheck: %s, %ld ticks, %ld differ (first at frame %ld), %ld bytes; %ld of them by a step, "
-            "%ld by the next tick's text\n", rr_name(), tw_frames, tw_bad, tw_first, tw_bytes, tw_step, tw_text);
+            "%ld by the tick's own work\n", rr_name(), tw_frames, tw_bad, tw_first, tw_bytes, tw_step, tw_own);
 }
 
 static int tw_box[4];                   /* the differing characters' columns and rows, low and high */
@@ -660,19 +660,18 @@ static void tween_box(const uint8_t *a, const uint8_t *b)
 
 /* a tick whose picture differs from the tween's: by a step (why = 1) when
    the step's work (the HUD, the players' stats) changed it between the
-   two, which the tween keeps for the step's own tick; by the next tick's
-   text (why = 2) when one player's next tick changed its text program's
-   string or the nearest car's label, which it draws after its objects have
-   run (tween.c); listed unless so (RM_TWEEN_ALL: all) */
+   two, which the tween keeps for the step's own tick; by the tick's own
+   work (why = 2) when one player's tick drew what its objects had changed
+   first (tween_check); listed unless so (RM_TWEEN_ALL: all) */
 static void tween_differs(long frame_no, long ticks, int f, int why, long bad)
 {
-    if ((!why && tw_bad - tw_step - tw_text < 20) || getenv("RM_TWEEN_ALL"))
+    if ((!why && tw_bad - tw_step - tw_own < 20) || getenv("RM_TWEEN_ALL"))
         fprintf(stderr, "tweencheck: frame %ld (tick %ld, race %u) at %d/1%s: %ld bytes differ, characters %d-%d x %d-%d\n",
-                frame_no, ticks, rm_tick_count(), f, why == 1 ? " by a step" : why ? " by the next tick's text" : "",
+                frame_no, ticks, rm_tick_count(), f, why == 1 ? " by a step" : why ? " by the tick's own work" : "",
                 bad, tw_box[0], tw_box[1], tw_box[2], tw_box[3]);
     tw_bad++;
     tw_step += why == 1;
-    tw_text += why == 2;
+    tw_own += why == 2;
     tw_bytes += bad;
     if (tw_first < 0)
         tw_first = frame_no;
@@ -694,7 +693,7 @@ static void tween_check(void)
     static uint32_t *b;
     static uint8_t ahead_px[2][RM_TWEEN_BYTES];
     static int ahead_mask;
-    static uint8_t ahead_text[18];      /* the 1/1's text and label state ($2648, $2732: tween.c) */
+    int zero_ok = 0;                    /* this tick's 0/1 drawn and exact */
     static long ticks, shot = -2, ahead = -1;
     const uint8_t *ram = snes_sfx_ram();
     int tw, th, y;
@@ -728,34 +727,6 @@ static void tween_check(void)
             write_ppm(name, pic);
             free(pic);
         }
-    }
-    if (ahead == frame_no - 1) {        /* the last tick's 1/1 against what this one drew in each buffer */
-        for (o = 0; o < RM_TWEEN_BYTES; o++) {
-            if ((ahead_mask & 1) && ahead_px[0][o] != ram[(uint16_t)(0x2C00 + o)])
-                bad++;
-            if ((ahead_mask & 2) && ahead_px[1][o] != ram[(uint16_t)(0x9400 + o)])
-                bad++;
-        }
-        tw_frames++;
-        if (bad && getenv("RM_TWEEN_DUMP") && atol(getenv("RM_TWEEN_DUMP")) == frame_no) {
-            /* RM_TWEEN_DUMP=N: at frame N, the last tick's 1/1 and this tick's buffers */
-            write_file("tween_ahead", ".bin", ahead_px[0], sizeof ahead_px);
-            write_file("tween_drawn", ".bin", ram + 0x2C00, RM_TWEEN_BYTES);
-            write_file("tween_drawn2", ".bin", ram + 0x9400, RM_TWEEN_BYTES);
-        }
-        tw_box[0] = tw_box[2] = 99, tw_box[1] = tw_box[3] = -1;
-        if (bad) {
-            if (ahead_mask & 1)
-                tween_box(ahead_px[0], ram + 0x2C00);
-            if (ahead_mask & 2)
-                tween_box(ahead_px[1], ram + 0x9400);
-        }
-        if (bad)            /* this tick's picture: the step's HUD on its tick */
-            tween_differs(frame_no, ticks, 1,
-                          rm_tick_count() % RM_TICKS == RM_TICKS - 1                                        ? 1
-                          : memcmp(ahead_text, ram + 0x2648, 6) || memcmp(ahead_text + 6, ram + 0x2732, 12) ? 2
-                                                                                                             : 0,
-                          bad);
     }
     if (snes_wram()[0x0D62]) {
         /* two players: the tick draws after its physics, so its own
@@ -816,12 +787,42 @@ static void tween_check(void)
                 tween_box(px[m - 1], drawn);
                 tween_differs(frame_no, ticks, 0, 0, bad);
             }
+            zero_ok = !bad;
         }
+    }
+    if (ahead == frame_no - 1) {        /* the last tick's 1/1 against what this one drew in each buffer */
+        bad = 0;
+        for (o = 0; o < RM_TWEEN_BYTES; o++) {
+            if ((ahead_mask & 1) && ahead_px[0][o] != ram[(uint16_t)(0x2C00 + o)])
+                bad++;
+            if ((ahead_mask & 2) && ahead_px[1][o] != ram[(uint16_t)(0x9400 + o)])
+                bad++;
+        }
+        tw_frames++;
+        if (bad && getenv("RM_TWEEN_DUMP") && atol(getenv("RM_TWEEN_DUMP")) == frame_no) {
+            /* RM_TWEEN_DUMP=N: at frame N, the last tick's 1/1 and this tick's buffers */
+            write_file("tween_ahead", ".bin", ahead_px[0], sizeof ahead_px);
+            write_file("tween_drawn", ".bin", ram + 0x2C00, RM_TWEEN_BYTES);
+            write_file("tween_drawn2", ".bin", ram + 0x9400, RM_TWEEN_BYTES);
+        }
+        tw_box[0] = tw_box[2] = 99, tw_box[1] = tw_box[3] = -1;
+        if (bad) {
+            if (ahead_mask & 1)
+                tween_box(ahead_px[0], ram + 0x2C00);
+            if (ahead_mask & 2)
+                tween_box(ahead_px[1], ram + 0x9400);
+        }
+        /* the 1/1 and this tick's 0/1 start from the same state: with the
+           0/1 exact, what differs is what this tick did before its
+           picture (its objects' work that the picture draws after them: the
+           HUD's input, the text, the label; the step's HUD), which the last
+           tick could not know */
+        if (bad)
+            tween_differs(frame_no, ticks, 1, zero_ok ? 2 : rm_tick_count() % RM_TICKS == RM_TICKS - 1 ? 1 : 0,
+                          bad);
     }
     if (!(ahead_mask = rm_tween_buffers(1, 1, ahead_px[0], ahead_px[1])))
         return;
-    memcpy(ahead_text, ram + 0x2648, 6);
-    memcpy(ahead_text + 6, ram + 0x2732, 12);
     ahead = frame_no;
 }
 
