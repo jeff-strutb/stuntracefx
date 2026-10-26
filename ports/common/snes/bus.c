@@ -257,9 +257,18 @@ void snes_tick(unsigned clocks)
 void snes_cart_irq(int level) { cart_irq = level; }
 
 /* snes_hold_interrupts: code run between frames (from the frame hook)
-   takes no interrupt; they wait for it to end */
-
-void snes_hold_interrupts(int on) { held = on; }
+   takes no interrupt; they wait for it to end. The machine is put back
+   after it, so the Super FX's interrupt that its own programs' STOPs raise
+   is too: the hold's end leaves it as its start found it. */
+void snes_hold_interrupts(int on)
+{
+    static int irq_kept;
+    if (s_cart.superfx && on && !held)
+        irq_kept = gsu_irq();
+    else if (s_cart.superfx && !on && held)
+        gsu_irq_put(irq_kept);
+    held = on;
+}
 
 static void check_interrupts(void)
 {

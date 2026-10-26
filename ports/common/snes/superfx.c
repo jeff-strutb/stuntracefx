@@ -98,6 +98,12 @@ void gsu_reset(void)
 
 uint8_t *snes_sfx_ram(void) { return ram_store; }
 int gsu_running(void) { return go; }
+int gsu_irq(void) { return sfr_irq; }
+void gsu_irq_put(int on)
+{
+    sfr_irq = (uint8_t)(on != 0);
+    snes_cart_irq(sfr_irq);
+}
 
 /* ---- time ---- */
 

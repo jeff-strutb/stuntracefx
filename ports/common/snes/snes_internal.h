@@ -39,6 +39,8 @@ uint8_t gsu_reg_read(uint16_t addr);         /* $3000-$32FF */
 void gsu_reg_write(uint16_t addr, uint8_t v);
 void gsu_sync(void);                         /* the Super FX up to the S-CPU's time */
 int gsu_running(void);
+int gsu_irq(void);                           /* SFR's IRQ flag */
+void gsu_irq_put(int on);                    /* it, and the cartridge's IRQ line, set as kept */
 extern uint8_t *gsu_ram_mem;
 
 /* ---- apu.c ---- */
