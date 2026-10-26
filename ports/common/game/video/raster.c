@@ -6,8 +6,9 @@
  * windows, the uploads made while the screen is off).
  *
  * The stage to run next is $0D3F; each sets the next and the line it runs
- * at (raster_line, and raster_dot within that line: a stage that comes
- * late in its line makes its changes from the line after).
+ * at (raster_line, and raster_dot within that line when the race asks for
+ * stages at a dot, raster_by_dot: a stage that comes late in its line
+ * makes its changes from the line after).
  */
 #include <stdlib.h>
 
@@ -19,11 +20,12 @@
 #define sprites_dirty       W8(0x0D52)
 
 uint16_t raster_line, raster_dot;       /* where the next stage runs */
+int raster_by_dot;                      /* the stages come at a dot of their line (else at its start) */
 
 /* The line a stage's changes take effect from. */
 static unsigned raster_row(void)
 {
-    return raster_line + (raster_dot >= 0xC0);
+    return raster_line + (raster_by_dot && raster_dot >= 0xC0);
 }
 
 static void next(uint8_t stage, uint16_t line)
