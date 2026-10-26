@@ -30,6 +30,11 @@ uint8_t rd8(uint32_t addr);
 void wr8(uint32_t addr, uint8_t value);
 
 uint64_t snes_clock;
+/* snes_set_untimed: the S-CPU's code (outside its interrupt handlers),
+   its DMA and the Super FX keep no time: the beam stands while they run */
+static int untimed, in_handler;
+static uint32_t vblanks;           /* vertical blanks begun */
+static uint32_t untimed_reads;     /* reads since the last write, untimed */
 uint8_t snes_mdr;
 int snes_rom_unheld;
 const SnesCart *snes_cart;
@@ -157,6 +162,7 @@ static void events_next(void)
 static void line_begin(void)
 {
     if (vline == 225) {
+        vblanks++;
         rdnmi_flag = 1;
         if (nmitimen & 0x80)
             nmi_pending = 1;
@@ -228,8 +234,18 @@ static void run_events(void)
     events_next();
 }
 
+void snes_set_untimed(int on)
+{
+    untimed = on;
+    untimed_reads = 0;
+}
+
+int snes_untimed(void) { return untimed && !in_handler; }
+
 void snes_tick(unsigned clocks)
 {
+    if (untimed && !in_handler)
+        return;
     snes_clock += clocks;
     if (snes_clock >= next_event)
         run_events();
@@ -242,13 +258,18 @@ static void check_interrupts(void)
     if (nmi_pending) {
         nmi_pending = 0;
         dbg_nmis++;
-        if (snes_interrupt_hook)
+        if (snes_interrupt_hook) {
+            in_handler++;
             snes_interrupt_hook(1);
+            in_handler--;
+        }
         return;
     }
     if ((timeup_flag || cart_irq) && snes_interrupt_hook && !(snes_irq_masked && snes_irq_masked())) {
         dbg_irqs++;
+        in_handler++;
         snes_interrupt_hook(0);
+        in_handler--;
     }
 }
 
@@ -631,6 +652,12 @@ static uint8_t access_rd(uint32_t addr)
     second = last_was_read && addr == ((last_read + 1) & 0xFFFFFF);
     if (!second)
         check_interrupts();
+    if (untimed && !in_handler) {
+        /* code with no time that reads and reads and writes nothing waits
+           for something that time would bring: it never comes */
+        if (++untimed_reads > 20000000)
+            snes_fatal("untimed: the S-CPU waits (its last read $%06X)", addr);
+    }
     last_read = addr;
     last_was_read = !second;
     last_was_write = 0;
@@ -678,6 +705,7 @@ static void access_wr(uint32_t addr, uint8_t value, int check)
     last_write = addr;
     last_was_write = !second;
     last_was_read = 0;
+    untimed_reads = 0;
     snes_tick(snes_access_clocks(addr));
     snes_mdr = value;
     if (snes_write_hook)
@@ -742,6 +770,18 @@ void snes_cpu_wait(uint32_t clocks)
     last_was_read = last_was_write = 0;
 }
 void snes_cpu_clocks(uint32_t clocks) { snes_tick(clocks); }
+
+/* The clock run on, timed, to the next vertical blank's start (line 225:
+   the NMI, the joypads' read, the frame hook), interrupts taken on the way */
+void snes_wait_vblank(void)
+{
+    int keep = untimed;
+    uint32_t f = vblanks;
+    untimed = 0;
+    while (vblanks == f)
+        snes_cpu_wait(64);
+    untimed = keep;
+}
 void snes_cpu_interrupts(void) { check_interrupts(); }
 
 /* ---- power ---------------------------------------------------------------------- */

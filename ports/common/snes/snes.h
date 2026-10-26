@@ -159,6 +159,18 @@ void snes_cpu_wait(uint32_t clocks);
    internal cycles), `clocks` master clocks: the decomp's cyc(). */
 void snes_cpu_clocks(uint32_t clocks);
 
+/* Untimed: the S-CPU's code (not its interrupt handlers), its DMA and the
+   Super FX keep no time, as native code: the beam stands still while they
+   run, and a Super FX program runs to its STOP when the S-CPU next looks
+   at it. A wait for something time would bring stops the port (it names
+   the address). Off (the default) is the console's time. */
+void snes_set_untimed(int on);
+int snes_untimed(void);
+/* The clock run on, timed, to the next vertical blank's start (the NMI,
+   the joypads' read, the frame hook), interrupts taken along the way: how
+   untimed code ends its frame. Untimed stays as it was. */
+void snes_wait_vblank(void);
+
 /* The machine's state at a frame boundary, for comparisons with the
    original: work RAM (128 KB) and the Super FX RAM. */
 const uint8_t *snes_wram(void);

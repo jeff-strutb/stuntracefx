@@ -7,6 +7,7 @@
 #include "hw.h"
 #include "cpu_ops.h"
 #include "assets.h"
+#include "remaster.h"
 
 void abi_ObjectsRunHandlers(void);
 void abi_CameraFollowStep(void);
@@ -1150,6 +1151,8 @@ void abi_RaceFrameRun(void)
     uint8_t p0 = cpu.p, db = cpu.db;
     uint32_t b;
 
+    rm_race_frame();
+
     frame_start();
     frame_view_from(0x0346);
     (cyc(62), abi_PlayerControlsFrame());
@@ -1204,12 +1207,15 @@ void abi_RaceFrameRun(void)
         cyc(46);
     }
     abi_GsuScreenToggle();
+    if (rm_tick60())
+        RmRaceScreenShow();
     op_sep(P_M);
     b = (uint32_t)cpu.db << 16;
     cyc(46);
     wr8(b | 0x0357, 0x00);
     frame_time(db, p0);
     cyc(58);                            /* its return */
+    rm_race_frame_end();
 }
 
 void abi_GsuScreenFlipMenu(void);
@@ -1242,6 +1248,8 @@ void abi_RaceFrameRunTwoPlayers(void)
 {
     uint8_t p0 = cpu.p, db = cpu.db;
     uint32_t b;
+
+    rm_race_frame();
 
     frame_start();
     op_sep(P_M);

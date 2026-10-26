@@ -13,6 +13,7 @@
 #include "draw_list.h"
 #include "wram.h"
 #include "cpu_ops.h"
+#include "remaster.h"
 
 /* DMA channel 0, mode 1 (two registers, write once) to VMDATAL/H. */
 static void vram_channel(uint16_t size, uint16_t src, uint16_t vram)
@@ -1151,6 +1152,27 @@ static int race_stage(uint32_t b)
         return 0;
     }
     return 1;
+}
+
+/* Remaster, Frame rate 60 (remaster.h): the race screen's upload stages
+   one after another until one waits for the next screen, so the screen
+   just finished goes to the display at once, not a third a vertical
+   blank, ending with the stage that waits for the next one (the sprites
+   and the palette). Untimed, from the race frame's end. */
+void RmRaceScreenShow(void)
+{
+    uint32_t b = (uint32_t)cpu.db << 16;
+    uint16_t at, a = cpu.a, x = cpu.x, y = cpu.y;
+    uint8_t p = cpu.p;
+    int n;
+
+    for (n = 0; n < 32; n++) {          /* a runaway's guard */
+        at = rd16(b | 0x0D7D);
+        race_stage(b);
+        if (rd16(b | 0x0D7D) == at)
+            break;
+    }
+    cpu.a = a; cpu.x = x; cpu.y = y; cpu.p = p;
 }
 
 /*

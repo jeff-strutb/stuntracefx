@@ -119,6 +119,12 @@ void gsu_sync(void)
         return;
     }
     gsu_target = snes_clock;
+    if (snes_untimed()) {
+        /* no time: the program runs to its STOP */
+        gsu_target = UINT64_MAX;
+        coro_switch(main_co, gsu_co);
+        return;
+    }
     if (gsu_now < gsu_target)
         coro_switch(main_co, gsu_co);
 }
@@ -127,6 +133,8 @@ void gsu_sync(void)
    RON bit 4 for the ROM clear): 6 clocks at a time until it gives it back. */
 static void bus_wait(GsuClock *c, int ram)
 {
+    if (go && !(gsu.scmr & (ram ? 0x08 : 0x10)) && gsu_target == UINT64_MAX)
+        snes_fatal("untimed: the Super FX waits for its %s, which the S-CPU holds", ram ? "RAM" : "ROM");
     while (go && !(gsu.scmr & (ram ? 0x08 : 0x10))) {
         gsuclk_step(c, GSUCLK_BUS, 6);
         clk_sync();

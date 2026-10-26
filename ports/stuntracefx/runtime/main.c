@@ -34,6 +34,7 @@
 #include <string.h>
 
 #include "host.h"
+#include "rm_options.h"
 #include "snes.h"
 #include "video.h"
 #include "rr.h"
@@ -283,9 +284,48 @@ static void save_write(int force)
 /* ---- input ---- */
 static uint16_t keys;
 
+/* ---- the Remaster Options (rm_options.h) ----
+   Frame rate 60 (F1 toggles it): the race's loop runs a game frame each
+   tick, 1/60 s. A race frame waits for its tick (the vertical blank's
+   start), then runs as native code (the console untimed: snes.h), its
+   Super FX programs to their STOPs; at its end its screen goes to the
+   display at once (the game's upload stages in one go), and the simulation
+   steps a tick at a time (game/include/remaster.h). Not in the attract's
+   demos ($10DA set), which replay the original's buttons frame by frame.
+   The option is taken at each frame's end. */
+static int rm_on;
+static long rm_race_at = -100;
+
+int rm_tick60(void) { return rm_on && frame_no - rm_race_at <= 2; }
+
+void rm_race_frame(void)
+{
+    if (!rm_on)
+        return;
+    snes_set_untimed(0);
+    snes_wait_vblank();                 /* the tick */
+    rm_race_at = frame_no;
+    snes_set_untimed(1);
+}
+
+void rm_race_frame_end(void)
+{
+    snes_set_untimed(0);
+}
+
+static void rm_apply(void)
+{
+    rm_on = rm_option(RM_OPT_FRAMERATE) && snes_wram()[0x10DA] == 0;
+}
+
 static void key(int vk, int down)
 {
     uint16_t m = 0;
+    if (vk == 0x70 && down) {           /* F1 */
+        rm_option_set(RM_OPT_FRAMERATE, !rm_option(RM_OPT_FRAMERATE));
+        fprintf(stderr, "remaster: frame rate %s\n", rm_option(RM_OPT_FRAMERATE) ? "60" : "original");
+        return;
+    }
     switch (vk) {
     case 0x26: m = SNES_UP; break;
     case 0x28: m = SNES_DOWN; break;
@@ -575,6 +615,7 @@ static void frame(void)
 {
     uint16_t b0 = 0, b1 = 0;
     frame_no++;
+    rm_apply();
     if (headless) {
         int more;
         static int gc = -1;
