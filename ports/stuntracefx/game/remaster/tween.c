@@ -3,12 +3,13 @@
  * game's 60 ticks is shown pictures between two ticks. A race frame takes
  * its view and draw list from the state its tick starts from, and the next
  * frame will draw from the state this tick ends with. The state at the
- * tick's start is kept; a picture at num/den of the way is the state now
- * (at 1/1 the next frame's picture exactly) with the positions and angles the 3D draws from
- * (the view's record, the objects', the Super FX records') are set
- * between the two, the 3D drawn again (RmTweenDraw), and everything put
- * back. A field that moved further than any tick moves it (a new or
- * placed object) takes the state now.
+ * tick's start is kept; a picture at num/den of the way is the nearer
+ * tick's state (the start's before half way, else the end's: at 0/1 and
+ * 1/1 the two frames' pictures exactly) with the positions and angles the
+ * 3D draws from (the view's record, the objects', the Super FX records')
+ * set between the two, the 3D drawn again (RmTweenDraw), and everything
+ * put back. A field that moved further than any tick moves it (a new or
+ * placed object) keeps the nearer tick's.
  */
 #include <string.h>
 
@@ -21,6 +22,7 @@ void RmTweenDraw(void);
 void RmTweenDrawTwoPlayers(void);
 
 static uint8_t was_w[0x20000], was_s[0x10000], kept_w[0x20000], kept_s[0x10000];
+static RegsGSU was_gsu;                     /* the Super FX's registers then (SCBR: the buffer it draws in) */
 static unsigned was_tick;                   /* the tick the kept start is of */
 static int was_ok, ticked, shown_tick;      /* a race tick since the last frame's end; the frame shown was one */
 static uint8_t done[0x10000 >> 1];          /* a Super FX word already set between */
@@ -31,6 +33,7 @@ void rm_tween_tick_start(void)
 {
     memcpy(was_w, nshvc_wram(), sizeof was_w);
     memcpy(was_s, nshvc_sram(), sizeof was_s);
+    was_gsu = gsu;
     was_tick = rm_tick_count();
     was_ok = 1;
     ticked = 1;
@@ -115,9 +118,18 @@ int rm_tween_buffers(int num, int den, uint8_t *at_2c00, uint8_t *at_9400)
     memcpy(kept_w, w, sizeof kept_w);
     memcpy(kept_s, s, sizeof kept_s);
     memset(done, 0, sizeof done);
-    /* the state the tick ends with (what the next frame draws: what is
-       drawn, its frames, its looks), its positions and angles set back
-       toward the tick's start */
+    /* the state of the nearer tick (what is drawn, its frames, its looks,
+       the Super FX's registers):
+       the start's for the first half of the way, else the end's; its
+       positions and angles set between the two. The screen buffers stay
+       as they are. */
+    if (2 * num < den) {
+        memcpy(w, was_w, sizeof was_w);
+        memcpy(s, was_s, 0x2C00);
+        memcpy(s + 0x2C00 + RM_TWEEN_BYTES, was_s + 0x2C00 + RM_TWEEN_BYTES, 0x9400 - 0x2C00 - RM_TWEEN_BYTES);
+        memcpy(s + 0x9400 + RM_TWEEN_BYTES, was_s + 0x9400 + RM_TWEEN_BYTES, 0x10000 - 0x9400 - RM_TWEEN_BYTES);
+        gsu = was_gsu;
+    }
 
     /* the views' records: player 1's car ($0346), and player 2's ($034A)
        in a two-player race */

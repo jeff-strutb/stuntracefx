@@ -644,11 +644,27 @@ static void tween_report(void)
 /* a tick whose picture differs from the tween's: by a step when the step's
    work (the HUD, the players' stats) changed it between the two, which the
    tween keeps for the step's own tick; listed unless so (RM_TWEEN_ALL: all) */
+static int tw_box[4];                   /* the differing 8x8 tiles' columns and rows, low and high */
+
+static void tween_box(const uint8_t *a, const uint8_t *b)
+{
+    long o;
+    for (o = 0; o < RM_TWEEN_BYTES; o++)
+        if (a[o] != b[o]) {
+            int c = (int)(o / 32 / 32), r = (int)(o / 32 % 32);
+            if (c < tw_box[0]) tw_box[0] = c;
+            if (c > tw_box[1]) tw_box[1] = c;
+            if (r < tw_box[2]) tw_box[2] = r;
+            if (r > tw_box[3]) tw_box[3] = r;
+        }
+}
+
 static void tween_differs(long frame_no, long ticks, int f, int step, long bad)
 {
     if ((!step && tw_bad - tw_step < 20) || getenv("RM_TWEEN_ALL"))
-        fprintf(stderr, "tweencheck: frame %ld (tick %ld, race %u) at %d/1%s: %ld bytes differ\n", frame_no, ticks,
-                rm_tick_count(), f, step ? " by a step" : "", bad);
+        fprintf(stderr, "tweencheck: frame %ld (tick %ld, race %u) at %d/1%s: %ld bytes differ, tiles %d-%d x %d-%d\n",
+                frame_no, ticks, rm_tick_count(), f, step ? " by a step" : "", bad, tw_box[0], tw_box[1], tw_box[2],
+                tw_box[3]);
     tw_bad++;
     tw_step += step;
     tw_bytes += bad;
@@ -720,6 +736,13 @@ static void tween_check(void)
             write_file("tween_drawn", ".bin", ram + 0x2C00, RM_TWEEN_BYTES);
             write_file("tween_drawn2", ".bin", ram + 0x9400, RM_TWEEN_BYTES);
         }
+        tw_box[0] = tw_box[2] = 99, tw_box[1] = tw_box[3] = -1;
+        if (bad) {
+            if (ahead_mask & 1)
+                tween_box(ahead_px[0], ram + 0x2C00);
+            if (ahead_mask & 2)
+                tween_box(ahead_px[1], ram + 0x9400);
+        }
         if (bad)            /* this tick's picture: the step's HUD on its tick */
             tween_differs(frame_no, ticks, 1, rm_tick_count() % RM_TICKS == RM_TICKS - 1, bad);
     }
@@ -748,6 +771,11 @@ static void tween_check(void)
                 write_file("tween_want", ".bin", f ? ram + 0x2C00 : last[0], RM_TWEEN_BYTES);
                 write_file("tween_want2", ".bin", f ? ram + 0x9400 : last[1], RM_TWEEN_BYTES);
             }
+            tw_box[0] = tw_box[2] = 99, tw_box[1] = tw_box[3] = -1;
+            if (bad) {
+                tween_box(px[0], f ? ram + 0x2C00 : last[0]);
+                tween_box(px[1], f ? ram + 0x9400 : last[1]);
+            }
             if (bad)        /* the stats the step set after its pictures: 1/1 on its tick, 0/1 the next */
                 tween_differs(frame_no, ticks, f, rm_tick_count() % RM_TICKS == (f ? RM_TICKS - 1 : 0), bad);
         }
@@ -756,6 +784,24 @@ static void tween_check(void)
         last_at = frame_no;
         ahead = -1;
         return;
+    }
+    {
+        /* one player: 0/1 against the picture this tick drew (the buffer
+           its start's $021A names) */
+        static uint8_t px[2][RM_TWEEN_BYTES];
+        int m = rm_tween_buffers(0, 1, px[0], px[1]);
+        const uint8_t *drawn = ram + (m == 1 ? 0x2C00 : 0x9400);
+        if (m) {
+            bad = 0;
+            for (o = 0; o < RM_TWEEN_BYTES; o++)
+                bad += px[m - 1][o] != drawn[o];
+            tw_frames++;
+            tw_box[0] = tw_box[2] = 99, tw_box[1] = tw_box[3] = -1;
+            if (bad) {
+                tween_box(px[m - 1], drawn);
+                tween_differs(frame_no, ticks, 0, 0, bad);
+            }
+        }
     }
     if (!(ahead_mask = rm_tween_buffers(1, 1, ahead_px[0], ahead_px[1])))
         return;
