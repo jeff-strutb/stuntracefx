@@ -103,6 +103,8 @@ static uint8_t hud_w[0x20000], now_w[0x20000], now_s[0x2C00 + 0x400];
 static Regs65816 hud_cpu;
 static unsigned hud_tick;
 static int hud_ok;
+static unsigned hud_stopped;            /* the tick whose redraw reached the HUD's loop */
+int rm_tween_start_side;
 
 void RmRaceHud(void)
 {
@@ -132,7 +134,7 @@ void rm_hud_redraw_in(int hold)
     Regs65816 cpu_now = cpu;
     RegsGSU gsu_now = gsu;
     int untimed = nshvc_untimed();
-    if (!hud_ok || rm_ticks - hud_tick >= RM_TICKS)
+    if ((!hud_ok && !(rm_tween_start_side && hud_stopped == rm_ticks)) || rm_ticks - hud_tick >= RM_TICKS)
         return;
     /* the Super FX's RAM outside the two screen buffers ($2C00-$FBFF) kept
        too: only the pixels drawn stay */
@@ -145,7 +147,7 @@ void rm_hud_redraw_in(int hold)
         nshvc_hold_interrupts(1);
     nshvc_set_untimed(1);
     if (!rm_redraw_run(hud_draw))
-        hud_ok = 0;                     /* the HUD's own loop this step: no more redraws of it */
+        hud_ok = 0, hud_stopped = rm_ticks;  /* the HUD's own loop this step: no more redraws of it */
     nshvc_set_untimed(untimed);
     if (hold)
         nshvc_hold_interrupts(0);

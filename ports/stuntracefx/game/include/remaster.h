@@ -39,6 +39,11 @@ void RmRaceHud(void);
 void rm_hud_redraw(void);
 /* the same with the interrupts already held by the caller (tween.c) */
 void rm_hud_redraw_in(int hold);
+/* set by tween.c while it draws an in-between frame on the start's side
+   (before half way): the HUD as the tick's own picture had it, drawn even
+   when that picture's redraw reached the HUD's own loop (TIME UP), after
+   which the redraws stop */
+extern int rm_tween_start_side;
 /* draw() run as a redraw (rm_redrawing holds): 0 when it reached a wait
    for a frame and was let go there, the state to be put back by the
    caller */

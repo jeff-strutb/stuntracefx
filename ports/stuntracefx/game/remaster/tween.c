@@ -129,6 +129,16 @@ int rm_tween_buffers(int num, int den, uint8_t *at_2c00, uint8_t *at_9400)
         memcpy(s + 0x2C00 + RM_TWEEN_BYTES, was_s + 0x2C00 + RM_TWEEN_BYTES, 0x9400 - 0x2C00 - RM_TWEEN_BYTES);
         memcpy(s + 0x9400 + RM_TWEEN_BYTES, was_s + 0x9400 + RM_TWEEN_BYTES, 0x10000 - 0x9400 - RM_TWEEN_BYTES);
         gsu = was_gsu;
+        if (!two) {
+            /* one player: the text program's string ($2732: its address,
+               bank, position at $2738/$273A, tested by RaceFrameRun) and
+               the nearest car's label (FxTextNotice: $273C bit 0, the car
+               $2648, its offset in the view's axes $264A/$264C) are drawn
+               after the tick's objects have run (their handlers,
+               FxNearestCar), so a tick's picture has the end's */
+            memcpy(s + 0x2648, kept_s + 0x2648, 6);
+            memcpy(s + 0x2732, kept_s + 0x2732, 12);
+        }
     }
 
     /* the views' records: player 1's car ($0346), and player 2's ($034A)
@@ -160,7 +170,9 @@ int rm_tween_buffers(int num, int den, uint8_t *at_2c00, uint8_t *at_9400)
 
     nshvc_hold_interrupts(1);
     nshvc_set_untimed(1);
-    drew = rm_redraw_run(two ? RmTweenDrawTwoPlayers : RmTweenDraw);  /* a redraw: no port, no wait (remaster.h) */
+    rm_tween_start_side = 2 * num < den;
+    drew = rm_redraw_run(two ? RmTweenDrawTwoPlayers : RmTweenDraw);
+    rm_tween_start_side = 0;  /* a redraw: no port, no wait (remaster.h) */
     nshvc_set_untimed(untimed);
     nshvc_hold_interrupts(0);
     /* one player: the buffer drawn in (its start at $021A, the one the
