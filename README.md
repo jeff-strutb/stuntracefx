@@ -102,7 +102,8 @@ produced these bytes, so no C can rebuild them. Each routine therefore has two
 sources:
 
 - **C, the decompilation.** Readable C per routine, certified behaviour exact
-  against the running original (T3).
+  against the running original (T3). A native port is built from it later and
+  never edits it.
 - **Assembly, the byte-exact companion.** Symbolic, commented assembly that
   rebuilds the ROM byte for byte (T4). It is the reading the C is written
   from, and the byte-exact rebuild proves that reading is right.
