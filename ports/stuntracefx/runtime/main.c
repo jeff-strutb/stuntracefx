@@ -327,6 +327,25 @@ static uint16_t pad_buttons(int index)
     return b;
 }
 
+/* ---- the player driving: what a touch screen is (host_set_driving) ----
+   The race reads pad 1 for the player's car once a race frame
+   (port_controls_read); a race frame takes up to eight video frames, more
+   while the screen loads, so the player drives while the last read is that
+   recent. Not in the attract demos ($10DA set), and not while paused (the
+   race reads no pad then). */
+static long controls_frame = -1000;
+
+void port_controls_read(int player)
+{
+    if (player == 0)
+        controls_frame = frame_no;
+}
+
+static int driving_now(void)
+{
+    return frame_no - controls_frame <= 12 && snes_wram()[0x10DA] == 0;
+}
+
 /* ---- sound: the mixer's 32,040 Hz to the device's rate ----
    The windowed-sinc resampler (ports/common/audio/resample.c), its ratio
    trimmed by up to 0.5% to keep 50 ms of the mixer's output queued. */
@@ -575,6 +594,7 @@ static void frame(void)
         return;
     }
     show();
+    host_set_driving(driving_now());
     {
         host_event e;
         while (host_poll_event(&e, 0)) {

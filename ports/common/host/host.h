@@ -94,6 +94,10 @@ typedef struct host_pad {
     unsigned buttons;
 } host_pad;
 int host_pad_read(int index, host_pad *p);
+/* the game says whether the player is driving a race now: a touch screen is
+   then the wheel and pedals, else the menus' swipes and taps (host/ios; the
+   other hosts take no notice) */
+void host_set_driving(int driving);
 
 /* ---- process ---------------------------------------------------------------------- */
 /* the program's name, before host_init: dir names the save folder, title

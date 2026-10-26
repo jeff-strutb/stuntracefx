@@ -17,6 +17,12 @@
 #include "machine.h"
 #include "native.h"
 
+/* The race reads player `player`'s pad for its car (object/gsu_record.c),
+   once a race frame: the port's runtime takes it that the player is
+   driving (a touch screen is then a wheel and pedals). No time and nothing
+   of the game's state. */
+void port_controls_read(int player);
+
 /* The time of a register access the C does the work of (the port's clock). */
 void io_read_time(uint32_t addr, uint8_t value);
 void io_write_time(uint32_t addr, uint8_t value);

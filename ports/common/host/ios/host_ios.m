@@ -15,9 +15,8 @@
  * CAMetalLayer (host_metal_layer), one drawable pixel per screen pixel, or
  * arrive as ARGB pixels through host_present (the software renderer).
  *
- *   touch     controls drawn over the screen send the keys the keyboard's
- *             game keys send (arrows, Z X A S, Q W, Enter, Shift); hidden
- *             while a controller is connected, shown again by a touch
+ *   touch     in a race the wheel and pedals, else swipes and taps for the
+ *             menus (PortTouch), as the keys the keyboard's game keys send
  *   keys      a hardware keyboard's HID usage, as a Win32 virtual key
  *   sound     a RemoteIO output unit pulling the game's mixer
  *   pads      GameController.framework, as on macOS
@@ -172,243 +171,399 @@ static void kb_event(long u, int down)
     key_event(hid_vk(u), down);
 }
 
-/* ---- the touch controls ------------------------------------------------------------ */
-/* the SNES pad's buttons, each the key the keyboard sends for it
-   (runtime/main.c's key()) */
-enum { TC_UP, TC_DOWN, TC_LEFT, TC_RIGHT, TC_A, TC_B, TC_X, TC_Y, TC_L, TC_R, TC_SELECT, TC_START, TC_COUNT };
-static const int k_tc_vk[TC_COUNT] = { 0x26, 0x28, 0x25, 0x27, 'X', 'Z', 'S', 'A', 'Q', 'W', 0x10, 0x0D };
-static const char *const k_tc_label[TC_COUNT] = { "", "", "", "", "A", "B", "X", "Y", "L", "R", "SELECT", "START" };
+/* ---- touch: the wheel and pedals in a race, swipes and taps elsewhere ------------- */
+/* As the Boss Rally port's (ports/remastered/ios TouchPad.swift), on the
+ * SNES pad of this game's race (object/gsu_record.c ctl_player): B
+ * accelerates, A brakes (and reverses below a crawl), Left and Right steer,
+ * L and R steer harder, Y boosts. Every press is the key the keyboard sends
+ * for that button (runtime/main.c key()).
+ *
+ * While the player drives (host_set_driving):
+ *   the wheel  a finger right of the brake zone holds the accelerator (B)
+ *              for as long as it stays on the glass; moving it sideways
+ *              steers, full lock at 90 points either side, the neutral point
+ *              sliding along when the finger goes past the lock so the thumb
+ *              never runs out of room. The pad is digital: past a fifth of
+ *              the lock it is Left or Right, at nine tenths also L or R (the
+ *              hard turn). A wheel drawn where the finger landed turns with
+ *              the steering. Lifting the finger coasts.
+ *   the brake  a finger on the left of the screen holds A: the car brakes
+ *              and, slow enough, reverses (the game's own rule).
+ *   the boost  a finger on the boost pad (right, above the wheel's reach)
+ *              holds Y.
+ *   pause      the button at the top centre, or a tap with two fingers:
+ *              START.
+ * Elsewhere (menus, the pause menu, the title): a swipe is the d-pad, the
+ * way the content follows the finger (a swipe to the left is Right, a swipe
+ * up is Down); a tap is B and START together (every menu's confirm); a tap
+ * with two fingers is Y (back). */
+enum { VK_LEFT = 0x25, VK_UP = 0x26, VK_RIGHT = 0x27, VK_DOWN = 0x28, VK_START = 0x0D,
+       VK_B = 'Z', VK_A = 'X', VK_Y = 'A', VK_L = 'Q', VK_R = 'W' };
 
-@interface PortControls : UIView
-@property (nonatomic) BOOL off;        /* hidden while a controller is connected */
-- (void)releaseAll;
+static _Atomic int s_driving;              /* host_set_driving, from the game thread */
+
+void host_set_driving(int driving) { atomic_store(&s_driving, driving != 0); }
+
+/* a button pressed a moment (5 frames: a press the game's pad read sees) */
+static void key_pulse(int vk)
+{
+    key_event(vk, 1);
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 80 * NSEC_PER_MSEC), dispatch_get_main_queue(),
+                   ^{ key_event(vk, 0); });
+}
+
+static UIColor *rgb(unsigned c) { return [UIColor colorWithRed:(c >> 16) / 255.0 green:(c >> 8 & 0xFF) / 255.0 blue:(c & 0xFF) / 255.0 alpha:1]; }
+
+/* The steering wheel drawn under the finger: a rim, a hub and three spokes. */
+static UIView *wheel_view(CGFloat size)
+{
+    UIView *v = [[UIView alloc] initWithFrame:CGRectMake(0, 0, size, size)];
+    CGFloat k = size / 100;
+    UIColor *gold = rgb(0xF5D34A);
+    CAShapeLayer *rim = [CAShapeLayer layer], *hub = [CAShapeLayer layer], *sp = [CAShapeLayer layer];
+    UIBezierPath *spokes = [UIBezierPath bezierPath];
+    static const CGFloat s[3][4] = { { 50, 40, 50, 10 }, { 59, 56, 84, 70 }, { 41, 56, 16, 70 } };
+    int i;
+    v.userInteractionEnabled = NO;
+    v.alpha = 0.9;
+    rim.path = [UIBezierPath bezierPathWithOvalInRect:CGRectMake(6 * k, 6 * k, 88 * k, 88 * k)].CGPath;
+    rim.fillColor = nil;
+    rim.strokeColor = gold.CGColor;
+    rim.lineWidth = 9 * k;
+    [v.layer addSublayer:rim];
+    hub.path = [UIBezierPath bezierPathWithOvalInRect:CGRectMake(39 * k, 39 * k, 22 * k, 22 * k)].CGPath;
+    hub.fillColor = gold.CGColor;
+    [v.layer addSublayer:hub];
+    for (i = 0; i < 3; i++) {
+        [spokes moveToPoint:CGPointMake(s[i][0] * k, s[i][1] * k)];
+        [spokes addLineToPoint:CGPointMake(s[i][2] * k, s[i][3] * k)];
+    }
+    sp.path = spokes.CGPath;
+    sp.strokeColor = gold.CGColor;
+    sp.lineWidth = 7 * k;
+    sp.lineCap = kCALineCapRound;
+    [v.layer addSublayer:sp];
+    v.layer.shadowColor = gold.CGColor;
+    v.layer.shadowOpacity = 0.45;
+    v.layer.shadowRadius = 8;
+    v.layer.shadowOffset = CGSizeZero;
+    return v;
+}
+
+/* A pedal: a ribbed pad with its name, brighter while pressed. */
+static UIView *pedal_view(CGRect frame, unsigned colour, NSString *name)
+{
+    UIView *v = [[UIView alloc] initWithFrame:frame];
+    UIColor *c = rgb(colour);
+    CAShapeLayer *pad = [CAShapeLayer layer], *rb = [CAShapeLayer layer];
+    UIBezierPath *ribs = [UIBezierPath bezierPath];
+    UILabel *label = [[UILabel alloc] initWithFrame:CGRectMake(0, frame.size.height - 36, frame.size.width, 22)];
+    int i;
+    v.userInteractionEnabled = NO;
+    v.alpha = 0.4;
+    pad.path = [UIBezierPath bezierPathWithRoundedRect:CGRectInset(v.bounds, 4, 4) cornerRadius:16].CGPath;
+    pad.fillColor = [UIColor colorWithWhite:0.08 alpha:0.55].CGColor;
+    pad.strokeColor = c.CGColor;
+    pad.lineWidth = 4;
+    [v.layer addSublayer:pad];
+    for (i = 0; i < 4 && 22 + i * 16 < frame.size.height - 40; i++) {
+        [ribs moveToPoint:CGPointMake(22, 22 + i * 16)];
+        [ribs addLineToPoint:CGPointMake(frame.size.width - 22, 22 + i * 16)];
+    }
+    rb.path = ribs.CGPath;
+    rb.strokeColor = c.CGColor;
+    rb.lineWidth = 5;
+    rb.lineCap = kCALineCapRound;
+    [v.layer addSublayer:rb];
+    label.text = name;
+    label.textAlignment = NSTextAlignmentCenter;
+    label.font = [UIFont systemFontOfSize:13 weight:UIFontWeightHeavy];
+    label.textColor = c;
+    [v addSubview:label];
+    return v;
+}
+
+static void pedal_pressed(UIView *v, BOOL on)
+{
+    v.alpha = on ? 0.85 : 0.4;
+    v.transform = on ? CGAffineTransformMakeScale(0.94, 0.94) : CGAffineTransformIdentity;
+}
+
+/* The pause button at the top centre while the player drives: two bars. */
+static UIControl *pause_button(void)
+{
+    UIControl *b = [[UIControl alloc] initWithFrame:CGRectMake(0, 0, 56, 44)];
+    CAShapeLayer *bars = [CAShapeLayer layer];
+    UIBezierPath *p = [UIBezierPath bezierPath];
+    [p appendPath:[UIBezierPath bezierPathWithRoundedRect:CGRectMake(17, 10, 8, 24) cornerRadius:2]];
+    [p appendPath:[UIBezierPath bezierPathWithRoundedRect:CGRectMake(31, 10, 8, 24) cornerRadius:2]];
+    bars.path = p.CGPath;
+    bars.fillColor = UIColor.whiteColor.CGColor;
+    bars.shadowColor = UIColor.blackColor.CGColor;
+    bars.shadowOpacity = 0.6;
+    bars.shadowRadius = 3;
+    bars.shadowOffset = CGSizeZero;
+    [b.layer addSublayer:bars];
+    b.alpha = 0.75;
+    return b;
+}
+
+typedef enum { ROLE_NONE, ROLE_WHEEL, ROLE_BRAKE, ROLE_BOOST, ROLE_MENU } Role;
+
+@interface PortTouch : UIView
+@property (nonatomic) BOOL padConnected;   /* a controller: the pedals and pause are not drawn (they still work) */
+- (void)reset;
 @end
 
-@implementation PortControls {
-    CGPoint _pad, _face;              /* the d-pad's and the face buttons' centres */
-    CGFloat _padR, _btnR, _btnOff;
-    CGRect _rect[TC_COUNT];           /* L, R, Select, Start */
-    CGPoint _btn[TC_COUNT];           /* A, B, X, Y */
-    CAShapeLayer *_shape[TC_COUNT], *_padBase;
-    NSMutableDictionary<NSValue *, NSNumber *> *_roles;   /* touch -> what it began on */
-    unsigned _mask;
+@implementation PortTouch {
+    NSMutableDictionary<NSValue *, NSArray *> *_fingers;   /* touch -> role, start x, start y, time */
+    CGPoint _wheelOrigin;
+    int _steerKeys;                        /* the steering keys held: bits Left, Right, L, R */
+    double _gestureBegan;
+    int _gestureFingers;
+    BOOL _gestureMoved;
+    BOOL _driving;
+    UIView *_wheel, *_brake, *_boost;
+    UIControl *_pause;
+    CADisplayLink *_link;
 }
+
+static const CGFloat k_steer_range = 90;   /* points of sideways travel to full lock */
+static const CGFloat k_brake_zone = 0.3;   /* the left of the screen that brakes */
+static const CGFloat k_wheel_size = 160;
+static const CGFloat k_wheel_degrees = 120;
+static const double k_tap_seconds = 0.25;
+static const CGFloat k_tap_points = 12;
+static const CGFloat k_swipe_points = 30;
 
 - (instancetype)initWithFrame:(CGRect)f
 {
-    int i;
     if (!(self = [super initWithFrame:f]))
         return nil;
     self.multipleTouchEnabled = YES;
-    self.backgroundColor = [UIColor clearColor];
-    _roles = [NSMutableDictionary new];
-    _padBase = [CAShapeLayer layer];
-    [self.layer addSublayer:_padBase];
-    for (i = 0; i < TC_COUNT; i++) {
-        _shape[i] = [CAShapeLayer layer];
-        [self.layer addSublayer:_shape[i]];
-        if (k_tc_label[i][0]) {
-            CATextLayer *t = [CATextLayer layer];
-            t.string = [NSString stringWithUTF8String:k_tc_label[i]];
-            t.alignmentMode = kCAAlignmentCenter;
-            t.foregroundColor = [UIColor colorWithWhite:1 alpha:0.7].CGColor;
-            t.name = @"label";
-            [_shape[i] addSublayer:t];
-        }
-    }
+    self.backgroundColor = UIColor.clearColor;
+    _fingers = [NSMutableDictionary new];
+    _brake = pedal_view(CGRectMake(0, 0, 84, 128), 0xE84A3C, @"BRAKE");
+    _boost = pedal_view(CGRectMake(0, 0, 84, 76), 0x4AA8F5, @"BOOST");
+    _wheel = wheel_view(k_wheel_size);
+    _pause = pause_button();
+    _brake.hidden = _boost.hidden = _wheel.hidden = _pause.hidden = YES;
+    [_pause addTarget:self action:@selector(pausePressed) forControlEvents:UIControlEventTouchUpInside];
+    [self addSubview:_brake];
+    [self addSubview:_boost];
+    [self addSubview:_wheel];
+    [self addSubview:_pause];
+    _link = [CADisplayLink displayLinkWithTarget:self selector:@selector(tick)];
+    [_link addToRunLoop:NSRunLoop.mainRunLoop forMode:NSRunLoopCommonModes];
     return self;
-}
-
-static UIBezierPath *pill(CGRect r)
-{
-    return [UIBezierPath bezierPathWithRoundedRect:r cornerRadius:r.size.height / 2];
 }
 
 - (void)layoutSubviews
 {
     CGRect b = self.bounds;
     UIEdgeInsets s = self.safeAreaInsets;
-    CGFloat h = b.size.height, m = h * 0.04, pw, ph, lw, lh;
-    int i;
     [super layoutSubviews];
-    _padR = h * 0.2;
-    _btnR = h * 0.075;
-    _btnOff = _btnR * 1.7;
-    _pad = CGPointMake(s.left + m + _padR, h * 0.6);
-    _face = CGPointMake(b.size.width - s.right - m - _padR, h * 0.6);
-    _btn[TC_A] = CGPointMake(_face.x + _btnOff, _face.y);
-    _btn[TC_B] = CGPointMake(_face.x, _face.y + _btnOff);
-    _btn[TC_X] = CGPointMake(_face.x, _face.y - _btnOff);
-    _btn[TC_Y] = CGPointMake(_face.x - _btnOff, _face.y);
-    lw = h * 0.24;
-    lh = h * 0.09;
-    _rect[TC_L] = CGRectMake(s.left + m, s.top + m, lw, lh);
-    _rect[TC_R] = CGRectMake(b.size.width - s.right - m - lw, s.top + m, lw, lh);
-    pw = h * 0.2;
-    ph = h * 0.07;
-    _rect[TC_SELECT] = CGRectMake(_pad.x - pw / 2, h - s.bottom - m - ph, pw, ph);
-    _rect[TC_START] = CGRectMake(_face.x - pw / 2, h - s.bottom - m - ph, pw, ph);
-
-    [CATransaction begin];
-    [CATransaction setDisableActions:YES];
-    _padBase.path = [UIBezierPath bezierPathWithArcCenter:_pad radius:_padR startAngle:0 endAngle:2 * M_PI
-                                                clockwise:YES].CGPath;
-    _padBase.fillColor = [UIColor colorWithWhite:1 alpha:0.08].CGColor;
-    _padBase.strokeColor = [UIColor colorWithWhite:1 alpha:0.25].CGColor;
-    {   /* the d-pad's four arms */
-        CGFloat a = _padR * 0.3, l = _padR * 0.85;
-        CGRect arm[4] = { CGRectMake(_pad.x - a, _pad.y - l, 2 * a, l - a), CGRectMake(_pad.x - a, _pad.y + a, 2 * a, l - a),
-                          CGRectMake(_pad.x - l, _pad.y - a, l - a, 2 * a), CGRectMake(_pad.x + a, _pad.y - a, l - a, 2 * a) };
-        for (i = TC_UP; i <= TC_RIGHT; i++)
-            _shape[i].path = [UIBezierPath bezierPathWithRoundedRect:arm[i] cornerRadius:a * 0.3].CGPath;
-    }
-    for (i = TC_A; i <= TC_Y; i++)
-        _shape[i].path = [UIBezierPath bezierPathWithArcCenter:_btn[i] radius:_btnR startAngle:0 endAngle:2 * M_PI
-                                                     clockwise:YES].CGPath;
-    for (i = TC_L; i < TC_COUNT; i++)
-        _shape[i].path = pill(_rect[i]).CGPath;
-    for (i = 0; i < TC_COUNT; i++) {
-        CGRect r = CGPathGetBoundingBox(_shape[i].path);
-        CGFloat fs = i >= TC_SELECT ? r.size.height * 0.45 : r.size.height * 0.5;
-        for (CALayer *t in _shape[i].sublayers)
-            if ([t isKindOfClass:[CATextLayer class]]) {
-                CATextLayer *tl = (CATextLayer *)t;
-                tl.fontSize = fs;
-                tl.contentsScale = self.window.windowScene.screen.scale ?: 2;
-                tl.frame = CGRectMake(r.origin.x, r.origin.y + (r.size.height - fs * 1.2) / 2, r.size.width, fs * 1.2);
-            }
-    }
-    [CATransaction commit];
-    [self paint];
+    _brake.center = CGPointMake(round(b.size.width * k_brake_zone * 0.5), round(b.size.height * 0.62));
+    _boost.center = CGPointMake(round(b.size.width - s.right - 16 - _boost.bounds.size.width / 2),
+                                round(MAX(s.top, 6) + 24 + 44 + _boost.bounds.size.height / 2));
+    _pause.center = CGPointMake(round(b.size.width / 2), round(MAX(s.top, 6) + 24));
 }
 
-- (void)paint
+- (void)pausePressed { key_pulse(VK_START); }
+
+/* the pedals are shown while the player drives; a change between driving
+   and the menus starts afresh */
+- (void)tick
 {
-    int i;
-    [CATransaction begin];
-    [CATransaction setDisableActions:YES];
-    for (i = 0; i < TC_COUNT; i++) {
-        _shape[i].fillColor = [UIColor colorWithWhite:1 alpha:_mask & 1u << i ? 0.45 : 0.12].CGColor;
-        _shape[i].strokeColor = [UIColor colorWithWhite:1 alpha:0.35].CGColor;
-        _shape[i].lineWidth = 1.5;
+    BOOL d = atomic_load(&s_driving) != 0;
+    BOOL show = d && !self.padConnected;
+    if (d != _driving) {
+        _driving = d;
+        [self reset];
+        if (getenv("PORT_INPUTLOG"))
+            fprintf(stderr, "input: touch %s\n", d ? "drives" : "is the menus'");
     }
-    [CATransaction commit];
+    if (_brake.hidden == show) {
+        _brake.hidden = _boost.hidden = _pause.hidden = !show;
+        [self setNeedsLayout];
+    }
 }
 
-static CGFloat dist(CGPoint a, CGPoint b) { return hypot(a.x - b.x, a.y - b.y); }
-
-/* what a touch at p presses, given what it began on: the d-pad's
-   direction (eight ways), every face button within reach (between two
-   presses both), or the one button it began on */
-- (unsigned)pressOf:(CGPoint)p role:(int)role
+- (BOOL)has:(Role)r
 {
-    unsigned m = 0;
-    int i;
-    if (role == TC_UP) {
-        CGFloat dx = p.x - _pad.x, dy = p.y - _pad.y, d = hypot(dx, dy);
-        if (d < _padR * 0.2)
-            return 0;
-        if (dx / d > 0.38) m |= 1u << TC_RIGHT;
-        if (dx / d < -0.38) m |= 1u << TC_LEFT;
-        if (dy / d > 0.38) m |= 1u << TC_DOWN;
-        if (dy / d < -0.38) m |= 1u << TC_UP;
-        return m;
-    }
-    if (role == TC_A) {
-        for (i = TC_A; i <= TC_Y; i++)
-            if (dist(p, _btn[i]) < _btnR * 1.25)
-                m |= 1u << i;
-        return m;
-    }
-    if (role >= TC_L && CGRectContainsPoint(CGRectInset(_rect[role], -16, -16), p))
-        return 1u << role;
-    return 0;
+    for (NSValue *k in _fingers)
+        if ([_fingers[k][0] intValue] == r)
+            return YES;
+    return NO;
 }
 
-/* what a touch begins on: the d-pad's side, the face buttons' side, a
-   small button, or nothing (-1) */
-- (int)roleAt:(CGPoint)p
+- (Role)roleAt:(CGPoint)p
 {
-    int i;
-    for (i = TC_L; i < TC_COUNT; i++)
-        if (CGRectContainsPoint(CGRectInset(_rect[i], -10, -10), p))
-            return i;
-    if (dist(p, _pad) < _padR * 1.6)
-        return TC_UP;
-    if (dist(p, _face) < _padR * 1.6)
-        return TC_A;
-    return -1;
+    if (_driving) {
+        if (p.x < self.bounds.size.width * k_brake_zone)
+            return ROLE_BRAKE;
+        if (CGRectContainsPoint(CGRectInset(_boost.frame, -12, -12), p))
+            return ROLE_BOOST;
+        return [self has:ROLE_WHEEL] ? ROLE_NONE : ROLE_WHEEL;
+    }
+    return [self has:ROLE_MENU] ? ROLE_NONE : ROLE_MENU;
 }
 
-- (void)update
+/* the steering keys for s (-1 left .. 1 right): Left or Right past a fifth
+   of the lock, and L or R at nine tenths */
+- (void)steer:(CGFloat)s
 {
-    unsigned m = 0, ch;
-    int i;
-    for (NSValue *k in _roles) {
-        UITouch *t = [k nonretainedObjectValue];
-        m |= [self pressOf:[t locationInView:self] role:[_roles[k] intValue]];
-    }
-    ch = m ^ _mask;
-    _mask = m;
-    for (i = 0; i < TC_COUNT; i++)
-        if (ch & 1u << i)
-            key_event(k_tc_vk[i], (m >> i) & 1);
-    if (ch)
-        [self paint];
+    int want = 0, ch, i;
+    static const int vk[4] = { VK_LEFT, VK_RIGHT, VK_L, VK_R };
+    if (s <= -0.2) want |= 1;
+    if (s >= 0.2) want |= 2;
+    if (s <= -0.9) want |= 4;
+    if (s >= 0.9) want |= 8;
+    ch = want ^ _steerKeys;
+    for (i = 0; i < 4; i++)
+        if (ch & 1 << i)
+            key_event(vk[i], (want >> i) & 1);
+    _steerKeys = want;
 }
 
 - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)ev
 {
+    double now = CACurrentMediaTime();
     (void)ev;
-    if (self.off) {                    /* hidden for a controller: a touch shows them */
-        self.off = NO;
-        return;
-    }
     for (UITouch *t in touches) {
-        int r = [self roleAt:[t locationInView:self]];
+        CGPoint p = [t locationInView:self];
+        Role r;
+        if (_fingers.count == 0) {
+            _gestureBegan = now;
+            _gestureFingers = 0;
+            _gestureMoved = NO;
+        }
+        _gestureFingers++;
+        r = [self roleAt:p];
+        _fingers[[NSValue valueWithNonretainedObject:t]] = @[ @(r), @(p.x), @(p.y), @(now) ];
+        switch (r) {
+        case ROLE_WHEEL:
+            _wheelOrigin = p;
+            key_event(VK_B, 1);
+            _wheel.center = p;
+            _wheel.transform = CGAffineTransformIdentity;
+            _wheel.hidden = NO;
+            break;
+        case ROLE_BRAKE:
+            key_event(VK_A, 1);
+            pedal_pressed(_brake, YES);
+            break;
+        case ROLE_BOOST:
+            key_event(VK_Y, 1);
+            pedal_pressed(_boost, YES);
+            break;
+        default:
+            break;
+        }
         if (getenv("PORT_INPUTLOG"))
-            fprintf(stderr, "input: touch at %.0f,%.0f of %.0fx%.0f: %d\n", [t locationInView:self].x,
-                    [t locationInView:self].y, self.bounds.size.width, self.bounds.size.height, r);
-        if (r >= 0)
-            _roles[[NSValue valueWithNonretainedObject:t]] = @(r);
+            fprintf(stderr, "input: touch at %.0f,%.0f of %.0fx%.0f: role %d\n", p.x, p.y, self.bounds.size.width,
+                    self.bounds.size.height, (int)r);
     }
-    [self update];
 }
 
 - (void)touchesMoved:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)ev
 {
-    (void)touches;
     (void)ev;
-    [self update];
+    for (UITouch *t in touches) {
+        NSArray *f = _fingers[[NSValue valueWithNonretainedObject:t]];
+        CGPoint p = [t locationInView:self];
+        CGFloat raw, s;
+        if (!f)
+            continue;
+        if (hypot(p.x - [f[1] doubleValue], p.y - [f[2] doubleValue]) > k_tap_points)
+            _gestureMoved = YES;
+        if ([f[0] intValue] != ROLE_WHEEL)
+            continue;
+        raw = p.x - _wheelOrigin.x;
+        if (raw > k_steer_range) {
+            _wheelOrigin.x = p.x - k_steer_range;
+            raw = k_steer_range;
+        } else if (raw < -k_steer_range) {
+            _wheelOrigin.x = p.x + k_steer_range;
+            raw = -k_steer_range;
+        }
+        s = raw / k_steer_range;
+        [self steer:s];
+        _wheel.center = CGPointMake(_wheelOrigin.x, _wheel.center.y);   /* the wheel follows the sliding neutral */
+        _wheel.transform = CGAffineTransformMakeRotation(s * k_wheel_degrees * M_PI / 180);
+    }
 }
 
-- (void)touchesEnded:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)ev
+- (void)touchesEnded:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)ev { (void)ev; [self end:touches cancelled:NO]; }
+- (void)touchesCancelled:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)ev { (void)ev; [self end:touches cancelled:YES]; }
+
+- (void)end:(NSSet<UITouch *> *)touches cancelled:(BOOL)cancelled
 {
-    (void)ev;
-    for (UITouch *t in touches)
-        [_roles removeObjectForKey:[NSValue valueWithNonretainedObject:t]];
-    [self update];
+    double now = CACurrentMediaTime();
+    for (UITouch *t in touches) {
+        NSValue *key = [NSValue valueWithNonretainedObject:t];
+        NSArray *f = _fingers[key];
+        CGPoint p = [t locationInView:self];
+        CGFloat dx, dy, dist;
+        if (!f)
+            continue;
+        [_fingers removeObjectForKey:key];
+        switch ([f[0] intValue]) {
+        case ROLE_WHEEL:
+            key_event(VK_B, 0);
+            [self steer:0];
+            _wheel.hidden = YES;
+            break;
+        case ROLE_BRAKE:
+            if (![self has:ROLE_BRAKE]) {
+                key_event(VK_A, 0);
+                pedal_pressed(_brake, NO);
+            }
+            break;
+        case ROLE_BOOST:
+            if (![self has:ROLE_BOOST]) {
+                key_event(VK_Y, 0);
+                pedal_pressed(_boost, NO);
+            }
+            break;
+        case ROLE_MENU:
+            if (cancelled || _gestureFingers != 1)
+                break;
+            dx = p.x - [f[1] doubleValue];
+            dy = p.y - [f[2] doubleValue];
+            dist = hypot(dx, dy);
+            if (dist <= k_tap_points && now - [f[3] doubleValue] <= k_tap_seconds) {
+                key_pulse(VK_B);                                   /* confirm: B or START, as every menu takes */
+                key_pulse(VK_START);
+            } else if (dist >= k_swipe_points) {
+                /* the content follows the finger */
+                key_pulse(fabs(dx) >= fabs(dy) ? (dx < 0 ? VK_RIGHT : VK_LEFT) : (dy < 0 ? VK_DOWN : VK_UP));
+            }
+            break;
+        default:
+            break;
+        }
+    }
+    if (_fingers.count == 0 && !cancelled && !_gestureMoved && _gestureFingers == 2 &&
+        now - _gestureBegan <= k_tap_seconds + 0.15)
+        key_pulse(_driving ? VK_START : VK_Y);                     /* pause; in the menus, back */
 }
 
-- (void)touchesCancelled:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)ev
+- (void)reset
 {
-    [self touchesEnded:touches withEvent:ev];
-}
-
-- (void)releaseAll
-{
-    [_roles removeAllObjects];
-    [self update];
-}
-
-/* (a view at alpha 0 gets no touches: its layers are hidden instead) */
-- (void)setOff:(BOOL)off
-{
-    _off = off;
-    if (off)
-        [self releaseAll];
-    for (CALayer *l in self.layer.sublayers)
-        l.hidden = off;
+    for (NSValue *k in _fingers.allKeys) {
+        switch ([_fingers[k][0] intValue]) {
+        case ROLE_WHEEL: key_event(VK_B, 0); break;
+        case ROLE_BRAKE: key_event(VK_A, 0); break;
+        case ROLE_BOOST: key_event(VK_Y, 0); break;
+        default: break;
+        }
+    }
+    [_fingers removeAllObjects];
+    [self steer:0];
+    _wheel.hidden = YES;
+    pedal_pressed(_brake, NO);
+    pedal_pressed(_boost, NO);
 }
 @end
 
@@ -417,7 +572,7 @@ static CGFloat dist(CGPoint a, CGPoint b) { return hypot(a.x - b.x, a.y - b.y); 
 @end
 
 static PortView *s_view;
-static PortControls *s_controls;
+static PortTouch *s_controls;
 static CAMetalLayer *s_layer;
 static CALayer *s_pic;
 static _Atomic int s_pw, s_ph;        /* the drawable's size in pixels */
@@ -451,7 +606,7 @@ static _Atomic int s_pw, s_ph;        /* the drawable's size in pixels */
     s_layer.framebufferOnly = NO;     /* the renderer copies its frame in */
     s_layer.magnificationFilter = kCAFilterNearest;
     s_layer.opaque = YES;
-    s_controls = [[PortControls alloc] initWithFrame:CGRectZero];
+    s_controls = [[PortTouch alloc] initWithFrame:CGRectZero];
     s_controls.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [s_view addSubview:s_controls];
     self.view = s_view;
@@ -528,9 +683,7 @@ static void controls_for_pads(void)
     for (GCController *c in GCController.controllers)
         if (c.extendedGamepad)
             pad = 1;
-    s_controls.off = pad;
-    if (getenv("PORT_INPUTLOG"))
-        fprintf(stderr, "input: touch controls %s\n", pad ? "hidden (a controller)" : "shown");
+    s_controls.padConnected = pad;
 }
 
 static void app_active(void)
@@ -556,7 +709,7 @@ static void app_inactive(void)
     struct timespec until;
     int i;
     /* keys held go up, or they stay down for good */
-    [s_controls releaseAll];
+    [s_controls reset];
     for (i = 0; i < 256; i++)
         kb_event(i, 0);
     focus_event(0);

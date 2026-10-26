@@ -102,3 +102,5 @@ int host_pad_read(int index, host_pad *p)
     memset(p, 0, sizeof *p);
     return 0;
 }
+
+void host_set_driving(int driving) { (void)driving; }

@@ -6,6 +6,7 @@
  */
 #include "machine.h"
 #include "cpu_ops.h"
+#include "native.h"
 
 void abi_ObjectChildFollow(void);
 
@@ -1839,6 +1840,7 @@ void abi_PlayerControlsFrame(void)
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | 0x7E);
     cpu.db = 0x7E;
     cyc(94);
+    port_controls_read(0);
     ctl_player(0x0309, 0x1F23, 0, 0x0346);
     cyc(24);
     op_lda8(0x7E0D62);

@@ -504,3 +504,5 @@ int host_pad_read(int index, host_pad *o)
         return 1;
     }
 }
+
+void host_set_driving(int driving) { (void)driving; }
