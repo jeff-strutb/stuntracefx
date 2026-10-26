@@ -1,4 +1,4 @@
-/* old: video/screen_setup.c
+/* old: video/screen_setup.c video/dma.c
  *
  * screen_setup_check.c: the port's screen set-up (video/screen_setup.c)
  * against the decomp's, on random states: the decomp's writes to the video
@@ -33,7 +33,7 @@
 #include "ppu.h"
 
 #define OLD(name) void old_abi_##name(void);
-OLD(VideoRegsReset) OLD(RaceScreenSetup)
+OLD(VideoRegsReset) OLD(RaceScreenSetup) OLD(VideoStartUploads)
 
 static uint64_t rng = 0x2545F4914F6CDD1Dull;
 
@@ -183,6 +183,29 @@ int main(int argc, char **argv)
         fresh();
         old_run(old_abi_RaceScreenSetup);
         race_screen_setup();
+        same();
+    }
+    CASE("VideoStartUploads") {
+        fresh();
+        old_cpu.db = 0x03;  /* its caller's bank, where the two transfers are described */
+        old_run(old_abi_VideoStartUploads);
+        video_start_uploads();
+        /* direct page $FB-$FC: the transfers' descriptor pointer, scratch
+           that each user of it sets first */
+        wram[0xFB] = old_w[0xFB];
+        wram[0xFC] = old_w[0xFC];
+        /* channel 0's registers as the decomp's transfers leave them: the
+           game never runs a per-line table on channel 0, so they are not
+           the picture's */
+        {
+            const uint8_t *d = &ppu.dma[0];
+            VideoLineTable t = {
+                .mode = d[0] & 7, .indirect = (uint8_t)(d[0] >> 6 & 1), .target = d[1],
+                .bank = d[4], .indirect_bank = d[7], .at = (uint16_t)(d[2] | d[3] << 8)
+            };
+
+            video_line_table(0, &t);
+        }
         same();
     }
     printf("screen_setup_check: %ld cases, %ld differ\n", cases, failed);

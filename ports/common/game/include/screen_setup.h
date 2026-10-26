@@ -19,4 +19,8 @@ void screen_ppu_reset(uint16_t x);
    that the frame runs. */
 void race_screen_setup(void);
 
+/* The race's first uploads: the screen mode value, and the graphics store
+   cleared at $0000-$5FFF and $7C00-$7FFF. */
+void video_start_uploads(void);
+
 #endif

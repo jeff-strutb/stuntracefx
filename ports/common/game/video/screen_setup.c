@@ -173,3 +173,20 @@ void race_screen_setup(void)
         video_register((uint8_t)reg, 0x00);
     }
 }
+
+/* The race's first uploads (VideoStartUploads): the S-CPU's screen mode
+   value ($0374) to 3, then two runs of the graphics store cleared to the
+   byte at 03:F881 (0): words $0000-$5FFF and $7C00-$7FFF. The original
+   does these by two DMA transfers it describes in ROM (03:F873, 03:F87A);
+   turning interrupts off and acknowledging the Super FX are the machine's
+   and left out. */
+void video_start_uploads(void)
+{
+    uint8_t fill = *rom_at(0x03F881);
+    uint16_t word = (uint16_t)(fill | fill << 8);
+
+    W8(0x0000) = 0x00;
+    W16(0x0374) = 0x0003;
+    video_store_fill(0x0000, word, 0x6000);
+    video_store_fill(0x7C00, word, 0x0400);
+}
