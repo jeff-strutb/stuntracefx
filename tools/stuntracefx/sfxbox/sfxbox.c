@@ -2,7 +2,7 @@
  * sfxbox: run the original ROM headless and record what it executes.
  *
  *   sfxbox --rom ROM --script FILE --out DIR [--core DYLIB] [--trace]
- *          [--check LIB | --lockstep LIB] [--only ADDR,ADDR...]
+ *          [--check LIB | --lockstep LIB] [--only ADDR,ADDR...] [--rows FILE]
  *
  * Script, one command per line ('#' starts a comment):
  *   wait N               N frames, no buttons
@@ -149,6 +149,11 @@ static bool env(unsigned cmd, void *data) {
     }
 }
 
+/* --rows FILE: each frame's first and last line with any pixel not black
+   (-1 -1 for a frame all black), as "row FRAME FIRST LAST": where the
+   picture's forced blank and brightness leave it shown, for comparing the
+   native port's raster timing with the original's */
+static FILE *rows_f;
 static void video(const void *data, unsigned w, unsigned h, size_t pitch) {
     if (!data) return;
     if (w > 512) w = 512;
@@ -168,6 +173,17 @@ static void video(const void *data, unsigned w, unsigned h, size_t pitch) {
             }
             frame[y * 512 + x] = c;
         }
+    }
+    if (rows_f) {
+        int first = -1, last = -1;
+        for (unsigned y = 0; y < h; y++)
+            for (unsigned x = 0; x < w; x++)
+                if (frame[y * 512 + x] & 0xFFFFFF) {
+                    if (first < 0) first = (int)y;
+                    last = (int)y;
+                    break;
+                }
+        fprintf(rows_f, "row %ld %d %d\n", frames, first, last);
     }
 }
 /* --sound FILE: the DSP's output from power-on as the chip makes it (the
@@ -787,6 +803,9 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--sound") && i + 1 < argc) {
             if (!(sound_f = fopen(argv[++i], "wb"))) die("cannot write %s", argv[i]);
         }
+        else if (!strcmp(argv[i], "--rows") && i + 1 < argc) {
+            if (!(rows_f = fopen(argv[++i], "w"))) die("cannot write %s", argv[i]);
+        }
         else if (!strcmp(argv[i], "--pacing") && i + 1 < argc) {
             if (!(pacing_f = fopen(argv[++i], "w"))) die("cannot write %s", argv[i]);
         }
@@ -861,6 +880,7 @@ int main(int argc, char **argv) {
     if (lockstep) lockstep_end(frames);
     if (trace && sfxbox_trace_write_p(outdir)) die("trace write failed");
     if (pacing_f) fclose(pacing_f);
+    if (rows_f) fclose(rows_f);
     if (sound_f) fclose(sound_f);
     if (apulog_f) fclose(apulog_f);
     if (voices_f) fclose(voices_f);

@@ -125,7 +125,7 @@ void cpu_restart(uint32_t at, void (*entry)(void))
 /* ---- interrupts ---- */
 static void push8(uint8_t v)
 {
-    wr8((uint16_t)cpu.s, v);
+    snes_interrupt_push((uint16_t)cpu.s, v);
     cpu.s--;
 }
 

@@ -103,11 +103,13 @@ static uint64_t irq_at, next_event;
 #define REFRESH_AT 536
 #define REFRESH_CLOCKS 40
 
-/* where an interrupt may not be taken: the read straight after a read of
-   the byte before it (the second byte of one word) */
-static uint32_t last_read = 0xFFFFFFFFu;
+/* where an interrupt may not be taken: the access straight after an access
+   of the same kind to the byte before it (the second byte of one word);
+   the byte after that starts the next word, so a run of accesses up
+   through memory (a copy, a fill) still has its places */
+static uint32_t last_read = 0xFFFFFFFFu, last_write = 0xFFFFFFFFu;
 static unsigned dbg_irqs, dbg_nmis;          /* for PORT_DEBUG */
-static int last_was_read;
+static int last_was_read, last_was_write;
 
 void snes_fatal(const char *fmt, ...)
 {
@@ -629,7 +631,8 @@ static uint8_t access_rd(uint32_t addr)
     if (!second)
         check_interrupts();
     last_read = addr;
-    last_was_read = 1;
+    last_was_read = !second;
+    last_was_write = 0;
     /* the clock first: what the read sees is the machine at its end */
     snes_tick(rom_data(addr) ? 0 : snes_access_clocks(addr));
     v = bus_read(addr, &cost, 0);
@@ -659,10 +662,20 @@ uint8_t rd8(uint32_t addr)
 /* A register the port still answers as the console does (native.h). */
 uint8_t hw_rd(uint32_t addr) { return access_rd(addr); }
 
-static void access_wr(uint32_t addr, uint8_t value)
+/* A write is a place an interrupt is taken too, as between any two of the
+   original's instructions: a stretch of stores alone (a fill loop) would
+   otherwise hold a raster interrupt past its line. Not the second byte of
+   a word, and not the interrupt sequence's own pushes (`check` 0). */
+static void access_wr(uint32_t addr, uint8_t value, int check)
 {
     unsigned cost;
+    int second;
     addr &= 0xFFFFFF;
+    second = last_was_write && addr == ((last_write + 1) & 0xFFFFFF);
+    if (check && !second)
+        check_interrupts();
+    last_write = addr;
+    last_was_write = !second;
     last_was_read = 0;
     snes_tick(snes_access_clocks(addr));
     snes_mdr = value;
@@ -677,10 +690,11 @@ void wr8(uint32_t addr, uint8_t value)
         wr8_site = __builtin_return_address(0);
         audit_site((uint16_t)addr, 1);
     }
-    access_wr(addr, value);
+    access_wr(addr, value, 1);
 }
 
-void hw_wr(uint32_t addr, uint8_t value) { access_wr(addr, value); }
+void hw_wr(uint32_t addr, uint8_t value) { access_wr(addr, value, 1); }
+void snes_interrupt_push(uint32_t addr, uint8_t value) { access_wr(addr, value, 0); }
 
 /* A register access whose work the port's C does itself (native.h): its
    time, as rd8's and wr8's, and for a read the place an interrupt can come;
@@ -688,10 +702,12 @@ void hw_wr(uint32_t addr, uint8_t value) { access_wr(addr, value); }
 void io_read_time(uint32_t addr, uint8_t value)
 {
     addr &= 0xFFFFFF;
-    if (!(last_was_read && addr == ((last_read + 1) & 0xFFFFFF)))
+    int second = last_was_read && addr == ((last_read + 1) & 0xFFFFFF);
+    if (!second)
         check_interrupts();
     last_read = addr;
-    last_was_read = 1;
+    last_was_read = !second;
+    last_was_write = 0;
     snes_tick(snes_access_clocks(addr));
     snes_mdr = value;
 }
@@ -702,6 +718,11 @@ uint16_t input_pad(int port) { return joy_auto[port & 1]; }
 void io_write_time(uint32_t addr, uint8_t value)
 {
     addr &= 0xFFFFFF;
+    int second = last_was_write && addr == ((last_write + 1) & 0xFFFFFF);
+    if (!second)
+        check_interrupts();
+    last_write = addr;
+    last_was_write = !second;
     last_was_read = 0;
     snes_tick(snes_access_clocks(addr));
     snes_mdr = value;
@@ -717,7 +738,7 @@ void snes_cpu_wait(uint32_t clocks)
         clocks -= n;
         check_interrupts();
     }
-    last_was_read = 0;
+    last_was_read = last_was_write = 0;
 }
 void snes_cpu_clocks(uint32_t clocks) { snes_tick(clocks); }
 void snes_cpu_interrupts(void) { check_interrupts(); }

@@ -131,6 +131,8 @@ uint8_t snes_peek(uint32_t addr);
 unsigned snes_access_clocks(uint32_t addr);
 /* the place between two instructions where an interrupt may be taken */
 void snes_cpu_interrupts(void);
+/* a byte the interrupt sequence pushes: a write where no interrupt is taken */
+void snes_interrupt_push(uint32_t addr, uint8_t value);
 /* clocks with no access (a delay loop), interrupts taken along the way */
 void snes_cpu_wait(uint32_t clocks);
 /* Time the S-CPU spends between two of its accesses (instruction fetches,
