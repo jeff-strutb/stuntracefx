@@ -961,3 +961,12 @@ void object_timed_step(uint16_t obj)
     }
     *OBJ(obj, 0x4B) = (uint8_t)(v - 1);
 }
+
+/* A car's frame: the object is rebucketed, posed from its record and the
+   record's flag 4 (bit 2 of its +$1C) is set. */
+void object_car_pose_step(uint16_t obj)
+{
+    object_rebucket(obj);
+    object_pose_from_record(obj);
+    record_mark_flag4(obj);
+}

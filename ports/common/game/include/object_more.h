@@ -60,6 +60,7 @@ void object_move_forward(uint16_t obj);
 void object_billboard_tilt(uint16_t obj);
 void object_timed_setup(uint16_t obj);
 void object_timed_step(uint16_t obj);
+void object_car_pose_step(uint16_t obj);
 
 /* the release of an object by a handler in another bank: object_release */
 void object_release_long(uint16_t obj);

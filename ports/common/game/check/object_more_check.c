@@ -40,6 +40,7 @@ OLD(ObjectSpawnSparklePair) OLD(ObjectSparkleStep) OLD(ObjectSparkleStart) OLD(O
 OLD(ObjectMoveForward) OLD(ObjectSpawnTrail) OLD(ObjectTrailStart) OLD(ObjectTrailStep)
 OLD(ObjectSpawnAttached) OLD(ObjectAttachedStart) OLD(ObjectAttachedStep) OLD(ObjectPlaceOnParent)
 OLD(ObjectBillboardTilt) OLD(ObjectSpawnPuff) OLD(ObjectTimedSetup) OLD(ObjectTimedStep)
+OLD(ObjectCarPoseStep)
 
 static uint64_t rng = 0x2545F4914F6CDD1Dull;
 
@@ -696,6 +697,18 @@ int main(int argc, char **argv)
             old_run(old_abi_ObjectTimedStep);
             object_timed_step(obj);
         }
+        same();
+    }
+    CASE("ObjectCarPoseStep") {
+        uint16_t obj;
+
+        fresh(1 + (int)(rnd() % 0x80));
+        obj = some_used();
+        OBJ_W(obj, 0x0C) = (uint16_t)rnd();
+        OBJ_W(obj, 0x10) = (uint16_t)rnd();
+        regs(0, obj, 0, 1);
+        old_run(old_abi_ObjectCarPoseStep);
+        object_car_pose_step(obj);
         same();
     }
     printf("object_more_check: %ld cases, %ld differ\n", cases, failed);
