@@ -4810,20 +4810,24 @@ void abi_CameraApproachTarget(void)
         (cyc(14), abi_ApproachEighthMin8());
         cyc(30);
         wr16(b | (uint16_t)(pos[i] + cpu.y), cpu.a);
+        rm_eased16(b | (uint16_t)(pos[i] + cpu.y), 0x00003E, RM_DECAY_8);
         cpu.p |= P_M;
         cyc(22);
     }
     cpu.p &= (uint8_t)~P_M;
     cyc(52);
     op_lda16(b | (uint16_t)(0x2027 + cpu.x));
-    if (cpu.a) {
-        w = (uint16_t)(cpu.a - 1);
+    if (cpu.a || !rm_step_due()) {      /* Remaster: its count a step at a time, its move shared */
+        w = (uint16_t)(cpu.a - (rm_step_due() ? 1 : 0));
         cpu.a = w;
         cyc(60);
         wr16(b | (uint16_t)(0x2027 + cpu.x), w);
         for (i = 0; i < 3; i++) {
             cyc(30);
             op_lda16(b | (uint16_t)(0x202E + i * 2 + cpu.x));
+            if (!w && !rm_step_due())
+                cpu.a = 0;              /* its count run out: still till the step's tick */
+            cpu.a = (uint16_t)rm_share(b | (uint16_t)(tgt[i] + cpu.y), (int16_t)cpu.a);
             cyc(44);
             op_add16(rd16(b | (uint16_t)(tgt[i] + cpu.y)));
             cyc(30);

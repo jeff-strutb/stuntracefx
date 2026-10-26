@@ -12,6 +12,7 @@
  */
 #include "machine.h"
 #include "cpu_ops.h"
+#include "remaster.h"
 
 void abi_CameraFollowLink(void);
 void abi_CameraPointFromTable(void);
@@ -761,6 +762,12 @@ static void zoom_frame(uint16_t to, void (*fn)(void))
     wr16(0x00003E, cpu.a);
     op_lda16_imm(to);
     (cyc(48), fn());
+    {   /* Remaster (remaster.h): the tick's own fraction of the ease */
+        uint16_t was;
+        if (rm_sharing() && (was = rd16(0x00003E), 1))
+            cpu.a = (uint16_t)(was + rm_share_by(cam(0x000E), (int16_t)(uint16_t)(cpu.a - was),
+                                                 fn == abi_ApproachThirtySecondMin32 ? RM_DECAY_32 : RM_DECAY_64));
+    }
     wr16(cam(0x000E), cyc_then(30, cpu.a));
     cpu.p |= P_M;
     (cyc(46), tail());
