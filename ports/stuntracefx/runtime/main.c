@@ -298,24 +298,39 @@ static int rm_on;                       /* Frame rate 60 */
 static int rm_pace;                     /* video frames a race frame: 1 at 60; 0 the original's */
 static int rm_share_on;                 /* the steps shared out over RM_TICKS ticks */
 /* each field's carried share (rm_share), by its address: work RAM, the
-   Super FX's RAM */
-static int8_t rm_carry_w[0x20000], rm_carry_s[0x10000];
+   Super FX's RAM; in 1/RM_SHARE_ONE of a unit */
+static int32_t rm_carry_w[0x20000], rm_carry_s[0x10000];
 
-/* a race frame running as a tick: untimed, from rm_race_frame */
 int rm_tick60(void) { return rm_pace && snes_untimed(); }
 
-int32_t rm_share(uint32_t field, int32_t d)
+int rm_sharing(void) { return rm_share_on && snes_untimed(); }
+
+int32_t rm_share_by(uint32_t field, int32_t d, int32_t mul)
 {
-    int8_t *c;
-    int32_t t, q;
-    if (!rm_share_on || !snes_untimed())
+    int32_t *c;
+    int64_t t, q, one = (int64_t)RM_SHARE_ONE * RM_TICKS;
+    if (!rm_sharing())
         return d;
     c = (field >> 16 & 0xFE) == 0x70 ? &rm_carry_s[field & 0xFFFF]
                                       : &rm_carry_w[field & 0x1FFFF];
-    t = d + *c;
-    q = t >= 0 ? t / RM_TICKS : -((RM_TICKS - 1 - t) / RM_TICKS);   /* floor */
-    *c = (int8_t)(t - q * RM_TICKS);
-    return q;
+    t = (int64_t)d * mul + *c;
+    q = t >= 0 ? t / one : -((one - 1 - t) / one);  /* floor */
+    *c = (int32_t)(t - q * one);
+    return (int32_t)q;
+}
+
+int32_t rm_share(uint32_t field, int32_t d)
+{
+    return rm_share_by(field, d, RM_SHARE_ONE);
+}
+
+static unsigned rm_ticks;               /* ticks run, sharing */
+
+unsigned rm_tick_count(void) { return rm_ticks; }
+
+int rm_step_due(void)
+{
+    return !rm_sharing() || rm_ticks % RM_TICKS == RM_TICKS - 1;
 }
 
 void rm_race_frame(void)
@@ -323,6 +338,8 @@ void rm_race_frame(void)
     int n;
     if (!rm_pace)
         return;
+    if (rm_share_on)
+        rm_ticks++;
     snes_set_untimed(0);
     for (n = 0; n < rm_pace; n++)       /* the tick */
         snes_wait_vblank();
@@ -676,9 +693,21 @@ static void frame(void)
             t = getenv("RM_TRACE") && (tf = fopen(getenv("RM_TRACE"), "w"));
         if (t) {
             const uint8_t *w = snes_wram();
-            fprintf(tf, "%ld %d %d %d %02X:%02X.%04X\n", frame_no, (int16_t)(w[0xC5] | w[0xC6] << 8),
+            const uint8_t *f = snes_sfx_ram();
+            uint16_t o = (uint16_t)(w[0x346] | w[0x347] << 8), r = (uint16_t)(w[0x2022 + o] | w[0x2023 + o] << 8);
+            if (r > 0xFF00) r = 0;
+            fprintf(tf, "%ld %d %d %d %02X:%02X.%04X %d %d %d %d %d\n", frame_no, (int16_t)(w[0xC5] | w[0xC6] << 8),
                     (int16_t)(w[0xC7] | w[0xC8] << 8), (int16_t)(w[0xC9] | w[0xCA] << 8), w[0xE66], w[0xE64],
-                    w[0xE62] | w[0xE63] << 8);
+                    w[0xE62] | w[0xE63] << 8, r, (int16_t)(f[r + 0x4A] | f[r + 0x4B] << 8),
+                    (int16_t)(f[r + 0x2E] | f[r + 0x2F] << 8), (int16_t)(f[r + 0x32] | f[r + 0x33] << 8),
+                    (int16_t)(f[r + 0x6A] | f[r + 0x6B] << 8));
+            if (getenv("RM_TRACE_REC")) {
+                int k;
+                fprintf(tf, "R %ld", frame_no);
+                for (k = 0; k < 0x98; k += 2)
+                    fprintf(tf, " %d", (int16_t)(f[r + k] | f[r + k + 1] << 8));
+                fprintf(tf, "\n");
+            }
         }
     }
     if (headless) {

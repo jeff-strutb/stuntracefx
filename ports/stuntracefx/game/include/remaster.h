@@ -17,6 +17,36 @@ int rm_tick60(void);
    RM_TICKS ticks change it by exactly d. d itself when the steps are the
    original's. */
 int32_t rm_share(uint32_t field, int32_t d);
+/* Whether the steps are being shared out now (a race frame at 60) */
+int rm_sharing(void);
+/* Whether this tick completes one of the original's steps: every
+   RM_TICKS-th tick at 60, always otherwise. The discrete work (the race's
+   phases, countdowns that end in an event, the HUD's tallies, sound
+   commands) runs on these ticks only, so it keeps the original's timing
+   exactly. */
+int rm_step_due(void);
+/* the ticks run at 60 so far */
+unsigned rm_tick_count(void);
+/* rm_share of d * mul / RM_SHARE_ONE: for a change that is a fraction of
+   a gap (a decay, a filter) the tick's own fraction, RM_DECAY(c) for a
+   step's c = 1/2, 1/4, 1/8, 1/16 */
+#define RM_SHARE_ONE 4096
+int32_t rm_share_by(uint32_t field, int32_t d, int32_t mul);
+/* (1 - (1 - c)^(1/6)) / c * 6 * 4096: the share of a step's change by a
+   fraction c of a gap that leaves after six ticks what the step leaves */
+#define RM_DECAY_2  5363            /* c = 1/2 */
+#define RM_DECAY_4  4602            /* c = 1/4 */
+#define RM_DECAY_8  4327            /* c = 1/8 */
+#define RM_DECAY_16 4207            /* c = 1/16 */
+/* rm_share for a signed word of the Super FX's RAM (bank $70) */
+static inline uint16_t rm_share_fx(uint16_t addr, uint16_t d)
+{
+    return (uint16_t)rm_share(0x700000u | addr, (int16_t)d);
+}
+static inline uint16_t rm_share_fx_by(uint16_t addr, uint16_t d, int32_t mul)
+{
+    return (uint16_t)rm_share_by(0x700000u | addr, (int16_t)d, mul);
+}
 /* A race frame starts: at Frame rate 60 it waits for its tick and runs
    untimed, as native code, until rm_race_frame_end. */
 void rm_race_frame(void);

@@ -500,10 +500,12 @@ void abi_PanelDelayCount(void)
     op_lda8(b | 0x0D5F);
     cpu.p |= P_C;
     cyc(38);
-    /* Remaster, Frame rate 60: a race frame is a tick with no vertical
-       blank inside it ($0306 still 0 here), so the delay counts the
-       tick's video frames, $06D4 */
-    cpu.a = (uint16_t)((cpu.a & 0xFF00) | op_sbc8((uint8_t)cpu.a, rd8(b | (rm_tick60() ? 0x06D4 : 0x0306)), &cpu.p));
+    /* Remaster: a race frame is a tick with no vertical blank inside it
+       ($0306 still 0 here), so the delay counts the tick's video frames,
+       $06D4; at 60 this runs on a step's tick, which stands for the
+       step's RM_TICKS video frames (remaster.h) */
+    cpu.a = (uint16_t)((cpu.a & 0xFF00) | op_sbc8((uint8_t)cpu.a,
+            rm_sharing() ? RM_TICKS : rd8(b | (rm_tick60() ? 0x06D4 : 0x0306)), &cpu.p));
     cyc(8);
     wr8(b | 0x0D5F, (uint8_t)cpu.a);
     cyc(42);

@@ -13,8 +13,22 @@
  * pulled from the R10 stack, two levels at once in FxCarAimAlongCourse)
  * go through physics_run's dispatch on the address they reach.
  */
+#include <string.h>
 #include "gsu.h"
 #include "gsu_ops.h"
+#include "remaster.h"
+
+/* Remaster, Frame rate 60 (remaster.h): what the car's step would have
+   added to each of its six speeds beyond the tick's shares, over the runs
+   of this tick so far (a car with +$1C bit 3 runs twice a step), for the
+   dead zones to judge the whole step; the car and tick they are for; the
+   speed a dead zone kept */
+static uint16_t rm_beyond[8], rm_kept, rm_beyond_car;
+static unsigned rm_beyond_tick;
+/* a jump asked for in a step not yet reached its tick, by the car's record */
+static uint8_t rm_jump_asked[0x8000];
+/* the control bits of the step's ticks so far, by the car's record */
+static uint8_t rm_steer_bits[0x8000];
 
 #define R gsu.r
 
@@ -178,7 +192,7 @@ l8FDF:
     R[0] = R[0];
     gsu_moves(R[0]);
     t = gsu.z;
-    R[0] = gsu_dec(R[0]);
+    R[0] = (uint16_t)(R[0] + rm_share_fx(FX_INIT_2472, 0xFFFF));   /* DEC; Remaster: a tick's share */
     gsu_code(0x048fe4, 4);
     if (t) { gsu_code(0x048fe9, 1); goto l8FE9; }
     gsu_code(0x048fe8, 2);
@@ -186,7 +200,7 @@ l8FDF:
 l8FE9:
     gsu_code(0x048fea, 4);
     R[0] = gsu_ldw(FX_INIT_2470);
-    R[0] = gsu_inc(R[0]);
+    R[0] = (uint16_t)(R[0] + rm_share_fx(FX_INIT_2470, 1));        /* INC; Remaster: a tick's share */
     gsu_code(0x048fee, 2);
     gsu_sbk(R[0]);
     R[0] = 0xFFFF;
@@ -332,7 +346,7 @@ l907A:
     gsu_code(0x049081, 10);
     R[1] = gsu_ldw(R[1]);
     R[0] = 0x0078;
-    R[1] = gsu_add(R[0], R[1], 0);
+    R[1] = gsu_add(rm_share_fx((uint16_t)(R[9] + 0x30), R[0]), R[1], 0);   /* Remaster: a tick's share */
     R[0] = 0x0030;
     R[0] = gsu_add(R[0], R[9], 0);
     gsu_code(0x04908b, 10);
@@ -360,7 +374,7 @@ l90A0:
     R[1] = gsu_add(R[1], R[9], 0);
     gsu_code(0x0490ac, 7);
     R[1] = gsu_ldw(R[1]);
-    R[1] = gsu_sub(R[1], R[0], 0);
+    R[1] = gsu_sub(R[1], rm_share_fx((uint16_t)(R[9] + 0x30), R[0]), 0);   /* Remaster */
     R[0] = 0x0030;
     R[0] = gsu_add(R[0], R[9], 0);
     gsu_code(0x0490b3, 7);
@@ -374,7 +388,7 @@ l90B9:
     R[0] = gsu_div2(R[0]);
     R[0] = gsu_div2(R[0]);
     R[0] = gsu_div2(R[0]);
-    R[1] = gsu_sub(R[1], R[0], 0);
+    R[1] = gsu_sub(R[1], rm_share_fx_by((uint16_t)(R[9] + 0x2E), R[0], RM_DECAY_8), 0);   /* Remaster */
     R[0] = 0x002E;
     R[0] = gsu_add(R[0], R[9], 0);
     gsu_code(0x0490be, 15);
@@ -387,7 +401,7 @@ l90B9:
     R[0] = gsu_div2(R[0]);
     R[0] = gsu_div2(R[0]);
     R[0] = gsu_div2(R[0]);
-    R[1] = gsu_sub(R[1], R[0], 0);
+    R[1] = gsu_sub(R[1], rm_share_fx_by((uint16_t)(R[9] + 0x32), R[0], RM_DECAY_8), 0);   /* Remaster */
     R[0] = 0x0032;
     R[0] = gsu_add(R[0], R[9], 0);
     gsu_code(0x0490d1, 15);
@@ -465,7 +479,7 @@ l910A:
     gsu_code(0x04911d, 7);
     R[1] = gsu_ldw(R[1]);
     R[0] = 0x0078;
-    R[1] = gsu_add(R[0], R[1], 0);
+    R[1] = gsu_add(rm_share_fx((uint16_t)(R[9] + 0x30), R[0]), R[1], 0);   /* Remaster: a tick's share */
     R[0] = 0x0030;
     R[0] = gsu_add(R[0], R[9], 0);
     gsu_code(0x049124, 10);
@@ -494,7 +508,7 @@ l9139:
     R[1] = R[0];
     R[0] = gsu_div2(R[0]);
     R[0] = gsu_div2(R[0]);
-    R[1] = gsu_sub(R[1], R[0], 0);
+    R[1] = gsu_sub(R[1], rm_share_fx_by((uint16_t)(R[9] + 0x2E), R[0], RM_DECAY_4), 0);   /* Remaster */
     R[0] = 0x002E;
     R[0] = gsu_add(R[0], R[9], 0);
     gsu_code(0x049147, 13);
@@ -506,7 +520,7 @@ l9139:
     R[1] = R[0];
     R[0] = gsu_div2(R[0]);
     R[0] = gsu_div2(R[0]);
-    R[1] = gsu_sub(R[1], R[0], 0);
+    R[1] = gsu_sub(R[1], rm_share_fx_by((uint16_t)(R[9] + 0x32), R[0], RM_DECAY_4), 0);   /* Remaster */
     R[0] = 0x0032;
     R[0] = gsu_add(R[0], R[9], 0);
     gsu_code(0x049158, 13);
@@ -563,7 +577,7 @@ l9185:
     gsu_code(0x04918c, 10);
     R[1] = gsu_ldw(R[1]);
     R[0] = 0x003C;
-    R[1] = gsu_add(R[0], R[1], 0);
+    R[1] = gsu_add(rm_share_fx((uint16_t)(R[9] + 0x30), R[0]), R[1], 0);   /* Remaster: a tick's share */
     R[0] = 0x0030;
     R[0] = gsu_add(R[0], R[9], 0);
     gsu_code(0x049196, 10);
@@ -3239,7 +3253,7 @@ lAC34:
     R[0] = gsu_add(R[0], R[9], 0);
     gsu_code(0x04ac88, 6);
     R[0] = gsu_ldw(R[0]);
-    R[1] = gsu_add(R[0], R[1], 0);
+    R[1] = gsu_add(R[0], rm_share_fx((uint16_t)(R[9] + 0x26), R[1]), 0);
     R[0] = 0x0026;
     R[0] = gsu_add(R[0], R[9], 0);
     gsu_code(0x04ac8e, 7);
@@ -4814,6 +4828,9 @@ lB407:
     t = gsu.z;
     gsu_code(0x04b40c, 4);
     if (t) { gsu_code(0x04b415, 1); goto lB415; }
+    /* Remaster: the jump's wait counts the original's steps (remaster.h);
+       a car run twice a step counts it twice on the step's tick */
+    if (!rm_step_due()) goto lB436;
     R[0] = gsu_dec(R[0]);
     gsu_code(0x04b410, 3);
     gsu_sbk(R[0]);
@@ -4822,6 +4839,17 @@ lB407:
     gsu_code(0x04b436, 1);
     if (t) goto lB436;
 lB415:
+    /* Remaster: a jump on a step's tick, asked for on any tick of the step
+       (the original takes the presses of all its step's video frames) */
+    if (rm_sharing()) {
+        uint8_t *ask = &rm_jump_asked[(R[8] >> 1) & 0x7FFF];
+        if (R[2] & 0x0080)
+            *ask = 1;
+        if (!rm_step_due()) goto lB436;
+        if (*ask)
+            R[2] |= 0x0080;
+        *ask = 0;
+    }
     R[0] = 0x0080;
     R[0] = gsu_and(R[0], R[2]);
     t = gsu.z;
@@ -4836,7 +4864,7 @@ lB415:
     if (t) { gsu_code(0x04b436, 1); goto lB436; }
     gsu_code(0x04b425, 5);
     R[0] = gsu_ldw((FX_HIT + 2));
-    R[0] = gsu_add(R[0], R[1], 0);
+    R[0] = gsu_add(R[0], rm_sharing() ? (uint16_t)(R[1] * RM_TICKS) : R[1], 0);   /* Remaster: the jump whole */
     gsu_code(0x04b42a, 5);
     gsu_stw((FX_HIT + 2), R[0]);
     R[1] = 0x0020;
@@ -4845,9 +4873,25 @@ lB415:
     gsu_code(0x04b42f, 8);
     gsu_stw(R[0], R[1]);
 lB436:
+    /* Remaster: the steering takes a step on the step's tick, from the
+       control bits of all the step's ticks (as the original's of all its
+       video frames); between, it holds (remaster.h) */
+    if (rm_sharing()) {
+        uint8_t *acc = &rm_steer_bits[(R[8] >> 1) & 0x7FFF];
+        *acc |= (uint8_t)(R[2] & 0x000F);
+        if (!rm_step_due()) {
+            R[3] = gsu_ldw((uint16_t)(R[8] + 0x3A));
+            goto lB44F_held;
+        }
+        rm_kept = R[2];
+        R[2] |= *acc;
+        *acc = 0;
+    } else
+        rm_kept = R[2];
     R[11] = 0xB43B;
     gsu_code(0x04b437, 4); gsu_code(0x04ba05, 1);
     abi_FxSteerFromInput();
+    R[2] = rm_kept;
 lB43B:
     R[1] = 0x0070;
     R[1] = gsu_add(R[1], R[8], 0);
@@ -4865,6 +4909,7 @@ lB44A:
     R[0] = gsu_add(R[0], R[8], 0);
     gsu_code(0x04b44b, 5);
     gsu_stw(R[0], R[3]);
+lB44F_held:
     R[1] = 0x0000;
     R[0] = 0x0020;
     R[0] = gsu_and(R[0], R[2]);
@@ -4888,6 +4933,7 @@ lB45F:
     R[6] = gsu_add(R[6], R[8], 0);
     gsu_code(0x04b46b, 6);
     R[6] = gsu_ldw(R[6]);
+    rm_kept = R[6];
     R[6] = R[6];
     gsu_moves(R[6]);
     t = gsu.z;
@@ -4921,7 +4967,7 @@ lB48D:
     R[0] = 0x006A;
     R[0] = gsu_add(R[0], R[8], 0);
     gsu_code(0x04b498, 6);
-    gsu_stw(R[0], R[6]);
+    gsu_stw(R[0], (uint16_t)(rm_kept + rm_share_fx(R[0], (uint16_t)(R[6] - rm_kept))));   /* Remaster */
 lB49D:
     gsu_code(0x04b49e, 4);
     R[1] = gsu_ldw(FX_PARAM_THRUST);
@@ -5113,7 +5159,7 @@ lB562:
     R[0] = gsu_sub(R[4], R[1], 0);
     R[0] = gsu_div2(R[0]);
     R[0] = gsu_div2(R[0]);
-    R[0] = gsu_add(R[0], R[1], 0);
+    R[0] = gsu_add(rm_share_fx_by((uint16_t)(R[8] + 0x50), R[0], RM_DECAY_4), R[1], 0);
     gsu_code(0x04b574, 8);
     gsu_sbk(R[0]);
     R[0] = 0x0800;
@@ -5339,7 +5385,7 @@ lB693:
     R[0] = gsu_sub(R[0], R[1], 0);
     R[0] = gsu_div2(R[0]);
     R[0] = gsu_div2(R[0]);
-    R[0] = gsu_add(R[0], R[1], 0);
+    R[0] = gsu_add(rm_share_fx_by((uint16_t)(R[8] + 0x24), R[0], RM_DECAY_4), R[1], 0);
     gsu_code(0x04b69c, 7);
     gsu_sbk(R[0]);
     R[0] = gsu_sub(R[0], R[0], 0);
@@ -5649,7 +5695,7 @@ lB7DF:
     R[0] = gsu_div2(R[1]);
     R[0] = gsu_div2(R[0]);
     R[0] = gsu_div2(R[0]);
-    R[0] = gsu_sub(R[1], R[0], 0);
+    R[0] = gsu_sub(R[1], rm_share_fx_by((uint16_t)(R[8] + 0x2E), R[0], RM_DECAY_8), 0);
     gsu_code(0x04b7f6, 10);
     gsu_sbk(R[0]);
     R[1] = 0x0032;
@@ -5659,7 +5705,7 @@ lB7DF:
     R[0] = gsu_div2(R[1]);
     R[0] = gsu_div2(R[0]);
     R[0] = gsu_div2(R[0]);
-    R[0] = gsu_sub(R[1], R[0], 0);
+    R[0] = gsu_sub(R[1], rm_share_fx_by((uint16_t)(R[8] + 0x32), R[0], RM_DECAY_8), 0);
     gsu_code(0x04b806, 10); gsu_cache(0xb810);
     gsu_sbk(R[0]);
 lB80F:
@@ -5667,6 +5713,11 @@ lB80F:
     R[4] = 0x2334;
     R[2] = 0x002E;
     R[2] = gsu_add(R[2], R[8], 0);
+    if (R[8] != rm_beyond_car || rm_tick_count() != rm_beyond_tick) {
+        memset(rm_beyond, 0, sizeof rm_beyond);   /* the car's first run this tick */
+        rm_beyond_car = R[8];
+        rm_beyond_tick = rm_tick_count();
+    }
     R[12] = 0x0006;
     R[13] = 0xB81C;
     gsu_code(0x04b810, 13);
@@ -5677,6 +5728,12 @@ lB81C:
     R[4] = gsu_inc(R[4]);
     gsu_code(0x04b81e, 4);
     R[3] = gsu_ldw(R[2]);
+    {   /* Remaster: a tick's share; what the step would add beyond it kept
+           for the dead zones below */
+        uint16_t full = R[0];
+        R[0] = rm_share_fx(R[2], R[0]);
+        rm_beyond[(uint16_t)(R[2] - R[8] - 0x2E) >> 1 & 7] += (uint16_t)(full - R[0]);
+    }
     R[0] = gsu_add(R[0], R[3], 0);
     gsu_code(0x04b822, 2);
     gsu_stw(R[2], R[0]);
@@ -5725,6 +5782,8 @@ lB85A:
     R[0] = gsu_add(R[0], R[8], 0);
     gsu_code(0x04b85b, 4);
     R[0] = gsu_ldw(R[0]);
+    rm_kept = R[0];
+    R[0] = (uint16_t)(R[0] + rm_beyond[0]);   /* Remaster: the dead zone on the whole step */
     R[0] = R[0];
     gsu_moves(R[0]);
     t = gsu.s;
@@ -5750,11 +5809,13 @@ lB870:
     gsu_code(0x04b878, 3);
 lB87A:
     gsu_code(0x04b87b, 1);
-    gsu_sbk(R[0]);
+    gsu_sbk(R[0] ? rm_kept : 0);
     R[0] = 0x0032;
     R[0] = gsu_add(R[0], R[8], 0);
     gsu_code(0x04b87c, 4);
     R[0] = gsu_ldw(R[0]);
+    rm_kept = R[0];
+    R[0] = (uint16_t)(R[0] + rm_beyond[2]);   /* Remaster: the dead zone on the whole step */
     R[0] = R[0];
     gsu_moves(R[0]);
     t = gsu.s;
@@ -5780,11 +5841,13 @@ lB891:
     gsu_code(0x04b899, 3);
 lB89B:
     gsu_code(0x04b89c, 1);
-    gsu_sbk(R[0]);
+    gsu_sbk(R[0] ? rm_kept : 0);
     R[0] = 0x0030;
     R[0] = gsu_add(R[0], R[8], 0);
     gsu_code(0x04b89d, 4);
     R[0] = gsu_ldw(R[0]);
+    rm_kept = R[0];
+    R[0] = (uint16_t)(R[0] + rm_beyond[1]);   /* Remaster: the dead zone on the whole step */
     R[0] = R[0];
     gsu_moves(R[0]);
     t = gsu.s;
@@ -5810,12 +5873,14 @@ lB8B2:
     gsu_code(0x04b8ba, 3);
 lB8BC:
     gsu_code(0x04b8bd, 1);
-    gsu_sbk(R[0]);
+    gsu_sbk(R[0] ? rm_kept : 0);
 lB8BD:
     R[1] = 0x0034;
     R[1] = gsu_add(R[1], R[8], 0);
     gsu_code(0x04b8be, 6);
     R[0] = gsu_ldw(R[1]);
+    rm_kept = R[0];
+    R[0] = (uint16_t)(R[0] + rm_beyond[3]);   /* Remaster: the dead zone on the whole step */
     R[1] = gsu_inc(R[1]);
     R[1] = gsu_inc(R[1]);
     R[0] = R[0];
@@ -5843,9 +5908,11 @@ lB8D7:
     gsu_code(0x04b8df, 3);
 lB8E1:
     gsu_code(0x04b8e2, 1);
-    gsu_sbk(R[0]);
+    gsu_sbk(R[0] ? rm_kept : 0);
     gsu_code(0x04b8e3, 1);
     R[0] = gsu_ldw(R[1]);
+    rm_kept = R[0];
+    R[0] = (uint16_t)(R[0] + rm_beyond[4]);   /* Remaster: the dead zone on the whole step */
     R[1] = gsu_inc(R[1]);
     R[1] = gsu_inc(R[1]);
     R[0] = R[0];
@@ -5873,9 +5940,11 @@ lB8F7:
     gsu_code(0x04b8ff, 3);
 lB901:
     gsu_code(0x04b902, 1);
-    gsu_sbk(R[0]);
+    gsu_sbk(R[0] ? rm_kept : 0);
     gsu_code(0x04b903, 1);
     R[0] = gsu_ldw(R[1]);
+    rm_kept = R[0];
+    R[0] = (uint16_t)(R[0] + rm_beyond[5]);   /* Remaster: the dead zone on the whole step */
     R[0] = R[0];
     gsu_moves(R[0]);
     t = gsu.s;
@@ -5901,7 +5970,7 @@ lB915:
     gsu_code(0x04b91d, 3);
 lB91F:
     gsu_code(0x04b920, 1);
-    gsu_sbk(R[0]);
+    gsu_sbk(R[0] ? rm_kept : 0);
 lB920:
     R[1] = 0x002E;
     R[1] = gsu_add(R[1], R[8], 0);
@@ -5964,7 +6033,7 @@ lB920:
     R[0] = R[1];
     R[0] = gsu_div2(R[0]);
     R[0] = gsu_div2(R[0]);
-    R[1] = gsu_sub(R[1], R[0], 0);
+    R[1] = gsu_sub(R[1], rm_share_fx_by((uint16_t)(R[8] + 0x28), R[0], RM_DECAY_4), 0);
     R[0] = 0x0028;
     R[0] = gsu_add(R[0], R[8], 0);
     gsu_code(0x04b973, 13);
@@ -5976,7 +6045,7 @@ lB97F:
     R[1] = gsu_ldw(R[1]);
     R[0] = gsu_sub(R[2], R[1], 0);
     R[0] = gsu_div2(R[0]);
-    R[1] = gsu_add(R[0], R[1], 0);
+    R[1] = gsu_add(rm_share_fx_by((uint16_t)(R[8] + 0x52), R[0], RM_DECAY_2), R[1], 0);
     R[0] = 0x0052;
     R[0] = gsu_add(R[0], R[8], 0);
     gsu_code(0x04b986, 11);

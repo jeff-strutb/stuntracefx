@@ -8,6 +8,7 @@
 #include "machine.h"
 #include "cpu_ops.h"
 #include "assets.h"
+#include "remaster.h"
 
 /* A field of the object at offset `obj` in the data bank. */
 static uint32_t field(uint8_t bank, uint16_t obj, uint16_t off)
@@ -158,7 +159,11 @@ static uint16_t apply_velocity(uint8_t bank, uint16_t obj, uint8_t *p)
     for (i = 0; i < 3; i++) {
         uint16_t a = rd16(cyc_then(30, field(bank, obj, (uint16_t)(0x0C + 2 * i))));
         uint16_t b = rd16(cyc_then(44, field(bank, obj, (uint16_t)(0x2E + 2 * i))));
-        uint32_t s = (uint32_t)a + b;
+        uint32_t s;
+
+        /* Remaster: a tick's share of the step's move (remaster.h) */
+        b = (uint16_t)rm_share(field(bank, obj, (uint16_t)(0x0C + 2 * i)), (int16_t)b);
+        s = (uint32_t)a + b;
         r = (uint16_t)s;
         wr16(field(bank, obj, (uint16_t)(0x0C + 2 * i)), cyc_then(30, r));
         *p = (uint8_t)((nz16(*p, r) & ~(P_C | P_V)) | (s > 0xFFFF ? P_C : 0)
@@ -2032,7 +2037,8 @@ void ObjectsRunHandlers(void)
     uint16_t x, y = cpu.y;
 
     cyc(46);
-    v = (uint8_t)(rd8(b | 0x05E9) + 1);
+    /* Remaster: the step counted a tick's share at a time (remaster.h) */
+    v = (uint8_t)(rd8(b | 0x05E9) + rm_share(b | 0x05E9, 1));
     cyc(6);
     wr8(b | 0x05E9, v);
     if (!v)
@@ -2058,7 +2064,7 @@ void ObjectsRunHandlers(void)
                 cpu.p = (uint8_t)((nz8(cpu.p, v) | P_M) & ~P_X);
                 (cyc(62), abi_ObjectRunHandlerB());
             } else {
-                v = (uint8_t)(v - 1);
+                v = (uint8_t)(v + rm_share(b | (uint16_t)(0x2036 + x), -1));   /* Remaster */
                 cyc(98);
                 wr8(b | (uint16_t)(0x2036 + x), v);
                 cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);

@@ -11,6 +11,7 @@
 #include <string.h>
 #include "gsu_ops.h"
 #include "fx_calls.h"
+#include "remaster.h"
 
 #define FX_WORLD_SUM 0x2340u   /* x, y, z */
 #define FX_LOCAL_SUM 0x2346u   /* x, y, z in the object's axes */
@@ -208,7 +209,8 @@ FxApplyLeft FxSumsApply(uint16_t rec, int copy)
         gsu_codes(FxSumsApply_fetch[0] + 3 + i, 1);
         o.field = gsu_ldw(gsu_add((uint16_t)(REC_1E + 2 * i), rec, 0));
         gsu_codes(FxSumsApply_fetch[0] + 6 + i, 1);
-        gsu_sbk(gsu_add(gsu_div2(o.v[i]), o.field, 0));
+        /* Remaster: a tick's share of the push (remaster.h) */
+        gsu_sbk(gsu_add(rm_share_fx((uint16_t)(rec + REC_1E + 2 * i), gsu_div2(o.v[i])), o.field, 0));
     }
     for (i = 0; i < 3; i++) {
         gsu_codes(FxSumsApply_fetch[0] + 9 + i, 1);
@@ -217,6 +219,7 @@ FxApplyLeft FxSumsApply(uint16_t rec, int copy)
         gsu_codes(FxSumsApply_fetch[0] + 12 + i, 1);
         for (k = 0; k < doublings[i]; k++)
             r = gsu_add(r, r, 0);
+        r = rm_share_fx((uint16_t)(rec + REC_2E + 2 * i), r);
         o.last = gsu_add(r, o.field, 0);
         gsu_codes(FxSumsApply_fetch[0] + 15 + i, 1);
         gsu_sbk(o.last);

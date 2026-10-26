@@ -9,6 +9,7 @@
 #include "gsu_ops.h"
 #include "draw_list.h"
 #include "fx_calls.h"
+#include "remaster.h"
 
 #define REC_NEXT 0x0Eu
 #define REC_X 0x1Eu
@@ -428,7 +429,8 @@ void abi_FxTimersProgram(void)
         gsu_code(0x01bbe0, 2);
         gsu.r[0] = gsu_lob(gsu_ldb(gsu.r[9]));
         if (!gsu.z) {
-            gsu.r[0] = gsu_dec(gsu.r[0]);
+            /* DEC; Remaster: a tick's share of the step (remaster.h) */
+            gsu.r[0] = (uint16_t)(gsu.r[0] + rm_share_fx(gsu.r[9], 0xFFFF));
             gsu_code(0x01bbe2, 7);
             gsu_stb(gsu.r[9], (uint8_t)gsu.r[0]);
             gsu.r[7] = gsu.r[0];
@@ -672,7 +674,8 @@ static void fx_particle(int copy)
         gsu_codes(fx_particle_fetch[0] + 3 + i, 1);
         gsu.r[rw[i]] = gsu_ldw(gsu.r[rw[i]]);
         gsu.r[keep[i]] = gsu.r[rw[i]];
-        gsu.r[0] = gsu_add(gsu.r[0], gsu.r[rw[i]], 0);
+        /* Remaster: a tick's share of the step's move */
+        gsu.r[0] = gsu_add(rm_share_fx((uint16_t)(gsu.r[11] + axis[i].word), gsu.r[0]), gsu.r[rw[i]], 0);
         gsu_codes(fx_particle_fetch[0] + 6 + i, 1);
         gsu_sbk(gsu.r[0]);
         gsu_codes(fx_particle_fetch[0] + 9 + i, 1);
@@ -691,7 +694,7 @@ static void fx_particle(int copy)
         gsu.r[0] = gsu_add(0x0004, gsu.r[11], 0);
         gsu_code(0x01ba89, 11);
         gsu.r[0] = gsu_ldb(gsu.r[0]);
-        gsu.r[0] = gsu_add(gsu.r[0], 0x0001, 0);
+        gsu.r[0] = gsu_add(gsu.r[0], rm_share_fx((uint16_t)(gsu.r[11] + 4), 0x0001), 0);   /* Remaster */
         gsu.r[4] = gsu_add(0x0004, gsu.r[11], 0);
         gsu_code(0x01ba94, 9);
         gsu_stb(gsu.r[4], (uint8_t)gsu.r[0]);

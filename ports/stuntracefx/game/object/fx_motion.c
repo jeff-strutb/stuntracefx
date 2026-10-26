@@ -7,6 +7,7 @@
  * +$1C halves every step.
  */
 #include "gsu_ops.h"
+#include "remaster.h"
 
 #define REC_POS 0x1Eu
 #define REC_FLAGS1C 0x1Cu
@@ -44,6 +45,7 @@ static void move_word(FxMoveRegs *g, int halvings, int copy)
     gsu_codes(move_word_fetch[copy] + 1, 1);
     for (i = 0; i < halvings; i++)
         g->r0 = gsu_div2(g->r0);
+    g->r0 = rm_share_fx(g->r2, g->r0);  /* Remaster: a tick's share of the move */
     gsu_codes(move_word_fetch[copy] + 2, 1);
     g->r3 = gsu_ldw(g->r2);
     g->r0 = gsu_add(g->r0, g->r3, 0);

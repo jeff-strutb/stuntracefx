@@ -10,6 +10,7 @@
 #include <string.h>
 #include "gsu_ops.h"
 #include "fx_calls.h"
+#include "remaster.h"
 
 #define FX_POOL_FIRST 0x1098u
 #define FX_PART_MODE 0x0068u     /* the parts' mode word from the script */
@@ -291,6 +292,33 @@ void abi_FxCarFromScript(void)
     memcpy(gsu.r, g.r, 15 * sizeof g.r[0]);
 }
 
+/* Remaster, Frame rate 60 (remaster.h): a part's velocity is eight
+   times its move since the last run, which the original makes once a
+   step; at 60 that is a tick's move, a sixth of it, and every grip from
+   the wheels' speeds a sixth with it. The change over the last RM_TICKS
+   ticks, a step's time, is what the original's step sees: each part
+   keeps its last positions. A part not moved on the tick before starts
+   from its move this tick, as if it had kept it. */
+static struct { unsigned tick; uint16_t at[3][RM_TICKS]; } rm_part[0x8000];
+
+static uint16_t rm_part_step_change(uint16_t part, int axis, uint16_t now, uint16_t moved)
+{
+    unsigned t = rm_tick_count(), j;
+    uint16_t *at = rm_part[(part >> 1) & 0x7FFF].at[axis], ago;
+
+    if (axis == 0 && rm_part[(part >> 1) & 0x7FFF].tick + 1 != t)
+        for (j = 0; j < 3 * RM_TICKS; j++)
+            rm_part[(part >> 1) & 0x7FFF].at[j / RM_TICKS][j % RM_TICKS] = 0xFFFF;
+    if (axis == 2)
+        rm_part[(part >> 1) & 0x7FFF].tick = t;
+    if (at[t % RM_TICKS] == 0xFFFF && at[(t + 1) % RM_TICKS] == 0xFFFF)
+        for (j = 0; j < RM_TICKS; j++)
+            at[(t + RM_TICKS - j) % RM_TICKS] = (uint16_t)(now - moved * j);
+    ago = at[t % RM_TICKS];
+    at[t % RM_TICKS] = now;
+    return (uint16_t)(now - ago);
+}
+
 /*
  * @routine 04:A4ED FxCarMoveParts
  * WHAT IT DOES: Moves each part of car R8 with it: the part's offset
@@ -386,6 +414,8 @@ FxRegs FxCarMoveParts(FxRegs g, int copy)
             gsu_codes(FxCarMoveParts_fetch[0] + 39 + i, 1);
             gsu_stw(g.r[0], g.r[1]);
             g.r[1] = gsu_sub(g.r[1], g.r[2], 0);
+            if (rm_sharing())           /* Remaster: the change over a step's time */
+                g.r[1] = rm_part_step_change(g.r[9], i, (uint16_t)(g.r[1] + g.r[2]), g.r[1]);
             gsu_codes(FxCarMoveParts_fetch[0] + 42 + i, 1);
             p = gsu_lmult(g.r[1], g.r[6]);
             g.r[1] = (uint16_t)(p >> 16);
@@ -925,13 +955,48 @@ cleared:
     return g;
 }
 
+/* Remaster, Frame rate 60 (remaster.h): the hit is judged once a step, on
+   the step's tick, from the step's average push. A wall's push grows with
+   how far the car has gone into it; the original's car goes a whole step
+   in before it answers, a tick's a sixth as far, so a tick's push alone
+   is smaller for the same crash. What a step's pushes add up to does not
+   depend on the step's length: the speed into the wall they take away.
+   Each run of the step (+$1C bit 3 runs a car twice, $263C 0 then 1) is
+   summed apart, as the original sums its two. */
+static int32_t rm_hit_sum[0x8000 >> 4][2][3];
+
 void abi_FxCarHit(void)
 {
     uint16_t ret = gsu.r[11];
+    uint16_t tick[3] = {0, 0, 0};
+    int32_t *sum = NULL;
     FxRegs g;
+    int i;
 
+    if (rm_sharing()) {
+        sum = rm_hit_sum[(gsu.r[8] >> 4) & 0x7FF][gsu_rd8(gsu_ram(FX_HIT_ON)) | gsu_rd8(gsu_ram(FX_HIT_ON + 1)) ? 1 : 0];
+        for (i = 0; i < 3; i++) {
+            uint16_t a = (uint16_t)(FX_HIT_X + 2 * i);
+            tick[i] = (uint16_t)(gsu_rd8(gsu_ram(a)) | gsu_rd8(gsu_ram((uint16_t)(a + 1))) << 8);
+            sum[i] += (int16_t)tick[i];
+        }
+        if (!rm_step_due())
+            { gsu_code(0x040000 | ret, 1); return; }
+        for (i = 0; i < 3; i++) {
+            uint16_t v = (uint16_t)(sum[i] / RM_TICKS), a = (uint16_t)(FX_HIT_X + 2 * i);
+            gsu_wr8(gsu_ram(a), (uint8_t)v);
+            gsu_wr8(gsu_ram((uint16_t)(a + 1)), (uint8_t)(v >> 8));
+            sum[i] = 0;
+        }
+    }
     memcpy(g.r, gsu.r, sizeof g.r);
     g = FxCarHit(g, GSU_COPY(0));
     memcpy(gsu.r, g.r, 15 * sizeof g.r[0]);
+    if (sum)                            /* the tick's own pushes back for its move */
+        for (i = 0; i < 3; i++) {
+            uint16_t a = (uint16_t)(FX_HIT_X + 2 * i);
+            gsu_wr8(gsu_ram(a), (uint8_t)tick[i]);
+            gsu_wr8(gsu_ram((uint16_t)(a + 1)), (uint8_t)(tick[i] >> 8));
+        }
     gsu_code(0x040000 | ret, 1);
 }

@@ -1531,6 +1531,8 @@ void abi_RaceSoundsAndHud(void)
 {
     uint8_t p0 = cpu.p, db0 = cpu.db;
 
+    if (!rm_step_due())                 /* Remaster: on the step's tick (remaster.h) */
+        return;
     cpu.db = 0x07;
     cpu.p = nz8(cpu.p, 0x07);
     op_sep(P_M | P_X);
