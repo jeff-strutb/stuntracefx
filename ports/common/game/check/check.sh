@@ -23,14 +23,26 @@ for f in $(sed -n '1s/^.*old: *//p' $G/check/${NAME}_check.c | sed 's#\*/##'); d
   $CC $CFLAGS -w -Isrc/stuntracefx/include -c "src/stuntracefx/$f" -o "$o"
   OLD="$OLD $o"
 done
-nm $OLD | awk '$1 ~ /^[UTDBRC]$/ {print $2} NF==3 && $2 ~ /^[TDBRC]$/ {print $3}' | sort -u |
-  grep -vE '^(memcpy|memset|memmove|memcmp|abort|_GLOBAL_OFFSET_TABLE_|__stack_chk_fail|__stack_chk_guard)$' |
-  awk '{print $1, "old_" $1}' > "$OUT/rename"
-for o in $OLD; do objcopy --redefine-syms="$OUT/rename" "$o"; done
+# the objects' global symbols as "TYPE name" (Mach-O's leading underscore taken off)
+U=""; [ "$(uname)" = Darwin ] && U=_
+syms() { nm -g "$@" | awk -v u="$U" 'NF >= 2 { n = $NF; if (u != "" && substr(n, 1, 1) == "_") n = substr(n, 2); print $(NF-1), n }'; }
+syms $OLD | awk '$1 ~ /^[UTDBRCS]$/ {print $2}' | sort -u |
+  grep -vE '^(memcpy|memset|memmove|memcmp|abort|_GLOBAL_OFFSET_TABLE_|__stack_chk_fail|__stack_chk_guard)$' > "$OUT/names"
+if command -v objcopy >/dev/null; then
+  awk '{print $1, "old_" $1}' "$OUT/names" > "$OUT/rename"
+  for o in $OLD; do objcopy --redefine-syms="$OUT/rename" "$o"; done
+else
+  # no objcopy (macOS): build the decomp's files again with every name defined to old_name
+  awk '{print "#define " $1 " old_" $1}' "$OUT/names" > "$OUT/rename.h"
+  for f in $(sed -n '1s/^.*old: *//p' $G/check/${NAME}_check.c | sed 's#\*/##'); do
+    o="$OUT/old_$(echo "$f" | tr / _ | sed 's/\.c$//').o"
+    $CC $CFLAGS -w -include "$OUT/rename.h" -Isrc/stuntracefx/include -c "src/stuntracefx/$f" -o "$o"
+  done
+fi
 # stubs for what the decomp's files call outside themselves, but the model's
-DEF=$(nm $OLD | awk 'NF==3 && $2 ~ /^[TDBRC]$/ {print $3}' | sort -u)
+DEF=$(syms $OLD | awk '$1 ~ /^[TDBRCS]$/ {print $2}' | sort -u)
 { echo '#include <stdio.h>'; echo '#include <stdlib.h>'
-  nm -u $OLD | awk '{print $2}' | sort -u | grep '^old_' | while read s; do
+  syms $OLD | awk '$1 == "U" {print $2}' | sort -u | grep '^old_' | while read s; do
     case "$s" in old_rd8|old_wr8|old_cyc|old_cpu_idle|old_cpu|old_gsu|old_gsu_*|old_call_routine) continue;; esac
     echo "$DEF" | grep -qx "$s" && continue
     echo "void $s(void) { fprintf(stderr, \"check: the decomp's code called $s, outside the check\\\\n\"); exit(2); }"
