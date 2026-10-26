@@ -17,7 +17,7 @@ void model_load_rom(const char *path);
 /* The I/O writes the old code made, in order (cleared by model_reset). */
 /* the joypads' auto-read results; the sound ports as the sound CPU shows
    them, and as last written */
-extern uint16_t model_pads[2];
+extern uint16_t model_pads[2], model_htime, model_vtime;   /* the raster interrupt's dot and line */
 extern uint8_t model_sound_in[4], model_sound_out[4];
 extern int model_io_n;
 extern uint32_t model_io[4096];

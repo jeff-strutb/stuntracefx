@@ -1,4 +1,4 @@
-/* old: video/fade.c video/palette.c video/dma.c video/windows.c video/window_hdma.c video/colour_math.c object/object.c audio/sound_queue.c input/joypad.c race/time.c video/scroll.c video/gradient.c video/tilemap.c video/oam.c system/vblank_updates.c system/frame_updates.c system/approach.c system/raster.c
+/* old: video/fade.c video/palette.c video/dma.c video/windows.c video/window_hdma.c video/colour_math.c object/object.c audio/sound_queue.c input/joypad.c race/time.c video/scroll.c video/gradient.c video/tilemap.c video/oam.c system/vblank_updates.c system/frame_updates.c system/approach.c system/raster.c hud/digits.c hud/slide.c
  *
  * raster_check.c: the port's frame work (what the original does in its
  * raster interrupt: the fade, the palettes, the windows, the uploads) against
@@ -39,7 +39,7 @@ OLD(WindowsSetupSelect) OLD(WindowHdmaNormal) OLD(WindowHdmaBands) OLD(WindowLay
 OLD(WindowSweepIfOn) OLD(WindowSlideOrOscillate) OLD(WindowBandsAnimate) OLD(WindowSplitAnimate) OLD(WindowSlideCheck)
 OLD(WindowHdmaFFDD) OLD(WindowHdmaFFD1) OLD(WindowHdmaFFD5) OLD(WindowHdmaFFD9)
 OLD(SoundPortsSend) OLD(JoypadRead) OLD(JoypadAccumulate) OLD(FrameSoundAndJoypads) OLD(RaceClockStep)
-OLD(Bg2ScrollFromTable) OLD(GradientPointersToBank7F) OLD(NmiFrameUpload) OLD(OamDirectStage) OLD(VblankUpdates) OLD(FrameCountAndPortsEnd) OLD(WindowTable7F)
+OLD(Bg2ScrollFromTable) OLD(GradientPointersToBank7F) OLD(NmiFrameUpload) OLD(OamDirectStage) OLD(VblankUpdates) OLD(FrameCountAndPortsEnd) OLD(WindowTable7F) OLD(RasterStage)
 
 static uint64_t rng = 0x3C6EF372FE94F82Bull;
 
@@ -99,7 +99,10 @@ static void fresh(void)
         model_sound_out[i] = sound_out[i] = (uint8_t)rnd();
     }
     for (i = 0; i < 2; i++)
-        model_pads[i] = pads[i] = (uint16_t)(rnd() & 0xFFF0);                   /* the game's standing setting: words, a step of 1 */
+        model_pads[i] = pads[i] = (uint16_t)(rnd() & 0xFFF0);
+    model_vtime = raster_line = (uint16_t)(rnd() & 0xFF);
+    model_htime = raster_dot = (uint16_t)(rnd() & 0xFF);                   /* the game's standing setting: words, a step of 1 */
+    video_frame_begin();
     ppu_to_port();
     video_registers_reset();
     memset(&old_cpu, 0, sizeof old_cpu);
@@ -138,6 +141,10 @@ static void same(void)
             fail("game pak RAM $%04zX = %02X, the decomp's %02X (was %02X)", i, pakram[i], old_p[i], start_p[i]);
             return;
         }
+    if (raster_line != model_vtime || raster_dot != model_htime) {
+        fail("raster line %u dot %u, the decomp's %u %u", raster_line, raster_dot, model_vtime, model_htime);
+        return;
+    }
     for (i = 0; i < 4; i++)
         if (sound_out[i] != model_sound_out[i]) {
             fail("sound port %zu = %02X, the decomp's %02X", i, sound_out[i], model_sound_out[i]);
@@ -266,6 +273,8 @@ int main(int argc, char **argv)
         W16(0x19B6) = (uint16_t)(rnd() % 12 * 2);
         W8(0x19BD) = (uint8_t)(rnd() & 1 ? (rnd() & 1 ? 1 : 0xFF) : rnd());
         W16(0x19B8) = (uint16_t)(rnd() & 1 ? 2 : 0xFFFE);
+        if (rnd() & 1)                  /* the kept colours' timers counting up */
+            W8(0x0D53) = 0, W8(0x0E05) |= 1, W8(0x0E06) |= 1;
         W8(0x19D5) = (uint8_t)(rnd() % 6);
         if (rnd() & 1)
             W16(0x19D9) = (uint16_t)(W16(0x19D4) + W16(0x19D6));
@@ -406,6 +415,60 @@ int main(int argc, char **argv)
         default: window_table_7f();
         }
         same();
+    }
+    CASE("RasterStage") {
+        static const uint8_t stages[] = {0x00, 0x02, 0x04, 0x06, 0x08, 0x0A, 0x0C, 0x0E, 0x10, 0x12, 0x14, 0x16, 0x18,
+                                         0x1A, 0x1C, 0x1E, 0x20};
+
+        fresh();
+        scratch_f9 = 1;
+        W8(0x0D3F) = stages[rnd() % sizeof stages];
+        /* the states the stages' callees are checked from above */
+        W16(0x0D7D) = (uint16_t)(rnd() % 14 * 2);
+        if (W16(0x0D7D) == 0x1C)
+            W16(0x0D7D) = 0x1E;
+        W8(0x0D23) = (uint8_t)(rnd() % 10 * 2);
+        W8(0x0D22) = (uint8_t)(rnd() & 1 ? 0 : rnd());
+        W16(0x10A0) = (uint16_t)(0x8000 + (rnd() & 0x3FFF));
+        W8(0x0D54) = (uint8_t)(rnd() % 6 * 2);
+        W8(0x0D2B) = (uint8_t)(rnd() & 3);
+        W16(0x0D83) = (uint16_t)(rnd() & 0x1FE), W16(0x0D85) = (uint16_t)(rnd() & 0x1FE);
+        W16(0xFD5B) = (uint16_t)(rnd() & 15), W16(0xFD5D) = (uint16_t)(rnd() & 15), W16(0xFD5F) = (uint16_t)(rnd() & 15);
+        W8(0x19A9) = (uint8_t)((rnd() % 5) * 2);
+        W8(0x19D5) = (uint8_t)(rnd() % 6);
+        W16(0x19B6) = (uint16_t)(rnd() % 12 * 2);
+        W16(0x19B8) = (uint16_t)(rnd() & 1 ? 2 : 0xFFFE);
+        if (rnd() & 1)                  /* the kept colours' timers counting up */
+            W8(0x0D53) = 0, W8(0x0E05) |= 1, W8(0x0E06) |= 1;
+        W8(0x19D1) = (uint8_t)(rnd() % 4 * 2);
+        W8(0x02) = (uint8_t)(rnd() % 4 * 2);
+        W16(0x1905) = (uint16_t)(rnd() % 4);
+        W16(0x18FF) = (uint16_t)(rnd() & 1);
+        W8(0x11D7) &= (uint8_t)~0x0F;
+        W16(0x16AF) = 0;                /* no transfers queued but the animated tiles' */
+        W16(0x1191) = (uint16_t)(rnd() % 9 * 2), W16(0x1193) = (uint16_t)(rnd() % 9 * 2);
+        {
+            int j;
+
+            for (j = 0; j < 2; j++) {
+                uint16_t obj = (uint16_t)(rnd() & 0x7FE), l1 = (uint16_t)(0x0300 + (rnd() & 0x7FE)), l2 = (uint16_t)(0x0300 + (rnd() & 0x7FE));
+
+                W16(j ? 0x034A : 0x0346) = obj;
+                W16(0x204F + obj) = l1;
+                W16(0x204F + l1) = l2;
+            }
+        }
+        old_cpu.db = 0x00;
+        {
+            static char name[40];
+
+            snprintf(name, sizeof name, "RasterStage %02X", W8(0x0D3F));
+            model_current = name;
+        }
+        old_run(old_abi_RasterStage);
+        raster_stage();
+        same();
+        model_current = "RasterStage";
     }
     printf("raster_check: %ld cases, %ld differ\n", cases, failed);
     return failed != 0;

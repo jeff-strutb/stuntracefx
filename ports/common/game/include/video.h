@@ -146,6 +146,9 @@ void nmi_frame_upload(void);
 void vblank_updates(void);
 void frame_count_and_ports_end(void);
 void oam_direct_stage(void);
+/* video/raster.c: the frame's stages */
+extern uint16_t raster_line, raster_dot;
+void raster_stage(void);
 
 /* ---- video/frame_updates.c: the updates applied as a frame ends ---- */
 void frame_sprites_if_pending(void);

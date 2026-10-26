@@ -64,7 +64,7 @@ static void die(const char *what, uint32_t a)
     exit(2);
 }
 
-uint16_t model_pads[2];
+uint16_t model_pads[2], model_htime, model_vtime;
 uint8_t model_sound_in[4], model_sound_out[4];
 
 uint8_t old_rd8(uint32_t a)
@@ -99,7 +99,8 @@ uint8_t old_rd8(uint32_t a)
         return (uint8_t)(model_pads[(o - 0x4218) >> 1] >> ((o & 1) * 8));
     case 0x2140: case 0x2141: case 0x2142: case 0x2143:
         return model_sound_in[o - 0x2140];
-    case 0x4212: return 0;                /* the joypads' auto-read done */
+    case 0x4212: return 0x40;             /* in horizontal blank, the joypads' auto-read done */
+    case 0x4211: return 0x80;             /* the raster interrupt acknowledged */
     case 0x4016: case 0x4017: return 0;   /* plain joypads: the second data line 0 */
     }
     die("read", a);
@@ -152,6 +153,10 @@ void old_wr8(uint32_t a, uint8_t v)
     case 0x211C: m7b = v; m7_latch = v; return;
     case 0x2140: case 0x2141: case 0x2142: case 0x2143: model_sound_out[o - 0x2140] = v; return;
     case 0x4016: return;                  /* the joypads' latch */
+    case 0x4207: model_htime = (uint16_t)((model_htime & 0x100) | v); return;
+    case 0x4208: model_htime = (uint16_t)((model_htime & 0xFF) | (v & 1) << 8); return;
+    case 0x4209: model_vtime = (uint16_t)((model_vtime & 0x100) | v); return;
+    case 0x420A: model_vtime = (uint16_t)((model_vtime & 0xFF) | (v & 1) << 8); return;
     case 0x3030: case 0x3031: return;     /* the status cleared */
     case 0x3034: gsu_pbr = v; return;
     case 0x3038: old_gsu.scbr = v; return;
