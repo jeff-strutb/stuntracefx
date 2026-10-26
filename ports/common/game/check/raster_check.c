@@ -1,4 +1,4 @@
-/* old: video/fade.c video/palette.c video/dma.c video/windows.c video/window_hdma.c video/colour_math.c object/object.c audio/sound_queue.c input/joypad.c race/time.c video/scroll.c video/gradient.c
+/* old: video/fade.c video/palette.c video/dma.c video/windows.c video/window_hdma.c video/colour_math.c object/object.c audio/sound_queue.c input/joypad.c race/time.c video/scroll.c video/gradient.c video/tilemap.c
  *
  * raster_check.c: the port's frame work (what the original does in its
  * raster interrupt: the fade, the palettes, the windows, the uploads) against
@@ -39,7 +39,7 @@ OLD(WindowsSetupSelect) OLD(WindowHdmaNormal) OLD(WindowHdmaBands) OLD(WindowLay
 OLD(WindowSweepIfOn) OLD(WindowSlideOrOscillate) OLD(WindowBandsAnimate) OLD(WindowSplitAnimate) OLD(WindowSlideCheck)
 OLD(WindowHdmaFFDD) OLD(WindowHdmaFFD1) OLD(WindowHdmaFFD5) OLD(WindowHdmaFFD9)
 OLD(SoundPortsSend) OLD(JoypadRead) OLD(JoypadAccumulate) OLD(FrameSoundAndJoypads) OLD(RaceClockStep)
-OLD(Bg2ScrollFromTable) OLD(GradientPointersToBank7F)
+OLD(Bg2ScrollFromTable) OLD(GradientPointersToBank7F) OLD(NmiFrameUpload)
 
 static uint64_t rng = 0x3C6EF372FE94F82Bull;
 
@@ -354,6 +354,20 @@ int main(int argc, char **argv)
             old_run(old_abi_GradientPointersToBank7F);
             gradient_pointers_to_bank_7f();
         }
+        same();
+    }
+    CASE("NmiFrameUpload") {
+        static const uint8_t race[] = {0x00, 0x02, 0x04, 0x06, 0x08, 0x0A, 0x0C, 0x0E, 0x10, 0x12, 0x14, 0x16, 0x18, 0x1A, 0x1E, 0x20};
+
+        fresh();
+        scratch_f9 = 1;
+        W8(0x0D22) = (uint8_t)(rnd() & 1 ? 0 : rnd());
+        W16(0x0D7D) = race[rnd() % sizeof race];
+        W8(0x0D23) = (uint8_t)(rnd() % 10 * 2);
+        W16(0x0D7F) = (uint16_t)(rnd() & 1 ? 0 : rnd());
+        W16(0x10A0) = (uint16_t)(0x8000 + (rnd() & 0x3FFF));
+        old_run(old_abi_NmiFrameUpload);
+        nmi_frame_upload();
         same();
     }
     printf("raster_check: %ld cases, %ld differ\n", cases, failed);

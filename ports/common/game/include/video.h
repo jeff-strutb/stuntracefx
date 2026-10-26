@@ -140,6 +140,9 @@ void video_sprites_all(void);
 void video_colours_from(uint16_t at, uint8_t first, uint16_t n);
 void video_colours_all(void);
 
+/* ---- video/frame_upload.c: the uploads between frames ---- */
+void nmi_frame_upload(void);
+
 /* ---- video/frame_updates.c: the updates applied as a frame ends ---- */
 void frame_sprites_if_pending(void);
 void frame_colours_if_pending(void);
