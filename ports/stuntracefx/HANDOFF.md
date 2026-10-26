@@ -64,7 +64,8 @@ check above covers 21 plays.
 - `ports/stuntracefx/game`: the port's own copy of the decomp, built by
   link.sh (GAME= selects another tree).
 - No ROM image is built in: the build extracts the game's data as named
-  assets (`assets.csv`: 2,046 assets, 862,346 bytes; `tools/assets.py`
+  assets (`assets.csv`: 2,049 assets, 862,346 bytes; names by hand in
+  `assets_named.csv`; `tools/assets.py`
   writes gen/assets.S, assets.c and assets.h) and leaves out the 186,230
   bytes of code the C stands for. runtime/cart.c serves the cartridge's
   addresses from the assets; a read of a byte no asset holds stops the
@@ -72,6 +73,13 @@ check above covers 21 plays.
   Super FX's ROM-buffer fill may land on code: it is only an error if a
   GETB or GETC reads it; whether a program starts with CACHE comes from
   routines.py, not from the code's bytes.
+- Asset variants (`ASSETS=` in link.sh; `ios` is the iOS host's default):
+  `assets.py` edits assets at build time. On iOS the title reads TAP TO
+  START: the sprite sheet gets an O (packed again by `tools/fxpack.py`,
+  the game's unpacker in Python, which matches the port on every menu
+  picture), the menu animation table moves past the ROM's end (the cart
+  space is 2 MB there) and the 20-sprite group takes its old place, which
+  the boot copies to $7F:3360.
 - Every console register access in the game is an explicit call
   (game/include/native.h): the multiply units are C arithmetic; joypads
   through input_pad; the picture through ppu_wr/vid_reg; DMA through

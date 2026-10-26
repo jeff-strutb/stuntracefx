@@ -17,7 +17,7 @@
 #include "snes.h"
 #include "cart.h"
 
-#define PAGES (1u << 12)                       /* 256-byte pages of up to 1 MB */
+#define PAGES (1u << 13)                       /* 256-byte pages of up to 2 MB */
 static const uint8_t *pages[PAGES];
 
 /* PORT_ROMCENSUS: who read each byte, and where the first read came from */
@@ -116,6 +116,8 @@ void cart_make(SnesCart *cart)
 {
     int i;
     memset(pages, 0, sizeof pages);
+    if (port_rom_size > PAGES << 8)
+        snes_fatal("cart: %u bytes of ROM space; the page table holds %u", port_rom_size, PAGES << 8);
     census_file = getenv("PORT_ROMCENSUS");
     if (census_file) {
         /* every read through cart_read: no page is read straight */

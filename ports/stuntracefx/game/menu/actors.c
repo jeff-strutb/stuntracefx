@@ -433,18 +433,18 @@ uint16_t MenuActorAnimate(uint8_t bank, uint16_t rec, uint16_t *x, uint8_t *p)
     *p = (uint8_t)((*p & ~(P_C | P_V)) | (s > 0xFFFF ? P_C : 0) | ((~(pos ^ m) & (pos ^ (uint16_t)s) & 0x8000) ? P_V : 0));
     i = (uint16_t)s;
     cyc(102);
-    d = rd16(ASSET_MenuActorAnimate_0BAB60 + i);
+    d = rd16(ASSET_menu_actor_animations + i);
     if (d & 0x8000) {
         wr16((uint16_t)(rd16(b | 0x11F9) + 0x16), cyc_then(22, 0x0000));
         cyc(24);
         i = rd16(b | 0x11DF);
         cyc(66);
-        d = rd16(ASSET_MenuActorAnimate_0BAB60 + i);
+        d = rd16(ASSET_menu_actor_animations + i);
     }
     cyc(20);
     wr16(b | 0x11DF, (uint16_t)(d - 1));
     cyc(72);
-    g = rd16((ASSET_MenuActorAnimate_0BAB60 + 0x2) + i);
+    g = rd16((ASSET_menu_actor_animations + 0x2) + i);
     *x = rd16(b | 0x11F9);
     cyc(22);
     wr16((uint16_t)(*x + 0x12), g);
@@ -1643,7 +1643,7 @@ uint16_t MenuActorCopyGroup(uint8_t bank, uint16_t *xo, uint8_t *p)
     unsigned s;
 
     cyc(22);
-    src = rd16(cyc_then(108, (ASSET_MenuActorAnimate_0BAB60 + 0x2) + rd16((uint16_t)(x + 0x14))));
+    src = rd16(cyc_then(108, (ASSET_menu_actor_animations + 0x2) + rd16((uint16_t)(x + 0x14))));
     size = (uint16_t)(((uint16_t)(rd16(0x7F1356 + src) + 1) << 3) + 2);
     cyc(118);
     wr16(b | 0x11DF, size);

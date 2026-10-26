@@ -17,6 +17,8 @@
 #                 headless default)
 #        GAME     the game's C (default ports/stuntracefx/game; src/stuntracefx
 #                 builds the reference the port's copy is checked against)
+#        ASSETS   a variant of the assets (tools/assets.py): ios (the iOS
+#                 host's default: TAP TO START on the title)
 #        SRFX_ROM your cartridge's ROM (default reference/stuntracefx/Stunt
 #                 Race FX (USA) (Rev 1).sfc), checked by its SHA-1: the build
 #                 extracts the game's assets from it (assets.csv, tools/
@@ -38,7 +40,8 @@ mkdir -p "$OUT/gen" "$OUT/obj"
 SRFX_GAME="$GAME" python3 ports/stuntracefx/tools/routines.py "$ROM" "$OUT/gen/routines.c" >/dev/null
 
 # the game's assets, out of the ROM (the code is the C)
-python3 ports/stuntracefx/tools/assets.py "$ROM" "$OUT/gen"
+[ "$HOST" = ios ] && ASSETS=${ASSETS-ios}
+python3 ports/stuntracefx/tools/assets.py "$ROM" "$OUT/gen" $ASSETS
 
 CFLAGS="-O2 -g -std=gnu11 -fno-strict-aliasing -ffp-contract=off"
 INC="-Iports/common/snes -Iports/common/video -Iports/common/audio -Iports/common/render -Iports/common/host -I$GAME/include -Iports/stuntracefx/runtime -I$OUT/gen"

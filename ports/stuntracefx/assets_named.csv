@@ -1,0 +1,10 @@
+name,start,end
+menu_bg1_tiles_packed,0E1A9C,0E3ABC
+menu_bg1_map_packed,0E3ABC,0E3E58
+menu_bg3_map_packed,0E3E98,0E3ECC
+menu_bg2_tiles_packed,0E3ECC,0E4664
+menu_bg2_map_packed,0E4664,0E4818
+menu_bg2_map_b_packed,0E4818,0E49DC
+menu_sprites_packed,0E49DC,0E5C38
+menu_sound_packed,0F690D,0F73B5
+menu_actor_animations,05AB60,05ADD4

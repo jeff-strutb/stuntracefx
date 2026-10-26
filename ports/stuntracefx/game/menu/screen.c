@@ -919,18 +919,19 @@ static void menu_apu_upload(uint8_t bank, uint16_t addr)
     delay_turns(0x4000);
 }
 
-/* Picture `in68` (Super FX input $1C) to VRAM `vram`; its byte count is
-   the big-endian word before it in bank $1C. */
-static void menu_picture(uint16_t vram, uint16_t in68)
+/* The packed picture ending at `end` (an asset's ASSET_name_END: its bank
+   the Super FX's input, its address $70:0068's) to VRAM `vram`; its byte
+   count is the big-endian word before the end. */
+static void menu_picture(uint16_t vram, uint32_t end)
 {
     cyc(70);
-    uint16_t x, n = rd16(0x1C0000 | (uint16_t)(in68 - 2));
+    uint16_t x, n = rd16((end & 0xFF0000) | (uint16_t)(end - 2));
 
     ppu_wr16(VMADDL, vram);
     cyc(114);
     wr16(0x0011D5, (uint16_t)((n << 8) | (n >> 8)));
     cyc(138);
-    MenuPictureToVram(0x00, in68, 0x001C, &x);
+    MenuPictureToVram(0x00, (uint16_t)end, (uint16_t)(end >> 16), &x);
     cyc(44);
 }
 
@@ -1009,18 +1010,18 @@ void MenuScreenOpen6(void)
     cyc(110);
     MenuPaletteScale(0x00, &x, &y);
     MenuHdmaSetup(0x00);
-    menu_picture(0x4000, 0xDC38);
-    menu_picture(0x6800, 0xC9DC);
+    menu_picture(0x4000, ASSET_menu_sprites_packed_END);
+    menu_picture(0x6800, ASSET_menu_bg2_map_b_packed_END);
     cyc(70);
     ppu_wr16(VMADDL, 0x7000);
     for (x = 0; x != 0x0040; x = (uint16_t)(x + 2))
         { cyc(96); ppu_wr16(VMDATAL, rd16(ASSET_MenuScreenOpen6_1CBE58 + x)); cyc(50); }
     cyc(18);
-    menu_picture(0x0000, 0xBABC);
-    menu_picture(0x6000, 0xBE58);
-    menu_picture(0x2000, 0xC664);
-    menu_picture(0x6400, 0xC818);
-    menu_picture(0x7C00, 0xBECC);
+    menu_picture(0x0000, ASSET_menu_bg1_tiles_packed_END);
+    menu_picture(0x6000, ASSET_menu_bg1_map_packed_END);
+    menu_picture(0x2000, ASSET_menu_bg2_tiles_packed_END);
+    menu_picture(0x6400, ASSET_menu_bg2_map_packed_END);
+    menu_picture(0x7C00, ASSET_menu_bg3_map_packed_END);
     cyc(46);
     wr16(0x00162D, 0x0000);
     cyc(24);

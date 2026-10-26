@@ -19,6 +19,10 @@ the C is named for how the original used it (cpu_, dma_, fx_ or spc_ data)
 or unread_.
 A piece whose range is already in assets.csv keeps the name it has there
 (the game's C names assets: assets.h), so names change only by hand.
+ports/stuntracefx/assets_named.csv gives blocks a name and exact range by
+hand (a packed picture, a table the C reaches through a pointer), and an
+asset the game's C names (ASSET_name) keeps its range: each is one asset,
+and the pieces around it stop at its edges.
 """
 import csv, glob, os, re, sys
 import numpy as np
@@ -28,6 +32,7 @@ sys.path.insert(0, os.path.join(ROOT, 'tools', 'stuntracefx'))
 import codemap  # noqa: E402
 
 OUT = os.path.join(ROOT, 'ports', 'stuntracefx', 'assets.csv')
+NAMED = os.path.join(ROOT, 'ports', 'stuntracefx', 'assets_named.csv')
 CPU_OP, DATA = 0x33, 0x4C | 0x4000
 MIN_PIECE = 16          # a reader's piece shorter than this joins its neighbour
 GAME = os.path.join(ROOT, 'ports', 'stuntracefx', 'game')
@@ -133,6 +138,27 @@ def main(census_files):
             else:
                 pieces.append(s)
     pieces = [[s, e, tables[s] if t else lab] for s, e, lab, t in pieces]
+    # the blocks named by hand, whole; the pieces around them cut at their edges
+    named = [(int(r['start'], 16), int(r['end'], 16), r['name']) for r in csv.DictReader(open(NAMED))]
+    used = set()
+    for path in glob.glob(os.path.join(GAME, '**', '*.c'), recursive=True):
+        used |= set(re.findall(r'\bASSET_(\w+?)(?:_SIZE|_END)?\b', open(path).read()))
+    if os.path.exists(OUT):
+        have = {(s0, e0) for s0, e0, _ in named}
+        for r in csv.DictReader(open(OUT)):
+            k = (int(r['start'], 16), int(r['end'], 16))
+            if r['name'] in used and k not in have and not any(a < k[1] and k[0] < b for a, b, _ in named):
+                named.append((k[0], k[1], r['name']))
+    for s0, e0, nm in named:
+        if code[s0:e0].any():
+            raise SystemExit('assetmap: %s holds code' % nm)
+    cut = []
+    for s, e, lab in pieces:
+        segs = [(s, e)]
+        for s0, e0, _ in named:
+            segs = [x for a, b in segs for x in ((a, min(b, s0)), (max(a, e0), b)) if x[0] < x[1]]
+        cut += [[a, b, lab] for a, b in segs]
+    pieces = sorted(cut + [[s0, e0, '=' + nm] for s0, e0, nm in named])
     old = {}
     if os.path.exists(OUT):
         for r in csv.DictReader(open(OUT)):
@@ -142,7 +168,10 @@ def main(census_files):
         w.writerow(['name', 'start', 'end', 'reader'])
         for s, e, lab in pieces:
             key = ('%06X' % s, '%06X' % e)
-            name = old.get(key, '%s_%s' % (re.sub(r'\W', '_', lab), addr(s)))
+            if lab.startswith('='):
+                name, lab = lab[1:], 'named'
+            else:
+                name = old.get(key, '%s_%s' % (re.sub(r'\W', '_', lab), addr(s)))
             w.writerow([name, key[0], key[1], lab])
     total = sum(e - s for s, e, _ in pieces)
     print('assetmap: %d assets, %d bytes of data; %d bytes of code left to the C' % (len(pieces), total, int(code.sum())))
