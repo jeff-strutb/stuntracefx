@@ -6,6 +6,7 @@
 #include "machine.h"
 #include "native.h"
 #include "hw.h"
+#include "assets.h"
 
 /*
  * @routine 09:EFFB Records7FFromF634
@@ -75,7 +76,7 @@ void abi_Records7FFromF634(void)
  */
 uint16_t Records7FFromF170(uint8_t bank)
 {
-    static const uint32_t from[8] = {0x09F88B, 0x09F8AB, 0x09F8CB, 0x09F8EB, 0x09F90B, 0x09F92B, 0x09F94B, 0x09F96B};
+    static const uint32_t from[8] = {ASSET_Records7FFromF170_09F88B, ASSET_Records7FFromF170_09F8AB, ASSET_Records7FFromF170_09F8CB, ASSET_Records7FFromF170_09F8EB, ASSET_Records7FFromF170_09F90B, ASSET_Records7FFromF170_09F92B, ASSET_Records7FFromF170_09F94B, ASSET_Records7FFromF170_09F96B};
     static const uint32_t to[8] = {0x7F43D7, 0x7F45B7, 0x7F45D7, 0x7F47B7, 0x7F47D7, 0x7F49B7, 0x7F49D7, 0x7F4BB7};
     uint32_t b = (uint32_t)bank << 16;
     uint16_t x = 0, y = 0xF170;

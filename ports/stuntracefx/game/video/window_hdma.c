@@ -8,6 +8,7 @@
 #include "native.h"
 #include "hw.h"
 #include "cpu_ops.h"
+#include "assets.h"
 
 #define WINDOW_HDMA 0x7FF85Bu
 
@@ -511,7 +512,7 @@ uint16_t WindowEdgesFromList(uint8_t bank, uint16_t *x, uint8_t *p)
     uint16_t sel = rd16(b | 0x19B6), n = 0, s;
 
     cyc(86);
-    wr16(b | 0x19B4, rd16(0x09F155 + sel));
+    wr16(b | 0x19B4, rd16((ASSET_WindowsInit_09F14D + 0x8) + sel));
     cyc(24);
     *x = rd16(cyc_then(62, 0x09F98B + rd16(b | 0x19B6)));
     for (;;) {
@@ -984,7 +985,7 @@ void WindowsInit(void)
         abi_WindowEdgesFromList();
     } while (cyc_loop(46, rd16(cyc_then(46, b | 0x19B6)) != 0x000E));
     cyc(34);
-    for (x = 0; (w = rd16(cyc_then(172, 0x09FB74 + x))) != 0xFFFF; x = (uint16_t)(x + 2))
+    for (x = 0; (w = rd16(cyc_then(172, ASSET_WindowsInit_09FB74 + x))) != 0xFFFF; x = (uint16_t)(x + 2))
         wr16(0x7FFF8B + x, w);
     cyc(42);
     if (rd8(b | 0x0D62)) {
@@ -1074,7 +1075,7 @@ void WindowsInit(void)
         cyc(76);
         w = (uint16_t)((rd16(b | 0x0D48) & 0x00FF) << 1);
         cyc(184);
-        x = (uint16_t)(w + rd16(0x09F127 + x));
+        x = (uint16_t)(w + rd16(ASSET_WindowsInit_09F127 + x));
         wr16(b | 0x19F6, rd16(b | x));
     } else { cyc(28); }
     cyc(46);
@@ -1084,7 +1085,7 @@ void WindowsInit(void)
         cyc(76);
         w = (uint16_t)(rd16(b | 0x0D48) & 0x00FF);
         cyc(184);
-        x = (uint16_t)(w + rd16(0x09F115 + x));
+        x = (uint16_t)(w + rd16(ASSET_WindowsInit_09F115 + x));
         wr8(b | 0x19E6, rd8(b | x));
     } else { cyc(22); }
     cyc(70);
@@ -1094,7 +1095,7 @@ void WindowsInit(void)
     cyc(52);
     wr8(b | 0x19D1, (uint8_t)x);
     cyc(72);
-    wr16(b | 0x19CB, rd16(0x09F14D + x));
+    wr16(b | 0x19CB, rd16(ASSET_WindowsInit_09F14D + x));
     cyc(24);
     wr16(b | 0x19D3, 0x0000);
     cyc(70);

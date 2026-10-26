@@ -6,6 +6,7 @@
 #include "native.h"
 #include "cpu_ops.h"
 #include "hw.h"
+#include "assets.h"
 
 void abi_ApuUploadBank19(void);
 void abi_SaveUnlocksCheck(void);
@@ -317,7 +318,7 @@ static void boot_run(int from)
     op_rep(P_M | P_X);
     boot_ldx(0x000F);
     do {
-        op_lda16(0x038D16 + cpu.x);
+        op_lda16(ASSET_boot_run_038D16 + cpu.x);
         wr16(0x000101 + cpu.x, cpu.a);
         cpu.x--;
         cpu.p = nz16(cpu.p, cpu.x);
@@ -389,7 +390,7 @@ attract:
     boot_blank(b);
     (cyc(78), boot_stack());
     op_sep(P_M | P_X);
-    call_routine(0x02CF3E, 1);
+    call_routine(ASSET_boot_run_02CF3E, 1);
     abi_WindowsInit();
     op_sep(P_M);
     op_rep(P_X);
@@ -404,7 +405,7 @@ attract:
     op_sep(P_M);
     op_rep(P_X);
     cyc(98);
-    call_routine(0x02CF45, 1);
+    call_routine((ASSET_boot_run_02CF3E + 0x7), 1);
     (cyc(62), abi_CourseDataPointer());
     (cyc(62), abi_CourseScriptRun());
     (cyc(62), abi_ObjectPlaceAll());

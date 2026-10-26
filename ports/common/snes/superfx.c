@@ -34,7 +34,7 @@ typedef struct {
     uint8_t colr, por;
     uint8_t scmr, scbr;
     uint16_t ramaddr;
-    uint8_t romdr;
+    uint8_t romdr, romdr_unheld;
     uint8_t pre_b, pre_alt1, pre_alt2, pre_sreg, pre_dreg;
 } RegsGSU;
 
@@ -42,6 +42,8 @@ RegsGSU gsu;
 uint8_t *gsu_ram_mem;
 
 void (*snes_gsu_run_hook)(uint8_t bank, uint16_t addr);
+int (*snes_gsu_cache_first_hook)(uint8_t bank, uint16_t addr);
+static uint32_t fetch_at;                /* where the ROM buffer was last filled from */
 
 static uint8_t ram_store[0x20000];
 static uint8_t cache[0x200];
@@ -61,6 +63,7 @@ static Coro *gsu_co, *main_co;
 
 static void gsu_main(void *arg);
 static inline uint8_t bus_byte(uint32_t addr);
+uint8_t gsu_fetch(uint32_t addr);
 static void bus_wait(GsuClock *c, int ram);
 static uint8_t pix_read(GsuClock *c, uint32_t addr);
 static void pix_write(GsuClock *c, uint32_t addr, uint8_t v);
@@ -152,7 +155,7 @@ static void gsu_main(void *arg)
         if (!snes_gsu_run_hook)
             snes_fatal("Super FX started with no runtime");
         gsuclk_code(&clk, (uint32_t)pbr << 16 | gsu.r[15], 1);
-        if (bus_byte((uint32_t)pbr << 16 | gsu.r[15]) == 0x02)
+        if (snes_gsu_cache_first_hook && snes_gsu_cache_first_hook(pbr, gsu.r[15]))
             gsuclk_cache(&clk, (uint16_t)(gsu.r[15] + 1));   /* a CACHE first: it runs after the next fetch */
         clk_sync();
         snes_gsu_run_hook(pbr, gsu.r[15]);
@@ -218,7 +221,7 @@ void gsu_reg_write(uint16_t addr, uint8_t v)
         }
         gsu.r[n] = (uint16_t)(v << 8 | reg_latch);
         if (n == 14)
-            gsu.romdr = gsu_rd8((uint32_t)gsu.rombr << 16 | gsu.r[14]);
+            gsu.romdr = gsu_fetch((uint32_t)gsu.rombr << 16 | gsu.r[14]);
         if (n == 15)
             program_starts();   /* R15 written: the program starts */
         return;
@@ -253,17 +256,39 @@ void gsu_reg_write(uint16_t addr, uint8_t v)
 
 /* ---- the Super FX's own bus (gsu.h) ---- */
 
-static inline uint8_t bus_byte(uint32_t addr)
+static inline uint8_t bus_byte_by(uint32_t addr, int who)
 {
     uint8_t bank = (uint8_t)(addr >> 16);
     uint16_t off = (uint16_t)addr;
     if (bank == 0x70 || bank == 0x71)
         return ram_store[((uint32_t)(bank & 1) << 16 | off) & (snes_cart->sfx_ram_size - 1)];
     if (bank < 0x40)
-        return snes_cart->rom[((uint32_t)(bank & 0x3F) << 15 | (off & 0x7FFF)) & (snes_cart->rom_size - 1)];
+        return snes_rom_byte(snes_cart, ((uint32_t)(bank & 0x3F) << 15 | (off & 0x7FFF)) & (snes_cart->rom_size - 1), who);
     if (bank < 0x60)
-        return snes_cart->rom[((uint32_t)(bank & 0x1F) << 16 | off) & (snes_cart->rom_size - 1)];
+        return snes_rom_byte(snes_cart, ((uint32_t)(bank & 0x1F) << 16 | off) & (snes_cart->rom_size - 1), who);
     return 0;
+}
+
+static inline uint8_t bus_byte(uint32_t addr) { return bus_byte_by(addr, SNES_ROM_GSU); }
+
+/* The ROM buffer's fill (an R14 write): the byte at addr, which the program
+   may never read; one no asset holds (code) marks the buffer instead of
+   stopping the port, and only a GETB or GETC of it does (gsu_fetch_used). */
+uint8_t gsu_fetch(uint32_t addr)
+{
+    uint8_t v;
+    addr &= 0xFFFFFF;
+    fetch_at = addr;
+    snes_rom_unheld = 0;
+    v = bus_byte_by(addr, SNES_ROM_GSU | SNES_ROM_FETCH);
+    gsu.romdr_unheld = (uint8_t)snes_rom_unheld;
+    return v;
+}
+
+void gsu_fetch_used(void)
+{
+    gsu.romdr = bus_byte(fetch_at);
+    gsu.romdr_unheld = 0;
 }
 
 static int is_ram(uint32_t addr) { uint8_t bank = (uint8_t)(addr >> 16); return bank == 0x70 || bank == 0x71; }

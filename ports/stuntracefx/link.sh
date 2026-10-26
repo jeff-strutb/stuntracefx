@@ -18,8 +18,10 @@
 #        GAME     the game's C (default ports/stuntracefx/game; src/stuntracefx
 #                 builds the reference the port's copy is checked against)
 #        SRFX_ROM your cartridge's ROM (default reference/stuntracefx/Stunt
-#                 Race FX (USA) (Rev 1).sfc), checked by its SHA-1 and built
-#                 into the executable: the game needs no ROM once built
+#                 Race FX (USA) (Rev 1).sfc), checked by its SHA-1: the build
+#                 extracts the game's assets from it (assets.csv, tools/
+#                 assets.py) and builds those in, not the ROM; the game needs
+#                 no ROM once built
 set -e
 cd "$(dirname "$0")/../.."
 HOST=${HOST:-null}
@@ -35,25 +37,11 @@ mkdir -p "$OUT/gen" "$OUT/obj"
 
 SRFX_GAME="$GAME" python3 ports/stuntracefx/tools/routines.py "$ROM" "$OUT/gen/routines.c" >/dev/null
 
-# the ROM, as data in the executable
-ROMABS=$(cd "$(dirname "$ROM")" && pwd)/$(basename "$ROM")
-case "$TARGET" in
-  *apple*)          SYM=_srfx_rom; SEC='.section __TEXT,__const';;
-  *mingw*|*windows*) SYM=srfx_rom;  SEC='.section .rdata,"dr"';;
-  *)                SYM=srfx_rom;  SEC='.section .rodata';;
-esac
-cat > "$OUT/gen/romdata.S" <<EOS
-    $SEC
-    .globl ${SYM}
-    .globl ${SYM}_end
-    .p2align 4
-${SYM}:
-    .incbin "$ROMABS"
-${SYM}_end:
-EOS
+# the game's assets, out of the ROM (the code is the C)
+python3 ports/stuntracefx/tools/assets.py "$ROM" "$OUT/gen"
 
 CFLAGS="-O2 -g -std=gnu11 -fno-strict-aliasing -ffp-contract=off"
-INC="-Iports/common/snes -Iports/common/video -Iports/common/audio -Iports/common/render -Iports/common/host -I$GAME/include -Iports/stuntracefx/runtime"
+INC="-Iports/common/snes -Iports/common/video -Iports/common/audio -Iports/common/render -Iports/common/host -I$GAME/include -Iports/stuntracefx/runtime -I$OUT/gen"
 case "$TARGET" in
   *mingw*|*windows*) OSHOST=ports/common/host/win32/host_win32.c; EXE=.exe; OSLIBS="-static -lwinmm";;
   *)                 OSHOST=ports/common/host/posix/host_posix.c; EXE=;     OSLIBS=;;
@@ -74,10 +62,10 @@ compile() {   # source, extra flags
 
 # the game: every C file
 for f in $(find "$GAME" -name '*.c' | sort); do
-  compile "$f" "-w -I$GAME/include"
+  compile "$f" "-w -I$GAME/include -I$OUT/gen"
 done
 # the machine layer and the runtime (an app with its own host calls srfx_main)
-for f in ports/common/snes/*.c ports/common/video/*.c ports/common/audio/*.c ports/stuntracefx/runtime/*.c "$OUT/gen/routines.c"; do
+for f in ports/common/snes/*.c ports/common/video/*.c ports/common/audio/*.c ports/stuntracefx/runtime/*.c "$OUT/gen/routines.c" "$OUT/gen/assets.c"; do
   if [ "$HOST" = lib ] && [ "$f" = ports/stuntracefx/runtime/main.c ]; then
     compile "$f" "-Wall $INC -Dmain=srfx_main"
   elif [ "$HOST" = ios ] && [ "$f" = ports/stuntracefx/runtime/main.c ]; then
@@ -91,7 +79,7 @@ case "$TARGET" in
   aarch64*|arm64*) compile ports/common/snes/coro_arm64.S "";;
   x86_64*)         compile ports/common/snes/coro_x86_64.S "";;
 esac
-compile "$OUT/gen/romdata.S" ""
+compile "$OUT/gen/assets.S" ""
 compile "$OSHOST" "-Wall -Iports/common/host"
 
 # the renderer

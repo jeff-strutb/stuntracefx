@@ -3,6 +3,7 @@
  * per-course table index ($0E3D holds the course number).
  */
 #include "machine.h"
+#include "assets.h"
 
 static uint16_t word_lookup(uint32_t table, uint16_t i)
 {
@@ -19,7 +20,7 @@ static uint16_t word_lookup(uint32_t table, uint16_t i)
  */
 uint16_t HandlerTableA(uint16_t i)
 {
-    return word_lookup(0x03B6F1, i);
+    return word_lookup(ASSET_HandlerTableA_03B6F1, i);
 }
 
 void abi_HandlerTableA(void)
@@ -38,7 +39,7 @@ void abi_HandlerTableA(void)
  */
 uint16_t HandlerTableB(uint16_t i)
 {
-    return word_lookup(0x03B704, i);
+    return word_lookup(ASSET_HandlerTableB_03B704, i);
 }
 
 void abi_HandlerTableB(void)
@@ -105,7 +106,7 @@ uint16_t CourseDataPointer(uint8_t *bank, uint8_t *p)
     cyc(46);
     uint16_t c = rd16(0x000E3D), i = (uint16_t)(((uint16_t)(c << 1) + c) & 0x00FF);
     cyc(326);
-    uint16_t addr = rd16(0x03F4A5 + i), r = (uint16_t)(addr - 0x8000);
+    uint16_t addr = rd16(ASSET_CourseDataPointer_03F4A5 + i), r = (uint16_t)(addr - 0x8000);
 
     *p = (uint8_t)((*p & ~(P_C | P_V)) | (addr >= 0x8000 ? P_C : 0)
                    | (((addr ^ 0x8000) & (addr ^ r) & 0x8000) ? P_V : 0));
@@ -143,7 +144,7 @@ uint16_t SelectionTables18CB(uint8_t bank)
     uint16_t base, s1, i3, x, v = 0, w, u;
 
     cyc(76);
-    base = rd16(cyc_then(100, 0x0BB00C + (uint16_t)(rd16(0x0018CB) << 1)));
+    base = rd16(cyc_then(100, ASSET_SelectionTables18CB_0BB00C + (uint16_t)(rd16(0x0018CB) << 1)));
     wr16(b | 0x11DF, base);
     cyc(32);
     v = rd16(0x0018CD);
@@ -178,13 +179,13 @@ uint16_t SelectionTables18CB(uint8_t bank)
     u = rd16(b | 0x11DF);
     x = (uint16_t)(x + u);
     cyc(118);
-    wr16(0x0018E5, rd16(0x0BB014 + x) & 3);
+    wr16(0x0018E5, rd16(ASSET_unread_0BB014 + x) & 3);
     cyc(104);
-    wr16(0x0018E7, rd16(0x0BB015 + x) & 3);
+    wr16(0x0018E7, rd16((ASSET_unread_0BB014 + 0x1) + x) & 3);
     cyc(104);
-    wr16(0x0018E9, rd16(0x0BB016 + x) & 3);
+    wr16(0x0018E9, rd16((ASSET_unread_0BB014 + 0x2) + x) & 3);
     cyc(32);
-    wr16(0x0018E3, rd16(cyc_then(118, 0x03B7B1 + rd16(0x0018CB))) & 3);
+    wr16(0x0018E3, rd16(cyc_then(118, ASSET_SelectionTables18CB_03B7B1 + rd16(0x0018CB))) & 3);
     for (x = 0; x < 8; x += 2) {
         cyc(86);
         uint16_t idx = (uint16_t)(rd16(0x0018CB + x) << 2);
@@ -193,7 +194,7 @@ uint16_t SelectionTables18CB(uint8_t bank)
         u = rd16(0x0018E3 + x);
         idx = (uint16_t)(idx + u);
         cyc(154);
-        v = rd16(0x03B7B5 + idx) & 3;
+        v = rd16((ASSET_SelectionTables18CB_03B7B1 + 0x4) + idx) & 3;
         wr16(0x0018D3 + x, v);
         cyc(50);
     }

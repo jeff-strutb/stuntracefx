@@ -7,6 +7,7 @@
 #include "machine.h"
 #include "cpu_ops.h"
 #include "wram.h"
+#include "assets.h"
 
 #define MENU_GAUGE 0x00117Eu
 
@@ -174,7 +175,7 @@ uint16_t GaugeFromSpeed(uint8_t bank, uint16_t *x)
         a = (uint16_t)(a >> 2);
         *x = GaugeTableIndex(bank, a);
         cyc(76);
-        a = rd8(0x0BB158 + *x);
+        a = rd8(ASSET_GaugeFromSpeed_0BB158 + *x);
     } else { cyc(84); }                 /* CMP, BNE, BRL */
     cyc(48);
     wr16(0x000002, a);
@@ -205,7 +206,7 @@ void abi_GaugeFromSpeedZero(void)
     cyc(84);
     x = GaugeTableIndex(cpu.db, 0x0000);
     cyc(124);
-    a = rd8(0x0BB158 + x);
+    a = rd8(ASSET_GaugeFromSpeed_0BB158 + x);
     wr16(0x000002, a);
     cpu.a = a;
     cpu.x = x;

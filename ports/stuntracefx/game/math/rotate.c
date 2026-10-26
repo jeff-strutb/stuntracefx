@@ -6,6 +6,7 @@
 #include "native.h"
 #include "hw.h"
 #include "cpu_ops.h"
+#include "assets.h"
 
 /*
  * Signed 8 x 8 multiply through the unsigned multiplier: the magnitudes are
@@ -119,9 +120,9 @@ static uint8_t rotate8(uint32_t xa, uint32_t va, uint32_t out, uint32_t out2)
 static void sin_cos(uint8_t i)
 {
     cyc((0x3E + i) > 0xFF ? 6 : 0);
-    wr8(0x000625, rd8(0x00973E + i));
+    wr8(0x000625, rd8(ASSET_sin_cos_00973E + i));
     cyc(32 + ((0xFE + i) > 0xFF ? 6 : 0));
-    wr8(0x000624, cyc_then(24, rd8(0x0096FE + i)));
+    wr8(0x000624, cyc_then(24, rd8(ASSET_sin_cos_0096FE + i)));
 }
 
 /*
@@ -390,9 +391,9 @@ static void rotate_wide(uint8_t i, uint16_t xa, uint16_t out)
     uint8_t t, v;
 
     cyc(186);
-    t = rd8(0x0096FE + i);
+    t = rd8(ASSET_sin_cos_0096FE + i);
     wr8(0x0005F6, t);
-    t = rd8(0x00973E + i);
+    t = rd8(ASSET_sin_cos_00973E + i);
     cyc(0x3E + i > 0xFF ? 62 : 56);     /* LDA abs,X (6 more over a page), STA */
     wr8(0x0005F7, t);
     mul_at(xa, 0x05F6);

@@ -9,6 +9,7 @@
 #include "machine.h"
 #include "hw.h"
 #include "cpu_ops.h"
+#include "assets.h"
 
 uint16_t MenuActorAnimateFrame(uint8_t bank, uint16_t *x, uint8_t *p);
 int MenuSelectConfirm(uint8_t bank, uint16_t *x, uint16_t *y, uint8_t *p);
@@ -496,13 +497,13 @@ void abi_MenuSelectionFramesCycle(void)
     cyc(60);
     wr16((uint16_t)(obj + 0x22), n);
     cyc(100);
-    off = rd16(0x0BDFCB + (uint32_t)(n << 1));
+    off = rd16(ASSET_MenuSelectionFramesCycle_0BDFCB + (uint32_t)(n << 1));
     wr16(b | 0x11DF, off);
     cyc(32);
     sel = (uint16_t)(rd16(0x0018CB) << 1);
     cpu.x = sel;
     cyc(114);
-    cpu.a = rd16(0x0BDFD3 + (uint32_t)sel);
+    cpu.a = rd16((ASSET_MenuSelectionFramesCycle_0BDFCB + 0x8) + (uint32_t)sel);
     off = rd16(b | 0x11DF);
     cpu.p &= (uint8_t)~P_C;
     cpu.a = op_adc16(cpu.a, off, &cpu.p);

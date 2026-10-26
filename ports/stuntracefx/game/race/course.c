@@ -3,6 +3,7 @@
  */
 #include "machine.h"
 #include "cpu_ops.h"
+#include "assets.h"
 
 static uint32_t dbw(uint8_t bank, uint16_t a)
 {
@@ -1111,7 +1112,7 @@ void abi_CourseZoomTimeUp(void)
     cyc(24);
     cpu.x = rd16(b | 0x0D48);
     cyc(96);
-    a = (uint16_t)(rd16(0x03FB86 + cpu.x) & 0x00FF);
+    a = (uint16_t)(rd16(ASSET_CourseZoomTimeUp_03FB86 + cpu.x) & 0x00FF);
     cpu.a = a;
     cpu.p = nz16(cpu.p, a);
     wr16(b | 0x0E3D, a);
@@ -1783,7 +1784,7 @@ static void preview_rows(int all, uint16_t last)
         if (all)
             call_routine(0x07C673, 1);
         else
-            call_routine(0x07C663, 1);
+            call_routine(ASSET_preview_rows_07C663, 1);
         cyc(24);   /* PreviewRowDraw* state their tail */
         op_lda16(b | 0x0FA8);
         v = (uint16_t)(cpu.a + 1);
@@ -2089,7 +2090,7 @@ void abi_CourseRecordsDispatch(void)
     cpu.x = rd8(b | 0x0D43);
     cpu.p = nz8(cpu.p, (uint8_t)cpu.x);
     cyc(46);
-    switch (rd16(0x02E603 + cpu.x)) {
+    switch (rd16(ASSET_CourseRecordsDispatch_02E603 + cpu.x)) {
     case 0xE648: abi_CourseRecordsSelectStep(); cyc(0); break;
     case 0xE750: abi_CourseRecordsOpening(); break;
     case 0xE795: abi_CourseRecordsShown(); cyc(0); break;
@@ -2164,7 +2165,7 @@ void abi_CourseScreenStep(void)
     cpu.x = v;
     cpu.p = nz8(cpu.p, v);
     cyc(36);
-    switch (rd16(0x02E360 + cpu.x)) {
+    switch (rd16(ASSET_CourseScreenStep_02E360 + cpu.x)) {
     case 0xE3F6:
         op_sep(P_M | P_X);
         screen_state(b, 0xE3FE);

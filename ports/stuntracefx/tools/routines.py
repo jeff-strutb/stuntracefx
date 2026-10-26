@@ -115,8 +115,13 @@ def main(argv):
            '#include <stdint.h>', '#include "routines.h"']
     out += ['void abi_%s(void);' % n for n in names]
     out.append('const PortRoutine port_routines[] = {')
+    def cache_first(a):
+        # a Super FX program whose first instruction is CACHE ($02): the
+        # runtime times it from this, not from the code's bytes
+        bank, lo = a >> 16, a & 0xFFFF
+        return int(bank < 0x40 and rom[(bank & 0x3F) << 15 | (lo & 0x7FFF)] == 0x02)
     for a, n in sorted(set(rows)):
-        out.append('    {0x%06X, abi_%s, "%s"},' % (a, n, n))
+        out.append('    {0x%06X, abi_%s, "%s", %d},' % (a, n, n, cache_first(a)))
     out.append('};')
     out.append('const int port_routine_count = %d;' % len(set(rows)))
     srows = sorted(spc.items(), key=lambda kv: (kv[1][0], kv[0]))

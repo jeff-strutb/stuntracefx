@@ -9,6 +9,7 @@
 #include "machine.h"
 #include "native.h"
 #include "hw.h"
+#include "assets.h"
 
 /* The run expansion GradientExpandFirst and GradientExpandSecond share,
    from run table index x: each run byte n stores the colour word at the
@@ -18,7 +19,7 @@ static uint16_t expand_runs(uint8_t bank, uint16_t x, uint16_t *y)
 {
     for (;;) {
         cyc(198);
-        uint16_t n = (uint16_t)(rd16(0x1FB44E + x) & 0x00FF), colour, out;
+        uint16_t n = (uint16_t)(rd16(ASSET_expand_runs_1FB44E + x) & 0x00FF), colour, out;
 
         if (!n)
             { cyc(32); return x; }
@@ -123,14 +124,14 @@ void abi_GradientExpandSecond(void)
 uint16_t GradientBuildColours(uint16_t x, int *carry)
 {
     cyc(288);
-    uint8_t bank = rd8(0x03F6F3 + x);
-    uint16_t y = rd16(0x03F6F1 + x), second;
+    uint8_t bank = rd8((ASSET_GradientBuildColours_03F6F1 + 0x2) + x);
+    uint16_t y = rd16(ASSET_GradientBuildColours_03F6F1 + x), second;
     int i;
 
     wr16(0x0000F3, 0x0000);
     GradientExpandFirst(bank, &y, carry);
     cyc(176);
-    second = rd16(0x03F745 + x);
+    second = rd16(ASSET_GradientBuildColours_03F745 + x);
     if (second) {
         y = second;
         wr16(0x0000F3, 0x0400);
@@ -303,9 +304,9 @@ uint16_t GradientSetup(uint8_t bank)
     i = (uint16_t)(((uint16_t)(c << 1) + rd8(cyc_then(52, b | 0x0E3D))) & 0x00FF);
     /* the rest reads only ROM: 8 a byte read, and the code between */
     cyc(114);
-    blk = rd8(0x03F6F3 + i);
+    blk = rd8((ASSET_GradientBuildColours_03F6F1 + 0x2) + i);
     cyc(8 + 104);
-    src = rd16(0x03F6F1 + i);
+    src = rd16(ASSET_GradientBuildColours_03F6F1 + i);
     cyc(16 + 90);
     for (k = 0; k < 0x20; k++) {
         rd8((uint32_t)blk << 16 | (uint16_t)(src + k));
@@ -313,7 +314,7 @@ uint16_t GradientSetup(uint8_t bank)
     }
     a = (uint16_t)(src & 0xFF00);
     for (k = 0; k < 0x20; k++) {
-        a = (uint16_t)((a & 0xFF00) | rd8(0x1FA800 + k));
+        a = (uint16_t)((a & 0xFF00) | rd8(ASSET_GradientSetup_1FA800 + k));
         cyc(8 + (k < 0x1F ? 92 : 124));
     }
     return a;

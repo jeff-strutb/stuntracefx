@@ -6,6 +6,7 @@
 #include "native.h"
 #include "cpu_ops.h"
 #include "hw.h"
+#include "assets.h"
 
 uint8_t GsuCF42To3000(uint16_t in68, uint16_t in6a);
 
@@ -528,9 +529,9 @@ uint16_t MenuCourseGraphics(uint8_t bank)
     cyc(4);
     uint16_t a, x;
 
-    course_picture(bank, 0x03F4F9, &a, &x);
+    course_picture(bank, ASSET_MenuCourseGraphics_03F4F9, &a, &x);
     picture_to_vram(bank, a, x, 0x4C00, 0x1800, 1);
-    course_picture(bank, 0x03F5A1, &a, &x);
+    course_picture(bank, ASSET_MenuCourseGraphics_03F5A1, &a, &x);
     picture_to_vram(bank, a, x, 0x3C00, 0x2000, 1);
     picture_to_vram(bank, 0xFB84, 0x0017, 0x1680, 0x0600, 1);
     picture_to_vram(bank, 0, 0, 0x3680, 0x0600, 0);
@@ -588,7 +589,7 @@ static uint16_t cross_fade(uint8_t bank, uint16_t n, uint16_t *factor)
     uint16_t x = 0x0080, y = 0x003F;
 
     cyc(114);
-    wr16(b | 0x11DF, rd16(0x0BCFE5 + (uint16_t)(n & 0xFFFE)));
+    wr16(b | 0x11DF, rd16(ASSET_cross_fade_0BCFE5 + (uint16_t)(n & 0xFFFE)));
     cyc(110);
     MenuPaletteScale(bank, &x, &y);
     cyc(24);
@@ -856,7 +857,7 @@ void MenuScreenOpen0(void)
     cyc(48);
     ppu_wr16(VMADDL, 0x4000);
     for (x = 0; x != 0x0720; x = (uint16_t)(x + 2))
-        { cyc(96); ppu_wr16(VMDATAL, rd16(0x1CDC8C + x)); cyc(50); }
+        { cyc(96); ppu_wr16(VMDATAL, rd16(ASSET_MenuScreenOpen0_1CDC8C + x)); cyc(50); }
     cyc(64);
     wr16(0x00162D, 0x0000);
     cyc(24);
@@ -1013,7 +1014,7 @@ void MenuScreenOpen6(void)
     cyc(70);
     ppu_wr16(VMADDL, 0x7000);
     for (x = 0; x != 0x0040; x = (uint16_t)(x + 2))
-        { cyc(96); ppu_wr16(VMDATAL, rd16(0x1CBE58 + x)); cyc(50); }
+        { cyc(96); ppu_wr16(VMDATAL, rd16(ASSET_MenuScreenOpen6_1CBE58 + x)); cyc(50); }
     cyc(18);
     menu_picture(0x0000, 0xBABC);
     menu_picture(0x6000, 0xBE58);
@@ -1305,9 +1306,9 @@ void abi_ChampionScreenOpen(void)
     cyc(0);
     cpu.x = x;
     cpu.p = (uint8_t)((cpu.p & ~P_N) | P_Z | P_C);
-    champion_picture(0x4000, 0x18C76E, 0xC770, 0x0018);
-    champion_picture(0x2000, 0x18998A, 0x998C, 0x0018);
-    champion_picture(0x0000, 0x1C989A, 0x989C, 0x001C);
+    champion_picture(0x4000, ASSET_ChampionScreenOpen_18C76E, 0xC770, 0x0018);
+    champion_picture(0x2000, ASSET_ChampionScreenOpen_18998A, 0x998C, 0x0018);
+    champion_picture(0x0000, ASSET_ChampionScreenOpen_1C989A, 0x989C, 0x001C);
     cpu.p &= (uint8_t)~(P_M | P_X);
     cpu.a = 0xE87B;
     cpu.x = 0x0004;
@@ -1324,14 +1325,14 @@ void abi_ChampionScreenOpen(void)
     yo = 0x0003;
     for (;;) {
         cyc(190);
-        cpu.a = rd16(0x0BED9F + x);
+        cpu.a = rd16(ASSET_ChampionScreenOpen_0BED9F + x);
         wr16(0x0011E1, cpu.a);
         cyc(72);
-        cpu.a = rd16(0x0BEDA1 + x);
+        cpu.a = rd16((ASSET_ChampionScreenOpen_0BED9F + 0x2) + x);
         wr16(0x0011E3, cpu.a);
         sx = x;
         cyc(174);
-        cpu.a = rd16(0x0BEDD7 + (uint16_t)(yo << 1));
+        cpu.a = rd16((ASSET_ChampionScreenOpen_0BEDCF + 0x8) + (uint16_t)(yo << 1));
         wr16(0x0011E5, cpu.a);
         cyc(48);
         for (y2 = 0x0004;; y2--) {
@@ -1357,7 +1358,7 @@ void abi_ChampionScreenOpen(void)
                 break;
         }
         cyc(254);
-        x2 = rd16(0x0BEDCF + (uint16_t)(yo << 1));
+        x2 = rd16(ASSET_ChampionScreenOpen_0BEDCF + (uint16_t)(yo << 1));
         a = rd16(0x0011E1);
         cyc(24);
         a |= rd16(0x0011E3);
@@ -1390,7 +1391,7 @@ void abi_ChampionScreenOpen(void)
     cpu.p = (uint8_t)((cpu.p & ~P_C) | (a >> 15));
     a = (uint16_t)(a << 1);
     cyc(124);
-    cpu.a = rd16(0x0BEDDF + a);
+    cpu.a = rd16(ASSET_ChampionScreenOpen_0BEDDF + a);
     wr16(0x0011DF, cpu.a);
     cpu.x = 0x0628;
     cpu.p = nz16(cpu.p, 0x0628);

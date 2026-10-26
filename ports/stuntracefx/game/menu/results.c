@@ -9,6 +9,7 @@
  */
 #include "machine.h"
 #include "cpu_ops.h"
+#include "assets.h"
 
 void abi_MenuWaitThenAnimate(void);
 void abi_MenuActorCopyGroup(void);
@@ -315,7 +316,7 @@ void abi_ResultsPlaceCar(void)
 
     byte_of(0x000FAC);
     op_cmp16(rd16(cyc_then(40, fld(0x22))));
-    table = (cpu.p & P_Z) ? (cyc(12), 0x0BDA17) : (cyc(18), 0x0BDA0F);
+    table = (cpu.p & P_Z) ? (cyc(12), (ASSET_ResultsPlaceCar_0BDA0F + 0x8)) : (cyc(18), ASSET_ResultsPlaceCar_0BDA0F);
     (cyc(50), abi_ResultsCarIndex());
     cyc(32);
     op_lda16(0x70FC6F + (uint32_t)cpu.x);
@@ -393,7 +394,7 @@ void abi_ResultsLeaderBlink(void)
     op_asl16();
     op_tax16();
     cyc(70);
-    op_lda16(0x0BDA86 + (uint32_t)cpu.x);
+    op_lda16(ASSET_ResultsLeaderBlink_0BDA86 + (uint32_t)cpu.x);
     wr16(abs_db(0x11DF), cpu.a);
     cpu.x = rd16(cyc_then(24, abs_db(0x11F9)));
     cpu.p = nz16(cpu.p, cpu.x);
@@ -682,7 +683,7 @@ void abi_ResultsLetterTiles(void)
     op_asl16();
     op_tax16();
     cyc(100);
-    op_lda16(0x0BDDD3 + (uint32_t)cpu.x);
+    op_lda16(ASSET_ResultsLetterTiles_0BDDD3 + (uint32_t)cpu.x);
     wr16(abs_db(0x11E3), cpu.a);
     tall_tile(0x11E5);
     cpu.x = x;

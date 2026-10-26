@@ -6,6 +6,7 @@
  */
 #include "machine.h"
 #include "wram.h"
+#include "assets.h"
 
 /*
  * @routine 07:AA6E OamTextLine
@@ -26,7 +27,7 @@ void OamTextLine(uint8_t bank, uint16_t *xp, uint16_t *yp, uint16_t *ap)
     cyc(60);
     uint16_t y = (uint16_t)((rd16(0x0000F2) & 0xFF) << 2);
     cyc(90);
-    uint16_t x = rd16(cyc_then(190, 0x078000 + ((rd16(b | 0x0E3D) << 1) & 0x00FF)));
+    uint16_t x = rd16(cyc_then(190, ASSET_OamTextLine_078000 + ((rd16(b | 0x0E3D) << 1) & 0x00FF)));
     uint8_t c, pen, attr = 0;
 
     *ap = x;

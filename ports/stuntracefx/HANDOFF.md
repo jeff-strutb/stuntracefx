@@ -35,13 +35,14 @@ pushed.
 
 | command | what it holds |
 |---|---|
-| `python3 ports/stuntracefx/tools/same.py` | every play from power-on, the port against the reference port (a3f26e3, built once into build/stuntracefx/port/ref): shots, dumps, the pacing record, byte for byte. About 2 minutes. |
+| `python3 ports/stuntracefx/tools/same.py` | every play from power-on, the port against the reference port (REF in same.py, built once into build/stuntracefx/port/ref-REF): shots, dumps, the pacing record, byte for byte. About 2 minutes. |
 | `PORT_AUDIT=1` (headless) | names any rd8/wr8 that reaches a register |
 | `PORT_VIDCHECK=1` | each frame drawn from its record (video.h VidFrame) against the picture drawn a line at a time (drawn only under this check) |
 | `PORT_FXCHECK=1` | the game's fill lifted to C (game/render/draw_list.c) against the Super FX's plots, every draw list; also counts pixels plotted outside the lists |
 | `PORT_GPUCHECK=1` with `RENDER=metal\|gl\|vulkan HOST=null` | the GPU compositor's frame, read back, against vid_draw_frame |
 | `PORT_FXGPUCHECK=1` (a GPU RENDER, HOST=null) | the 3D canvas filled on the GPU (render/fill) against draw_list.c's fill: random spans of every kind and layout, then every draw list |
 | `PORT_CANVASCHECK=1` (`PORT_CANVASDUMP=N`) | the Super FX screen as operations (runtime/canvas.c) against every byte the S-CPU uploads of it to VRAM, at the moment it is uploaded |
+| `PORT_ROMCENSUS=FILE PORT_ROMCENSUS_ROM=ROM` | each ROM byte a run reads, who read it and the C function; `tools/assetmap.py CENSUS...` (numpy) remakes `assets.csv` from these and the decomp's traces |
 | `PORT_RRCHECK=N` (windowed) | the presented frame at frame N (composed on the GPU) against the record's picture drawn on the CPU and scaled by the reference |
 | `ports/common/render/check/check.sh` | each backend's sharp bilinear against the reference |
 | `ports/common/audio/check/mix_replay LOG SOUND` (VOX=) | the native mixer fed bsnes's DSP inputs, against bsnes's samples |
@@ -62,6 +63,15 @@ check above covers 21 plays.
 
 - `ports/stuntracefx/game`: the port's own copy of the decomp, built by
   link.sh (GAME= selects another tree).
+- No ROM image is built in: the build extracts the game's data as named
+  assets (`assets.csv`: 2,046 assets, 862,346 bytes; `tools/assets.py`
+  writes gen/assets.S, assets.c and assets.h) and leaves out the 186,230
+  bytes of code the C stands for. runtime/cart.c serves the cartridge's
+  addresses from the assets; a read of a byte no asset holds stops the
+  port. The game's C names the tables it addresses (`ASSET_name`). The
+  Super FX's ROM-buffer fill may land on code: it is only an error if a
+  GETB or GETC reads it; whether a program starts with CACHE comes from
+  routines.py, not from the code's bytes.
 - Every console register access in the game is an explicit call
   (game/include/native.h): the multiply units are C arithmetic; joypads
   through input_pad; the picture through ppu_wr/vid_reg; DMA through

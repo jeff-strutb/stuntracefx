@@ -44,12 +44,29 @@ extern "C" {
 #define SNES_HEIGHT        224
 
 /* ---- the cartridge and power ----------------------------------------------------- */
+/* The ROM is not one image: the port's runtime holds its data as named
+   blocks and answers for each ROM offset. rom_pages[off >> 8] points at
+   the 256 bytes of that page where one block holds them all; else it is
+   NULL and rom_read answers (a page split between blocks, or holding code,
+   which no block has). `who` says which part reads (SNES_ROM_*). */
+enum { SNES_ROM_CPU = 1, SNES_ROM_DMA = 2, SNES_ROM_PEEK = 4, SNES_ROM_GSU = 8,
+       /* with SNES_ROM_GSU: the ROM buffer's fill, a byte the program may
+          never use: one no block holds reads 0 and sets snes_rom_unheld */
+       SNES_ROM_FETCH = 16 };
+extern int snes_rom_unheld;
 typedef struct SnesCart {
-    const uint8_t *rom;
+    const uint8_t *const *rom_pages;
+    uint8_t (*rom_read)(uint32_t off, int who);
     uint32_t rom_size;
     int superfx;             /* a Super FX cartridge (LoROM, RAM at $70-$71) */
     uint32_t sfx_ram_size;   /* its RAM: 32 or 64 KB */
 } SnesCart;
+
+static inline uint8_t snes_rom_byte(const SnesCart *c, uint32_t off, int who)
+{
+    const uint8_t *p = c->rom_pages[off >> 8];
+    return p ? p[off & 0xFF] : c->rom_read(off, who);
+}
 
 /* Power on: everything cleared as the console starts. */
 void snes_power(const SnesCart *cart);
@@ -119,6 +136,9 @@ const uint8_t *snes_aram(void);
 /* The Super FX starts a program at bank:addr (the S-CPU wrote R15): the
    runtime runs its C, which returns at the program's STOP. */
 extern void (*snes_gsu_run_hook)(uint8_t bank, uint16_t addr);
+/* Whether the program at bank:addr starts with CACHE (its timing: the
+   cache is set after the next fetch); the runtime knows its programs. */
+extern int (*snes_gsu_cache_first_hook)(uint8_t bank, uint16_t addr);
 
 /* ---- for the runtime -------------------------------------------------------------- */
 /* A fatal error in the port (not in the game): reported, then exit. */

@@ -10,6 +10,7 @@
  */
 #include "machine.h"
 #include "cpu_ops.h"
+#include "assets.h"
 
 void abi_ObjectSpawn(void);
 void abi_ObjectCopyPositionTo(void);
@@ -1024,11 +1025,11 @@ void abi_ObjectChildrenSpawn(void)
             cyc(108);
             t = rd16(0x700012 + rec);
             cyc(86);
-            wr16(b | 0x1F4C, rd16(0x098000 + t));
+            wr16(b | 0x1F4C, rd16(ASSET_ObjectChildrenSpawn_098000 + t));
             cyc(72);
-            wr16(b | 0x1F52, rd16(0x098002 + t));
+            wr16(b | 0x1F52, rd16((ASSET_ObjectChildrenSpawn_098000 + 0x2) + t));
             cyc(72);
-            op_lda16(0x098004 + t);
+            op_lda16((ASSET_ObjectChildrenSpawn_098000 + 0x4) + t);
             wr16(b | 0x1F4E, cpu.a);
             cpu.x = rec;
             cyc(104);
@@ -2312,10 +2313,10 @@ void abi_ObjectAttachSpawn(void)
     op_tax16();
     cpu.p |= P_M;
     cyc(38);
-    op_lda8(0x098090 + cpu.x);
+    op_lda8(ASSET_ObjectAttachSpawn_098090 + cpu.x);
     n = (uint8_t)cpu.a;
     if (n) {
-        cyc(80 + rom_n(0x098090 + cpu.x, 8));
+        cyc(80 + rom_n(ASSET_ObjectAttachSpawn_098090 + cpu.x, 8));
         cpu.x++;
         for (;;) {
             if ((made = spawn(0xA040))) {
@@ -2325,19 +2326,19 @@ void abi_ObjectAttachSpawn(void)
                 op_lda16(b | 0x1F4C);
                 cyc(30);
                 wr16(b | (uint16_t)(0x2006 + cpu.y), cpu.a);
-                cyc(32 + rom_n(0x098090 + i, 16));
-                t = rd16(0x098090 + i);
+                cyc(32 + rom_n(ASSET_ObjectAttachSpawn_098090 + i, 16));
+                t = rd16(ASSET_ObjectAttachSpawn_098090 + i);
                 cyc(92);
-                wr16(b | (uint16_t)(0x2004 + cpu.y), rd16(0x098000 + t));
+                wr16(b | (uint16_t)(0x2004 + cpu.y), rd16(ASSET_ObjectChildrenSpawn_098000 + t));
                 cyc(72);
-                wr16(b | 0x1F50, rd16(0x098002 + t));
+                wr16(b | 0x1F50, rd16((ASSET_ObjectChildrenSpawn_098000 + 0x2) + t));
                 cyc(72);
-                wr16(b | 0x1F52, rd16(0x098004 + t));
+                wr16(b | 0x1F52, rd16((ASSET_ObjectChildrenSpawn_098000 + 0x4) + t));
                 cyc(78);
-                wr16(b | (uint16_t)(0x201A + cpu.y), rd16(0x098006 + t));
+                wr16(b | (uint16_t)(0x201A + cpu.y), rd16((ASSET_ObjectChildrenSpawn_098000 + 0x6) + t));
                 cpu.p |= P_M;
                 cyc(92);
-                op_lda8(0x098008 + t);
+                op_lda8((ASSET_ObjectChildrenSpawn_098000 + 0x8) + t);
                 wr8(b | (uint16_t)(0x201C + cpu.y), (uint8_t)cpu.a);
                 cpu.x = i;
                 cyc(60);
@@ -2366,9 +2367,9 @@ void abi_ObjectAttachSpawn(void)
                 }
                 cyc(28);
                 cpu.p &= (uint8_t)~P_M;
-                wr16(b | (uint16_t)(0x202E + cpu.y), cyc_then(100 + rom_n(0x098092 + cpu.x, 16), sext_word(0x098092 + cpu.x, 48)));
-                wr16(b | (uint16_t)(0x2030 + cpu.y), cyc_then(100, sext_word(0x098093 + cpu.x, 32 + rom_n(0x098093 + cpu.x, 16))));
-                wr16(b | (uint16_t)(0x2032 + cpu.y), cyc_then(100, sext_word(0x098094 + cpu.x, 32 + rom_n(0x098094 + cpu.x, 16))));
+                wr16(b | (uint16_t)(0x202E + cpu.y), cyc_then(100 + rom_n((ASSET_ObjectAttachSpawn_098090 + 0x2) + cpu.x, 16), sext_word((ASSET_ObjectAttachSpawn_098090 + 0x2) + cpu.x, 48)));
+                wr16(b | (uint16_t)(0x2030 + cpu.y), cyc_then(100, sext_word((ASSET_ObjectAttachSpawn_098090 + 0x3) + cpu.x, 32 + rom_n((ASSET_ObjectAttachSpawn_098090 + 0x3) + cpu.x, 16))));
+                wr16(b | (uint16_t)(0x2032 + cpu.y), cyc_then(100, sext_word((ASSET_ObjectAttachSpawn_098090 + 0x4) + cpu.x, 32 + rom_n((ASSET_ObjectAttachSpawn_098090 + 0x4) + cpu.x, 16))));
                 cpu.p |= P_M;
             } else { cyc(26); }
             cyc(86);
@@ -3992,10 +3993,10 @@ void abi_CameraPointFromTable(void)
             op_tax16();
             cpu.p |= P_M;
             cyc(70);
-            op_lda8(0x098090 + cpu.x);
+            op_lda8(ASSET_ObjectAttachSpawn_098090 + cpu.x);
             wr8(b | 0x1F2B, (uint8_t)cpu.a);
             cyc(64);
-            op_lda8(0x098091 + cpu.x);
+            op_lda8((ASSET_ObjectAttachSpawn_098090 + 0x1) + cpu.x);
             wr8(b | 0x1F2D, (uint8_t)cpu.a);
             cpu.x = obj;
             cyc(66);
@@ -4064,14 +4065,14 @@ store:
     }
     x = (uint16_t)(x + 2);
     cyc(120);
-    op_lda16(0x098090 + x);
+    op_lda16(ASSET_ObjectAttachSpawn_098090 + x);
     wr16(b | cpu.y, cpu.a);
     cyc(64);
-    wr16(0x000002, rd16(0x098092 + x));
+    wr16(0x000002, rd16((ASSET_ObjectAttachSpawn_098090 + 0x2) + x));
     cyc(64);
-    wr16(0x000008, rd16(0x098094 + x));
+    wr16(0x000008, rd16((ASSET_ObjectAttachSpawn_098090 + 0x4) + x));
     cyc(64);
-    op_lda16(0x098096 + x);
+    op_lda16((ASSET_ObjectAttachSpawn_098090 + 0x6) + x);
     wr16(0x000094, cpu.a);
     /* PHX, TYX, PLY: X = the point, Y = the object. */
     cpu.x = pt;

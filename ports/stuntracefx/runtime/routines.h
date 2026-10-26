@@ -11,6 +11,7 @@ typedef struct {
     uint32_t addr;
     void (*abi)(void);
     const char *name;
+    uint8_t cache_first;     /* a Super FX program that starts with CACHE */
 } PortRoutine;
 
 /* sorted by address */

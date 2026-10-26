@@ -31,6 +31,7 @@ void wr8(uint32_t addr, uint8_t value);
 
 uint64_t snes_clock;
 uint8_t snes_mdr;
+int snes_rom_unheld;
 const SnesCart *snes_cart;
 static SnesCart s_cart;
 
@@ -474,7 +475,7 @@ static uint8_t bus_read(uint32_t addr, unsigned *cost, int kind)
         if (off >= 0x8000) {
             if ((bank & 0x80) && (memsel & 1))
                 *cost = 6;
-            return s_cart.rom[rom_lo(bank, off)];
+            return snes_rom_byte(&s_cart, rom_lo(bank, off), kind ? SNES_ROM_DMA : SNES_ROM_CPU);
         }
         if (off >= 0x6000) {
             if (s_cart.superfx)
@@ -502,7 +503,7 @@ static uint8_t bus_read(uint32_t addr, unsigned *cost, int kind)
     }
     bank &= 0x7F;
     if (bank < 0x60)
-        return s_cart.rom[rom_hi(bank, off)];
+        return snes_rom_byte(&s_cart, rom_hi(bank, off), kind ? SNES_ROM_DMA : SNES_ROM_CPU);
     if ((bank == 0x70 || bank == 0x71) && s_cart.superfx)
         return *sfx_ram_at((uint32_t)(bank & 1) << 16 | off);
     return snes_mdr;
@@ -580,11 +581,11 @@ uint8_t snes_peek(uint32_t addr)
         if (off < 0x2000)
             return wram[off];
         if (off >= 0x8000)
-            return s_cart.rom[rom_lo(bank, off)];
+            return snes_rom_byte(&s_cart, rom_lo(bank, off), SNES_ROM_PEEK);
         return 0;
     }
     if ((bank & 0x7F) < 0x60)
-        return s_cart.rom[rom_hi(bank & 0x7F, off)];
+        return snes_rom_byte(&s_cart, rom_hi(bank & 0x7F, off), SNES_ROM_PEEK);
     return 0;
 }
 

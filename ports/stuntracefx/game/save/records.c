@@ -4,6 +4,7 @@
  */
 #include "machine.h"
 #include "cpu_ops.h"
+#include "assets.h"
 
 /* Sum five bytes from `base` + X with 8-bit adds; X steps past them. */
 static uint8_t sum5(uint32_t base, uint8_t *x, uint8_t *p)
@@ -2487,7 +2488,7 @@ static void records_char_offset(uint32_t row_table, uint32_t char_table)
  */
 void abi_RecordsCharOffsetStunt(void)
 {
-    records_char_offset(0x07D8D4, 0x07D8DC);
+    records_char_offset(ASSET_RecordsCharOffsetStunt_07D8D4, (ASSET_RecordsCharOffsetStunt_07D8D4 + 0x8));
 }
 
 /*
@@ -2499,7 +2500,7 @@ void abi_RecordsCharOffsetStunt(void)
  */
 void abi_RecordsCharOffsetAll(void)
 {
-    records_char_offset(0x07D8E3, 0x07D8EB);
+    records_char_offset((ASSET_RecordsCharOffsetStunt_07D8D4 + 0xF), ASSET_RecordsCharOffsetAll_07D8EB);
 }
 
 /*
@@ -2676,7 +2677,7 @@ void abi_RecordsCharTileStunt(void)
         cyc(50);
         break;
     default:
-        jump_routine(0x070000 | rd16(0x07D79D + cpu.x));
+        jump_routine(0x070000 | rd16(ASSET_RecordsCharTileStunt_07D79D + cpu.x));
         break;
     }
 }
@@ -2759,7 +2760,7 @@ void abi_RecordsCharTileAll(void)
         letter = 1;
         break;
     default:
-        jump_routine(0x070000 | rd16(0x07D807 + cpu.x));
+        jump_routine(0x070000 | rd16(ASSET_RecordsCharTileAll_07D807 + cpu.x));
         letter = 1;
         break;
     }

@@ -12,6 +12,7 @@
 #include "native.h"
 #include "hw.h"
 #include "cpu_ops.h"
+#include "assets.h"
 
 #define CRASH_COLOUR 0x1A2Eu
 #define CRASH_CODE 0x000717u
@@ -110,7 +111,7 @@ static void crash_body(uint8_t bank, uint16_t code)
             cpu.x = 0x812E;
             cpu.y = 0x0000;
             cpu.p = (uint8_t)((cpu.p & (P_V | P_D)) | P_I | P_Z | P_C);
-            cpu_loop_forever(0x00812C);
+            cpu_loop_forever(ASSET_crash_body_00812C);
         }
         cyc(54);
         step = (uint16_t)((uint16_t)(a - rd16(CRASH_SCROLL)) >> 3);

@@ -6,7 +6,7 @@
 While the console's parts are replaced, each step that only moves code
 behind a new interface must leave the port's run exactly as it was. The
 reference is the port as of REF (built once, from that commit, into
-build/stuntracefx/port/ref); the port is build/stuntracefx/port/null. Each
+build/stuntracefx/port/ref-REF); the port is build/stuntracefx/port/null. Each
 script (default: every play in tools/stuntracefx/plays, without its save
 and load lines, a shot and a dump added at its end) runs on both from
 power-on with --pacing; every shot, dump and the pacing record must be the
@@ -17,9 +17,9 @@ import concurrent.futures, filecmp, glob, os, shutil, subprocess, sys, tarfile, 
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 B = os.path.join(ROOT, 'build', 'stuntracefx', 'port')
-REF = 'a3f26e3'
+REF = '0ebd2401'
 ROM = os.path.join(ROOT, 'reference', 'stuntracefx', 'Stunt Race FX (USA) (Rev 1).sfc')
-REF_EXE = os.path.join(B, 'ref', 'stuntracefx')
+REF_EXE = os.path.join(B, 'ref-' + REF, 'stuntracefx')
 PORT_EXE = os.path.join(B, 'null', 'stuntracefx')
 WORK = os.path.join(B, 'same')
 

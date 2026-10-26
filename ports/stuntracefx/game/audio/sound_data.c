@@ -6,6 +6,7 @@
 #include "machine.h"
 #include "native.h"
 #include "cpu_ops.h"
+#include "assets.h"
 
 uint8_t GsuRun(uint8_t bank, uint16_t start);
 void ApuUpload(uint8_t bank, uint16_t addr);
@@ -353,7 +354,7 @@ void abi_CourseSoundLoad(void)
         delay_4000();
         for (x = 0x0000; x < 0x1518; x = (uint16_t)(x + 2)) {
             cyc(150);
-            cpu.a = rd16(0x1E9B2C + x);
+            cpu.a = rd16(ASSET_CourseSoundLoad_1E9B2C + x);
             wr16(0x706000 + x, cpu.a);
             cyc(4);
         }
@@ -392,8 +393,8 @@ void abi_CourseSoundLoad(void)
     cpu.p = nz16(cpu.p, x);
     (cyc(152), abi_ApuPort1Send05());
     cyc(196);
-    cpu.y = (uint16_t)(rd16(0x04D324 + x) & 0x00FF);
-    cpu.a = rd16(0x04D322 + x);
+    cpu.y = (uint16_t)(rd16((ASSET_CourseSoundLoad_04D322 + 0x2) + x) & 0x00FF);
+    cpu.a = rd16(ASSET_CourseSoundLoad_04D322 + x);
     cpu.p = nz16(cpu.p, cpu.a);
     abi_SoundDataLoad();
     cpu.p &= (uint8_t)~(P_M | P_X);

@@ -8,6 +8,7 @@
  * $70:FC0B has bit 2 set (for player 1 also when the mode $18C3 is 3).
  */
 #include "machine.h"
+#include "assets.h"
 
 void SoundPort0QueuePush(uint8_t command);
 void MenuSet1A66(uint8_t bank, uint16_t i);
@@ -459,7 +460,7 @@ uint16_t MenuSettingsShow(uint8_t bank, uint16_t *x, uint16_t *y, uint8_t *p)
     cyc(60);
     v = rd16(SETTINGS + i);
     wr16(dbw(bank, 0x11DF), cyc_then(24, v));
-    wr16(dbw(bank, 0x11E3), rd16(cyc_then(72, 0x0BC15E + i)));
+    wr16(dbw(bank, 0x11E3), rd16(cyc_then(72, ASSET_MenuChoiceAnimations_0BC15E + i)));
     a = rd16(cyc_then(24, dbw(bank, 0x11DF)));
     cyc(64);
     *p = cmp16(*p, a, 0x0000);

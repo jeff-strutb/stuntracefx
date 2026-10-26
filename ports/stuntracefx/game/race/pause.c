@@ -8,6 +8,7 @@
  */
 #include "machine.h"
 #include "cpu_ops.h"
+#include "assets.h"
 
 void abi_SoundPort0QueuePush(void);
 void abi_SoundPort1QueuePush(void);
@@ -832,7 +833,7 @@ void abi_PauseReplayStages(void)
     cpu.x = rd8(((uint32_t)cpu.db << 16) | 0x0D2F);
     cpu.p = nz8(cpu.p, (uint8_t)cpu.x);
     cyc(46);
-    jump_routine(0x070000 | rd16(0x07BC24 + cpu.x));
+    jump_routine(0x070000 | rd16(ASSET_PauseReplayStages_07BC24 + cpu.x));
 }
 
 /*

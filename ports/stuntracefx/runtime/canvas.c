@@ -36,7 +36,7 @@
 #include "gsu.h"
 #include "draw_list.h"
 
-extern const uint8_t srfx_rom[], srfx_rom_end[];
+#include "cart.h"
 
 #define CANVASES 2
 
@@ -381,8 +381,8 @@ void fx_op_clear(void)
     if (check < 0) {
         check = getenv("PORT_CANVASCHECK") != NULL;
         if (check) {
-            src.rom = srfx_rom;
-            src.rom_size = (uint32_t)(srfx_rom_end - srfx_rom);
+            src.rom = cart_linear();
+            src.rom_size = port_rom_size;
             atexit(report);
         }
         if (check || gpu)

@@ -5,6 +5,7 @@
 #include "native.h"
 #include "hw.h"
 #include "cpu_ops.h"
+#include "assets.h"
 
 /*
  * @routine 03:ED89 TilemapRowFromGsuRam
@@ -660,7 +661,7 @@ uint16_t TilemapLevelColumns(void)
     uint32_t in = 140;                  /* PHP, PHB, PHK, PLB, REP, LDY # */
 
     for (i = 0; i < 12; i++) {
-        x = rd16(0x02FB6E + 2 * i);
+        x = rd16(ASSET_TilemapLevelColumns_02FB6E + 2 * i);
         cyc(in + 132);                  /* TYA, ASL, TAX, LDA abs,X (ROM), TAX, LDA abs,Y */
         n = rd8(0x020F05 + i);
         if (n > 4)
@@ -1371,7 +1372,7 @@ void abi_ChampionshipScreenStep(void)
         cpu.x = 0x01FE;
         do {
             cyc(104);
-            op_lda16(0x1F8600 + (uint32_t)cpu.x);
+            op_lda16(ASSET_ResultsChampionScreen_1F8600 + (uint32_t)cpu.x);
             wr16(0x7EFD65 + (uint32_t)cpu.x, cpu.a);
             cpu.x = (uint16_t)(cpu.x - 2);
             cpu.p = nz16(cpu.p, cpu.x);

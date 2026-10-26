@@ -7,6 +7,7 @@
 #include "machine.h"
 #include "cpu_ops.h"
 #include "wram.h"
+#include "assets.h"
 
 uint8_t GsuRun(uint8_t bank, uint16_t start);
 uint16_t GsuParam216A(uint8_t bank, uint16_t index);
@@ -492,7 +493,7 @@ static void bonus_x_from_table(uint32_t b, uint16_t step)
 {
     cpu.x = step;
     cyc(124);
-    cpu.a = (uint16_t)(0x008F - rd16(0x079806 + step));
+    cpu.a = (uint16_t)(0x008F - rd16(ASSET_GsuFA5AThreeShifted_079806 + step));
     wr16(b | 0x0D6D, cpu.a);
 }
 
@@ -696,7 +697,7 @@ void TimeBonusTally(void)
     state = rd16(b | 0x0D65);
     cpu.x = state;
     cyc(46);
-    switch (rd16(0x078E9F + state)) {
+    switch (rd16(ASSET_TimeBonusTally_078E9F + state)) {
     case 0x8ED1:                        /* 0: idle */
         return;
     case 0x8EB9:                        /* 2: start */
@@ -1111,7 +1112,7 @@ void TimeBonusTransfer(void)
     cpu.x = rd16(b | 0x0D67);
     cpu.p = nz16(cpu.p, cpu.x);
     cyc(46);
-    switch (rd16(0x078C43 + cpu.x)) {
+    switch (rd16(ASSET_TimeBonusTransfer_078C43 + cpu.x)) {
     case 0x8C4B:                        /* grow */
         lda16(b | 0x0D69);
         cyc(23);

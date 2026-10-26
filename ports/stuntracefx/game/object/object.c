@@ -7,6 +7,7 @@
  */
 #include "machine.h"
 #include "cpu_ops.h"
+#include "assets.h"
 
 /* A field of the object at offset `obj` in the data bank. */
 static uint32_t field(uint8_t bank, uint16_t obj, uint16_t off)
@@ -326,7 +327,7 @@ uint8_t ObjectTableE8AF(uint8_t bank, uint8_t a, uint16_t obj, uint8_t *p)
     a = add8(a, rd8(b | 0x1F4C), p);
     *p = (uint8_t)((*p & ~P_C) | (a & 0x04 ? P_C : 0));
     cyc(314);
-    return rd8(0x08E8AF + (a >> 3));
+    return rd8(ASSET_ObjectTableE8AF_08E8AF + (a >> 3));
 }
 
 void abi_ObjectTableE8AF(void)
@@ -353,7 +354,7 @@ uint8_t ObjectTableC056(uint8_t bank, uint16_t obj, uint8_t *p)
 
     *p = (uint8_t)((*p & ~(P_C | P_V)) | (d & 0x02 ? P_C : 0) | (((f ^ s) & (f ^ d) & 0x80) ? P_V : 0));
     cyc(188);
-    v = rd8(0x08C056 + (d >> 2));
+    v = rd8(ASSET_ObjectTableC056_08C056 + (d >> 2));
     wr8(b | 0x1F5A, v);
     cyc(136);
     return v;
@@ -2687,7 +2688,7 @@ void abi_ObjectMoveForward(void)
     cpu.x = cpu.a;
     cpu.p |= P_M;
     cyc(128);
-    v = rd8((uint32_t)(0x08B32B + cpu.x));
+    v = rd8((uint32_t)(ASSET_ObjectMoveForward_08B32B + cpu.x));
     cpu.x = x0;
     cpu.p = nz16(cpu.p, x0);
     wr8(dp8(0x08), v);

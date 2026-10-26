@@ -7,6 +7,7 @@
 #include "native.h"
 #include "hw.h"
 #include "cpu_ops.h"
+#include "assets.h"
 
 void CgramDma(uint16_t src, uint8_t colour, uint16_t size);
 
@@ -406,8 +407,8 @@ uint16_t PaletteCourseLoad(uint8_t bank, uint16_t *xo, uint16_t *yo, uint8_t *p)
     *p = (uint8_t)((*p & ~P_V) | ((~((uint16_t)(c << 1) ^ c) & ((uint16_t)(c << 1) ^ s) & 0x8000) ? P_V : 0));
     i = (uint16_t)(s & 0x00FF);
     cyc(208);
-    blk = rd8(0x03F64B + i);
-    y = rd16(0x03F649 + i);
+    blk = rd8((ASSET_PaletteCourseLoad_03F649 + 0x2) + i);
+    y = rd16(ASSET_PaletteCourseLoad_03F649 + i);
     for (x = 0x0020; x < 0x0200; x = (uint16_t)(x + 2)) {
         src = ((uint32_t)blk << 16) + 0x0020 + y;
         cyc(180);
@@ -420,18 +421,18 @@ uint16_t PaletteCourseLoad(uint8_t bank, uint16_t *xo, uint16_t *yo, uint8_t *p)
         y = (uint16_t)(y + 2);
     }
     cyc(330);
-    blk = rd8(0x03F69F + i);
-    y = rd16(0x03F69D + i);
+    blk = rd8((ASSET_PaletteCourseLoad_03F69D + 0x2) + i);
+    y = rd16(ASSET_PaletteCourseLoad_03F69D + i);
     for (x = 0x0020; x < 0x0200; x = (uint16_t)(x + 2)) {
         src = ((uint32_t)blk << 16) + 0x0020 + y;
         cyc(180);
         wr16(0x7F39D7 + x, rd16(src & 0xFFFFFF));
         y = (uint16_t)(y + 2);
     }
-    blk = rd8(0x03F6F3 + i);
-    PaletteLoad16(blk, cyc_then(462, rd16(0x03F6F1 + i)));
-    blk = rd8(0x03F747 + i);
-    PaletteCopy16To7F39D7(blk, cyc_then(314, rd16(0x03F745 + i)));
+    blk = rd8((ASSET_GradientBuildColours_03F6F1 + 0x2) + i);
+    PaletteLoad16(blk, cyc_then(462, rd16(ASSET_GradientBuildColours_03F6F1 + i)));
+    blk = rd8((ASSET_GradientBuildColours_03F745 + 0x2) + i);
+    PaletteCopy16To7F39D7(blk, cyc_then(314, rd16(ASSET_GradientBuildColours_03F745 + i)));
     x = 0x01FE;
     cyc(24);
     for (;;) {
@@ -1151,7 +1152,7 @@ static uint16_t fade_part(uint32_t b, uint16_t m, uint16_t step)
     cyc(46);
     wr16(b | 0x1F2B, cpu.a);
     cyc(94);
-    op_lda16(0x02D65A + (uint32_t)cpu.x);
+    op_lda16(ASSET_WordCopyStep_02D65A + (uint32_t)cpu.x);
     op_and16(m);
     c = rd16(b | 0x1F2B);
     op_cmp16(c);

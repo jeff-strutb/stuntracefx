@@ -7,6 +7,7 @@
 #include "hw.h"
 #include "wram.h"
 #include "cpu_ops.h"
+#include "assets.h"
 
 /*
  * @routine 07:C4D2 OamHideRange
@@ -755,7 +756,7 @@ uint8_t OamPaletteFromTableE30F(uint8_t bank, uint16_t *y)
     cyc(68);
     *y = (uint16_t)(rd16(b | 0x0D79) << 2);
     cyc(66);
-    return cyc_then(72, OamSetPalette(bank, rd8(cyc_then(180, 0x04E30F + (rd16(b | 0x0D48) & 0x00FF))), 0x0016, y));
+    return cyc_then(72, OamSetPalette(bank, rd8(cyc_then(180, (ASSET_OamPalettesE28D_04E30B + 0x4) + (rd16(b | 0x0D48) & 0x00FF))), 0x0016, y));
 }
 
 void abi_OamPaletteFromTableE30F(void)
@@ -779,7 +780,7 @@ uint8_t OamPaletteFromTableE26A(uint8_t bank, uint16_t *y)
     *y = (uint16_t)((uint16_t)(rd16(b | 0x0D7B) + 0x0D) << 2);
     cyc(104);
     uint16_t n = rd16(b | 0x10D8);
-    uint8_t bits = n ? rd8(cyc_then(84, 0x04E26A + ((uint16_t)(n - 1) & 0x00FF))) : 0x0A;
+    uint8_t bits = n ? rd8(cyc_then(84, ASSET_OamPaletteFromTableE26A_04E26A + ((uint16_t)(n - 1) & 0x00FF))) : 0x0A;
 
     cyc(132);
     return cyc_then(72, OamSetPalette(bank, bits, 0x0016, y));
@@ -806,7 +807,7 @@ uint8_t OamPaletteFromTableE26AByMode(uint8_t bank, uint16_t *y)
     cyc(68);
     *y = (uint16_t)(rd16(b | 0x0D79) << 2);
     cyc(66);
-    return cyc_then(72, OamSetPalette(bank, rd8(cyc_then(180, 0x04E26A + (rd16(b | 0x0D48) & 0x00FF))), 0x0012, y));
+    return cyc_then(72, OamSetPalette(bank, rd8(cyc_then(180, ASSET_OamPaletteFromTableE26A_04E26A + (rd16(b | 0x0D48) & 0x00FF))), 0x0012, y));
 }
 
 void abi_OamPaletteFromTableE26AByMode(void)
@@ -832,15 +833,15 @@ uint8_t OamPalettesE28D(uint8_t bank, uint16_t *y)
     cyc(68);
     *y = (uint16_t)(rd16(b | 0x0D75) << 2);
     cyc(66);
-    OamSetPalette(bank, rd8(cyc_then(180, 0x04E30B + (rd16(b | 0x0D48) & 0x00FF))), 0x0012, y);
+    OamSetPalette(bank, rd8(cyc_then(180, ASSET_OamPalettesE28D_04E30B + (rd16(b | 0x0D48) & 0x00FF))), 0x0012, y);
     cyc(46);
     *y = (uint16_t)((uint16_t)(rd16(b | 0x0D75) + 0x16) << 2);
     cyc(104);
-    OamSetPalette(bank, rd8(cyc_then(180, 0x04E313 + (rd16(b | 0x0D89) & 0x00FF))), 0x0006, y);
+    OamSetPalette(bank, rd8(cyc_then(180, (ASSET_OamPalettesE28D_04E30B + 0x8) + (rd16(b | 0x0D89) & 0x00FF))), 0x0006, y);
     cyc(46);
     *y = (uint16_t)((uint16_t)(rd16(b | 0x0D75) + 0x1C) << 2);
     cyc(104);
-    return cyc_then(72, OamSetPalette(bank, rd8(cyc_then(180, 0x04E313 + (rd16(b | 0x0D8A) & 0x00FF))), 0x0006, y));
+    return cyc_then(72, OamSetPalette(bank, rd8(cyc_then(180, (ASSET_OamPalettesE28D_04E30B + 0x8) + (rd16(b | 0x0D8A) & 0x00FF))), 0x0006, y));
 }
 
 void abi_OamPalettesE28D(void)
@@ -1194,19 +1195,19 @@ static MetaspriteEnd metasprite_draw(uint8_t bank, uint16_t group, uint16_t slot
     unsigned s;
 
     cyc(176);
-    n16 = rd16(0x04EDCD + x);
+    n16 = rd16((ASSET_metasprite_draw_04EDCB + 0x2) + x);
     wr16(0x0000F1, n16);
     cyc(62);
-    x = rd16(0x04EDCB + x);
+    x = rd16(ASSET_metasprite_draw_04EDCB + x);
     hi = (uint16_t)(x & 0xFF00);
     do {
         cyc(100);
-        v = rd8(0x04EE4B + x);
+        v = rd8(ASSET_metasprite_draw_04EE4B + x);
         o = rd8(b | 0x0D3B);
         cyc(30);
         wr8(b | (uint16_t)(0x0375 + y), (uint8_t)(v + o));
         cyc(78);
-        v = rd8(0x04EE4C + x);
+        v = rd8((ASSET_metasprite_draw_04EE4B + 0x1) + x);
         o = rd8(b | 0x0D3C);
         s = (unsigned)v + o;
         p = (uint8_t)(p & ~(P_C | P_V));
@@ -1217,13 +1218,13 @@ static MetaspriteEnd metasprite_draw(uint8_t bank, uint16_t group, uint16_t slot
         cyc(30);
         wr8(b | (uint16_t)(0x0376 + y), (uint8_t)s);
         cyc(70);
-        v = rd8(0x04EE4D + x);
+        v = rd8((ASSET_metasprite_draw_04EE4B + 0x2) + x);
         wr8(b | (uint16_t)(0x0377 + y), v);
         cyc(70);
-        v = rd8(0x04EE4E + x);
+        v = rd8((ASSET_metasprite_draw_04EE4B + 0x3) + x);
         wr8(b | (uint16_t)(0x0378 + y), v);
         cyc(6);
-        lo = rd8(0x04EE4F + x);
+        lo = rd8((ASSET_metasprite_draw_04EE4B + 0x4) + x);
         if (!(lo & 0x01)) {
             cyc(366);
             mask = rd16(b | (uint16_t)(0xFA8D + ((y >> 2) & 0x0003)));
@@ -1328,7 +1329,7 @@ static uint16_t flashing_metasprite_draw(uint8_t bank, uint16_t set, uint16_t *x
     cyc(48);
     i = (uint16_t)(rd16(b | 0x0D35) << 2);
     cyc(106);
-    wr16(0x0000F1, rd16(0x1CE5AE + i));
+    wr16(0x0000F1, rd16(ASSET_flashing_metasprite_draw_1CE5AE + i));
     *x = rd16(0x1CE5AC + i);
     *y = 0;
     i = (uint16_t)(*x & 0xFF00);
@@ -1337,21 +1338,21 @@ static uint16_t flashing_metasprite_draw(uint8_t bank, uint16_t set, uint16_t *x
        long, CLC, ADC abs (100) */
     cyc(162);
     do {
-        uint8_t v = rd8(0x1CE62C + *x);
+        uint8_t v = rd8(ASSET_flashing_metasprite_draw_1CE62C + *x);
 
         v = (uint8_t)(v + rd8(b | 0x0D37));
         cyc(30);                                /* STA abs,Y */
         wr8(b | (uint16_t)(0x0375 + *y), v);
         cyc(78);                                /* LDA long, CLC, ADC abs */
-        v = rd8(0x1CE62D + *x);
+        v = rd8((ASSET_flashing_metasprite_draw_1CE62C + 0x1) + *x);
         v = (uint8_t)(v + rd8(b | 0x0D38));
         cyc(30);
         wr8(b | (uint16_t)(0x0376 + *y), v);
         cyc(70);                                /* LDA long, STA abs,Y */
-        wr8(b | (uint16_t)(0x0377 + *y), rd8(0x1CE62E + *x));
+        wr8(b | (uint16_t)(0x0377 + *y), rd8((ASSET_flashing_metasprite_draw_1CE62C + 0x2) + *x));
         cyc(24);                                /* LDA abs */
         phase = rd8(b | 0x0D39);
-        a = rd8(0x1CE62F + *x);
+        a = rd8((ASSET_flashing_metasprite_draw_1CE62C + 0x3) + *x);
         /* CMP #, BCC (taken for phase 0, then LDA long, STA abs,Y: 108);
            else BEQ, LDA long, BIT #$08 and its ladder (bit 3: 76, bit 1:
            108, neither: 102) and STA abs,Y: 140 + it for phase 1, 134 + it
@@ -1361,7 +1362,7 @@ static uint16_t flashing_metasprite_draw(uint8_t bank, uint16_t set, uint16_t *x
         else
             cyc((phase == 1 ? 140 : 134) + ((a & 0x08) ? 76 : (a & 0x02) ? 108 : 102));
         wr8(b | (uint16_t)(0x0378 + *y), phase ? cycled_attr(a, phase) : a);
-        a = rd8(0x1CE630 + *x);
+        a = rd8((ASSET_flashing_metasprite_draw_1CE62C + 0x4) + *x);
         *x = (uint16_t)(*x + 5);
         *y = (uint16_t)(*y + 4);
         cyc(198);                               /* LDA long, BIT #, INX x5, INY x4, DEC's fetch */
@@ -1546,19 +1547,19 @@ uint8_t SpritePieces3(uint8_t bank, uint16_t *x, uint16_t *y, uint8_t *p, uint16
     unsigned t;
 
     cyc(24);
-    i = rd8(cyc_then(148, 0x07B981 + (rd16(b | 0x10BB) & 0x00FF)));
+    i = rd8(cyc_then(148, ASSET_SpritePieces3_07B981 + (rd16(b | 0x10BB) & 0x00FF)));
     i = (uint16_t)(i + rd16(b | 0x10C3));
     cyc(182);
     *x = *set = rd16(0x1CF09E + ((uint16_t)(i << 2) & 0x00FF));
     wr8(0x0000F1, 0x03);
     do {
         cyc(24);
-        wr8(b | (uint16_t)(0x0375 + *y), (uint8_t)(rd8(b | 0x10BD) + rd8(cyc_then(84, 0x1CF11E + *x))));
+        wr8(b | (uint16_t)(0x0375 + *y), (uint8_t)(rd8(b | 0x10BD) + rd8(cyc_then(84, ASSET_SpritePieces3_1CF11E + *x))));
         cyc(24);
-        wr8(b | (uint16_t)(0x0376 + *y), (uint8_t)(rd8(b | 0x10BF) + rd8(cyc_then(84, 0x1CF11F + *x))));
+        wr8(b | (uint16_t)(0x0376 + *y), (uint8_t)(rd8(b | 0x10BF) + rd8(cyc_then(84, (ASSET_SpritePieces3_1CF11E + 0x1) + *x))));
         {
             cyc(24);
-            uint8_t base = rd8(b | 0x10C1), add = rd8(cyc_then(84, 0x1CF120 + *x));
+            uint8_t base = rd8(b | 0x10C1), add = rd8(cyc_then(84, (ASSET_SpritePieces3_1CF11E + 0x2) + *x));
 
             t = (unsigned)base + add;
             *p = (uint8_t)((*p & ~(P_C | P_V)) | (t > 0xFF ? P_C : 0)
@@ -1567,9 +1568,9 @@ uint8_t SpritePieces3(uint8_t bank, uint16_t *x, uint16_t *y, uint8_t *p, uint16
         }
         cyc(24);
         if (rd8(b | 0x10C5))
-            { cyc(102); attr = (uint8_t)((rd8(0x1CF121 + *x) & 0xF1) | rd8(b | 0x10C5)); }
+            { cyc(102); attr = (uint8_t)((rd8((ASSET_SpritePieces3_1CF11E + 0x3) + *x) & 0xF1) | rd8(b | 0x10C5)); }
         else
-            { cyc(78); attr = rd8(0x1CF121 + *x); }
+            { cyc(78); attr = rd8((ASSET_SpritePieces3_1CF11E + 0x3) + *x); }
         cyc(30);
         wr8(b | (uint16_t)(0x0378 + *y), attr);
         *x = (uint16_t)(*x + 5);
@@ -2108,7 +2109,7 @@ static void oam_stage_dispatch(uint32_t table)
  */
 void abi_OamStageDispatchBB3C(void)
 {
-    oam_stage_dispatch(0x07BB3C);
+    oam_stage_dispatch(ASSET_OamStageDispatchBB3C_07BB3C);
 }
 
 /*
@@ -2119,7 +2120,7 @@ void abi_OamStageDispatchBB3C(void)
  */
 void abi_OamStageDispatchBBA2(void)
 {
-    oam_stage_dispatch(0x07BBA2);
+    oam_stage_dispatch(ASSET_OamStageDispatchBBA2_07BBA2);
 }
 
 void abi_OamSetPalette(void);
@@ -2607,8 +2608,8 @@ static void overlay_draw(unsigned lead)
     cyc(24);
     pic = rd16(b | 0x10A0);
     cyc(140);
-    a = pic == rd16(0x04E066) ? 0x0000 : pic == rd16(cyc_then(86, 0x04E068)) ? 0x0002
-        : pic == rd16(cyc_then(58, 0x04E06A)) ? (cyc(6), 0x0004) : 0x0008;
+    a = pic == rd16(ASSET_overlay_draw_04E066) ? 0x0000 : pic == rd16(cyc_then(86, (ASSET_overlay_draw_04E066 + 0x2))) ? 0x0002
+        : pic == rd16(cyc_then(58, (ASSET_overlay_draw_04E066 + 0x4))) ? (cyc(6), 0x0004) : 0x0008;
     op_sep(P_M);
     v = rd8(b | 0x10A8);
     cyc(16);
@@ -2620,7 +2621,7 @@ static void overlay_draw(unsigned lead)
     do {
         op_rep(P_M);
         cyc(in);
-        a = (uint16_t)(rd16(0x04E1B6 + (uint32_t)cpu.x) & 0x00FF);
+        a = (uint16_t)(rd16(ASSET_overlay_draw_04E1B6 + (uint32_t)cpu.x) & 0x00FF);
         a = (uint16_t)(a + rd16(b | 0x10A4));
         cpu.a = a;
         op_sep(P_M);
@@ -2633,14 +2634,14 @@ static void overlay_draw(unsigned lead)
             cyc(80);
             wr8(b | (uint16_t)(0x0375 + cpu.y), (uint8_t)a);
             cyc(78);
-            v = rd8(0x04E1B7 + (uint32_t)cpu.x);
+            v = rd8((ASSET_overlay_draw_04E1B6 + 0x1) + (uint32_t)cpu.x);
             v = (uint8_t)(v + rd8(b | 0x10A6));
             cyc(30);
             v = (uint8_t)(v - rd8(0x0000F5));
             cyc(30);
             wr8(b | (uint16_t)(0x0376 + cpu.y), v);
             cyc(70);
-            v = rd8(0x04E1B8 + (uint32_t)cpu.x);
+            v = rd8((ASSET_overlay_draw_04E1B6 + 0x2) + (uint32_t)cpu.x);
             v = (uint8_t)(v + rd8(0x0000F1));
             cyc(30);
             wr8(b | (uint16_t)(0x0377 + cpu.y), v);

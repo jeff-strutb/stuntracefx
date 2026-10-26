@@ -9,6 +9,7 @@
 #include "machine.h"
 #include "wram.h"
 #include "cpu_ops.h"
+#include "assets.h"
 
 void SoundPort1QueuePush(uint8_t command);
 
@@ -311,7 +312,7 @@ static uint8_t sound_d89(uint8_t *index)
     uint8_t i = rd8(0x000D89), command;
 
     cyc(48);
-    command = rd8(0x03EDEF + i);
+    command = rd8(ASSET_sound_d89_03EDEF + i);
     SoundPort0QueuePushRaw(command);
     *index = i;
     cyc(72);
@@ -348,12 +349,12 @@ static uint8_t sound_pair_from_table(uint8_t *x)
     cyc(68);
     *x = rd8(0x000D8A);
     cyc(64);
-    c = (uint8_t)(rd8(0x0BFB18 + *x) | 0x80);
+    c = (uint8_t)(rd8(ASSET_sound_pair_from_table_0BFB18 + *x) | 0x80);
     SoundPort0QueuePushRaw(c);
     cyc(46);
     *x = rd8(0x000D89);
     cyc(48);
-    c = rd8(0x0BFB18 + *x);
+    c = rd8(ASSET_sound_pair_from_table_0BFB18 + *x);
     SoundPort0QueuePushRaw(c);
     cyc(72);
     return c;
@@ -434,7 +435,7 @@ int SoundIfFlag40(uint8_t bank, uint16_t flags, uint8_t y, uint8_t *x)
     cyc(116);
     *x = rd8((uint32_t)bank << 16 | (uint16_t)(0x0D89 + y));
     cyc(100);
-    SoundPort0QueuePush(rd8(0x04D0D6 + *x));
+    SoundPort0QueuePush(rd8(ASSET_SoundIfFlag40_04D0D6 + *x));
     cyc(46);
     return 1;
 }

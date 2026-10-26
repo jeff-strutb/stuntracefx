@@ -31,6 +31,7 @@ typedef struct {
     uint8_t scmr, scbr;      /* screen mode and base, set by the S-CPU */
     uint16_t ramaddr;        /* the last RAM address loaded or stored: SBK writes there */
     uint8_t romdr;           /* the ROM buffer: GETB and GETC read it */
+    uint8_t romdr_unheld;    /* it was filled from code, not data: never to be read */
     /* A prefix the caller left pending for the routine's first instruction
        (a WITH, TO, FROM or ALT in the delay slot of its call): B (set by
        WITH), ALT1, ALT2, and the source and destination registers. All 0
@@ -42,6 +43,10 @@ extern RegsGSU gsu;
 
 /* One byte on the Super FX's bus (24-bit: bank, address). */
 uint8_t gsu_rd8(uint32_t addr);
+/* The ROM buffer filled from addr; and a read of a buffer gsu_fetch filled
+   from a byte no asset holds, which stops the port. */
+uint8_t gsu_fetch(uint32_t addr);
+void gsu_fetch_used(void);
 void gsu_wr8(uint32_t addr, uint8_t value);
 
 /* PLOT and RPIX at (x, y) with the current colour, options and screen. */
@@ -159,7 +164,7 @@ static inline void gsu_sbk(uint16_t v)
 static inline void gsu_r14(uint16_t v)
 {
     gsu.r[14] = v;
-    gsu.romdr = gsu_rd8((uint32_t)gsu.rombr << 16 | v);
+    gsu.romdr = gsu_fetch((uint32_t)gsu.rombr << 16 | v);
     gsu_buffer(GSU_B_R14);
 }
 
@@ -167,6 +172,8 @@ static inline void gsu_r14(uint16_t v)
 static inline uint8_t gsu_getb(void)
 {
     gsu_buffer(GSU_B_ROMBUF);
+    if (gsu.romdr_unheld)
+        gsu_fetch_used();
     return gsu.romdr;
 }
 

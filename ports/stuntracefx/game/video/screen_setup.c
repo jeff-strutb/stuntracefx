@@ -7,6 +7,7 @@
 #include "native.h"
 #include "hw.h"
 #include "cpu_ops.h"
+#include "assets.h"
 
 static void io8(uint8_t bank, uint32_t reg, uint8_t v)
 {
@@ -766,7 +767,7 @@ void abi_RaceHudLoad(void)
     x = (uint16_t)((rd16(b | 0x0E3D) & 0x00FF) << 1);
     cpu.x = x;
     cyc(132);
-    cpu.a = rd16(0x03F799 + x);
+    cpu.a = rd16(ASSET_RaceHudLoad_03F799 + x);
     wr16(0x700050, cpu.a);
     op_sep(P_M);
     cyc(46);

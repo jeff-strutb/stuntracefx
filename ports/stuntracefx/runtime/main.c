@@ -40,12 +40,10 @@
 #include "rr_size.h"
 #include "resample.h"
 #include "dispatch.h"
+#include "cart.h"
 
 /* the ROM, built in (romdata.S: the builder's own ROM) */
-extern const uint8_t srfx_rom[];
-extern const uint8_t srfx_rom_end[];
 
-const uint8_t *port_rom(void) { return srfx_rom; }
 
 static int headless;
 static long max_frames = -1;
@@ -452,13 +450,12 @@ static void picture_of(const VidFrame *f, RrPicture *p)
 
 void canvas_gpu(void);
 void canvas_gpu_apply(const VidFrame *f);
-extern const uint8_t srfx_rom[], srfx_rom_end[];
 
 /* the 3D canvases fed from the game's screen operations, where the
    renderer has them */
 static void canvases_start(void)
 {
-    if (rr_fill_rom(srfx_rom, (uint32_t)(srfx_rom_end - srfx_rom)))
+    if (rr_fill_rom(cart_linear(), port_rom_size))
         canvas_gpu();
 }
 
@@ -651,8 +648,7 @@ int main(int argc, char **argv)
     host_init(argc, argv);
     if (script)
         script_load(script);
-    cart.rom = srfx_rom;
-    cart.rom_size = (uint32_t)(srfx_rom_end - srfx_rom);
+    cart_make(&cart);
     cart.superfx = 1;
     cart.sfx_ram_size = 0x10000;
     snes_power(&cart);

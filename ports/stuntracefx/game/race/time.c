@@ -4,6 +4,7 @@
  */
 #include "machine.h"
 #include "cpu_ops.h"
+#include "assets.h"
 
 uint8_t CourseIndex12(uint8_t a, uint8_t *p);
 
@@ -60,7 +61,7 @@ static uint16_t add_course_value(uint32_t table, uint8_t bra, uint16_t *x, uint8
  */
 uint16_t RaceTimeAddD815(uint16_t *x, uint8_t *p)
 {
-    return add_course_value(0x03D815, 0, x, p);
+    return add_course_value((ASSET_RaceTimeInit_03D810 + 0x5), 0, x, p);
 }
 
 void abi_RaceTimeAddD815(void)
@@ -79,7 +80,7 @@ void abi_RaceTimeAddD815(void)
  */
 uint16_t RaceTimeAddD814(uint16_t *x, uint8_t *p)
 {
-    return add_course_value(0x03D814, 22, x, p);
+    return add_course_value((ASSET_RaceTimeInit_03D810 + 0x4), 22, x, p);
 }
 
 void abi_RaceTimeAddD814(void)
@@ -136,11 +137,11 @@ void abi_RaceTimeInit(void)
             cpu.a = (uint16_t)((cpu.a & 0xFF00) | rd8(b | 0x0D89));
             abi_CourseIndex12();
             cyc(0);
-            v = rd8((uint32_t)(0x03D813 + cpu.x));
+            v = rd8((uint32_t)((ASSET_RaceTimeInit_03D810 + 0x3) + cpu.x));
         } else {
             cyc(46);
             cpu.x = rd8(b | 0x0D4A);
-            v = rd8((uint32_t)(0x03D810 + cpu.x));
+            v = rd8((uint32_t)(ASSET_RaceTimeInit_03D810 + cpu.x));
         }
     } else {
         cyc(8);
@@ -160,7 +161,7 @@ void abi_RaceTimeInit(void)
             v = op_adc8(v, rd8(b | 0x0D89), &cpu.p);
             cpu.x = v;
             cyc(14);
-            v = rd8((uint32_t)(0x03D8A3 + cpu.x));
+            v = rd8((uint32_t)(ASSET_RaceTimeInit_03D8A3 + cpu.x));
         } }
     }
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);

@@ -6,6 +6,7 @@
 #include "native.h"
 #include "hw.h"
 #include "cpu_ops.h"
+#include "assets.h"
 
 void abi_ObjectsRunHandlers(void);
 void abi_CameraFollowStep(void);
@@ -914,7 +915,7 @@ void abi_RaceLoad(void)
     cpu.p &= (uint8_t)~(P_M | P_X);
     for (w = 0x01FE;; w = (uint16_t)(w - 2)) {
         cyc(126);
-        cpu.a = rd16(0x1F8200 + w);
+        cpu.a = rd16(ASSET_RaceLoad_1F8200 + w);
         wr16(0x7EFD65 + w, cpu.a);
         if (!w)
             { cyc(106); break; } else { cyc(4); }
@@ -1392,7 +1393,7 @@ void abi_RaceLoop(void)
     cpu.x = rd8(b | 0x0D2B);
     cpu.p = nz8(cpu.p, (uint8_t)cpu.x);
     cyc(56);
-    v = rd8(0x02E338 + cpu.x);
+    v = rd8(ASSET_RaceLoop_02E338 + cpu.x);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
     cpu.p = nz8(cpu.p, v);
     wr8(b | 0x0D62, v);

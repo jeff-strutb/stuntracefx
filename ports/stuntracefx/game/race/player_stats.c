@@ -7,6 +7,7 @@
 #include "native.h"
 #include "hw.h"
 #include "cpu_ops.h"
+#include "assets.h"
 
 void abi_CarFinishSound(void);
 
@@ -649,7 +650,7 @@ void abi_PlayerOnePhaseRace(void)
             cyc(16);
             wr16(b | (uint16_t)(0x0FB0 + cpu.x), cpu.a);
             cyc(78);
-            op_lda16(0x07DFA0 + cpu.x);
+            op_lda16(ASSET_PlayerOnePhaseRace_07DFA0 + cpu.x);
             wr16(b | (uint16_t)(0x1010 + cpu.x), cpu.a);
             cpu.x = (uint16_t)(cpu.x + 2);
             cpu.y--;
@@ -875,7 +876,7 @@ void abi_PlayerOnePhaseStep(void)
     cpu.x = (uint8_t)cpu.a;
     cpu.p = nz8(cpu.p, (uint8_t)cpu.x);
     cyc(60);
-    h = rd16(0x07DE5E + cpu.x);
+    h = rd16(ASSET_PlayerOnePhaseStep_07DE5E + cpu.x);
     switch (h) {
     case 0xE285:
         jump_routine(0x07E285);
@@ -1290,7 +1291,7 @@ void abi_StuntPhaseStep(void)
     cpu.x = (uint8_t)cpu.a;
     cpu.p = nz8(cpu.p, (uint8_t)cpu.x);
     cyc(60);
-    switch (rd16(0x07E0A7 + cpu.x)) {
+    switch (rd16(ASSET_StuntPhaseStep_07E0A7 + cpu.x)) {
     case 0xE292: jump_routine(0x07E292); cyc(0); break;
     case 0xE2E9: jump_routine(0x07E2E9); cyc(0); break;
     case 0xE404: jump_routine(0x07E404); break;
@@ -1542,7 +1543,7 @@ void abi_RaceSoundsAndHud(void)
     cpu.x = (uint8_t)cpu.a;
     cpu.p = nz8(cpu.p, (uint8_t)cpu.x);
     cyc(52);
-    switch (rd16(0x07DABE + cpu.x)) {
+    switch (rd16(ASSET_RaceSoundsAndHud_07DABE + cpu.x)) {
     case 0xDAC6: hud_mode_zero(p0, db0); break;
     case 0xDB36: hud_mode_one(p0, db0); break;
     case 0xDC47: cyc(22); hud_mode_two(0, p0, db0); break;
@@ -1779,7 +1780,7 @@ void abi_TimeUpPhaseStep(void)
     cpu.x = (uint8_t)cpu.a;
     cpu.p = nz8(cpu.p, (uint8_t)cpu.x);
     cyc(60);
-    switch (rd16(0x07DB89 + cpu.x)) {
+    switch (rd16(ASSET_TimeUpPhaseStep_07DB89 + cpu.x)) {
     case 0xDB97: abi_TimeUpPhaseStart(); break;
     case 0xDBB8: abi_TimeUpPhaseSlideIn(); break;
     case 0xDBBC: abi_TimeUpPhaseSlideOut(); break;

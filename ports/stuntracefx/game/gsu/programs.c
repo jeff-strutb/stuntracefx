@@ -11,6 +11,7 @@
 #include "native.h"
 #include "hw.h"
 #include "cpu_ops.h"
+#include "assets.h"
 
 uint8_t GsuRun(uint8_t bank, uint16_t start);
 uint16_t GsuParam216B(uint8_t bank, uint16_t index);
@@ -1871,7 +1872,7 @@ uint8_t GsuFA5AThreeShifted(uint8_t bank, uint8_t *p)
 
     fa5a_unit_scale();
     cyc(24);
-    x = add16(rd16(cyc_then(86, 0x079806 + rd16(b | 0x0D6B))), rd16(b | 0x0D6D), p);
+    x = add16(rd16(cyc_then(86, ASSET_GsuFA5AThreeShifted_079806 + rd16(b | 0x0D6B))), rd16(b | 0x0D6D), p);
     wr16(0x0000F1, x);
     cyc(32);
     wr16(0x70020A, x);
@@ -2568,13 +2569,13 @@ void abi_GlyphSpritesInit(void)
     cyc(0);
     do {
         cyc(124);
-        op_lda16(0x04DA7A + (uint32_t)cpu.x);
+        op_lda16(ASSET_GlyphSpritesInit_04DA7A + (uint32_t)cpu.x);
         wr16(b | (uint16_t)(0x0FB0 + cpu.x), cpu.a);
         op_lda16_imm(0x0008);
         cyc(16);
         wr16(b | (uint16_t)(0x0FE0 + cpu.x), 0x0008);
         cyc(78);
-        op_lda16(0x04DA8E + (uint32_t)cpu.x);
+        op_lda16(ASSET_GlyphSpritesInit_04DA8E + (uint32_t)cpu.x);
         wr16(b | (uint16_t)(0x1010 + cpu.x), cpu.a);
         cyc(30);
         wr16(b | (uint16_t)(0x1040 + cpu.x), 0x0000);

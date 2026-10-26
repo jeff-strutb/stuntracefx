@@ -30,6 +30,7 @@
 #include "snes.h"
 #include "jump.h"
 #include "dispatch.h"
+#include "cart.h"
 
 Regs65816 cpu;
 
@@ -215,10 +216,15 @@ static void gsu_run(uint8_t bank, uint16_t addr)
     r->abi();
 }
 
+static int gsu_cache_first(uint8_t bank, uint16_t addr)
+{
+    const PortRoutine *r = find((uint32_t)bank << 16 | addr);
+    return r && r->cache_first;
+}
+
 static void spc_run(uint16_t addr)
 {
     const uint8_t *aram = snes_aram();
-    const uint8_t *rom = port_rom();
     int i;
     for (i = 0; i < port_spc_routine_count; i++) {
         const PortSpcRoutine *r = &port_spc_routines[i];
@@ -226,8 +232,11 @@ static void spc_run(uint16_t addr)
         int ok = 1;
         if (r->apu != addr)
             continue;
-        for (u = r->uses; ok && u->len; u++)
-            ok = !memcmp(aram + u->apu, rom + u->rom, u->len);
+        for (u = r->uses; ok && u->len; u++) {
+            unsigned k;
+            for (k = 0; ok && k < u->len; k++)
+                ok = aram[(uint16_t)(u->apu + k)] == cart_byte(u->rom + k);
+        }
         if (ok) {
             r->abi();
             return;
@@ -243,6 +252,7 @@ void port_start(void)
     snes_interrupt_hook = take_interrupt;
     snes_irq_masked = irq_masked;
     snes_gsu_run_hook = gsu_run;
+    snes_gsu_cache_first_hook = gsu_cache_first;
     snes_spc_set_hooks(&spc_hooks);
     /* the reset: emulation mode, 8-bit registers, I set, the stack in page
        1, the reset vector's code */

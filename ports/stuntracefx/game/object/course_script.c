@@ -3,6 +3,7 @@
  * settings a course starts with, run once when the course is set up.
  */
 #include "machine.h"
+#include "assets.h"
 
 void abi_ObjectSpawnFromScript(void);
 void abi_ObjectAlloc(void);
@@ -105,7 +106,7 @@ void abi_CourseScriptRun(void)
         cpu.y = y;
         cpu.x = op;
         cyc(122);
-        switch (rd16(0x088000 + op)) {
+        switch (rd16(ASSET_CourseScriptRun_088000 + op)) {
         case 0x8049:                                   /* $02 */
             spawn(y);
             x = (uint16_t)(y + 0x16);

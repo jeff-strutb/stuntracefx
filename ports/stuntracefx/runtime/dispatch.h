@@ -8,7 +8,6 @@
 #include <stdint.h>
 
 /* the cartridge's ROM (1 MB) */
-const uint8_t *port_rom(void);
 /* power on and run the game's C from the reset vector; never returns */
 void port_start(void);
 

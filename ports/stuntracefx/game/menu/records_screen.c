@@ -11,6 +11,7 @@
  */
 #include "machine.h"
 #include "cpu_ops.h"
+#include "assets.h"
 
 void abi_MetaspriteDraw(void);
 void abi_SoundPort0QueuePush(void);
@@ -1034,8 +1035,8 @@ void abi_SpeedRecordsScreen(void)
     if ((uint8_t)cpu.a) {
         origin(0x89, 0x89);
         md_first(0x001A, 0);
-        md_next(0x04EE35, 0, 0x0D73, 0x0019);
-        md_next(0x04EE31, 0x0D73, 0x0D75, 0x0000);
+        md_next((ASSET_SpeedRecordsScreen_04EE31 + 0x4), 0, 0x0D73, 0x0019);
+        md_next(ASSET_SpeedRecordsScreen_04EE31, 0x0D73, 0x0D75, 0x0000);
         cyc(24);
         op_lda16(b | 0x0D75);
         cyc(24);
@@ -1053,11 +1054,11 @@ void abi_SpeedRecordsScreen(void)
     if (cpu.a)
         { cyc(44); md_first(0x001B, 0); }
     else { cyc(38); md_first(0x0005, 22 /* BRA */); }
-    md_next(0x04EDE1, 0, 0x0D73, 0x0001);
-    md_next(0x04EDD1, 0x0D73, 0x0D75, 0x0002);
-    md_next(0x04EDD5, 0x0D75, 0x0D77, 0x0003);
-    md_next(0x04EDD9, 0x0D77, 0x0D79, 0x0004);
-    md_next(0x04EDDD, 0x0D79, 0x0D7B, 0x0000);
+    md_next((ASSET_SpeedRecordsScreen_04EDDD + 0x4), 0, 0x0D73, 0x0001);
+    md_next((ASSET_metasprite_draw_04EDCB + 0x6), 0x0D73, 0x0D75, 0x0002);
+    md_next((ASSET_metasprite_draw_04EDCB + 0xA), 0x0D75, 0x0D77, 0x0003);
+    md_next((ASSET_metasprite_draw_04EDCB + 0xE), 0x0D77, 0x0D79, 0x0004);
+    md_next(ASSET_SpeedRecordsScreen_04EDDD, 0x0D79, 0x0D7B, 0x0000);
     (cyc(46), abi_OamClassName());
     (cyc(46), abi_SpeedRecordsPage());
     (cyc(62), abi_OamPaletteFromTableE26A());
@@ -1263,9 +1264,9 @@ void abi_StuntRecordsScreen(void)
             wr16(b | 0x0E3D, cpu.a);
         } else { cyc(30); } }
         md_first(0x0015, 0);
-        md_next(0x04EE21, 0, 0x0D73, 0x0013);
+        md_next(ASSET_StuntRecordsScreen_04EE21, 0, 0x0D73, 0x0013);
         op_rep(P_M);
-        md_next(0x04EE19, 0x0D73, 0x0D75, 0x0014);
+        md_next((ASSET_AllRecordsScreen_04EE0D + 0xC), 0x0D73, 0x0D75, 0x0014);
         best_time(0x70FC4A, 0x0017, 0, 1);
         abi_SpriteTextAt8152();
         (cyc(24), abi_RecordsMenuTwo());
@@ -1273,10 +1274,10 @@ void abi_StuntRecordsScreen(void)
     } else { cyc(30); }
     origin(0x81, 0x89);
     md_first(0x0012, 0);
-    md_next(0x04EDF5, 0, 0x0D73, 0x0007);
-    md_next(0x04EDE9, 0x0D73, 0x0D75, 0x0008);
-    md_next(0x04EDED, 0x0D75, 0x0D77, 0x0009);
-    md_next(0x04EDF1, 0x0D77, 0x0D79, 0x0006);
+    md_next((ASSET_StuntRecordsScreen_04EDED + 0x8), 0, 0x0D73, 0x0007);
+    md_next((ASSET_SpeedRecordsScreen_04EDDD + 0xC), 0x0D73, 0x0D75, 0x0008);
+    md_next(ASSET_StuntRecordsScreen_04EDED, 0x0D75, 0x0D77, 0x0009);
+    md_next((ASSET_StuntRecordsScreen_04EDED + 0x4), 0x0D77, 0x0D79, 0x0006);
     (cyc(46), abi_SpriteTextAt8152());
     op_rep(P_M | P_X);
     special_row(0x0D77, 4, 1, abi_SpritePiecesAt46Y93);
@@ -1304,8 +1305,8 @@ void abi_BattleRecordsScreen(void)
 
     origin(0x81, 0x89);
     md_first(0x000D, 0);
-    md_next(0x04EE01, 0, 0x0D73, 0x000C);
-    md_next(0x04EDFD, 0x0D73, 0x0D75, 0x000B);
+    md_next((ASSET_BattleRecordsScreen_04EDFD + 0x4), 0, 0x0D73, 0x000C);
+    md_next(ASSET_BattleRecordsScreen_04EDFD, 0x0D73, 0x0D75, 0x000B);
     slot_to_y(0x0D73, 0);
     cyc(66);
     op_lda16(b | 0x0D89);
@@ -1362,8 +1363,8 @@ void abi_AllRecordsScreen(void)
         cyc(6);
         origin(0x89, 0x89);
         md_first(0x0018, 0);
-        md_next(0x04EE2D, 0, 0x0D73, 0x0016);
-        md_next(0x04EE25, 0x0D73, 0x0D75, 0x0017);
+        md_next((ASSET_StuntRecordsScreen_04EE21 + 0xC), 0, 0x0D73, 0x0016);
+        md_next((ASSET_StuntRecordsScreen_04EE21 + 0x4), 0x0D73, 0x0D75, 0x0017);
         best_time(0x70FC5E, 0x0014, -1, 0);
         abi_SpriteTextAt8952();
         (cyc(24), abi_RecordsMenuTwo());
@@ -1371,10 +1372,10 @@ void abi_AllRecordsScreen(void)
     } else { cyc(30); }
     origin(0x89, 0x89);
     md_first(0x0012, 0);
-    md_next(0x04EE05, 0, 0x0D73, 0x000F);
-    md_next(0x04EE09, 0x0D73, 0x0D75, 0x0010);
-    md_next(0x04EE0D, 0x0D75, 0x0D77, 0x0011);
-    md_next(0x04EE11, 0x0D77, 0x0D79, 0x000E);
+    md_next((ASSET_BattleRecordsScreen_04EDFD + 0x8), 0, 0x0D73, 0x000F);
+    md_next((ASSET_BattleRecordsScreen_04EDFD + 0xC), 0x0D73, 0x0D75, 0x0010);
+    md_next(ASSET_AllRecordsScreen_04EE0D, 0x0D75, 0x0D77, 0x0011);
+    md_next((ASSET_AllRecordsScreen_04EE0D + 0x4), 0x0D77, 0x0D79, 0x000E);
     (cyc(46), abi_SpriteTextAt8952());
     (cyc(62), abi_OamPaletteFromTableE26AByMode());
     op_rep(P_M | P_X);

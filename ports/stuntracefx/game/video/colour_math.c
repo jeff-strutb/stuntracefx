@@ -4,6 +4,7 @@
  */
 #include "machine.h"
 #include "native.h"
+#include "assets.h"
 
 void SoundPort1QueuePushW(uint8_t command, unsigned wide);
 
@@ -69,7 +70,7 @@ static uint8_t fixed_colour_from_step(uint8_t *step)
     cyc(54);
     *step = rd8(0x7F3408);
     cyc(86);
-    v = rd8(0x03FE7B + *step);
+    v = rd8(ASSET_fixed_colour_from_step_03FE7B + *step);
     wr8(0x7F340D, v);
     cyc(44);
     return v;

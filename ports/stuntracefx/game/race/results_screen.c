@@ -10,6 +10,7 @@
 #include "machine.h"
 #include "native.h"
 #include "cpu_ops.h"
+#include "assets.h"
 
 void abi_SoundPort0QueuePush(void);
 void abi_SoundPort0QueuePushX8(void);
@@ -866,7 +867,7 @@ static void car_picture(uint32_t b)
     op_asl16();
     op_tax16();
     cyc(92);
-    op_lda16(0x07CCB7 + cpu.x);
+    op_lda16(ASSET_car_picture_07CCB7 + cpu.x);
     wr16(b | 0x10A0, cpu.a);
 }
 
@@ -979,7 +980,7 @@ static void car_change(uint32_t b, int right)
     cpu.x = (uint16_t)(cpu.a & 0x00FF);
     cpu.p = nz8(cpu.p, (uint8_t)cpu.x);
     cyc(86);
-    op_lda8(0x07CE93 + cpu.x);
+    op_lda8(ASSET_car_change_07CE93 + cpu.x);
     wr8(0x0018CB, (uint8_t)cpu.a);
     (cyc(62), abi_SelectionSave());
     op_sep(P_M);
@@ -1187,7 +1188,7 @@ void abi_ResultsChampionScreen(void)
     op_rep(P_M | P_X);
     for (x = 0x01FE; x >= 0; x -= 2) {
         cyc(104);
-        op_lda16((uint32_t)(0x1F8600 + x));
+        op_lda16((uint32_t)(ASSET_ResultsChampionScreen_1F8600 + x));
         wr16((uint32_t)(0x7EFD65 + x), cpu.a);
         cyc(26);
     }
@@ -1524,7 +1525,7 @@ static void lap_char(void)
         cyc(42);
         return;
     default:
-        jump_routine(0x070000 | rd16(0x07D191 + cpu.x));
+        jump_routine(0x070000 | rd16(ASSET_lap_char_07D191 + cpu.x));
         return;
     }
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);

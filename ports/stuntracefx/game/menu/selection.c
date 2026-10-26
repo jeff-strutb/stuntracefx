@@ -5,6 +5,7 @@
  */
 #include "machine.h"
 #include "cpu_ops.h"
+#include "assets.h"
 
 /*
  * @routine 0B:C58D MenuRowPosition
@@ -58,7 +59,7 @@ uint16_t MenuChoiceRepeat(uint16_t *x, uint8_t *p)
     cyc(48);                            /* BNE not taken, LDA long */
     b = rd16(0x0018C9);
     *x = (uint16_t)(b << 1);
-    a = rd16(0x0BC758 + *x);
+    a = rd16(ASSET_MenuChoiceRepeat_0BC758 + *x);
     cyc(108);                           /* ASL, TAX, LDA long (its 2 ROM bytes), STA long */
     wr16(0x0018D3, a);
     *p = (uint8_t)((nz16(*p, a) & ~P_C) | (b & 0x8000 ? P_C : 0));
@@ -220,9 +221,9 @@ uint16_t SelectionCommit(uint8_t bank, uint16_t *x)
     cyc(32);
     wr16(0x0018DD, cyc_then(32, HandlerTableA(cyc_then(46, rd16(0x0018C9)))));
     cyc(32);
-    wr16(b | 0x11DF, (uint16_t)(rd16(cyc_then(180, 0x03B540 + ((rd16(0x0018C9) & 3) << 1))) << 4));
+    wr16(b | 0x11DF, (uint16_t)(rd16(cyc_then(180, ASSET_SelectionCommit_03B540 + ((rd16(0x0018C9) & 3) << 1))) << 4));
     cyc(32);
-    v = (uint16_t)(rd16(cyc_then(124, 0x03B540 + ((rd16(0x0018CB) & 3) << 1))) | rd16(b | 0x11DF));
+    v = (uint16_t)(rd16(cyc_then(124, ASSET_SelectionCommit_03B540 + ((rd16(0x0018CB) & 3) << 1))) | rd16(b | 0x11DF));
     cyc(54);
     wr8(0x70FC0E, (uint8_t)v);
     (cyc(84), SaveChecksum());
@@ -232,15 +233,15 @@ uint16_t SelectionCommit(uint8_t bank, uint16_t *x)
     wr16(0x0018D5, 0x0000);
     cyc(32);
     if (rd16(0x0018CB) == rd16(cyc_then(32, 0x0018C9)))
-        { cyc(48); wr16(b | 0x18D5, rd16(cyc_then(100, 0x03B464 + (uint16_t)(rd16(0x0018C9) << 1)))); } else { cyc(22); }
+        { cyc(48); wr16(b | 0x18D5, rd16(cyc_then(100, ASSET_SelectionCommit_03B464 + (uint16_t)(rd16(0x0018C9) << 1)))); } else { cyc(22); }
     cyc(32);
     *x = (uint16_t)((uint16_t)((uint16_t)(rd16(0x0018CB) << 2) + rd16(cyc_then(74, 0x0018D3))) << 1);
     cyc(108);
-    wr16(0x0018E3, rd16(0x03B46C + *x));
+    wr16(0x0018E3, rd16((ASSET_SelectionCommit_03B464 + 0x8) + *x));
     cyc(32);
     *x = (uint16_t)((uint16_t)((uint16_t)(rd16(0x0018C9) << 2) + rd16(cyc_then(74, 0x0018D5))) << 1);
     cyc(108);
-    v = rd16(0x03B46C + *x);
+    v = rd16((ASSET_SelectionCommit_03B464 + 0x8) + *x);
     wr16(0x0018E5, v);
     return v;
 }
@@ -279,7 +280,7 @@ static uint16_t save_selection(uint8_t bank, uint16_t *x)
         cyc(78);
         *x = (uint16_t)((rd16(0x0018CB) & 3) << 1);
         cyc(154);
-        v = rd16(0x03B540 + *x);
+        v = rd16(ASSET_SelectionCommit_03B540 + *x);
         wr8(0x70FC0D, (uint8_t)v);
         return v;
     }
@@ -288,7 +289,7 @@ static uint16_t save_selection(uint8_t bank, uint16_t *x)
     cyc(32);
     *x = (uint16_t)(rd16(0x0018CB) << 1);
     cyc(100);
-    v = rd16(0x03B540 + *x);
+    v = rd16(ASSET_SelectionCommit_03B540 + *x);
     if (mode == 1)
         { cyc(56); v = (uint16_t)(v << 4); }
     v = (uint16_t)(v | rd16(b | 0x11DF));
@@ -684,13 +685,13 @@ void abi_CarSelectTwoPlayers(void)
     cyc(24);
     cpu.x = rd8(b | 0x0D8A);
     cyc(72);
-    op_lda8(0x07C1BF + cpu.x);
+    op_lda8(ASSET_CarSelectTwoPlayers_07C1BF + cpu.x);
     wr8(0x0018C9, (uint8_t)cpu.a);
     (cyc(62), abi_SelectionCommit());
     cyc(24);
     cpu.x = rd8(b | 0x0D89);
     cyc(72);
-    op_lda8(0x07C1BF + cpu.x);
+    op_lda8(ASSET_CarSelectTwoPlayers_07C1BF + cpu.x);
     wr8(0x0018CB, (uint8_t)cpu.a);
     (cyc(62), abi_SelectionCommit());
     cyc(42);
