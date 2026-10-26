@@ -75,6 +75,8 @@ static void send(void)
     if (b != sent) {
         sent = b;
         front_buttons(b);
+        if (getenv("PORT_INPUTLOG"))
+            fprintf(stderr, "input: buttons %04X at frame %u\n", b, front_frames());
     }
 }
 

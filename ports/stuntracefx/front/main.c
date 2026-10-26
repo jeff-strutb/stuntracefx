@@ -12,6 +12,7 @@
  * FX's RAM, as the reference port writes them (tools/same.py).
  */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "front.h"
@@ -82,6 +83,14 @@ static void on_frame(void)
     static int made;
     TouchView v;
     rm_frame_end();
+    if (getenv("PORT_INPUTLOG")) {
+        uint16_t held = (uint16_t)(nshvc_peek(0x7E0309) | nshvc_peek(0x7E030A) << 8);
+        uint16_t pad = (uint16_t)(nshvc_peek(0x004218) | nshvc_peek(0x004219) << 8);
+        if (held || pad)
+            fprintf(stderr, "input: frame %u: the pad reads %04X, the game holds %04X\n", nshvc_frames(), pad, held);
+    }
+    if (getenv("PORT_INPUTLOG") && nshvc_frames() % 300 == 0)
+        fprintf(stderr, "input: frame %u, driving %d\n", nshvc_frames(), driving_now());
     if (!made) {
         art_make();
         made = 1;
