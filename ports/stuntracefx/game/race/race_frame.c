@@ -1284,6 +1284,8 @@ void abi_RaceFrameRunTwoPlayers(void)
     op_sep(P_M);
     (cyc(84), abi_RaceSoundsPlayer1());
     (cyc(46), abi_GsuScreenFlipMenu());
+    if (rm_tick60())
+        RmRaceScreenShow();             /* Remaster: player 1's screen to the display at once */
     op_sep(P_M);
     cyc(46);
     wr8((uint32_t)cpu.db << 16 | 0x0357, 0x00);
@@ -1307,11 +1309,14 @@ void abi_RaceFrameRunTwoPlayers(void)
     (cyc(62), abi_RaceSoundsPlayer2());
     op_sep(P_M);
     (cyc(68), abi_GsuScreenFlipMenu());
+    if (rm_tick60())
+        RmRaceScreenShow();             /* Remaster: player 2's screen to the display at once */
     op_sep(P_M);
     cyc(46);
     wr8((uint32_t)cpu.db << 16 | 0x0357, 0x00);
     frame_time(db, p0);
     cyc(58);                            /* its return */
+    rm_race_frame_end();
 }
 
 void abi_GsuEE88Ramp(void);

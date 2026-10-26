@@ -424,6 +424,9 @@ void abi_RaceSoundsPlayer1(void)
     uint8_t p0 = cpu.p, db0 = cpu.db;
     uint32_t b = 0x070000;
 
+    if (!rm_step_due())                 /* Remaster: on the step's tick (remaster.h) */
+        { cpu.a = 0; return; }
+
     cpu.db = 0x07;
     cpu.p = nz8(cpu.p, 0x07);
     op_sep(P_M | P_X);
@@ -455,6 +458,9 @@ void abi_RaceSoundsPlayer2(void)
 {
     uint8_t p0 = cpu.p, db0 = cpu.db;
     uint32_t b = 0x070000;
+
+    if (!rm_step_due())                 /* Remaster: on the step's tick (remaster.h) */
+        { cpu.a = 0; return; }
 
     cpu.db = 0x07;
     cpu.p = nz8(cpu.p, 0x07);
