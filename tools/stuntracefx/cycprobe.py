@@ -24,7 +24,7 @@ place, its offset in the file, and for an access the function called
 positions come from clang's syntax tree (-ast-dump=json); code inside
 macros is left as it is.
 """
-import csv, glob, json, os, subprocess, sys
+import csv, glob, json, os, re, subprocess, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DECOMP = os.path.join(ROOT, 'src', 'stuntracefx')
@@ -36,7 +36,10 @@ SRC = os.path.abspath(os.environ.get('CYC_SRC', DECOMP))
 def rel_name(path):
     """A file of the tree probed by its name in the decomp."""
     return os.path.relpath(os.path.join(DECOMP, os.path.relpath(path, SRC)), ROOT)
-TIMING = ('cyc', 'cyc_then', 'cyc_loop', 'gsu_cyc', 'gsu_cyc_then', 'gsu_cyc_loop', 'gsu_code', 'gsu_code_then', 'gsu_code_loop', 'gsu_cache', 'gsu_cache_then', 'gsu_cache_loop', 'gsu_codes', 'gsu_codes_then', 'gsu_codes_loop', 'gsu_time')   # machine.h's stated time: no access, no probes
+TIMING = ('cyc', 'cyc_then', 'cyc_loop', 'cycs', 'cycs_then', 'cycs_loop', 'gsu_cyc', 'gsu_cyc_then', 'gsu_cyc_loop', 'gsu_code', 'gsu_code_then', 'gsu_code_loop', 'gsu_cache', 'gsu_cache_then', 'gsu_cache_loop', 'gsu_codes', 'gsu_codes_then', 'gsu_codes_loop', 'gsu_time')   # machine.h's stated time: no access, no probes
+# the S-CPU's stated time: with --marks each call names itself in the record
+S_TIMING = ('cyc', 'cyc_then', 'cyc_loop', 'cycs', 'cycs_then', 'cycs_loop')
+MARK_T = 1 << 31        # an M line for a timing call: MARK_T | its id (timing.csv)
 CONTROL = {'IfStmt', 'WhileStmt', 'ForStmt', 'DoStmt', 'SwitchStmt', 'LabelStmt', 'CaseStmt', 'DefaultStmt'}
 
 
@@ -110,8 +113,10 @@ def annotate(node, state):
 class Walker:
     """Collects insertions (offset, text, kind) for one file's own code."""
 
-    def __init__(self, path, text, pure, calls=None):
+    def __init__(self, path, text, pure, calls=None, marks=False):
         self.path = path
+        self.marks = marks     # name each S-CPU timing call too (timing.csv)
+        self.timing = {}       # index in ins of a timing call's id -> its meta
         self.text = text
         self.pure = pure       # functions whose calls need no probe
         self.calls = calls     # headers: each inline function's callees
@@ -230,6 +235,20 @@ class Walker:
             self._meta(form='arg', at=span[0], end=span[1], typ=typ, anchor=self.anchor, unsafe=self.unsafe > 0,
                        callee=callee(call.get('inner', [{}])[0]))
             return len(self.ins) - 1
+
+    def timing_call(self, call, ref, name):
+        """A timing call named in the record: cyc(N) as CYC_AT_cyc(T, N),
+        the macro (cycprobe.h) marking MARK_T | T just before the time is
+        stated, after its arguments are worked out."""
+        span, rs = self.mine(call), self.mine(ref)
+        if not span or not rs:
+            return
+        p = self.text.index('(', rs[1])
+        args = self.text[p + 1:span[1] - 1]
+        self.ins.append((rs[0], 1, 'CYC_AT_', None))
+        self.ins.append((p + 1, 1, '%T, ', 'timing'))
+        self.timing[len(self.ins) - 1] = dict(fn=self.fn, name=name, at=span[0], end=span[1],
+                                              args=(p + 1, span[1] - 1), text=args)
 
     def body(self, node, kind, back=False):
         if node is None:
@@ -443,6 +462,8 @@ class Walker:
             name = callee(inner[0])
             if self.calls is not None and name:
                 self.calls[self.fn].add(name)
+            if self.marks and name in S_TIMING and self.fn is not None:
+                self.timing_call(node, inner[0], name)
             if name not in self.pure:
                 args = inner[1:]
                 typ = last_param(inner[0])
@@ -514,11 +535,11 @@ class Walker:
         self.unsafe -= 1
 
 
-def walk_file(path, pure, calls=None):
+def walk_file(path, pure, calls=None, marks=False):
     """A file's insertions, in the order they go in: (index in w.ins,
     (offset, order, text, kind)); and the walker (w.meta by that index)."""
     text = open(path).read()
-    w = Walker(path, text, pure, calls)
+    w = Walker(path, text, pure, calls, marks)
     tree = ast(path)
     annotate(tree, [None])
     for node in tree.get('inner', []):
@@ -528,12 +549,60 @@ def walk_file(path, pure, calls=None):
     return text, w, sorted(enumerate(w.ins), key=lambda it: (it[1][0], it[1][1], it[0] if it[1][1] else -it[0]))
 
 
-def instrument(path, out, next_id, rows, pure, calls=None):
-    text, w, order = walk_file(path, pure, calls)
+# the other processors' C (the Super FX's, the SPC700's): their own register
+# files, their own headers
+OTHER_HEADERS = ('gsu.h', 'gsu_ops.h', 'fx_calls.h', 'spc.h', 'spc_ops.h')
+OTHER_USE = re.compile(r'\b(?:gsu|spc)\s*\.\s*[A-Za-z_]')
+
+
+def other_cpu(heads, files):
+    """The functions that run on the Super FX or the SPC700: those using
+    their register files or defined in their headers, and the functions
+    only they call. nativeshvc runs them beside the S-CPU's C, so their
+    marks would land in its record."""
+    calls, own = {}, set()
+    for path in heads + files:
+        text = open(path).read()
+        w = Walker(path, text, set(), calls)
+        tree = ast(path)
+        annotate(tree, [None])
+        for node in tree.get('inner', []):
+            w.visit_loc(node)
+            if node.get('kind') == 'FunctionDecl':
+                body = next((c for c in node.get('inner', []) if c.get('kind') == 'CompoundStmt'), None)
+                span = body and w.mine(body)
+                if span and (os.path.basename(path) in OTHER_HEADERS or OTHER_USE.search(text[span[0]:span[1]])):
+                    own.add(node.get('name'))
+    callers = {}
+    for f, cs in calls.items():
+        for c in cs:
+            callers.setdefault(c, set()).add(f)
+    other = set(own)
+    while True:
+        more = {f for f in calls if f not in other and callers.get(f) and callers[f] <= other}
+        if not more:
+            return other
+        other |= more
+
+
+def instrument(path, out, next_id, rows, pure, calls=None, timing=None, other=()):
+    text, w, order = walk_file(path, pure, calls, timing is not None)
     pieces, at = [], 0
     rel = rel_name(path)
     for i, (off, _order, s, kind) in order:
         pieces.append(text[at:off])
+        if '@' in s and (w.meta.get(i) or {}).get('fn') in other:
+            s = s.replace('CYC_PROBE', 'CYC_NOPROBE')       # another processor's: no mark
+        if '%T' in s and w.timing[i]['fn'] in other:
+            s = s.replace('%T, ', '0, ')
+        if '%T' in s:
+            m = w.timing[i]
+            tid = len(timing) + 1
+            line = text.count('\n', 0, m['at']) + 1
+            col = m['at'] - text.rfind('\n', 0, m['at'])
+            timing.append(dict(id=tid, file=rel, line=line, col=col, fn=m['fn'], name=m['name'], offset=m['at'],
+                               end=m['end'], arg_from=m['args'][0], arg_to=m['args'][1], args=' '.join(m['text'].split())))
+            s = s.replace('%T', str(tid))
         if '@' in s:
             line = text.count('\n', 0, off) + 1
             col = off - text.rfind('\n', 0, off)
@@ -608,6 +677,36 @@ def build_lib(outdir, lib):
     print('cycprobe: %s' % os.path.relpath(lib, ROOT))
 
 
+MARKS_H = '''/* cycprobe.h: the probes and timing calls named in nativeshvc's record
+   (cycprobe.py --marks): an M line each, a probe by its id, a timing call by
+   MARK_T | its id just before the time it states. */
+#ifndef CYCPROBE_H
+#define CYCPROBE_H
+#include <stdint.h>
+void nshvc_mark(uint32_t id);
+void cyc(uint32_t clocks);
+void cycs(uint64_t lengths);
+#define CYC_PROBE(n) nshvc_mark(n)
+#define CYC_PROBE_IF(n, c) ((c) ? (nshvc_mark(n), 1) : 0)
+#define CYC_NOPROBE(n) ((void)0)          /* another processor's C */
+#define CYC_NOPROBE_IF(n, c) (c)
+#define CYC_MARK_T 0x80000000u
+static inline void cyc_at_(uint32_t t, uint32_t clocks) { if (t) nshvc_mark(CYC_MARK_T | t); cyc(clocks); }
+static inline void cycs_at_(uint32_t t, uint64_t lengths) { if (t) nshvc_mark(CYC_MARK_T | t); cycs(lengths); }
+static inline uint32_t cyc_then_at_(uint32_t t, uint32_t clocks, uint32_t v) { cyc_at_(t, clocks); return v; }
+static inline uint32_t cycs_then_at_(uint32_t t, uint64_t lengths, uint32_t v) { cycs_at_(t, lengths); return v; }
+static inline int cyc_loop_at_(uint32_t t, uint32_t clocks, int again) { if (again) cyc_at_(t, clocks); return again; }
+static inline int cycs_loop_at_(uint32_t t, uint64_t lengths, int again) { if (again) cycs_at_(t, lengths); return again; }
+#define CYC_AT_cyc cyc_at_
+#define CYC_AT_cycs cycs_at_
+#define CYC_AT_cyc_then cyc_then_at_
+#define CYC_AT_cycs_then cycs_then_at_
+#define CYC_AT_cyc_loop cyc_loop_at_
+#define CYC_AT_cycs_loop cycs_loop_at_
+#endif
+'''
+
+
 def main(argv):
     if len(argv) == 4 and argv[1] == '--lib':
         main(['', argv[2]])
@@ -616,6 +715,9 @@ def main(argv):
     if len(argv) < 2:
         print(__doc__)
         return 2
+    marks = '--marks' in argv
+    argv = [a for a in argv if a != '--marks']
+    timing = [] if marks else None
     outdir = os.path.abspath(argv[1])
     files = [os.path.abspath(f) for f in argv[2:]] or sorted(glob.glob(os.path.join(SRC, '**', '*.c'), recursive=True))
     rows, nid = [], 1
@@ -624,20 +726,44 @@ def main(argv):
     # the headers' inline functions first
     heads = sorted(glob.glob(os.path.join(SRC, 'include', '*.h')))
     pure = pure_functions(heads)
+    other = other_cpu(heads, sorted(glob.glob(os.path.join(SRC, '**', '*.c'), recursive=True))) if marks else set()
     for h in heads:
-        nid = instrument(h, os.path.join(inc, os.path.basename(h)), nid, rows, pure)
+        nid = instrument(h, os.path.join(inc, os.path.basename(h)), nid, rows, pure, timing=timing, other=other)
     for f in files:
         out = os.path.join(outdir, os.path.relpath(f, SRC))
-        nid = instrument(f, out, nid, rows, pure)
+        nid = instrument(f, out, nid, rows, pure, timing=timing, other=other)
     with open(os.path.join(inc, 'cycprobe.h'), 'w') as o:
-        o.write('/* cycprobe.h: the probes (cycprobe.py). */\n#ifndef CYCPROBE_H\n#define CYCPROBE_H\n'
-                'void sfx_probe(unsigned id);\n#define CYC_PROBE(n) sfx_probe(n)\n'
-                '#define CYC_PROBE_IF(n, c) ((c) ? (sfx_probe(n), 1) : 0)\n#endif\n')
+        if marks:
+            o.write(MARKS_H)
+        else:
+            o.write('/* cycprobe.h: the probes (cycprobe.py). */\n#ifndef CYCPROBE_H\n#define CYCPROBE_H\n'
+                    'void sfx_probe(unsigned id);\n#define CYC_PROBE(n) sfx_probe(n)\n'
+                    '#define CYC_PROBE_IF(n, c) ((c) ? (sfx_probe(n), 1) : 0)\n#endif\n')
+    if marks:
+        with open(os.path.join(outdir, 'other_cpu.txt'), 'w') as o:
+            o.write(''.join(f + '\n' for f in sorted(other)))
+        # each probe inside a timing call's arguments (an arm of its ?:)
+        inside, by_id = {}, {t['id']: t for t in timing}
+        for t in timing:
+            inside.setdefault(t['file'], []).append(t)
+        for i, r in enumerate(rows):
+            par = ''
+            for t in inside.get(r[1], ()):
+                if t['arg_from'] <= r[5] < t['arg_to']:
+                    if not par or t['arg_from'] > by_id[par]['arg_from']:
+                        par = t['id']
+            rows[i] = r + (par,)
+        with open(os.path.join(outdir, 'timing.csv'), 'w', newline='') as f:
+            cols = ['id', 'file', 'line', 'col', 'fn', 'name', 'offset', 'end', 'arg_from', 'arg_to', 'args']
+            wr = csv.DictWriter(f, cols)
+            wr.writeheader()
+            wr.writerows(timing)
     with open(os.path.join(outdir, 'probes.csv'), 'w', newline='') as f:
         wr = csv.writer(f)
-        wr.writerow(['id', 'file', 'line', 'col', 'kind', 'offset', 'callee'])
+        wr.writerow(['id', 'file', 'line', 'col', 'kind', 'offset', 'callee'] + (['timing'] if marks else []))
         wr.writerows(rows)
-    print('cycprobe: %d probes in %d files under %s' % (len(rows), len(files), os.path.relpath(outdir, ROOT)))
+    print('cycprobe: %d probes%s in %d files under %s' % (
+        len(rows), ' and %d timing calls' % len(timing) if marks else '', len(files), outdir))
     return 0
 
 
