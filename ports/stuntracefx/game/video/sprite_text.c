@@ -43,7 +43,7 @@ void OamTextLine(uint8_t bank, uint16_t *xp, uint16_t *yp, uint16_t *ap)
             x++;
             wr8(0x0000F3, cyc_then(46, (uint8_t)(rd8(0x0000F3) + 8)));
             cyc(16);
-            wr8(0x0000F2, cyc_then(6, (uint8_t)(rd8(0x0000F2) - 1)));
+            wr8(0x0000F2, cyc_then(6, (uint8_t)(rd8_rmw(0x0000F2) - 1)));
             cyc(22);
             continue;
         }
@@ -64,7 +64,7 @@ void OamTextLine(uint8_t bank, uint16_t *xp, uint16_t *yp, uint16_t *ap)
         wr8(b | (uint16_t)(OAM_BUFFER + 3 + y), attr);
         y += 4;
         cyc(72);
-        c = (uint8_t)(rd8(0x0000F2) - 1);
+        c = (uint8_t)(rd8_rmw(0x0000F2) - 1);
         cyc(6);
         wr8(0x0000F2, c);
         if (!c)

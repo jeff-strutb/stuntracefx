@@ -117,7 +117,7 @@ static uint16_t draw_record(uint16_t o, uint16_t r)
     cyc(52);
     wr16(REC(r, 0x16), cyc_then(30, rd16(OBJ(o, 0x5D))));
     cyc(90);
-    wr16(DRAW_COUNT, cyc_then(14, (uint16_t)(rd16(DRAW_COUNT) + 1)));
+    wr16_rmw(DRAW_COUNT, cyc_then(6, (uint16_t)(rd16_rmw(DRAW_COUNT) + 1)));
     return (uint16_t)(r + 0x1E);
 }
 

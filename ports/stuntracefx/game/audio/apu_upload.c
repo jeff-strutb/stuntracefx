@@ -60,9 +60,9 @@ static uint8_t apu_upload_next_byte(uint16_t *offset, uint16_t *low)
         wr16(APU_STREAM_PTR, 0);
         *offset = 0x8000;
         cyc(40);
-        bank = rd16(APU_STREAM_BANK);
-        cyc(14);
-        wr16(APU_STREAM_BANK, (uint16_t)(bank + 1));
+        bank = rd16_rmw(APU_STREAM_BANK);
+        cyc(6);
+        wr16_rmw(APU_STREAM_BANK, (uint16_t)(bank + 1));
     } else { cyc(22); }
     cyc(100);
     return value;

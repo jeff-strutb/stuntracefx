@@ -256,6 +256,30 @@ void snes_tick(unsigned clocks)
 
 void snes_cart_irq(int level) { cart_irq = level; }
 
+/* ---- the Super FX's console (superfx.h) ---- */
+#include "coro.h"
+uint64_t gsu_host_clock(void) { return snes_clock; }
+int gsu_host_untimed(void) { return snes_untimed(); }
+void gsu_host_irq(int level) { snes_cart_irq(level); }
+uint8_t gsu_host_open_bus(void) { return snes_mdr; }
+uint32_t gsu_host_ram_size(void) { return snes_cart->sfx_ram_size; }
+uint8_t gsu_host_rom(uint32_t off, int fetch, int *unheld)
+{
+    uint8_t v;
+    snes_rom_unheld = 0;
+    v = snes_rom_byte(snes_cart, off & (snes_cart->rom_size - 1), SNES_ROM_GSU | (fetch ? SNES_ROM_FETCH : 0));
+    *unheld = snes_rom_unheld;
+    return v;
+}
+void gsu_host_fatal(const char *msg) { snes_fatal("%s", msg); }
+/* the S-CPU runs on the program's own stack */
+GsuHostCoro *gsu_host_coro_current(void) { return (GsuHostCoro *)coro_self(); }
+GsuHostCoro *gsu_host_coro_new(void (*fn)(void *), void *arg, size_t stack)
+{
+    return (GsuHostCoro *)coro_new(fn, arg, stack);
+}
+void gsu_host_coro_switch(GsuHostCoro *from, GsuHostCoro *to) { coro_switch((Coro *)from, (Coro *)to); }
+
 /* snes_hold_interrupts: code run between frames (from the frame hook)
    takes no interrupt; they wait for it to end. The machine is put back
    after it, so the Super FX's interrupt that its own programs' STOPs raise
@@ -761,6 +785,32 @@ void wr8(uint32_t addr, uint8_t value)
 }
 
 void hw_wr(uint32_t addr, uint8_t value) { access_wr(addr, value, 1); }
+
+/* A word or long is one operation (machine.h): the bytes after the first
+   are no place for an interrupt (access_wr's second byte; a read's, as
+   io_read_time's). */
+uint16_t rd16(uint32_t addr)
+{
+    uint8_t lo = rd8(addr);
+    return (uint16_t)(lo | rd8((addr + 1) & 0xFFFFFF) << 8);
+}
+void wr16(uint32_t addr, uint16_t value)
+{
+    wr8(addr, (uint8_t)value);
+    wr8((addr + 1) & 0xFFFFFF, (uint8_t)(value >> 8));
+}
+uint32_t rd24(uint32_t addr) { return rd16(addr) | (uint32_t)rd8((addr + 2) & 0xFFFFFF) << 16; }
+
+/* A read-modify-write (machine.h): its read, then its write, the high byte
+   first for a word, with no interrupt between them. */
+uint8_t rd8_rmw(uint32_t addr) { return rd8(addr); }
+uint16_t rd16_rmw(uint32_t addr) { return rd16(addr); }
+void wr16_rmw(uint32_t addr, uint16_t value)
+{
+    access_wr((addr + 1) & 0xFFFFFF, (uint8_t)(value >> 8), 0);
+    access_wr(addr, (uint8_t)value, 0);
+    last_was_write = 0;        /* a write after it is no word's second byte */
+}
 void snes_interrupt_push(uint32_t addr, uint8_t value) { access_wr(addr, value, 0); }
 
 /* A register access whose work the port's C does itself (native.h): its

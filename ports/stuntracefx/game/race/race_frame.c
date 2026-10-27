@@ -1095,7 +1095,7 @@ static void frame_time(uint8_t db, uint8_t p0)
     cyc(24);
     wr8(b | 0x06D5, v);
     cyc(24);
-    v = (uint8_t)(rd8(b | 0x06D6) + 1);
+    v = (uint8_t)(rd8_rmw(b | 0x06D6) + 1);
     cyc(6);
     wr8(b | 0x06D6, v);
     cpu.p = nz8(cpu.p, v);

@@ -214,7 +214,7 @@ void abi_WindowEdgesStep(void)
     v = rd8(b | 0x340D);
     cpu.p = (uint8_t)((cpu.p & ~P_C) | (v >= 0x1F ? (cyc(38), P_C) : 0));
     if (v < 0x1F)
-        { cyc(56); wr8(b | 0x340D, cyc_then(6, (uint8_t)(rd8(b | 0x340D) + 1))); }
+        { cyc(56); wr8(b | 0x340D, cyc_then(6, (uint8_t)(rd8_rmw(b | 0x340D) + 1))); }
     cpu.x = 0x00;
     cyc(40);
     v = (uint8_t)((rd8(b | 0x3437) ^ 0xFF) + 1);

@@ -31,7 +31,7 @@ static void lda8_imm(uint8_t v)
 static uint8_t inc8_mem(uint32_t addr)
 {
     cyc(24);
-    uint8_t v = (uint8_t)(rd8(addr) + 1);
+    uint8_t v = (uint8_t)(rd8_rmw(addr) + 1);
 
     cyc(6);
     wr8(addr, v);
@@ -42,7 +42,7 @@ static uint8_t inc8_mem(uint32_t addr)
 static uint8_t dec8_mem(uint32_t addr)
 {
     cyc(24);
-    uint8_t v = (uint8_t)(rd8(addr) - 1);
+    uint8_t v = (uint8_t)(rd8_rmw(addr) - 1);
 
     cyc(6);
     wr8(addr, v);

@@ -26,7 +26,7 @@ static void queue_push(uint32_t queue, uint32_t head, uint32_t count, uint8_t va
     n = rd8(count);
     if (n == 0) {
         cyc(46);
-        wr8(count, cyc_then(6, (uint8_t)(rd8(count) + 1)));
+        wr8(count, cyc_then(6, (uint8_t)(rd8_rmw(count) + 1)));
         cyc(24);
         wr8(queue + rd8(head), cyc_then(30, value));
     } else if (n < 0x10) {
@@ -37,7 +37,7 @@ static void queue_push(uint32_t queue, uint32_t head, uint32_t count, uint8_t va
         cyc(110);
         wr8(queue + slot, value);
         cyc(24);
-        wr8(count, cyc_then(6, (uint8_t)(rd8(count) + 1)));
+        wr8(count, cyc_then(6, (uint8_t)(rd8_rmw(count) + 1)));
     } else { cyc(54); }
     cyc(184);
 }
@@ -230,7 +230,7 @@ static int ring_send(uint32_t b, uint16_t port, uint16_t count, uint16_t head, u
         cyc(24);
         v = rd8(b | (uint16_t)(ring + cpu.x));
         cyc(24);
-        n = (uint8_t)(rd8(b | count) - 1);
+        n = (uint8_t)(rd8_rmw(b | count) - 1);
         cyc(6);
         wr8(b | count, n);
         if (n) {

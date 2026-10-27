@@ -45,10 +45,10 @@ uint16_t SpriteSlotFirst(uint8_t bank, uint16_t *x, uint8_t *p)
         for (*x = 8; *x; ) {
             uint16_t c = (*p & P_C) ? 0x8000 : 0;
 
-            w = rd16(cyc_then(100, dbw(bank, 0x1F2B)));
+            w = rd16_rmw(cyc_then(100, dbw(bank, 0x1F2B)));
             *p = (uint8_t)((*p & ~P_C) | (w & 1 ? P_C : 0));
             w = (uint16_t)(c | w >> 1);
-            wr16(dbw(bank, 0x1F2B), cyc_then(14, w));
+            wr16_rmw(dbw(bank, 0x1F2B), cyc_then(6, w));
             *p = nz16(*p, w);
             if (*p & P_C) {
                 found = 1;
@@ -169,7 +169,7 @@ uint8_t SpriteSlot1Countdown(uint8_t bank, uint16_t *x)
     cyc(38);
     wr8((uint16_t)(r + 0), a);
 count:
-    wr8(dbw(bank, 0x08FB), cyc_then(6, (uint8_t)(rd8(cyc_then(24, dbw(bank, 0x08FB))) - 1)));
+    wr8(dbw(bank, 0x08FB), cyc_then(6, (uint8_t)(rd8_rmw(cyc_then(24, dbw(bank, 0x08FB))) - 1)));
     return a;
 }
 

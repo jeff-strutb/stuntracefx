@@ -85,7 +85,7 @@ static void store_dec(uint32_t at, uint8_t v)
     wr8(at, v);
     if (v & 0x80) {
         cyc(48);
-        hi = rd8(at + 1);
+        hi = rd8_rmw(at + 1);
         cyc(6);
         wr8(at + 1, (uint8_t)(hi - 1));
     } else { cyc(38); }
@@ -436,9 +436,9 @@ static void double_vector(void)
 
     for (i = 0; i < 3; i++) {
         cyc(16);
-        v = rd16(at[i]);
-        cyc(14);
-        wr16(at[i], (uint16_t)(v << 1));
+        v = rd16_rmw(at[i]);
+        cyc(6);
+        wr16_rmw(at[i], (uint16_t)(v << 1));
     }
 }
 

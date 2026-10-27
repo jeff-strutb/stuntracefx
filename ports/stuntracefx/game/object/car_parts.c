@@ -157,7 +157,7 @@ static void add16m(uint32_t addr, uint32_t by, uint32_t adc)
 static uint8_t dec8(uint32_t addr)
 {
     cyc(52);
-    uint8_t v = (uint8_t)(rd8(addr) - 1);
+    uint8_t v = (uint8_t)(rd8_rmw(addr) - 1);
 
     cyc(6);
     wr8(addr, v);
@@ -169,7 +169,7 @@ static uint8_t dec8(uint32_t addr)
 static void inc8(uint32_t addr)
 {
     cyc(24);
-    uint8_t v = (uint8_t)(rd8(addr) + 1);
+    uint8_t v = (uint8_t)(rd8_rmw(addr) + 1);
 
     cyc(6);
     wr8(addr, v);
@@ -1259,7 +1259,7 @@ static void rival_frame(void)
         abi_CarCrashParts();
         if (!(cpu.p & P_C)) {
             cyc(40);                    /* BCS not taken, DEC abs to its read */
-            v = (uint8_t)(rd8(db() | 0x1F71) - 1);
+            v = (uint8_t)(rd8_rmw(db() | 0x1F71) - 1);
             cyc(6);
             wr8(db() | 0x1F71, v);
             cpu.p = nz8(cpu.p, v);

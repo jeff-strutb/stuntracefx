@@ -109,7 +109,7 @@ void abi_JoypadAccumulate(void)
 static void serial_shift(uint32_t b, uint8_t bit)
 {
     cyc(38);
-    uint8_t v = rd8(b | 0x1182);
+    uint8_t v = rd8_rmw(b | 0x1182);
 
     cyc(6);
     wr8(b | 0x1182, (uint8_t)(v << 1 | bit));

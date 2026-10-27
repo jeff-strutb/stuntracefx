@@ -476,7 +476,7 @@ static int pad_bit(uint32_t b, uint16_t bit)
 static void step_with_sound(uint32_t b, uint16_t at, int d)
 {
     cyc(86);
-    uint8_t v = (uint8_t)(rd8(b | at) + d);
+    uint8_t v = (uint8_t)(rd8_rmw(b | at) + d);
 
     cyc(6);
     wr8(b | at, v);

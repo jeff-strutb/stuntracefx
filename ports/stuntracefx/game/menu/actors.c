@@ -91,10 +91,10 @@ uint16_t MenuActorAlloc(uint8_t bank, uint8_t *p)
     wr16(dbw(bank, FREE_DEPTH), cyc_then(52, (uint16_t)(depth + 2)));
     len = rd16(cyc_then(24, dbw(bank, LIVE_LEN)));
     wr16(dbw(bank, (uint16_t)(LIVE_LIST + len)), cyc_then(30, rec));
-    len = rd16(cyc_then(24, dbw(bank, LIVE_LEN)));
-    wr16(dbw(bank, LIVE_LEN), cyc_then(14, (uint16_t)(len + 1)));
-    len = rd16(cyc_then(24, dbw(bank, LIVE_LEN)));
-    wr16(dbw(bank, LIVE_LEN), cyc_then(14, (uint16_t)(len + 1)));
+    len = rd16_rmw(cyc_then(24, dbw(bank, LIVE_LEN)));
+    wr16_rmw(dbw(bank, LIVE_LEN), cyc_then(6, (uint16_t)(len + 1)));
+    len = rd16_rmw(cyc_then(24, dbw(bank, LIVE_LEN)));
+    wr16_rmw(dbw(bank, LIVE_LEN), cyc_then(6, (uint16_t)(len + 1)));
     *p = nz16(*p, rec);
     cyc(56);
     return rec;
@@ -412,9 +412,9 @@ uint16_t MenuActorAnimate(uint8_t bank, uint16_t rec, uint16_t *x, uint8_t *p)
         return anim;
     }
     cyc(38);
-    t = (uint16_t)(rd16((uint16_t)(rec + 0x18)) - 1);
-    cyc(14);
-    wr16((uint16_t)(rec + 0x18), t);
+    t = (uint16_t)(rd16_rmw((uint16_t)(rec + 0x18)) - 1);
+    cyc(6);
+    wr16_rmw((uint16_t)(rec + 0x18), t);
     if (!(t & 0x8000)) {
         cyc(22);
         *p = nz16(*p, t);
@@ -475,10 +475,10 @@ void abi_MenuActorAnimate(void)
 int MenuActorCountdown(uint16_t rec, uint8_t *p)
 {
     cyc(22);
-    uint16_t c = (uint16_t)(rd16((uint16_t)(rec + 0x0A)) - 1);
+    uint16_t c = (uint16_t)(rd16_rmw((uint16_t)(rec + 0x0A)) - 1);
 
-    cyc(14);
-    wr16((uint16_t)(rec + 0x0A), c);
+    cyc(6);
+    wr16_rmw((uint16_t)(rec + 0x0A), c);
     if (!(c & 0x8000)) {
         cyc(22);
         *p = nz16(*p, c);
@@ -1171,13 +1171,13 @@ uint16_t MenuActorUploadFrames(uint8_t bank, uint16_t rec, uint16_t frame, uint1
         cyc(54);
         queue_frame_row(b, rd16(b | 0x11E1), src);
         cyc(90);
-        wr8(b | 0x11E2, cyc_then(6, (uint8_t)(rd8(b | 0x11E2) + 1)));
+        wr8(b | 0x11E2, cyc_then(6, (uint8_t)(rd8_rmw(b | 0x11E2) + 1)));
         cyc(46);
         queue_frame_row(b, rd16(b | 0x11E1), cyc_then(74, (uint16_t)(src + 0x0200)));
         cyc(68);
-        wr16(b | 0x11E3, cyc_then(14, (uint16_t)(rd16(b | 0x11E3) + 1)));  /* two memory increments */
+        wr16_rmw(b | 0x11E3, cyc_then(6, (uint16_t)(rd16_rmw(b | 0x11E3) + 1)));  /* two memory increments */
         cyc(24);
-        wr16(b | 0x11E3, cyc_then(14, (uint16_t)(rd16(b | 0x11E3) + 1)));
+        wr16_rmw(b | 0x11E3, cyc_then(6, (uint16_t)(rd16_rmw(b | 0x11E3) + 1)));
         cyc(24);
         wr16(b | 0x11DF, cyc_then(76, (uint16_t)(rd16(b | 0x11DF) + 2) & 0x003F));
         cyc(24);
@@ -1293,9 +1293,9 @@ uint16_t MenuActorAnimateThenExit(uint8_t bank, uint16_t *x, uint8_t *p)
     *p &= (uint8_t)~(P_M | P_X);
     a = MenuActorAnimateFrame(bank, x, p);
     cyc(22);
-    c = (uint16_t)(rd16((uint16_t)(*x + 0x0A)) - 1);
-    cyc(14);
-    wr16((uint16_t)(*x + 0x0A), c);
+    c = (uint16_t)(rd16_rmw((uint16_t)(*x + 0x0A)) - 1);
+    cyc(6);
+    wr16_rmw((uint16_t)(*x + 0x0A), c);
     *p = nz16(*p, c);
     if (!(c & 0x8000))
         { cyc(22); return a; }
@@ -1439,10 +1439,10 @@ void abi_MenuFadeInHandler(void)
 uint16_t MenuChoiceObjectFrames(uint8_t bank, uint16_t a, uint16_t *x, uint16_t *y, uint8_t *p)
 {
     cyc(68);
-    uint16_t t = (uint16_t)(rd16((uint16_t)(*x + 0x1E)) - 1);
+    uint16_t t = (uint16_t)(rd16_rmw((uint16_t)(*x + 0x1E)) - 1);
 
-    cyc(14);
-    wr16((uint16_t)(*x + 0x1E), t);
+    cyc(6);
+    wr16_rmw((uint16_t)(*x + 0x1E), t);
     if (!(t & 0x8000)) {
         cyc(88);
         *p = nz16(*p, t);
@@ -1670,11 +1670,11 @@ uint16_t MenuActorCopyGroup(uint8_t bank, uint16_t *xo, uint8_t *p)
         cyc(24);
         wr16(0x7F1356 + rd16(b | 0x11E3), cyc_then(32, a));
         cyc(24);
-        wr16(b | 0x11E1, cyc_then(14, (uint16_t)(rd16(b | 0x11E1) + 2)));
+        wr16_rmw(b | 0x11E1, cyc_then(6, (uint16_t)(rd16_rmw(b | 0x11E1) + 2)));
         cyc(86);
-        wr16(b | 0x11E3, cyc_then(14, (uint16_t)(rd16(b | 0x11E3) + 2)));
+        wr16_rmw(b | 0x11E3, cyc_then(6, (uint16_t)(rd16_rmw(b | 0x11E3) + 2)));
         cyc(86);
-        wr16(b | 0x11DF, cyc_then(14, (uint16_t)(rd16(b | 0x11DF) - 2)));
+        wr16_rmw(b | 0x11DF, cyc_then(6, (uint16_t)(rd16_rmw(b | 0x11DF) - 2)));
     } while (cyc_loop(44, rd16(cyc_then(24, b | 0x11DF))));
     cyc(62);
     *xo = rd16(b | CURRENT);
@@ -2016,11 +2016,11 @@ uint16_t MenuDropStart(uint8_t bank, uint16_t rec, uint16_t a, uint8_t *p)
         {HDMAEN, 0x10}, {TSW, 0x00}, {CGWSEL, 0x00}, {CGADSUB, 0x00},
         {BG1SC, 0x69}, {BG2SC, 0x61}, {BG12NBA, 0x04}};
     cyc(22);
-    uint16_t c = (uint16_t)(rd16((uint16_t)(rec + 0x0A)) - 1), h;
+    uint16_t c = (uint16_t)(rd16_rmw((uint16_t)(rec + 0x0A)) - 1), h;
     unsigned i;
 
-    cyc(14);
-    wr16((uint16_t)(rec + 0x0A), c);
+    cyc(6);
+    wr16_rmw((uint16_t)(rec + 0x0A), c);
     if (!(c & 0x8000)) {
         cyc(46);
         *p = nz16(*p, c);
@@ -2340,9 +2340,9 @@ uint16_t MenuSelectArrive(uint8_t bank, uint16_t *x, uint8_t *p)
 
     *p &= (uint8_t)~(P_M | P_X);
     cyc(44);
-    speed = (uint16_t)(rd16((uint16_t)(rec + 0x20)) + 1);
-    cyc(14);
-    wr16((uint16_t)(rec + 0x20), speed);
+    speed = (uint16_t)(rd16_rmw((uint16_t)(rec + 0x20)) + 1);
+    cyc(6);
+    wr16_rmw((uint16_t)(rec + 0x20), speed);
     cyc(22);
     pos = (uint16_t)(rd16((uint16_t)(rec + 0x22)) + speed);
     cyc(74);
@@ -2516,10 +2516,10 @@ uint16_t MenuActorSpawnList(uint8_t bank, uint16_t list, uint16_t *a, uint16_t *
             { cyc(18); break; }
         if (MenuActorSpawn(bank, e, a, y, &p) == 0xFFFF)
             SystemHaltSpawn();
-        x = rd16(cyc_then(64, dbw(bank, 0x11FD)));
-        wr16(dbw(bank, 0x11FD), cyc_then(14, (uint16_t)(x + 1)));
-        x = rd16(cyc_then(24, dbw(bank, 0x11FD)));
-        wr16(dbw(bank, 0x11FD), cyc_then(14, (uint16_t)(x + 1)));
+        x = rd16_rmw(cyc_then(64, dbw(bank, 0x11FD)));
+        wr16_rmw(dbw(bank, 0x11FD), cyc_then(6, (uint16_t)(x + 1)));
+        x = rd16_rmw(cyc_then(24, dbw(bank, 0x11FD)));
+        wr16_rmw(dbw(bank, 0x11FD), cyc_then(6, (uint16_t)(x + 1)));
         cyc(22);
     }
     *a = e;
@@ -2601,11 +2601,11 @@ void abi_MenuDropAwayFinishCurrent(void)
 static void ror_mem(uint32_t addr, int *c)
 {
     cyc(24);
-    uint16_t v = rd16(addr);
+    uint16_t v = rd16_rmw(addr);
     int out = v & 1;
 
-    cyc(14);
-    wr16(addr, (uint16_t)((v >> 1) | (*c ? 0x8000 : 0)));
+    cyc(6);
+    wr16_rmw(addr, (uint16_t)((v >> 1) | (*c ? 0x8000 : 0)));
     *c = out;
 }
 
@@ -2614,10 +2614,10 @@ static void ror_mem(uint32_t addr, int *c)
 static void oam_high_step(void)
 {
     cyc(24);
-    uint16_t n = (uint16_t)(rd16(0x0011DF) - 1), y;
+    uint16_t n = (uint16_t)(rd16_rmw(0x0011DF) - 1), y;
 
-    cyc(14);
-    wr16(0x0011DF, n);
+    cyc(6);
+    wr16_rmw(0x0011DF, n);
     if (!(n & 0x8000))
         { cyc(22); return; }
     cyc(64);
@@ -2698,7 +2698,7 @@ uint16_t MenuOamBuild(uint16_t *x, uint16_t *y)
                 if (sx < 0xFFF0)
                     { cyc(64); continue; }
                 cyc(86);
-                wr16(0x0011F1, cyc_then(14, (uint16_t)(rd16(0x0011F1) + 1)));
+                wr16_rmw(0x0011F1, cyc_then(6, (uint16_t)(rd16_rmw(0x0011F1) + 1)));
                 cyc(52);
             } else if (sx >= 0x0100) {
                 cyc(70);
@@ -2759,7 +2759,7 @@ uint16_t MenuOamBuild(uint16_t *x, uint16_t *y)
                 if (sx < 0xFFF0)
                     { cyc(62); goto next; }
                 cyc(80);
-                wr16(0x0011F1, cyc_then(14, (uint16_t)(rd16(0x0011F1) + 1)));
+                wr16_rmw(0x0011F1, cyc_then(6, (uint16_t)(rd16_rmw(0x0011F1) + 1)));
                 cyc(52);
             } else if (sx >= 0x0100) {
                 cyc(68);
@@ -2779,19 +2779,19 @@ uint16_t MenuOamBuild(uint16_t *x, uint16_t *y)
             cyc(52);
             wr16(0x001205, *y);
             cyc(24);
-            w = rd16(0x0011F1);
+            w = rd16_rmw(0x0011F1);
             c = w & 1;
-            cyc(14);
-            wr16(0x0011F1, (uint16_t)(w >> 1));
+            cyc(6);
+            wr16_rmw(0x0011F1, (uint16_t)(w >> 1));
             ror_mem(0x0011E1, &c);
             cyc(32);
             c = rd16(0x7F135C + *x) & 1;
             cyc(14);
             ror_mem(0x0011E1, &c);
             cyc(24);
-            w = (uint16_t)(rd16(0x0011DF) - 1);
-            cyc(14);
-            wr16(0x0011DF, w);
+            w = (uint16_t)(rd16_rmw(0x0011DF) - 1);
+            cyc(6);
+            wr16_rmw(0x0011DF, w);
             if (w & 0x8000) {
                 /* here the word is stored before $11DF is reset */
                 cyc(40);
@@ -2807,9 +2807,9 @@ uint16_t MenuOamBuild(uint16_t *x, uint16_t *y)
         next:
             *x = (uint16_t)(*x + 8);
             cyc(90);
-            w = (uint16_t)(rd16(0x0011E3) - 1);
-            cyc(14);
-            wr16(0x0011E3, w);
+            w = (uint16_t)(rd16_rmw(0x0011E3) - 1);
+            cyc(6);
+            wr16_rmw(0x0011E3, w);
             if (w & 0x8000)
                 break; else { cyc(18); }
         }

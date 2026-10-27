@@ -749,7 +749,7 @@ static void preview_menu_loop(void)
         cyc(56);
         wr16(0x0018FD, 0x0000);
         cyc(24);
-        wr16(b | 0x11DD, cyc_then(14, (uint16_t)(rd16(b | 0x11DD) + 1)));
+        wr16_rmw(b | 0x11DD, cyc_then(6, (uint16_t)(rd16_rmw(b | 0x11DD) + 1)));
         (cyc(62), abi_MenuActorsRun());
         (cyc(62), abi_MenuOamBuild());
         cpu.p &= (uint8_t)~P_M;

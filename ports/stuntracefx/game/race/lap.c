@@ -76,7 +76,7 @@ uint8_t LapSplit(uint8_t bank, uint8_t x, uint8_t *p)
         *p &= (uint8_t)~P_C;
         v = adc_bcd8(v, 0x60, p);
         cyc(40);
-        wr8(0x0000F1, cyc_then(6, (uint8_t)(rd8(0x0000F1) - 1)));
+        wr8(0x0000F1, cyc_then(6, (uint8_t)(rd8_rmw(0x0000F1) - 1)));
     }
     cyc(30);
     wr8(b | (uint16_t)(0x0EDF + x), v);

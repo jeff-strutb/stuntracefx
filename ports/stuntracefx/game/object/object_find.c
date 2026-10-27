@@ -571,8 +571,8 @@ void abi_ObjectCountOfKind(void)
         m = rd16(cyc_then(first ? 44 : 66, f(b, x, 0x04)));
         first = 0;
         if (cpu.a == m) {
-            n = rd16(cyc_then(40, w(b, WORK)));
-            wr16(w(b, WORK), cyc_then(14, (uint16_t)(n + 1)));
+            n = rd16_rmw(cyc_then(40, w(b, WORK)));
+            wr16_rmw(w(b, WORK), cyc_then(6, (uint16_t)(n + 1)));
         } else { cyc(22); }
         y = rd16(cyc_then(30, f(b, x, 0x00)));
     } while (y);

@@ -460,11 +460,11 @@ uint16_t MenuPictureInsetGrid(uint8_t bank)
         for (i = 0; i < 15; i++, x = (uint16_t)(x + 2))
             { cyc(18); a = raise_tile(x); }
         cyc(58);
-        wr16(b | 0x11E1, cyc_then(14, (uint16_t)(rd16(b | 0x11E1) + 1)));
+        wr16_rmw(b | 0x11E1, cyc_then(6, (uint16_t)(rd16_rmw(b | 0x11E1) + 1)));
         cyc(24);
-        rows = (uint16_t)(rd16(b | 0x11DF) - 1);
-        cyc(14);
-        wr16(b | 0x11DF, rows);
+        rows = (uint16_t)(rd16_rmw(b | 0x11DF) - 1);
+        cyc(6);
+        wr16_rmw(b | 0x11DF, rows);
     } while (cyc_loop(22, !(rows & 0x8000)));
     for (i = 0; cyc_loop(18, i < 0xA0); i++, x = (uint16_t)(x + 2))
         a = w = raise_tile(x);

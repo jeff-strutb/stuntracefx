@@ -31,9 +31,9 @@ static uint16_t expand_runs(uint8_t bank, uint16_t x, uint16_t *y)
             wr16((0x7FEF57 + out) & 0xFFFFFF, colour);
             out = (uint16_t)(out + 2);
             cyc(44);
-            n = (uint16_t)(rd16(0x0000F1) - 1);
-            cyc(14);
-            wr16(0x0000F1, n);
+            n = (uint16_t)(rd16_rmw(0x0000F1) - 1);
+            cyc(6);
+            wr16_rmw(0x0000F1, n);
         } while (cyc_loop(22, n));
         cyc(32);
         wr16(0x0000F3, out);

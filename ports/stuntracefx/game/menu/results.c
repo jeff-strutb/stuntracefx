@@ -41,9 +41,9 @@ static void set_field(uint16_t off, uint16_t v)
 /* DEC of a field (16-bit): N, Z from the result. */
 static uint16_t dec_fld(uint16_t off)
 {
-    uint16_t v = (uint16_t)(rd16(cyc_then(22, fld(off))) - 1);
+    uint16_t v = (uint16_t)(rd16_rmw(cyc_then(22, fld(off))) - 1);
 
-    wr16(fld(off), cyc_then(14, v));
+    wr16_rmw(fld(off), cyc_then(6, v));
     cpu.p = nz16(cpu.p, v);
     return v;
 }

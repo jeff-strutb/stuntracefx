@@ -74,9 +74,9 @@ void SpeedSampleAdd(uint8_t bank, uint16_t speed, uint16_t player, uint8_t *p, u
     wr16(b | (uint16_t)(sum + 2), (uint16_t)h);
     *a = (uint16_t)h;
     cyc(24);
-    m = (uint16_t)(rd16(b | cnt) + 1);
-    cyc(14);
-    wr16(b | cnt, m);
+    m = (uint16_t)(rd16_rmw(b | cnt) + 1);
+    cyc(6);
+    wr16_rmw(b | cnt, m);
     *p = nz16(*p, m);
     cyc(42);
 }
@@ -546,7 +546,7 @@ static void p1_cmp8(uint8_t m)
 static uint8_t p1_step8(uint32_t at, int d)
 {
     cyc(8);
-    uint8_t v = (uint8_t)(rd8(at) + d);
+    uint8_t v = (uint8_t)(rd8_rmw(at) + d);
 
     cyc(6);
     wr8(at, v);
@@ -943,7 +943,7 @@ static void stunt_count_byte(uint32_t b)
 static void stunt_count_down(uint32_t b, uint32_t lead)
 {
     cyc(lead);
-    uint8_t v = (uint8_t)(rd8(b | 0x0E3F) - 1);
+    uint8_t v = (uint8_t)(rd8_rmw(b | 0x0E3F) - 1);
 
     cyc(6);
     wr8(b | 0x0E3F, v);
@@ -1157,7 +1157,7 @@ void abi_StuntPanelDone(void)
     call_routine(0x078929, 0);
     op_sep(P_M);
     cyc(182);
-    v = (uint8_t)(rd8(b | 0x0E3F) - 1);
+    v = (uint8_t)(rd8_rmw(b | 0x0E3F) - 1);
     cyc(6);
     wr8(b | 0x0E3F, v);
     cpu.p = nz8(cpu.p, v);
@@ -1592,9 +1592,9 @@ void abi_TimeUpPhaseStart(void)
     wr16(b | 0x0FE2, 0x0040);
     for (i = 0; i < 2; i++) {
         cyc(24);
-        v = (uint16_t)(rd16(b | 0x0DD6) + 1);
-        cyc(14);
-        wr16(b | 0x0DD6, v);
+        v = (uint16_t)(rd16_rmw(b | 0x0DD6) + 1);
+        cyc(6);
+        wr16_rmw(b | 0x0DD6, v);
         cpu.p = nz16(cpu.p, v);
     }
     cyc(42);
@@ -1896,7 +1896,7 @@ void abi_RaceEndCountdown(void)
         race_end_vblank(b, branch);
         branch = 0;
         cyc(24);
-        v = (uint8_t)(rd8(b | 0x0E5A) - 1);
+        v = (uint8_t)(rd8_rmw(b | 0x0E5A) - 1);
         cyc(6);
         wr8(b | 0x0E5A, v);
         cpu.p = nz8(cpu.p, v);

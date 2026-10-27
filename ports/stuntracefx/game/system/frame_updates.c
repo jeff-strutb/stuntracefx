@@ -446,11 +446,11 @@ static uint8_t frame_input_and_count_end(uint8_t bank, uint16_t *hi, uint16_t *x
     *hi = (uint16_t)(w & 0xFF00);
     *x = word_list_append(0x001193, 0x0011B5, w);
     cyc(116);
-    wr8(b | 0x0E3B, cyc_then(6, (uint8_t)(rd8(b | 0x0E3B) + 1)));
+    wr8(b | 0x0E3B, cyc_then(6, (uint8_t)(rd8_rmw(b | 0x0E3B) + 1)));
     cyc(24);
-    wr8(b | 0x0306, cyc_then(6, (uint8_t)(rd8(b | 0x0306) + 1)));
+    wr8(b | 0x0306, cyc_then(6, (uint8_t)(rd8_rmw(b | 0x0306) + 1)));
     cyc(16);
-    wr8(0x000006, cyc_then(6, (uint8_t)(rd8(0x000006) + 1)));
+    wr8(0x000006, cyc_then(6, (uint8_t)(rd8_rmw(0x000006) + 1)));
     cyc(24);
     v = rd8(b | 0x11DA);
     cyc(24);
@@ -508,11 +508,11 @@ uint8_t FrameCountAndPortsEnd(uint8_t bank, uint16_t *high, int *checked)
     uint8_t lum;
 
     cyc(38);
-    wr8(0x000006, cyc_then(6, (uint8_t)(rd8(0x000006) + 1)));
+    wr8(0x000006, cyc_then(6, (uint8_t)(rd8_rmw(0x000006) + 1)));
     cyc(24);
-    wr8(b | 0x0E3B, cyc_then(6, (uint8_t)(rd8(b | 0x0E3B) + 1)));
+    wr8(b | 0x0E3B, cyc_then(6, (uint8_t)(rd8_rmw(b | 0x0E3B) + 1)));
     cyc(24);
-    wr8(b | 0x0306, cyc_then(6, (uint8_t)(rd8(b | 0x0306) + 1)));
+    wr8(b | 0x0306, cyc_then(6, (uint8_t)(rd8_rmw(b | 0x0306) + 1)));
     cyc(78);
     wr16(0x0018FB, 0x0000);
     cyc(32);

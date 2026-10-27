@@ -31,7 +31,7 @@ uint16_t GsuScreenFlip(uint8_t bank)
         wr16(b | 0x0D7D, 0x0008);
     } else {
         cyc(68);
-        wr16(b | 0x0D7F, cyc_then(14, (uint16_t)(rd16(b | 0x0D7F) + 1)));
+        wr16_rmw(b | 0x0D7F, cyc_then(6, (uint16_t)(rd16_rmw(b | 0x0D7F) + 1)));
         cyc(48);
         wr16(b | 0x0D7D, 0x0000);
     }
@@ -83,7 +83,7 @@ uint16_t GsuScreenFlipMenu(uint8_t bank)
         base = 0x0B;
     } else {
         cyc(68);
-        wr16(b | 0x0D7F, cyc_then(14, (uint16_t)(rd16(b | 0x0D7F) + 1)));
+        wr16_rmw(b | 0x0D7F, cyc_then(6, (uint16_t)(rd16_rmw(b | 0x0D7F) + 1)));
         start = 0x9400;
         base = 0x25;
     }
@@ -135,7 +135,7 @@ uint16_t GsuScreenToggle(uint8_t bank)
         base = 0x0B;
     } else {
         cyc(68);
-        wr16(b | 0x0D7F, cyc_then(14, (uint16_t)(rd16(b | 0x0D7F) + 1)));
+        wr16_rmw(b | 0x0D7F, cyc_then(6, (uint16_t)(rd16_rmw(b | 0x0D7F) + 1)));
         start = 0x9400;
         base = 0x25;
     }

@@ -94,9 +94,9 @@ void ObjectListTableFirst(void)
                 cyc(32);
                 wr16(0x7E96B5, v);
                 cyc(24);
-                v = rd16(b | 0x0D04);
-                cyc(14);
-                wr16(b | 0x0D04, (uint16_t)(v + 1));
+                v = rd16_rmw(b | 0x0D04);
+                cyc(6);
+                wr16_rmw(b | 0x0D04, (uint16_t)(v + 1));
                 cpu.y = 0x000A;
             } else { t = 112; /* BIT, BNE taken */ }
         } else { cyc(66); }

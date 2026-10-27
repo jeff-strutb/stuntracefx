@@ -171,7 +171,7 @@ uint8_t HudDrawNumber3(uint8_t n, uint16_t offset, uint8_t *p)
         *p = (uint8_t)((*p & ~P_V) | (((n ^ 100) & (n ^ (uint8_t)(n - 100)) & 0x80) ? P_V : 0));
         n = (uint8_t)(n - 100);
         cyc(64);
-        count = rd8(0x0000F1);
+        count = rd8_rmw(0x0000F1);
         cyc(6);
         wr8(0x0000F1, (uint8_t)(count + 1));
         cyc(22);
@@ -187,7 +187,7 @@ uint8_t HudDrawNumber3(uint8_t n, uint16_t offset, uint8_t *p)
         n = (uint8_t)(n - 10);
         cyc(c);
         c = 86;
-        count = rd8(0x0000F1);
+        count = rd8_rmw(0x0000F1);
         cyc(6);
         wr8(0x0000F1, (uint8_t)(count + 1));
     }

@@ -50,7 +50,7 @@ static void cmp8(uint8_t m)
 static void step8(uint32_t addr, int d)
 {
     cyc(30);
-    uint8_t v = rd8(addr);
+    uint8_t v = rd8_rmw(addr);
 
     v = (uint8_t)(v + d);
     cyc(6);

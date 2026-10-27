@@ -139,7 +139,7 @@ static void add16(uint32_t addr, uint16_t v)
 static uint8_t dec8(uint32_t addr)
 {
     cyc(8);
-    uint8_t v = (uint8_t)(rd8(addr) - 1);
+    uint8_t v = (uint8_t)(rd8_rmw(addr) - 1);
 
     cyc(6);
     wr8(addr, v);
@@ -151,7 +151,7 @@ static uint8_t dec8(uint32_t addr)
 static void inc8(uint32_t addr)
 {
     cyc(46);
-    uint8_t v = (uint8_t)(rd8(addr) + 1);
+    uint8_t v = (uint8_t)(rd8_rmw(addr) + 1);
 
     cyc(6);
     wr8(addr, v);
@@ -8055,9 +8055,9 @@ static void slide_gate_held_m16(void)
 
     op_lda16(F(0x2025, cpu.x));
     op_and16(0xF001);
-    m = rd16((uint16_t)(cpu.d + 0x5C));
+    m = rd16_rmw((uint16_t)(cpu.d + 0x5C));
     cpu.p = (uint8_t)((cpu.p & ~P_Z) | ((cpu.a & m) ? 0 : P_Z));
-    wr16((uint16_t)(cpu.d + 0x5C), (uint16_t)(m | cpu.a));
+    wr16_rmw((uint16_t)(cpu.d + 0x5C), (uint16_t)(m | cpu.a));
     wr16((uint16_t)(cpu.d + 0xEC + cpu.x), cpu.y);
     cpu.a = (uint16_t)(cpu.a | 0x25BD);
     cpu.p = nz16(cpu.p, cpu.a);
@@ -8100,7 +8100,7 @@ static void slide_gate_out_m8(void)
     lda8((uint8_t)(a & 0x02));
     brk_09(0xECC0);
     cyc(86);
-    m = rd8((uint16_t)(cpu.d + 0x5C));
+    m = rd8_rmw((uint16_t)(cpu.d + 0x5C));
     cpu.p = (uint8_t)((cpu.p & ~P_Z) | (((uint8_t)cpu.a & m) ? 0 : P_Z));
     cyc(6);
     wr8((uint16_t)(cpu.d + 0x5C), (uint8_t)(m | (uint8_t)cpu.a));

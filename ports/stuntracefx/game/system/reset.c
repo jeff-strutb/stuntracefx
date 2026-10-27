@@ -95,7 +95,7 @@ void abi_SoftResetCheck(void)
         }
         op_sep(P_M);
         cyc(90);
-        v = (uint8_t)(rd8(b | RESET_STATE) - 1);
+        v = (uint8_t)(rd8_rmw(b | RESET_STATE) - 1);
         cyc(6);
         wr8(b | RESET_STATE, v);
         cpu.p = nz8(cpu.p, v);
@@ -116,7 +116,7 @@ void abi_SoftResetCheck(void)
         cyc(40);
         wr8(b | RESET_TICK, 0x00);
         cyc(24);
-        v = (uint8_t)(rd8(b | RESET_FRAMES) - 1);
+        v = (uint8_t)(rd8_rmw(b | RESET_FRAMES) - 1);
         cyc(6);
         wr8(b | RESET_FRAMES, v);
         cpu.p = nz8(cpu.p, v);

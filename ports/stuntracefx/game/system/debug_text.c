@@ -92,9 +92,9 @@ void DebugDrawChar(uint8_t bank, uint8_t ch, uint16_t *a, uint16_t *x, uint16_t 
         *x = (uint16_t)(*x + 2);
         *y = (uint16_t)(*y + 1);
         cyc(80);
-        rows = (uint16_t)(rd16(TEXT_ROWS) - 1);
-        cyc(14);
-        wr16(TEXT_ROWS, rows);
+        rows = (uint16_t)(rd16_rmw(TEXT_ROWS) - 1);
+        cyc(6);
+        wr16_rmw(TEXT_ROWS, rows);
     } while (rows);
     cyc(88);
     pos = (uint16_t)(dest - rd16(TEXT_BASE));

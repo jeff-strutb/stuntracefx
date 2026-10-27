@@ -92,7 +92,7 @@ static uint16_t vram_fill_gradient(uint16_t start, uint8_t *p)
             a = (uint16_t)s;
         }
         cyc(10);
-        wr16(0x0000F1, cyc_then(14, (uint16_t)(rd16(0x0000F1) + 1)));
+        wr16_rmw(0x0000F1, cyc_then(6, (uint16_t)(rd16_rmw(0x0000F1) + 1)));
         cyc(22);
     }
     return a;
@@ -724,9 +724,9 @@ uint16_t TilemapRowToE3D7(uint8_t bank, uint16_t *x, uint16_t *y)
         *x = (uint16_t)(*x + 2);
         *y = (uint16_t)(*y + 2);
         cyc(72);
-        n = (uint16_t)(rd16(0x0000F3) - 1);
-        cyc(14);
-        wr16(0x0000F3, n);
+        n = (uint16_t)(rd16_rmw(0x0000F3) - 1);
+        cyc(6);
+        wr16_rmw(0x0000F3, n);
     } while (n);
     cyc(58);
     return v;
@@ -792,9 +792,9 @@ static uint16_t backdrop_rows_update(uint8_t bank, uint16_t *xo, uint16_t *yo)
         x = (uint16_t)(x + 0x0100);
         a = x;
         cyc(82);
-        n = (uint16_t)(rd16(0x0000F1) - 1);
-        cyc(14);
-        wr16(0x0000F1, (uint16_t)n);
+        n = (uint16_t)(rd16_rmw(0x0000F1) - 1);
+        cyc(6);
+        wr16_rmw(0x0000F1, (uint16_t)n);
         if (!n)
             break;
     }
@@ -1157,7 +1157,7 @@ void abi_TimesKeepAndAdvance(void)
     cyc(40);
     wr8(b | 0x0E3F, 0x00);
     cyc(24);
-    v = (uint8_t)(rd8(b | 0x0D59) + 1);
+    v = (uint8_t)(rd8_rmw(b | 0x0D59) + 1);
     cyc(6);
     wr8(b | 0x0D59, v);
     cpu.p = nz8(cpu.p, v);
@@ -1230,7 +1230,7 @@ static void bg2_scroll_corner(uint32_t b)
 static void stage_next(uint32_t b)
 {
     cyc(24);
-    uint8_t v = (uint8_t)(rd8(b | 0x0D59) + 1);
+    uint8_t v = (uint8_t)(rd8_rmw(b | 0x0D59) + 1);
 
     cyc(6);
     wr8(b | 0x0D59, v);

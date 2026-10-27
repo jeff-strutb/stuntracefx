@@ -1563,9 +1563,9 @@ uint16_t GsuReciprocal(uint8_t bank, uint8_t *p)
     cyc(40);
     if (0x00FF < rd16(0x0000F1)) {
         cyc(32);
-        wr16(0x0000F1, cyc_then(14, (uint16_t)(rd16(0x0000F1) >> 1)));
+        wr16_rmw(0x0000F1, cyc_then(6, (uint16_t)(rd16_rmw(0x0000F1) >> 1)));
         cyc(16);
-        wr16(0x0000F3, cyc_then(14, (uint16_t)(rd16(0x0000F3) >> 1)));
+        wr16_rmw(0x0000F3, cyc_then(6, (uint16_t)(rd16_rmw(0x0000F3) >> 1)));
     } else { cyc(22); }
     cyc(16);
     wr16(b | 0x4204, n = cyc_then(24, rd16(0x0000F3)));
@@ -2703,9 +2703,9 @@ void abi_GlyphListMessageAndTime(void)
         wr16(0x0000F3, cpu.a);
         cpu.x = (uint16_t)(cpu.x + 2);
         cyc(44);
-        v = (uint16_t)(rd16(0x0000F1) - 1);
-        cyc(14);
-        wr16(0x0000F1, v);
+        v = (uint16_t)(rd16_rmw(0x0000F1) - 1);
+        cyc(6);
+        wr16_rmw(0x0000F1, v);
         cpu.p = nz16(cpu.p, v);
     } while (v);
     op_rep(P_M);
@@ -2880,10 +2880,10 @@ void abi_SoundPort1QueuePush(void);
    moves on; 1 when it ran out. */
 static int glyph_wait(uint32_t b, uint16_t reload)
 {
-    uint16_t v = (uint16_t)(rd16(b | 0x115A) - 1);
+    uint16_t v = (uint16_t)(rd16_rmw(b | 0x115A) - 1);
 
-    cyc(14);
-    wr16(b | 0x115A, v);
+    cyc(6);
+    wr16_rmw(b | 0x115A, v);
     cpu.p = nz16(cpu.p, v);
     if (v)
         { cyc(22); return 0; }
@@ -2893,9 +2893,9 @@ static int glyph_wait(uint32_t b, uint16_t reload)
         wr16(b | 0x115A, reload);
     } else { cyc(16); }
     cyc(24);
-    v = (uint16_t)(rd16(b | 0x10D8) + 1);
-    cyc(14);
-    wr16(b | 0x10D8, v);
+    v = (uint16_t)(rd16_rmw(b | 0x10D8) + 1);
+    cyc(6);
+    wr16_rmw(b | 0x10D8, v);
     cpu.p = nz16(cpu.p, v);
     return 1;
 }
@@ -2904,10 +2904,10 @@ static int glyph_wait(uint32_t b, uint16_t reload)
 static void glyph_next(uint32_t b)
 {
     cyc(24);
-    uint16_t v = (uint16_t)(rd16(b | 0x10D8) + 1);
+    uint16_t v = (uint16_t)(rd16_rmw(b | 0x10D8) + 1);
 
-    cyc(14);
-    wr16(b | 0x10D8, v);
+    cyc(6);
+    wr16_rmw(b | 0x10D8, v);
     cpu.p = nz16(cpu.p, v);
 }
 
@@ -2955,13 +2955,13 @@ static void glyph_flag_step(uint32_t b, uint16_t flag, uint16_t reload)
     op_lda16_imm(flag);
     wr16(b | (uint16_t)(0x110E + cpu.x), flag);
     cyc(24);
-    v = (uint16_t)(rd16(b | 0x115C) + 1);
-    cyc(14);
-    wr16(b | 0x115C, v);
+    v = (uint16_t)(rd16_rmw(b | 0x115C) + 1);
+    cyc(6);
+    wr16_rmw(b | 0x115C, v);
     cyc(24);
-    v = (uint16_t)(rd16(b | 0x115C) + 1);
-    cyc(14);
-    wr16(b | 0x115C, v);
+    v = (uint16_t)(rd16_rmw(b | 0x115C) + 1);
+    cyc(6);
+    wr16_rmw(b | 0x115C, v);
     cpu.p = nz16(cpu.p, v);
     cyc(24);
     op_lda16(b | 0x115C);
@@ -3034,10 +3034,10 @@ void abi_GlyphTimesSequence(void)
         glyph_flag_step(b, 0x00FF, 0x000A);
         break;
     case 4: case 8: case 12: {
-        uint16_t v = (uint16_t)(rd16(b | 0x115A) - 1);
+        uint16_t v = (uint16_t)(rd16_rmw(b | 0x115A) - 1);
 
-        cyc(14);
-        wr16(b | 0x115A, v);
+        cyc(6);
+        wr16_rmw(b | 0x115A, v);
         cpu.p = nz16(cpu.p, v);
         if (!v) {
             cyc(40);
@@ -3082,10 +3082,10 @@ void abi_GlyphTimesSequence(void)
         abi_GlyphRowY60From0();
         break;
     default: {
-        uint16_t v = (uint16_t)(rd16(b | 0x115A) - 1);
+        uint16_t v = (uint16_t)(rd16_rmw(b | 0x115A) - 1);
 
-        cyc(14);
-        wr16(b | 0x115A, v);
+        cyc(6);
+        wr16_rmw(b | 0x115A, v);
         cpu.p = nz16(cpu.p, v);
         if (!v) {
             cyc(136);
@@ -3172,9 +3172,9 @@ void abi_GlyphSpritesGrowAndTimes(void)
         op_cmp16(0x0007);
         if (!(cpu.p & P_C)) {
             cyc(64);
-            v = (uint16_t)(rd16(b | 0x1040) + 1);
-            cyc(14);
-            wr16(b | 0x1040, v);
+            v = (uint16_t)(rd16_rmw(b | 0x1040) + 1);
+            cyc(6);
+            wr16_rmw(b | 0x1040, v);
             cpu.p = nz16(cpu.p, v);
         } else { cyc(46); }
         cyc(62);
@@ -4026,7 +4026,7 @@ void abi_GlyphSpritesSlideIn(void)
             (cyc(86), abi_SoundPort0QueuePush());
         }
         cyc(24);
-        v = (uint8_t)(rd8(b | 0x0E55) - 1);
+        v = (uint8_t)(rd8_rmw(b | 0x0E55) - 1);
         cyc(6);
         wr8(b | 0x0E55, v);
         cpu.p = nz8(cpu.p, v);

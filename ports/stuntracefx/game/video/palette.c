@@ -254,9 +254,9 @@ uint16_t PaletteLoad16(uint8_t bank, uint16_t src)
         cyc(32);
         wr16(0x7EFD65 + 2 * i, c);
         cyc(72);
-        n = rd16(0x0000F1);
-        cyc(14);
-        wr16(0x0000F1, (uint16_t)(n - 1));
+        n = rd16_rmw(0x0000F1);
+        cyc(6);
+        wr16_rmw(0x0000F1, (uint16_t)(n - 1));
         cyc(22);
     }
     cyc(36);
@@ -355,9 +355,9 @@ uint16_t PaletteCopy16To7F39D7(uint8_t bank, uint16_t src)
         w = rd16((uint32_t)bank << 16 | (uint16_t)(src + 2 * i));
         wr16(0x7F39D7 + 2 * i, w);
         cyc(72);
-        n = rd16(0x0000F1);
-        cyc(14);
-        wr16(0x0000F1, (uint16_t)(n - 1));
+        n = rd16_rmw(0x0000F1);
+        cyc(6);
+        wr16_rmw(0x0000F1, (uint16_t)(n - 1));
         cyc(22);
     }
     cyc(36);
@@ -447,9 +447,9 @@ uint16_t PaletteCourseLoad(uint8_t bank, uint16_t *xo, uint16_t *yo, uint8_t *p)
         while (n) {
             bits >>= 1;
             cyc(52);
-            n = (uint16_t)(rd16(0x0000F1) - 1);
-            cyc(14);
-            wr16(0x0000F1, n);
+            n = (uint16_t)(rd16_rmw(0x0000F1) - 1);
+            cyc(6);
+            wr16_rmw(0x0000F1, n);
         }
         /* to the LDA long: BIT and BNE (6 more taken), and with no shift
            loop the table's ROM read and BRA before them */
@@ -531,9 +531,9 @@ static void blend_split(uint32_t at, uint32_t dp)
     cyc(24);
     for (i = 0; i < 5; i++) {
         cyc(16);
-        w = rd16(dp);
-        cyc(14);
-        wr16(dp, (uint16_t)(w >> 1));
+        w = rd16_rmw(dp);
+        cyc(6);
+        wr16_rmw(dp, (uint16_t)(w >> 1));
     }
     cyc(24);
     wr16(at, (uint16_t)(v & 0x1F));

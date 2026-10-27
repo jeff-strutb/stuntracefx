@@ -653,7 +653,7 @@ static void frame_done(uint32_t b)
     cyc(38);
     wr8(0x000000, 0x00);
     cyc(24);
-    v = (uint8_t)(rd8(b | 0x0D28) - 1);
+    v = (uint8_t)(rd8_rmw(b | 0x0D28) - 1);
     cyc(6);
     wr8(b | 0x0D28, v);
     cpu.p = nz8(cpu.p, v);

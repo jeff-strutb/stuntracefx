@@ -320,10 +320,10 @@ uint16_t GsuRecordWords88(void)
         wr16(0x7EFFA6 + x, v);
         x = (uint16_t)(x + 2);
         cyc(44);
-        c = rd16(0x000002);
+        c = rd16_rmw(0x000002);
         c = (uint16_t)(c - 1);
-        cyc(14);
-        wr16(0x000002, c);
+        cyc(6);
+        wr16_rmw(0x000002, c);
     } while (c);
     cyc(160);
     return v;
@@ -1885,9 +1885,9 @@ uint16_t RecordButtonSequence(uint8_t bank, uint16_t rec, uint8_t *p)
     uint16_t n, s, in;
 
     cyc(24);
-    n = (uint16_t)(rd16(b | SEQ_COUNT) + 1);
-    cyc(14);
-    wr16(b | SEQ_COUNT, n);
+    n = (uint16_t)(rd16_rmw(b | SEQ_COUNT) + 1);
+    cyc(6);
+    wr16_rmw(b | SEQ_COUNT, n);
     cyc(24);
     s = rd16(b | SEQ_STAGE);
     *p = nz16(*p, s);
@@ -1912,9 +1912,9 @@ uint16_t RecordButtonSequence(uint8_t bank, uint16_t rec, uint8_t *p)
         cyc(96);
         wr16(b | SEQ_COUNT, 0x0000);
         cyc(24);
-        s = (uint16_t)(rd16(b | SEQ_STAGE) + 1);
-        cyc(14);
-        wr16(b | SEQ_STAGE, s);
+        s = (uint16_t)(rd16_rmw(b | SEQ_STAGE) + 1);
+        cyc(6);
+        wr16_rmw(b | SEQ_STAGE, s);
         *p = nz16(*p, s);
         cyc(22);
         return in;

@@ -41,7 +41,13 @@ void touch_view(TouchView *v);
 void art_make(void);
 void art_place(const TouchView *v);
 
-/* ---- the cartridge (cart.c) ---- */
+/* ---- the cartridge (cart.c) and its Super FX (superfx_cart.c) ---- */
 void cart_describe(nshvc_cart *cart);
+/* the Super FX on the connector (cart.h) */
+extern const struct nshvc_chip front_superfx;
+/* a ROM read for the Super FX's ROM buffer's fill (with NSHVC_ROM_CHIP): a
+   byte no asset holds reads 0 and sets front_rom_unheld */
+#define FRONT_ROM_FETCH NSHVC_ROM_CHIP_OWN
+extern int front_rom_unheld;
 
 #endif

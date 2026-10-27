@@ -12,8 +12,9 @@
 #     LIBS=                       the host's frameworks and libraries
 #   check: the touch scheme's check (touch_check.c) only
 #
-# The game's machine headers are its own but gsu.h, which is the console's
-# (the register files' layout is nativeshvc's).
+# The game's machine headers are its own; its Super FX (ports/common/snes/
+# superfx.c, gsu_clock.c) is the cartridge's, on nativeshvc's connector
+# (front/superfx_cart.c).
 set -e
 cd "$(dirname "$0")/../../.."
 CC=${CC:-clang}
@@ -33,22 +34,28 @@ if [ "$1" = check ]; then
 fi
 
 cp "$GAME"/include/*.h "$OUT/include/"
-cp "$NSHVC/include/nshvc/gsu.h" "$OUT/include/gsu.h"
 SRFX_GAME="$GAME" python3 ports/stuntracefx/tools/routines.py "$ROM" "$OUT/gen/routines.c" >/dev/null
 python3 ports/stuntracefx/tools/assets.py "$ROM" "$OUT/gen" $ASSETS >/dev/null
 OBJS=
+# the newest of the game's headers: an object older than it is built again
+HDR=$(ls -t "$GAME"/include/*.h | head -1)
 for f in $(find "$GAME" -name '*.c' | sort) "$OUT/gen/routines.c" "$OUT/gen/assets.c"; do
   o="$OUT/obj/$(echo "$f" | sed 's#[/.]#_#g').o"
-  if [ ! -f "$o" ] || [ "$f" -nt "$o" ] || [ "$OUT/include/gsu.h" -nt "$o" ]; then
+  if [ ! -f "$o" ] || [ "$f" -nt "$o" ] || [ "$HDR" -nt "$o" ]; then
     $CC -O2 -std=gnu11 -fno-strict-aliasing -ffp-contract=off -w \
       -I"$OUT/include" -I"$OUT/gen" -I"$FRONT" -I"$NSHVC/include" -c "$f" -o "$o"
   fi
   OBJS="$OBJS $o"
 done
 $CC -c "$OUT/gen/assets.S" -I"$OUT/gen" -o "$OUT/obj/assets_S.o"
-for f in main cart touch art; do
-  $CC -O2 -std=gnu11 -Wall $DEFS -I"$FRONT" -I"$OUT/include" -I"$NSHVC/include" -c "$FRONT/$f.c" -o "$OUT/obj/front_$f.o"
+for f in main cart superfx_cart touch art; do
+  $CC -O2 -std=gnu11 -Wall $DEFS -I"$FRONT" -I"$OUT/include" -I"$NSHVC/include" -Iports/common/snes -c "$FRONT/$f.c" -o "$OUT/obj/front_$f.o"
   OBJS="$OBJS $OUT/obj/front_$f.o"
+done
+# the cartridge's Super FX
+for f in superfx gsu_clock; do
+  $CC -O2 -std=gnu11 -Wall $DEFS -Iports/common/snes -c "ports/common/snes/$f.c" -o "$OUT/obj/chip_$f.o"
+  OBJS="$OBJS $OUT/obj/chip_$f.o"
 done
 $CC -o "$OUT/stuntracefx" $OBJS "$OUT/obj/assets_S.o" "$NSHVC/$NB/libnshvc.a" -lm $LIBS
 echo "built $OUT/stuntracefx"

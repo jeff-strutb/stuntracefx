@@ -127,10 +127,10 @@ static uint16_t sprite_strip(uint16_t index, uint16_t offset, uint32_t table, ui
         index = (uint16_t)(index + 2);
         offset = (uint16_t)(offset + 4);
         cyc(100);
-        n = rd16(0x000008);
+        n = rd16_rmw(0x000008);
         n = (uint16_t)(n - 1);
-        cyc(14);
-        wr16(0x000008, n);
+        cyc(6);
+        wr16_rmw(0x000008, n);
     } while (cyc_loop(22, !(n & 0x8000)));
     cyc(68);
     wr16(0x000002, pos0);
@@ -1244,7 +1244,7 @@ static MetaspriteEnd metasprite_draw(uint8_t bank, uint16_t group, uint16_t slot
         x = (uint16_t)(x + 5);
         y = (uint16_t)(y + 4);
         cyc(214);
-        n = rd8(0x0000F1);
+        n = rd8_rmw(0x0000F1);
         n = (uint8_t)(n - 1);
         cyc(6);
         wr8(0x0000F1, n);
@@ -1366,7 +1366,7 @@ static uint16_t flashing_metasprite_draw(uint8_t bank, uint16_t set, uint16_t *x
         *x = (uint16_t)(*x + 5);
         *y = (uint16_t)(*y + 4);
         cyc(198);                               /* LDA long, BIT #, INX x5, INY x4, DEC's fetch */
-        n = (uint8_t)(rd8(0x0000F1) - 1);
+        n = (uint8_t)(rd8_rmw(0x0000F1) - 1);
         cyc(6);
         wr8(0x0000F1, n);
         if (n)
@@ -1576,7 +1576,7 @@ uint8_t SpritePieces3(uint8_t bank, uint16_t *x, uint16_t *y, uint8_t *p, uint16
         *x = (uint16_t)(*x + 5);
         *y = (uint16_t)(*y + 4);
         cyc(142);
-        n = (uint8_t)(rd8(0x0000F1) - 1);
+        n = (uint8_t)(rd8_rmw(0x0000F1) - 1);
         cyc(6);
         wr8(0x0000F1, n);
     } while (cyc_loop(22, n));
@@ -1964,9 +1964,9 @@ static void stage_next_if(uint32_t b, uint16_t at, uint8_t v)
     if (c != v)
         { cyc(38); return; }            /* CMP, BNE taken */
     cyc(56);                            /* CMP, BNE not taken, INC's fetch */
-    wr8(b | 0x0D54, cyc_then(6, (uint8_t)(rd8(b | 0x0D54) + 1)));
+    wr8(b | 0x0D54, cyc_then(6, (uint8_t)(rd8_rmw(b | 0x0D54) + 1)));
     cyc(24);
-    wr8(b | 0x0D54, cyc_then(6, (uint8_t)(rd8(b | 0x0D54) + 1)));
+    wr8(b | 0x0D54, cyc_then(6, (uint8_t)(rd8_rmw(b | 0x0D54) + 1)));
 }
 
 /* Restart $0D54 when the byte at `at` equals v. */
@@ -2281,7 +2281,7 @@ void abi_OamStagePause(void)
     wr8(b | 0x19BD, 0x01);
     abi_OamHighBits18();
     cyc(24);
-    v = (uint8_t)(rd8(b | 0x0D2D) - 1);
+    v = (uint8_t)(rd8_rmw(b | 0x0D2D) - 1);
     cyc(6);
     wr8(b | 0x0D2D, v);
     cpu.p = nz8(cpu.p, v);
@@ -2354,7 +2354,7 @@ void abi_PictureTurnStep(void)
     op_lda8(b | 0x0D31);
     if ((uint8_t)cpu.a) {
         cyc(40);
-        wr8(b | 0x0D31, cyc_then(6, (uint8_t)(rd8(b | 0x0D31) - 1)));
+        wr8(b | 0x0D31, cyc_then(6, (uint8_t)(rd8_rmw(b | 0x0D31) - 1)));
         op_plp(p0);
         cyc(28);
         return;
@@ -2426,7 +2426,7 @@ void abi_PictureTurnStep(void)
     op_rep(P_M | P_X);
     op_sep(P_M);
     cyc(buf3000 ? 90 : 68);             /* REP, REP, SEP, DEC's opcode; the $3000 arm's BRA */
-    wr8(b | 0x0D32, cyc_then(6, (uint8_t)(rd8(b | 0x0D32) - 1)));
+    wr8(b | 0x0D32, cyc_then(6, (uint8_t)(rd8_rmw(b | 0x0D32) - 1)));
     op_plp(p0);
     cyc(28);
 }
@@ -2534,7 +2534,7 @@ void abi_OamStagePause2(void)
     wr8(b | 0x19BD, 0x01);
     abi_OamHighBits58();
     cyc(24);
-    v = (uint8_t)(rd8(b | 0x0D2D) - 1);
+    v = (uint8_t)(rd8_rmw(b | 0x0D2D) - 1);
     cyc(6);
     wr8(b | 0x0D2D, v);
     cpu.p = nz8(cpu.p, v);
@@ -2723,7 +2723,7 @@ void abi_OverlaySpritesStep(void)
         cyc(48);
         wr16(b | 0x10A8, 0x0040);
         cyc(24);
-        wr16(b | 0x10A2, cyc_then(14, (uint16_t)(rd16(b | 0x10A2) + 1)));
+        wr16_rmw(b | 0x10A2, cyc_then(6, (uint16_t)(rd16_rmw(b | 0x10A2) + 1)));
         break;
     case 0xE0B6:
         op_rep(P_M);
@@ -2745,7 +2745,7 @@ void abi_OverlaySpritesStep(void)
         cyc(24);
         wr16(b | 0x10A8, 0x0000);
         cyc(24);
-        wr16(b | 0x10A2, cyc_then(14, (uint16_t)(rd16(b | 0x10A2) + 1)));
+        wr16_rmw(b | 0x10A2, cyc_then(6, (uint16_t)(rd16_rmw(b | 0x10A2) + 1)));
         break;
     case 0xE0E7:
         op_rep(P_M);
@@ -2847,7 +2847,7 @@ void abi_OverlayFramesUntilFaded(void)
 static void oam_dec8(uint32_t at)
 {
     cyc(24);
-    uint8_t v = (uint8_t)(rd8(at) - 1);
+    uint8_t v = (uint8_t)(rd8_rmw(at) - 1);
 
     cyc(6);
     wr8(at, v);

@@ -150,7 +150,7 @@ static void cmp8(uint8_t a, uint8_t m, uint8_t *p)
 static void ror_dp(uint16_t a, uint8_t *p)
 {
     cyc(60);
-    uint8_t v = rd8(a);
+    uint8_t v = rd8_rmw(a);
 
     wr8(a, ror8(v, p));
 }
@@ -158,7 +158,7 @@ static void ror_dp(uint16_t a, uint8_t *p)
 static void rol_dp(uint16_t a, uint8_t *p)
 {
     cyc(62);
-    uint8_t v = rd8(a);
+    uint8_t v = rd8_rmw(a);
 
     wr8(a, cyc_then(6, rol8(v, p)));
 }
@@ -166,7 +166,7 @@ static void rol_dp(uint16_t a, uint8_t *p)
 static void lsr_dp(uint16_t a, uint8_t *p)
 {
     cyc(38);
-    uint8_t v = rd8(a);
+    uint8_t v = rd8_rmw(a);
 
     wr8(a, cyc_then(6, lsr8(v, p)));
 }

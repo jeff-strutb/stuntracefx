@@ -46,7 +46,7 @@ uint16_t OamClassName(uint8_t bank, uint16_t *x, uint16_t *y)
         *x = (uint16_t)(*x + 1);
         *y = (uint16_t)(*y + 4);
         cyc(86);
-        n = (uint8_t)(rd8(0x0000F1) - 1);
+        n = (uint8_t)(rd8_rmw(0x0000F1) - 1);
         cyc(6);
         wr8(0x0000F1, n);
     } while (cyc_loop(22, n));

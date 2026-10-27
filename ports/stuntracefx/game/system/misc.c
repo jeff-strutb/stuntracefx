@@ -166,12 +166,12 @@ uint8_t Countdown0DF8(uint8_t bank)
 
     if (v) {
         cyc(46);
-        wr8(b | 0x0DF8, cyc_then(6, (uint8_t)(rd8(b | 0x0DF8) - 1)));
+        wr8(b | 0x0DF8, cyc_then(6, (uint8_t)(rd8_rmw(b | 0x0DF8) - 1)));
         cyc(54);
         return v;
     }
     cyc(40);
-    wr8(b | 0x0E5C, cyc_then(6, (uint8_t)(rd8(b | 0x0E5C) - 1)));
+    wr8(b | 0x0E5C, cyc_then(6, (uint8_t)(rd8_rmw(b | 0x0E5C) - 1)));
     cyc(24);
     wr8(b | 0x1160, 0x00);
     cyc(54);
@@ -839,9 +839,9 @@ void abi_DemoRun(void)
             op_rep(P_M | P_X);
             b = (uint32_t)cpu.db << 16;
             cyc(24);
-            v = (uint16_t)(rd16(b | 0x1A59) + 1);
-            cyc(14);
-            wr16(b | 0x1A59, v);
+            v = (uint16_t)(rd16_rmw(b | 0x1A59) + 1);
+            cyc(6);
+            wr16_rmw(b | 0x1A59, v);
             cpu.p = nz16(cpu.p, v);
             cyc(24);
             op_lda16(b | 0x1A5B);

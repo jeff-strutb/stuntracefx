@@ -366,7 +366,7 @@ static int menu_wait(void)
     if (!(uint8_t)cpu.a)
         { cyc(22); return 1; }
     cyc(40);
-    v = (uint8_t)(rd8(b | 0x0D41) - 1);
+    v = (uint8_t)(rd8_rmw(b | 0x0D41) - 1);
     cyc(6);
     wr8(b | 0x0D41, v);
     cpu.p = nz8(cpu.p, v);
@@ -518,7 +518,7 @@ static void speed_alt_leave(void)
     cyc(62);
     wr8(b | 0x0D40, 0x0E);
     cyc(24);
-    v = (uint8_t)(rd8(b | 0x0D48) + 1);
+    v = (uint8_t)(rd8_rmw(b | 0x0D48) + 1);
     cyc(6);
     wr8(b | 0x0D48, v);
     cpu.p = nz8(cpu.p, v);
@@ -912,7 +912,7 @@ void abi_SpeedRecordsPage(void)
         if (v < 0x04) {
             sound8(0x45);
             cyc(24);
-            v = (uint8_t)(rd8(b | 0x10D8) + 1);
+            v = (uint8_t)(rd8_rmw(b | 0x10D8) + 1);
             cyc(6);
             wr8(b | 0x10D8, v);
             cpu.p = nz8(cpu.p, v);
@@ -925,7 +925,7 @@ void abi_SpeedRecordsPage(void)
             cyc(42);
             sound8(0x45);
             cyc(24);
-            v = (uint8_t)(rd8(b | 0x10D8) - 1);
+            v = (uint8_t)(rd8_rmw(b | 0x10D8) - 1);
             cyc(6);
             wr8(b | 0x10D8, v);
             cpu.p = nz8(cpu.p, v);

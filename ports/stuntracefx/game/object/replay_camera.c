@@ -265,7 +265,7 @@ static void overhead_frame(void)
 
     op_lda8(cyc_then(30, F(0x2048, cpu.x)));
     if ((uint8_t)cpu.a) {
-        v = (uint8_t)(rd8(cyc_then(52, F(0x2048, cpu.x))) - 1);
+        v = (uint8_t)(rd8_rmw(cyc_then(52, F(0x2048, cpu.x))) - 1);
         wr8(F(0x2048, cpu.x), cyc_then(6, v));
         cpu.p = nz8(cpu.p, v);
         car_rec42(1);
@@ -549,7 +549,7 @@ static void drift_frame(uint16_t ty, void (*done)(void))
         return;
     }
     {
-        uint8_t n = (uint8_t)(rd8(cyc_then(52, F(0x2048, cpu.x))) - 1);
+        uint8_t n = (uint8_t)(rd8_rmw(cyc_then(52, F(0x2048, cpu.x))) - 1);
 
         wr8(F(0x2048, cpu.x), cyc_then(6, n));
         cpu.p = nz8(cpu.p, n);
@@ -940,7 +940,7 @@ void abi_CameraStillStep(void)
         return;
     }
     {
-        uint8_t n = (uint8_t)(rd8(cyc_then(52, F(0x2048, cpu.x))) - 1);
+        uint8_t n = (uint8_t)(rd8_rmw(cyc_then(52, F(0x2048, cpu.x))) - 1);
 
         wr8(F(0x2048, cpu.x), cyc_then(6, n));
         cpu.p = nz8(cpu.p, n);
@@ -1169,7 +1169,7 @@ void abi_CameraReturnStep(void)
     uint8_t n;
 
     view(0x09);
-    n = (uint8_t)(rd8(cyc_then(30, F(0x2048, cpu.x))) - 1);
+    n = (uint8_t)(rd8_rmw(cyc_then(30, F(0x2048, cpu.x))) - 1);
     wr8(F(0x2048, cpu.x), cyc_then(6, n));
     cpu.p = nz8(cpu.p, n);
     if (n) {
@@ -1286,7 +1286,7 @@ void abi_CameraBesideWait(void)
         return;
     }
     {
-        uint8_t n = (uint8_t)(rd8(cyc_then(52, F(0x2048, cpu.x))) - 1);
+        uint8_t n = (uint8_t)(rd8_rmw(cyc_then(52, F(0x2048, cpu.x))) - 1);
 
         wr8(F(0x2048, cpu.x), cyc_then(6, n));
         cpu.p = nz8(cpu.p, n);
@@ -1368,7 +1368,7 @@ static void lift_frame(void)
         return;
     }
     {
-        uint8_t n = (uint8_t)(rd8(cyc_then(52, F(0x2048, cpu.x))) - 1);
+        uint8_t n = (uint8_t)(rd8_rmw(cyc_then(52, F(0x2048, cpu.x))) - 1);
 
         wr8(F(0x2048, cpu.x), cyc_then(6, n));
         cpu.p = nz8(cpu.p, n);

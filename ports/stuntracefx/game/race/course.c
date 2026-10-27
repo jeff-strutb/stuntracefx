@@ -755,7 +755,7 @@ static void speed_select_body(void)
         if (open && (cyc(2), sel_pressed(b, 0x0800))) {
             sel_sound();
             cyc(8);
-            v = (uint8_t)(rd8(b | 0x0D63) - 1);
+            v = (uint8_t)(rd8_rmw(b | 0x0D63) - 1);
             cyc(6);
             wr8(b | 0x0D63, v);
             cyc(16);
@@ -1333,7 +1333,7 @@ void abi_CourseRecordsSelectStep(void)
         if (open && (cyc(2), sel_pressed(b, 0x0800))) {
             sel_sound();
             cyc(8);
-            v = (uint8_t)(rd8(b | 0x0D63) - 1);
+            v = (uint8_t)(rd8_rmw(b | 0x0D63) - 1);
             cyc(6);
             wr8(b | 0x0D63, v);
             cyc(16);
@@ -1413,7 +1413,7 @@ void abi_CourseRecordsOpening(void)
 {
     uint32_t b = (uint32_t)cpu.db << 16;
     cyc(24);
-    uint8_t v = (uint8_t)(rd8(b | 0x0D42) - 1);
+    uint8_t v = (uint8_t)(rd8_rmw(b | 0x0D42) - 1);
 
     cyc(6);
     wr8(b | 0x0D42, v);
@@ -1564,7 +1564,7 @@ void abi_CourseRecordsShown(void)
 {
     uint32_t b = (uint32_t)cpu.db << 16;
     cyc(24);
-    uint8_t v = (uint8_t)(rd8(b | 0x0D42) - 1);
+    uint8_t v = (uint8_t)(rd8_rmw(b | 0x0D42) - 1);
 
     cyc(6);
     wr8(b | 0x0D42, v);
@@ -1670,11 +1670,11 @@ static void wipe_out_body(void)
     cyc(76);
     wr8(b | 0x10AD, 0x01);
     cyc(24);
-    v = (uint8_t)(rd8(b | 0x10B3) + 1);
+    v = (uint8_t)(rd8_rmw(b | 0x10B3) + 1);
     cyc(6);
     wr8(b | 0x10B3, v);
     cyc(24);
-    v = (uint8_t)(rd8(b | 0x10B3) + 1);
+    v = (uint8_t)(rd8_rmw(b | 0x10B3) + 1);
     cyc(6);
     wr8(b | 0x10B3, v);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | 0x10);
@@ -1801,18 +1801,18 @@ static void preview_rows(int all, uint16_t last)
     op_cmp16(last);
     if (cpu.a < last) {
         cyc(64);
-        v = (uint16_t)(rd16(b | 0x0FA6) + 1);
-        cyc(14);
-        wr16(b | 0x0FA6, v);
+        v = (uint16_t)(rd16_rmw(b | 0x0FA6) + 1);
+        cyc(6);
+        wr16_rmw(b | 0x0FA6, v);
         cpu.p = nz16(cpu.p, v);
         return;
     }
     cyc(70);
     wr16(b | 0x0FA6, 0x0000);
     cyc(24);
-    v = (uint16_t)(rd16(b | 0x0FAA) + 1);
-    cyc(14);
-    wr16(b | 0x0FAA, v);
+    v = (uint16_t)(rd16_rmw(b | 0x0FAA) + 1);
+    cyc(6);
+    wr16_rmw(b | 0x0FAA, v);
     cpu.p = nz16(cpu.p, v);
 }
 
@@ -2212,7 +2212,7 @@ void abi_CourseScreenStep(void)
                 } else {
                     op_sep(P_M);
                     cyc(86);
-                    v = (uint8_t)(rd8(b | 0x0D25) + 1);
+                    v = (uint8_t)(rd8_rmw(b | 0x0D25) + 1);
                     cyc(6);
                     wr8(b | 0x0D25, v);
                     cyc(24);

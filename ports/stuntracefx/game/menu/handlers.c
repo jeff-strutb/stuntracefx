@@ -33,10 +33,10 @@ static uint8_t cmp16(uint8_t p, uint16_t a, uint16_t b)
 static uint16_t dec_field(uint16_t rec, uint16_t off)
 {
     cyc(22);
-    uint16_t v = (uint16_t)(rd16((uint16_t)(rec + off)) - 1);
+    uint16_t v = (uint16_t)(rd16_rmw((uint16_t)(rec + off)) - 1);
 
-    cyc(14);
-    wr16((uint16_t)(rec + off), v);
+    cyc(6);
+    wr16_rmw((uint16_t)(rec + off), v);
     return v;
 }
 

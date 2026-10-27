@@ -498,6 +498,50 @@ void abi_BootColdStart(void)
     boot_run(BOOT_COLD);
 }
 
+void abi_RasterIrq(void);
+
+/*
+ * @routine 00:0108 NmiStub
+ * WHAT IT DOES: The NMI vector's code, one of the stubs BootColdStart
+ * copies to $0101 ($03:8D16): it returns at once; the game does its frame's
+ * work outside the NMI.
+ * HOW: RTI (the interrupt's return: its time and pulls are the console's).
+ * Entry: the interrupt's frame on the stack. Exit: as at entry.
+ */
+void abi_NmiStub(void)
+{
+}
+
+/*
+ * @routine 00:010C IrqStub
+ * WHAT IT DOES: The IRQ vector's code, one of the stubs BootColdStart
+ * copies to $0101 ($03:8D16): calls the IRQ handler, RasterIrq, then
+ * returns from the interrupt.
+ * HOW: JSL $7E:A2D9, then RTI (the interrupt's return: its time and pulls
+ * are the console's). The JSL's pushes and the RTL's pulls are on the
+ * stack; RasterIrq states the rest of its RTL.
+ * Entry: the interrupt's frame on the stack. Exit: as RasterIrq leaves the
+ * registers.
+ */
+void abi_IrqStub(void)
+{
+    cyc(24);                            /* JSL: the opcode and the address fetched */
+    wr8(cpu.s, 0x00);                   /* PB */
+    cpu.s--;
+    cyc(14);                            /* an internal cycle, the bank fetched */
+    wr8(cpu.s, 0x01);                   /* the return, $010F */
+    cpu.s--;
+    wr8(cpu.s, 0x0F);
+    cpu.s--;
+    abi_RasterIrq();
+    cpu.s++;                            /* RTL's pulls */
+    rd8(cpu.s);
+    cpu.s++;
+    rd8(cpu.s);
+    cpu.s++;
+    rd8(cpu.s);
+}
+
 /*
  * @routine 03:8B34 BootStart
  * WHAT IT DOES: The start from a cleared machine (the soft reset's jump):

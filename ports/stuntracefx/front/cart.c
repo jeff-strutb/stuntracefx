@@ -4,8 +4,9 @@
  * routines.c), and its ROM as the named assets the build extracts (gen/
  * assets.c, tools/assets.py), with no image of the ROM: the code the C
  * stands for is held nowhere. A byte no asset holds reads 0 where the Super
- * FX's ROM buffer fills from it (it may never be used: NSHVC_ROM_FETCH);
- * anywhere else it stops the game.
+ * FX's ROM buffer fills from it (it may never be used: FRONT_ROM_FETCH);
+ * anywhere else it stops the game. The board and its Super FX are the
+ * cartridge's own (superfx_cart.c).
  */
 #include <stdlib.h>
 
@@ -34,14 +35,14 @@ static uint8_t asset_read(uint32_t off, int who)
     const PortAsset *a = find(off);
     if (a)
         return a->data[off - a->rom];
-    if (who & NSHVC_ROM_FETCH) {
-        nshvc_rom_unheld = 1;
+    if (who & FRONT_ROM_FETCH) {
+        front_rom_unheld = 1;
         return 0;
     }
     if (who & NSHVC_ROM_PEEK)
         return 0;
     nshvc_fatal("ROM $%06X read (by %s): no asset holds it (code the C stands for)", (unsigned)off,
-                who & NSHVC_ROM_DMA ? "DMA" : who & NSHVC_ROM_GSU ? "the Super FX" : "the S-CPU");
+                who & NSHVC_ROM_DMA ? "DMA" : who & NSHVC_ROM_CHIP ? "the Super FX" : "the S-CPU");
     return 0;
 }
 
@@ -60,7 +61,8 @@ void cart_describe(nshvc_cart *cart)
     }
     cart->title = "Stunt Race FX";
     cart->save_name = "stuntracefx";
-    cart->map = NSHVC_SUPERFX;
+    cart->map = NSHVC_CHIP;
+    cart->chip = &front_superfx;
     cart->region = NSHVC_NTSC;
     cart->rom = NULL;
     cart->rom_pages = pages;

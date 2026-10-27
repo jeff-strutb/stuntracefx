@@ -299,9 +299,9 @@ void DebugPrintDecimalWord(void)
             cyc(100);
             wr16(NUM_VALUE, (uint16_t)(v - pw));
             cyc(16);
-            n = rd16(NUM_DIGIT);
-            cyc(14);
-            wr16(NUM_DIGIT, (uint16_t)(n + 1));
+            n = rd16_rmw(NUM_DIGIT);
+            cyc(6);
+            wr16_rmw(NUM_DIGIT, (uint16_t)(n + 1));
         }
         cyc(156);
         pw = rd16(POWERS_OF_TEN + x);
@@ -359,12 +359,12 @@ void DebugPrintBinaryByte(void)
     wr8(NUM_BITS, (uint8_t)cpu.a);
     for (i = 0; i < 4; i++) {
         cyc(i ? 152 : 32); /* later pairs: ROL, ASL x3, PLP, ROL, PHA, LDA #0 first */
-        v = rd8(NUM_BITS);
+        v = rd8_rmw(NUM_BITS);
         lo = v & 1;
         cyc(6);
         wr8(NUM_BITS, (uint8_t)(v >> 1));
         cyc(38);
-        v = rd8(NUM_BITS);
+        v = rd8_rmw(NUM_BITS);
         cyc(6);
         wr8(NUM_BITS, (uint8_t)(v >> 1));
         pair[i] = (uint8_t)((v & 1) << 4 | lo);

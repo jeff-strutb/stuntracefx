@@ -286,7 +286,7 @@ reset:
 cyc(6);
 next:
         cyc(32);
-        blk = rd8(0x0000F3);
+        blk = rd8_rmw(0x0000F3);
         cyc(6);
         wr8(0x0000F3, (uint8_t)(blk + 1));
         cyc(16);
@@ -506,7 +506,7 @@ static void save_blocks_validate(uint8_t bank, uint8_t *p, int from_bad)
         if (v != s)
             goto reset;
         cyc(32);
-        blk = rd8(0x0000F3);
+        blk = rd8_rmw(0x0000F3);
         cyc(6);
         wr8(0x0000F3, (uint8_t)(blk + 1));
         cyc(16);
@@ -1990,8 +1990,8 @@ void abi_SpecialRecordInsert(void)
             } else { cyc(4); }
             cpu.x = (uint16_t)(cpu.x + 4);
             cpu.p = nz16(cpu.p, cpu.x);
-            n = (uint16_t)(rd16(cyc_then(90, special_dp(0xF5))) - 1);
-            wr16(special_dp(0xF5), cyc_then(14, n));
+            n = (uint16_t)(rd16_rmw(cyc_then(90, special_dp(0xF5))) - 1);
+            wr16_rmw(special_dp(0xF5), cyc_then(6, n));
             cpu.p = nz16(cpu.p, n);
         } while (cyc_loop(8, n));
         r1 = special_pack(b, 0x0EF0);

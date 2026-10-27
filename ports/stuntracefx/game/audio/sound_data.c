@@ -338,7 +338,7 @@ void abi_CourseSoundLoad(void)
             return;
         }
         cyc(46);
-        v = (uint8_t)(rd8(b | 0x10DE) - 1);
+        v = (uint8_t)(rd8_rmw(b | 0x10DE) - 1);
         cyc(6);
         wr8(b | 0x10DE, v);
         cpu.p = nz8(cpu.p, v);

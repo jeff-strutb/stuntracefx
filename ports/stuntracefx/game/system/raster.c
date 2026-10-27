@@ -244,7 +244,7 @@ static void irq_ack(void)
 static void inc8(uint32_t addr)
 {
     cyc(24);
-    uint8_t v = (uint8_t)(rd8(addr) + 1);
+    uint8_t v = (uint8_t)(rd8_rmw(addr) + 1);
 
     cyc(6);
     wr8(addr, v);

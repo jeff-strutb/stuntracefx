@@ -396,7 +396,7 @@ static void sound_push_decimal(uint8_t command)
     n = rd8(SOUND_PORT0_COUNT);
     if (n == 0) {
         cyc(46);
-        wr8(SOUND_PORT0_COUNT, cyc_then(6, (uint8_t)(rd8(SOUND_PORT0_COUNT) + 1)));
+        wr8(SOUND_PORT0_COUNT, cyc_then(6, (uint8_t)(rd8_rmw(SOUND_PORT0_COUNT) + 1)));
         cyc(24);
         wr8(SOUND_PORT0_QUEUE + rd8(SOUND_PORT0_HEAD), cyc_then(30, command));
     } else if (n < 0x10) {
@@ -407,7 +407,7 @@ static void sound_push_decimal(uint8_t command)
             slot = sbc_decimal8(slot, 0x10, &c);
         }
         wr8(SOUND_PORT0_QUEUE + slot, command);
-        wr8(SOUND_PORT0_COUNT, (uint8_t)(rd8(SOUND_PORT0_COUNT) + 1));
+        wr8(SOUND_PORT0_COUNT, (uint8_t)(rd8_rmw(SOUND_PORT0_COUNT) + 1));
     }
     cyc(162);
 }
@@ -477,7 +477,7 @@ void abi_TimeDigitBytes(void)
 static void inc16(uint32_t addr)
 {
     cyc(24);
-    wr16(addr, cyc_then(14, (uint16_t)(rd16(addr) + 1)));
+    wr16_rmw(addr, cyc_then(6, (uint16_t)(rd16_rmw(addr) + 1)));
 }
 
 static void sound(uint16_t command)
@@ -754,7 +754,7 @@ void TimeBonusTally(void)
             cyc(24);
             wr16(b | 0x0E74, 0x0000);
             cyc(38);
-            wr16(b | 0x0D5B, cyc_then(14, (uint16_t)(rd16(b | 0x0D5B) - 1)));
+            wr16_rmw(b | 0x0D5B, cyc_then(6, (uint16_t)(rd16_rmw(b | 0x0D5B) - 1)));
             inc16(b | 0x0D65);
             inc16(b | 0x0D65);
             cyc(24);
@@ -980,10 +980,10 @@ static void sub16(uint16_t m)
 static void inc16_nz(uint32_t addr)
 {
     cyc(24);
-    uint16_t v = (uint16_t)(rd16(addr) + 1);
+    uint16_t v = (uint16_t)(rd16_rmw(addr) + 1);
 
-    cyc(14);
-    wr16(addr, v);
+    cyc(6);
+    wr16_rmw(addr, v);
     cpu.p = nz16(cpu.p, v);
 }
 
