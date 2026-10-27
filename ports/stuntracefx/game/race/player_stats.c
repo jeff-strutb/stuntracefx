@@ -430,7 +430,8 @@ void abi_RaceSoundsPlayer1(void)
     cpu.db = 0x07;
     cpu.p = nz8(cpu.p, 0x07);
     op_sep(P_M | P_X);
-    (cyc(140), abi_SoftResetCheck());
+    if (!rm_redrawing())                /* Remaster: no reset check, no sound in a redraw (remaster.h) */
+        (cyc(140), abi_SoftResetCheck());
     cyc(56);
     race_stats(0x0000, 0x702476);
     cyc(56);
@@ -440,7 +441,8 @@ void abi_RaceSoundsPlayer1(void)
     cpu.p = nz8(cpu.p, 0x00);
     cyc(40);
     wr8(b | 0x1A5D, 0x00);
-    (cyc(62), abi_EngineSoundsPlayer1());
+    if (!rm_redrawing())
+        (cyc(62), abi_EngineSoundsPlayer1());
     (cyc(46), abi_PhaseDispatchE24F());
     race_x_test(b, 0x0D1A);
     race_frame_end(b, 0x0D1A, 0, p0, db0);
@@ -469,7 +471,8 @@ void abi_RaceSoundsPlayer2(void)
     cpu.p = nz8(cpu.p, 0x01);
     cyc(134);
     wr8(b | 0x1A5D, 0x01);
-    (cyc(62), abi_EngineSoundsPlayer2());
+    if (!rm_redrawing())                /* Remaster: no sound in a redraw (remaster.h) */
+        (cyc(62), abi_EngineSoundsPlayer2());
     op_sep(P_X);
     cyc(46);
     call_routine(0x07E265, 0);

@@ -23,6 +23,13 @@ void RmTweenDrawTwoPlayers(void);
 
 static uint8_t was_w[0x20000], was_s[0x10000], kept_w[0x20000], kept_s[0x10000];
 static RegsGSU was_gsu;                     /* the Super FX's registers then (SCBR: the buffer it draws in) */
+/* two players: the state each picture pair was drawn from, at its tick's
+   RaceSoundsPlayer1 (remaster.h), for this tick and the last */
+static uint8_t pic_w[2][0x20000], pic_s[2][0x10000];
+static RegsGSU pic_gsu[2];
+static unsigned pic_tick[2];
+static int pic_ok[2], pic_step[2], pic_now;
+int rm_tween_step;
 static unsigned was_tick;                   /* the tick the kept start is of */
 static int was_ok, ticked, shown_tick;      /* a race tick since the last frame's end; the frame shown was one */
 static uint8_t done[0x10000 >> 1];          /* a Super FX word already set between */
@@ -37,6 +44,28 @@ void rm_tween_tick_start(void)
     was_tick = rm_tick_count();
     was_ok = 1;
     ticked = 1;
+}
+
+void rm_tween_pictures_drawn(void)
+{
+    pic_now ^= 1;
+    memcpy(pic_w[pic_now], nshvc_wram(), sizeof pic_w[0]);
+    memcpy(pic_s[pic_now], nshvc_sram(), sizeof pic_s[0]);
+    pic_gsu[pic_now] = gsu;
+    pic_tick[pic_now] = rm_tick_count();
+    pic_step[pic_now] = rm_step_due();
+    pic_ok[pic_now] = 1;
+}
+
+/* the state a picture is drawn from: its memory but the screen buffers,
+   and the Super FX's registers */
+static void draw_from(uint8_t *w, uint8_t *s, const uint8_t *from_w, const uint8_t *from_s, const RegsGSU *from_gsu)
+{
+    memcpy(w, from_w, 0x20000);
+    memcpy(s, from_s, 0x2C00);
+    memcpy(s + 0x2C00 + RM_TWEEN_BYTES, from_s + 0x2C00 + RM_TWEEN_BYTES, 0x9400 - 0x2C00 - RM_TWEEN_BYTES);
+    memcpy(s + 0x9400 + RM_TWEEN_BYTES, from_s + 0x9400 + RM_TWEEN_BYTES, 0x10000 - 0x9400 - RM_TWEEN_BYTES);
+    gsu = *from_gsu;
 }
 
 void rm_tween_frame_end(void)
@@ -121,26 +150,27 @@ int rm_tween_buffers(int num, int den, uint8_t *at_2c00, uint8_t *at_9400)
     memcpy(kept_s, s, sizeof kept_s);
     memset(done, 0, sizeof done);
     /* the state of the nearer tick (what is drawn, its frames, its looks,
-       the Super FX's registers):
-       the start's for the first half of the way, else the end's; its
-       positions and angles set between the two. The screen buffers stay
-       as they are. */
-    if (2 * num < den) {
-        memcpy(w, was_w, sizeof was_w);
-        memcpy(s, was_s, 0x2C00);
-        memcpy(s + 0x2C00 + RM_TWEEN_BYTES, was_s + 0x2C00 + RM_TWEEN_BYTES, 0x9400 - 0x2C00 - RM_TWEEN_BYTES);
-        memcpy(s + 0x9400 + RM_TWEEN_BYTES, was_s + 0x9400 + RM_TWEEN_BYTES, 0x10000 - 0x9400 - RM_TWEEN_BYTES);
-        gsu = was_gsu;
-        if (!two) {
-            /* one player: the text program's string ($2732: its address,
-               bank, position at $2738/$273A, tested by RaceFrameRun) and
-               the nearest car's label (FxTextNotice: $273C bit 0, the car
-               $2648, its offset in the view's axes $264A/$264C) are drawn
-               after the tick's objects have run (their handlers,
-               FxNearestCar), so a tick's picture has the end's */
-            memcpy(s + 0x2648, kept_s + 0x2648, 6);
-            memcpy(s + 0x2732, kept_s + 0x2732, 12);
-        }
+       the Super FX's registers): the start's for the first half of the
+       way, else the end's; its positions and angles set between the two.
+       The screen buffers stay as they are. Two players: the start is the
+       last tick's pictures, the end this tick's, each drawn from the state
+       at its tick's RaceSoundsPlayer1. */
+    if (two) {
+        int side = 2 * num < den ? pic_now ^ 1 : pic_now;
+        if (!pic_ok[side] || pic_tick[side] != (2 * num < den ? was_tick - 1 : was_tick))
+            return 0;
+        draw_from(w, s, pic_w[side], pic_s[side], &pic_gsu[side]);
+        rm_tween_step = pic_step[side];
+    } else if (2 * num < den) {
+        draw_from(w, s, was_w, was_s, &was_gsu);
+        /* one player: the text program's string ($2732: its address,
+           bank, position at $2738/$273A, tested by RaceFrameRun) and the
+           nearest car's label (FxTextNotice: $273C bit 0, the car $2648,
+           its offset in the view's axes $264A/$264C) are drawn after the
+           tick's objects have run (their handlers, FxNearestCar), so a
+           tick's picture has the end's */
+        memcpy(s + 0x2648, kept_s + 0x2648, 6);
+        memcpy(s + 0x2732, kept_s + 0x2732, 12);
     }
 
     /* the views' records: player 1's car ($0346), and player 2's ($034A)
@@ -174,7 +204,8 @@ int rm_tween_buffers(int num, int den, uint8_t *at_2c00, uint8_t *at_9400)
     nshvc_set_untimed(1);
     rm_tween_start_side = 2 * num < den;
     drew = rm_redraw_run(two ? RmTweenDrawTwoPlayers : RmTweenDraw);
-    rm_tween_start_side = 0;  /* a redraw: no port, no wait (remaster.h) */
+    rm_tween_start_side = 0;
+    rm_tween_step = 0;  /* a redraw: no port, no wait (remaster.h) */
     nshvc_set_untimed(untimed);
     nshvc_hold_interrupts(0);
     /* one player: the buffer drawn in (its start at $021A, the one the

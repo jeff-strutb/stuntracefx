@@ -47,6 +47,13 @@ extern int rm_tween_start_side;
 /* the Super FX's RAM at the tick's end, while tween.c draws: what the
    HUD's redraw reads, as the tick's own redraw after its objects did */
 const uint8_t *rm_tween_end_sram(void);
+/* Two players: the state at the tick's RaceSoundsPlayer1, after player
+   1's picture and before the step's stats that player 2's picture shows
+   (race_frame.c), kept for the tick and the last; and, while tween.c
+   draws from one, whether that tick was a step's (RmTweenDrawTwoPlayers
+   then runs RaceSoundsPlayer1 between the pictures) */
+void rm_tween_pictures_drawn(void);
+extern int rm_tween_step;
 /* draw() run as a redraw (rm_redrawing holds): 0 when it reached a wait
    for a frame and was let go there, the state to be put back by the
    caller */

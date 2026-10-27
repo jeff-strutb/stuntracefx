@@ -1148,6 +1148,8 @@ void abi_GsuParamsUpdate(void);
 
 void abi_GsuScreenFlipMenu(void);
 void abi_FrameRunGsuAB13A(void);
+void abi_RaceSoundsPlayer1(void);
+void abi_RaceSoundsPlayer2(void);
 
 void RmTweenDraw(void)
 {
@@ -1194,9 +1196,11 @@ void RmTweenDraw(void)
    $0D62 set player 2's draw list while it draws) into one buffer; the
    switch (GsuScreenFlipMenu), player 2's view matrix and sort, $06CF less
    $140 and HUD panel A's frame (FrameRunGsuAB13A: player 2's picture)
-   into the other; the switch back. The players' stats, phases and sounds
-   are the step's (RaceSoundsPlayer1/2 run on its tick only) and are not
-   run. Untimed; the caller keeps and puts back the state. */
+   into the other; the switch back. On a step's tick (rm_tween_step) the
+   players' stats and the phase (RaceSoundsPlayer1) come between the two
+   pictures and player 2's phase (RaceSoundsPlayer2, which draws into its
+   picture) after the second, as there, their sounds not. Untimed; the
+   caller keeps and puts back the state. */
 void RmTweenDrawTwoPlayers(void)
 {
     uint32_t b;
@@ -1230,6 +1234,10 @@ void RmTweenDrawTwoPlayers(void)
     wr16(b | 0x1AE8, 0x0000);
     op_sep(P_M);
     abi_FrameRunGsuAB13B();
+    if (rm_tween_step) {
+        op_sep(P_M);
+        abi_RaceSoundsPlayer1();
+    }
     op_sep(P_M);
     abi_GsuScreenFlipMenu();
     op_sep(P_M);
@@ -1239,6 +1247,10 @@ void RmTweenDrawTwoPlayers(void)
     wr16(b | 0x06CF, (uint16_t)(rd16(b | 0x06CF) - 0x0140));
     op_sep(P_M);
     abi_FrameRunGsuAB13A();
+    if (rm_tween_step) {
+        op_sep(P_M);
+        abi_RaceSoundsPlayer2();
+    }
     op_sep(P_M);
     abi_GsuScreenFlipMenu();
 }
@@ -1402,6 +1414,8 @@ void abi_RaceFrameRunTwoPlayers(void)
     op_lda16(0x702476);
     (cyc(62), abi_SpeedGaugeUpdate());
     op_sep(P_M);
+    if (rm_tick60())
+        rm_tween_pictures_drawn();      /* Remaster: the state player 1's picture was drawn from (tween.c) */
     (cyc(84), abi_RaceSoundsPlayer1());
     (cyc(46), abi_GsuScreenFlipMenu());
     if (rm_tick60())
