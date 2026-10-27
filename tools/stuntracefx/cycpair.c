@@ -26,7 +26,9 @@
    8, C for 12) and the C's tokens, tab-separated, after a "#" line of what
    was paired and what was left out and why. A stretch is left out after an
    access of the C's the original does not make there (the stretch it ends
-   and the one after), when one of the original's cycles is not 6, 8 or 12
+   and the one after), when the original made the access that ends it more
+   often than the C in between (a poll loop counting differently), when one
+   of the original's cycles is not 6, 8 or 12
    clocks, or when it runs past LONG cycles or tokens. Lost (32 accesses
    unpaired in a row), the pairing starts again at the original's frame the
    C begins next. */
@@ -139,10 +141,10 @@ static void rec(const char *key)
     vs[j].n++;
 }
 
-static long st_ok, st_skip, st_odd, st_long, st_unp, st_resync, st_rom, st_orphan;
+static long st_poll, st_ok, st_skip, st_odd, st_long, st_unp, st_resync, st_rom, st_orphan;
 static char line[LONG * 24 + LONG + 4];
 
-static void stretch(uint64_t from, uint64_t to)
+static void stretch(uint64_t from, uint64_t to, uint32_t at)
 {
     int m = 0;
     if (cbad) {
@@ -153,6 +155,12 @@ static void stretch(uint64_t from, uint64_t to)
         OE *e = &ob[i % OR];
         if (e->k == 'F')
             continue;
+        if ((e->k == 'R' || e->k == 'W') && e->a == at) {
+            /* the original made this access more often than the C (a poll
+               loop counting differently): no stretch of one pass */
+            st_poll++;
+            return;
+        }
         if (m >= LONG) { st_long++; return; }
         if (e->c == 6) line[m++] = '6';
         else if (e->c == 8) line[m++] = '8';
@@ -235,7 +243,7 @@ int main(int argc, char **argv)
                 i++;
             }
             if (found) {
-                stretch(ot, i);
+                stretch(ot, i, a);
                 ot = i + 1;
                 fails = 0;
                 cbad = 0;
@@ -257,8 +265,8 @@ int main(int argc, char **argv)
             fprintf(stderr, "cycpair: cannot write %s\n", argv[3]);
             return 1;
         }
-        fprintf(out, "# ok %ld distinct %zu skip %ld odd %ld long %ld unpaired %ld resync %ld rom %ld orphan %ld\n",
-                st_ok, nv, st_skip, st_odd, st_long, st_unp, st_resync, st_rom, st_orphan);
+        fprintf(out, "# ok %ld distinct %zu skip %ld poll %ld odd %ld long %ld unpaired %ld resync %ld rom %ld orphan %ld\n",
+                st_ok, nv, st_skip, st_poll, st_odd, st_long, st_unp, st_resync, st_rom, st_orphan);
         for (size_t i = 0; i < cap; i++)
             if (vs[i].key) fprintf(out, "%ld\t%s\n", vs[i].n, vs[i].key);
         fclose(out);

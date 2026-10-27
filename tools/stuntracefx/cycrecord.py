@@ -28,6 +28,7 @@ The nativeshvc side is NSHVC=../nativeshvc (its tests/srfx/build.sh with
 GAME_DIR), run as CYC_C_CMD, by default
     {srfx} --rom {rom} --script {script} --headless --out {out}
 from this checkout, so a script's paths (its state) are read from here.
+CYC_SRC records a copy of the decomp instead (cycapply.py's check).
 """
 import glob, hashlib, os, shlex, signal, subprocess, sys, threading, time
 
@@ -36,6 +37,8 @@ TOOLS = os.path.join(ROOT, 'tools', 'stuntracefx')
 NSHVC = os.path.abspath(os.environ.get('NSHVC', os.path.join(ROOT, '..', 'nativeshvc')))
 ROM = os.path.join(ROOT, 'reference', 'stuntracefx', 'Stunt Race FX (USA) (Rev 1).sfc')
 CORE = os.path.join(ROOT, 'tools', 'toolchains', 'bsnes', 'bsnes_libretro.dylib')
+# the tree recorded: the decomp, or (CYC_SRC, as cycprobe.py reads it) a copy
+SRC = os.path.abspath(os.environ.get('CYC_SRC', os.path.join(ROOT, 'src', 'stuntracefx')))
 C_CMD = os.environ.get('CYC_C_CMD', '{srfx} --rom {rom} --script {script} --headless --out {out}')
 
 
@@ -49,7 +52,7 @@ def run(cmd, **kw):
 def fingerprint():
     """The decomp's C and the marking tools, as they are now."""
     h = hashlib.sha1()
-    files = sorted(glob.glob(os.path.join(ROOT, 'src', 'stuntracefx', '**', '*.[ch]'), recursive=True))
+    files = sorted(glob.glob(os.path.join(SRC, '**', '*.[ch]'), recursive=True))
     for f in files + [os.path.join(TOOLS, 'cycprobe.py')]:
         h.update(f.encode())
         h.update(open(f, 'rb').read())
@@ -143,6 +146,7 @@ class Run:
         ocmd = [sfxbox, '--core', CORE, '--rom', ROM, '--script', script, '--out', os.path.join(d, 'o'),
                 '--cyclog', self.of]
         cenv = dict(os.environ, NSHVC_CYCLOG=self.cf)
+        cenv.setdefault('NSHVC_STATES', os.path.join(TOOLS, 'states'))   # where a script's load finds its play
         if frames:
             ocmd += ['--cyclog-frames', frames]
             cenv['NSHVC_CYCLOG_FRAMES'] = frames
