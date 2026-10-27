@@ -7,7 +7,7 @@
    built with cycprobe.py --marks; either may be a FIFO, both are read as
    they are written. Each access of the C (a read, a write, an interrupt's
    push) is paired with the next access of the original with the same
-   address, value and direction among the next W the original makes. Between
+   address (mirrors folded to one), value and direction among the next W the original makes. Between
    two paired accesses the original's cycles are a stretch (its unpaired
    accesses are cycles of it: a read the C does not make); the C's lines in
    between say what it passed:
@@ -46,6 +46,7 @@ typedef struct { char k; uint32_t a; uint8_t v; uint8_t c; } OE;   /* k: R W an 
 static OE ob[OR];
 static uint64_t oh, ot;       /* ring: [ot, oh) read, ot just after the last paired access */
 static FILE *fo, *fc;
+static uint32_t fold(uint32_t a);
 
 static int oread(void)
 {
@@ -57,7 +58,7 @@ static int oread(void)
             return 0;
         if ((l[0] == 'r' || l[0] == 'w') && l[1] == ' ') {
             if (sscanf(l + 2, "%x %x %u", &a, &v, &c) != 3) continue;
-            e.k = l[0] == 'r' ? 'R' : 'W'; e.a = a; e.v = (uint8_t)v; e.c = (uint8_t)c;
+            e.k = l[0] == 'r' ? 'R' : 'W'; e.a = fold(a); e.v = (uint8_t)v; e.c = (uint8_t)c;
         } else if ((l[0] == 'o' || l[0] == 'n') && l[1] == ' ') {
             if (sscanf(l + 2, "%x %x %u", &a, &v, &c) != 3) continue;
             e.k = 'c'; e.a = 0; e.v = 0; e.c = (uint8_t)c;
@@ -75,6 +76,25 @@ static int oread(void)
         ob[oh++ % OR] = e;
         return 1;
     }
+}
+
+/* One address for each place the bus reaches: banks $80-$FF as $00-$7F
+   (but $FE-$FF stay ROM), and in banks $00-$3F the low 8 KB of work RAM
+   as $7E and the registers as bank $00. The original reaches a register
+   or work RAM through whatever bank its data bank holds ($03:2140 is
+   $2140); the C names it one way. */
+static uint32_t fold(uint32_t a)
+{
+    unsigned bank = a >> 16 & 0xFF, off = a & 0xFFFF;
+    if (bank >= 0x80 && bank < 0xFE)
+        bank -= 0x80;
+    if (bank < 0x40 || (bank >= 0x80 && bank < 0xC0)) {
+        if (off < 0x2000)
+            return 0x7E0000 | off;
+        if (off < 0x6000)
+            return off;
+    }
+    return bank << 16 | off;
 }
 
 /* nativeshvc's rom_data(): a read it gives no time */
@@ -231,6 +251,7 @@ int main(int argc, char **argv)
             if (sscanf(l + 2, "%x %x", &a, &v) != 2)
                 continue;
             if (k == 'R' && rom(a)) { st_rom++; continue; }
+            a = fold(a);
             for (;;) {
                 OE *e;
                 while (i >= oh) if (!oread()) break;
