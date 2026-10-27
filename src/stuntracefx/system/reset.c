@@ -204,7 +204,8 @@ void abi_ResetVector(void)
     cpu.p |= P_I;
     cpu.p &= (uint8_t)~P_C;
     cpu.e = 0;
-    cpu.p = (uint8_t)((cpu.p & ~P_C) | (old_e ? P_C : (cyc(88), 0)));
+    cpu.p = (uint8_t)((cpu.p & ~P_C) | (old_e ? P_C : 0));
+    cyc(88);
     cpu.p &= (uint8_t)~P_D;
     jump_routine(0x038AA9);
 }
