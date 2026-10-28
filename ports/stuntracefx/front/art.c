@@ -2,7 +2,8 @@
  * art.c: the touch controls' pictures (front.h), drawn here once as ARGB at
  * twice the window's points and handed to the console's overlay: the
  * steering wheel under the finger (a gold rim, a hub and three spokes), the
- * two pedals (a ribbed pad with its name) and the pause button (two bars).
+ * two pedals (a ribbed pad with its name) and the pause button (two bars);
+ * and on every host the mode's badge (ORIGINAL or ENHANCED, Tab).
  * Shapes are by their distance from each pixel's centre, a pixel's edge
  * blended across one pixel.
  */
@@ -74,12 +75,16 @@ static float d_roundrect(float px, float py, float x, float y, float w, float h,
             }                                                                                 \
     } while (0)
 
-/* 5 x 7 capitals for the pedals' names */
+/* 5 x 7 capitals for the pedals' names and the mode's badge */
 static const struct { char c; uint8_t row[7]; } k_font[] = {
     { 'A', { 0x0E, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11 } }, { 'B', { 0x1E, 0x11, 0x11, 0x1E, 0x11, 0x11, 0x1E } },
-    { 'E', { 0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x1F } }, { 'K', { 0x11, 0x12, 0x14, 0x18, 0x14, 0x12, 0x11 } },
-    { 'O', { 0x0E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E } }, { 'R', { 0x1E, 0x11, 0x11, 0x1E, 0x14, 0x12, 0x11 } },
-    { 'S', { 0x0F, 0x10, 0x10, 0x0E, 0x01, 0x01, 0x1E } }, { 'T', { 0x1F, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04 } },
+    { 'C', { 0x0E, 0x11, 0x10, 0x10, 0x10, 0x11, 0x0E } }, { 'D', { 0x1E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x1E } },
+    { 'E', { 0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x1F } }, { 'G', { 0x0E, 0x11, 0x10, 0x17, 0x11, 0x11, 0x0F } },
+    { 'H', { 0x11, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11 } }, { 'I', { 0x0E, 0x04, 0x04, 0x04, 0x04, 0x04, 0x0E } },
+    { 'K', { 0x11, 0x12, 0x14, 0x18, 0x14, 0x12, 0x11 } }, { 'L', { 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1F } },
+    { 'N', { 0x11, 0x19, 0x15, 0x13, 0x11, 0x11, 0x11 } }, { 'O', { 0x0E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E } },
+    { 'R', { 0x1E, 0x11, 0x11, 0x1E, 0x14, 0x12, 0x11 } }, { 'S', { 0x0F, 0x10, 0x10, 0x0E, 0x01, 0x01, 0x1E } },
+    { 'T', { 0x1F, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04 } },
 };
 
 /* text centred on (cx, top), each font pixel a square of `dot` points */
@@ -132,6 +137,18 @@ static Img pedal(float w, float h, uint32_t c, const char *name)
     return m;
 }
 
+/* the mode's badge: its name on a dark rounded plate, edged in its colour */
+#define BADGE_W 112
+#define BADGE_H 26
+static Img badge(const char *name, uint32_t c)
+{
+    Img m = img_new(BADGE_W, BADGE_H);
+    SHAPE(&m, 0x141414, 0.7f, d_roundrect(px, py, 1, 1, BADGE_W - 2, BADGE_H - 2, 6));
+    SHAPE(&m, c, 1, fabsf(d_roundrect(px, py, 1, 1, BADGE_W - 2, BADGE_H - 2, 6)) - 0.75f);
+    text(&m, name, BADGE_W / 2.0f, (BADGE_H - 7 * 1.75f) / 2, 1.75f, c);
+    return m;
+}
+
 static Img pause_bars(void)
 {
     Img m = img_new(56, 44);
@@ -143,6 +160,7 @@ static Img pause_bars(void)
 }
 
 static int id_wheel = -1, id_brake = -1, id_boost = -1, id_pause = -1;
+static int id_original = -1, id_enhanced = -1;
 
 static int hand_over(Img m)
 {
@@ -172,12 +190,28 @@ void art_place(const TouchView *v)
     front_overlay_place(id_pause, v->pause_x, v->pause_y, s, 0, 0.75f, v->driving);
 }
 
+void art_make_mode(void)
+{
+    id_original = hand_over(badge("ORIGINAL", 0xF5D34A));
+    id_enhanced = hand_over(badge("ENHANCED", 0x4AA8F5));
+}
+
+void art_place_mode(int enhanced, float left, float top)
+{
+    const float s = 1.0f / DENSITY, cx = left + BADGE_W / 2.0f, cy = top + BADGE_H / 2.0f;
+    if (id_original < 0)
+        return;
+    front_overlay_place(id_original, cx, cy, s, 0, 0.85f, !enhanced);
+    front_overlay_place(id_enhanced, cx, cy, s, 0, 0.85f, enhanced);
+}
+
 /* the pictures as made, for a check (touch_check.c): 0 wheel, 1 brake,
-   2 boost, 3 pause */
+   2 boost, 3 pause, 4 the ORIGINAL badge, 5 the ENHANCED one */
 uint32_t *art_picture(int which, int *w, int *h)
 {
     Img m = which == 0 ? wheel() : which == 1 ? pedal(84, 128, 0xE84A3C, "BRAKE")
-          : which == 2 ? pedal(84, 112, 0x4AA8F5, "BOOST") : pause_bars();
+          : which == 2 ? pedal(84, 112, 0x4AA8F5, "BOOST") : which == 3 ? pause_bars()
+          : which == 4 ? badge("ORIGINAL", 0xF5D34A) : badge("ENHANCED", 0x4AA8F5);
     *w = m.w;
     *h = m.h;
     return m.px;

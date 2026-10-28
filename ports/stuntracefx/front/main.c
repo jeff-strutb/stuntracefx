@@ -1,8 +1,9 @@
 /*
  * main.c: Stunt Race FX on nativeshvc (front.h). The game (game/) is the
  * cartridge; this is what it adds to the console's front end: its keys
- * (F1 Frame rate 60, F2 Widescreen), its Remaster Options taken at each
- * frame's end, and a touch screen as its controls (touch.c, art.c).
+ * (Tab Original or Enhanced mode, with a badge saying which; F1 Frame rate
+ * 60, F2 Widescreen), its Remaster Options taken at each frame's end, and a
+ * touch screen as its controls (touch.c, art.c).
  *
  *   stuntracefx [nshvc_main's options] [--pacing FILE]
  *
@@ -58,12 +59,19 @@ static int driving_now(void)
     return controls_seen && nshvc_frames() - controls_frame <= 12 && nshvc_peek(0x7E10DA) == 0;
 }
 
+/* ---- the mode: Original (the original's pace, by the cost profile) or
+   Enhanced (independent of the processors' speed: Frame rate 60) ---- */
+static int enhanced(void) { return rm_option(RM_OPT_FRAMERATE); }
+
 /* ---- the hooks ---- */
 static int on_key(int vk, int down)
 {
-    if (!down || (vk != 0x70 && vk != 0x71))
+    if (!down || (vk != 0x09 && vk != 0x70 && vk != 0x71))
         return 0;
-    if (vk == 0x70) {                       /* F1 */
+    if (vk == 0x09) {                       /* Tab */
+        rm_option_set(RM_OPT_FRAMERATE, !enhanced());
+        fprintf(stderr, "mode: %s\n", enhanced() ? "enhanced" : "original");
+    } else if (vk == 0x70) {                /* F1 */
         rm_option_set(RM_OPT_FRAMERATE, !rm_option(RM_OPT_FRAMERATE));
         fprintf(stderr, "remaster: frame rate %s\n", rm_option(RM_OPT_FRAMERATE) ? "60" : "original");
     } else {                                /* F2 */
@@ -80,9 +88,14 @@ static void on_touch(const nshvc_touch *t, int n)
 
 static void on_frame(void)
 {
-    static int made;
+    static int made, badge_made;
     TouchView v;
     rm_frame_end();
+    if (!badge_made) {
+        art_make_mode();
+        badge_made = 1;
+    }
+    art_place_mode(enhanced(), 8, front_safe_top() + 8);
     if (getenv("PORT_INPUTLOG")) {
         uint16_t held = (uint16_t)(nshvc_peek(0x7E0309) | nshvc_peek(0x7E030A) << 8);
         uint16_t pad = (uint16_t)(nshvc_peek(0x004218) | nshvc_peek(0x004219) << 8);

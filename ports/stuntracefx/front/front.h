@@ -40,6 +40,10 @@ void touch_view(TouchView *v);
    from touch_view */
 void art_make(void);
 void art_place(const TouchView *v);
+/* the mode's badge (every host): made once, then placed each frame with
+   its top-left corner at (left, top), in window points */
+void art_make_mode(void);
+void art_place_mode(int enhanced, float left, float top);
 
 /* ---- the cartridge (cart.c) and its Super FX (superfx_cart.c) ---- */
 void cart_describe(nshvc_cart *cart);
