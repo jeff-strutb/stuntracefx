@@ -112,8 +112,15 @@ void rm_race_frame_paced(void);
    race (the results and the screens they open). From here it runs frames
    of its own on the console's time; the next race frame is a tick again. */
 void rm_step_over(void);
-/* the options taken, at each frame's end (the front end calls it) */
+/* the options taken, at each frame's end (the front end calls it); the
+   main CPU's costs set for the mode (Enhanced: none, contract 2.2) */
 void rm_frame_end(void);
+/* The raster interrupt's handler runs (system/boot.c): the main CPU's
+   costs on while it does, in Enhanced too, so its writes to the PPU land
+   on the lines the original's did (the race screen's top and bottom, its
+   windows); the game's frame work stays free */
+void rm_irq_enter(void);
+void rm_irq_leave(void);
 /* the finished screen to the display at once: video/dma.c */
 void RmRaceScreenShow(void);
 /* Enhanced mode's picture (picture.c): count characters of planar data at

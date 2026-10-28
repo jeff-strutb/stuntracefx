@@ -23,6 +23,8 @@ uint8_t *nshvc_wram(void);
 uint8_t *nshvc_sram(void);
 /* Interrupts held while code runs between frames (from the frame hook) */
 void nshvc_hold_interrupts(int on);
+/* the main CPU's accesses timed (1) or free (0) (contract 2.2) */
+void nshvc_set_cpu_costs(int on);
 /* A canvas in a layer's characters' place at the window's resolution
    (contract 2.4): k, the window's pixels a console pixel (0: no canvas
    here); count characters from VRAM word word_addr, each 8k x 8k texels */

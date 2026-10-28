@@ -14,6 +14,7 @@ uint8_t nshvc_peek(uint32_t addr) { return snes_peek(addr); }
 uint8_t *nshvc_wram(void) { return (uint8_t *)snes_wram(); }
 uint8_t *nshvc_sram(void) { return snes_sfx_ram(); }
 void nshvc_hold_interrupts(int on) { snes_hold_interrupts(on); }
+void nshvc_set_cpu_costs(int on) { (void)on; }
 int nshvc_ext_canvas_scale(void) { return 0; }
 void nshvc_ext_canvas_chars(int layer, unsigned word_addr, int count, const uint8_t *texels, int k)
 {

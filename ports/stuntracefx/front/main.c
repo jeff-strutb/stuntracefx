@@ -93,7 +93,6 @@ static void on_frame(void)
     static int made, badge_made;
     TouchView v;
     rm_frame_end();
-    nshvc_set_cpu_costs(!rm_enhanced());
     if (!badge_made) {
         art_make_mode();
         badge_made = 1;

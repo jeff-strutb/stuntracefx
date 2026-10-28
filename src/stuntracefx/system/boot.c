@@ -6,6 +6,7 @@
 #include "cpu_ops.h"
 #include "hw.h"
 #include "assets.h"
+#include "remaster.h"
 
 void abi_ApuUploadBank19(void);
 void abi_SaveUnlocksCheck(void);
@@ -494,7 +495,9 @@ void abi_IrqStub(void)
     cpu.s--;
     wr8(cpu.s, 0x0F);
     cpu.s--;
+    rm_irq_enter();
     abi_RasterIrq();
+    rm_irq_leave();
     cpu.s++;                            /* RTL's pulls */
     rd8(cpu.s);
     cpu.s++;

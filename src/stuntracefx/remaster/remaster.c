@@ -208,6 +208,32 @@ void rm_race_frame_end(void)
 /* At each frame's end (the front end calls it). RM_REF_PACE=N (a check,
    not an option): the original's whole steps, one each N video
    frames, to compare a run at 60 with the original at a steady pace. */
+static int in_irq;                      /* in the raster interrupt's handler */
+static int costs_now = -1;              /* the costs as last set */
+
+/* the main CPU's costs: off in Enhanced, but on in the interrupt handler.
+   Set each frame's end, and in the handler only when they change: a set
+   drops the console's carried part of a clock */
+static void cpu_costs(int every)
+{
+    int on = in_irq || !rm_on;
+    if (every || on != costs_now)
+        nshvc_set_cpu_costs(on);
+    costs_now = on;
+}
+
+void rm_irq_enter(void)
+{
+    in_irq++;
+    cpu_costs(0);
+}
+
+void rm_irq_leave(void)
+{
+    in_irq--;
+    cpu_costs(0);
+}
+
 void rm_frame_end(void)
 {
     static int ref = -1;
@@ -217,5 +243,6 @@ void rm_frame_end(void)
     rm_on = rm_option(RM_OPT_FRAMERATE) && nshvc_peek(0x7E10DA) == 0;
     rm_pace = ref ? ref : rm_on;
     rm_share_on = rm_on && !ref;
+    cpu_costs(1);
     rm_canvas_frame_end();
 }
