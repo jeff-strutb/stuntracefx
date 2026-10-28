@@ -60,7 +60,9 @@ static int driving_now(void)
 }
 
 /* ---- the mode: Original (the original's pace, by the cost profile) or
-   Enhanced (independent of the processors' speed: Frame rate 60) ---- */
+   Enhanced (independent of the processors' speed: Frame rate 60; the main
+   CPU's work takes no console time, and the Super FX's none, outside the
+   attract's demos, rm_enhanced) ---- */
 static int enhanced(void) { return rm_option(RM_OPT_FRAMERATE); }
 
 /* ---- the hooks ---- */
@@ -91,6 +93,7 @@ static void on_frame(void)
     static int made, badge_made;
     TouchView v;
     rm_frame_end();
+    nshvc_set_cpu_costs(!rm_enhanced());
     if (!badge_made) {
         art_make_mode();
         badge_made = 1;
