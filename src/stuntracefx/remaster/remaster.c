@@ -170,6 +170,17 @@ void rm_hud_redraw_in(int hold)
     gsu = gsu_now;
 }
 
+static void cpu_costs(int every);
+static int drawing;                     /* drawing Enhanced's 3D between steps (whole_tween) */
+
+/* In a race frame or a menus' 3D frame at 60: the main CPU's work there
+   takes no time in Enhanced (cpu_costs) */
+static void frame60(int on)
+{
+    rm_frame60 = on;
+    cpu_costs(0);
+}
+
 /* A race frame. Enhanced (rm_share_on): the original's whole step each
    RM_TICKS video frames, the 3D drawn between its start and end in the
    frames between (rm_whole_tween): the physics are the original's, step
@@ -180,7 +191,7 @@ void rm_race_frame(void)
     redraw_wait();
     if (!rm_pace)
         return;
-    rm_frame60 = 0;
+    frame60(0);
     rm_whole = rm_share_on;
     rm_waiting = 1;                     /* the frame hook in the wait: a clean point (tween.c) */
     for (rm_wait_k = 0; rm_wait_k < (rm_whole ? RM_TICKS : rm_pace); rm_wait_k++)
@@ -188,7 +199,7 @@ void rm_race_frame(void)
     rm_waiting = 0;
     if (rm_share_on)                    /* counted after the wait: the frame hook in it shows the last */
         rm_ticks++;
-    rm_frame60 = 1;
+    frame60(1);
 }
 
 int rm_whole_steps(void) { return rm_whole; }
@@ -204,7 +215,11 @@ static void whole_tween(void)
 
     if (!rm_whole || !rm_waiting || j >= RM_TICKS)
         return;
+    drawing = 1;                        /* the 3D's work, free as the race frame's */
+    cpu_costs(0);
     m = rm_tween_buffers(j, RM_TICKS, px[0], px[1]);
+    drawing = 0;
+    cpu_costs(0);
     if (m == 3)
         rm_canvas_show_players(px[0], px[1]);
     else if (m)                         /* in the place of the buffer the step showed */
@@ -219,18 +234,18 @@ void rm_race_frame_paced(void)
         return;
     if (rm_share_on)
         rm_ticks++;
-    rm_frame60 = 1;
+    frame60(1);
 }
 
 void rm_step_over(void)
 {
     redraw_wait();
-    rm_frame60 = 0;
+    frame60(0);
 }
 
 void rm_race_frame_end(void)
 {
-    rm_frame60 = 0;
+    frame60(0);
 }
 
 /* At each frame's end (the front end calls it). RM_REF_PACE=N (a check,
@@ -239,12 +254,15 @@ void rm_race_frame_end(void)
 static int in_irq;                      /* in the raster interrupt's handler */
 static int costs_now = -1;              /* the costs as last set */
 
-/* the main CPU's costs: off in Enhanced, but on in the interrupt handler.
-   Set each frame's end, and in the handler only when they change: a set
-   drops the console's carried part of a clock */
+/* the main CPU's costs: off in Enhanced's race frames and menus' 3D
+   frames, the work it makes processor-speed independent; on elsewhere
+   (the boot, the menus, the sound driver's uploads and commands, whose
+   handshakes keep the original's timing) and in the interrupt handler.
+   Set each frame's end, otherwise only when they change: a set drops the
+   console's carried part of a clock */
 static void cpu_costs(int every)
 {
-    int on = in_irq || !rm_on;
+    int on = in_irq || !rm_on || !(rm_frame60 || drawing);
     if (every || on != costs_now)
         nshvc_set_cpu_costs(on);
     costs_now = on;
