@@ -4,29 +4,31 @@ reference bsnes bsnes_libretro.dylib
 rom-sha256 c04d80b84514202ff319384ca20641eb0189e975eed5612915bd9c224b2ab30a
 source-sha256 -
 checked unchecked
-cpu read  wram 21.7 rom 68.1 cart-ram 41.4 io 67.8
-cpu write wram 16.0 rom 106.9 cart-ram 37.1 io 34.8
+cpu read  wram 28.2 rom 19.8 cart-ram 28.4 io 44.8
+cpu write wram 16.1 rom 71.9 cart-ram 16.8 io 36.3
+spc read  ram 5.1 reg 3.9
+spc write ram 1.4 reg 0.0
 chip superfx ops LOAD STORE FLUSH RPIX speed 5
-program 0180BC fixed 0 weights 2244101 0 0 0
-program 0181E3 fixed 0 weights 684831 0 0 0
-program 0182CE fixed 0 weights 103935 0 0 0
-program 018325 fixed 0 weights 1220055 0 0 0
-program 01AB13 fixed 150596 weights 110433 0 31991 4228688
-program 01AEF8 fixed 1610 weights 19232 39903 0 0
-program 01BBC7 fixed 0 weights 81920 54336 0 0
-program 01CF42 fixed 28617 weights 0 97436 0 0
+program 0180BC fixed 2192 weights 0 0 0 0
+program 0181E3 fixed 1365 weights 0 0 0 0
+program 0182CE fixed 609 weights 0 0 0 0
+program 018325 fixed 1794 weights 0 0 0 0
+program 01AB13 fixed 152073 weights 114265 0 30494 2377440
+program 01AEF8 fixed 1570 weights 19113 41137 0 0
+program 01BBC7 fixed 0 weights 79845 55422 0 0
+program 01CF42 fixed 21257 weights 0 238771 0 0
 program 01D1EB fixed 0 weights 120320 120320 120320 120320
 program 048800 fixed 0 weights 51351 51351 51351 51351
-program 048B64 fixed 1664 weights 15075 0 0 0
-program 048C95 fixed 1494 weights 14347 6360 0 0
-program 048CC6 fixed 0 weights 0 77770 0 0
-program 048FCA fixed 91 weights 15470 187647 0 0
+program 048B64 fixed 1664 weights 15057 0 0 0
+program 048C95 fixed 1534 weights 14314 4153 0 0
+program 048CC6 fixed 0 weights 0 77778 0 0
+program 048FCA fixed 0 weights 18379 184753 0 0
 program 04BF51 fixed 0 weights 104155 104155 104155 104155
-program 07EE50 fixed 0 weights 0 24459 0 0
-program 07EE88 fixed 0 weights 84776 0 0 0
-program 07F121 fixed 0 weights 140119 0 0 26723
-program 07F15B fixed 0 weights 106778 64583 23247 0
-program 07F6DF fixed 0 weights 69997 0 20378 0
-program 07FA88 fixed 0 weights 103799 0 20248 0
-program 07FAF2 fixed 0 weights 105831 1103199 13823 0
+program 07EE50 fixed 18344 weights 0 0 0 0
+program 07EE88 fixed 84818 weights 0 0 0 0
+program 07F121 fixed 779 weights 118432 0 16600 0
+program 07F15B fixed 580 weights 104464 0 21450 0
+program 07F6DF fixed 8853 weights 0 0 20375 0
+program 07FA88 fixed 73338 weights 0 0 20250 0
+program 07FAF2 fixed 0 weights 105491 0 16003 0
 default fixed 0 weights 48259 48259 48259 48259
