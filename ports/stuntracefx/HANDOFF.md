@@ -26,6 +26,27 @@ below predate this and stand only where they don't conflict with it: the
 console is nativeshvc, and its register-level contract is the accepted
 API. The cycle-exact work is on branch shelf/cycle-exact.
 
+**Original and Enhanced, 2026-10-28.** Tab switches the two C modes
+(`RM_OPT_FRAMERATE`, saved in `remaster.cfg`; the env var forces it for a
+run; `rm_enhanced()` in remaster.c; demos stay Original), with a badge
+(front/art.c). Original mode: the cost profile, approximate, races about
+5% fast (5.64 against 5.95 TV frames a race frame; the C makes fewer
+S-CPU accesses than the original the weights were fitted to; a per-kind
+fit was dropped). Enhanced: Super FX jobs free (superfx_cart.c), S-CPU
+costs off (contract 2.2), the race at a steady 60 ticks a second; the
+pictures on nativeshvc's canvas (contract 2.4, a04400dc), `remaster/
+picture.c` with the stages in video/dma.c (1-player buffers at VRAM words
+$0000/$2200, 416 8 bpp characters; 2-player sets $0000/$2000, 360 4 bpp)
+and system/vblank_updates.c (menus' 3D sets $0000/$0B00, 143 8 bpp). The
+choice is per buffer at its first stage; buffers that share characters
+narrow the canvas before the last copy to VRAM, so a Tab back is clean;
+the canvas goes off when its screen stops uploading and is handed again
+when the window's scale changes. Checked headless against the canvas
+decode (residue only under sprites), Tab both ways on all three screens,
+k 3 and 5, and Original shots byte-identical to before. The race intro is about 15% shorter in Enhanced (its
+steps count race frames; the countdown is timed and matches). Later:
+high-resolution polygons from the draw list.
+
 ## The rules (Jeff's, all standing)
 
 - **Zero emulation when done.** The finished port is the game's own source

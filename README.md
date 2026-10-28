@@ -180,8 +180,39 @@ The build expects nativeshvc's checkout beside this one (`NSHVC=../nativeshvc`)
 and its library built. `--pacing FILE` logs each race frame's TV frames
 (`$06D4`), the measure to compare with the original's.
 
+### Original and Enhanced modes
+
+A preserved decompilation has three tiers: the assembly, bit exact; the C,
+behaviour exact; and an Enhanced mode, the C brought to a modern standard
+with nativeshvc's extensions. The native build plays both C modes. **Tab**
+switches between them; a badge in the corner says which is on, and the
+choice is saved (`remaster.cfg`, the Frame rate 60 option;
+`RM_OPT_FRAMERATE=1` forces Enhanced for a run without saving). Right
+Shift is SELECT. The attract demos always play in Original mode.
+
+- **Original mode** is the preservation record: the game paced by its
+  chips' work, from the cost profile above, slowdown included. The pace
+  is approximate: races run about 5% fast (5.64 TV frames a race frame
+  against the original's 5.95). The profile's S-CPU weights were fitted to
+  the original's accesses, and the C makes fewer of them (work-RAM reads
+  0.70x, writes 0.60x, I/O reads 0.14x); a per-kind fit was tried and
+  dropped, as it overcharges access-dense code about 2.5x.
+- **Enhanced mode** makes the game independent of processor speed, as a
+  modern game is: the race ticks at a steady 60 a second, sharing each
+  original race frame's step over its ticks, with neither the S-CPU
+  (nativeshvc contract 2.2, `nshvc_set_cpu_costs`) nor the Super FX taking
+  time. The finished Super FX pictures (the race screen, both halves of
+  the split screen, the menus' 3D) go to nativeshvc's **canvas** (contract
+  2.4) instead of being copied to video memory, which one vertical blank
+  could not hold at 60: each buffer is handed at its flip, keyed by the
+  video-memory characters it stands in for, and the console places it by
+  its own rules at the window's resolution. Original mode is unchanged by
+  it. The race intro runs about 15% shorter: its steps count race frames,
+  which the original ran slow under load (about 7.25 TV frames each,
+  against Enhanced's fixed 6). The countdown is timed and matches.
+
 **State (October 28, 2026).** The game boots, plays its menus and runs
-races at the original's pace on its measured profile. Not yet right:
+races in both modes. Not yet right:
 
 - **Race music garbled, and a freeze later in a race.** The sound driver's
   own upload loop reads a port in a 6-clock gap the hardware never exposed,
