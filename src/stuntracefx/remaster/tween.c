@@ -85,8 +85,8 @@ int rm_tween_ready(void)
        100 at the vertical blank's start). An interrupt handler that leaves
        them alone (a two-player race's split screen IRQ, at the frame's
        end every frame) is no bar. */
-    return was_ok && shown_tick && was_tick == rm_tick_count() && rm_sharing_on() && rm_in_tick_wait() &&
-           (gsu.scmr & 0x18) == 0x18;
+    return was_ok && (rm_whole_steps() || (shown_tick && rm_sharing_on())) && was_tick == rm_tick_count() &&
+           rm_in_tick_wait() && (gsu.scmr & 0x18) == 0x18;
 }
 
 /* the word at a of `to` set num/den of the way from `was` to `now` */

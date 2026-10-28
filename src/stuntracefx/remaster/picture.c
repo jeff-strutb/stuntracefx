@@ -76,10 +76,41 @@ static void canvas_hand(void)
 
 void rm_canvas_show(unsigned word, uint16_t src, unsigned count)
 {
-    canvas_seen = 1;
-    if (count * 64 > sizeof canvas_src || src + count * 64 > 0x10000)
+    if (src + count * 64 > 0x10000)
         return;
-    memcpy(canvas_src, nshvc_sram() + src, count * 64);
+    rm_canvas_show_bytes(word, nshvc_sram() + src, count);
+}
+
+void rm_canvas_replace(const uint8_t *src)
+{
+    if (!canvas_on || canvas_bpp != 8 || canvas_count != 416)
+        return;
+    rm_canvas_show_bytes(canvas_word, src, 416);
+}
+
+void rm_canvas_show_players(const uint8_t *p1, const uint8_t *p2)
+{
+    unsigned r, set = canvas_on && canvas_count == 360 ? canvas_word : 0x0000;
+
+    canvas_seen = 1;
+    for (r = 0; r < 0x12; r++) {
+        memcpy(canvas_src + r * 0x140, p1 + r * 0x200, 0x140);
+        memcpy(canvas_src + 0x12 * 0x140 + r * 0x140, p2 + r * 0x200, 0x140);
+    }
+    canvas_owner = RM_CANVAS_RACE;
+    canvas_word = set;
+    canvas_count = 360;
+    canvas_bpp = 4;
+    canvas_k = nshvc_ext_canvas_scale();
+    canvas_hand();
+}
+
+void rm_canvas_show_bytes(unsigned word, const uint8_t *src, unsigned count)
+{
+    canvas_seen = 1;
+    if (count * 64 > sizeof canvas_src)
+        return;
+    memcpy(canvas_src, src, count * 64);
     canvas_owner = owner_now;
     canvas_word = word;
     canvas_count = count;
@@ -112,6 +143,32 @@ void rm_canvas_show_copied(unsigned word, unsigned count, unsigned bpp)
     canvas_bpp = bpp;
     canvas_k = nshvc_ext_canvas_scale();
     canvas_hand();
+}
+
+void rm_canvas_show_copied_late(unsigned word, unsigned count, unsigned bpp)
+{
+    static uint8_t last[360 * 32];
+    static unsigned last_n;
+    size_t n = (size_t)count * bpp * 8;
+
+    if (n > sizeof last || word * 2 + n > sizeof vram_shadow) {
+        rm_canvas_show_copied(word, count, bpp);
+        return;
+    }
+    if (last_n == n && canvas_on) {     /* the last set's pictures in this one's place */
+        canvas_seen = 1;
+        memcpy(canvas_src, last, n);
+        canvas_owner = owner_now;
+        canvas_word = word;
+        canvas_count = count;
+        canvas_bpp = bpp;
+        canvas_k = nshvc_ext_canvas_scale();
+        canvas_hand();
+    } else {
+        rm_canvas_show_copied(word, count, bpp);
+    }
+    memcpy(last, vram_shadow + word * 2, n);
+    last_n = (unsigned)n;
 }
 
 void rm_canvas_narrow(unsigned word, unsigned count)

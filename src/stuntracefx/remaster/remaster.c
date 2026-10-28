@@ -22,6 +22,8 @@ static int rm_on;                       /* Frame rate 60 */
 static int rm_pace;                     /* video frames a race frame: 1 at 60; 0 the original's */
 static int rm_share_on;                 /* the steps shared out over RM_TICKS ticks */
 static int rm_frame60;                  /* in a race frame at 60: from its tick to its step over */
+static int rm_whole;                    /* Enhanced's race: the original's whole steps, the 3D drawn between */
+static int rm_wait_k;                   /* the video frames a race frame's wait has had */
 /* each field's carried share (rm_share), by its address: work RAM, the
    Super FX's RAM; in 1/RM_SHARE_ONE of a unit */
 static int32_t rm_carry_w[0x20000], rm_carry_s[0x10000];
@@ -30,7 +32,7 @@ int rm_tick60(void) { return rm_pace && rm_frame60; }
 
 int rm_enhanced(void) { return rm_on; }
 
-int rm_sharing(void) { return rm_share_on && rm_frame60; }
+int rm_sharing(void) { return rm_share_on && rm_frame60 && !rm_whole; }
 
 int rm_sharing_on(void) { return rm_share_on; }
 
@@ -168,15 +170,20 @@ void rm_hud_redraw_in(int hold)
     gsu = gsu_now;
 }
 
+/* A race frame. Enhanced (rm_share_on): the original's whole step each
+   RM_TICKS video frames, the 3D drawn between its start and end in the
+   frames between (rm_whole_tween): the physics are the original's, step
+   for step, which a share of a step a tick cannot be (its dead zones and
+   tire forces act on the state each tick reaches). */
 void rm_race_frame(void)
 {
-    int n;
     redraw_wait();
     if (!rm_pace)
         return;
     rm_frame60 = 0;
+    rm_whole = rm_share_on;
     rm_waiting = 1;                     /* the frame hook in the wait: a clean point (tween.c) */
-    for (n = 0; n < rm_pace; n++)       /* the tick */
+    for (rm_wait_k = 0; rm_wait_k < (rm_whole ? RM_TICKS : rm_pace); rm_wait_k++)
         nshvc_wait_vblank();
     rm_waiting = 0;
     if (rm_share_on)                    /* counted after the wait: the frame hook in it shows the last */
@@ -184,9 +191,30 @@ void rm_race_frame(void)
     rm_frame60 = 1;
 }
 
+int rm_whole_steps(void) { return rm_whole; }
+
+/* Enhanced's race, from the frame hook in a race frame's wait: frames 1
+   to RM_TICKS - 1 of the wait show the 3D drawn that far between the
+   last step's start and end (its own picture is the start's, the next
+   step's the end's), on the canvas in the shown buffer's place */
+static void whole_tween(void)
+{
+    static uint8_t px[2][RM_TWEEN_BYTES];
+    int j = rm_wait_k + 1, m;
+
+    if (!rm_whole || !rm_waiting || j >= RM_TICKS)
+        return;
+    m = rm_tween_buffers(j, RM_TICKS, px[0], px[1]);
+    if (m == 3)
+        rm_canvas_show_players(px[0], px[1]);
+    else if (m)                         /* in the place of the buffer the step showed */
+        rm_canvas_replace(px[m - 1]);
+}
+
 void rm_race_frame_paced(void)
 {
     redraw_wait();
+    rm_whole = 0;
     if (!rm_pace)
         return;
     if (rm_share_on)
@@ -244,5 +272,6 @@ void rm_frame_end(void)
     rm_pace = ref ? ref : rm_on;
     rm_share_on = rm_on && !ref;
     cpu_costs(1);
+    whole_tween();
     rm_canvas_frame_end();
 }

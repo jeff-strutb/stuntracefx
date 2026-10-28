@@ -145,8 +145,21 @@ void rm_picture_chars(const uint8_t *data, unsigned count, unsigned bpp, unsigne
    race screen has gone, handed again when the window's k changed. */
 int rm_canvas_ready(void);
 void rm_canvas_show(unsigned word, uint16_t src, unsigned count);
+/* the same from bytes in buffer order; and a two-player set (360 4 bpp
+   characters) from the players' buffers, 18 columns of $140 bytes $200
+   apart each, in the shown set's place */
+void rm_canvas_show_bytes(unsigned word, const uint8_t *src, unsigned count);
+void rm_canvas_show_players(const uint8_t *p1, const uint8_t *p2);
+/* a one-player picture (416 8 bpp characters) in place of the race
+   buffer the canvas shows */
+void rm_canvas_replace(const uint8_t *src);
 void rm_canvas_copy(unsigned word, uint16_t src, unsigned bytes, unsigned stride, unsigned rows);
 void rm_canvas_show_copied(unsigned word, unsigned count, unsigned bpp);
+/* the same a step late, for a two-player race in whole steps (a step's
+   pictures are its end's, so the frames between show the way from the
+   last step's to this one's): the last set's pictures in this one's
+   place, this one's kept for the next */
+void rm_canvas_show_copied_late(unsigned word, unsigned count, unsigned bpp);
 void rm_canvas_narrow(unsigned word, unsigned count);
 void rm_canvas_off(void);
 enum { RM_CANVAS_RACE = 1, RM_CANVAS_MENU = 2 };
@@ -176,6 +189,9 @@ int rm_tween_buffers(int num, int den, uint8_t *at_2c00, uint8_t *at_9400);
 /* whether the option shares the steps out (Frame rate 60, not the
    reference pace) */
 int rm_sharing_on(void);
+/* Enhanced's race: the original's whole steps, the 3D drawn between them
+   (remaster.c) */
+int rm_whole_steps(void);
 /* whether the S-CPU is in a race frame's wait for its tick (the frame
    hook's clean point for an in-between draw) */
 int rm_in_tick_wait(void);
