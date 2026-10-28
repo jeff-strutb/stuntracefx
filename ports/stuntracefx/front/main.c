@@ -91,6 +91,8 @@ static void on_frame(void)
     }
     if (getenv("PORT_INPUTLOG") && nshvc_frames() % 300 == 0)
         fprintf(stderr, "input: frame %u, driving %d\n", nshvc_frames(), driving_now());
+#ifdef NSHVC_HOST_IOS
+    /* the touch scheme and its pictures: the iOS build's only */
     if (!made) {
         art_make();
         made = 1;
@@ -98,6 +100,10 @@ static void on_frame(void)
     touch_set_driving(driving_now());
     touch_view(&v);
     art_place(&v);
+#else
+    (void)made;
+    (void)v;
+#endif
 }
 
 /* ---- --pacing ---- */
