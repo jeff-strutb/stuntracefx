@@ -10,11 +10,13 @@
  * The console gives the chip its clock, IRQ line, open bus and the ROM
  * (gsu_host_*); a program the S-CPU starts runs its C from the cartridge's
  * routines (the routine at PBR:R15) to its STOP, and takes the time its
- * row of the cartridge's cost profile gives it (gsu_host_price).
+ * row of the cartridge's cost profile gives it (gsu_host_price); in
+ * Enhanced mode (rm_enhanced), none.
  */
 #include "nshvc/cart.h"
 
 #include "front.h"
+#include "remaster.h"
 #include "superfx.h"
 
 static uint32_t ram_size;
@@ -44,7 +46,8 @@ void gsu_host_fatal(const char *msg) { nshvc_fatal("%s", msg); }
    (LOAD, STORE, FLUSH, RPIX, the profile's order), in 1/GSU_PRICE_ONE of a
    clock; its rows sorted by entry (PBR:R15), and a row for a program not
    listed. With no profile, a program costs its accesses at the chip's bus
-   speed, 5 clocks each. */
+   speed, 5 clocks each. In Enhanced mode a program costs nothing: the
+   game's pace does not hang on the chip's speed. */
 static const nshvc_cost_profile *profile;
 
 static void price_of(const nshvc_chip_program *row, GsuPrice *out)
@@ -58,6 +61,12 @@ void gsu_host_price(uint8_t bank, uint16_t addr, GsuPrice *out)
 {
     uint32_t pc = (uint32_t)bank << 16 | addr;
     size_t lo = 0, hi;
+    if (rm_enhanced()) {
+        out->fixed = 0;
+        for (int k = 0; k < GSU_OPS; k++)
+            out->weight[k] = 0;
+        return;
+    }
     if (!profile) {
         out->fixed = 0;
         for (int k = 0; k < GSU_OPS; k++)

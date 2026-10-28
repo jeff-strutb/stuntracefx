@@ -14,6 +14,10 @@
    frames took 4 to 9 video frames, 6 on average */
 #define RM_TICKS 6
 int rm_tick60(void);
+/* Enhanced mode now (Frame rate 60 on, not in the attract's demos): the
+   game's pace independent of the chips' speed, so the Super FX's programs
+   take no time (superfx_cart.c) */
+int rm_enhanced(void);
 /* A change d the original makes to a field once a step, as a tick's share
    of it: the field's carry kept (by its address, `field`) so that
    RM_TICKS ticks change it by exactly d. d itself when the steps are the

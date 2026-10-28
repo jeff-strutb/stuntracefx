@@ -28,6 +28,8 @@ static int32_t rm_carry_w[0x20000], rm_carry_s[0x10000];
 
 int rm_tick60(void) { return rm_pace && rm_frame60; }
 
+int rm_enhanced(void) { return rm_on; }
+
 int rm_sharing(void) { return rm_share_on && rm_frame60; }
 
 int rm_sharing_on(void) { return rm_share_on; }
