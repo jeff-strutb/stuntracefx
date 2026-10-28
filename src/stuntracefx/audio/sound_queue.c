@@ -6,6 +6,7 @@
  * frame code sends the oldest byte of each queue to its APU port (0 or 1)
  * when the sound CPU has taken the previous one.
  */
+#include "remaster.h"
 #include "machine.h"
 #include "cpu_ops.h"
 #include "hw.h"
@@ -18,27 +19,19 @@ static void queue_push(uint32_t queue, uint32_t head, uint32_t count, uint8_t va
 {
     uint8_t n;
 
-    cyc(46);
     if (rd8(SOUND_MUTED) != 0)
         return;
-    cyc(40);
     n = rd8(count);
     if (n == 0) {
-        cyc(46);
-        wr8(count, cyc_then(6, (uint8_t)(rd8(count) + 1)));
-        cyc(24);
-        wr8(queue + rd8(head), cyc_then(30, value));
+        wr8(count, ((uint8_t)(rd8_rmw(count) + 1)));
+        wr8(queue + rd8(head), (value));
     } else if (n < 0x10) {
-        cyc(122);
         uint8_t slot = (uint8_t)(n + rd8(head));
         if (slot >= 0x10)
-            { cyc(10); slot -= 0x10; }
-        cyc(110);
+            slot -= 0x10;
         wr8(queue + slot, value);
-        cyc(24);
-        wr8(count, cyc_then(6, (uint8_t)(rd8(count) + 1)));
-    } else { cyc(54); }
-    cyc(184);
+        wr8(count, ((uint8_t)(rd8_rmw(count) + 1)));
+    }
 }
 
 /*
@@ -50,7 +43,6 @@ static void queue_push(uint32_t queue, uint32_t head, uint32_t count, uint8_t va
  */
 void SoundPort0QueuePushRaw(uint8_t command)
 {
-    cyc(252);
     queue_push(SOUND_PORT0_QUEUE, SOUND_PORT0_HEAD, SOUND_PORT0_COUNT, command);
 }
 
@@ -58,7 +50,6 @@ void abi_SoundPort0QueuePushRaw(void)
 {
     SoundPort0QueuePushRaw((uint8_t)cpu.a);
     cpu.p = nz8(cpu.p, cpu.db);  /* the last pull restores DB */
-    cyc(8);
 }
 
 /* From a caller with M and X 8-bit: the pulls take no extra byte. */
@@ -72,48 +63,27 @@ void abi_SoundPort0QueuePushRawX8(void)
    and Y 16-bit 16 (the entry's BRA is queue_push's). */
 void abi_SoundPort0QueuePushRawWide(void)
 {
-    unsigned wide = (cpu.p & P_M ? 0 : 8) + (cpu.p & P_X ? 0 : 16);
 
-    cyc(198 + wide);
     queue_push(SOUND_PORT0_QUEUE, SOUND_PORT0_HEAD, SOUND_PORT0_COUNT, (uint8_t)cpu.a);
-    cyc(wide);
     cpu.p = nz8(cpu.p, cpu.db);
 }
 
-/*
- * @routine 04:D656 SoundPort0QueuePush
- * WHAT IT DOES: Queues a sound command for APU port 0 on behalf of the player
- * whose car is being processed.
- * HOW: Sets bit 7 of the command when that is player 2, then queue_push on
- * the port 0 ring.
- * Entry: any widths; A low byte = command. Exit: every register unchanged
- * except N and Z, which the final pull of DB sets from DB.
- */
-static unsigned push_wide(void)
+static void port0_push(uint8_t command)
 {
-    return (cpu.p & P_M ? 0 : 8) + (cpu.p & P_X ? 0 : 16);
-}
-
-/* wide: the caller's PHA/PLA 8 longer with A 16-bit, PHY/PHX/PLX/PLY 16 with
-   X and Y 16-bit. */
-static void port0_push(uint8_t command, unsigned wide)
-{
-    cyc(222 + wide);
     if (rd8(CURRENT_PLAYER) != 0)
-        { cyc(10); command |= 0x80; }
+        command |= 0x80;
     queue_push(SOUND_PORT0_QUEUE, SOUND_PORT0_HEAD, SOUND_PORT0_COUNT, command);
-    cyc(wide);
 }
 
 /* From C: M 8-bit, X 16-bit. */
 void SoundPort0QueuePush(uint8_t command)
 {
-    port0_push(command, 16);
+    port0_push(command);
 }
 
 void abi_SoundPort0QueuePush(void)
 {
-    port0_push((uint8_t)cpu.a, push_wide());
+    port0_push((uint8_t)cpu.a);
     cpu.p = nz8(cpu.p, cpu.db);  /* the last pull restores DB */
 }
 
@@ -129,28 +99,26 @@ void abi_SoundPort0QueuePushX8(void)
  * Entry: any widths; A low byte = command. Exit: every register unchanged
  * except N and Z, which the final pull of DB sets from DB.
  */
-static void port1_push(uint8_t command, unsigned wide)
+static void port1_push(uint8_t command)
 {
-    cyc(176 + wide);
     queue_push(SOUND_PORT1_QUEUE, SOUND_PORT1_HEAD, SOUND_PORT1_COUNT, command);
-    cyc(wide);
 }
 
 /* From C: M 8-bit, X 16-bit. */
 void SoundPort1QueuePush(uint8_t command)
 {
-    port1_push(command, 16);
+    port1_push(command);
 }
 
-/* From C with the caller's widths: wide as for port0_push. */
-void SoundPort1QueuePushW(uint8_t command, unsigned wide)
+/* From C with the caller's widths. */
+void SoundPort1QueuePushW(uint8_t command)
 {
-    port1_push(command, wide);
+    port1_push(command);
 }
 
 void abi_SoundPort1QueuePush(void)
 {
-    port1_push((uint8_t)cpu.a, push_wide());
+    port1_push((uint8_t)cpu.a);
     cpu.p = nz8(cpu.p, cpu.db);  /* the last pull restores DB */
 }
 
@@ -170,29 +138,19 @@ void abi_SoundPort1QueuePushX8(void)
  */
 void SoundReset(void)
 {
-    cyc(92);
+    if (rm_redrawing())                 /* Remaster: a HUD redraw reaches no port (remaster.h) */
+        return;
     wr8(SOUND_MUTED, 0);
-    cyc(32);
     wr8(WRAM_0DD0, 0);
-    cyc(32);
     wr8(SOUND_PORT1_LAST, 0);
-    cyc(32);
     wr8(SOUND_PORT0_HEAD, 0);
-    cyc(32);
     wr8(SOUND_PORT1_HEAD, 0);
-    cyc(32);
     wr8(SOUND_PORT1_COUNT, 0);
-    cyc(32);
     wr8(SOUND_PORT0_COUNT, 0);
-    cyc(32);
     wr8(WRAM_0E1B, 0);
-    cyc(32);
     wr8(WRAM_0E1C, 0);
-    cyc(32);
     wr8(APUIO3, 0);
-    cyc(32);
     wr8(APUIO2, 0);
-    cyc(72);
 }
 
 void abi_SoundReset(void)
@@ -211,35 +169,26 @@ static int ring_send(uint32_t b, uint16_t port, uint16_t count, uint16_t head, u
 {
     uint8_t v, n;
 
-    cyc(24);
     v = rd8(b | port);
     if (v) {
-        cyc(16);
         v = 0x00;
     } else {
-        cyc(40);
         n = rd8(b | count);
         cpu.a = (uint16_t)((cpu.a & 0xFF00) | n);
         if (!n)
-            { cyc(22); return 0; }
-        cyc(40);
+            return 0;
         cpu.x = rd8(b | head);
-        cyc(24);
         v = rd8(b | (uint16_t)(ring + cpu.x));
-        cyc(24);
-        n = (uint8_t)(rd8(b | count) - 1);
-        cyc(6);
+        n = (uint8_t)(rd8_rmw(b | count) - 1);
         wr8(b | count, n);
         if (n) {
             cpu.x = (uint8_t)(cpu.x + 1);
             if (cpu.x >= 0x10)
                 cpu.x = 0x00;
-            cyc(92);
             wr8(b | head, (uint8_t)cpu.x);
-        } else { cyc(22); }
+        }
     }
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
-    cyc(46);
     wr8(b | port, v);
     return 1;
 }
@@ -265,76 +214,57 @@ void abi_SoundPortsSend(void)
     uint8_t p0 = cpu.p, v;
 
     op_sep(P_M | P_X);
-    cyc(46);
     v = rd8(b | 0x10E2);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
     if (v) {
-        cyc(40);
         wr8(b | 0x2140, v);
-        cyc(24);
         wr8(b | 0x10E2, 0x00);
-        cyc(28);                        /* PLP; op_plp states the RTS */
+        /* PLP; op_plp states the RTS */
         op_plp(p0);
         return;
     }
-    cyc(46);
     v = rd8(b | 0x10E3);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
     if (v) {
-        cyc(40);
         wr8(b | 0x2141, v);
-        cyc(24);
         wr8(b | 0x10E3, 0x00);
-        cyc(28);
         op_plp(p0);
         return;
-    } else { cyc(6); }
+    }
     {
         static const uint16_t hold[2] = {0x10DA, 0x10DC};
         int i;
 
         for (i = 0; i < 2; i++) {
-            cyc(40);
             v = rd8(b | hold[i]);
             cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
             if (v) {
-                cyc(50);
                 op_plp(p0);
                 return;
             }
         }
     }
-    cyc(40);
     v = rd8(b | 0x0E3B);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
     if (!(v & 0x01)) {
-        cyc(60);
         op_plp(p0);
         return;
-    } else { cyc(38); }
+    }
     ring_send(b, 0x2140, 0x0DCC, 0x0DC8, 0x0DA8);
     if (ring_send(b, 0x2141, 0x0DCE, 0x0DCA, 0x0DB8))
-        { cyc(24); wr8(b | 0x0DD2, (uint8_t)cpu.a); }
-    cyc(24);
+        wr8(b | 0x0DD2, (uint8_t)cpu.a);
     v = rd8(b | 0x0E4B);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
     if (v) {
         cpu.a = (uint16_t)(cpu.a & 0xFF00);
-        cyc(62);
         wr8(b | 0x2142, 0x00);
-        cyc(24);
         wr8(b | 0x2143, 0x00);
     } else {
-        cyc(40);
         v = rd8(b | 0x0E47);
-        cyc(24);
         wr8(b | 0x2142, v);
-        cyc(24);
         v = rd8(b | 0x0E49);
-        cyc(24);
         wr8(b | 0x2143, v);
         cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
     }
-    cyc(28);
     op_plp(p0);
 }

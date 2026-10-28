@@ -6,6 +6,7 @@
  */
 #include "machine.h"
 #include "wram.h"
+#include "assets.h"
 
 /*
  * @routine 07:AA6E OamTextLine
@@ -23,51 +24,37 @@
 void OamTextLine(uint8_t bank, uint16_t *xp, uint16_t *yp, uint16_t *ap)
 {
     uint32_t b = (uint32_t)bank << 16;
-    cyc(60);
     uint16_t y = (uint16_t)((rd16(0x0000F2) & 0xFF) << 2);
-    cyc(90);
-    uint16_t x = rd16(cyc_then(190, 0x078000 + ((rd16(b | 0x0E3D) << 1) & 0x00FF)));
+    uint16_t x = rd16((ASSET_OamTextLine_078000 + ((rd16(b | 0x0E3D) << 1) & 0x00FF)));
     uint8_t c, pen, attr = 0;
 
     *ap = x;
     c = rd8(b | x);
+    /* STA $F2 */
     wr8(0x0000F2, c);
     x++;
-    cyc(72);
-    wr8(0x0000F3, cyc_then(46, (uint8_t)(rd8(0x0000F3) - (uint8_t)(c << 2))));
+    wr8(0x0000F3, ((uint8_t)(rd8(0x0000F3) - (uint8_t)(c << 2))));
     for (;;) {
-        cyc(84);
         c = rd8(b | x);
         if (c & 0x80) {
             x++;
-            wr8(0x0000F3, cyc_then(46, (uint8_t)(rd8(0x0000F3) + 8)));
-            cyc(16);
-            wr8(0x0000F2, cyc_then(6, (uint8_t)(rd8(0x0000F2) - 1)));
-            cyc(22);
+            wr8(0x0000F3, ((uint8_t)(rd8(0x0000F3) + 8)));
+            wr8(0x0000F2, ((uint8_t)(rd8_rmw(0x0000F2) - 1)));
             continue;
         }
-        cyc(6);
-        wr8(b | (uint16_t)(OAM_BUFFER + 2 + y), cyc_then(30, (uint8_t)(c + rd8(0x0000F1))));
+        wr8(b | (uint16_t)(OAM_BUFFER + 2 + y), ((uint8_t)(c + rd8(0x0000F1))));
         x++;
-        cyc(30);
         pen = rd8(0x0000F3);
-        cyc(30);
         wr8(b | (uint16_t)(OAM_BUFFER + y), pen);
-        cyc(46);
         wr8(0x0000F3, (uint8_t)(pen + 8));
-        cyc(16);
-        wr8(b | (uint16_t)(OAM_BUFFER + 1 + y), cyc_then(30, rd8(0x0000F4)));
-        cyc(16);
+        wr8(b | (uint16_t)(OAM_BUFFER + 1 + y), (rd8(0x0000F4)));
         attr = rd8(0x0000F5);
-        cyc(30);
         wr8(b | (uint16_t)(OAM_BUFFER + 3 + y), attr);
         y += 4;
-        cyc(72);
-        c = (uint8_t)(rd8(0x0000F2) - 1);
-        cyc(6);
+        c = (uint8_t)(rd8_rmw(0x0000F2) - 1);
         wr8(0x0000F2, c);
         if (!c)
-            break; else { cyc(22); }
+            break;
     }
     *xp = x;
     *yp = y;
@@ -82,7 +69,6 @@ void abi_OamTextLine(void)
     cpu.a = a;
     cpu.x = cpu.p & P_X ? (uint16_t)(x & 0xFF) : x;
     cpu.y = cpu.p & P_X ? (uint16_t)(y & 0xFF) : y;
-    cyc(86);
 }
 
 /*
@@ -93,7 +79,6 @@ void abi_OamTextLine(void)
  */
 void OamTextLineLong(uint16_t *xp, uint16_t *yp, uint16_t *ap)
 {
-    cyc(224);
     OamTextLine(0x07, xp, yp, ap);
 }
 
@@ -117,21 +102,14 @@ static void sprite_text_line_at(uint8_t bank, uint8_t x, uint8_t y, uint16_t *xp
     uint16_t a;
     unsigned i;
 
-    cyc(74);
     wr8(0x0000F4, y);
-    cyc(36);
     wr8(0x0000F3, x);
-    cyc(32);
     wr8(0x0000F2, 0x70);
-    cyc(32);
     wr8(0x0000F5, 0x36);
-    cyc(16);
     wr8(0x0000F1, 0x00);
     OamTextLineLong(xp, yp, &a);
-    cyc(254);
     for (i = 0; i < 8; i += 2)
-        { cyc(24); wr16(b | (uint16_t)(0x058E + i), 0x0000); }
-    cyc(42);
+        wr16(b | (uint16_t)(0x058E + i), 0x0000);
 }
 
 /* For the abi_ wrappers: A = 0, M 16-bit, Z set, N clear; C and V from the
@@ -165,7 +143,6 @@ void SpriteTextAt895E(uint8_t bank)
 
 void abi_SpriteTextAt895E(void)
 {
-    cyc(68);
     abi_sprite_text_line_at(0x89, 0x5E);
 }
 
@@ -184,7 +161,6 @@ void SpriteTextAt8152(uint8_t bank)
 
 void abi_SpriteTextAt8152(void)
 {
-    cyc(68);
     abi_sprite_text_line_at(0x81, 0x52);
 }
 
@@ -201,7 +177,6 @@ void SpriteTextAt8152B(uint8_t bank)
 
 void abi_SpriteTextAt8152B(void)
 {
-    cyc(68);
     abi_sprite_text_line_at(0x81, 0x52);
 }
 
@@ -221,7 +196,6 @@ void SpriteTextAt8952(uint8_t bank)
 
 void abi_SpriteTextAt8952(void)
 {
-    cyc(68);
     abi_sprite_text_line_at(0x89, 0x52);
 }
 
@@ -239,7 +213,6 @@ void SpriteTextAt8152C(uint8_t bank)
 
 void abi_SpriteTextAt8152C(void)
 {
-    cyc(68);
     abi_sprite_text_line_at(0x81, 0x52);
 }
 
@@ -257,6 +230,5 @@ void SpriteTextAt8952B(uint8_t bank)
 
 void abi_SpriteTextAt8952B(void)
 {
-    cyc(46);
     abi_sprite_text_line_at(0x89, 0x52);
 }

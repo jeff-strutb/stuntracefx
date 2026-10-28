@@ -13,7 +13,6 @@
    bit stays, the low bit falls out into carry. */
 static uint16_t asr1(uint16_t v)
 {
-    cyc(46);
     return (uint16_t)((v >> 1) | (v & 0x8000));
 }
 
@@ -22,12 +21,9 @@ static uint16_t three_quarters(uint16_t v, uint8_t *p)
 {
     uint16_t half = asr1(v), quarter;
 
-    cyc(8);
     wr16(SCALE_SCRATCH, half);
-    cyc(2);
     quarter = asr1(half);
     *p &= (uint8_t)~P_C;
-    cyc(20);
     return op_adc16(quarter, rd16(SCALE_SCRATCH), p);
 }
 
@@ -44,7 +40,7 @@ uint16_t ScaleThreeQuarters(uint16_t v)
 {
     uint8_t p = 0;
 
-    return cyc_then(44, three_quarters(v, &p));
+    return (three_quarters(v, &p));
 }
 
 void abi_ScaleThreeQuarters(void)
@@ -65,7 +61,6 @@ void abi_ScaleThreeQuarters(void)
  */
 uint16_t ScaleQuarter(uint16_t v, uint8_t *p)
 {
-    cyc(24);
     uint16_t r = asr1(asr1(v));
 
     *p = (uint8_t)((nz16(*p, r) & ~P_C) | (v >> 1 & 1));
@@ -78,7 +73,6 @@ void abi_ScaleQuarter(void)
 
     cpu.a = ScaleQuarter(cpu.a, &p);
     cpu.p = p;
-    cyc(4);
 }
 
 /*
@@ -93,11 +87,9 @@ uint16_t ScaleNineSixteenths(uint16_t v, uint8_t *p)
 {
     uint16_t half = asr1(v), sixteenth;
 
-    cyc(8);
     wr16(SCALE_SCRATCH, half);
     sixteenth = asr1(asr1(asr1(half)));
     *p &= (uint8_t)~P_C;
-    cyc(6);
     return op_adc16(sixteenth, rd16(SCALE_SCRATCH), p);
 }
 
@@ -107,7 +99,6 @@ void abi_ScaleNineSixteenths(void)
 
     cpu.a = ScaleNineSixteenths(cpu.a, &p);
     cpu.p = p;
-    cyc(44);
 }
 
 /*
@@ -122,11 +113,9 @@ uint16_t ScaleFiveEighths(uint16_t v, uint8_t *p)
 {
     uint16_t half = asr1(v), eighth;
 
-    cyc(8);
     wr16(SCALE_SCRATCH, half);
     eighth = asr1(asr1(half));
     *p &= (uint8_t)~P_C;
-    cyc(14);
     return op_adc16(eighth, rd16(SCALE_SCRATCH), p);
 }
 
@@ -136,7 +125,6 @@ void abi_ScaleFiveEighths(void)
 
     cpu.a = ScaleFiveEighths(cpu.a, &p);
     cpu.p = p;
-    cyc(44);
 }
 
 /*
@@ -151,17 +139,13 @@ uint16_t ScaleSevenEighths(uint16_t v, uint8_t *p)
 {
     uint16_t half = asr1(v), quarter, r;
 
-    cyc(8);
     wr16(SCALE_SCRATCH, half);
     quarter = asr1(half);
-    cyc(8);
     wr16(SCALE_SCRATCH2, quarter);
     r = asr1(quarter);
     *p &= (uint8_t)~P_C;
-    cyc(22);
     r = op_adc16(r, rd16(SCALE_SCRATCH), p);
     *p &= (uint8_t)~P_C;
-    cyc(30);
     return op_adc16(r, rd16(SCALE_SCRATCH2), p);
 }
 
@@ -171,7 +155,6 @@ void abi_ScaleSevenEighths(void)
 
     cpu.a = ScaleSevenEighths(cpu.a, &p);
     cpu.p = p;
-    cyc(44);
 }
 
 /*
@@ -189,23 +172,17 @@ uint16_t ScaleFifteenSixteenths(uint8_t bank, uint16_t v, uint8_t *p)
     uint32_t eighth_at = (uint32_t)bank << 16 | 0x1F2B;
     uint16_t half = asr1(v), quarter, eighth, r;
 
-    cyc(8);
     wr16(SCALE_SCRATCH, half);
     quarter = asr1(half);
-    cyc(8);
     wr16(SCALE_SCRATCH2, quarter);
     eighth = asr1(quarter);
-    cyc(16);
     wr16(eighth_at, eighth);
     r = asr1(eighth);
     *p &= (uint8_t)~P_C;
-    cyc(30);
     r = op_adc16(r, rd16(eighth_at), p);
     *p &= (uint8_t)~P_C;
-    cyc(30);
     r = op_adc16(r, rd16(SCALE_SCRATCH), p);
     *p &= (uint8_t)~P_C;
-    cyc(30);
     return op_adc16(r, rd16(SCALE_SCRATCH2), p);
 }
 
@@ -215,7 +192,6 @@ void abi_ScaleFifteenSixteenths(void)
 
     cpu.a = ScaleFifteenSixteenths(cpu.db, cpu.a, &p);
     cpu.p = p;
-    cyc(44);
 }
 
 /*
@@ -231,24 +207,18 @@ void abi_ScaleFifteenSixteenths(void)
  */
 uint16_t Mode7ScaleProduct(uint16_t value, int positive)
 {
-    uint16_t q;
+    uint16_t q, n;
+    uint8_t d, m;
 
-    cyc(40);
-    wr16(WRDIVL, positive ? value : (cyc(44), (uint16_t)-value));
-    cyc(54);
-    wr8(WRDIVB, cyc_then(24, rd8(0x7F340A)));
-    cyc(144);
+    wr16(WRDIVL, n = positive ? value : ((uint16_t)-value));
+    wr8(WRDIVB, d = (rd8(0x7F340A)));
     q = rd16(RDDIVL);
     if (!positive)
-        { cyc(16); q = (uint16_t)-q; }
-    cyc(68);
+        q = (uint16_t)-q;
     wr8(M7A, (uint8_t)q);
-    cyc(44);
     wr8(M7A, (uint8_t)(q >> 8));
-    cyc(32);
-    wr8(M7B, cyc_then(24, rd8(0x7F3408)));
-    cyc(46);
-    return cyc_then(42, rd16(MPYL));
+    wr8(M7B, m = (rd8(0x7F3408)));
+    return (rd16(MPYL));
 }
 
 void abi_Mode7ScaleProduct(void)
@@ -269,20 +239,15 @@ void abi_Mode7ScaleProduct(void)
  */
 uint16_t ScaleDp02Dp94(uint8_t *p)
 {
-    cyc(16);
     uint16_t a = asr1(asr1(rd16(0x000002))), b, s;
 
     /* XBA, BIT #, then ORA # and BRA (negative) or AND #, then CLC,
        ADC #, AND #, STA (the shifts' time is asr1's) */
-    cyc((a & 0x8000) ? 164 : 148);
     a = (uint16_t)(int16_t)(int8_t)(uint8_t)(a >> 8);
     a = (uint16_t)((uint16_t)(a + 0x20) & 0xFFFE);
-    cyc(4);
     wr16(0x000002, a);
-    cyc(16);
     b = (uint16_t)((int16_t)(rd16(0x000094) & 0xF800) >> 5);
     b = (uint16_t)(b + 0x0400);
-    cyc(268);
     wr16(0x000094, b);
     s = (uint16_t)(b + a);
     *p = (uint8_t)((nz16(*p, s) & ~(P_C | P_V)) | ((unsigned)b + a > 0xFFFF ? P_C : 0)
@@ -308,10 +273,8 @@ void abi_ScaleDp02Dp94(void)
  */
 uint16_t ScaleObjectXZ(uint16_t obj, uint8_t *p)
 {
-    cyc(32);
-    wr16(0x000002, cyc_then(16, rd16(0x7E200C + obj)));
-    cyc(32);
-    wr16(0x000094, cyc_then(16, rd16(0x7E2010 + obj)));
+    wr16(0x000002, (rd16(0x7E200C + obj)));
+    wr16(0x000094, (rd16(0x7E2010 + obj)));
     return ScaleDp02Dp94(p);
 }
 
@@ -333,8 +296,7 @@ void abi_ScaleDp02Dp94(void);
  */
 uint16_t ScaleDp02Dp94Long(uint8_t *p)
 {
-    cyc(46);
-    return cyc_then(44, ScaleDp02Dp94(p));
+    return (ScaleDp02Dp94(p));
 }
 
 void abi_ScaleDp02Dp94Long(void)
@@ -356,11 +318,9 @@ uint16_t ScaleFiveThirtySeconds(uint8_t bank, uint16_t v, uint8_t *p)
     uint32_t eighth_at = (uint32_t)bank << 16 | 0x1F2B;
     uint16_t e = asr1(asr1(asr1(v))), t;
 
-    cyc(0);
     wr16(eighth_at, e);
     t = asr1(asr1(e));
     *p &= (uint8_t)~P_C;
-    cyc(22);
     return op_adc16(t, rd16(eighth_at), p);
 }
 
@@ -370,7 +330,6 @@ void abi_ScaleFiveThirtySeconds(void)
 
     cpu.a = ScaleFiveThirtySeconds(cpu.db, cpu.a, &p);
     cpu.p = p;
-    cyc(44);
 }
 
 /* The four words at $7F:3432: base ($7F:3442) + (target ($7F:343A) - base)
@@ -380,19 +339,14 @@ static void blend_words(void)
     unsigned i;
 
     for (i = 0; i < 4; i++) {
-        cyc(32);
         cpu.a = rd16((uint32_t)(0x7F343A + i * 2));
         cpu.p |= P_C;
-        cyc(46);
         cpu.a = op_sbc16(cpu.a, rd16((uint32_t)(0x7F3442 + i * 2)), &cpu.p);
-        (cyc(40), abi_Mode7ScaleProduct());
+        (abi_Mode7ScaleProduct());
         cpu.p &= (uint8_t)~P_C;
-        cyc(46);
         cpu.a = op_adc16(cpu.a, rd16((uint32_t)(0x7F3442 + i * 2)), &cpu.p);
-        cyc(32);
         wr16((uint32_t)(0x7F3432 + i * 2), cpu.a);
     }
-    cyc(44);
 }
 
 /*
@@ -408,17 +362,14 @@ static void blend_words(void)
 void abi_BlendStepUp(void)
 {
     cpu.p &= (uint8_t)~(P_M | P_X);
-    cyc(54);
     cpu.a = rd16(0x7F3408);
-    cyc(32);
     op_cmp16(rd16(0x7F340A));
     if (cpu.p & P_Z)
-        { cyc(60); return; }
+        return;
     cpu.a = (uint16_t)(cpu.a + 1);
     cpu.p = nz16(cpu.p, cpu.a);
-    cyc(68);
     wr16(0x7F3408, cpu.a);
-    (cyc(22), blend_words());
+    (blend_words());
 }
 
 /*
@@ -433,14 +384,12 @@ void abi_BlendStepUp(void)
 void abi_BlendStepDown(void)
 {
     cpu.p &= (uint8_t)~(P_M | P_X);
-    cyc(54);
     cpu.a = rd16(0x7F3408);
     cpu.p = nz16(cpu.p, cpu.a);
     if (cpu.p & P_Z)
-        { cyc(60); return; }
+        return;
     cpu.a = (uint16_t)(cpu.a - 1);
     cpu.p = nz16(cpu.p, cpu.a);
-    cyc(68);
     wr16(0x7F3408, cpu.a);
     blend_words();
 }

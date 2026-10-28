@@ -1,11 +1,12 @@
 #!/bin/sh
-# Stunt Race FX on nativeshvc: the game (ports/stuntracefx/game), its
+# Stunt Race FX on nativeshvc: the game (src/stuntracefx), its
 # generated tables and assets, and this front end, linked with libnshvc.
 #
 #   sh ports/stuntracefx/front/build.sh [check]
 #     NSHVC=../nativeshvc         the console's checkout
 #     NSHVC_BUILD=build/null      its build (cmake -B ... -DNSHVC_HOST=...)
 #     OUT=build/stuntracefx/front/null
+#     GAME=src/stuntracefx        the game's C (or a copy of it: cycgame.py's)
 #     ASSETS=                     a variant of the assets (tools/assets.py: ios)
 #     CC=clang                    the compiler (with its target, for iOS)
 #     DEFS=                       the host's defines (-DNSHVC_HOST_IOS=1 for iOS)
@@ -13,7 +14,7 @@
 #   check: the touch scheme's check (touch_check.c) only
 #
 # The game's machine headers are its own; its Super FX (ports/common/snes/
-# superfx.c, gsu_clock.c) is the cartridge's, on nativeshvc's connector
+# superfx.c) is the cartridge's, on nativeshvc's connector
 # (front/superfx_cart.c).
 set -e
 cd "$(dirname "$0")/../../.."
@@ -21,7 +22,7 @@ CC=${CC:-clang}
 NSHVC=${NSHVC:-../nativeshvc}
 NB=${NSHVC_BUILD:-build/null}
 OUT=${OUT:-build/stuntracefx/front/$(basename "$NB")}
-GAME=ports/stuntracefx/game
+GAME=${GAME:-src/stuntracefx}
 FRONT=ports/stuntracefx/front
 ROM="reference/stuntracefx/Stunt Race FX (USA) (Rev 1).sfc"
 mkdir -p "$OUT/gen" "$OUT/obj" "$OUT/include"
@@ -48,12 +49,12 @@ for f in $(find "$GAME" -name '*.c' | sort) "$OUT/gen/routines.c" "$OUT/gen/asse
   OBJS="$OBJS $o"
 done
 $CC -c "$OUT/gen/assets.S" -I"$OUT/gen" -o "$OUT/obj/assets_S.o"
-for f in main cart superfx_cart touch art; do
+for f in main cart superfx_cart touch art cost_profile; do
   $CC -O2 -std=gnu11 -Wall $DEFS -I"$FRONT" -I"$OUT/include" -I"$NSHVC/include" -Iports/common/snes -c "$FRONT/$f.c" -o "$OUT/obj/front_$f.o"
   OBJS="$OBJS $OUT/obj/front_$f.o"
 done
 # the cartridge's Super FX
-for f in superfx gsu_clock; do
+for f in superfx; do
   $CC -O2 -std=gnu11 -Wall $DEFS -Iports/common/snes -c "ports/common/snes/$f.c" -o "$OUT/obj/chip_$f.o"
   OBJS="$OBJS $OUT/obj/chip_$f.o"
 done

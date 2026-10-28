@@ -23,31 +23,19 @@ uint16_t GsuScreenFlip(uint8_t bank)
     uint32_t b = (uint32_t)bank << 16;
     uint16_t mode;
 
-    cyc(46);
     if (rd16(b | 0x0D7F)) {
-        cyc(62);
         wr16(b | 0x0D7F, 0x0000);
-        cyc(48);
         wr16(b | 0x0D7D, 0x0008);
     } else {
-        cyc(68);
-        wr16(b | 0x0D7F, cyc_then(14, (uint16_t)(rd16(b | 0x0D7F) + 1)));
-        cyc(48);
+        wr16_rmw(b | 0x0D7F, ((uint16_t)(rd16_rmw(b | 0x0D7F) + 1)));
         wr16(b | 0x0D7D, 0x0000);
     }
-    cyc(24);
-    wr16(b | (GSU_SCMR & 0xFFFF), cyc_then(48, (uint16_t)(rd16(b | 0x0374) & 0xFFF7)));
-    cyc(56);
+    wr16(b | (GSU_SCMR & 0xFFFF), ((uint16_t)(rd16(b | 0x0374) & 0xFFF7)));
     wr16(0x70021A, 0x2C00);
-    cyc(16);
     wr16(0x000048, 0x2C00);
-    cyc(24);
     mode = (uint16_t)(rd16(b | 0x0374) | 0x0018);
-    cyc(48);
     wr16(b | (GSU_SCMR & 0xFFFF), mode);
-    cyc(70);
     wr8(GSU_SCBR, 0x0B);
-    cyc(42);
     return (uint16_t)((mode & 0xFF00) | 0x0B);
 }
 
@@ -75,31 +63,21 @@ uint16_t GsuScreenFlipMenu(uint8_t bank)
     uint16_t mode, start;
     uint8_t base;
 
-    cyc(46);
     if (rd16(b | 0x0D7F)) {
-        cyc(62);
         wr16(b | 0x0D7F, 0x0000);
         start = 0x2C00;
         base = 0x0B;
     } else {
-        cyc(68);
-        wr16(b | 0x0D7F, cyc_then(14, (uint16_t)(rd16(b | 0x0D7F) + 1)));
+        wr16_rmw(b | 0x0D7F, ((uint16_t)(rd16_rmw(b | 0x0D7F) + 1)));
         start = 0x9400;
         base = 0x25;
     }
-    cyc(24);
-    wr16(b | (GSU_SCMR & 0xFFFF), cyc_then(48, (uint16_t)(rd16(b | 0x0374) & 0xFFF7)));
-    cyc(56);
+    wr16(b | (GSU_SCMR & 0xFFFF), ((uint16_t)(rd16(b | 0x0374) & 0xFFF7)));
     wr16(0x70021A, start);
-    cyc(16);
     wr16(0x000048, start);
-    cyc(24);
     mode = (uint16_t)(rd16(b | 0x0374) | 0x0018);
-    cyc(48);
     wr16(b | (GSU_SCMR & 0xFFFF), mode);
-    cyc(70);
     wr8(GSU_SCBR, base);
-    cyc(42);
     return (uint16_t)((mode & 0xFF00) | base);
 }
 
@@ -127,31 +105,21 @@ uint16_t GsuScreenToggle(uint8_t bank)
     uint16_t mode, start;
     uint8_t base;
 
-    cyc(46);
     if (rd16(b | 0x0D7F)) {
-        cyc(62);
         wr16(b | 0x0D7F, 0x0000);
         start = 0x2C00;
         base = 0x0B;
     } else {
-        cyc(68);
-        wr16(b | 0x0D7F, cyc_then(14, (uint16_t)(rd16(b | 0x0D7F) + 1)));
+        wr16_rmw(b | 0x0D7F, ((uint16_t)(rd16_rmw(b | 0x0D7F) + 1)));
         start = 0x9400;
         base = 0x25;
     }
-    cyc(24);
-    wr16(b | (GSU_SCMR & 0xFFFF), cyc_then(48, (uint16_t)(rd16(b | 0x0374) & 0xFFF7)));
-    cyc(56);
+    wr16(b | (GSU_SCMR & 0xFFFF), ((uint16_t)(rd16(b | 0x0374) & 0xFFF7)));
     wr16(0x70021A, start);
-    cyc(16);
     wr16(0x000048, start);
-    cyc(24);
     mode = (uint16_t)(rd16(b | 0x0374) | 0x0018);
-    cyc(48);
     wr16(b | (GSU_SCMR & 0xFFFF), mode);
-    cyc(70);
     wr8(GSU_SCBR, base);
-    cyc(42);
     return (uint16_t)((mode & 0xFF00) | base);
 }
 

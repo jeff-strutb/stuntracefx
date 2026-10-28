@@ -14,23 +14,17 @@
  */
 uint8_t HalfRateApproach(void)
 {
-    cyc(68);
     uint8_t t = (uint8_t)((rd8(0x0011DC) + 1) & 0x01), v, target;
 
-    cyc(54);
     wr8(0x0011DC, t);
     if (t)
-        { cyc(22); return t; }
-    cyc(40);
+        return t;
     v = rd8(0x0011DA);
-    cyc(24);
     target = rd8(0x0011DB);
     if (v == target)
-        { cyc(22); return v; }
-    cyc(62);
+        return v;
     v = rd8(0x0011DA);
     v = (uint8_t)(v < target ? v + 1 : v - 1);
-    cyc(38);
     wr8(0x0011DA, v);
     return v;
 }
@@ -38,7 +32,6 @@ uint8_t HalfRateApproach(void)
 void abi_HalfRateApproach(void)
 {
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | HalfRateApproach());
-    cyc(70);
 }
 
 /*
@@ -49,9 +42,7 @@ void abi_HalfRateApproach(void)
  */
 void ApproachTargetFull(uint8_t bank)
 {
-    cyc(84);
     wr8((uint32_t)bank << 16 | 0x11DB, 0x0F);
-    cyc(70);
 }
 
 void abi_ApproachTargetFull(void)
@@ -68,9 +59,7 @@ void abi_ApproachTargetFull(void)
  */
 void ApproachTargetZero(uint8_t bank)
 {
-    cyc(68);
     wr8((uint32_t)bank << 16 | 0x11DB, 0x00);
-    cyc(70);
 }
 
 void abi_ApproachTargetZero(void)

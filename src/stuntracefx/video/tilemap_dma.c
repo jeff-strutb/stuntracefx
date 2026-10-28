@@ -13,33 +13,24 @@ void abi_Bg2ScrollFromTable(void);
 /* The gradient source word at gradient_src (through the data bank) to
    $7F:348D, then channel 0 from $7F:src to VMDATA at VRAM $5C00, $440
    bytes; P saved and restored. */
-static void upload(uint16_t gradient_src, uint16_t src, int bra)
+static void upload(uint16_t gradient_src, uint16_t src)
 {
     uint32_t b = (uint32_t)cpu.db << 16;
     uint8_t p = cpu.p;
     uint16_t v;
 
-    cyc(68);
     v = rd16(b | gradient_src);
-    cyc(32);
     wr16(0x7F348D, v);
-    cyc(48);
     wr16(b | 0x4302, src);
-    cyc(62);
     wr8(b | 0x4304, 0x7F);
-    cyc(bra ? 62 : 40);                 /* BRA into the shared tail, or not */
+    /* BRA into the shared tail, or not */
     wr8(b | 0x2115, 0x80);
-    cyc(48);
     wr16(b | 0x2116, 0x5C00);
-    cyc(48);
     wr16(b | 0x4300, 0x1801);
-    cyc(48);
     wr16(b | 0x4305, 0x0440);
-    cyc(40);
     wr8(b | 0x420B, 0x01);
     cpu.a = (uint16_t)((v & 0xFF00) | 0x01);
     cpu.x = 0x0440;
-    cyc(28);
     op_plp(p);
 }
 
@@ -57,12 +48,12 @@ static void upload(uint16_t gradient_src, uint16_t src, int bra)
  */
 void TilemapDmaE817(void)
 {
-    upload(0x0D9C, 0xE817, 1);
+    upload(0x0D9C, 0xE817);
 }
 
 void abi_TilemapDmaE817(void)
 {
-    upload(0x0D9C, 0xE817, 1);
+    upload(0x0D9C, 0xE817);
 }
 
 /*
@@ -74,13 +65,12 @@ void abi_TilemapDmaE817(void)
  */
 void TilemapDmaE3D7(void)
 {
-    upload(0x0D9A, 0xE3D7, 0);
+    upload(0x0D9A, 0xE3D7);
 }
 
 void abi_TilemapDmaE3D7(void)
 {
-    cyc(24);
-    upload(0x0D9A, 0xE3D7, 0);
+    upload(0x0D9A, 0xE3D7);
 }
 
 /*
@@ -96,10 +86,9 @@ void Bg2Band2TilemapE817(void)
     cpu.p |= P_M | P_X;
     cpu.x = 0x02;
     cpu.y &= 0x00FF;
-    (cyc(84), abi_Bg2ScrollFromTable());
-    cyc(46);
-    upload(0x0D9C, 0xE817, 1);
-    cyc(42);                            /* RTS */
+    (abi_Bg2ScrollFromTable());
+    upload(0x0D9C, 0xE817);
+    /* RTS */
 }
 
 void abi_Bg2Band2TilemapE817(void)
@@ -119,10 +108,9 @@ void Bg2Band0TilemapE3D7(void)
     cpu.p |= P_M | P_X;
     cpu.x = 0x00;
     cpu.y &= 0x00FF;
-    (cyc(84), abi_Bg2ScrollFromTable());
-    cyc(70);
-    upload(0x0D9A, 0xE3D7, 0);
-    cyc(42);                            /* RTS */
+    (abi_Bg2ScrollFromTable());
+    upload(0x0D9A, 0xE3D7);
+    /* RTS */
 }
 
 void abi_Bg2Band0TilemapE3D7(void)

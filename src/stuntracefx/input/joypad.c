@@ -18,28 +18,18 @@
  */
 uint16_t JoypadRead(void)
 {
-    cyc(98);
     uint16_t now1 = rd16(JOY1L);
-    cyc(54);
-    uint16_t new1 = (uint16_t)((now1 ^ rd16(JOY1_HELD)) & rd16(cyc_then(32, JOY1L)));
+    uint16_t new1 = (uint16_t)((now1 ^ rd16(JOY1_HELD)) & rd16((JOY1L)));
     uint16_t now2;
     uint16_t new2;
 
-    cyc(24);
     wr16(JOY1_PRESSED, new1);
-    cyc(24);
     wr16(JOY1_PRESSED_COPY, new1);
-    cyc(32);
     now2 = rd16(JOY2L);
-    cyc(54);
-    new2 = (uint16_t)((now2 ^ rd16(JOY2_HELD)) & rd16(cyc_then(32, JOY2L)));
-    cyc(24);
+    new2 = (uint16_t)((now2 ^ rd16(JOY2_HELD)) & rd16((JOY2L)));
     wr16(JOY2_PRESSED, new2);
-    cyc(24);
     wr16(JOY2_PRESSED_COPY, new2);
-    cyc(60);
     wr16(JOY2_HELD, now2);
-    cyc(60);
     wr16(JOY1_HELD, now1);
     return now1;
 }
@@ -67,36 +57,22 @@ uint16_t JoypadAccumulate(void)
 {
     uint16_t now, held;
 
-    cyc(68);
     now = rd16(JOY1L);
-    cyc(54);
-    wr16(JOY1_PRESSED_COPY, cyc_then(24, (uint16_t)(((now ^ rd16(JOY1_LAST)) & rd16(cyc_then(24, JOY1L))) | rd16(cyc_then(24, JOY1_PRESSED_COPY)))));
-    cyc(60);
+    wr16(JOY1_PRESSED_COPY, ((uint16_t)(((now ^ rd16(JOY1_LAST)) & rd16((JOY1L))) | rd16((JOY1_PRESSED_COPY)))));
     wr16(JOY1_LAST, now);
-    cyc(24);
     now = rd16(JOY2L);
-    cyc(54);
-    wr16(JOY2_PRESSED_COPY, cyc_then(24, (uint16_t)(((now ^ rd16(JOY2_LAST)) & rd16(cyc_then(24, JOY2L))) | rd16(cyc_then(24, JOY2_PRESSED_COPY)))));
-    cyc(60);
+    wr16(JOY2_PRESSED_COPY, ((uint16_t)(((now ^ rd16(JOY2_LAST)) & rd16((JOY2L))) | rd16((JOY2_PRESSED_COPY)))));
     wr16(JOY2_LAST, now);
 
-    cyc(24);
     now = rd16(JOY1L);
-    cyc(54);
-    wr16(JOY2_PRESSED, cyc_then(24, (uint16_t)((now ^ rd16(JOY2_HELD)) & rd16(cyc_then(24, JOY1L)))));
+    wr16(JOY2_PRESSED, ((uint16_t)((now ^ rd16(JOY2_HELD)) & rd16((JOY1L)))));
     {
-        cyc(24);
         uint16_t now2 = rd16(JOY2L);
-        cyc(54);
-        wr16(JOY2_PRESSED, cyc_then(24, (uint16_t)((now2 ^ rd16(JOY2_HELD)) & rd16(cyc_then(24, JOY2L)))));
-        cyc(60);
-        wr16(JOY2_HELD, cyc_then(24, (uint16_t)(now2 | rd16(JOY2_HELD))));
+        wr16(JOY2_PRESSED, ((uint16_t)((now2 ^ rd16(JOY2_HELD)) & rd16((JOY2L)))));
+        wr16(JOY2_HELD, ((uint16_t)(now2 | rd16(JOY2_HELD))));
     }
-    cyc(60);
     held = (uint16_t)(now | rd16(JOY1_HELD));
-    cyc(24);
     wr16(JOY1_HELD, held);
-    cyc(70);
     return held;
 }
 
@@ -108,10 +84,8 @@ void abi_JoypadAccumulate(void)
 /* ROL $1182 with the carry `bit`. */
 static void serial_shift(uint32_t b, uint8_t bit)
 {
-    cyc(38);
-    uint8_t v = rd8(b | 0x1182);
+    uint8_t v = rd8_rmw(b | 0x1182);
 
-    cyc(6);
     wr8(b | 0x1182, (uint8_t)(v << 1 | bit));
 }
 
@@ -121,15 +95,17 @@ static void serial_shift(uint32_t b, uint8_t bit)
 static uint8_t serial_rest(uint32_t b, uint8_t port, int y, uint16_t lead)
 {
     for (; y >= 0; y--, lead = 60)
-        { cyc(lead); serial_shift(b, (rd8(b | (uint16_t)(0x4016 + port)) & 0x02) ? (cyc(32), 1) : (cyc(38), 0)); }
-    cyc(54);
+        {
+            uint8_t bit = (rd8(b | (uint16_t)(0x4016 + port)) & 0x02) ? (1) : (0);
+
+            serial_shift(b, bit);
+        }
     return rd8(b | 0x1182);
 }
 
 /* Eight serial reads into a cleared $1182, first bit highest. */
 static uint8_t serial_byte(uint32_t b, uint8_t port)
 {
-    cyc(24);
     wr8(b | 0x1182, 0x00);
     return serial_rest(b, port, 7, 40);
 }
@@ -145,37 +121,30 @@ static int port_check(uint32_t b, uint8_t port, int stage, int y)
 
     if (stage <= 1) {
         if (stage == 0) {
-            cyc(198);
             wr8(b | 0x4016, 0x01);
             v = serial_byte(b, port);
         } else {
             serial_shift(b, 1);
-            cyc(22);
             v = serial_rest(b, port, y - 1, 60);
         }
-        cyc(38);
+        /* CMP #$FF, BNE */
         if (v != 0xFF)
-            goto done;
+            goto done;   /* the BNE taken */
         stage = 2;
     }
     if (stage == 2) {
-        cyc(40);
         wr8(b | 0x4016, 0x00);
         v = serial_byte(b, port);
     } else {
         serial_shift(b, 1);
-        cyc(22);
         v = serial_rest(b, port, y - 1, 60);
     }
     if (v != 0xFF) {
-        cyc(110);
         wr16(0x0018FB, 0x0001);
         found = 1;
-    }
+    }    /* CMP #$FF, BEQ taken */
 done:
-    cyc(62);
     wr8(b | 0x4016, 0x00);
-    cyc(42);
     return found;
 }
 
@@ -280,18 +249,13 @@ void abi_FrameSoundAndJoypads(void)
     uint32_t b = (uint32_t)cpu.db << 16;
     unsigned i;
 
-    (cyc(46), abi_SoundPortsSend());
-    (cyc(46), abi_JoypadRead());
+    (abi_SoundPortsSend());
+    (abi_JoypadRead());
     cpu.p &= (uint8_t)~P_M;
-    cyc(92);
     for (i = 0; i < 2; i++) {
-        cyc(24);
         cpu.a = rd16(b | (uint16_t)(0x118B + i * 2));
-        cyc(24);
         cpu.a |= rd16(b | (uint16_t)(0x0311 + i * 2));
         cpu.p = nz16(cpu.p, cpu.a);
-        cyc(24);
         wr16(b | (uint16_t)(0x118B + i * 2), cpu.a);
     }
-    cyc(42);
 }

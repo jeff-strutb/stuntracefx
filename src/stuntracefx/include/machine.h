@@ -3,8 +3,16 @@
  *
  * The C reads and writes the S-CPU's 24-bit address space through rd8/wr8,
  * exactly as the original code does, so a routine's C has the same inputs
- * and outputs as its assembly. Inside the verification harness these go to
- * the emulated machine; a native port supplies its own implementation.
+ * and outputs as its assembly. The console (nativeshvc, include/nshvc/
+ * machine.h: this header is the game's copy of that contract's S-CPU side)
+ * answers each access; the verification harness answers them from the
+ * original's record.
+ *
+ * The C states no instruction time. Under nativeshvc's contract 2.0 the
+ * main CPU's work and its accesses take no console time; time passes only
+ * where the original waited on the hardware or on its own interrupts, in
+ * the console's waits (waits.h), so the game behaves as the original does
+ * without restating how long each instruction took.
  *
  * Routines that assembly still calls also need the register file: each such
  * routine has an abi_ wrapper that takes its inputs from `cpu` and leaves its
@@ -20,24 +28,19 @@ void wr8(uint32_t addr, uint8_t value);
 
 /* Multi-byte accesses are little-endian and linear in the 24-bit space,
    the low byte first, as the CPU makes them (lockstep places each access
-   on the original's, so the order is part of the behaviour). */
-static inline uint16_t rd16(uint32_t addr)
-{
-    uint8_t lo = rd8(addr);
+   on the original's, so the order is part of the behaviour). Each call is
+   one operation: no interrupt comes between its bytes. */
+uint16_t rd16(uint32_t addr);
+void wr16(uint32_t addr, uint16_t value);
+uint32_t rd24(uint32_t addr);
 
-    return (uint16_t)(lo | rd8((addr + 1) & 0xFFFFFF) << 8);
-}
-
-static inline void wr16(uint32_t addr, uint16_t value)
-{
-    wr8(addr, (uint8_t)value);
-    wr8((addr + 1) & 0xFFFFFF, (uint8_t)(value >> 8));
-}
-
-static inline uint32_t rd24(uint32_t addr)
-{
-    return rd16(addr) | (uint32_t)rd8((addr + 2) & 0xFFFFFF) << 16;
-}
+/* A read-modify-write instruction (ASL, LSR, ROL, ROR, INC, DEC, TSB, TRB
+   on memory): its read, then its write, one operation, no interrupt
+   between them: rd8_rmw then wr8, or rd16_rmw then wr16_rmw, whose write
+   is the high byte first, then the low, as the CPU makes them. */
+uint8_t rd8_rmw(uint32_t addr);
+uint16_t rd16_rmw(uint32_t addr);
+void wr16_rmw(uint32_t addr, uint16_t value);
 
 /* The 65816 register file, for abi_ wrappers. */
 typedef struct {
@@ -104,31 +107,5 @@ void cpu_loop_forever(uint32_t at);
    runs in there and follows the original from `at`; `entry` is checked on
    its own, by unit calls.) */
 void cpu_restart(uint32_t at, void (*entry)(void));
-/* Time the original spends with no access the C makes: a delay loop's
-   turns (its fetches and internal cycles), `clocks` master clocks (21.477
-   MHz). The rest of the machine runs meanwhile, so the time matters: the
-   sound CPU acting on a command before the next one arrives. */
-void cpu_idle(uint32_t clocks);
-/* The time the original spends here between two bus accesses, besides
-   their own: its instruction fetches and internal cycles, `clocks` master
-   clocks. The C states it where its code stands for the original's, so
-   each access comes at the original's time. */
-void cyc(uint32_t clocks);
-/* `v`, with the time before an access stated after the access's other
-   arguments are worked out: where the access is reached in the middle of
-   an expression, so no statement before it stands for that place. */
-static inline uint32_t cyc_then(uint32_t clocks, uint32_t v)
-{
-    cyc(clocks);
-    return v;
-}
-/* `again`, a loop's test, with the time the original takes to go round
-   once more stated when it does. */
-static inline int cyc_loop(uint32_t clocks, int again)
-{
-    if (again)
-        cyc(clocks);
-    return again;
-}
 
 #endif

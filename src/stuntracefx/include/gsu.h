@@ -31,6 +31,7 @@ typedef struct {
     uint8_t scmr, scbr;      /* screen mode and base, set by the S-CPU */
     uint16_t ramaddr;        /* the last RAM address loaded or stored: SBK writes there */
     uint8_t romdr;           /* the ROM buffer: GETB and GETC read it */
+    uint8_t romdr_unheld;    /* it was filled from code, not data: never to be read */
     /* A prefix the caller left pending for the routine's first instruction
        (a WITH, TO, FROM or ALT in the delay slot of its call): B (set by
        WITH), ALT1, ALT2, and the source and destination registers. All 0
@@ -42,64 +43,22 @@ extern RegsGSU gsu;
 
 /* One byte on the Super FX's bus (24-bit: bank, address). */
 uint8_t gsu_rd8(uint32_t addr);
+/* The ROM buffer filled from addr; and a read of a buffer gsu_fetch filled
+   from a byte no asset holds, which stops the port. */
+uint8_t gsu_fetch(uint32_t addr);
+void gsu_fetch_used(void);
 void gsu_wr8(uint32_t addr, uint8_t value);
 
 /* PLOT and RPIX at (x, y) with the current colour, options and screen. */
 void gsu_plot(uint8_t x, uint8_t y);
 uint8_t gsu_rpix(uint8_t x, uint8_t y);
 
-/* The Super FX's time, as the original spends it. Nearly all of it is
-   fetching its code: the C says where it stands for which of the
-   original's code bytes, gsu_code(bank:addr, n) for the n bytes fetched
-   from addr on, and where the original fetches a CACHE instruction (R15
-   one past it: as it runs, after the next byte's fetch, the code cache's
-   base moves there and the cache empties when it changes). The rest comes with what the C does: its loads and stores
-   (the RAM buffer), its R14 writes and ROM-buffer reads, MULT and FMULT,
-   PLOT and RPIX (the pixel caches). The runtime prices each as the GSU-1
-   does (a byte from the code cache, a cache line's fill, a byte outside
-   it; the buffers' waits; tools/stuntracefx/sfxbox/gsu_clock.h). gsu_cyc states
-   any clocks beyond those (master clocks, 21.47 MHz). The stated forms of
-   a branch and a loop, as machine.h's cyc_then and cyc_loop. */
-void gsu_code(uint32_t addr, uint32_t n);
-static inline uint32_t gsu_code_then(uint32_t addr, uint32_t n, uint32_t v) { gsu_code(addr, n); return v; }
-static inline int gsu_code_loop(uint32_t addr, uint32_t n, int again) { if (again) gsu_code(addr, n); return again; }
-void gsu_cache(uint16_t r15);
-static inline uint32_t gsu_cache_then(uint16_t r15, uint32_t v) { gsu_cache(r15); return v; }
-static inline int gsu_cache_loop(uint16_t r15, int again) { if (again) gsu_cache(r15); return again; }
-/* A helper that stands for several copies of the original's code (one
-   beside each caller, or one for each case of a table) states the code of
-   the copy it runs as from a table of them: its caller passes the copy's
-   number. Each entry is a stretch of code, or with n 0 a CACHE (R15 =
-   addr); both 0, none (a copy with fewer stretches there). */
-typedef struct { uint32_t addr, n; } GsuCode;
-#define GSU_COPY(k) (k)     /* the copy a call runs its helper as */
-static inline void gsu_codes(const GsuCode *c, int k)
+/* The screen's layout as PLOT reads it: 0-2 the 128, 160 and 192-line
+   heights (SCMR bits 2 and 5), 3 the sprite layout (POR bit 4). */
+static inline uint8_t gsu_layout(void)
 {
-    for (int i = 0; i < k; i++) {
-        if (c[i].n)
-            gsu_code(c[i].addr, c[i].n);
-        else if (c[i].addr)
-            gsu_cache((uint16_t)c[i].addr);
-    }
+    return (uint8_t)((gsu.por & 0x10) ? 3 : ((gsu.scmr >> 2) & 1) | ((gsu.scmr >> 4) & 2));
 }
-static inline uint32_t gsu_codes_then(const GsuCode *c, int k, uint32_t v) { gsu_codes(c, k); return v; }
-static inline int gsu_codes_loop(const GsuCode *c, int k, int again) { if (again) gsu_codes(c, k); return again; }
-void gsu_cyc(uint32_t clocks);
-static inline uint32_t gsu_cyc_then(uint32_t clocks, uint32_t v) { gsu_cyc(clocks); return v; }
-static inline int gsu_cyc_loop(uint32_t clocks, int again) { if (again) gsu_cyc(clocks); return again; }
-
-/* The time of an instruction beyond its fetch, for the helpers here and
-   in gsu_ops.h: MULT or UMULT, FMULT or LMULT. */
-enum { GSU_T_MULT, GSU_T_FMULT };
-void gsu_time(int what);
-
-/* The buffers, for the helpers here and in gsu_ops.h: an R14 write (the
-   ROM buffer starts its fill), a read of the ROM buffer (GETB, GETC),
-   RAMB (the RAM buffer's store made first), ROMB (the ROM buffer's fill
-   finished first). Their time depends on the code run between them, so
-   each is a place in the C's time of its own, as an access is. */
-enum { GSU_B_R14, GSU_B_ROMBUF, GSU_B_RAMBUF, GSU_B_ROMB };
-void gsu_buffer(int what);
 
 /* Game pak RAM address `a` in the current RAM bank. */
 static inline uint32_t gsu_ram(uint16_t a)
@@ -152,14 +111,14 @@ static inline void gsu_sbk(uint16_t v)
 static inline void gsu_r14(uint16_t v)
 {
     gsu.r[14] = v;
-    gsu.romdr = gsu_rd8((uint32_t)gsu.rombr << 16 | v);
-    gsu_buffer(GSU_B_R14);
+    gsu.romdr = gsu_fetch((uint32_t)gsu.rombr << 16 | v);
 }
 
 /* GETB, GETC: the ROM buffer. */
 static inline uint8_t gsu_getb(void)
 {
-    gsu_buffer(GSU_B_ROMBUF);
+    if (gsu.romdr_unheld)
+        gsu_fetch_used();
     return gsu.romdr;
 }
 
@@ -208,7 +167,6 @@ static inline uint32_t gsu_lmult(uint16_t a, uint16_t b)
 {
     uint32_t p = (uint32_t)((int32_t)(int16_t)a * (int16_t)b);
 
-    gsu_time(GSU_T_FMULT);
     gsu.cy = (uint8_t)(p >> 15 & 1);
     gsu_sz((uint16_t)(p >> 16));
     return p;

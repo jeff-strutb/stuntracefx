@@ -21,11 +21,8 @@ static Gauge gauge_of(uint32_t b, uint16_t lo_at, uint16_t hi_at, uint16_t value
 {
     Gauge g;
 
-    cyc(40);
     g.y = rd8(b | hi_at);
-    cyc(44);
     g.x = rd8(b | lo_at);
-    cyc(82);
     g.value = rd8(b | value_at);
     return g;
 }
@@ -33,18 +30,16 @@ static Gauge gauge_of(uint32_t b, uint16_t lo_at, uint16_t hi_at, uint16_t value
 /* For the abi_ wrappers: the registers as the code sets them for a gauge
    call (M 8-bit, X 16-bit, A high byte = the Y byte, N, Z from the slot),
    then the gauge's own abi_. */
-static void abi_gauge(void (*gauge)(void), uint16_t lo_at, uint16_t hi_at, uint16_t value_at, uint16_t slot,
-                      uint32_t call)
+static void abi_gauge(void (*gauge)(void), uint16_t lo_at, uint16_t hi_at, uint16_t value_at, uint16_t slot)
 {
     Gauge g = gauge_of((uint32_t)cpu.db << 16, lo_at, hi_at, value_at);
 
-    cyc(call);                          /* LDY # (24), any BRA (22), JSL (62) */
+    /* LDY # (24), any BRA (22), JSL (62) */
     cpu.x = (uint16_t)(g.y << 8 | g.x);
     cpu.a = (uint16_t)(g.y << 8 | g.value);
     cpu.y = slot;
     cpu.p = nz16((uint8_t)((cpu.p | P_M) & ~P_X), slot);
     gauge();
-    cyc(28);
 }
 
 /*
@@ -63,19 +58,16 @@ void HudGaugesPanelA(uint8_t bank)
     Gauge g;
 
     g = gauge_of(b, 0x0E0F, 0x0E11, 0x0DFA);
-    cyc(86);                            /* LDY #, JSL */
+    /* LDY #, JSL */
     SpriteBar4WithMarker(bank, g.value, (uint16_t)(g.y << 8 | g.x), 0x0140);
     g = gauge_of(b, 0x0E13, 0x0E15, 0x0E06);
-    cyc(86);
     SpriteBar6WithMarker(bank, g.value, (uint16_t)(g.y << 8 | g.x), 0x016C);
 }
 
 void abi_HudGaugesPanelA(void)
 {
-    cyc(28);
-    abi_gauge(abi_SpriteBar4WithMarker, 0x0E0F, 0x0E11, 0x0DFA, 0x0140, 86);
-    abi_gauge(abi_SpriteBar6WithMarker, 0x0E13, 0x0E15, 0x0E06, 0x016C, 86);
-    cyc(14);
+    abi_gauge(abi_SpriteBar4WithMarker, 0x0E0F, 0x0E11, 0x0DFA, 0x0140);
+    abi_gauge(abi_SpriteBar6WithMarker, 0x0E13, 0x0E15, 0x0E06, 0x016C);
 }
 
 /*
@@ -100,36 +92,30 @@ void HudGaugesPanelB(uint8_t bank)
         return;
     split = rd8(b | 0x0D62) != 0;
     g = gauge_of(b, 0x0E0E, 0x0E10, 0x0DF9);
-    cyc(split ? 86 : 108);              /* LDY #, the BRA when not split, JSL */
+    /* LDY #, the BRA when not split, JSL */
     SpriteBar4WithMarker(bank, g.value, (uint16_t)(g.y << 8 | g.x), split ? 0x0040 : 0x0100);
     split = rd8(b | 0x0D62) != 0;
     g = gauge_of(b, 0x0E12, 0x0E14, 0x0E05);
-    cyc(split ? 86 : 108);
     SpriteBar6WithMarker(bank, g.value, (uint16_t)(g.y << 8 | g.x), split ? 0x006C : 0x012C);
 }
 
 void abi_HudGaugesPanelB(void)
 {
     uint32_t b = (uint32_t)cpu.db << 16;
-    cyc(76);
     uint8_t v = rd8(0x000D55);
     int split;
 
     if (!v)
-        { cyc(48); v = rd8(0x000D62); }
-    cyc(46);
+        v = rd8(0x000D62);
     if (!v) {
-        cyc(12);
         cpu.a &= 0xFF00;
         cpu.p = (uint8_t)((nz8(cpu.p, 0) | P_M) & ~P_X);
         return;
     }
     split = rd8(b | 0x0D62) != 0;
-    abi_gauge(abi_SpriteBar4WithMarker, 0x0E0E, 0x0E10, 0x0DF9, split ? (cyc(50), 0x0040) : 0x0100, split ? 86 : 108);
-    cyc(40);
+    abi_gauge(abi_SpriteBar4WithMarker, 0x0E0E, 0x0E10, 0x0DF9, split ? (0x0040) : 0x0100);
     split = rd8(b | 0x0D62) != 0;
-    abi_gauge(abi_SpriteBar6WithMarker, 0x0E12, 0x0E14, 0x0E05, split ? (cyc(50), 0x006C) : 0x012C, split ? 86 : 108);
-    cyc(14);
+    abi_gauge(abi_SpriteBar6WithMarker, 0x0E12, 0x0E14, 0x0E05, split ? (0x006C) : 0x012C);
 }
 
 /* Gauge y at `at` = y, then the X-position high bits of the twelve sprites
@@ -142,16 +128,12 @@ static void gauge6_place(uint16_t at, uint8_t y, uint8_t x)
     unsigned i;
 
     op_sep(P_M | P_X);
-    cyc(62);
     wr8(b | at, y);
-    cyc(x ? 16 : 38);                   /* LDX #imm; panel B's also BRAs to the shared tail */
+    /* LDX #imm; panel B's also BRAs to the shared tail */
     for (i = 0; i < 4; i++) {
-        cyc(24);
         v = (uint8_t)(rd8(b | (uint16_t)(0x057B + i + x)) & keep[i]);
-        cyc(46);
         wr8(b | (uint16_t)(0x057B + i + x), v);
     }
-    cyc(70);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
     cpu.x = x;
     cpu.p = p0;

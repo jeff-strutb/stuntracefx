@@ -3,8 +3,10 @@
  * restart the game.
  */
 #include "machine.h"
+#include "waits.h"
 #include "cpu_ops.h"
 #include "hw.h"
+#include "remaster.h"
 
 void abi_SoundPort1QueuePush(void);
 void abi_SoftResetApu(void);
@@ -17,15 +19,13 @@ void abi_WramFillZeroLong(void);
 /* LDA # (8-bit). */
 static void reset_lda8(uint8_t v)
 {
-    cyc(40);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
     cpu.p = nz8(cpu.p, v);
 }
 
 /* WramFillZeroLong on a work RAM range: A = bank, X = start, Y = count. */
-static void reset_fill(uint8_t bank, uint16_t x, uint16_t y, uint32_t pre)
+static void reset_fill(uint8_t bank, uint16_t x, uint16_t y)
 {
-    cyc(pre);
     reset_lda8(bank);
     cpu.x = x;
     cpu.p = nz16(cpu.p, x);
@@ -43,7 +43,6 @@ static void reset_fill(uint8_t bank, uint16_t x, uint16_t y, uint32_t pre)
  */
 void abi_SoftResetWarmBoot(void)
 {
-    cyc(32);
     jump_routine(0x038BAA);
 }
 
@@ -68,95 +67,72 @@ void abi_SoftResetCheck(void)
     uint32_t b = (uint32_t)cpu.db << 16;
     uint8_t v;
     uint16_t i;
-    int fresh = 0;
 
     op_sep(P_M);
-    cyc(68);
     op_lda8(b | RESET_STATE);
     if (!(uint8_t)cpu.a) {
         op_rep(P_M);
-        cyc(40);
         op_lda16(b | 0x0309);
         op_and16(0x3030);
         op_cmp16(0x3030);
         if (!(cpu.p & P_Z)) {
-            cyc(120);
             op_plp(p0);
             return;
         }
-        cyc(92);
         op_lda16(b | 0x0309);
         op_and16(0xCFCF);
         if (cpu.a) {
-            cyc(96);
             op_plp(p0);
             return;
         }
         op_sep(P_M);
-        cyc(90);
-        v = (uint8_t)(rd8(b | RESET_STATE) - 1);
-        cyc(6);
+        v = (uint8_t)(rd8_rmw(b | RESET_STATE) - 1);
         wr8(b | RESET_STATE, v);
         cpu.p = nz8(cpu.p, v);
-        cyc(38);
         reset_lda8(0x04);
         abi_SoundPort1QueuePush();
         reset_lda8(0x01);
         wr8(b | 0x0E3A, 0x01);
         reset_lda8(0x70);
         wr8(b | RESET_FRAMES, 0x70);
-        fresh = 1;
     }
     do {
-        do
-            { cyc(fresh ? 24 : 46); fresh = 0; op_lda8(b | RESET_TICK); }
-        while (!(uint8_t)cpu.a);
-        cyc(40);
+        rm_step_over();               /* frames of its own (remaster.h) */
+        wait_nonzero8(b | RESET_TICK);
+        op_lda8(b | RESET_TICK);
         wr8(b | RESET_TICK, 0x00);
-        cyc(24);
-        v = (uint8_t)(rd8(b | RESET_FRAMES) - 1);
-        cyc(6);
+        v = (uint8_t)(rd8_rmw(b | RESET_FRAMES) - 1);
         wr8(b | RESET_FRAMES, v);
         cpu.p = nz8(cpu.p, v);
     } while (v);
     reset_lda8(0x80);
-    cyc(16);
     wr8(b | INIDISP, 0x80);
-    cyc(24);
     wr8(b | NMITIMEN, 0x00);
-    cyc(24);
     wr8(b | MDMAEN, 0x00);
-    cyc(24);
     wr8(b | HDMAEN, 0x00);
-    cyc(24);
     wr8(b | RESET_STATE, 0x00);
     abi_SoftResetApu();
-    cyc(22); /* SEP */
+    /* SEP */
     op_sep(P_M);
-    cyc(24);
     wr8(b | 0x0D2B, 0x00);
-    cyc(24);
     wr8(b | 0x0D62, 0x00);
     op_sep(P_M);
     op_rep(P_X);
-    reset_fill(0x00, 0x0300, 0x2100, 108);
-    reset_fill(0x7E, 0x2000, 0xE000, 86);
-    reset_fill(0x7F, 0x0000, 0xFFFF, 86);
+    reset_fill(0x00, 0x0300, 0x2100);
+    reset_fill(0x7E, 0x2000, 0xE000);
+    reset_fill(0x7F, 0x0000, 0xFFFF);
     db = cpu.db;
     v = cpu.p;
     op_rep(P_M | P_X);
     op_lda16_imm(0x0000);
-    cyc(62);
     wr16(0x700000, 0x0000);
     op_lda16_imm(0x27FF);
     cpu.x = 0x0000;
     cpu.p = nz16(cpu.p, 0);
     cpu.y = 0x0001;
     cpu.p = nz16(cpu.p, 1);
-    cyc(22);
     for (i = 0; i <= 0x27FF; i++)
-        { cyc(36); wr8(0x700001u + i, rd8(0x700000u + i)); }
-    cyc(58);
+        wr8(0x700001u + i, rd8(0x700000u + i));
     cpu.a = 0xFFFF;
     cpu.x = 0x2800;
     cpu.y = 0x2801;
@@ -181,12 +157,11 @@ void abi_SoftResetLong(void)
     op_sep(P_M);
     cpu.db = 0x07;
     cpu.p = nz8(cpu.p, 0x07);
-    (cyc(162), abi_SoftResetCheck());
+    (abi_SoftResetCheck());
     op_sep(P_M);
     cpu.db = db;
     cpu.p = nz8(cpu.p, db);
     op_plp(p0);
-    cyc(80);
 }
 
 /*
@@ -205,7 +180,6 @@ void abi_ResetVector(void)
     cpu.p &= (uint8_t)~P_C;
     cpu.e = 0;
     cpu.p = (uint8_t)((cpu.p & ~P_C) | (old_e ? P_C : 0));
-    cyc(88);
     cpu.p &= (uint8_t)~P_D;
     jump_routine(0x038AA9);
 }
@@ -226,9 +200,8 @@ void abi_InterruptReturn(void)
        for any routine's. */
     uint8_t p;
 
-    cyc(20);
     p = rd8((uint16_t)(cpu.s + 1));
-    cyc(24);   /* the pulls of PC and PB */
+    /* the pulls of PC and PB */
     cpu.p = p;
     if (p & P_X) {
         cpu.x &= 0x00FF;
@@ -252,16 +225,16 @@ void abi_SoftResetApu(void)
 {
     uint8_t p0 = cpu.p, p1;
 
+    if (rm_redrawing())                 /* Remaster: a HUD redraw reaches no port (remaster.h) */
+        return;
     op_sep(P_M);
     op_rep(P_X);
-    cyc(162);
     delay_turns(0x8000);
     cpu.x = 0x0000;
     cpu.p = (uint8_t)((cpu.p & ~P_N) | P_Z);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | 0x06);
     cpu.p = nz8(cpu.p, 0x06);
     wr8(APUIO1, 0x06);
-    cyc(156);
     delay_turns(0x8000);
     cpu.x = 0x0000;
     cpu.p = (uint8_t)((cpu.p & ~P_N) | P_Z);
@@ -273,7 +246,6 @@ void abi_SoftResetApu(void)
     cpu.p = nz16(cpu.p, cpu.y);
     abi_ApuUpload();
     op_rep(P_M);
-    cyc(38);
     delay_turns(0x4000);
     cpu.a = 0x0000;
     cpu.p = (uint8_t)((cpu.p & ~P_N) | P_Z);
@@ -290,5 +262,5 @@ void abi_SoftResetApu(void)
 void abi_SoftResetApuLong(void)
 {
     abi_SoftResetApu();
-    cyc(44); /* RTL */
+    /* RTL */
 }

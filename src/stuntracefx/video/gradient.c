@@ -8,6 +8,7 @@
  */
 #include "machine.h"
 #include "hw.h"
+#include "assets.h"
 
 /* The run expansion GradientExpandFirst and GradientExpandSecond share,
    from run table index x: each run byte n stores the colour word at the
@@ -16,29 +17,22 @@
 static uint16_t expand_runs(uint8_t bank, uint16_t x, uint16_t *y)
 {
     for (;;) {
-        cyc(198);
-        uint16_t n = (uint16_t)(rd16(0x1FB44E + x) & 0x00FF), colour, out;
+        uint16_t n = (uint16_t)(rd16(ASSET_expand_runs_1FB44E + x) & 0x00FF), colour, out;
 
         if (!n)
-            { cyc(32); return x; }
+            return x;
         wr16(0x0000F1, n);
-        cyc(92);
         colour = rd16(((uint32_t)bank << 16) + 0x0020 + *y);
         out = rd16(0x0000F3);
         do {
-            cyc(32);
             wr16((0x7FEF57 + out) & 0xFFFFFF, colour);
             out = (uint16_t)(out + 2);
-            cyc(44);
-            n = (uint16_t)(rd16(0x0000F1) - 1);
-            cyc(14);
-            wr16(0x0000F1, n);
-        } while (cyc_loop(22, n));
-        cyc(32);
+            n = (uint16_t)(rd16_rmw(0x0000F1) - 1);
+            wr16_rmw(0x0000F1, n);
+        } while ((n));
         wr16(0x0000F3, out);
         x = (uint16_t)(x + 1);
         *y = (uint16_t)(*y + 2);
-        cyc(6);
     }
 }
 
@@ -46,11 +40,10 @@ static uint16_t expand_runs(uint8_t bank, uint16_t x, uint16_t *y)
    1 (second list) uses the run table from `special`, any other from 0. */
 static uint16_t expand_list(uint8_t bank, uint16_t *y, uint16_t course, uint16_t special, int *carry)
 {
-    cyc(92);
     uint16_t c = (uint16_t)(rd16((uint32_t)bank << 16 | 0x0E3D) & 0x00FF);
 
     *carry = c >= course;
-    return expand_runs(bank, c == course ? (cyc(16), special) : 0, y);
+    return expand_runs(bank, c == course ? (special) : 0, y);
 }
 
 static void abi_expand(uint16_t course, uint16_t special)
@@ -121,23 +114,20 @@ void abi_GradientExpandSecond(void)
  */
 uint16_t GradientBuildColours(uint16_t x, int *carry)
 {
-    cyc(288);
-    uint8_t bank = rd8(0x03F6F3 + x);
-    uint16_t y = rd16(0x03F6F1 + x), second;
+    uint8_t bank = rd8((ASSET_GradientBuildColours_03F6F1 + 0x2) + x);
+    uint16_t y = rd16(ASSET_GradientBuildColours_03F6F1 + x), second;
     int i;
 
     wr16(0x0000F3, 0x0000);
     GradientExpandFirst(bank, &y, carry);
-    cyc(176);
-    second = rd16(0x03F745 + x);
+    second = rd16(ASSET_GradientBuildColours_03F745 + x);
     if (second) {
         y = second;
         wr16(0x0000F3, 0x0400);
         GradientExpandSecond(bank, &y, carry);
     }
-    cyc(52);
     for (i = 0xFE; i >= 0; i -= 2)
-        { cyc(50); wr16(0x7FF757 + (uint32_t)i, 0x0000); cyc(32); }
+        wr16(0x7FF757 + (uint32_t)i, 0x0000);
     return y;
 }
 
@@ -149,19 +139,15 @@ void abi_GradientBuildColours(void)
     cpu.a = 0;
     cpu.x = 0xFFFE;
     cpu.p = (uint8_t)((nz8(cpu.p, cpu.db) & ~P_C) | P_M | (carry ? P_C : 0));
-    cyc(104);
 }
 
 /* Store a word `count` times at $7F:3497 + X, stepping 2. */
 static uint16_t fill_cgadd(uint16_t value, uint16_t x, uint16_t count)
 {
-    cyc(0);
     do {
-        cyc(32);
         wr16(0x7F3497 + x, value);
         x = (uint16_t)(x + 2);
-    } while (cyc_loop(64, --count));
-    cyc(100);
+    } while ((--count));
     return x;
 }
 
@@ -192,7 +178,6 @@ void abi_GradientFillCgadd(void)
  */
 void GradientFillCgaddB(uint16_t value, uint16_t x, uint16_t count)
 {
-    cyc(0);
     fill_cgadd(value, x, count);
 }
 
@@ -213,16 +198,11 @@ void abi_GradientFillCgaddB(void)
  */
 uint16_t GradientPointersToBank7F(void)
 {
-    cyc(46);
     uint16_t v = rd16(0x000D96);
 
-    cyc(32);
     wr16(0x7F348D, v);
-    cyc(24);
     v = rd16(0x000D98);
-    cyc(32);
     wr16(0x7F3493, v);
-    cyc(42);
     return v;
 }
 
@@ -260,60 +240,39 @@ uint16_t GradientSetup(uint8_t bank)
     uint8_t blk;
     unsigned k;
 
-    cyc(152);
     wr8(b | 0x4320, 0x00);
-    cyc(40);
     wr8(b | 0x4321, 0x21);
-    cyc(40);
     wr8(b | 0x4324, 0x7F);
-    cyc(70);
     wr16(b | 0x4322, 0x3497);
-    cyc(48);
     wr16(b | 0x4330, 0x0042);
-    cyc(48);
     wr16(b | 0x4331, 0x0022);
-    cyc(48);
     wr16(b | 0x4334, 0x007F);
-    cyc(70);
     wr16(b | 0x4332, 0x3489);
-    cyc(102);
     wr16(0x7F3497, 0x0117);
     x = 2;
-    cyc(94);
     GradientFillCgaddB(0x0181, x, 0x0050);
     x = (uint16_t)(x + 0xA0);
-    cyc(56);
     wr16(0x7F3497 + x, 0x0118);
     x = (uint16_t)(x + 2);
-    cyc(122);
     GradientFillCgaddB(0x0181, x, 0x0050);
     x = (uint16_t)(x + 0xA0);
-    cyc(56);
     wr16(0x7F3497 + x, 0x0000);
     for (k = 0; k < 6; k++)
-        { cyc(56); wr16(ptr[k].a, ptr[k].v); }
-    cyc(22);
+        wr16(ptr[k].a, ptr[k].v);
     for (k = 0; k < 5; k++)
-        { cyc(48); wr8(cnt[k].a, cnt[k].v); }
-    cyc(40);
+        wr8(cnt[k].a, cnt[k].v);
     wr8(b | 0x4337, 0x7F);
-    cyc(90);
     c = rd8(b | 0x0E3D);
-    i = (uint16_t)(((uint16_t)(c << 1) + rd8(cyc_then(52, b | 0x0E3D))) & 0x00FF);
+    i = (uint16_t)(((uint16_t)(c << 1) + rd8((b | 0x0E3D))) & 0x00FF);
     /* the rest reads only ROM: 8 a byte read, and the code between */
-    cyc(114);
-    blk = rd8(0x03F6F3 + i);
-    cyc(8 + 104);
-    src = rd16(0x03F6F1 + i);
-    cyc(16 + 90);
+    blk = rd8((ASSET_GradientBuildColours_03F6F1 + 0x2) + i);
+    src = rd16(ASSET_GradientBuildColours_03F6F1 + i);
     for (k = 0; k < 0x20; k++) {
         rd8((uint32_t)blk << 16 | (uint16_t)(src + k));
-        cyc(8 + (k < 0x1F ? 104 : 152));
     }
     a = (uint16_t)(src & 0xFF00);
     for (k = 0; k < 0x20; k++) {
-        a = (uint16_t)((a & 0xFF00) | rd8(0x1FA800 + k));
-        cyc(8 + (k < 0x1F ? 92 : 124));
+        a = (uint16_t)((a & 0xFF00) | rd8(ASSET_GradientSetup_1FA800 + k));
     }
     return a;
 }

@@ -20,20 +20,20 @@ typedef struct {
     uint16_t r[16];
 } FxRegs;
 
-FxQuotient FxDivide(uint16_t hi, uint16_t lo, uint16_t divisor, int copy);
-FxQuotient FxDivideHalvedIfLarge(uint16_t hi, uint16_t lo, uint16_t *divisor, int copy);
-FxRoot FxSquareRoot(uint16_t hi, uint16_t lo, int copy);
-FxRegs FxNormalize(FxRegs g, int copy);
-FxRegs FxAngleOf(FxRegs g, int copy);
-FxRegs FxTurnRegs(FxRegs g, int copy);
+FxQuotient FxDivide(uint16_t hi, uint16_t lo, uint16_t divisor);
+FxQuotient FxDivideHalvedIfLarge(uint16_t hi, uint16_t lo, uint16_t *divisor);
+FxRoot FxSquareRoot(uint16_t hi, uint16_t lo);
+FxRegs FxNormalize(FxRegs g);
+FxRegs FxAngleOf(FxRegs g);
+FxRegs FxTurnRegs(FxRegs g);
 FxRegs FxSpreadCars(FxRegs g);
-FxRegs FxPoolTake(FxRegs g, int copy);
+FxRegs FxPoolTake(FxRegs g);
 FxRegs FxListSweepRegs(FxRegs g);
-FxRegs FxContactNote(FxRegs g, int copy);
-FxRegs FxRecordsApart(FxRegs g, int copy);
-FxRegs FxBearingTo(FxRegs g, int copy);
-FxRegs FxCourseNearest(FxRegs g, int copy);
-FxRegs FxCourseNextEntry(FxRegs g, int copy);
+FxRegs FxContactNote(FxRegs g);
+FxRegs FxRecordsApart(FxRegs g);
+FxRegs FxBearingTo(FxRegs g);
+FxRegs FxCourseNearest(FxRegs g);
+FxRegs FxCourseNextEntry(FxRegs g);
 
 void abi_FxMatrixFromAngles(void);
 void abi_FxMatrixTranspose04(void);

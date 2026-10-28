@@ -43,76 +43,56 @@ void DebugDrawChar(uint8_t bank, uint8_t ch, uint16_t *a, uint16_t *x, uint16_t 
     uint8_t f, bits, high, v;
     unsigned i;
 
-    cyc(90);
     dest = rd16(TEXT_POS);
-    cyc(30);
     dest = (uint16_t)(dest + rd16(TEXT_BASE));
     *x = dest;
-    cyc(104);
     wr16(TEXT_ROWS, (uint16_t)(ch << 1));
-    cyc(44);
     *y = (uint16_t)((ch << 2) + rd16(TEXT_ROWS));
-    cyc(54);
     wr16(TEXT_ROWS, 0x0006);
     rows = 6;
     do {
-        cyc(rows == 6 ? 76 : 92); /* PHX first, BRL after */
+        /* PHX first, BRL after */
         v = rd8(b | TEXT_HALF);
         f = rd8(b | (uint16_t)(TEXT_FONT + *y));
-        cyc((v & 0x04) ? 94 : 100); /* BEQ not taken / taken */
+        /* BEQ not taken / taken */
         wr8(b | TEXT_BITS, f);
-        high = (v & 0x04) ? (cyc(40), (uint8_t)(f >> 4)) : (uint8_t)(f & 0xF0);
-        cyc(40);
+        high = (v & 0x04) ? ((uint8_t)(f >> 4)) : (uint8_t)(f & 0xF0);
         wr8(b | TEXT_HIGH, high);
-        cyc(24);
         bits = rd8(b | TEXT_BITS);
-        bits = (v & 0x04) ? (uint8_t)(bits & 0x0F) : (cyc(40), (uint8_t)(bits << 4));
-        cyc(40);
+        bits = (v & 0x04) ? (uint8_t)(bits & 0x0F) : ((uint8_t)(bits << 4));
         wr8(b | TEXT_BITS, bits);
-        cyc(24);
         high = rd8(b | TEXT_HIGH);
-        cyc(40);
         wr8(b | TEXT_MASK, (uint8_t)~(bits | high));
-        cyc((v & 0x04) ? 46 : 24); /* BRA */
+        /* BRA */
         if (!(rd8(b | TEXT_HALF) & 0x04))
             for (i = 0; i < 8; i++)
-                { cyc(i == 0 ? 80 : i == 5 ? 48 : 32); wr8(0x700000 + cell[i].off + *x, cell[i].cleared); } else { cyc(38); }
+                wr8(0x700000 + cell[i].off + *x, cell[i].cleared);
         for (i = 0; i < 8; i++) {
-            cyc(32);
             v = rd8(0x700000 + cell[i].off + *x);
-            cyc(24);
             v = (uint8_t)(v & rd8(b | TEXT_MASK));
             if (cell[i].high < 2)
-                { cyc(24); v |= rd8(b | TEXT_BITS); }
+                v |= rd8(b | TEXT_BITS);
             if (cell[i].high == 1)
-                { cyc(24); v |= rd8(b | TEXT_HIGH); }
-            cyc(32);
+                v |= rd8(b | TEXT_HIGH);
             wr8(0x700000 + cell[i].off + *x, v);
         }
         *x = (uint16_t)(*x + 2);
         *y = (uint16_t)(*y + 1);
-        cyc(80);
-        rows = (uint16_t)(rd16(TEXT_ROWS) - 1);
-        cyc(14);
-        wr16(TEXT_ROWS, rows);
+        rows = (uint16_t)(rd16_rmw(TEXT_ROWS) - 1);
+        wr16_rmw(TEXT_ROWS, rows);
     } while (rows);
-    cyc(88);
     pos = (uint16_t)(dest - rd16(TEXT_BASE));
-    cyc(54);
     half = (uint16_t)(rd16(b | TEXT_HALF) ^ 0x0004);
-    cyc(48);
     wr16(b | TEXT_HALF, half);
     if (!half) {
-        cyc(92);
         pos = (uint16_t)(pos + 0x0400);
         *x = pos;
         if (pos >= 0x6800)
-            { cyc(54); pos = (uint16_t)(pos - 0x67C0); }
+            pos = (uint16_t)(pos - 0x67C0);
     }
-    cyc(74);
     wr16(TEXT_POS, pos);
     *a = pos;
-    cyc(70); /* PLP, RTS */
+    /* PLP, RTS */
 }
 
 void abi_DebugDrawChar(void)
@@ -137,19 +117,15 @@ void DebugPrint(uint8_t bank)
     uint32_t s;
     uint16_t y = 0, a = 0, x = 0, yy = 0;
     uint8_t c;
-    unsigned top;
 
-    cyc(242);
     wr16((uint32_t)bank << 16 | TEXT_HALF, 0x0000);
-    for (top = 150;; top = 90) { /* later rounds follow a draw: its tail is stated */
-        cyc(top);
+    for (;;) {
         s = rd24(0x000054);
-        cyc(168);
         c = rd8((s + y) & 0xFFFFFF);
         if (!c)
-            { cyc(70); break; }
+            break;
         if (c >= 0x61)
-            { cyc(24); c = (uint8_t)(c - 0x20); }
+            c = (uint8_t)(c - 0x20);
         c = (uint8_t)(c - 0x20);
         DebugDrawChar(0x00, c, &a, &x, &yy);
         y = (uint16_t)(y + 1);
@@ -186,22 +162,16 @@ uint16_t DebugShowErrors(uint8_t bank)
     unsigned i;
 
     for (i = 0; i < 3; i++) {
-        cyc(54);
         a = rd16(errors[i].flag);
         if (!a)
             continue;
-        cyc(56);
         wr16(TEXT_POS, errors[i].pos);
-        cyc(48);
         wr16((uint32_t)bank << 16 | TEXT_HALF, 0x0000);
-        cyc(54);
         wr8(0x000056, 0x08);
-        cyc(62);
         wr16(0x000054, errors[i].text);
         DebugPrint(bank);
         a = errors[i].text;
     }
-    cyc(66);
     return a;
 }
 

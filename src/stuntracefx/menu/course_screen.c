@@ -49,40 +49,30 @@ uint16_t MenuCourseScreenSetup(uint8_t bank)
     unsigned i;
 
     SoundPairFromTable();
-    cyc(28);
     for (x = 0; x != 0x0200; x += 2)
-        { wr16(dbw(bank, (uint16_t)(0x0375 + x)), cyc_then(72, 0xE0E0)); cyc(56); }
-    cyc(0);
+        wr16(dbw(bank, (uint16_t)(0x0375 + x)), (0xE0E0));
     for (x = 0; x != 0x0020; x += 2)
-        { wr16(dbw(bank, (uint16_t)(0x0575 + x)), cyc_then(90, 0x5555)); cyc(38); }
-    cyc(182);
-    for (i = 0; cyc_loop(18, i < 4); i++) {
-        cyc(56);
+        wr16(dbw(bank, (uint16_t)(0x0575 + x)), (0x5555));
+    for (i = 0; (i < 4); i++) {
         x = groups[i][0];
         y = groups[i][1];
         MenuOamFromList(0x0B, &x, &y);
-        cyc(20);
     }
-    cyc(70);
     OamDmaAll();
-    cyc(132);
     GsuCF42To3000(0xD970, 0x001D);
-    cyc(62);
     CoursePictureToVram(bank);
-    wr8(dbw(bank, 0x2101), cyc_then(62, 0x03));
-    wr8(dbw(bank, 0x0D3F), cyc_then(62, 0x08));
-    wr8(dbw(bank, 0x0D7D), cyc_then(40, 0x0C));
+    wr8(dbw(bank, 0x2101), (0x03));
+    wr8(dbw(bank, 0x0D3F), (0x08));
+    wr8(dbw(bank, 0x0D7D), (0x0C));
     for (i = 0; i < sizeof course_params / sizeof course_params[0]; i++)
-        wr8(dbw(bank, course_params[i].addr), cyc_then(40, course_params[i].v));
+        wr8(dbw(bank, course_params[i].addr), (course_params[i].v));
     uint16_t a = GradientSetup(bank);
 
-    cyc(94);
     return a;
 }
 
 void abi_MenuCourseScreenSetup(void)
 {
-    cyc(106);
     cpu.a = MenuCourseScreenSetup(cpu.db);
     cpu.x = 0x0020;
     cpu.y = 0x0020;

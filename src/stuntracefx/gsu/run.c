@@ -11,27 +11,32 @@
 #include "hw.h"
 #include "wram.h"
 #include "cpu_ops.h"
+#include "waits.h"
 
-/* Poll until the Super FX stops (status bit 5 clear), counting each poll:
-   an 8-bit INC of $FE, and of $FF only when $FE wraps to 0. `first` is
-   the time before the first INC's read: GsuWait's SEP and the INC (38),
-   or GsuRun's INC alone (16); after a poll, AND #, BNE and the INC (54). */
-static void gsu_wait(uint32_t first)
+/*
+ * Wait for the Super FX to stop (status bit 5 clear), as the console's
+ * wait, stepping the 16-bit poll count at lo, hi once for the loop's turn:
+ * the low byte, and the high one when the low one wraps to 0. The count
+ * only reaches the debug panels. The last read is made here, as the
+ * original's exit read.
+ */
+static void gsu_wait_counting(uint32_t lo, uint32_t hi)
 {
-    uint8_t n;
+    uint8_t l = (uint8_t)(rd8(lo) + 1);
 
-    cyc(first);
-    do {
-        n = (uint8_t)(rd8(GSU_WAIT_COUNT) + 1);
-        cyc(6);
-        wr8(GSU_WAIT_COUNT, n);
-        if (!n) {
-            cyc(32);
-            n = (uint8_t)(rd8(GSU_WAIT_COUNT + 1) + 1);
-            cyc(6);
-            wr8(GSU_WAIT_COUNT + 1, n);
-        } else { cyc(22); }
-    } while (cyc_loop(54, rd8(cyc_then(24, GSU_SFR)) & 0x20));
+    wr8(lo, l);
+    if (!l)
+        wr8(hi, (uint8_t)(rd8(hi) + 1));
+    if (rd8(GSU_SFR) & 0x20)
+        wait_mem(GSU_SFR, 0, 0x20, 0, 1);
+    rd8(GSU_SFR);
+}
+
+/* GsuWait's and GsuRun's loop: INC $FE (and $FF on a wrap), LDA $3030,
+   AND #$20, BNE */
+static void gsu_wait(void)
+{
+    gsu_wait_counting(GSU_WAIT_COUNT, GSU_WAIT_COUNT + 1);
 }
 
 /* After the poll: the screen mode value back to SCMR. */
@@ -39,9 +44,7 @@ static uint8_t gsu_scmr_back(void)
 {
     uint8_t mode;
 
-    cyc(56);
     mode = rd8(GSU_SCMR_SHADOW);
-    cyc(24);
     wr8(GSU_SCMR, mode);
     return mode;
 }
@@ -57,8 +60,8 @@ static uint8_t gsu_scmr_back(void)
  */
 uint8_t GsuWait(void)
 {
-    gsu_wait(38);
-    return cyc_then(42, gsu_scmr_back());
+    gsu_wait();
+    return (gsu_scmr_back());
 }
 
 void abi_GsuWait(void)
@@ -81,15 +84,11 @@ void abi_GsuWait(void)
  */
 uint8_t GsuRun(uint8_t bank, uint16_t start)
 {
-    cyc(32);
     wr8(GSU_PBR, bank);
-    cyc(112);
-    wr8(GSU_SCMR, cyc_then(40, rd8(GSU_SCMR_SHADOW) | 0x18));
-    cyc(24);
+    wr8(GSU_SCMR, (rd8(GSU_SCMR_SHADOW) | 0x18));
     wr8(GSU_SFR, 0x00);
-    cyc(24);
     wr16(GSU_R15, start);
-    gsu_wait(16);                       /* its own copy of the poll, no SEP */
+    gsu_wait();
     return gsu_scmr_back();
 }
 
@@ -99,7 +98,7 @@ void abi_GsuRun(void)
 
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | mode);
     cpu.p = nz8(cpu.p, cpu.db);
-    cyc(72);                            /* PLB, RTL */
+    /* PLB, RTL */
 }
 
 uint16_t GsuParamsUpdate(void);
@@ -110,25 +109,16 @@ static uint8_t gsu_ab13_with_params(uint8_t bank, uint16_t *last)
     uint32_t b = (uint32_t)bank << 16;
     uint8_t mode;
 
-    *last = (cyc(22), GsuParamsUpdate());
-    cyc(108);
+    *last = (GsuParamsUpdate());
     wr8(b | 0x3034, 0x01);
-    cyc(24);
-    wr8(b | 0x303A, cyc_then(40, (uint8_t)(rd8(b | 0x0374) | 0x18)));
-    cyc(24);
+    wr8(b | 0x303A, ((uint8_t)(rd8(b | 0x0374) | 0x18)));
     wr16(b | 0x301E, 0xAB13);
-    do {
-        cyc(46);
-        uint8_t n = (uint8_t)(rd8(b | 0x1F21) + 1);
-
-        cyc(6);
-        wr8(b | 0x1F21, n);
-        if (!n)
-            { cyc(40); wr8(b | 0x1F22, cyc_then(6, (uint8_t)(rd8(b | 0x1F22) + 1))); } else { cyc(22); }
-    } while (cyc_loop(16, rd8(cyc_then(24, b | 0x3030)) & 0x20));
-    cyc(56);
+    {
+        /* its own loop: INC $1F21 (and $1F22 on a wrap) through the data
+           bank, LDA $3030, AND #$20, BNE */
+        gsu_wait_counting(b | 0x1F21, b | 0x1F22);
+    }
     mode = rd8(b | 0x0374);
-    cyc(24);
     wr8(b | 0x303A, mode);
     return mode;
 }
@@ -159,7 +149,7 @@ void abi_GsuAB13WithParams(void)
     uint8_t mode = gsu_ab13_with_params(cpu.db, &last);
 
     cpu.a = (uint16_t)((last & 0xFF00) | mode);
-    cpu.x = (cpu.p & P_X) ? 0x0013 : (cyc(72), 0xAB13);
+    cpu.x = (cpu.p & P_X) ? 0x0013 : (0xAB13);
 }
 
 void abi_BucketTriggersFromView(void);
@@ -181,12 +171,12 @@ void abi_GsuRecordsUpload(void);
  */
 void FrameObjectsWhileGsuRuns(void)
 {
-    (cyc(46), abi_BucketTriggersFromView());
-    (cyc(46), abi_ObjectDrawListBuild());
-    (cyc(46), abi_BucketTriggersFixedArea());
-    (cyc(46), abi_ObjectGroupsActivate());
-    (cyc(46), abi_GsuWait());
-    (cyc(62), abi_GsuRecordsUpload());
+    (abi_BucketTriggersFromView());
+    (abi_ObjectDrawListBuild());
+    (abi_BucketTriggersFixedArea());
+    (abi_ObjectGroupsActivate());
+    (abi_GsuWait());
+    (abi_GsuRecordsUpload());
 }
 
 void abi_FrameObjectsWhileGsuRuns(void)
@@ -211,30 +201,21 @@ void FrameRunGsu8FCA(void)
     uint16_t n;
 
     cpu.p = (uint8_t)((cpu.p | P_M) & ~P_X);
-    cyc(60);
     wr8(0x0000FE, 0x00);
-    cyc(16);
     wr8(0x0000FF, 0x00);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | 0x04);
     cpu.x = 0x8FCA;
-    cyc(72);
     wr8(GSU_PBR, 0x04);
     cpu.db = 0x00;
-    cyc(112);
-    wr8(GSU_SCMR, cyc_then(40, (uint8_t)(rd8(GSU_SCMR_SHADOW) | 0x18)));
-    cyc(24);
+    wr8(GSU_SCMR, ((uint8_t)(rd8(GSU_SCMR_SHADOW) | 0x18)));
     wr8(GSU_SFR, 0x00);
-    cyc(24);
     wr16(GSU_R15, 0x8FCA);
-    (cyc(46), FrameObjectsWhileGsuRuns());
-    cyc(80);
+    (FrameObjectsWhileGsuRuns());
     n = rd16(0x0000FE);
-    cyc(24);
     wr16(0x001F1F, n);
     cpu.a = n;
     cpu.db = db;
     cpu.p = (uint8_t)(nz8(cpu.p | P_M, db) & ~P_X);
-    cyc(94);
 }
 
 void abi_FrameRunGsu8FCA(void)
@@ -261,7 +242,7 @@ void abi_MapMarkersPanelB(void);
 /* CMP # (8-bit): N, Z and C. */
 static void run_cmp8(uint8_t v, uint8_t m)
 {
-    cpu.p = (uint8_t)((nz8(cpu.p, (uint8_t)(v - m)) & ~P_C) | (v >= m ? (cyc(8), P_C) : (cyc(2), 0)));
+    cpu.p = (uint8_t)((nz8(cpu.p, (uint8_t)(v - m)) & ~P_C) | (v >= m ? (P_C) : (0)));
 }
 
 /*
@@ -279,50 +260,40 @@ static void run_cmp8(uint8_t v, uint8_t m)
  */
 void abi_HudFrameWhileGsuRuns(void)
 {
-    cyc(62);
     uint32_t b;
     uint8_t v;
 
     abi_SlideStep();
-    (cyc(62), abi_FadeValueStep());
-    (cyc(62), abi_DataBankTest());
+    (abi_FadeValueStep());
+    (abi_DataBankTest());
     op_sep(P_M | P_X);
     b = (uint32_t)cpu.db << 16;
-    cyc(24);
     op_lda8(b | 0x0D62);
     if ((uint8_t)cpu.a) {
-        cyc(72);
         op_lda8(0x000D7F);
         cpu.y = (uint8_t)cpu.a;
-        cyc(90);
         run_cmp8((uint8_t)cpu.y, 0x01);
         v = (uint8_t)cpu.y;
         abi_BackdropScrollFromView();
         if (v == 0x01)
-            { cyc(46); abi_HudDrawValueC(); }
+            abi_HudDrawValueC();
         else
-            { cyc(46); abi_HudDrawValueB(); }
-        cyc(0);
+            abi_HudDrawValueB();
         return;
     }
     cpu.x = 0x00;
-    cyc(70);
     op_lda8(0x000D2B);
     v = (uint8_t)cpu.a;
-    cyc(42);
     run_cmp8(v, 0x01);
     if (v != 0x01) {
         run_cmp8(v, 0x03);
         if (v != 0x03)
-            { cyc(64); abi_HudDigitSprites62(); }
-        cyc(12);
+            abi_HudDigitSprites62();
     }
     if (v != 0x03)
-        { cyc(34); abi_HudDrawDigits19EC(); }
-    cyc(46);
+        abi_HudDrawDigits19EC();
     abi_BackdropRowsUpdate();
-    (cyc(46), abi_HudDrawValueA());
-    cyc(62);
+    (abi_HudDrawValueA());
     call_routine(0x7EE34F, 1);
 }
 
@@ -333,18 +304,12 @@ static void start_ab13(uint32_t b)
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | 0x01);
     cpu.x = 0xAB13;
     cpu.p = nz16(cpu.p, 0xAB13);
-    cyc(64);
     wr8(b | 0x3034, 0x01);
-    cyc(24);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | (uint8_t)(rd8(b | 0x0374) | 0x18));
     cpu.p = nz8(cpu.p, (uint8_t)cpu.a);
-    cyc(40);
     wr8(b | 0x303A, (uint8_t)cpu.a);
-    cyc(24);
     wr8(b | 0x3030, 0x00);
-    cyc(24);
     wr16(b | 0x301E, 0xAB13);
-    cyc(46);
 }
 
 /*
@@ -365,32 +330,27 @@ void abi_FrameRunGsuAB13B(void)
 
     op_sep(P_M);
     op_rep(P_X);
-    cyc(38);
     wr8(0x0000FE, 0x00);
-    cyc(16);
     wr8(0x0000FF, 0x00);
     abi_GsuParamsUpdate();
     b = (uint32_t)cpu.db << 16;
     start_ab13(b);
     abi_HudFrameWhileGsuRuns();
-    (cyc(88), abi_HudGaugesPanelB());
+    (abi_HudGaugesPanelB());
     op_sep(P_M);
     b = (uint32_t)cpu.db << 16;
-    cyc(46);
     op_lda8(b | 0x0D62);
     if ((uint8_t)cpu.a)
-        { cyc(62); abi_FrameObjectsWhileGsuRuns(); cyc(88); }
+        abi_FrameObjectsWhileGsuRuns();
     else
-        cyc(68);                        /* the branch over the call, then the call to GsuWait */
+        ;                        /* the branch over the call, then the call to GsuWait */
     abi_GsuWait();
     op_rep(P_M);
     b = (uint32_t)cpu.db << 16;
-    cyc(16);
     op_lda16(0x0000FE);
-    cyc(24);
     wr16(b | 0x1F21, cpu.a);
-    (cyc(46), abi_MapMarkersPanelB());
-    cyc(44);                            /* RTL */
+    (abi_MapMarkersPanelB());
+    /* RTL */
 }
 
 /*
@@ -409,16 +369,14 @@ void abi_FrameRunGsuAB13A(void)
 
     op_sep(P_M);
     op_rep(P_X);
-    (cyc(22), abi_GsuParamsUpdate());
+    (abi_GsuParamsUpdate());
     b = (uint32_t)cpu.db << 16;
-    cyc(24);
     wr8(b | 0x1F21, 0x00);
-    cyc(24);
     wr8(b | 0x1F22, 0x00);
     start_ab13(b);
     abi_HudFrameWhileGsuRuns();
-    (cyc(88), abi_HudGaugesPanelA());
-    (cyc(46), abi_GsuWait());
-    (cyc(46), abi_MapMarkersPanelA());
-    cyc(44);                            /* RTL */
+    (abi_HudGaugesPanelA());
+    (abi_GsuWait());
+    (abi_MapMarkersPanelA());
+    /* RTL */
 }

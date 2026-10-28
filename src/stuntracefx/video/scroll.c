@@ -17,43 +17,30 @@
  * Entry: M 8-bit, DB a bank where these are work RAM; X = band offset.
  * Exit: A low byte = the vertical high byte; N, Z from it.
  */
-/* LDA abs,X: 24, and 6 more with a 16-bit index or when an 8-bit one
-   crosses a page. */
-static uint32_t abs_x(uint16_t base, uint16_t x, int wide)
-{
-    return 24 + (wide || (base & 0xFF) + (x & 0xFF) > 0xFF ? 6 : 0);
-}
-
-static uint8_t bg2_scroll(uint16_t band, int wide)
+static uint8_t bg2_scroll(uint16_t band)
 {
     uint8_t v;
 
-    cyc(abs_x(BG2_SCROLL_X, band, wide));
-    wr8(BG2HOFS, cyc_then(24, rd8(BG2_SCROLL_X + band)));
-    cyc(abs_x(BG2_SCROLL_X + 1, band, wide));
-    wr8(BG2HOFS, cyc_then(24, rd8(BG2_SCROLL_X + 1 + band)));
-    cyc(abs_x(BG2_SCROLL_Y, band, wide));
-    wr8(BG2VOFS, cyc_then(24, rd8(BG2_SCROLL_Y + band)));
-    cyc(abs_x(BG2_SCROLL_Y + 1, band, wide));
+    wr8(BG2HOFS, (rd8(BG2_SCROLL_X + band)));
+    wr8(BG2HOFS, (rd8(BG2_SCROLL_X + 1 + band)));
+    wr8(BG2VOFS, (rd8(BG2_SCROLL_Y + band)));
     v = rd8(BG2_SCROLL_Y + 1 + band);
-    cyc(24);
     wr8(BG2VOFS, v);
     return v;
 }
 
 uint8_t Bg2ScrollFromTable(uint16_t band)
 {
-    return bg2_scroll(band, 1);
+    return bg2_scroll(band);
 }
 
 void abi_Bg2ScrollFromTable(void)
 {
     int wide = !(cpu.p & P_X);
-    uint8_t v = bg2_scroll(wide ? cpu.x : (uint8_t)cpu.x, wide);
+    uint8_t v = bg2_scroll(wide ? cpu.x : (uint8_t)cpu.x);
 
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
     cpu.p = nz8(cpu.p, v);
-    cyc(42);
 }
 
 /*
@@ -66,16 +53,11 @@ void abi_Bg2ScrollFromTable(void)
  */
 void ScrollHdmaSet(void)
 {
-    cyc(76);
     uint16_t v = rd16(0x000E37);
 
-    cyc(32);
     wr16(0x0010AE, v);
-    cyc(32);
     wr16(0x0010B7, v);
-    cyc(56);
     wr16(0x0010B1, 0x0130);
-    cyc(32);
     wr16(0x0010B4, 0x0130);
 }
 
@@ -83,5 +65,5 @@ void abi_ScrollHdmaSet(void)
 {
     ScrollHdmaSet();
     cpu.a = 0x0130;
-    cyc(72);                            /* its return */
+    /* its return */
 }

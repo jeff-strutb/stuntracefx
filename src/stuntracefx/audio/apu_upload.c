@@ -8,9 +8,14 @@
  * block of length 0 ends the list and its address is where the SPC700 starts.
  */
 #include "machine.h"
+#include "waits.h"
 #include "cpu_ops.h"
 #include "hw.h"
 #include "wram.h"
+#include "remaster.h"
+#include "spc.h"
+
+int spc_battle_resident;
 
 /*
  * @routine 04:D788 ApuUploadNextByte
@@ -40,33 +45,26 @@ static int in_rom(uint32_t at)
 /* The byte, then the pointer's low word read again for the add (in *low). */
 static uint8_t apu_upload_next_byte(uint16_t *offset, uint16_t *low)
 {
-    cyc(16);
     uint32_t base = rd24(APU_STREAM_PTR);
     uint32_t at = (base + *offset) & 0xFFFFFF;
     uint8_t value = rd8(at);
     uint16_t bank;
 
     if (in_rom(at))
-        cyc(8);
+        ;
     *offset += 1;
-    cyc(110);
     *low = rd16(APU_STREAM_PTR);
     if ((uint32_t)*low + *offset > 0xFFFF) {
-        cyc(56);
         wr16(APU_STREAM_PTR, 0);
         *offset = 0x8000;
-        cyc(40);
-        bank = rd16(APU_STREAM_BANK);
-        cyc(14);
-        wr16(APU_STREAM_BANK, (uint16_t)(bank + 1));
-    } else { cyc(22); }
-    cyc(100);
+        bank = rd16_rmw(APU_STREAM_BANK);
+        wr16_rmw(APU_STREAM_BANK, (uint16_t)(bank + 1));
+    }
     return value;
 }
 
 uint8_t ApuUploadNextByte(uint16_t *offset)
 {
-    cyc(0);
     uint16_t low;
 
     return apu_upload_next_byte(offset, &low);
@@ -98,52 +96,47 @@ static ApuUploadEnd apu_upload(uint8_t bank, uint16_t addr)
     uint16_t offset = 0;
     uint8_t kick = 0xCC;
 
-    cyc(38);
-    wr16(APU_STREAM_PTR, addr);
-    cyc(16);
-    wr8(APU_STREAM_BANK, bank);
-    cyc(26);
-    while (rd16(cyc_then(46, APUIO0)) != 0xBBAA) {
+    if (rm_redrawing()) {               /* Remaster: a HUD redraw reaches no port (remaster.h) */
+        end.offset = 0;
+        end.kick = 0;
+        return end;
     }
-    cyc(6);
+    wr16(APU_STREAM_PTR, addr);
+    wr8(APU_STREAM_BANK, bank);
+    wait_mem(APUIO0, 1, 0xFFFF, 0xBBAA, 1);   /* the IPL ready */
+    (void)rd16(APUIO0);
     for (;;) {
-        cyc(116);
         uint8_t lo = ApuUploadNextByte(&offset);
-        cyc(66);
         uint8_t hi = ApuUploadNextByte(&offset);
         uint16_t length = (uint16_t)(lo | hi << 8);
         uint8_t more = length != 0;
         uint8_t index = 0;
         unsigned carry = 1;
+        uint8_t to_lo, to_hi;
 
-        cyc(80);
-        wr8(APUIO2, cyc_then(24, ApuUploadNextByte(&offset)));
-        cyc(46);
-        wr8(APUIO3, cyc_then(24, ApuUploadNextByte(&offset)));
-        cyc(78);
-        wr8(APUIO1, more);
-        cyc(68);
-        wr8(APUIO0, kick);
-        while (rd8(cyc_then(24, APUIO0)) != kick) {
-            cyc(22);
+        wr8(APUIO2, (to_lo = ApuUploadNextByte(&offset)));
+        wr8(APUIO3, (to_hi = ApuUploadNextByte(&offset)));
+        {   /* the driver now at $10B0 (spc.h) */
+            uint16_t to = (uint16_t)(to_lo | to_hi << 8);
+            if (more && to <= 0x10B0 && (uint32_t)to + length > 0x10B0)
+                spc_battle_resident = bank == 0x1A && addr == 0xF091;
         }
-        cyc(38);
+        wr8(APUIO1, more);
+        wr8(APUIO0, kick);
+        wait_mem(APUIO0, 0, 0xFF, kick, 1);
+        (void)rd8(APUIO0);
         if (!more)
-            { cyc(38); break; } else { cyc(46); }
-        wr16(APUIO0, cyc_then(104, (uint16_t)(ApuUploadNextByte(&offset) << 8 | index)));
+            break;
+        wr16(APUIO0, ((uint16_t)(ApuUploadNextByte(&offset) << 8 | index)));
         while (--length) {
-            cyc(124);
             uint8_t data = ApuUploadNextByte(&offset);
-            while (rd8(cyc_then(44, APUIO0)) != index) {
-                cyc(2);
-            }
+            wait_mem(APUIO0, 0, 0xFF, index, 1);
+            (void)rd8(APUIO0);
             index++;
-            cyc(76);
             wr16(APUIO0, (uint16_t)(data << 8 | index));
         }
-        cyc(30);
-        while (rd8(cyc_then(46, APUIO0)) != index) {
-        }
+        wait_mem(APUIO0, 0, 0xFF, index, 1);
+        (void)rd8(APUIO0);
         /* The next block's kick is past the last index, and never zero. */
         kick = index;
         do {
@@ -179,7 +172,10 @@ void ApuUpload(uint8_t bank, uint16_t addr)
 
 void abi_ApuUpload(void)
 {
-    ApuUploadEnd end = apu_upload((uint8_t)cpu.a, cpu.y);
+    ApuUploadEnd end;
+
+    rm_step_over();             /* a load for a screen to come (remaster.h) */
+    end = apu_upload((uint8_t)cpu.a, cpu.y);
 
     cpu.a = end.kick;
     cpu.x = 0;
@@ -198,7 +194,6 @@ void ApuSettleDelay(void);
 
 void ApuPort1Send05(void)
 {
-    cyc(62);
     wr8(APUIO1, 0x05);
     ApuSettleDelay();
 }
@@ -219,13 +214,12 @@ void abi_ApuPort1Send05(void)
  */
 void ApuSettleDelay(void)
 {
-    cyc(90);
     delay_turns(0x4000);
 }
 
 void abi_ApuSettleDelay(void)
 {
-    (cyc(0), ApuSettleDelay());
+    (ApuSettleDelay());
     cpu.a = 0;
     cpu.p = (uint8_t)((cpu.p & ~(P_M | P_N)) | P_Z);
 }
@@ -246,13 +240,12 @@ void ApuUploadBank19(void)
 
 void abi_ApuUploadBank19(void)
 {
-    cyc(154);
     ApuUploadEnd end = apu_upload(0x19, 0xC27C);
 
     /* its own copy of the settle delay: REP, LDA #$4000, DEC A and BNE */
-    cyc(118);
     delay_turns(0x4000);
     cpu.a = 0;
     cpu.x = 0;
     cpu.y = end.offset;
+    /* PLP, RTL */
 }

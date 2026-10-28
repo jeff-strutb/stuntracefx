@@ -26,7 +26,7 @@ void abi_FxDrawBitmap64x16(void);
 void abi_FxDrawBitmap16x24(void);
 
 /* CMP of R0 with a byte IBT loads (sign-extended). */
-static void cmp_code(uint8_t code, int copy)
+static void cmp_code(uint8_t code)
 {
     gsu.r[3] = (uint16_t)(int16_t)(int8_t)code;
     gsu_sub(gsu.r[0], gsu.r[3], 0);
@@ -34,57 +34,29 @@ static void cmp_code(uint8_t code, int copy)
 
 /* A picture: ROM bank $15, R14 = $8000 + at, the blit called with R11 at
    its return address. */
-/* gsuwalk: the code of each copy of picture, read from the ROM */
-static const GsuCode picture_fetch[8][6] = {
-    {{0x01d3cf, 7}, {0x01d3d6, 3}, {0x01d3d9, 2}, {0x01d3db, 4}, {0x01e35a, 1}, {0xe35b, 0}},
-    {{0x01d3eb, 7}, {0x01d3f2, 3}, {0x01d3f5, 2}, {0x01d3f7, 4}, {0x01e9de, 1}, {0xe9df, 0}},
-    {{0x01d407, 7}, {0x01d40e, 3}, {0x01d411, 2}, {0x01d413, 4}, {0x01f062, 1}, {0xf063, 0}},
-    {{0x01d423, 7}, {0x01d42a, 3}, {0x01d42d, 2}, {0x01d42f, 4}, {0x01dcd6, 1}, {0xdcd7, 0}},
-    {{0x01d43f, 7}, {0x01d446, 3}, {0x01d449, 2}, {0x01d44b, 4}, {0x01dcd6, 1}, {0xdcd7, 0}},
-    {{0x01d45b, 7}, {0x01d462, 3}, {0x01d465, 2}, {0x01d467, 4}, {0x01f3e4, 1}, {0xf3e5, 0}},
-    {{0x01d49f, 4}, {0x01d4a3, 3}, {0x01d4a6, 2}, {0x01d4a8, 4}, {0x01d4e4, 1}, {0xd4e5, 0}},
-    {{0x01d4bd, 4}, {0x01d4c1, 3}, {0x01d4c4, 2}, {0x01d4c6, 4}, {0x01d5d2, 1}, {0xd5d3, 0}},
-};
 
-static void picture(uint16_t at, void (*blit)(void), uint16_t ret, int copy)
+static void picture(uint16_t at, void (*blit)(void), uint16_t ret)
 {
     gsu.r[1] = at;
     gsu.r[0] = 0x0015;
-    gsu_codes(picture_fetch[copy], 1);
     gsu_romb(0x15);
-    gsu_codes(picture_fetch[copy] + 1, 1);
     gsu_r14(0x8000);
-    gsu_codes(picture_fetch[copy] + 2, 1);
     gsu_r14(gsu_add(gsu.r[14], gsu.r[1], 0));
     gsu.r[11] = ret;
-    gsu_codes(picture_fetch[copy] + 3, 3);
     (blit());
 }
 
 /* The glyph R0 - '0' (doubled) from ROM bank 1's table, drawn and Y put
    back (SUB of the line height). */
-/* gsuwalk: the code of each copy of glyph, read from the ROM */
-static const GsuCode glyph_fetch[2][5] = {
-    {{0x01d494, 3}, {0x01d497, 2}, {0x01d499, 2}, {0x01d49b, 1}, {0x01d49c, 3}},
-    {{0x01d4b2, 3}, {0x01d4b5, 2}, {0x01d4b7, 2}, {0x01d4b9, 1}, {0x01d4ba, 3}},
-};
 
-/* gsuwalk: the copy of picture each copy of glyph calls */
-static const uint8_t picture_in_glyph[2] = {6, 7};
-
-static void glyph(uint16_t table, void (*blit)(void), uint16_t ret, int copy)
+static void glyph(uint16_t table, void (*blit)(void), uint16_t ret)
 {
-    gsu_codes(glyph_fetch[copy], 1);
     gsu_r14(table);
-    gsu_codes(glyph_fetch[copy] + 1, 1);
     gsu_r14(gsu_add(gsu.r[0], gsu.r[14], 0));
-    gsu_codes(glyph_fetch[copy] + 2, 1);
     gsu.r[1] = (gsu_getb());
-    gsu_codes(glyph_fetch[copy] + 3, 1);
     gsu_r14(gsu_inc(gsu.r[14]));
-    gsu_codes(glyph_fetch[copy] + 4, 1);
     gsu.r[1] = gsu_getbh(gsu.r[1]);
-    picture(gsu.r[1], blit, ret, GSU_COPY(picture_in_glyph[copy]));
+    picture(gsu.r[1], blit, ret);
     gsu.r[2] = gsu_sub(gsu.r[2], gsu.r[6], 0);
 }
 
@@ -114,185 +86,144 @@ static void glyph(uint16_t table, void (*blit)(void), uint16_t ret, int copy)
  */
 void abi_FxTextDraw(void)
 {
-    gsu_code(0x01d312, 2);
     gsu_push(&gsu.r[10], gsu.r[11]);
-    gsu_code(0x01d314, 6);
     gsu.r[7] = gsu_ldw(FX_TEXT_X);
-    gsu_code(0x01d31a, 4);
     gsu.r[2] = gsu_ldw(FX_TEXT_Y);
     gsu.r[5] = 0;
     gsu.r[6] = 0x0020;
     gsu.r[0] = gsu_sub(gsu.r[0], gsu.r[0], 0);
-    gsu_code(0x01d31e, 8);
     gsu_ramb(gsu.r[0]);
     gsu.r[0] = 0;
     gsu.por = (uint8_t)gsu.r[0];
     gsu.r[9] = FX_TEXT_PALETTES;
-    gsu_code(0x01d326, 11);
     gsu.r[0] = gsu_ldw(FX_TEXT_AT);
     gsu.r[8] = gsu.r[0];
     gsu_moves(gsu.r[8]);
     if (gsu.z)
-        { gsu_code(0x01d331, 8); gsu_code(0x01d4dd, 1); goto end; } else { gsu_code(0x01d331, 4); gsu_code(0x01d339, 1); }
+        goto end;
     gsu.r[4] = gsu.r[7];
-    gsu_code(0x01d33a, 2);
     for (;;) {
-        gsu_code(0x01d33c, 4);
         gsu.r[0] = gsu_lob(gsu_ldw(FX_TEXT_BANK));
-        gsu_code(0x01d340, 3);
         gsu_romb(gsu.r[0]);
-        gsu_code(0x01d343, 2);
         gsu_r14(gsu.r[8]);
-        gsu_code(0x01d345, 1);
         gsu.r[0] = (gsu_getb());
         gsu.r[8] = gsu_inc(gsu.r[8]);
         gsu.r[0] = (uint16_t)(int16_t)(int8_t)gsu.r[0];      /* SEX */
         gsu_sz(gsu.r[0]);
         if (gsu.z)
-            { gsu_code(0x01d346, 4); break; } else { gsu_code(0x01d346, 4); gsu_code(0x01d34e, 1); }
+            break;
         if (gsu.s) {
-            gsu_code(0x01d34f, 2); gsu_code(0x01d355, 2);
             gsu_r14(gsu_inc(gsu.r[14]));
-            cmp_code(0xFF, GSU_COPY(0));
+            cmp_code(0xFF);
             if (gsu.z) {
-                gsu_code(0x01d357, 9);
                 gsu.r[7] = gsu_getb();
-                gsu_code(0x01d360, 1);
                 gsu_r14(gsu_inc(gsu.r[14]));
-                gsu_code(0x01d361, 2);
                 gsu.r[2] = (gsu_getb());
-                gsu_code(0x01d363, 1);
                 gsu_r14(gsu_inc(gsu.r[14]));
                 gsu.r[4] = gsu.r[7];
                 gsu.r[8] = gsu.r[14];
-                gsu_code(0x01d364, 6); gsu_code(0x01d33b, 1);
                 continue;
-            } else { gsu_code(0x01d357, 6); gsu_code(0x01d36a, 1); }
-            cmp_code(0xFE, GSU_COPY(1));
+            }
+            cmp_code(0xFE);
             if (gsu.z) {
-                gsu_code(0x01d36b, 8);
                 gsu.r[0] = gsu_getb();
                 gsu.r[8] = gsu_inc(gsu.r[8]);
                 gsu.r[0] = gsu_add(gsu.r[0], gsu.r[0], 0);
                 gsu.r[0] = gsu_add(gsu.r[0], gsu.r[0], 0);
                 gsu.r[9] = FX_TEXT_PALETTES;
                 gsu.r[9] = gsu_add(gsu.r[0], gsu.r[9], 0);  /* BRA's delay slot */
-                gsu_code(0x01d373, 9); gsu_code(0x01d33b, 1);
                 continue;
-            } else { gsu_code(0x01d36b, 6); gsu_code(0x01d37c, 1); }
-            cmp_code(0xFD, GSU_COPY(2));
+            }
+            cmp_code(0xFD);
             if (gsu.z) {
-                gsu_code(0x01d37d, 8);
                 gsu.r[0] = gsu_getb();
                 gsu.r[8] = gsu_inc(gsu.r[8]);
                 gsu_moves(gsu.r[0]);
                 if (gsu.z) {
                     gsu.r[6] = 0x0020;
                     gsu.r[5] = 0;
-                    gsu_code(0x01d385, 5); gsu_code(0x01d393, 9); gsu_code(0x01d33b, 1);
                 } else {
                     gsu.r[6] = 0x0010;
                     gsu.r[5] = 1;
-                    gsu_code(0x01d385, 14); gsu_code(0x01d33b, 1);
                 }
                 continue;
-            } else { gsu_code(0x01d37d, 6); gsu_code(0x01d39c, 1); }
-            cmp_code(0xFC, GSU_COPY(3));
+            }
+            cmp_code(0xFC);
             if (gsu.z) {
                 gsu.r[0] = 0x0004;
                 gsu_moves(gsu.r[5]);
                 if (gsu.z)
-                    { gsu.r[0] = 0x0008; gsu_code(0x01d39d, 18); } else { gsu_code(0x01d39d, 14); gsu_code(0x01d3ae, 1); }
+                    gsu.r[0] = 0x0008;
                 gsu.r[4] = gsu_add(gsu.r[4], gsu.r[0], 0);
-                gsu_code(0x01d3af, 5); gsu_code(0x01d33b, 1);
                 continue;
-            } else { gsu_code(0x01d39d, 6); gsu_code(0x01d3b4, 1); }
-            cmp_code(0xF5, GSU_COPY(4));
+            }
+            cmp_code(0xF5);
             if (gsu.z) {
                 gsu.r[4] = gsu.r[7];
                 gsu.r[0] = gsu_div2(gsu.r[6]);
                 gsu.r[2] = gsu_add(gsu.r[2], gsu.r[0], 0);
-                gsu_code(0x01d3b5, 18); gsu_code(0x01d33b, 1);
                 continue;
-            } else { gsu_code(0x01d3b5, 6); gsu_code(0x01d3c7, 1); }
-            cmp_code(0xFB, GSU_COPY(5));
+            }
+            cmp_code(0xFB);
             if (gsu.z) {
-                gsu_code(0x01d3c8, 7);
-                picture(0x3700, abi_FxDrawBitmap120x32, 0xD3DF, GSU_COPY(0));
-                gsu_code(0x01d3df, 4); gsu_code(0x01d33b, 1);
+                picture(0x3700, abi_FxDrawBitmap120x32, 0xD3DF);
                 continue;
-            } else { gsu_code(0x01d3c8, 6); gsu_code(0x01d3e3, 1); }
-            cmp_code(0xFA, GSU_COPY(6));
+            }
+            cmp_code(0xFA);
             if (gsu.z) {
-                gsu_code(0x01d3e4, 7);
-                picture(0x3B00, abi_FxDrawBitmap120x16, 0xD3FB, GSU_COPY(1));
-                gsu_code(0x01d3fb, 4); gsu_code(0x01d33b, 1);
+                picture(0x3B00, abi_FxDrawBitmap120x16, 0xD3FB);
                 continue;
-            } else { gsu_code(0x01d3e4, 6); gsu_code(0x01d3ff, 1); }
-            cmp_code(0xF9, GSU_COPY(7));
+            }
+            cmp_code(0xF9);
             if (gsu.z) {
-                gsu_code(0x01d400, 7);
-                picture(0x1810, abi_FxDrawBitmap64x16, 0xD417, GSU_COPY(2));
-                gsu_code(0x01d417, 4); gsu_code(0x01d33b, 1);
+                picture(0x1810, abi_FxDrawBitmap64x16, 0xD417);
                 continue;
-            } else { gsu_code(0x01d400, 6); gsu_code(0x01d41b, 1); }
-            cmp_code(0xF8, GSU_COPY(8));
+            }
+            cmp_code(0xF8);
             if (gsu.z) {
-                gsu_code(0x01d41c, 7);
-                picture(0x3700, abi_FxDrawBitmap120x24, 0xD433, GSU_COPY(3));
-                gsu_code(0x01d433, 4); gsu_code(0x01d33b, 1);
+                picture(0x3700, abi_FxDrawBitmap120x24, 0xD433);
                 continue;
-            } else { gsu_code(0x01d41c, 6); gsu_code(0x01d437, 1); }
-            cmp_code(0xF7, GSU_COPY(9));
+            }
+            cmp_code(0xF7);
             if (gsu.z) {
-                gsu_code(0x01d438, 7);
-                picture(0x3A00, abi_FxDrawBitmap120x24, 0xD44F, GSU_COPY(4));
-                gsu_code(0x01d44f, 4); gsu_code(0x01d33b, 1);
+                picture(0x3A00, abi_FxDrawBitmap120x24, 0xD44F);
                 continue;
-            } else { gsu_code(0x01d438, 6); gsu_code(0x01d453, 1); }
-            cmp_code(0xF6, GSU_COPY(10));
+            }
+            cmp_code(0xF6);
             if (gsu.z) {
-                gsu_code(0x01d454, 7);
-                picture(0x3D1C, abi_FxDrawBitmap16x24, 0xD46B, GSU_COPY(5));
-                gsu_code(0x01d46b, 4); gsu_code(0x01d33b, 1);
+                picture(0x3D1C, abi_FxDrawBitmap16x24, 0xD46B);
                 continue;
-            } else { gsu_code(0x01d454, 6); gsu_code(0x01d46f, 1); }
-        } else { gsu_code(0x01d34f, 6); gsu_code(0x01d46f, 1); }
-        cmp_code(0x0D, GSU_COPY(11));
+            }
+        }
+        cmp_code(0x0D);
         if (gsu.z) {
             gsu.r[4] = gsu.r[7];
             gsu.r[2] = gsu_add(gsu.r[2], gsu.r[6], 0);
-            gsu_code(0x01d470, 14); gsu_code(0x01d33b, 1);
             continue;
-        } else { gsu_code(0x01d470, 6); gsu_code(0x01d47e, 1); }
+        }
         gsu.r[3] = 0x0030;
         gsu.r[0] = gsu_sub(gsu.r[0], gsu.r[3], 0);
         if (!gsu.s) {
             gsu.r[3] = 0x0001;
-            gsu_code(0x01d47f, 5); gsu_code(0x01d488, 6);
             gsu_romb(gsu.r[3]);
             gsu.r[0] = gsu_add(gsu.r[0], gsu.r[0], 0);
             gsu_moves(gsu.r[5]);
             if (gsu.z)
-                { { gsu_code(0x01d48e, 6); glyph(FX_GLYPHS_BIG, abi_FxDrawBitmap16x32, 0xD4AC, GSU_COPY(0)); gsu_code(0x01d4ac, 5); gsu_code(0x01d4cc, 1); } }
+                { { glyph(FX_GLYPHS_BIG, abi_FxDrawBitmap16x32, 0xD4AC); } }
             else
-                { { gsu_code(0x01d48e, 5); gsu_code(0x01d4b1, 1); glyph(FX_GLYPHS_SMALL, abi_FxDrawBitmap8x16, 0xD4CA, GSU_COPY(1)); gsu_code(0x01d4ca, 3); } }
-        } else { gsu_code(0x01d47f, 9); gsu_code(0x01d4cc, 1); }
+                { { glyph(FX_GLYPHS_SMALL, abi_FxDrawBitmap8x16, 0xD4CA); } }
+        }
         gsu.r[0] = 0x000A;
         gsu_moves(gsu.r[5]);
         if (gsu.z)
-            { gsu.r[0] = 0x0014; gsu_code(0x01d4cd, 11); } else { gsu_code(0x01d4cd, 7); gsu_code(0x01d4d7, 1); }
+            gsu.r[0] = 0x0014;
         gsu.r[4] = gsu_add(gsu.r[4], gsu.r[0], 0);
-        gsu_code(0x01d4d8, 5); gsu_code(0x01d33b, 1);
     }
 
-gsu_code(0x01d34a, 4); gsu_code(0x01d4dd, 1);
 end:
     ;
-    gsu_code(0x01d4de, 2);
     gsu.r[0] = gsu_rpix((uint8_t)gsu.r[1], (uint8_t)gsu.r[2]);
     gsu_sz(gsu.r[0]);
-    gsu_code(0x01d4e0, 4);
     gsu_pull(&gsu.r[10]);       /* the return address, into R15 */
 }
 
@@ -307,9 +238,7 @@ void abi_FxTextProgram(void)
 {
     gsu.r[10] = 0x0240;
     gsu.r[11] = 0xD30F;
-    gsu_code(0x01d308, 7); gsu_code(0x01d311, 1);
     abi_FxTextDraw();
-    gsu_code(0x01d30f, 1);
 }
 
 /*
@@ -329,85 +258,62 @@ void abi_FxTextProgram(void)
  */
 void abi_FxTextNotice(void)
 {
-    gsu_code(0x01d130, 2);
     gsu_push(&gsu.r[10], gsu.r[11]);
-    gsu_code(0x01d132, 6);
     gsu.r[0] = gsu_ldw(0x273C);
     gsu.r[1] = 0x0001;
     gsu.r[0] = gsu_and(gsu.r[0], gsu.r[1]);
     if (gsu.z)
-        { gsu_code(0x01d138, 10); gsu_code(0x01d1c6, 1); goto done; } else { gsu_code(0x01d138, 6); gsu_code(0x01d142, 1); }
-    gsu_code(0x01d143, 4);
+        goto done;
     gsu.r[0] = gsu_ldw(0x2648);
     gsu_moves(gsu.r[0]);
     if (gsu.z)
-        { gsu_code(0x01d147, 8); gsu_code(0x01d1c6, 1); goto done; } else { gsu_code(0x01d147, 4); gsu_code(0x01d14f, 1); }
-    gsu_code(0x01d150, 4);
+        goto done;
     gsu.r[1] = gsu_ldw(0x2476);
     gsu_sub(gsu.r[0], gsu.r[1], 0);     /* CMP */
     if (gsu.z)
-        { gsu_code(0x01d154, 8); gsu_code(0x01d1c6, 1); goto done; } else { gsu_code(0x01d154, 4); gsu_code(0x01d15c, 1); }
-    gsu_code(0x01d15d, 4);
+        goto done;
     gsu.r[1] = gsu_ldw(0x2478);
     gsu_sub(gsu.r[0], gsu.r[1], 0);
     if (gsu.z)
-        { gsu_code(0x01d161, 8); gsu_code(0x01d1c6, 1); goto done; } else { gsu_code(0x01d161, 4); gsu_code(0x01d169, 1); }
+        goto done;
     gsu.r[2] = gsu.r[0];
-    gsu_code(0x01d16a, 6);
     gsu.r[0] = gsu_ldw(0x264C);
     gsu_moves(gsu.r[0]);
     if (gsu.s)
-        { gsu_code(0x01d170, 8); gsu_code(0x01d1c6, 1); goto done; } else { gsu_code(0x01d170, 4); gsu_code(0x01d178, 1); }
-    gsu_code(0x01d179, 4);
+        goto done;
     gsu.r[0] = gsu_ldw(0x264A);
     gsu.r[0] = gsu_div2(gsu.r[0]);
-    gsu_code(0x01d17d, 6);
     gsu.r[1] = gsu_ldw(0x0034);
     gsu.r[0] = gsu_add(gsu.r[0], gsu.r[1], 0);
     if (gsu.s)
-        { gsu.r[0] = gsu_sub(gsu.r[0], gsu.r[0], 0); gsu_code(0x01d183, 5); } else { gsu_code(0x01d183, 3); gsu_code(0x01d187, 1); }
+        gsu.r[0] = gsu_sub(gsu.r[0], gsu.r[0], 0);
     gsu.r[4] = 0x0011;
-    gsu_code(0x01d188, 6);
     gsu.r[1] = gsu_ldw(0x003A);
     gsu.r[1] = gsu_sub(gsu.r[1], gsu.r[4], 0);
     gsu_sub(gsu.r[0], gsu.r[1], 0);     /* CMP */
     if (!gsu.s)
-        { gsu.r[0] = gsu.r[1]; gsu_code(0x01d18e, 9); } else { gsu_code(0x01d18e, 6); gsu_code(0x01d196, 1); }
-    gsu_code(0x01d197, 4);
+        gsu.r[0] = gsu.r[1];
     gsu_stw(FX_TEXT_X, gsu.r[0]);
     gsu.r[0] = 0x0068;
-    gsu_code(0x01d19b, 7);
     gsu_stw(FX_TEXT_Y, gsu.r[0]);
     gsu.r[0] = 0x0001;
-    gsu_code(0x01d1a2, 6);
     gsu_stw(FX_TEXT_BANK, gsu.r[0]);
-    gsu_code(0x01d1a8, 2);
     gsu_romb(gsu.r[0]);
     gsu.r[0] = 0x0096;
     gsu.r[0] = gsu_add(gsu.r[0], gsu.r[2], 0);
-    gsu_code(0x01d1aa, 5);
     gsu.r[0] = gsu_ldw(gsu.r[0]);
     gsu.r[0] = gsu_add(gsu.r[0], gsu.r[0], 0);
-    gsu_code(0x01d1af, 4);
     gsu_r14(0xD1CB);
-    gsu_code(0x01d1b3, 2);
     gsu_r14(gsu_add(gsu.r[14], gsu.r[0], 0));
-    gsu_code(0x01d1b5, 1);
     gsu.r[0] = (gsu_getb());
-    gsu_code(0x01d1b6, 1);
     gsu_r14(gsu_inc(gsu.r[14]));
-    gsu_code(0x01d1b7, 2);
     gsu.r[0] = gsu_getbh(gsu.r[0]);
-    gsu_code(0x01d1b9, 4);
     gsu_stw(FX_TEXT_AT, gsu.r[0]);
     gsu.r[11] = 0xD1C1;
-    gsu_code(0x01d1bd, 4); gsu_code(0x01d311, 1);
     (abi_FxTextDraw());
     gsu.r[0] = gsu_sub(gsu.r[0], gsu.r[0], 0);
-    gsu_code(0x01d1c1, 6);
     gsu_stw(FX_TEXT_AT, gsu.r[0]);
 done:
     ;
-    gsu_code(0x01d1c7, 4);
-    gsu_code(0x010000 | gsu_pull(&gsu.r[10]), 1);
+    gsu_pull(&gsu.r[10]);
 }

@@ -4,6 +4,7 @@
  */
 #include "machine.h"
 #include "cpu_ops.h"
+#include "assets.h"
 
 uint8_t CourseIndex12(uint8_t a, uint8_t *p);
 
@@ -34,18 +35,15 @@ static uint16_t adc_bcd16(uint16_t a, uint16_t m, uint8_t *p)
 /* $0E70 += the BCD byte of `table` for the entry at $0D89 of this course.
    `bra` is the clocks of the BRA into the shared tail (0 for the copy that
    falls into it). */
-static uint16_t add_course_value(uint32_t table, uint8_t bra, uint16_t *x, uint8_t *p)
+static uint16_t add_course_value(uint32_t table, uint16_t *x, uint8_t *p)
 {
-    cyc(24);
     uint8_t i = CourseIndex12(rd8(0x000D89), p);
     uint16_t v;
 
     *x = i;
-    cyc(138 + bra);                     /* LDA long, [BRA,] REP, SED, AND #, CLC, ADC */
+    /* LDA long, [BRA,] REP, SED, AND #, CLC, ADC */
     v = adc_bcd16(rd8(table + i), rd16(0x000E70), p);
-    cyc(24);
     wr16(0x000E70, v);
-    cyc(80);
     return v;
 }
 
@@ -60,7 +58,7 @@ static uint16_t add_course_value(uint32_t table, uint8_t bra, uint16_t *x, uint8
  */
 uint16_t RaceTimeAddD815(uint16_t *x, uint8_t *p)
 {
-    return add_course_value(0x03D815, 0, x, p);
+    return add_course_value((ASSET_RaceTimeInit_03D810 + 0x5), x, p);
 }
 
 void abi_RaceTimeAddD815(void)
@@ -79,7 +77,7 @@ void abi_RaceTimeAddD815(void)
  */
 uint16_t RaceTimeAddD814(uint16_t *x, uint8_t *p)
 {
-    return add_course_value(0x03D814, 22, x, p);
+    return add_course_value((ASSET_RaceTimeInit_03D810 + 0x4), x, p);
 }
 
 void abi_RaceTimeAddD814(void)
@@ -121,55 +119,42 @@ void abi_RaceTimeInit(void)
     unsigned i;
 
     op_sep(P_M | P_X);
-    cyc(16);
     for (i = 0; i < 4; i++)
-        { cyc(24); wr8(b | (uint16_t)(0x0E68 + i), 0x99); }
-    cyc(24);
+        wr8(b | (uint16_t)(0x0E68 + i), 0x99);
     v = rd8(b | 0x0D2B);
     cpu.p = nz8(cpu.p, v);
     if (v == 0) {
-        cyc(46);
         v = rd8(b | 0x0D4C);
         cpu.p = nz8(cpu.p, v);
         if (v == 0) {
-            cyc(40);
             cpu.a = (uint16_t)((cpu.a & 0xFF00) | rd8(b | 0x0D89));
             abi_CourseIndex12();
-            cyc(0);
-            v = rd8((uint32_t)(0x03D813 + cpu.x));
+            v = rd8((uint32_t)((ASSET_RaceTimeInit_03D810 + 0x3) + cpu.x));
         } else {
-            cyc(46);
             cpu.x = rd8(b | 0x0D4A);
-            v = rd8((uint32_t)(0x03D810 + cpu.x));
+            v = rd8((uint32_t)(ASSET_RaceTimeInit_03D810 + cpu.x));
         }
     } else {
-        cyc(8);
         cpu.p = (uint8_t)((nz8(cpu.p, (uint8_t)(v - 0x02)) & ~P_C) | (v >= 0x02 ? P_C : 0));
         if (v >= 0x02)
             v = 0x00;
-        else { cyc(64); if (rd8(b | 0x0D4E) != 0)
+        else { if (rd8(b | 0x0D4E) != 0)
             v = 0x00;
         else {
-            cyc(40);
             v = rd8(b | 0x0E3D);
             cpu.p |= P_C;
             v = op_sbc8(v, 0x0C, &cpu.p);
             v = asl8(asl8(v));
             cpu.p &= (uint8_t)~P_C;
-            cyc(80);
             v = op_adc8(v, rd8(b | 0x0D89), &cpu.p);
             cpu.x = v;
-            cyc(14);
-            v = rd8((uint32_t)(0x03D8A3 + cpu.x));
+            v = rd8((uint32_t)(ASSET_RaceTimeInit_03D8A3 + cpu.x));
         } }
     }
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
     cpu.p = nz8(cpu.p, v);
-    cyc(86);
     wr8(b | 0x0E70, v);
-    cyc(24);
     wr8(b | 0x0E71, 0x00);
-    cyc(42);
 }
 
 /*
@@ -191,75 +176,53 @@ void abi_RaceClockStep(void)
     uint16_t a;
 
     op_sep(P_M | P_X);
-    cyc(54);
     v = rd8(0x000E5B);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
     if (!v) {
-        cyc(44);
         op_plp(p0);
         return;
     }
     cpu.p = (uint8_t)((cpu.p & ~P_M) | P_D);
-    cyc(82);
     a = rd16(b | 0x0E62);
     cpu.p &= (uint8_t)~P_C;
-    cyc(38);
     a = op_adc16(a, rd16(b | 0x0D29), &cpu.p);
-    cyc(24);
     wr16(b | 0x0E62, a);
-    cyc(24);
     a = op_adc16(rd16(b | 0x0E64), 0x0000, &cpu.p);
-    cyc(48);
     wr16(b | 0x0E64, a);
     cpu.a = a;
     op_cmp16(0x0060);
     if (a >= 0x0060) {
-        cyc(64);
         wr16(b | 0x0E64, 0x0000);
         cpu.p &= (uint8_t)~P_C;
-        cyc(24);
         a = op_adc16(rd16(b | 0x0E66), 0x0001, &cpu.p);
-        cyc(62);
         wr16(b | 0x0E66, a);
         cpu.a = a;
         op_cmp16(0x0010);
         if (a >= 0x0010) {
-            cyc(88);
             wr16(b | 0x0E66, 0x0009);
-            cyc(48);
             wr16(b | 0x0E64, 0x0059);
-            cyc(48);
             wr16(b | 0x0E62, 0x9999);
             cpu.a = 0x9999;
             cpu.p = nz16(cpu.p, cpu.a);
         }
-    } else { cyc(46); }
-    cyc(38);
+    }
     a = rd16(b | 0x0E68);
     cpu.p |= P_C;
-    cyc(38);
     a = op_sbc16(a, rd16(b | 0x0D29), &cpu.p);
     cpu.a = a;
-    cyc(40);
     wr16(b | 0x0E68, a);
     if (!(cpu.p & P_C)) {
-        cyc(24);
         a = rd16(b | 0x0E70);
         cpu.a = a;
         cpu.p = nz16(cpu.p, a);
         if (a) {
             cpu.p |= P_C;
             cpu.a = op_sbc16(a, 0x0001, &cpu.p);
-            cyc(72);
             wr16(b | 0x0E70, cpu.a);
         } else {
-            cyc(46);
             wr16(b | 0x0E68, 0x0000);
-            cyc(24);
             wr16(b | 0x0E70, 0x0000);
         }
-        cyc(22);
     }
-    cyc(42);
     op_plp(p0);
 }

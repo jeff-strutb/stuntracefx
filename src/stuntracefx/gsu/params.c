@@ -2,6 +2,7 @@
  * params.c: the parameter block in Super FX RAM that the renderer reads.
  */
 #include "machine.h"
+#include "widescreen.h"
 
 /*
  * @routine 7E:E2C9 GsuParamsUpdate
@@ -22,12 +23,9 @@ uint16_t GsuParamsUpdate(void)
     for (i = 0; i < 8; i++) {
         /* the first after the entry (PHP, REP); then LDA direct page (16)
            or absolute (24) */
-        cyc(i == 0 ? 130 : from[i] < 0x100 ? 16 : 24);
         v = rd16(from[i]);
-        cyc(32);
         wr16(to[i], v);
     }
-    cyc(72);
     return v;
 }
 
@@ -48,19 +46,19 @@ uint16_t GsuParamsFromDp(uint8_t bank)
 {
     static const uint8_t from[8] = {0xCE, 0xD0, 0x2A, 0x2E, 0x2C, 0x30, 0x32, 0x34};
     static const uint32_t to[8] = {0x700034, 0x700036, 0x700038, 0x70003A, 0x70003C, 0x70003E, 0x700092, 0x700094};
-    uint16_t v = 0;
+    uint16_t v = 0, w[6], planes[2];
     unsigned i;
+    int wide = 0;
 
-    cyc(17422);
     wr8((uint32_t)bank << 16 | 0x05EF, 0xFF);
-    cyc(22);
     for (i = 0; i < 8; i++) {
-        cyc(16);
         v = rd16(from[i]);
-        cyc(32);
-        wr16(to[i], v);
+        if (i < 6)
+            w[i] = v;
+        else if (i == 6)
+            wide = ws_view_planes(w, planes);
+        wr16(to[i], i >= 6 && wide ? planes[i - 6] : v);   /* Widescreen: the wide view's planes */
     }
-    cyc(44);
     return v;
 }
 
@@ -73,7 +71,6 @@ void abi_GsuParamsFromDp(void)
 /* $70:0216 = the word at `table` + index in the data bank. */
 static uint16_t param_216(uint8_t bank, uint16_t table, uint16_t index)
 {
-    cyc(82);
     uint16_t v = rd16((uint32_t)bank << 16 | (uint16_t)(table + index));
 
     wr16(0x700216, v);
@@ -83,14 +80,14 @@ static uint16_t param_216(uint8_t bank, uint16_t table, uint16_t index)
 /* Registers: the index is A * 2, kept to 8 bits when X is 8-bit. */
 static void abi_param_216(uint16_t table)
 {
-    cyc(24);
     uint16_t a = cpu.a, x = (uint16_t)(a << 1);
 
     if (cpu.p & P_X)
         x &= 0x00FF;
     cpu.x = x;
     cpu.a = param_216(cpu.db, table, x);
-    cpu.p = (uint8_t)((nz16(cpu.p, cpu.a) & ~P_C) | (a & 0x8000 ? P_C : (cyc(42), 0)));
+    cpu.p = (uint8_t)((nz16(cpu.p, cpu.a) & ~P_C) | (a & 0x8000 ? P_C : 0));
+    /* the same with C set: no branch on it */
 }
 
 /*
@@ -103,7 +100,6 @@ static void abi_param_216(uint16_t table)
  */
 uint16_t GsuParam216A(uint8_t bank, uint16_t index)
 {
-    cyc(24);
     return param_216(bank, 0x8E3E, index);
 }
 
@@ -120,7 +116,6 @@ void abi_GsuParam216A(void)
  */
 uint16_t GsuParam216B(uint8_t bank, uint16_t index)
 {
-    cyc(24);
     return param_216(bank, 0x8E52, index);
 }
 
@@ -146,24 +141,19 @@ uint16_t GsuTableEntryTo1F4C(uint8_t bank, uint16_t entry, uint8_t *p)
     uint16_t a, base, s, v = 0;
     unsigned i;
 
-    cyc(24);
     wr16(b | 0x1F4C, entry);
-    cyc(62);
     t = (uint32_t)(rd16(0x701094) & 0x00FF) << 16;
-    cyc(156);
     a = (uint16_t)((uint16_t)(rd16(t | 0x1F4C) - 1) << 3);
-    cyc(102);
     base = rd16(0x701092);
     s = (uint16_t)(a + base);
     *p = (uint8_t)((*p & ~(P_C | P_V)) | ((unsigned)a + base > 0xFFFF ? P_C : 0)
-                   | ((~(a ^ base) & (a ^ s) & 0x8000) ? P_V : (cyc(42), 0)));
+                   | ((~(a ^ base) & (a ^ s) & 0x8000) ? P_V : 0));
+    /* the same with V set: no branch on it */
     s = (uint16_t)(s + 2);
     for (i = 0; i < 3; i++) {
-        cyc(70);
         v = rd16(t | (uint16_t)(s + 2 * i));
         wr16(t | (uint16_t)(0x1F4C + 2 * i), v);
     }
-    cyc(108);
     return v;
 }
 
@@ -179,13 +169,9 @@ void abi_GsuTableEntryTo1F4C(void)
 /* Store the four bytes 0, b1, b2, b3 at $70:0200-$70:0203. */
 static uint8_t gsu_200(uint8_t b1, uint8_t b2, uint8_t b3)
 {
-    cyc(92);
     wr8(0x700200, 0x00);
-    cyc(48);
     wr8(0x700201, b1);
-    cyc(48);
     wr8(0x700202, b2);
-    cyc(48);
     wr8(0x700203, b3);
     return b3;
 }
@@ -199,13 +185,11 @@ static uint8_t gsu_200(uint8_t b1, uint8_t b2, uint8_t b3)
  */
 void GsuBytes200_BFB7B6(void)
 {
-    cyc(0);
     gsu_200(0xBF, 0xB7, 0xB6);
 }
 
 void abi_GsuBytes200_BFB7B6(void)
 {
-    cyc(0);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | gsu_200(0xBF, 0xB7, 0xB6));
 }
 
@@ -222,9 +206,7 @@ void GsuBytes200_0F060E(void)
 
 void abi_GsuBytes200_0F060E(void)
 {
-    cyc(0);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | gsu_200(0x0F, 0x06, 0x0E));
-    cyc(72);
 }
 
 /*
@@ -243,7 +225,6 @@ void GsuBytes200_0F010B(void)
 void abi_GsuBytes200_0F010B(void)
 {
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | gsu_200(0x0F, 0x01, 0x0B));
-    cyc(72);
 }
 
 /*
@@ -259,7 +240,6 @@ void GsuBytes200_BFB5BB(void)
 
 void abi_GsuBytes200_BFB5BB(void)
 {
-    cyc(0);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | gsu_200(0xBF, 0xB5, 0xBB));
 }
 
@@ -271,15 +251,12 @@ void abi_GsuBytes200_BFB5BB(void)
  */
 void GsuBytes200_BFBCBD(void)
 {
-    cyc(0);
     gsu_200(0xBF, 0xBC, 0xBD);
 }
 
 void abi_GsuBytes200_BFBCBD(void)
 {
-    cyc(0);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | gsu_200(0xBF, 0xBC, 0xBD));
-    cyc(22);
 }
 
 /*
@@ -290,14 +267,11 @@ void abi_GsuBytes200_BFBCBD(void)
  */
 void GsuBytes200_BFBAB9(void)
 {
-    cyc(0);
     gsu_200(0xBF, 0xBA, 0xB9);
-    cyc(72);
 }
 
 void abi_GsuBytes200_BFBAB9(void)
 {
-    cyc(0);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | gsu_200(0xBF, 0xBA, 0xB9));
 }
 
@@ -314,7 +288,6 @@ void GsuBytes200_BFB3BE(void)
 
 void abi_GsuBytes200_BFB3BE(void)
 {
-    cyc(0);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | gsu_200(0xBF, 0xB3, 0xBE));
 }
 
@@ -327,7 +300,6 @@ void abi_GsuBytes200_BFB3BE(void)
 void abi_GsuBytes200_BFB2B3(void)
 {
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | gsu_200(0xBF, 0xB2, 0xB3));
-    cyc(72);
 }
 
 /*
@@ -339,7 +311,6 @@ void abi_GsuBytes200_BFB2B3(void)
 void abi_GsuBytes200_BF12B6(void)
 {
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | gsu_200(0xBF, 0x12, 0xB6));
-    cyc(72);
 }
 
 /*
@@ -351,7 +322,6 @@ void abi_GsuBytes200_BF12B6(void)
 void abi_GsuBytes200_BF11BD(void)
 {
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | gsu_200(0xBF, 0x11, 0xBD));
-    cyc(72);
 }
 
 /*
@@ -363,7 +333,6 @@ void abi_GsuBytes200_BF11BD(void)
 void abi_GsuBytes200_BF10B9(void)
 {
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | gsu_200(0xBF, 0x10, 0xB9));
-    cyc(72);
 }
 
 /*
@@ -375,9 +344,7 @@ void abi_GsuBytes200_BF10B9(void)
  */
 void abi_GsuBytes200_BFB7B6_D8C4(void)
 {
-    cyc(0);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | gsu_200(0xBF, 0xB7, 0xB6));
-    cyc(72);
 }
 
 /*
@@ -390,7 +357,6 @@ void abi_GsuBytes200_BFB7B6_D8C4(void)
 void abi_GsuBytes200_BFBAB9_D8E1(void)
 {
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | gsu_200(0xBF, 0xBA, 0xB9));
-    cyc(72);
 }
 
 /*
@@ -403,7 +369,6 @@ void abi_GsuBytes200_BFBAB9_D8E1(void)
 void abi_GsuBytes200_BFB3BE_D8FE(void)
 {
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | gsu_200(0xBF, 0xB3, 0xBE));
-    cyc(72);
 }
 
 /*
@@ -414,9 +379,7 @@ void abi_GsuBytes200_BFB3BE_D8FE(void)
  */
 void abi_GsuBytes200_BFBBBE(void)
 {
-    cyc(0);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | gsu_200(0xBF, 0xBB, 0xBE));
-    cyc(72);
 }
 
 /*
@@ -427,7 +390,6 @@ void abi_GsuBytes200_BFBBBE(void)
  */
 void GsuBytes200_0F0405(void)
 {
-    cyc(0);
     gsu_200(0x0F, 0x04, 0x05);
 }
 
@@ -444,7 +406,6 @@ void abi_GsuBytes200_0F0405(void)
  */
 void GsuBytes200_0F090A(void)
 {
-    cyc(0);
     gsu_200(0x0F, 0x09, 0x0A);
 }
 
@@ -462,7 +423,6 @@ void abi_GsuBytes200_0F090A(void)
 void GsuBytes200_0F050E(void)
 {
     gsu_200(0x0F, 0x05, 0x0E);
-    cyc(72);
 }
 
 void abi_GsuBytes200_0F050E(void)
@@ -479,7 +439,6 @@ void abi_GsuBytes200_0F050E(void)
 void GsuBytes200_0F080E(void)
 {
     gsu_200(0x0F, 0x08, 0x0E);
-    cyc(72);
 }
 
 void abi_GsuBytes200_0F080E(void)
@@ -502,18 +461,14 @@ uint16_t GsuTableEntryNext(uint8_t bank, uint16_t entry, uint8_t *p)
     uint32_t t;
     uint16_t a, last, base;
 
-    cyc(24);
     wr16((uint32_t)bank << 16 | 0x1F4C, entry);
-    cyc(62);
     t = (uint32_t)(rd16(0x701094) & 0x00FF) << 16;
-    cyc(164);
     base = rd16(0x701092);
-    cyc(38);
     a = rd16(t | 0x1F4C);
-    cyc((t >> 16) < 0x70 ? 46 : 30);   /* CMP abs,X to its read; a ROM table's word is not placed */
+    /* CMP abs,X to its read; a ROM table's word is not placed */
     last = rd16(t | base);
     *p = (uint8_t)((*p & ~P_C) | (a >= last ? P_C : 0));
-    cyc(a == last ? 162 : 144);         /* CMP, BNE (taken or not), LDA #0, INC, PLB, PLX, RTL */
+    /* CMP, BNE (taken or not), LDA #0, INC, PLB, PLX, RTL */
     if (a == last)
         a = 0x0000;
     return (uint16_t)(a + 1);
@@ -530,21 +485,18 @@ void abi_GsuTableEntryNext(void)
 /* The body; X, Y and the flags as the exit leaves them. */
 static uint16_t gsu_records_upload(uint16_t *x, uint16_t *y, uint8_t *p)
 {
-    cyc(164);
     uint16_t n = rd16(0x000CEE), s, d;
     unsigned i;
 
-    cyc(32);
     wr16(0x7001C8, n);
     if (!n)
-        { cyc(118); return 0; }
+        return 0;
     s = 0xF77F;
     d = 0x0AAA;
-    cyc(102);
     wr16(0x001F2B, n);
     do {
         for (i = 0; i < 30; i += 2)
-            { cyc(32); wr16(0x700000 | (uint16_t)(d + i), cyc_then(30, rd16(0x7E0000 + s + i))); }
+            wr16(0x700000 | (uint16_t)(d + i), (rd16(0x7E0000 + s + i)));
         d = (uint16_t)(d + 0x1E);
         *p = (uint8_t)(*p & ~(P_C | P_V));
         if ((unsigned)s + 0x1E > 0xFFFF)
@@ -552,12 +504,9 @@ static uint16_t gsu_records_upload(uint16_t *x, uint16_t *y, uint8_t *p)
         if (~s & (uint16_t)(s + 0x1E) & 0x8000)
             *p |= P_V;
         s = (uint16_t)(s + 0x1E);
-        cyc(164);
         n = (uint16_t)(rd16(0x001F2B) - 1);
-        cyc(46);
         wr16(0x001F2B, n);
-    } while (cyc_loop(22, n));
-    cyc(88);
+    } while ((n));
     *x = s;
     *y = d;
     return 0;
@@ -597,7 +546,6 @@ void abi_GsuRecordsUpload(void)
  */
 void abi_GsuBytes200_BFBABD(void)
 {
-    cyc(84);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | gsu_200(0xBF, 0xBA, 0xBD));
 }
 

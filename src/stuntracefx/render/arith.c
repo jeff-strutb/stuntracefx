@@ -11,10 +11,12 @@
  * remainder shifted left one, with the bit shifted out of it dropped each
  * pass, so the remainder is exact only while it fits in 15 bits.
  */
+#include <stdlib.h>
 #include "gsu.h"
+#include "widescreen.h"
 #include "gsu_ops.h"
 
-uint16_t FxDivideHalving(uint16_t hi, uint16_t lo, uint16_t *divisor, uint16_t *remainder, int copy);
+uint16_t FxDivideHalving(uint16_t hi, uint16_t lo, uint16_t *divisor, uint16_t *remainder);
 
 /* The 16 passes, from the dividend as it stands after the first shift,
    with the flags their instructions leave: OV from the last pass's SUB,
@@ -22,18 +24,11 @@ uint16_t FxDivideHalving(uint16_t hi, uint16_t lo, uint16_t *divisor, uint16_t *
    high word. Each way through a pass ends in its own LOOP, with the ROL
    of the high word in its delay slot, as in the original. Returns the
    quotient; *rem_out = the high word after the last pass. */
-/* gsuwalk: the code of each copy of divide_passes, read from the ROM */
-static const GsuCode divide_passes_fetch[3][10] = {
-    {{0x01819c, 8}, {0x0181a4, 7}, {0x0181a3, 1}, {0x0181a4, 10}, {0x0181b3, 1}, {0x0181a4, 3}, {0x0181ae, 5}, {0x0181a3, 1}, {0x0181a4, 3}, {0x0181ae, 6}},
-    {{0x0181cc, 7}, {0x0181d3, 7}, {0x0181d2, 1}, {0x0181d3, 9}, {0, 0}, {0x0181d3, 3}, {0x0181dc, 5}, {0x0181d2, 1}, {0x0181d3, 3}, {0x0181dc, 7}},
-    {{0x0196d0, 7}, {0x0196d7, 7}, {0x0196d6, 1}, {0x0196d7, 9}, {0, 0}, {0x0196d7, 3}, {0x0196e0, 5}, {0x0196d6, 1}, {0x0196d7, 3}, {0x0196e0, 7}},
-};
 
-static uint16_t divide_passes(uint16_t rem, uint16_t quot, uint16_t divisor, uint16_t *rem_out, int copy)
+static uint16_t divide_passes(uint16_t rem, uint16_t quot, uint16_t divisor, uint16_t *rem_out)
 {
     int n = 0;
 
-    gsu_codes(divide_passes_fetch[copy], 1);
     for (;;) {
         uint16_t out = quot >> 15;
         uint16_t diff = gsu_sub(rem, divisor, 0);
@@ -46,14 +41,14 @@ static uint16_t divide_passes(uint16_t rem, uint16_t quot, uint16_t divisor, uin
             gsu.cy = (uint8_t)(rem >> 15);              /* ROL */
             rem = (uint16_t)(rem << 1 | out);
             if (!again)
-                { gsu_codes(divide_passes_fetch[copy] + 3, 2); break; } else { gsu_codes(divide_passes_fetch[copy] + 1, 2); }
+                break;
         } else {
             quot = gsu_add(quot, quot, 0);              /* ADD R6; WITH R4; ADD R4 */
             again = ++n < 16;                           /* LOOP */
             gsu.cy = (uint8_t)(rem >> 15);              /* ROL */
             rem = (uint16_t)(rem << 1 | out);
             if (!again)
-                { gsu_codes(divide_passes_fetch[copy] + 8, 2); break; } else { gsu_codes(divide_passes_fetch[copy] + 5, 3); }
+                break;
         }
     }
     *rem_out = rem;
@@ -75,23 +70,21 @@ static uint16_t divide_passes(uint16_t rem, uint16_t quot, uint16_t divisor, uin
  * the sign word; R12 = 0; R13 = $81A3 (the loop); OV, S, Z from MOVES R7
  * (S and Z from the quotient when it was negated); CY from the loop.
  */
-uint16_t FxDivideSigned(uint16_t hi, uint16_t lo, uint16_t divisor, uint16_t *remainder, int copy)
+uint16_t FxDivideSigned(uint16_t hi, uint16_t lo, uint16_t divisor, uint16_t *remainder)
 {
     uint16_t sign = hi ^ divisor;
     uint16_t quot;
 
     if (divisor & 0x8000)
-        { divisor = (uint16_t)-divisor; gsu_code(0x018187, 12); } else { gsu_code(0x018187, 10); gsu_code(0x018192, 1); }
+        divisor = (uint16_t)-divisor;
     if (hi & 0x8000) {
         uint32_t v = (uint32_t)-((uint32_t)hi << 16 | lo);
         hi = (uint16_t)(v >> 16);
         lo = (uint16_t)v;
-        gsu_code(0x018193, 9);
-    } else { gsu_code(0x018193, 4); gsu_code(0x01819b, 1); }
-    quot = divide_passes((uint16_t)(hi << 1 | lo >> 15), (uint16_t)(lo << 1), divisor, remainder, GSU_COPY(0));
+    }
+    quot = divide_passes((uint16_t)(hi << 1 | lo >> 15), (uint16_t)(lo << 1), divisor, remainder);
     if (sign & 0x8000)
-        { quot = (uint16_t)-quot; gsu_code(0x0181b4, 7); } else { gsu_code(0x0181b4, 4); gsu_code(0x0181ba, 1); }
-    gsu_code(0x0181bb, 1);
+        quot = (uint16_t)-quot;
     return quot;
 }
 
@@ -99,7 +92,7 @@ void abi_FxDivideSigned(void)
 {
     uint16_t hi = gsu.r[5], lo = gsu.r[4], d = gsu.r[6];
     uint16_t sign = hi ^ d;
-    uint16_t rem, quot = FxDivideSigned(hi, lo, d, &rem, GSU_COPY(0));
+    uint16_t rem, quot = FxDivideSigned(hi, lo, d, &rem);
 
     if (d & 0x8000)
         d = (uint16_t)-d;
@@ -118,7 +111,6 @@ void abi_FxDivideSigned(void)
     gsu.r[7] = sign;
     gsu.r[12] = 0;
     gsu.r[13] = 0x81A3;
-    gsu_code(0x010000 | gsu.r[11], 1);
 }
 
 /*
@@ -132,9 +124,9 @@ void abi_FxDivideSigned(void)
  * quotient, R0 = remainder; R12 = 0; R13 = $81D2 (the loop); S clear, Z
  * and CY from the LSR; OV from the last pass.
  */
-uint16_t FxDivide32By16(uint16_t hi, uint16_t lo, uint16_t divisor, uint16_t *remainder, int copy)
+uint16_t FxDivide32By16(uint16_t hi, uint16_t lo, uint16_t divisor, uint16_t *remainder)
 {
-    uint16_t rem, quot = divide_passes((uint16_t)(hi << 1 | lo >> 15), (uint16_t)(lo << 1), divisor, &rem, GSU_COPY(1));
+    uint16_t rem, quot = divide_passes((uint16_t)(hi << 1 | lo >> 15), (uint16_t)(lo << 1), divisor, &rem);
 
     *remainder = rem >> 1;
     return quot;
@@ -144,12 +136,9 @@ uint16_t FxDivide32By16(uint16_t hi, uint16_t lo, uint16_t divisor, uint16_t *re
    registers and flags as the original: R4 = the quotient, R0 = the
    remainder; R12 = 0, R13 = the loop's address; OV from the last pass;
    CY, S and Z from the LSR. */
-/* gsuwalk: the copy of divide_passes each copy of divide_exit calls */
-static const uint8_t divide_passes_in_divide_exit[2] = {1, 2};
-
-static uint16_t divide_exit(uint16_t hi, uint16_t lo, uint16_t d, uint16_t loop, int copy)
+static uint16_t divide_exit(uint16_t hi, uint16_t lo, uint16_t d, uint16_t loop)
 {
-    uint16_t rem, quot = divide_passes((uint16_t)(hi << 1 | lo >> 15), (uint16_t)(lo << 1), d, &rem, GSU_COPY(divide_passes_in_divide_exit[copy]));
+    uint16_t rem, quot = divide_passes((uint16_t)(hi << 1 | lo >> 15), (uint16_t)(lo << 1), d, &rem);
 
     gsu.cy = rem & 1;
     rem >>= 1;
@@ -163,37 +152,27 @@ static uint16_t divide_exit(uint16_t hi, uint16_t lo, uint16_t d, uint16_t loop,
 
 void abi_FxDivide32By16(void)
 {
-    divide_exit(gsu.r[0], gsu.r[4], gsu.r[6], 0x81D2, GSU_COPY(0));
+    divide_exit(gsu.r[0], gsu.r[4], gsu.r[6], 0x81D2);
 }
 
 /* A halving divide (FxDivide32By16Halving, and FxDivideHalving's copy of
    it with the loop at another address), leaving the registers and flags
    as the original: as divide_exit, with R6 = the divisor as used. */
-/* gsuwalk: the code of each copy of halving_divide, read from the ROM */
-static const GsuCode halving_divide_fetch[2][7] = {
-    {{0x0181bd, 4}, {0x0181c6, 1}, {0x0181c6, 1}, {0x0181bd, 9}, {0x0181bd, 9}, {0x0181cb, 1}, {0x0181c7, 5}},
-    {{0x0196c1, 4}, {0x0196ca, 1}, {0x0196ca, 1}, {0x0196c1, 9}, {0x0196c1, 9}, {0x0196cf, 1}, {0x0196cb, 5}},
-};
 
-/* gsuwalk: the copy of divide_exit each copy of halving_divide calls */
-static const uint8_t divide_exit_in_halving_divide[2] = {0, 1};
-
-static uint16_t halving_divide(uint16_t hi, uint16_t lo, uint16_t d, uint16_t loop, int copy)
+static uint16_t halving_divide(uint16_t hi, uint16_t lo, uint16_t d, uint16_t loop)
 {
     gsu_moves(hi);
     if (!gsu.s) {
         gsu_moves(d);
         if (!gsu.s)
-            { gsu_codes(halving_divide_fetch[copy] + 4, 2); goto divide; } else { gsu_codes(halving_divide_fetch[copy] + 3, 1); }                     /* BPL to the divide */
-        gsu_codes(halving_divide_fetch[copy] + 2, 1);
-    } else { gsu_codes(halving_divide_fetch[copy], 2); }
+            goto divide;   /* BPL to the divide */
+    }
     d = gsu_lsr(d);                          /* the halving: LSR R6, LSR R0, ROR R4 */
     hi = gsu_lsr(hi);
     lo = gsu_ror(lo);
-gsu_codes(halving_divide_fetch[copy] + 6, 1);
 divide:
     gsu.r[6] = d;
-    return divide_exit(hi, lo, d, loop, GSU_COPY(divide_exit_in_halving_divide[copy]));
+    return divide_exit(hi, lo, d, loop);
 }
 
 /*
@@ -208,7 +187,7 @@ divide:
  * Entry: R0:R4 = dividend, R6 = divisor; R11 = return address. Exit: as
  * FxDivide32By16; R6 = the divisor as used.
  */
-uint16_t FxDivide32By16Halving(uint16_t hi, uint16_t lo, uint16_t *divisor, uint16_t *remainder, int copy)
+uint16_t FxDivide32By16Halving(uint16_t hi, uint16_t lo, uint16_t *divisor, uint16_t *remainder)
 {
     gsu_moves(hi);
     if (!gsu.s) {
@@ -220,13 +199,12 @@ uint16_t FxDivide32By16Halving(uint16_t hi, uint16_t lo, uint16_t *divisor, uint
     hi = gsu_lsr(hi);
     lo = gsu_ror(lo);
 divide:
-    return FxDivide32By16(hi, lo, *divisor, remainder, GSU_COPY(0));
+    return FxDivide32By16(hi, lo, *divisor, remainder);
 }
 
 void abi_FxDivide32By16Halving(void)
 {
-    halving_divide(gsu.r[0], gsu.r[4], gsu.r[6], 0x81D2, GSU_COPY(0));
-    gsu_code(0x010000 | gsu.r[11], 1);
+    halving_divide(gsu.r[0], gsu.r[4], gsu.r[6], 0x81D2);
 }
 
 /*
@@ -239,15 +217,14 @@ void abi_FxDivide32By16Halving(void)
  * quotient, R0 = remainder; R6 = the divisor as used; R12 = 0; R13 =
  * $96D6 (the loop); S clear, Z and CY from the LSR; OV from the last pass.
  */
-uint16_t FxDivideHalving(uint16_t hi, uint16_t lo, uint16_t *divisor, uint16_t *remainder, int copy)
+uint16_t FxDivideHalving(uint16_t hi, uint16_t lo, uint16_t *divisor, uint16_t *remainder)
 {
-    return FxDivide32By16Halving(hi, lo, divisor, remainder, GSU_COPY(0));
+    return FxDivide32By16Halving(hi, lo, divisor, remainder);
 }
 
 void abi_FxDivideHalving(void)
 {
-    halving_divide(gsu.r[0], gsu.r[4], gsu.r[6], 0x96D6, GSU_COPY(1));
-    gsu_code(0x010000 | gsu.r[11], 1);
+    halving_divide(gsu.r[0], gsu.r[4], gsu.r[6], 0x96D6);
 }
 
 /*
@@ -268,45 +245,96 @@ void abi_FxDivideHalving(void)
  * last FxDivideHalving leaves them; S and Z from R10; the last RAM address
  * R10.
  */
-void FxRatioClamp(uint16_t *x, uint16_t *y, uint16_t d, uint16_t *ret, int copy)
+/* FxDivideHalving's quotient, from a 32-bit dividend: both halved first
+   when either has its top bit set. */
+static uint16_t halved_quotient(uint32_t v, uint16_t d)
 {
-    uint16_t a, b;
+    if (v & 0x80000000u || d & 0x8000) {
+        v >>= 1;
+        d >>= 1;
+    }
+    return (uint16_t)(v / d);
+}
 
-    gsu_code(0x019659, 2);
+/* FxRatioClamp's results at focal length f (Widescreen): a * 2f / d and
+   b * 2f / d (the halved pair), held as the original holds them; f = 128
+   is the original's arithmetic exactly (a << 8 is a * 256). */
+static void ratio_at_focal(uint16_t a, uint16_t b, uint16_t d, int f, uint16_t *x, uint16_t *y)
+{
+    uint32_t na = (uint32_t)a * 2u * (uint32_t)f, qa, qb;
+
+    if ((na >> 16) < d) {
+        qa = halved_quotient(na, d);
+        qb = halved_quotient((uint32_t)b * 2u * (uint32_t)f, d);
+        if (qa <= 0x3FFF) {
+            *x = (uint16_t)qa;
+            *y = (uint16_t)qb;
+            return;
+        }
+        *y = halved_quotient((qb << 14) - qb, (uint16_t)qa);
+    } else {
+        *y = halved_quotient(((uint32_t)b << 14) - b, a);
+    }
+    *x = 0x3FFF;
+}
+
+/* After the original's results: at another focal length they are replaced;
+   under PORT_FOCALCHECK the focal arithmetic at 128 is held against them. */
+static void ratio_focal(uint16_t a, uint16_t b, uint16_t d, uint16_t *x, uint16_t *y)
+{
+    uint16_t fx, fy;
+    int f = ws_focal();
+
+    if (f != 128) {
+        uint16_t ox = *x, oy = *y;
+
+        ratio_at_focal(a, b, d, f, x, y);
+        /* PORT_FOCALCHECK: unclamped, each result the original's times f /
+           128, to the one the two divisions' rounding allows */
+        if (ws_focal_check() && *x < 0x3FFF && ox < 0x3FFF)
+            ws_focal_checked(labs((long)*x * 128 - (long)ox * f) < 2 * 128 + f &&
+                             labs((long)*y * 128 - (long)oy * f) < 2 * 128 + f, a, b, d);
+        return;
+    }
+    if (ws_focal_check()) {
+        ratio_at_focal(a, b, d, 128, &fx, &fy);
+        ws_focal_checked(fx == *x && fy == *y, a, b, d);
+    }
+}
+
+void FxRatioClamp(uint16_t *x, uint16_t *y, uint16_t d, uint16_t *ret)
+{
+    uint16_t a, b, a0, b0;
+
     gsu_push(&gsu.r[10], gsu.r[11]);            /* the return address */
-    a = (uint16_t)((int16_t)*x >> 1);
-    b = (uint16_t)((int16_t)*y >> 1);
+    a = a0 = (uint16_t)((int16_t)*x >> 1);
+    b = b0 = (uint16_t)((int16_t)*y >> 1);
 
     /* each division leaves R0, R4, R6, R12, R13 and the flags; R11 is
        the return address of the last call (LINK) */
     if ((a >> 8) < d) {
         *ret = 0x9672;
-        gsu_code(0x01965b, 23); gsu_code(0x0196c0, 1);
-        a = halving_divide(a >> 8, (uint16_t)(a << 8), d, 0x96D6, GSU_COPY(1));
+        a = halving_divide(a >> 8, (uint16_t)(a << 8), d, 0x96D6);
         if (a <= 0x3FFF) {
             *ret = 0x9688;
-            gsu_code(0x019672, 22); gsu_code(0x0196c0, 1);
-            b = halving_divide(b >> 8, (uint16_t)(b << 8), d, 0x96D6, GSU_COPY(1));
+            b = halving_divide(b >> 8, (uint16_t)(b << 8), d, 0x96D6);
             *x = a;
             *y = b;
-            gsu_code(0x019688, 7);
+            ratio_focal(a0, b0, d, x, y);
             gsu_pull(&gsu.r[10]);               /* the return address, into R15 */
             return;
-        } else { gsu_code(0x019672, 7); gsu_code(0x01968f, 1); }
+        }
         *ret = 0x969E;
-        gsu_code(0x019690, 14); gsu_code(0x0196c0, 1);
-        b = halving_divide(b >> 8, (uint16_t)(b << 8), d, 0x96D6, GSU_COPY(1));
-        gsu_code(0x01969e, 3);
-    } else { gsu_code(0x01965b, 16); gsu_code(0x0196a0, 1); }
+        b = halving_divide(b >> 8, (uint16_t)(b << 8), d, 0x96D6);
+    }
     {
         uint32_t v = ((uint32_t)b << 14) - b;
 
         *ret = 0x96B6;
-        gsu_code(0x0196a1, 21); gsu_code(0x0196c0, 1);
-        *y = halving_divide((uint16_t)(v >> 16), (uint16_t)v, a, 0x96D6, GSU_COPY(1));
+        *y = halving_divide((uint16_t)(v >> 16), (uint16_t)v, a, 0x96D6);
         *x = 0x3FFF;
     }
-    gsu_code(0x0196b6, 10);
+    ratio_focal(a0, b0, d, x, y);
     gsu_pull(&gsu.r[10]);                       /* the return address, into R15 */
 }
 
@@ -314,7 +342,7 @@ void abi_FxRatioClamp(void)
 {
     uint16_t ret;
 
-    FxRatioClamp(&gsu.r[1], &gsu.r[2], gsu.r[3], &ret, GSU_COPY(0));
+    FxRatioClamp(&gsu.r[1], &gsu.r[2], gsu.r[3], &ret);
     gsu.r[11] = ret;
 }
 
@@ -333,14 +361,13 @@ void abi_FxRatioClamp(void)
  * clear; CY and OV from the last pass's SUB R8, or from its SBC R7 when the
  * root gained a bit.
  */
-uint16_t FxSqrt32(uint16_t hi, uint16_t lo, uint16_t *remainder, int copy)
+uint16_t FxSqrt32(uint16_t hi, uint16_t lo, uint16_t *remainder)
 {
     uint32_t v = (uint32_t)hi << 16 | lo;
     uint16_t root = 0, rem = 0;
     int n;
 
     /* the passes, LOOP at the bottom of each */
-    gsu_code(0x018097, 11);
     for (n = 0;;) {
         uint16_t twice;
 
@@ -351,14 +378,11 @@ uint16_t FxSqrt32(uint16_t hi, uint16_t lo, uint16_t *remainder, int copy)
         if (twice < rem) {
             rem = (uint16_t)(rem - twice - 1);
             root++;
-            gsu_code(0x0180a2, 23);
-        } else { gsu_code(0x0180a2, 19); gsu_code(0x0180b8, 1); }
+        }
         if (++n == 16)
-            { gsu_code(0x0180b9, 1); break; } else { gsu_code(0x0180b9, 1); gsu_code(0x0180a0, 1); }
-        gsu_code(0x0180a1, 1);
+            break;
     }
     *remainder = rem;
-    gsu_code(0x0180ba, 2);
     return root;
 }
 
@@ -388,7 +412,7 @@ static void sqrt32_leave(uint16_t root, uint16_t rem)
 
 void abi_FxSqrt32(void)
 {
-    uint16_t rem, root = FxSqrt32(gsu.r[4], gsu.r[5], &rem, GSU_COPY(0));
+    uint16_t rem, root = FxSqrt32(gsu.r[4], gsu.r[5], &rem);
 
     sqrt32_leave(root, rem);
 }
@@ -412,18 +436,12 @@ void abi_FxSqrt32(void)
  */
 uint32_t FxLengthProgram(uint16_t *root, uint16_t *rem)
 {
-    gsu_code(0x0180bd, 7);
     int16_t x = (int16_t)gsu_ldw(FX_LENGTH_IN);
-    gsu_code(0x0180c4, 5);
     uint32_t xx = gsu_lmult((uint16_t)x, (uint16_t)x);      /* LMULT: R8:R4 */
-    gsu_code(0x0180c9, 6);
     int16_t z = (int16_t)gsu_ldw(FX_LENGTH_IN2);
-    gsu_code(0x0180cf, 4);
     uint32_t sum = xx + gsu_lmult((uint16_t)z, (uint16_t)z);  /* LMULT, ADD, ADC */
 
-    gsu_code(0x0180d3, 12); gsu_code(0x018096, 1);
-    *root = FxSqrt32((uint16_t)(sum >> 16), (uint16_t)sum, rem, GSU_COPY(0));
-    gsu_code(0x0180df, 5);
+    *root = FxSqrt32((uint16_t)(sum >> 16), (uint16_t)sum, rem);
     gsu_stw(FX_LENGTH_OUT, *root);
     return sum;
 }

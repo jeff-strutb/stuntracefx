@@ -2,7 +2,9 @@
  * raster.c: waiting on the PPU's beam inside the raster interrupt.
  */
 #include "machine.h"
+#include "waits.h"
 #include "hw.h"
+#include "draw_list.h"
 #include "cpu_ops.h"
 
 /*
@@ -17,11 +19,8 @@ uint8_t WaitHBlank(void)
 {
     uint8_t v;
 
-    cyc(0);
-    do
-        { cyc(24); v = rd8(HVBJOY); }
-    while (cyc_loop(38, !(v & 0x40)));
-    cyc(74);
+    wait_mem(HVBJOY, 0, 0x40, 0, 0);     /* H-blank */
+    v = rd8(HVBJOY);
     return v;
 }
 
@@ -31,6 +30,19 @@ void abi_WaitHBlank(void)
 
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
     cpu.p = (uint8_t)(nz8(cpu.p, v) & ~P_Z);
+}
+
+/* WaitScanline's poll: latch the counters, read OPVCT low then high, and
+   compare the low byte with the line at $06E3 */
+static int scanline_ready(void *ctx)
+{
+    uint32_t b = *(const uint32_t *)ctx;
+    uint8_t lo;
+
+    rd8(SLHV);
+    lo = rd8(OPVCT);
+    rd8(OPVCT);
+    return lo == rd8(b | 0x06E3);
 }
 
 /*
@@ -44,19 +56,10 @@ void abi_WaitHBlank(void)
 void WaitScanline(uint8_t bank)
 {
     uint32_t b = (uint32_t)bank << 16;
-    uint8_t lo;
 
-    cyc(150);
     wr8(b | 0x06E4, 0x00);
-    do {
-        cyc(46);
-        rd8(SLHV);
-        cyc(24);
-        lo = rd8(OPVCT);
-        cyc(44);
-        rd8(OPVCT);
-    } while (cyc_loop(22, lo != rd8(cyc_then(44, b | 0x06E3))));
-    cyc(182);
+    rm_wait_point();
+    nshvc_wait_until(scanline_ready, &b);
 }
 
 void abi_WaitScanline(void)
@@ -78,87 +81,63 @@ void abi_WaitScanline(void)
  */
 static void put7f(uint32_t addr, uint8_t v)
 {
-    cyc(12);
     wr8(addr, v);
-    cyc(20);
 }
 
 void abi_WindowTable7F(void)
 {
-    cyc(54);
     uint8_t a, b2;
 
     op_sep(P_M);
     a = rd8(0x7F3438);
-    cyc(46);
     b2 = rd8(0x7F3434);
     cpu.p |= P_C;
     a = op_sbc8(a, b2, &cpu.p);
-    cyc(4);
     put7f(0x7F3402, a);
     cpu.p = (uint8_t)((cpu.p & ~P_C) | (a & 1));
     a = (uint8_t)(a >> 1);
     cpu.p &= (uint8_t)~P_C;
-    cyc(40);
     a = op_adc8(a, rd8(0x7F3434), &cpu.p);
-    cyc(20);
     put7f(0x7F3406, a);
-    cyc(12);
     a = rd8(0x7F3435);
     a = (uint8_t)(a >> 1);
-    cyc(34);
     put7f(0x7F3410, a);
     a++;
-    cyc(14);
     put7f(0x7F3413, a);
-    cyc(12);
     a = rd8(0x7F3433);
-    cyc(20);
     put7f(0x7F3420, a);
     put7f(0x7F3423, a);
     a++;
-    cyc(14);
     put7f(0x7F341D, a);
     put7f(0x7F3426, a);
     a++;
-    cyc(14);
     put7f(0x7F341A, a);
     put7f(0x7F3429, a);
     a++;
-    cyc(14);
     put7f(0x7F3417, a);
     put7f(0x7F342C, a);
-    cyc(12);
     a = rd8(0x7F3437);
-    cyc(20);
     put7f(0x7F3421, a);
     put7f(0x7F3424, a);
     a--;
-    cyc(14);
     put7f(0x7F341E, a);
     put7f(0x7F3427, a);
     a--;
-    cyc(14);
     put7f(0x7F341B, a);
     put7f(0x7F342A, a);
     a--;
-    cyc(14);
     put7f(0x7F3418, a);
     put7f(0x7F342D, a);
-    cyc(12);
     a = rd8(0x7F3439);
     cpu.p |= P_C;
-    cyc(46);
     a = op_sbc8(a, rd8(0x7F3435), &cpu.p);
     a = op_sbc8(a, 0x06, &cpu.p);
     cpu.p = (uint8_t)((cpu.p & ~P_C) | (a & 1));
     a = (uint8_t)(a >> 1);
     cpu.p = nz8(cpu.p, a);
-    cyc(18);
     put7f(0x7F341F, a);
     put7f(0x7F3422, a);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | a);
-    cyc(22);
 }
 
 /*
@@ -169,9 +148,7 @@ void abi_WindowTable7F(void)
  */
 void abi_WindowTable7FLong(void)
 {
-    cyc(46);
     abi_WindowTable7F();
-    cyc(44);
 }
 
 void abi_JoypadRead(void);
@@ -216,36 +193,30 @@ static void put8(uint32_t addr, uint8_t v)
 {
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
     cpu.p = nz8(cpu.p, v);
-    cyc(40);
     wr8(addr, v);
 }
 
 /* LDA from / STA to with M 8-bit. */
 static void copy8(uint32_t to, uint32_t from)
 {
-    cyc(24);
     uint8_t v = rd8(from);
 
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
     cpu.p = nz8(cpu.p, v);
-    cyc(24);
     wr8(to, v);
 }
 
 /* LDA TIMEUP: acknowledges the raster interrupt. */
 static void irq_ack(void)
 {
-    cyc(24);
     op_lda8(TIMEUP);
 }
 
 /* INC of a work RAM byte with M 8-bit. */
 static void inc8(uint32_t addr)
 {
-    cyc(24);
-    uint8_t v = (uint8_t)(rd8(addr) + 1);
+    uint8_t v = (uint8_t)(rd8_rmw(addr) + 1);
 
-    cyc(6);
     wr8(addr, v);
     cpu.p = nz8(cpu.p, v);
 }
@@ -262,9 +233,8 @@ static void hblank_inline(void)
 {
     uint8_t v;
 
-    do
-        { cyc(24); v = rd8(HVBJOY); }
-    while (cyc_loop(38, !(v & 0x40)));
+    wait_mem(HVBJOY, 0, 0x40, 0, 0);     /* H-blank */
+    v = rd8(HVBJOY);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
     cpu.p = (uint8_t)(nz8(cpu.p, v) & ~P_Z);
 }
@@ -281,13 +251,12 @@ static void frame_counts(uint32_t b)
 static void split_bg2(uint8_t v, uint8_t ylo, uint8_t yhi_pos, uint8_t yneg, uint8_t xlo)
 {
     if (v & 0x80) {
-        cyc(6);
         put8(BG2VOFS, yneg);
         put8(BG2VOFS, 0x00);
     } else {
         put8(BG2VOFS, ylo);
         put8(BG2VOFS, yhi_pos);
-        cyc(22);                                       /* BRA */
+        /* BRA */
     }
     put8(BG2HOFS, xlo);
     put8(BG2HOFS, 0x01);
@@ -325,12 +294,9 @@ void abi_RasterStage(void)
     uint8_t v;
 
     op_sep(P_M | P_X);
-    cyc(24);
     ldx8(rd8(b | 0x0D3F));
-    cyc(30);
     switch (rd16(0x7E0000 | (uint16_t)(0xA30D + cpu.x))) {
     case 0xA330:
-        cyc(46);
         abi_WaitHBlank();
         copy8(INIDISP, b | 0x0D61);
         put8(VTIMEL, 0xC8);
@@ -339,21 +305,18 @@ void abi_RasterStage(void)
         frame_counts(b);
         break;
     case 0xA34D:
-        cyc(46);
         abi_WaitHBlank();
         put8(INIDISP, 0x80);
         put8(VTIMEL, 0x17);
         irq_ack();
-        cyc(24);
         wr8(b | 0x0D3F, 0x00);
         put8(b | 0x0D52, 0xFF);
         put8(HDMAEN, 0x02);
-        (cyc(46), abi_JoypadRead());
-        (cyc(132), abi_OamDmaAll());
-        (cyc(46), abi_SoundPortsSend());
+        (abi_JoypadRead());
+        (abi_OamDmaAll());
+        (abi_SoundPortsSend());
         break;
     case 0xA375:
-        cyc(68);
         abi_WaitHBlank();
         put8(TM, 0x13);
         copy8(BG2VOFS, b | 0x0E37);
@@ -362,11 +325,11 @@ void abi_RasterStage(void)
         irq_ack();
         put8(b | 0x0D3F, 0x12);
         frame_counts(b);
-        (cyc(46), abi_JoypadRead());
-        (cyc(46), abi_FadeStepFixed());
-        (cyc(46), abi_SoundPortsSend());
+        (abi_JoypadRead());
+        (abi_FadeStepFixed());
+        (abi_SoundPortsSend());
         break;
-    case 0xA3A8: cyc(68); {
+    case 0xA3A8: {
         uint8_t c;
 
         abi_WaitHBlank();
@@ -378,70 +341,53 @@ void abi_RasterStage(void)
         copy8(CGADSUB, b | 0x0D47);
         put8(b | 0x0D3F, 0x10);
         put8(b | 0x0D52, 0xFF);
-        (cyc(62), abi_OamDmaAll());
+        (abi_OamDmaAll());
         copy8(BG2VOFS, b | 0x0E33);
         copy8(BG2VOFS, b | 0x0E34);
-        cyc(32);
         c = (uint8_t)(rd8(0x7F340D) | 0x80);
         put8(COLDATA, c);
         c = (uint8_t)((c & 0x7F) | 0x40);
-        cyc(16);
         put8(COLDATA, c);
         c = (uint8_t)((c & 0x1F) | 0x20);
-        cyc(16);
         put8(COLDATA, c);
         put8(TM, 0x03);
         op_rep(P_M);
         op_lda16_imm(0x1000);
-        cyc(10);
         wr16(DAS0L, 0x1000);
         op_lda16_imm(0x93D7);
-        cyc(10);
         wr16(A1T0L, 0x93D7);
         op_lda16_imm(0x5000);
-        cyc(10);
         wr16(VMADDL, 0x5000);
         op_lda16_imm(0x1801);
-        cyc(10);
         wr16(DMAP0, 0x1801);
         op_sep(P_M);
-        cyc(22);
         put8(A1B0, 0x7F);
         put8(VMAIN, 0x80);
-        cyc(24);
         c = (uint8_t)(rd8(b | 0x0374) & 0xF7);
         put8(GSU_SCMR, c);
         put8(MDMAEN, 0x01);
-        cyc(24);
         c = (uint8_t)(rd8(b | 0x0374) | 0x18);
         put8(GSU_SCMR, c);
         op_rep(P_M | P_X);
-        cyc(24);
         op_lda16(b | 0x0D7F);
         if (cpu.a) {
-            cyc(40);
             wr16(b | 0x0D7F, 0x0000);
             cpu.x = 0x2C00;
             cpu.y = 0x0400;
             op_lda16_imm(0x0800);
-            (cyc(80), abi_VramDmaFromGsuRam());
+            (abi_VramDmaFromGsuRam());
             op_rep(P_M);
             op_lda16_imm(0xFFFF);
-            cyc(18);
             wr16(0x000D81, 0xFFFF);
-        } else { cyc(22); }
-        cyc(46);
+        }
         abi_WindowTable7F();
         op_sep(P_M);
-        cyc(22);
         copy8(INIDISP, b | 0x0D61);
         break;
     }
     case 0xA4F5:
-        cyc(24);
         ldx8(rd8(b | 0x0D61));
         hblank_inline();
-        cyc(56);
         wr8(INIDISP, (uint8_t)cpu.x);
         put8(HTIMEL, 0x30);
         put8(VTIMEL, 0xC0);
@@ -449,43 +395,39 @@ void abi_RasterStage(void)
         put8(b | 0x0D3F, 0x14);
         frame_counts(b);
         put8(b | 0x0D52, 0xFF);
-        (cyc(46), abi_FadeStep());
-        (cyc(46), abi_JoypadAccumulate());
-        (cyc(46), abi_SoundPortsSend());
-        (cyc(46), abi_RaceClockStep());
+        (abi_FadeStep());
+        (abi_JoypadAccumulate());
+        (abi_SoundPortsSend());
+        (abi_RaceClockStep());
         op_rep(P_M);
         op_lda16_imm(0x01D8);
-        cyc(10);
         wr16(b | 0x0E60, 0x01D8);
         abi_HudDrawTime();
-        (cyc(46), abi_HudPanelsStep());
-        (cyc(46), abi_PalettesStep());
+        (abi_HudPanelsStep());
+        (abi_PalettesStep());
         break;
     case 0xA53D:
         put8(VTIMEL, 0xD0);
         irq_ack();
         put8(b | 0x0D3F, 0x06);
-        (cyc(62), abi_WindowHdmaNormal());
-        (cyc(62), abi_WindowLayoutStepForScreen());
-        (cyc(62), abi_WindowSlideOrOscillate());
-        (cyc(62), abi_WindowSweepIfOn());
-        (cyc(62), abi_WindowSlideCheck());
-        (cyc(62), abi_BobWindowsRun());
-        (cyc(62), abi_WindowBandsAnimate());
-        (cyc(62), abi_WindowSplitAnimate());
+        (abi_WindowHdmaNormal());
+        (abi_WindowLayoutStepForScreen());
+        (abi_WindowSlideOrOscillate());
+        (abi_WindowSweepIfOn());
+        (abi_WindowSlideCheck());
+        (abi_BobWindowsRun());
+        (abi_WindowBandsAnimate());
+        (abi_WindowSplitAnimate());
         break;
     case 0xA56B:
-        cyc(16);
         ldx8(0x80);
         hblank_inline();
-        cyc(56);
         wr8(INIDISP, (uint8_t)cpu.x);
-        (cyc(46), abi_NmiFrameUpload());
-        (cyc(46), abi_OamDirectStage());
-        (cyc(46), abi_RasterColoursUnless0D22());
+        (abi_NmiFrameUpload());
+        (abi_OamDirectStage());
+        (abi_RasterColoursUnless0D22());
         op_sep(P_M);
         b = (uint32_t)cpu.db << 16;
-        cyc(22);
         put8(HTIMEL, 0xE0);
         put8(VTIMEL, 0x10);
         irq_ack();
@@ -493,121 +435,101 @@ void abi_RasterStage(void)
         copy8(HDMAEN, b | 0x0D45);
         put8(b | 0x0D3F, 0x04);
         window_colours(b, 0x19AC);
-        (cyc(62), abi_WindowsSetupSelect());
+        (abi_WindowsSetupSelect());
         break;
     case 0xA5B6:
-        cyc(24);
-        ldx8(cyc_then(46, rd8(b | 0x0D61)));
+        ldx8((rd8(b | 0x0D61)));
         abi_WaitHBlank();
-        cyc(24);
         wr8(INIDISP, (uint8_t)cpu.x);
         put8(VTIMEL, 0x6F);
         put8(HTIMEH, 0x00);
-        cyc(24);
         wr8(VTIMEH, 0x00);
         put8(HTIMEL, 0x10);
         irq_ack();
         put8(b | 0x0D3F, 0x0A);
         frame_counts(b);
         put8(b | 0x0D52, 0xFF);
-        (cyc(46), abi_FadeStep());
-        (cyc(46), abi_RaceClockStep());
+        (abi_FadeStep());
+        (abi_RaceClockStep());
         op_sep(P_M);
-        cyc(22);
         put8(TM, 0x13);
         op_rep(P_M);
         op_lda16_imm(0x0100);
-        cyc(10);
         wr16(b | 0x0E60, 0x0100);
         abi_HudDrawTime();
-        (cyc(46), abi_HudPanelASlide());
-        (cyc(46), abi_HudPanelBSlide());
-        (cyc(46), abi_SoundPortsSend());
+        (abi_HudPanelASlide());
+        (abi_HudPanelBSlide());
+        (abi_SoundPortsSend());
         op_sep(P_M | P_X);
         cpu.y = 0x01;
         ldx8(0x02);
         abi_PaletteKeptColoursStep();
         break;
     case 0xA60F:
-        cyc(62);
         ldx8(0x80);
         abi_WaitHBlank();
-        cyc(38);
         wr8(INIDISP, (uint8_t)cpu.x);
         put8(VTIMEL, 0x77);
         irq_ack();
         put8(b | 0x0D3F, 0x0C);
         window_colours(b, 0x19AF);
-        cyc(24);
         op_lda8(b | 0x0D5D);
         v = (uint8_t)cpu.a;
         if (v) {
-            cyc(32);
             split_bg2(v, 0x80, 0x01, 0x00, 0xA0);
             break;
         }
-        cyc(46);
         op_lda8(b | 0x0D5C);
         if ((uint8_t)cpu.a)
-            { cyc(16); put8(BG12NBA, 0x40); } else { cyc(22); }
+            put8(BG12NBA, 0x40);
         put8(BG2SC, 0x3F);
-        cyc(62);
         ldx8(0x02);
         abi_Bg2ScrollFromTable();
-        (cyc(46), abi_RasterColours());
+        (abi_RasterColours());
         break;
     case 0xA681:
-        cyc(24);
-        ldx8(cyc_then(46, rd8(b | 0x0D61)));
+        ldx8((rd8(b | 0x0D61)));
         abi_WaitHBlank();
-        cyc(24);
         wr8(INIDISP, (uint8_t)cpu.x);
         put8(VTIMEL, 0xD7);
         irq_ack();
         put8(b | 0x0D3F, 0x0E);
         op_rep(P_M);
         op_lda16_imm(0x0000);
-        cyc(10);
         wr16(b | 0x0E60, 0x0000);
         abi_HudDrawTime();
         op_sep(P_M | P_X);
         cpu.y = 0x00;
         ldx8(0x00);
         abi_PaletteKeptColoursStep();
-        (cyc(62), abi_WindowSplitAnimate());
+        (abi_WindowSplitAnimate());
         break;
     case 0xA6B0:
-        cyc(62);
         ldx8(0x80);
         abi_WaitHBlank();
-        cyc(24);
         wr8(INIDISP, (uint8_t)cpu.x);
-        (cyc(46), abi_NmiFrameUpload());
-        (cyc(62), abi_OamDmaAll());
-        (cyc(62), abi_WindowLayoutStepForScreen());
-        (cyc(46), abi_RasterPaletteUpload());
-        (cyc(46), abi_JoypadAccumulate());
-        (cyc(62), abi_WindowHdmaBands());
-        (cyc(62), abi_WindowLayoutStepForScreen());
-        (cyc(62), abi_BobWindowsRun());
-        (cyc(62), abi_WindowBandsAnimate());
+        (abi_NmiFrameUpload());
+        (abi_OamDmaAll());
+        (abi_WindowLayoutStepForScreen());
+        (abi_RasterPaletteUpload());
+        (abi_JoypadAccumulate());
+        (abi_WindowHdmaBands());
+        (abi_WindowLayoutStepForScreen());
+        (abi_BobWindowsRun());
+        (abi_WindowBandsAnimate());
         op_sep(P_M | P_X);
         b = (uint32_t)cpu.db << 16;
-        cyc(24);
         op_lda8(b | 0x0D5C);
         v = (uint8_t)cpu.a;
         if (v) {
-            cyc(32);
             split_bg2(v, 0xE8, 0x01, 0x68, 0xF0);
-            cyc(22);                                   /* BRA */
+            /* BRA */
         } else {
-            cyc(46);
             op_lda8(b | 0x0D5D);
             if ((uint8_t)cpu.a)
-                put8(BG12NBA, 0x40); else { cyc(84); }
+                put8(BG12NBA, 0x40);
             ldx8(0x00);
             abi_Bg2ScrollFromTable();
-            cyc(0);
             put8(BG1SC, 0x1C);
             put8(BG2SC, 0x3F);
         }
@@ -615,37 +537,33 @@ void abi_RasterStage(void)
         put8(TM, 0x03);
         put8(HDMAEN, 0x1C);
         window_colours(b, 0x19AC);
-        (cyc(62), abi_WindowsSetupSelect());
+        (abi_WindowsSetupSelect());
         put8(VTIMEL, 0x0F);
         irq_ack();
         put8(b | 0x0D3F, 0x08);
-        (cyc(46), abi_GradientPointersToBank7F());
+        (abi_GradientPointersToBank7F());
         break;
     case 0xA75D:
         put8(VTIMEL, 0x10);
         break;
     case 0xA763:
-        cyc(46);
         abi_WaitHBlank();
         put8(INIDISP, 0x80);
-        (cyc(62), abi_VblankUpdates());
-        (cyc(46), abi_FrameSoundAndJoypads());
-        (cyc(62), abi_FrameCountAndPortsEnd());
+        (abi_VblankUpdates());
+        (abi_FrameSoundAndJoypads());
+        (abi_FrameCountAndPortsEnd());
         op_sep(P_M);
-        cyc(22);
         put8(VTIMEL, 0xE0);
         irq_ack();
         break;
     case 0xA781:
-        cyc(46);
         abi_WaitHBlank();
         put8(INIDISP, 0x80);
-        (cyc(62), abi_AnimTilesQueueNext());
-        (cyc(62), abi_VblankUpdates());
-        (cyc(46), abi_FrameSoundAndJoypads());
-        (cyc(62), abi_FrameInputAndCountEnd());
+        (abi_AnimTilesQueueNext());
+        (abi_VblankUpdates());
+        (abi_FrameSoundAndJoypads());
+        (abi_FrameInputAndCountEnd());
         op_sep(P_M);
-        cyc(22);
         put8(VTIMEL, 0xE0);
         irq_ack();
         break;
@@ -653,7 +571,6 @@ void abi_RasterStage(void)
         /* $A32F and $A75C: an RTL alone. */
         break;
     }
-    cyc(44);
 }
 
 /*
@@ -675,16 +592,13 @@ void abi_RasterIrq(void)
 
     op_rep(P_M | P_X);
     a0 = cpu.a;
-    cyc(62);
     op_lda16(0x004210);
     if (!(cpu.a & 0x8000)) {
-        cyc(48);
         op_lda16(0x003030);
         cpu.a = a0;
         cpu.p = nz16(cpu.p, a0);
-        cyc(80);
         return;
-    } else { cyc(246); }
+    }
     cpu.p |= P_I;
     x0 = cpu.x;
     y0 = cpu.y;
@@ -703,7 +617,6 @@ void abi_RasterIrq(void)
     cpu.p = nz8(cpu.p, db0);
     cpu.a = a0;
     cpu.p = nz16(cpu.p, a0);
-    cyc(180);
 }
 
 /* The time stamp both marks take: the frame counter $0306 as the high
@@ -718,24 +631,18 @@ static uint16_t time_stamp(void)
     uint8_t lo, hi;
 
     cpu.p |= P_I;
-    cyc(68);
     f = rd16(0x000306);
     f = (uint16_t)(((f >> 8) | (f << 8)) & 0xFF00);
-    cyc(76);
     wr16(0x001A37, f);
-    cyc(54);
     rd8(0x002137);
     cpu.p &= (uint8_t)~P_I;
-    cyc(46);
     lo = rd8(0x00213D);
-    cyc(52);
     hi = rd8(0x00213D);
     v = (uint16_t)(((hi << 8) | lo) & 0x01FF);
     if (!((uint16_t)(v - 0x0100) & 0x8000))
         v = 0x00FF;
     if ((uint16_t)(v - 0x0011) & 0x8000)
         v = (uint16_t)(v + 0x0100);
-    cyc(236);
     m = rd16(0x001A37);
     cpu.p &= (uint8_t)~P_C;
     return op_adc16(v, m, &cpu.p);
@@ -756,9 +663,7 @@ void abi_TimeMarkStart(void)
 
     cpu.p &= (uint8_t)~P_M;
     t = time_stamp();
-    cyc(32);
     wr16(0x001A39 + cpu.x, t);
-    cyc(44);
     cpu.a = t;
 }
 
@@ -781,47 +686,34 @@ void abi_TimeMarkEnd(void)
 
     cpu.p &= (uint8_t)~P_M;
     t = time_stamp();
-    cyc(32);
     wr16(0x001A37, t);
-    cyc(32);
     a = rd16(0x001A39 + cpu.x);
     a = (uint16_t)(a & 0x00FF);
     cpu.p = nz16(cpu.p, a);
     if ((uint16_t)(a - 0x00D1) & 0x8000) {
-        cyc(96);
         a = rd16(0x001A39 + cpu.x);
         a = (uint16_t)(a & 0xFF00);
-        cyc(56);
         wr16(0x001A39, a);
-        cyc(32);
         a = rd16(0x001A37);
         a = (uint16_t)(a & 0xFF00);
-        cyc(62);
         m = rd16((uint32_t)cpu.db << 16 | 0x1A39);
         cpu.p |= P_C;
         a = op_sbc16(a, m, &cpu.p);
         a = (uint16_t)((a >> 8) | (a << 8));
         a = (uint16_t)(a << 6);
         a = (uint16_t)(~a + 1);
-        cyc(182);
         m = rd16(0x001A37);
         cpu.p &= (uint8_t)~P_C;
         a = op_adc16(a, m, &cpu.p);
-        cyc(32);
         wr16(0x001A37, a);
-    } else { cyc(70); }
-    cyc(32);
+    }
     a = rd16(0x001A37);
-    cyc(46);
     m = rd16(0x001A39 + cpu.x);
     cpu.p |= P_C;
     a = op_sbc16(a, m, &cpu.p);
-    cyc(40);
     m = rd16(0x001A37 + cpu.x);
     cpu.p &= (uint8_t)~P_C;
     a = op_adc16(a, m, &cpu.p);
-    cyc(32);
     wr16(0x001A37 + cpu.x, a);
-    cyc(44);
     cpu.a = a;
 }

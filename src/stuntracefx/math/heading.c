@@ -34,34 +34,26 @@
  */
 static uint8_t smul_at(uint32_t a_at, uint32_t b_at, uint8_t *p)
 {
-    cyc(16);
-    uint8_t a = rd8(a_at), b, h, neg = 0, a_neg;
+    uint8_t a = rd8(a_at), b, h, neg = 0;
 
     if (a & 0x80) {
-        cyc(36);
         a = (uint8_t)(~a + 1);
         neg ^= 1;
     }
-    a_neg = neg;
-    cyc(54);
     wr8(WRMPYA, (uint8_t)(a << 1));
-    cyc(16);
     b = rd8(b_at);
     if (b & 0x80) {
-        cyc(36);
         b = (uint8_t)(~b + 1);
         neg ^= 1;
     }
-    cyc(40);
     wr8(WRMPYB, b);
     /* four NOPs and LDA RDMPYH; or NOP, JMP, then LDA #0 / SEC / SBC (82
        when only b was negated, 92 when only a was) */
-    cyc(!neg ? 80 : a_neg ? 92 : 82);
     h = rd8(RDMPYH);
     if (neg) {
         *p |= P_C;
         h = op_sbc8(0x00, h, p);
-    } else { cyc(40); }
+    }
     return h;
 }
 
@@ -69,10 +61,9 @@ static uint8_t smul_at(uint32_t a_at, uint32_t b_at, uint8_t *p)
    STX), as the flat vectors store x and z. */
 static void store_extended(uint32_t at, uint8_t v)
 {
-    cyc(30);
     wr8(at, v);
-    cyc(54);
-    wr8(at + 1, (v & 0x80) ? (cyc(8), 0xFF) : 0x00);
+    /* CMP #0, BPL taken, STX $03 */
+    wr8(at + 1, (v & 0x80) ? (0xFF) : 0x00);   /* BPL not taken, DEX */
 }
 
 /* A product stored over a sign byte cleared earlier, DEC'd when negative,
@@ -81,20 +72,11 @@ static void store_dec(uint32_t at, uint8_t v)
 {
     uint8_t hi;
 
-    cyc(14);
     wr8(at, v);
     if (v & 0x80) {
-        cyc(48);
-        hi = rd8(at + 1);
-        cyc(6);
+        hi = rd8_rmw(at + 1);
         wr8(at + 1, (uint8_t)(hi - 1));
-    } else { cyc(38); }
-}
-
-/* The extra 6 clocks of an indexed read that crosses a page. */
-static uint32_t crossed(uint32_t table, uint8_t i)
-{
-    return ((table & 0xFF) + i) > 0xFF ? 6 : 0;
+    }
 }
 
 /* The flat vector from the sine and cosine at table index i: x = speed
@@ -103,9 +85,7 @@ static uint8_t flat(uint8_t i, uint8_t *p)
 {
     uint8_t v;
 
-    cyc(150 + crossed(SIN_TABLE, i));
     wr8(H_SIN_A, rd8(SIN_TABLE + i));
-    cyc(48 + crossed(COS_TABLE, i));
     wr8(H_COS_A, rd8(COS_TABLE + i));
     v = smul_at(H_SPEED, H_SIN_A, p);
     store_extended(H_X, v);
@@ -122,18 +102,14 @@ static uint8_t pitched(uint8_t ia, uint8_t ib, uint8_t *p)
 {
     uint8_t v;
 
-    cyc(84 + crossed(SIN_TABLE, ia));
     wr8(H_SIN_A, rd8(SIN_TABLE + ia));
-    cyc(48 + crossed(COS_TABLE, ia));
     wr8(H_COS_A, rd8(COS_TABLE + ia));
-    cyc(48 + crossed(SIN_TABLE, ib));
     wr8(H_SIN_B, rd8(SIN_TABLE + ib));
-    cyc(48 + crossed(COS_TABLE, ib));
     wr8(H_COS_B, rd8(COS_TABLE + ib));
-    wr8(H_X, cyc_then(14, smul_at(H_SPEED, H_SIN_A, p)));
+    wr8(H_X, (smul_at(H_SPEED, H_SIN_A, p)));
     v = smul_at(H_X, H_COS_B, p);
     store_dec(H_X, v);
-    wr8(H_Z, cyc_then(14, smul_at(H_SPEED, H_COS_A, p)));
+    wr8(H_Z, (smul_at(H_SPEED, H_COS_A, p)));
     v = smul_at(H_Z, H_COS_B, p);
     store_dec(H_Z, v);
     v = smul_at(H_SPEED, H_SIN_B, p);
@@ -146,20 +122,15 @@ static uint8_t pitched(uint8_t ia, uint8_t ib, uint8_t *p)
    C is set by the last sign test (CMP #0); A keeps its high byte. */
 static void save_xy(void)
 {
-    cyc(16);
     wr16(H_SAVE_X, cpu.x);
-    cyc(16);
     wr16(H_SAVE_Y, cpu.y);
 }
 
 static void finish(uint8_t v, uint8_t p)
 {
     cpu.p = (uint8_t)((p & ~P_X) | P_C);
-    cyc(38);
     cpu.x = rd16(H_SAVE_X);
-    cyc(16);
     cpu.y = rd16(H_SAVE_Y);
-    cyc(72);
     cpu.p = nz8(cpu.p, cpu.db);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
 }
@@ -178,14 +149,10 @@ void HeadingFlat(void)
     uint32_t b = (uint32_t)cpu.db << 16;
     uint8_t p = cpu.p, i, v;
 
-    cyc(30);
-    wr8(H_SPEED, cyc_then(16, rd8(b | (uint16_t)(0x2017 + cpu.x))));
-    (cyc(22), save_xy());
-    cyc(16);
+    wr8(H_SPEED, (rd8(b | (uint16_t)(0x2017 + cpu.x))));
+    (save_xy());
     wr8(H_Y, 0x00);
-    cyc(16);
     wr8(H_Y + 1, 0x00);
-    cyc(30);
     i = rd8(b | (uint16_t)(0x2015 + cpu.x));
     v = flat(i, &p);
     finish(v, p);
@@ -209,16 +176,11 @@ void HeadingFlatMirrored(void)
     uint32_t b = (uint32_t)cpu.db << 16;
     uint8_t p = cpu.p, i, v;
 
-    cyc(30);
-    wr8(H_SPEED, cyc_then(16, rd8(b | (uint16_t)(0x2017 + cpu.x))));
-    cyc(30);
+    wr8(H_SPEED, (rd8(b | (uint16_t)(0x2017 + cpu.x))));
     i = rd8(b | (uint16_t)(0x2015 + cpu.x));
     save_xy();
-    cyc(16);
     wr8(H_Y, 0x00);
-    cyc(16);
     wr8(H_Y + 1, 0x00);
-    cyc(80);
     v = flat((uint8_t)(~i + 2), &p);
     finish(v, p);
 }
@@ -243,20 +205,13 @@ void HeadingPitched(void)
     uint32_t b = (uint32_t)cpu.db << 16;
     uint8_t p = cpu.p, h, pitch, v;
 
-    cyc(30);
-    wr8(H_SPEED, cyc_then(16, rd8(b | (uint16_t)(0x2017 + cpu.x))));
-    cyc(16);
+    wr8(H_SPEED, (rd8(b | (uint16_t)(0x2017 + cpu.x))));
     wr8(H_X + 1, 0x00);
-    cyc(16);
     wr8(H_Y + 1, 0x00);
-    cyc(16);
     wr8(H_Z + 1, 0x00);
     save_xy();
-    cyc(30);
     h = rd8(b | (uint16_t)(0x2015 + cpu.x));
-    cyc(44);
     pitch = rd8(b | (uint16_t)(0x2014 + cpu.x));
-    cyc(118);
     v = pitched(h, (uint8_t)(~pitch + 1), &p);
     finish(v, p);
 }
@@ -272,16 +227,11 @@ static void pitched_1f7c(void)
 {
     uint8_t p = cpu.p, h, pitch, v;
 
-    cyc(16);
     wr8(H_X + 1, 0x00);
-    cyc(16);
     wr8(H_Y + 1, 0x00);
-    cyc(16);
     wr8(H_Z + 1, 0x00);
     save_xy();
-    cyc(112);
     h = rd8(0x001F7D);
-    cyc(68);
     pitch = rd8(0x001F7C);
     v = pitched((uint8_t)(~h + 1), pitch, &p);
     finish(v, p);
@@ -300,12 +250,9 @@ void HeadingPitchedVia1F7C(void)
 {
     uint32_t b = (uint32_t)cpu.db << 16;
 
-    cyc(30);
-    wr8(H_SPEED, cyc_then(16, rd8(b | (uint16_t)(0x2017 + cpu.x))));
-    cyc(30);
-    wr8(b | 0x1F7D, cyc_then(24, rd8(b | (uint16_t)(0x2015 + cpu.x))));
-    cyc(30);
-    wr8(b | 0x1F7C, cyc_then(24, rd8(b | (uint16_t)(0x2014 + cpu.x))));
+    wr8(H_SPEED, (rd8(b | (uint16_t)(0x2017 + cpu.x))));
+    wr8(b | 0x1F7D, (rd8(b | (uint16_t)(0x2015 + cpu.x))));
+    wr8(b | 0x1F7C, (rd8(b | (uint16_t)(0x2014 + cpu.x))));
     pitched_1f7c();
 }
 
@@ -345,17 +292,12 @@ void HeadingFlatQuarterTurn(void)
     uint32_t b = (uint32_t)cpu.db << 16;
     uint8_t p = cpu.p, i, v;
 
-    cyc(16);
     wr8(H_SPEED, (uint8_t)cpu.a);
     save_xy();
-    cyc(16);
     wr8(H_Y, 0x00);
-    cyc(16);
     wr8(H_Y + 1, 0x00);
     p |= P_C;
-    cyc(60);
     i = op_sbc8(0x40, rd8(b | (uint16_t)(0x2015 + cpu.x)), &p);
-    cyc(20);
     v = flat((uint8_t)(i + 1), &p);
     finish(v, p);
 }
@@ -377,16 +319,11 @@ void HeadingFlatSpeedA(void)
     uint32_t b = (uint32_t)cpu.db << 16;
     uint8_t p = cpu.p, i, v;
 
-    cyc(16);
     wr8(H_SPEED, (uint8_t)cpu.a);
     save_xy();
-    cyc(16);
     wr8(H_Y, 0x00);
-    cyc(16);
     wr8(H_Y + 1, 0x00);
-    cyc(30);
     i = rd8(b | (uint16_t)(0x2015 + cpu.x));
-    cyc(36);
     v = flat((uint8_t)(i + 1), &p);
     finish(v, p);
 }
@@ -403,26 +340,17 @@ static void move_by(uint8_t *p)
     uint32_t b = (uint32_t)cpu.db << 16;
     uint16_t v;
 
-    cyc(52);
     v = rd16(b | (uint16_t)(0x200C + cpu.x));
     *p &= (uint8_t)~P_C;
-    cyc(30);
     v = op_adc16(v, rd16(H_X), p);
-    cyc(30);
     wr16(b | (uint16_t)(0x200C + cpu.x), v);
-    cyc(30);
     v = rd16(b | (uint16_t)(0x200E + cpu.x));
     *p &= (uint8_t)~P_C;
-    cyc(30);
     v = op_adc16(v, rd16(H_Y), p);
-    cyc(30);
     wr16(b | (uint16_t)(0x200E + cpu.x), v);
-    cyc(30);
     v = rd16(b | (uint16_t)(0x2010 + cpu.x));
     *p &= (uint8_t)~P_C;
-    cyc(30);
     v = op_adc16(v, rd16(H_Z), p);
-    cyc(30);
     wr16(b | (uint16_t)(0x2010 + cpu.x), v);
     cpu.a = v;
 }
@@ -435,10 +363,8 @@ static void double_vector(void)
     uint16_t v;
 
     for (i = 0; i < 3; i++) {
-        cyc(16);
-        v = rd16(at[i]);
-        cyc(14);
-        wr16(at[i], (uint16_t)(v << 1));
+        v = rd16_rmw(at[i]);
+        wr16_rmw(at[i], (uint16_t)(v << 1));
     }
 }
 
@@ -455,10 +381,9 @@ void ObjectMoveByVectorTimes4(void)
 {
     uint8_t p = cpu.p;
 
-    (cyc(22), double_vector());
+    (double_vector());
     double_vector();
     move_by(&p);
-    cyc(66);
     cpu.p = (uint8_t)(p | P_M);
 }
 
@@ -478,9 +403,8 @@ void ObjectMoveByVectorTimes2(void)
 {
     uint8_t p = cpu.p;
 
-    (cyc(22), double_vector());
+    (double_vector());
     move_by(&p);
-    cyc(66);
     cpu.p = (uint8_t)(p | P_M);
 }
 
@@ -501,7 +425,6 @@ void ObjectMoveByVector(void)
     uint8_t p = cpu.p;
 
     move_by(&p);
-    cyc(66);
     cpu.p = (uint8_t)(p | P_M);
 }
 
@@ -521,23 +444,18 @@ static void velocity_from_vector(int shift)
     unsigned i;
     int k;
 
-    (cyc(62), abi_HeadingPitchedFrom1F7C());
+    (abi_HeadingPitchedFrom1F7C());
     b = (uint32_t)cpu.db << 16;
-    cyc(22);
     for (i = 0; i < 3; i++) {
-        cyc(16);
         v = rd16(from[i]);
         cpu.p = nz16(cpu.p, v);
         for (k = 0; k < shift; k++) {
-            cyc(14);
             cpu.p = (uint8_t)((cpu.p & ~P_C) | (v >> 15));
             v = (uint16_t)(v << 1);
             cpu.p = nz16(cpu.p, v);
         }
-        cyc(30);
         wr16(b | (uint16_t)(0x202E + 2 * i + cpu.x), v);
     }
-    cyc(66);
     cpu.a = v;
     cpu.p |= P_M;
 }
@@ -628,25 +546,16 @@ void ObjectVelocityLevelFromDp(void)
     uint32_t b = (uint32_t)cpu.db << 16;
     uint16_t v;
 
-    cyc(16);
-    wr8(b | 0x1F7C, cyc_then(24, rd8(H_X)));
-    cyc(16);
-    wr8(H_SPEED, cyc_then(16, rd8(H_Z)));
-    cyc(40);
+    wr8(b | 0x1F7C, (rd8(H_X)));
+    wr8(H_SPEED, (rd8(H_Z)));
     wr8(b | 0x1F7D, 0x40);
-    (cyc(62), abi_HeadingPitchedFrom1F7C());
+    (abi_HeadingPitchedFrom1F7C());
     b = (uint32_t)cpu.db << 16;
-    cyc(38);
     v = rd16(H_X);
-    cyc(30);
     wr16(b | (uint16_t)(0x202E + cpu.x), v);
-    cyc(16);
     v = rd16(H_Y);
-    cyc(30);
     wr16(b | (uint16_t)(0x2030 + cpu.x), v);
-    cyc(30);
     wr16(b | (uint16_t)(0x2032 + cpu.x), 0x0000);
-    cyc(66);
     cpu.a = v;
     cpu.p = (uint8_t)(nz16(cpu.p, v) | P_M);
 }

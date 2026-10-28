@@ -27,29 +27,19 @@
  */
 static uint8_t oam_dma_if_pending(int *ran)
 {
-    cyc(90);
     uint8_t flags = rd8(FRAME_UPDATE_FLAGS);
 
     *ran = (flags & 0x04) != 0;
     if (!*ran)
-        { cyc(38); return 0; }
-    cyc(56);
+        return 0;
     wr8(DMAP0, 0x00);
-    cyc(40);
     wr8(DMAP0 + 1, 0x04);
-    cyc(48);
     wr16(A1T0L, OAM_BUFFER);
-    cyc(40);
     wr8(A1B0, 0x00);
-    cyc(48);
     wr16(DAS0L, 0x0220);
-    cyc(48);
     wr16(OAMADDL, 0x0000);
-    cyc(40);
     wr8(MDMAEN, 0x01);
-    cyc(24);
     flags = rd8(FRAME_UPDATE_FLAGS) & 0xFB;
-    cyc(40);
     wr8(FRAME_UPDATE_FLAGS, flags);
     return flags;
 }
@@ -68,7 +58,6 @@ void abi_OamDmaIfPending(void)
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | oam_dma_if_pending(&pending));
     if (pending)
         cpu.x = 0;
-    cyc(70);
 }
 
 /*
@@ -82,29 +71,19 @@ void abi_OamDmaIfPending(void)
  */
 static uint8_t cgram_dma_if_pending(int *ran)
 {
-    cyc(90);
     uint8_t flags = rd8(FRAME_UPDATE_FLAGS);
 
     *ran = (flags & 0x08) != 0;
     if (!*ran)
-        { cyc(38); return 0; }
-    cyc(56);
+        return 0;
     wr8(DMAP0, 0x00);
-    cyc(40);
     wr8(DMAP0 + 1, 0x22);
-    cyc(48);
     wr16(A1T0L, (uint16_t)PALETTE_BUFFER);
-    cyc(40);
     wr8(A1B0, (uint8_t)(PALETTE_BUFFER >> 16));
-    cyc(48);
     wr16(DAS0L, 0x0200);
-    cyc(24);
     wr8(CGADD, 0x00);
-    cyc(40);
     wr8(MDMAEN, 0x01);
-    cyc(24);
     flags = rd8(FRAME_UPDATE_FLAGS) & 0xF7;
-    cyc(40);
     wr8(FRAME_UPDATE_FLAGS, flags);
     return flags;
 }
@@ -123,7 +102,6 @@ void abi_CgramDmaIfPending(void)
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | cgram_dma_if_pending(&pending));
     if (pending)
         cpu.y = 0x0200;
-    cyc(70);
 }
 
 /*
@@ -149,33 +127,24 @@ static ByteWritesEnd byte_writes_if_pending(uint8_t bank, uint16_t x0, uint16_t 
 {
     ByteWritesEnd end = {0, x0, y0, 0, 0};
 
-    cyc(90);
     if (!(rd8(FRAME_UPDATE_FLAGS) & 0x01))
-        { cyc(38); return end; }
+        return end;
     end.ran = 1;
     {
-        cyc(78);
         uint16_t x = (uint16_t)(rd16(BYTE_WRITES_SIZE) - 4);
         end.a = x;
         if (!(x & 0x8000)) {   /* X and Y are only touched when there is an entry */
             do {
-                cyc(100);
                 end.y = rd16(BYTE_WRITES + x);
-                cyc(46);
                 end.a = rd16(BYTE_WRITES + 2 + x);
-                cyc(52);
                 wr8((uint32_t)bank << 16 | end.y, (uint8_t)end.a);
                 x = (uint16_t)(x - 4);
-            } while (cyc_loop(32, !(x & 0x8000)));
-            cyc(34);
+            } while ((!(x & 0x8000)));
             end.x = x;
         }
     }
-    cyc(84);
     wr16(BYTE_WRITES_SIZE, 0);
-    cyc(46);
     end.flags = rd8(FRAME_UPDATE_FLAGS) & 0xFE;
-    cyc(40);
     wr8(FRAME_UPDATE_FLAGS, end.flags);
     return end;
 }
@@ -194,7 +163,6 @@ void abi_ByteWritesIfPending(void)
         cpu.x = end.x;
         cpu.y = end.y;
     }
-    cyc(70);
 }
 
 /*
@@ -208,21 +176,15 @@ void abi_ByteWritesIfPending(void)
  */
 static int vram_dma_queue_add(uint16_t *size_out)
 {
-    cyc(98);
     uint16_t x = rd16(0x0016AF);
 
     if (x == 0x0200)
         return 0;
-    cyc(64);
-    wr16(0x0016B9 + x, cyc_then(32, rd16(0x0016B3)));
-    cyc(46);
-    wr8(0x0016BB + x, cyc_then(32, rd8(0x0016B5)));
-    cyc(46);
-    wr16(0x0016BC + x, cyc_then(32, rd16(0x0016B7)));
-    cyc(24);
-    wr16(0x0016BE + x, cyc_then(32, rd16(0x0016B1)));
+    wr16(0x0016B9 + x, (rd16(0x0016B3)));
+    wr8(0x0016BB + x, (rd8(0x0016B5)));
+    wr16(0x0016BC + x, (rd16(0x0016B7)));
+    wr16(0x0016BE + x, (rd16(0x0016B1)));
     *size_out = (uint16_t)(x + 8);
-    cyc(76);
     wr16(0x0016AF, *size_out);
     return 1;
 }
@@ -237,11 +199,9 @@ uint16_t VramDmaQueueAddA(uint16_t a)
 
 void VramDmaQueueAdd(void)
 {
-    cyc(0);
     uint16_t size;
 
     vram_dma_queue_add(&size);
-    cyc(108);
 }
 
 void abi_VramDmaQueueAdd(void)
@@ -249,22 +209,19 @@ void abi_VramDmaQueueAdd(void)
     uint16_t size;
 
     if (vram_dma_queue_add(&size))
-        { cyc(108); cpu.a = size; }
+        cpu.a = size;
 }
 
 /* Append A to a list of up to eight words; returns X, the new size (the
    old one when the list is full). */
 static uint16_t word_list_append(uint32_t size_addr, uint32_t list, uint16_t value)
 {
-    cyc(114);
     uint16_t x = rd16(size_addr);
 
     if (x == 0x0010)
-        { cyc(46); return x; }
-    cyc(72);
+        return x;
     wr16(list + x, value);
     x = (uint16_t)(x + 2);
-    cyc(52);
     wr16(size_addr, x);
     return x;
 }
@@ -331,43 +288,29 @@ static FlushEnd vram_dma_queue_flush(void)
     FlushEnd end = {0, 0, 0, 0, 0};
     uint16_t x;
 
-    cyc(90);
     if (!(rd8(FRAME_UPDATE_FLAGS) & 0x02))
-        { cyc(38); return end; }
+        return end;
     end.ran = 1;
-    cyc(72);
     wr8(VMAIN, 0x80);
-    cyc(40);
     wr8(DMAP0 + 1, 0x18);
-    cyc(46);
     x = (uint16_t)(rd16(0x0016AF) - 8);
     end.a = x;
     if (!(x & 0x8000)) {
         do {
-            cyc(122);
-            wr16(A1T0L, cyc_then(24, rd16(0x0016B9 + x)));
-            cyc(32);
-            wr16(VMADDL, cyc_then(24, rd16(0x0016BC + x)));
-            cyc(32);
-            wr16(DAS0L, cyc_then(24, rd16(0x0016BE + x)));
-            cyc(54);
-            wr8(A1B0, cyc_then(24, rd8(0x0016BB + x)));
-            cyc(40);
+            wr16(A1T0L, (rd16(0x0016B9 + x)));
+            wr16(VMADDL, (rd16(0x0016BC + x)));
+            wr16(DAS0L, (rd16(0x0016BE + x)));
+            wr8(A1B0, (rd8(0x0016BB + x)));
             wr8(DMAP0, 0x01);
-            cyc(24);
             wr8(MDMAEN, 0x01);
             x = (uint16_t)(x - 8);
-        } while (cyc_loop(42, !(x & 0x8000)));
-        cyc(44);
+        } while ((!(x & 0x8000)));
         end.a = x;
         end.x = x;
         end.looped = 1;
     }
-    cyc(106);
     wr16(0x0016AF, 0);
-    cyc(46);
     end.flags = rd8(FRAME_UPDATE_FLAGS) & 0xFD;
-    cyc(40);
     wr8(FRAME_UPDATE_FLAGS, end.flags);
     return end;
 }
@@ -384,7 +327,6 @@ void abi_VramDmaQueueFlush(void)
     cpu.a = (uint16_t)(((end.ran ? end.a : cpu.a) & 0xFF00) | end.flags);
     if (end.looped)
         cpu.x = end.x;
-    cyc(70);
 }
 
 void SystemHalt(void);
@@ -404,16 +346,12 @@ void SystemHalt(void);
 uint16_t FrameByteWritePush(uint8_t bank, uint16_t addr, uint8_t value)
 {
     uint32_t b = (uint32_t)bank << 16;
-    cyc(182);
     uint16_t x = rd16(b | (uint16_t)BYTE_WRITES_SIZE);
 
     if (x == 0x0080)
         SystemHalt();
-    cyc(108);
     wr16(BYTE_WRITES + 2 + x, value);
-    cyc(68);
     wr16(BYTE_WRITES + x, addr);
-    cyc(76);
     wr16(b | (uint16_t)BYTE_WRITES_SIZE, (uint16_t)(x + 4));
     return x;
 }
@@ -430,30 +368,19 @@ static uint8_t frame_input_and_count_end(uint8_t bank, uint16_t *hi, uint16_t *x
     uint16_t w;
     uint8_t v;
 
-    cyc(54);
     w = rd16(0x0018BF);
-    cyc(32);
     wr16(0x0018BB, w);
-    cyc(32);
     w = rd16(0x0018C1);
-    cyc(32);
     wr16(0x0018BD, w);
-    cyc(24);
     w = rd16(b | 0x0311);
     word_list_append(0x001191, 0x001195, w);
-    cyc(94);
     w = rd16(b | 0x0313);
     *hi = (uint16_t)(w & 0xFF00);
     *x = word_list_append(0x001193, 0x0011B5, w);
-    cyc(116);
-    wr8(b | 0x0E3B, cyc_then(6, (uint8_t)(rd8(b | 0x0E3B) + 1)));
-    cyc(24);
-    wr8(b | 0x0306, cyc_then(6, (uint8_t)(rd8(b | 0x0306) + 1)));
-    cyc(16);
-    wr8(0x000006, cyc_then(6, (uint8_t)(rd8(0x000006) + 1)));
-    cyc(24);
+    wr8(b | 0x0E3B, ((uint8_t)(rd8_rmw(b | 0x0E3B) + 1)));
+    wr8(b | 0x0306, ((uint8_t)(rd8_rmw(b | 0x0306) + 1)));
+    wr8(0x000006, ((uint8_t)(rd8_rmw(0x000006) + 1)));
     v = rd8(b | 0x11DA);
-    cyc(24);
     wr8(b | 0x2100, v);
     return v;
 }
@@ -482,7 +409,7 @@ void abi_FrameInputAndCountEnd(void)
     uint8_t v = frame_input_and_count_end(cpu.db, &hi, &x);
 
     cpu.a = (uint16_t)(hi | v);
-    cpu.x = (cpu.p & P_X) ? (cyc(44), (uint8_t)x) : x;
+    cpu.x = (cpu.p & P_X) ? ((uint8_t)x) : x;
     cpu.p = (uint8_t)(nz8(cpu.p, v) | P_M);
 }
 
@@ -507,30 +434,22 @@ uint8_t FrameCountAndPortsEnd(uint8_t bank, uint16_t *high, int *checked)
     uint16_t v;
     uint8_t lum;
 
-    cyc(38);
-    wr8(0x000006, cyc_then(6, (uint8_t)(rd8(0x000006) + 1)));
-    cyc(24);
-    wr8(b | 0x0E3B, cyc_then(6, (uint8_t)(rd8(b | 0x0E3B) + 1)));
-    cyc(24);
-    wr8(b | 0x0306, cyc_then(6, (uint8_t)(rd8(b | 0x0306) + 1)));
-    cyc(78);
+    wr8(0x000006, ((uint8_t)(rd8_rmw(0x000006) + 1)));
+    wr8(b | 0x0E3B, ((uint8_t)(rd8_rmw(b | 0x0E3B) + 1)));
+    wr8(b | 0x0306, ((uint8_t)(rd8_rmw(b | 0x0306) + 1)));
     wr16(0x0018FB, 0x0000);
-    cyc(32);
     v = rd16(0x001903);
     *high = (uint16_t)(v & 0xFF00);
     *checked = 0;
     if (v) {
         int found = JoypadPortCheck(bank, 0);
 
-        cyc(34);
         found |= JoypadPortCheck(bank, 1);
         if (found)
-            *high = 0x0000; else { cyc(28); }
+            *high = 0x0000;
         *checked = 1;
     }
-    cyc(68);
     lum = rd8(b | 0x11DA);
-    cyc(24);
     wr8(b | INIDISP, lum);
     return lum;
 }
@@ -546,6 +465,5 @@ void abi_FrameCountAndPortsEnd(void)
         cpu.x = 0x0001;
         cpu.y = 0x00FF;
     }
-    cyc(44);
     cpu.p = (uint8_t)(nz8(cpu.p, lum) | P_M);
 }

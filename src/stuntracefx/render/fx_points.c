@@ -17,59 +17,29 @@
 #define FX_VARIANT 0x0044u
 
 /* A signed script byte (GETBS, INC R14). */
-/* gsuwalk: the code of each copy of script_byte, read from the ROM */
-static const GsuCode script_byte_fetch[7][2] = {
-    {{0x04a167, 2}, {0x04a169, 1}},
-    {{0x04a19a, 2}, {0x04a19c, 1}},
-    {{0x04a19e, 4}, {0x04a1a2, 1}},
-    {{0x04a1a4, 4}, {0x04a1a8, 1}},
-    {{0x04a1b5, 2}, {0x04a1b7, 1}},
-    {{0x04a1b9, 5}, {0x04a1be, 1}},
-    {{0x04a1c1, 5}, {0x04a1c6, 1}},
-};
 
-static uint16_t script_byte(FxRegs *g, int copy)
+static uint16_t script_byte(FxRegs *g)
 {
-    gsu_codes(script_byte_fetch[copy], 1);
     uint16_t b = gsu_getbs();
 
-    gsu_codes(script_byte_fetch[copy] + 1, 1);
     gsu_r14(gsu_inc(g->r[14]));
     g->r[14] = gsu.r[14];
     return b;
 }
 
 /* A word to R9's list, R9 stepped on (STW, INC, INC). */
-/* gsuwalk: the code of each copy of put, read from the ROM */
-static const GsuCode put_fetch[7][1] = {
-    {{0x04a19d, 1}},
-    {{0x04a1a3, 1}},
-    {{0x04a1b8, 1}},
-    {{0x04a1bf, 2}},
-    {{0x04a1c7, 2}},
-    {{0x04a1c9, 5}},
-    {{0x04a1ce, 4}},
-};
 
-static void put(FxRegs *g, uint16_t v, int copy)
+static void put(FxRegs *g, uint16_t v)
 {
-    gsu_codes(put_fetch[copy], 1);
     gsu_stw(g->r[9], v);
     g->r[9] = gsu_inc(gsu_inc(g->r[9]));
 }
 
 /* The count byte for LOOP (GETB to R12) and R13 = the loop's start. */
-/* gsuwalk: the code of each copy of count, read from the ROM */
-static const GsuCode count_fetch[2][2] = {
-    {{0x04a195, 2}, {0x04a197, 1}},
-    {{0x04a1b0, 2}, {0x04a1b2, 1}},
-};
 
-static void count(FxRegs *g, uint16_t start, int copy)
+static void count(FxRegs *g, uint16_t start)
 {
-    gsu_codes(count_fetch[copy], 1);
     g->r[12] = gsu_getb();
-    gsu_codes(count_fetch[copy] + 1, 1);
     gsu_r14(gsu_inc(g->r[14]));
     g->r[14] = gsu.r[14];
     g->r[13] = start;
@@ -90,35 +60,27 @@ static void count(FxRegs *g, uint16_t start, int copy)
  * count; S, Z from R10, OV, CY from the compare with $20; the last RAM
  * address R10.
  */
-FxRegs FxModelPoints(FxRegs g, int copy)
+FxRegs FxModelPoints(FxRegs g)
 {
     uint16_t *sp = &g.r[10];
     uint16_t w;
 
-    gsu_code(0x04a155, 2);
     gsu_push(sp, g.r[3]);
-    gsu_code(0x04a157, 4);
     gsu_push(sp, g.r[1]);
-    gsu_code(0x04a15b, 4);
     gsu_push(sp, g.r[2]);
-    gsu_code(0x04a15f, 4);
     gsu_r14(g.r[9]);
     g.r[14] = gsu.r[14];
     g.r[9] = FX_POINTS;
-    gsu_code(0x04a163, 3); gsu_cache(0xa166); gsu_code(0x04a166, 1);
     for (;;) {
-        g.r[0] = script_byte(&g, GSU_COPY(0));
+        g.r[0] = script_byte(&g);
         g.r[3] = 0x04;
         gsu_sub(g.r[0], g.r[3], 0);
         if (gsu.z) {
-            gsu_code(0x04a16a, 6); gsu_code(0x04a194, 1);
-            count(&g, 0xA199, GSU_COPY(0));
-            gsu_code(0x04a198, 2);
+            count(&g, 0xA199);
             do {
-                put(&g, script_byte(&g, GSU_COPY(1)), GSU_COPY(0));
-                put(&g, script_byte(&g, GSU_COPY(2)), GSU_COPY(1));
-                g.r[0] = script_byte(&g, GSU_COPY(3));
-                gsu_code(0x04a1a9, 1);
+                put(&g, script_byte(&g));
+                put(&g, script_byte(&g));
+                g.r[0] = script_byte(&g);
                 gsu_stw(g.r[9], g.r[0]);
                 g.r[9] = gsu_inc(g.r[9]);
                 {
@@ -126,29 +88,25 @@ FxRegs FxModelPoints(FxRegs g, int copy)
 
                     g.r[9] = gsu_inc(g.r[9]);
                     if (!again)
-                        { gsu_code(0x04a1aa, 2); break; } else { gsu_code(0x04a1aa, 2); gsu_code(0x04a199, 1); }
+                        break;
                 }
             } while (1);
-            gsu_code(0x04a1ac, 3); gsu_code(0x04a166, 1);
             continue;
-        } else { gsu_code(0x04a16a, 6); }
+        }
         g.r[3] = 0x38;
         gsu_sub(g.r[0], g.r[3], 0);
         if (gsu.z) {
-            gsu_code(0x04a170, 7); gsu_code(0x04a1af, 1);
-            count(&g, 0xA1B4, GSU_COPY(1));
-            gsu_code(0x04a1b3, 2);
+            count(&g, 0xA1B4);
             do {
-                g.r[0] = script_byte(&g, GSU_COPY(4));
-                put(&g, g.r[0], GSU_COPY(2));
-                g.r[1] = script_byte(&g, GSU_COPY(5));
-                put(&g, g.r[1], GSU_COPY(3));
-                g.r[2] = script_byte(&g, GSU_COPY(6));
-                put(&g, g.r[2], GSU_COPY(4));
+                g.r[0] = script_byte(&g);
+                put(&g, g.r[0]);
+                g.r[1] = script_byte(&g);
+                put(&g, g.r[1]);
+                g.r[2] = script_byte(&g);
+                put(&g, g.r[2]);
                 g.r[0] = gsu_inc(gsu_not(g.r[0]));
-                put(&g, g.r[0], GSU_COPY(5));
-                put(&g, g.r[1], GSU_COPY(6));
-                gsu_code(0x04a1d2, 4);
+                put(&g, g.r[0]);
+                put(&g, g.r[1]);
                 gsu_stw(g.r[9], g.r[2]);
                 g.r[9] = gsu_inc(g.r[9]);
                 {
@@ -156,48 +114,35 @@ FxRegs FxModelPoints(FxRegs g, int copy)
 
                     g.r[9] = gsu_inc(g.r[9]);
                     if (!again)
-                        { gsu_code(0x04a1d6, 2); break; } else { gsu_code(0x04a1d6, 2); gsu_code(0x04a1b4, 1); }
+                        break;
                 }
             } while (1);
-            gsu_code(0x04a1d8, 3); gsu_code(0x04a166, 1);
             continue;
-        } else { gsu_code(0x04a170, 7); }
+        }
         g.r[3] = 0x1C;
         gsu_sub(g.r[0], g.r[3], 0);
         if (gsu.z) {
-            gsu_code(0x04a177, 7); gsu_code(0x04a1db, 2);
             gsu_r14(gsu_inc(g.r[14]));
-            gsu_code(0x04a1dd, 3);
             g.r[0] = gsu_ldw(FX_VARIANT);
             g.r[0] = gsu_add(g.r[0], g.r[0], 0);
-            gsu_code(0x04a1e0, 3);
             gsu_r14(gsu_add(gsu.r[14], g.r[0], 0));
             g.r[14] = gsu.r[14];
         } else {
             g.r[3] = 0x20;
             gsu_sub(g.r[0], g.r[3], 0);
             if (!gsu.z)
-                { gsu_code(0x04a177, 14); break; } else { gsu_code(0x04a177, 14); gsu_code(0x04a1e2, 1); }
+                break;
         }
-        gsu_code(0x04a1e3, 1);
         w = gsu_getb();
-        gsu_code(0x04a1e4, 1);
         gsu_r14(gsu_inc(g.r[14]));
         g.r[14] = gsu.r[14];
-        gsu_code(0x04a1e5, 2);
         g.r[0] = gsu_getbh(w);
-        gsu_code(0x04a1e7, 2);
         gsu_r14(gsu_add(g.r[14], g.r[0], 0));
         g.r[14] = gsu.r[14];
-        gsu_code(0x04a1e9, 3); gsu_code(0x04a166, 1);
     }
-    gsu_code(0x04a185, 5);
     g.r[2] = gsu_pull(sp);
-    gsu_code(0x04a18a, 4);
     g.r[1] = gsu_pull(sp);
-    gsu_code(0x04a18e, 4);
     g.r[3] = gsu_pull(sp);
-    gsu_code(0x04a192, 2);
     return g;
 }
 
@@ -206,6 +151,6 @@ void abi_FxModelPoints(void)
     FxRegs g;
 
     memcpy(g.r, gsu.r, sizeof g.r);
-    g = FxModelPoints(g, GSU_COPY(0));
+    g = FxModelPoints(g);
     memcpy(gsu.r, g.r, 15 * sizeof g.r[0]);
 }

@@ -21,7 +21,7 @@ void abi_DebugDrawChar(void);
 static void draw(uint16_t ch)
 {
     cpu.a = ch;
-    (cyc(76), abi_DebugDrawChar());
+    (abi_DebugDrawChar());
 }
 
 /*
@@ -38,13 +38,10 @@ void DebugHexByte(void)
     uint16_t a = cpu.a, d;
 
     cpu.p &= (uint8_t)~(P_M | P_X);
-    cyc(248);
     d = rd16(HEX_DIGITS + ((a & 0x00F0) >> 4));
     draw((uint16_t)((d & 0x00FF) - 0x0020));
-    cyc(154);
     d = rd16(HEX_DIGITS + (a & 0x000F));
     draw((uint16_t)((d & 0x00FF) - 0x0020));
-    cyc(28);
     op_plp(p);
 }
 
@@ -76,28 +73,24 @@ void DebugDecimalByte(void)
         v = op_sbc8(v, 200, &p);
         h = 0x02;
     } else if (v >= 100) {
-        cyc(38);
         p |= P_C;
         v = op_sbc8(v, 100, &p);
         h = 0x01;
     } else {
         h = 0xFF;
     }
-    cyc(104);
     cpu.p = p;
     if (h != 0xFF)
-        { cyc(26); draw((uint16_t)((cpu.a & 0xFF00) | h)); }
+        draw((uint16_t)((cpu.a & 0xFF00) | h));
     cpu.y = h;
     cpu.x = v;
-    cyc(h != 0xFF ? 296 : 366);
     t = rd8(DECIMAL_PAIRS + v);
-    cpu.p = (uint8_t)((p & ~P_C) | ((t >> 4) ? (t >> 3 & 1) : (cyc(34), (h == 0xFF))));
+    cpu.p = (uint8_t)((p & ~P_C) | ((t >> 4) ? (t >> 3 & 1) : ((h == 0xFF))));
     if ((t >> 4) || h != 0xFF)
-        { cyc(34); draw((uint16_t)((cpu.a & 0xFF00) | (t >> 4))); cyc(14); }
-    else { cyc(84); }
+        draw((uint16_t)((cpu.a & 0xFF00) | (t >> 4)));
     cpu.p = nz8(cpu.p, (uint8_t)(t & 0x0F));
     draw((uint16_t)(t & 0x0F));
-    cyc(42); /* RTS */
+    /* RTS */
 }
 
 void abi_DebugDecimalByte(void)
@@ -118,15 +111,12 @@ void DebugSignedByte(void)
     uint8_t v = (uint8_t)cpu.a;
 
     if (v & 0x80) {
-        cyc(40);
         draw((uint16_t)((cpu.a & 0xFF00) | 0x24));
-        cyc(30); /* EOR, INC */
+        /* EOR, INC */
         v = (uint8_t)(~v + 1);
     } else {
-        cyc(46);
         draw((uint16_t)((cpu.a & 0xFF00) | 0x29));
     }
-    cyc(52);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
     DebugDecimalByte();
 }
@@ -148,17 +138,15 @@ static void long_wrapper(void (*print)(void))
 
     cpu.p = (uint8_t)((cpu.p | P_M) & ~P_X);
     /* PHA pushes a word with M 16-bit; PHX and PHY a byte each with X 8-bit */
-    cyc((saved.p & P_M ? 194 : 202) - (saved.p & P_X ? 16 : 0));
     wr8((uint32_t)cpu.db << 16 | NUM_BYTE, (uint8_t)cpu.a);
     cpu.db = 0x00;
-    cyc(90);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | rd8(NUM_BYTE));
-    (cyc(46), print());
+    (print());
     a = cpu.a;
     cpu = saved;
     if (saved.p & P_M)
-        cpu.a = (uint16_t)((a & 0xFF00) | (saved.a & 0x00FF)); else { cyc(8); }
-    cyc(200 - (saved.p & P_X ? 16 : 0)); /* PLP, PLY, PLX, PLA, PLB, RTL */
+        cpu.a = (uint16_t)((a & 0xFF00) | (saved.a & 0x00FF));
+    /* PLP, PLY, PLX, PLA, PLB, RTL */
     cpu.p = nz8(cpu.p, cpu.db);
 }
 
@@ -234,18 +222,16 @@ void DebugPrintHexWord(void)
     uint16_t a = cpu.a;
 
     cpu.a = (uint16_t)(a << 8 | a >> 8);
-    (cyc((cpu.p & P_M ? 22 : 30) + 82), abi_DebugPrintHexByte()); /* PHA, XBA, JSL */
+    (abi_DebugPrintHexByte()); /* PHA, XBA, JSL */
     cpu.a = (uint16_t)(cpu.a << 8 | cpu.a >> 8);
-    (cyc(82), abi_DebugPrintHexByte()); /* XBA, JSL */
+    (abi_DebugPrintHexByte()); /* XBA, JSL */
     if (cpu.p & P_M) {
         cpu.a = (uint16_t)((cpu.a & 0xFF00) | (a & 0x00FF));
         cpu.p = nz8(cpu.p, (uint8_t)a);
     } else {
-        cyc(8);
         cpu.a = a;
         cpu.p = nz16(cpu.p, a);
     }
-    cyc(72);
 }
 
 void abi_DebugPrintHexWord(void)
@@ -268,66 +254,48 @@ void abi_DebugPrintHexWord(void)
 void DebugPrintDecimalWord(void)
 {
     Regs65816 saved = cpu;
-    uint16_t v, pw, n, x, drawn = 0, neg = 0, skip;
+    uint16_t v, pw, n, x, drawn = 0, skip;
 
     cpu.p &= (uint8_t)~(P_M | P_X);
-    cyc(172);
     wr16(NUM_VALUE, cpu.a);
     cpu.db = 0x00;
-    cyc(126);
     v = rd16(NUM_VALUE);
     if (v & 0x8000) {
-        cyc(70);
         wr16(NUM_VALUE, (uint16_t)(~v + 1));
         cpu.p = (uint8_t)((cpu.p | P_M) & ~P_X);
-        cyc(30);
         draw((uint16_t)((cpu.a & 0xFF00) | 0x0D));
-        neg = 1;
     }
     cpu.p &= (uint8_t)~P_M;
     x = 0;
-    cyc(neg ? 62 : 84);
     wr16(NUM_DIGIT, 0x0000);
     do {
-        cyc(2);
         for (;;) {
-            cyc(38);
             v = rd16(NUM_VALUE);
             pw = rd16(POWERS_OF_TEN + x);
             if ((uint16_t)(v - pw) & 0x8000)
                 break;
-            cyc(100);
             wr16(NUM_VALUE, (uint16_t)(v - pw));
-            cyc(16);
-            n = rd16(NUM_DIGIT);
-            cyc(14);
-            wr16(NUM_DIGIT, (uint16_t)(n + 1));
+            n = rd16_rmw(NUM_DIGIT);
+            wr16_rmw(NUM_DIGIT, (uint16_t)(n + 1));
         }
-        cyc(156);
         pw = rd16(POWERS_OF_TEN + x);
         wr16(NUM_VALUE, v);
-        cyc(16);
         n = rd16(NUM_DIGIT);
         skip = !(n || drawn);
         if (!skip) {
             drawn = 1;
             cpu.p |= P_M;
-            cyc(n ? 168 : 202);
             n = rd8(NUM_DIGIT);
             draw((uint16_t)((cpu.a & 0xFF00) | (uint8_t)(n + 0x10)));
         }
         cpu.p &= (uint8_t)~P_M;
-        cyc(skip ? 124 : 110);
         wr16(NUM_DIGIT, 0x0000);
         x = (uint16_t)(x + 2);
-    } while (cyc_loop(50, x != 0x000A));
-    cyc(22);
+    } while ((x != 0x000A));
     if (!drawn) {
-        cyc(94);
         cpu.p |= P_M;
         draw((uint16_t)((cpu.a & 0xFF00) | 0x10));
     }
-    cyc(drawn ? 300 : 230);
     cpu = saved;
 }
 
@@ -355,27 +323,21 @@ void DebugPrintBinaryByte(void)
     cpu.p |= P_M | P_X;
     cpu.x &= 0x00FF;
     cpu.y &= 0x00FF;
-    cyc(60);
     wr8(NUM_BITS, (uint8_t)cpu.a);
     for (i = 0; i < 4; i++) {
-        cyc(i ? 152 : 32); /* later pairs: ROL, ASL x3, PLP, ROL, PHA, LDA #0 first */
-        v = rd8(NUM_BITS);
+        /* later pairs: ROL, ASL x3, PLP, ROL, PHA, LDA #0 first */
+        v = rd8_rmw(NUM_BITS);
         lo = v & 1;
-        cyc(6);
         wr8(NUM_BITS, (uint8_t)(v >> 1));
-        cyc(38);
-        v = rd8(NUM_BITS);
-        cyc(6);
+        v = rd8_rmw(NUM_BITS);
         wr8(NUM_BITS, (uint8_t)(v >> 1));
         pair[i] = (uint8_t)((v & 1) << 4 | lo);
     }
-    cyc(22);
     for (i = 3; i >= 0; i--) {
-        cyc(i == 3 ? 172 : 74); /* the first: ROL, ASL x3, PLP, ROL, PHA, PLA, JSR */
+        /* the first: ROL, ASL x3, PLP, ROL, PHA, PLA, JSR */
         cpu.a = (uint16_t)((cpu.a & 0xFF00) | pair[i]);
         DebugHexByte();
     }
-    cyc(30);
     op_plp(p);
 }
 

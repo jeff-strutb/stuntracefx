@@ -32,47 +32,35 @@ static void fx_unused_run(uint16_t at, uint16_t ret)
 
     (void)t;
     (void)nx;
-    goto enter;   /* the caller fetched the first byte */
+    goto enter;
 l8915:
     R[10] = 0x0240;
     R[11] = 0x891D;
-    gsu_code(0x048916, 7); gsu_code(0x048923, 1);
     abi_FxPoolChecksum();
-    gsu_code(0x04891d, 1);
 l891D:
-    gsu_code(0x04891e, 4);
     gsu_stw(0x2686, R[0]);
     return;   /* the STOP: the program ends here */
 l8923:
     R[0] = gsu_sub(R[0], R[0], 0);
-    gsu_code(0x048924, 3);
     gsu_ramb(R[0]);
     R[1] = 0x1090;
     R[12] = 0x0AF9;
-    /* CACHE */
     R[13] = 0x892F;
-    gsu_code(0x048927, 6); gsu_cache(0x892d); gsu_code(0x04892d, 3);
 l892F:
-    gsu_code(0x048930, 2);
     R[2] = gsu_ldw(R[1]);
     R[1] = gsu_inc(R[1]);
     R[1] = gsu_inc(R[1]);
     R[0] = gsu_xor(R[0], R[2]);
     t = gsu_count_down(&R[12]);
-    gsu_code(0x048932, 5);
-    if (t) { gsu_code(0x04892f, 1); goto l892F; }
+    if (t) { goto l892F; }
     nx = (uint16_t)(R[11]);
     at = nx;
-    gsu_code(0x048937, 3);
     goto dispatch;
 l89FA:
     R[10] = 0x0240;
-    gsu_code(0x0489fb, 7);
     R[1] = gsu_ldw(0x238E);
     R[11] = 0x8A06;
-    gsu_code(0x048a02, 4); gsu_code(0x048a08, 1);
     abi_FxObjectFree();
-    gsu_code(0x048a06, 1);
 l8A06:
     return;   /* the STOP: the program ends here */
 l8AD0:
@@ -80,71 +68,53 @@ l8AD0:
     R[4] = 0x0028;
     R[3] = 0x1098;
     R[11] = 0x8ADE;
-    gsu_code(0x048ad1, 13); gsu_code(0x04893a, 1);
     abi_FxPoolTake();
-    gsu_code(0x048ade, 1);
 l8ADE:
     R[1] = R[1];
     gsu_moves(R[1]);
     t = gsu.z;
-    gsu_code(0x048adf, 4);
-    if (t) { gsu_code(0x048b2c, 1); goto l8B2C; }
-    gsu_code(0x048ae3, 5);
+    if (t) { goto l8B2C; }
     R[2] = gsu_ldw(0x238E);
     R[0] = 0x001E;
     R[0] = gsu_add(R[0], R[1], 0);
-    gsu_code(0x048ae8, 5);
     gsu_stw(R[0], R[2]);
-    gsu_code(0x048aed, 4);
     R[2] = gsu_ldw(0x2390);
     R[0] = 0x0020;
     R[0] = gsu_add(R[0], R[1], 0);
-    gsu_code(0x048af1, 5);
     gsu_stw(R[0], R[2]);
-    gsu_code(0x048af6, 4);
     R[2] = gsu_ldw(0x2392);
     R[0] = 0x0022;
     R[0] = gsu_add(R[0], R[1], 0);
-    gsu_code(0x048afa, 5);
     gsu_stw(R[0], R[2]);
     R[2] = 0x0016;
     R[2] = gsu_add(R[2], R[1], 0);
-    gsu_code(0x048aff, 6);
     R[2] = gsu_ldw(R[2]);
     R[0] = 0x00A0;
     R[2] = gsu_or(R[0], R[2]);
     R[0] = 0x0016;
     R[0] = gsu_add(R[0], R[1], 0);
-    gsu_code(0x048b05, 10);
     gsu_stw(R[0], R[2]);
     R[2] = 0xFFFF;
     R[0] = 0x001A;
     R[0] = gsu_add(R[0], R[1], 0);
-    gsu_code(0x048b0f, 8);
     gsu_stw(R[0], R[2]);
-    gsu_code(0x048b17, 4);
     gsu_stw(0x238E, R[1]);
     R[8] = R[1];
     R[11] = 0x8B21;
-    gsu_code(0x048b1b, 6); gsu_code(0x04c3b5, 1);
     abi_FxRecordSegment();
 l8B21:
     R[11] = 0x8B26;
-    gsu_code(0x048b22, 4); gsu_code(0x04cca4, 1);
     abi_FxCourseNextEntry();
 l8B26:
-    gsu_code(0x048b27, 4);
     gsu_stw(0x2390, R[0]);
     return;   /* the STOP: the program ends here */
 l8B2C:
     R[0] = gsu_sub(R[0], R[0], 0);
-    gsu_code(0x048b2d, 5);
     gsu_stw(0x238E, R[0]);
     return;   /* the STOP: the program ends here */
 dispatch:
     if (at == ret)
         return;
-    gsu_code(0x040000 | at, 1);   /* where it jumps: its first byte */
 fetched:
 enter:
     switch (at) {
@@ -231,125 +201,88 @@ static void fx_unused2_run(uint16_t at, uint16_t ret)
 
     (void)t;
     (void)nx;
-    goto enter;   /* the caller fetched the first byte */
+    goto enter;
 l9820:
-    gsu_code(0x049821, 3);
     R[6] = gsu_ldw(0x00E4);
-    gsu_code(0x049824, 2);
     R[0] = gsu_fmult(R[1], R[6]);
     R[5] = gsu_rol(R[0]);
-    gsu_code(0x049826, 5);
     R[6] = gsu_ldw(0x00EA);
-    gsu_code(0x04982b, 2);
     R[0] = gsu_fmult(R[2], R[6]);
     R[0] = gsu_rol(R[0]);
     R[5] = gsu_add(R[5], R[0], 0);
-    gsu_code(0x04982d, 6);
     R[6] = gsu_ldw(0x00F0);
-    gsu_code(0x049833, 2);
     R[0] = gsu_fmult(R[3], R[6]);
     R[0] = gsu_rol(R[0]);
     R[0] = gsu_add(R[0], R[5], 0);
-    gsu_code(0x049835, 6);
     gsu_stw(0x26F6, R[0]);
-    gsu_code(0x04983b, 3);
     R[6] = gsu_ldw(0x00E6);
-    gsu_code(0x04983e, 2);
     R[0] = gsu_fmult(R[1], R[6]);
     R[5] = gsu_rol(R[0]);
-    gsu_code(0x049840, 5);
     R[6] = gsu_ldw(0x00EC);
-    gsu_code(0x049845, 2);
     R[0] = gsu_fmult(R[2], R[6]);
     R[0] = gsu_rol(R[0]);
     R[5] = gsu_add(R[5], R[0], 0);
-    gsu_code(0x049847, 6);
     R[6] = gsu_ldw(0x00F2);
-    gsu_code(0x04984d, 2);
     R[0] = gsu_fmult(R[3], R[6]);
     R[0] = gsu_rol(R[0]);
     R[0] = gsu_add(R[0], R[5], 0);
-    gsu_code(0x04984f, 6);
     gsu_stw(0x26F8, R[0]);
-    gsu_code(0x049855, 3);
     R[6] = gsu_ldw(0x00E8);
-    gsu_code(0x049858, 2);
     R[0] = gsu_fmult(R[1], R[6]);
     R[5] = gsu_rol(R[0]);
-    gsu_code(0x04985a, 5);
     R[6] = gsu_ldw(0x00EE);
-    gsu_code(0x04985f, 2);
     R[0] = gsu_fmult(R[2], R[6]);
     R[0] = gsu_rol(R[0]);
     R[5] = gsu_add(R[5], R[0], 0);
-    gsu_code(0x049861, 6);
     R[6] = gsu_ldw(0x00F4);
-    gsu_code(0x049867, 2);
     R[0] = gsu_fmult(R[3], R[6]);
     R[0] = gsu_rol(R[0]);
     R[0] = gsu_add(R[0], R[5], 0);
-    gsu_code(0x049869, 6);
     gsu_stw(0x26FA, R[0]);
-    gsu_code(0x04986f, 4);
     R[1] = gsu_ldw(0x26F6);
-    gsu_code(0x049873, 4);
     R[2] = gsu_ldw(0x26F8);
-    gsu_code(0x049877, 4);
     R[3] = gsu_ldw(0x26FA);
-    gsu_code(0x04987b, 2); gsu_code(0x0498ab, 1);
     abi_FxHitAddUnit();           /* BRA into it: its return is ours */
     return;
 lCB7E:
-    gsu_code(0x04cb7f, 2);
     gsu_stw(R[10], R[11]);
     R[10] = gsu_inc(R[10]);
     R[10] = gsu_inc(R[10]);
-    gsu_code(0x04cb81, 4);
     gsu_stw(R[10], R[1]);
     R[10] = gsu_inc(R[10]);
     R[10] = gsu_inc(R[10]);
     R[1] = 0x001E;
     R[1] = gsu_add(R[1], R[8], 0);
-    gsu_code(0x04cb85, 8);
     R[1] = gsu_ldw(R[1]);
     R[2] = 0x0020;
     R[2] = gsu_add(R[2], R[8], 0);
-    gsu_code(0x04cb8d, 6);
     R[2] = gsu_ldw(R[2]);
     R[3] = 0x0022;
     R[3] = gsu_add(R[3], R[8], 0);
-    gsu_code(0x04cb93, 6);
     R[3] = gsu_ldw(R[3]);
     R[5] = R[5];
     gsu_moves(R[5]);
     t = gsu.z;
-    gsu_code(0x04cb99, 4);
-    if (t) { gsu_code(0x04cbdd, 1); goto lCBDD; }
+    if (t) { goto lCBDD; }
     R[1] = 0x0026;
     R[1] = gsu_add(R[1], R[5], 0);
-    gsu_code(0x04cb9d, 7);
     R[1] = gsu_ldw(R[1]);
     R[1] = R[1];
     gsu_moves(R[1]);
     t = gsu.z;
-    gsu_code(0x04cba4, 4);
-    if (t) { gsu_code(0x04cbaa, 1); goto lCBAA; }
+    if (t) { goto lCBAA; }
     R[5] = R[1];
-    gsu_code(0x04cba8, 3);
 lCBAA:
     R[0] = 0x0058;
     R[0] = gsu_add(R[0], R[8], 0);
-    gsu_code(0x04cbab, 5);
     gsu_stw(R[0], R[5]);
     R[1] = R[0];
     R[0] = 0x0024;
     R[0] = gsu_add(R[0], R[8], 0);
-    gsu_code(0x04cbb0, 6);
     R[0] = gsu_ldw(R[0]);
     R[1] = gsu_sub(R[1], R[0], 0);
     R[10] = gsu_dec(R[10]);
     R[10] = gsu_dec(R[10]);
-    gsu_code(0x04cbb6, 6);
     R[3] = gsu_ldw(R[10]);
     R[2] = R[3];
     R[2] = gsu_not(R[2]);
@@ -357,130 +290,95 @@ lCBAA:
     R[1] = R[1];
     gsu_moves(R[1]);
     t = gsu.s;
-    gsu_code(0x04cbbc, 9);
-    if (t) { gsu_code(0x04cbd0, 1); goto lCBD0; }
+    if (t) { goto lCBD0; }
     gsu_sub(R[1], R[3], 0);   /* CMP */
     t = gsu.s;
-    gsu_code(0x04cbc5, 6);
-    if (t) { gsu_code(0x04cbd8, 1); goto lCBD8; }
+    if (t) { goto lCBD8; }
     R[1] = R[3];
     t = 1;
-    gsu_code(0x04cbcb, 5);
-    gsu_code(0x04cbd8, 1);
     if (t) goto lCBD8;
 lCBD0:
     gsu_sub(R[1], R[2], 0);   /* CMP */
     t = !gsu.s;
-    gsu_code(0x04cbd1, 5);
-    if (t) { gsu_code(0x04cbd8, 1); goto lCBD8; }
+    if (t) { goto lCBD8; }
     R[1] = R[2];
-    gsu_code(0x04cbd6, 3);
 lCBD8:
     R[10] = gsu_dec(R[10]);
     R[10] = gsu_dec(R[10]);
-    gsu_code(0x04cbd9, 4);
     nx = (uint16_t)(gsu_ldw(R[10]));
     at = nx;
     goto dispatch;
 lCBDD:
     R[10] = gsu_dec(R[10]);
     R[10] = gsu_dec(R[10]);
-    gsu_code(0x04cbde, 3);
     R[0] = gsu_ldw(R[10]);
     R[1] = 0x0000;
     R[10] = gsu_dec(R[10]);
     R[10] = gsu_dec(R[10]);
-    gsu_code(0x04cbe1, 7);
     nx = (uint16_t)(gsu_ldw(R[10]));
     at = nx;
     goto dispatch;
 lA301:
-    gsu_code(0x04a302, 2);
     gsu_stw(R[10], R[11]);
     R[10] = gsu_inc(R[10]);
     R[10] = gsu_inc(R[10]);
     R[1] = 0x0018;
     R[1] = gsu_add(R[1], R[7], 0);
-    gsu_code(0x04a304, 8);
     R[1] = gsu_ldw(R[1]);
     R[1] = R[1];
     gsu_moves(R[1]);
     t = gsu.z;
-    gsu_code(0x04a30c, 4);
-    if (t) { gsu_code(0x04a328, 1); goto lA328; }
+    if (t) { goto lA328; }
     R[0] = 0x0004;
     R[0] = gsu_add(R[0], R[1], 0);
-    gsu_code(0x04a310, 5);
     R[0] = gsu_ldw(R[0]);
-    gsu_code(0x04a315, 4);
     gsu_stw(0x0068, R[0]);
     R[0] = 0x0006;
     R[0] = gsu_add(R[0], R[1], 0);
-    gsu_code(0x04a319, 4);
     R[0] = gsu_ldw(R[0]);
-    gsu_code(0x04a31d, 4);
     gsu_stw(0x002E, R[0]);
     R[0] = gsu_sub(R[0], R[0], 0);
-    gsu_code(0x04a321, 5);
     gsu_stw(0x002C, R[0]);
     t = 1;
-    gsu_code(0x04a326, 2);
-    gsu_code(0x04a340, 1);
     if (t) goto lA340;
 lA328:
     R[0] = 0x002E;
     R[0] = gsu_add(R[0], R[7], 0);
-    gsu_code(0x04a329, 4);
     R[0] = gsu_ldw(R[0]);
-    gsu_code(0x04a32d, 4);
     gsu_stw(0x0068, R[0]);
     R[0] = 0x0030;
     R[0] = gsu_add(R[0], R[7], 0);
-    gsu_code(0x04a331, 4);
     R[0] = gsu_ldw(R[0]);
-    gsu_code(0x04a335, 4);
     gsu_stw(0x002C, R[0]);
     R[0] = 0x0032;
     R[0] = gsu_add(R[0], R[7], 0);
-    gsu_code(0x04a339, 4);
     R[0] = gsu_ldw(R[0]);
-    gsu_code(0x04a33d, 4);
     gsu_stw(0x002E, R[0]);
 lA340:
     R[10] = gsu_dec(R[10]);
     R[10] = gsu_dec(R[10]);
-    gsu_code(0x04a341, 4);
     nx = (uint16_t)(gsu_ldw(R[10]));
     at = nx;
     goto dispatch;
 l93FA:
     R[1] = 0x0100;
     R[0] = 0x0014;
-    gsu_code(0x0493fb, 7);
     gsu_romb(R[0]);
-    gsu_code(0x049402, 3);
     gsu_r14(0x896C);
     R[0] = 0x0200;
     R[0] = gsu_bic(R[0], 1);
-    gsu_code(0x049405, 7);
     gsu_r14(gsu_add(R[14], R[0], 0));
-    gsu_code(0x04940c, 2);
     R[6] = gsu_getb();
-    gsu_code(0x04940e, 1);
     gsu_r14(gsu_inc(R[14]));
-    gsu_code(0x04940f, 3);
     R[6] = gsu_getbh(R[6]);
-    gsu_code(0x049412, 2);
     R[0] = gsu_fmult(R[1], R[6]);
     R[0] = gsu_add(R[0], R[0], 0);
     nx = (uint16_t)(R[11]);
     at = nx;
-    gsu_code(0x049414, 3);
     goto dispatch;
 l9417:
     R[10] = gsu_dec(R[10]);
     R[10] = gsu_dec(R[10]);
-    gsu_code(0x049418, 4);
     nx = (uint16_t)(gsu_ldw(R[10]));
     at = nx;
     goto dispatch;
@@ -488,38 +386,30 @@ lBCA5:
     R[1] = 0x0100;
     R[0] = gsu_sub(R[0], R[1], 0);
     t = gsu.s;
-    gsu_code(0x04bca6, 6);
-    if (t) { gsu_code(0x04bcb7, 1); goto lBCB7; }
+    if (t) { goto lBCB7; }
     R[6] = 0x0080;
-    gsu_code(0x04bcac, 6);
     { uint32_t p = gsu_lmult(R[0], R[6]); R[4] = (uint16_t)p; R[0] = (uint16_t)(p >> 16); }
     R[0] = gsu_swap(R[4]);
     R[0] = gsu_lob(R[0]);
     nx = (uint16_t)(R[11]);
     at = nx;
-    gsu_code(0x04bcb2, 5);
     goto dispatch;
 lBCB7:
     nx = (uint16_t)(R[11]);
     at = nx;
-    gsu_code(0x04bcb8, 2);
     goto dispatch;
 lC3A2:
-    gsu_code(0x04c3a3, 2);
     gsu_stw(R[10], R[11]);
     R[10] = gsu_inc(R[10]);
     R[10] = gsu_inc(R[10]);
     R[11] = 0xC3AB;
-    gsu_code(0x04c3a5, 6); gsu_code(0x04c3b5, 1);
     abi_FxRecordSegment();
 lC3AB:
     R[11] = 0xC3B0;
-    gsu_code(0x04c3ac, 4); gsu_code(0x04cca4, 1);
     abi_FxCourseNextEntry();
 lC3B0:
     R[10] = gsu_dec(R[10]);
     R[10] = gsu_dec(R[10]);
-    gsu_code(0x04c3b1, 4);
     nx = (uint16_t)(gsu_ldw(R[10]));
     at = nx;
     goto dispatch;
@@ -527,31 +417,25 @@ l9C2C:
     R[0] = 0x0001;
     R[10] = gsu_dec(R[10]);
     R[10] = gsu_dec(R[10]);
-    gsu_code(0x049c2d, 6);
     R[9] = gsu_ldw(R[10]);
     R[10] = gsu_dec(R[10]);
     R[10] = gsu_dec(R[10]);
-    gsu_code(0x049c33, 4);
     R[8] = gsu_ldw(R[10]);
     R[10] = gsu_dec(R[10]);
     R[10] = gsu_dec(R[10]);
-    gsu_code(0x049c37, 4);
     R[11] = gsu_ldw(R[10]);
     nx = (uint16_t)(R[11]);
     at = nx;
-    gsu_code(0x049c3b, 2);
     goto dispatch;
 lC19D:
     R[9] = 0x00E4;
     R[11] = 0xC1A5;
-    gsu_code(0x04c19e, 7); gsu_code(0x04c1a7, 1);
     abi_FxMatrixFromAngles();
 lC1A5:
     return;   /* the STOP: the program ends here */
 dispatch:
     if (at == ret)
         return;
-    gsu_code(0x040000 | at, 1);   /* where it jumps: its first byte */
 fetched:
 enter:
     switch (at) {
@@ -725,74 +609,59 @@ static void fx_unused8b_run(uint16_t at, uint16_t ret)
 
     (void)t;
     (void)nx;
-    goto enter;   /* the caller fetched the first byte */
+    goto enter;
 l8BAD:
     R[10] = 0x0240;
     R[4] = 0x002A;
     R[3] = 0x1098;
     R[11] = 0x8BBB;
-    gsu_code(0x048bae, 13); gsu_code(0x04893a, 1);
     abi_FxPoolTake();
-    gsu_code(0x048bbb, 1);
 l8BBB:
-    gsu_code(0x048bbc, 4);
     gsu_stw(0x238E, R[1]);
     R[1] = R[1];
     gsu_moves(R[1]);
     t = gsu.z;
-    gsu_code(0x048bc0, 4);
-    if (t) { gsu_code(0x048be0, 1); goto l8BE0; }
-    gsu_code(0x048bc4, 5);
+    if (t) { goto l8BE0; }
     gsu_stw(0x239A, R[1]);
     R[2] = 0x0016;
     R[2] = gsu_add(R[2], R[1], 0);
-    gsu_code(0x048bc9, 6);
     R[2] = gsu_ldw(R[2]);
     R[0] = 0x0020;
     R[2] = gsu_or(R[0], R[2]);
     R[0] = 0x0016;
     R[0] = gsu_add(R[0], R[1], 0);
-    gsu_code(0x048bcf, 10);
     gsu_stw(R[0], R[2]);
     R[2] = 0xFFFF;
     R[0] = 0x001A;
     R[0] = gsu_add(R[0], R[1], 0);
-    gsu_code(0x048bd9, 8);
     gsu_stw(R[0], R[2]);
 l8BE0:
     return;   /* the STOP: the program ends here */
 l8BE2:
     R[10] = 0x0240;
     R[0] = gsu_sub(R[0], R[0], 0);
-    gsu_code(0x048be3, 8);
     gsu_stw(0x238E, R[0]);
     return;   /* the STOP: the program ends here */
 l8BEC:
     R[4] = 0x002A;
     R[3] = 0x1098;
     R[11] = 0x8BF7;
-    gsu_code(0x048bed, 10); gsu_code(0x04893a, 1);
     abi_FxPoolTake();
-    gsu_code(0x048bf7, 1);
 l8BF7:
-    gsu_code(0x048bf8, 4);
     gsu_stw(0x238E, R[1]);
     R[1] = R[1];
     gsu_moves(R[1]);
     t = gsu.z;
-    gsu_code(0x048bfc, 4);
-    if (t) { gsu_code(0x048c08, 1); goto l8C08; }
+    if (t) { goto l8C08; }
     R[2] = 0x0001;
     R[0] = 0x0016;
     R[0] = gsu_add(R[0], R[1], 0);
-    gsu_code(0x048c00, 9);
     gsu_stw(R[0], R[2]);
 l8C08:
     return;   /* the STOP: the program ends here */
 dispatch:
     if (at == ret)
         return;
-    gsu_code(0x040000 | at, 1);   /* where it jumps: its first byte */
 fetched:
 enter:
     switch (at) {

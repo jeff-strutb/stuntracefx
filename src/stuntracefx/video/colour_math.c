@@ -3,8 +3,9 @@
  * PPU: $0D47 for CGADSUB, and the fixed colour's intensity at $7F:340D.
  */
 #include "machine.h"
+#include "assets.h"
 
-void SoundPort1QueuePushW(uint8_t command, unsigned wide);
+void SoundPort1QueuePushW(uint8_t command);
 
 /*
  * @routine 03:FE57 ColourMathA3
@@ -16,7 +17,6 @@ void SoundPort1QueuePushW(uint8_t command, unsigned wide);
 void ColourMathA3(void)
 {
     wr8(0x000D47, 0xA3);
-    cyc(42);
 }
 
 void abi_ColourMathA3(void)
@@ -36,11 +36,8 @@ void abi_ColourMathA3(void)
  */
 void ColourMathA7Start(void)
 {
-    cyc(100);
-    SoundPort1QueuePushW(0x04, 0);      /* after SEP #$30 */
-    cyc(40);
+    SoundPort1QueuePushW(0x04);      /* after SEP #$30 */
     wr8(0x000D47, 0xA7);
-    cyc(78);
     wr16(0x7F3408, 0x0000);
 }
 
@@ -65,12 +62,9 @@ static uint8_t fixed_colour_from_step(uint8_t *step)
 {
     uint8_t v;
 
-    cyc(54);
     *step = rd8(0x7F3408);
-    cyc(86);
-    v = rd8(0x03FE7B + *step);
+    v = rd8(ASSET_fixed_colour_from_step_03FE7B + *step);
     wr8(0x7F340D, v);
-    cyc(44);
     return v;
 }
 
@@ -102,10 +96,8 @@ void WindowsColourWindowOnly(void);
  */
 void ColourMathSub83Windowed(void)
 {
-    cyc(70);
     wr8(0x002131, 0x83);
-    (cyc(46), WindowsColourWindowOnly());
-    cyc(42);
+    (WindowsColourWindowOnly());
 }
 
 void abi_ColourMathSub83Windowed(void)
@@ -130,8 +122,7 @@ void ColourMathA3Long(void)
 
 void abi_ColourMathA3Long(void)
 {
-    (cyc(108), abi_ColourMathA3());
-    cyc(44);
+    (abi_ColourMathA3());
 }
 
 /*
@@ -142,9 +133,7 @@ void abi_ColourMathA3Long(void)
  */
 void ColourMathOff(uint8_t bank)
 {
-    cyc(62);
     wr8((uint32_t)bank << 16 | 0x0D47, 0x00);
-    cyc(42);
 }
 
 void abi_ColourMathOff(void)
@@ -169,7 +158,5 @@ void ColourMathOffLong(uint8_t bank)
 
 void abi_ColourMathOffLong(void)
 {
-    cyc(46);
     abi_ColourMathOff();
-    cyc(44);
 }

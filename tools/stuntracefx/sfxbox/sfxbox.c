@@ -122,6 +122,77 @@ static uint32_t frame[512 * 512];
 static unsigned fw, fh;
 static unsigned buttons;
 static long frames;
+/* SFXBOX_GSURUN=FILE: each Super FX program the original runs, as
+   "g FRAME PC CLOCKS K0..K6 RAM LOADS STORES FLUSH RPIX": the frame it
+   starts in, its first instruction, the clocks the core steps it from that
+   instruction to its STOP's, those by kind (patch 0007), and its accesses
+   to its RAM, all and by what made them: loads, stores, the pixel caches'
+   flushes, RPIX (what the cartridge's chip prices, tools/stuntracefx/
+   gsuprice.py). A flush's or RPIX's access is the one right after a step
+   of that kind (5, 6); the step kind is cleared at each instruction. */
+struct GsuRunCb {
+    void (*insn)(uint32_t pc, uint32_t prev_end, uint8_t opcode);
+    void (*step)(uint32_t clocks);
+    void (*ram)(int write, uint32_t addr, uint8_t data);
+    void (*cache)(int kind, uint32_t value);
+};
+static FILE *gsurun_f;
+static int gsurun_halted = 1, gsurun_starting, gsurun_on;
+static uint32_t gsurun_pc; static long gsurun_frame;
+static unsigned long long gsurun_clk, gsurun_by[8], gsurun_ram_n, gsurun_ram_by[4];
+static unsigned gsurun_kind;     /* the last step's kind in this instruction */
+static void gsurun_insn(uint32_t pc, uint32_t prev_end, uint8_t opcode)
+{
+    (void)prev_end;
+    gsurun_kind = 0;
+    if (gsurun_halted) { gsurun_halted = 0; gsurun_starting = 1; }
+    else if (gsurun_starting) {
+        gsurun_starting = 0; gsurun_on = 1; gsurun_clk = 0; gsurun_ram_n = 0; memset(gsurun_ram_by, 0, sizeof gsurun_ram_by); memset(gsurun_by, 0, sizeof gsurun_by); gsurun_pc = pc; gsurun_frame = frames + 1;
+    }
+    if (opcode == 0x00) {
+        if (gsurun_on) {
+            fprintf(gsurun_f, "g %ld %06X %llu", gsurun_frame, gsurun_pc, gsurun_clk);
+            for (int k = 0; k < 7; k++) fprintf(gsurun_f, " %llu", gsurun_by[k]);
+            fprintf(gsurun_f, " %llu %llu %llu %llu %llu\n", gsurun_ram_n,
+                    gsurun_ram_by[0], gsurun_ram_by[1], gsurun_ram_by[2], gsurun_ram_by[3]);
+        }
+        gsurun_on = 0; gsurun_halted = 1;
+    }
+}
+static void gsurun_ram(int write, uint32_t addr, uint8_t data)
+{
+    (void)addr; (void)data;
+    if (!gsurun_on) return;
+    gsurun_ram_n++;
+    gsurun_ram_by[gsurun_kind == 5 ? 2 : gsurun_kind == 6 ? 3 : write ? 1 : 0]++;
+}
+static void gsurun_step(uint32_t a)
+{
+    /* the step's kind in its top byte (gsucall.c STEP_KIND) */
+    if (gsurun_on) { gsurun_clk += a & 0xFFFFFFu; gsurun_by[(a >> 24) & 7] += a & 0xFFFFFFu; }
+    gsurun_kind = (a >> 24) & 7;
+}
+
+/* SFXBOX_SPCLOG=FILE: each SPC700 read and write of $F0-$FF, as
+   nativeshvc's NSHVC_SPCLOG gives the native console's: 8 bytes, its time
+   in SPC700 half cycles (the core's SMP clocks, 2 a cycle; little endian,
+   32 bits), 1 write or 0 read, the address (16 bits), the value. */
+struct SpcLogCb {
+    void (*insn)(uint16_t pc, uint16_t prev_end, uint8_t opcode);
+    void (*mem)(int write, uint16_t addr, uint8_t data);
+    void (*step)(uint32_t clocks);
+};
+static FILE *spclog_f;
+static uint64_t spclog_t;
+static void spclog_mem(int write, uint16_t addr, uint8_t data)
+{
+    if ((addr & 0xFFF0) != 0x00F0) return;
+    uint32_t t = (uint32_t)spclog_t;
+    uint8_t rec[8] = { (uint8_t)t, (uint8_t)(t >> 8), (uint8_t)(t >> 16), (uint8_t)(t >> 24),
+                       (uint8_t)write, (uint8_t)addr, (uint8_t)(addr >> 8), data };
+    fwrite(rec, 1, 8, spclog_f);
+}
+static void spclog_step(uint32_t clocks) { spclog_t += clocks & 0x7FFFFFFFu; }   /* SFXBOX_SMP_IDLE off */
 
 static bool env(unsigned cmd, void *data) {
     switch (cmd) {
@@ -226,9 +297,40 @@ static int16_t input(unsigned port, unsigned device, unsigned index, unsigned id
 }
 
 static int lockstep;
+
+/* --cyclog FILE [--cyclog-frames A-B]: each S-CPU cycle of the original,
+   one line: "o"/"n"/"r" ADDR VALUE CLOCKS for an opcode fetch, an operand
+   fetch or a data read, "w" ADDR VALUE CLOCKS for a write, "i" CLOCKS for
+   an internal cycle, "x" where an interrupt starts; "F n" at frame n's
+   start (frames counted from 1). DMA and refresh time are not CPU cycles
+   and are not logged. For giving the decomp's timing its cycle edges. */
+static FILE *cyclog_f;
+static long cyclog_lo = 1, cyclog_hi = 0x7FFFFFFF;
+static int *cyclog_who, cyclog_on;
+static uint32_t cyclog_addr; static uint8_t cyclog_data;
+static void cyclog_read(uint32_t addr, uint8_t data) { cyclog_addr = addr; cyclog_data = data; }
+static void cyclog_write(uint32_t addr, uint8_t data, int kind) { (void)kind; cyclog_addr = addr; cyclog_data = data; }
+static void cyclog_timing(int kind, int clocks, uint32_t addr)
+{
+    if (!cyclog_on) return;
+    if (kind == 1) {
+        int who = cyclog_who ? *cyclog_who : 0;
+        fprintf(cyclog_f, "%c %06X %02X %d\n", who == 1 ? 'o' : who == 2 ? 'n' : 'r', addr, cyclog_data, clocks);
+    } else if (kind == 2)
+        fprintf(cyclog_f, "w %06X %02X %d\n", addr, cyclog_data, clocks);
+    else if (kind == 3)
+        fprintf(cyclog_f, "i %d\n", clocks);
+    else if (kind == 4)
+        fputs("x\n", cyclog_f);
+}
+
 static void run(long n)
 {
     while (n-- > 0) {
+        if (cyclog_f) {
+            cyclog_on = frames + 1 >= cyclog_lo && frames + 1 <= cyclog_hi;
+            if (cyclog_on) fprintf(cyclog_f, "F %ld\n", frames + 1);
+        }
         if (lockstep) lockstep_before_frame(frames);
         retro_run_p();
         if (lockstep) lockstep_after_frame(frames);
@@ -806,6 +908,12 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--rows") && i + 1 < argc) {
             if (!(rows_f = fopen(argv[++i], "w"))) die("cannot write %s", argv[i]);
         }
+        else if (!strcmp(argv[i], "--cyclog") && i + 1 < argc) {
+            if (!(cyclog_f = fopen(argv[++i], "w"))) die("cannot write %s", argv[i]);
+        }
+        else if (!strcmp(argv[i], "--cyclog-frames") && i + 1 < argc) {
+            if (sscanf(argv[++i], "%ld-%ld", &cyclog_lo, &cyclog_hi) != 2) die("--cyclog-frames A-B");
+        }
         else if (!strcmp(argv[i], "--pacing") && i + 1 < argc) {
             if (!(pacing_f = fopen(argv[++i], "w"))) die("cannot write %s", argv[i]);
         }
@@ -835,6 +943,21 @@ int main(int argc, char **argv) {
         if (!tap) die("missing symbol sfxbox_dsp_voices (the core predates patch 0013)");
         *tap = dsp_voices;
     }
+    if (getenv("SFXBOX_SPCLOG")) {
+        void (*set_cb)(const struct SpcLogCb *, int (*)(uint16_t, uint16_t)) = dlsym(core, "sfxbox_smp_set_callbacks");
+        static const struct SpcLogCb cb = {NULL, spclog_mem, spclog_step};
+        if (!set_cb) die("missing symbol sfxbox_smp_set_callbacks");
+        if (checklib || locklib) die("SFXBOX_SPCLOG is for a plain run");
+        if (!(spclog_f = fopen(getenv("SFXBOX_SPCLOG"), "wb"))) die("cannot write %s", getenv("SFXBOX_SPCLOG"));
+        set_cb(&cb, NULL);
+    }
+    if (getenv("SFXBOX_GSURUN")) {
+        void (*set_cb)(const struct GsuRunCb *, int (*)(uint32_t, uint32_t)) = dlsym(core, "sfxbox_gsu_set_callbacks");
+        static const struct GsuRunCb cb = {gsurun_insn, gsurun_step, gsurun_ram, NULL};
+        if (!set_cb) die("missing symbol sfxbox_gsu_set_callbacks (the core predates patch 0002)");
+        if (!(gsurun_f = fopen(getenv("SFXBOX_GSURUN"), "w"))) die("cannot write %s", getenv("SFXBOX_GSURUN"));
+        set_cb(&cb, NULL);
+    }
     if (apulog_f) {
         void (**tap)(uint16_t, uint8_t, int) = dlsym(core, "sfxbox_apu_write");
         if (!tap) die("missing symbol sfxbox_apu_write (the core predates patch 0012)");
@@ -853,6 +976,17 @@ int main(int argc, char **argv) {
     struct retro_game_info gi = {rom, data, n, NULL};
     if (!retro_load_game_p(&gi)) die("load failed: %s", rom);
     if (trace) sfxbox_trace_begin_p();
+    if (cyclog_f) {
+        if (checklib || locklib) die("--cyclog is for a plain run");
+        struct SfxboxCallbacks { void (*insn)(uint32_t); void (*write)(uint32_t, uint8_t, int);
+            void (*read)(uint32_t, uint8_t); void (*interrupt)(uint32_t, uint16_t); void (*timing)(int, int, uint32_t); };
+        static struct SfxboxCallbacks cb = {NULL, cyclog_write, cyclog_read, NULL, cyclog_timing};
+        void (*set_cb)(const struct SfxboxCallbacks *) = (void (*)(const struct SfxboxCallbacks *))dlsym(core, "sfxbox_set_callbacks");
+        if (!set_cb) die("the core has no callbacks");
+        cyclog_who = (int *)dlsym(core, "sfxbox_cpu_who");
+        if (!cyclog_who) die("the core does not export sfxbox_cpu_who");
+        set_cb(&cb);
+    }
     if (apulog_f) {
         size_t n; uint8_t *a = sfxbox_memory_p("apuram", &n);
         if (!a || n != 65536) die("no APU RAM view");
@@ -880,9 +1014,11 @@ int main(int argc, char **argv) {
     if (lockstep) lockstep_end(frames);
     if (trace && sfxbox_trace_write_p(outdir)) die("trace write failed");
     if (pacing_f) fclose(pacing_f);
+    if (cyclog_f) fclose(cyclog_f);
     if (rows_f) fclose(rows_f);
     if (sound_f) fclose(sound_f);
     if (apulog_f) fclose(apulog_f);
+    if (spclog_f) fclose(spclog_f);
     if (voices_f) fclose(voices_f);
     printf("frames %ld\n", frames);
     return 0;

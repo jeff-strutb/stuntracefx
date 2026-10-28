@@ -14,7 +14,6 @@ static uint8_t sbc_bcd8(uint8_t a, uint8_t m, uint8_t *p)
 
     r = (a & 0x0F) + (y & 0x0F) + c;
     if (r <= 0x0F) r -= 0x06;
-    cyc(22);
     c = r > 0x0F;
     r = (a & 0xF0) + (y & 0xF0) + (c << 4) + (r & 0x0F);
     *p = (uint8_t)((*p & ~(P_V | P_C)) | ((~(a ^ y) & (a ^ r) & 0x80) ? P_V : 0));
@@ -57,67 +56,41 @@ uint8_t LapSplit(uint8_t bank, uint8_t x, uint8_t *p)
     uint32_t b = (uint32_t)bank << 16;
     uint8_t frac, secs, mins, v;
 
-    cyc(38);
     mins = rd8(b | 0x0E66);
-    cyc(16);
     wr8(0x0000F1, mins);
-    cyc(24);
     frac = rd8(b | 0x0E63);
     *p |= P_C;
-    cyc(38);
     v = sbc_bcd8(frac, rd8(b | 0x0EDB), p);
-    cyc(8);
     wr8(b | (uint16_t)(0x0EDE + x), v);
-    cyc(24);
     secs = rd8(b | 0x0E64);
-    cyc(24);
     v = sbc_bcd8(secs, rd8(b | 0x0EDC), p);
     if (!(*p & P_C)) {
         *p &= (uint8_t)~P_C;
         v = adc_bcd8(v, 0x60, p);
-        cyc(40);
-        wr8(0x0000F1, cyc_then(6, (uint8_t)(rd8(0x0000F1) - 1)));
+        wr8(0x0000F1, ((uint8_t)(rd8_rmw(0x0000F1) - 1)));
     }
-    cyc(30);
     wr8(b | (uint16_t)(0x0EDF + x), v);
     *p |= P_C;
-    cyc(16);
     v = rd8(0x0000F1);                          /* LDA, then SBC */
-    cyc(38);
     v = sbc_bcd8(v, rd8(b | 0x0EDD), p);
-    cyc(8);
     wr8(b | (uint16_t)(0x0EE0 + x), v);
 
-    cyc(24);
     frac = rd8(b | 0x0E63);
-    cyc(24);
     wr8(b | 0x0EDB, frac);
-    cyc(30);
     wr8(b | (uint16_t)(0x0EF0 + x), frac);
-    cyc(62);
     wr8(b | 0x0F6D, frac & 0x0F);
-    cyc(108);
     wr8(b | 0x0F6C, frac >> 4);
-    cyc(24);
     secs = rd8(b | 0x0E64);
-    cyc(24);
     wr8(b | 0x0EDC, secs);
-    cyc(30);
     wr8(b | (uint16_t)(0x0EF1 + x), secs);
-    cyc(62);
     wr8(b | 0x0F6B, secs & 0x0F);
-    cyc(108);
     wr8(b | 0x0F6A, secs >> 4);
-    cyc(24);
     mins = rd8(b | 0x0E66);
-    cyc(24);
     wr8(b | 0x0EDD, mins);
-    cyc(30);
     wr8(b | (uint16_t)(0x0EF2 + x), mins);
-    cyc(24);
     wr8(b | 0x0F69, mins);
 
-    *p = (uint8_t)((nz8(*p, mins) & ~(P_C | P_D)) | (secs & 0x08 ? (cyc(56), P_C) : (cyc(56), 0)));
+    *p = (uint8_t)((nz8(*p, mins) & ~(P_C | P_D)) | (secs & 0x08 ? (P_C) : (0)));
     return mins;
 }
 
@@ -142,17 +115,10 @@ void abi_RaceTimeKeep(void)
     uint32_t b = (uint32_t)cpu.db << 16;
 
     op_sep(P_M);
-    cyc(46);
     op_lda8(b | 0x0E63);
-    cyc(24);
     wr8(b | 0x0EE7, (uint8_t)cpu.a);
-    cyc(24);
     op_lda8(b | 0x0E64);
-    cyc(24);
     wr8(b | 0x0EE8, (uint8_t)cpu.a);
-    cyc(24);
     op_lda8(b | 0x0E66);
-    cyc(24);
     wr8(b | 0x0EE9, (uint8_t)cpu.a);
-    cyc(42);
 }

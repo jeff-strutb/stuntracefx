@@ -4,6 +4,7 @@
  * once it has applied the frame's updates.
  */
 #include "machine.h"
+#include "waits.h"
 #include "hw.h"
 #include "cpu_ops.h"
 
@@ -17,10 +18,9 @@
  */
 void abi_MenuFramesTarget7(void)
 {
-    cyc(84);
     wr8((uint32_t)cpu.db << 16 | 0x11DB, 0x07);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | 0x07);
-    cyc(70);                            /* PLP, RTS */
+    /* PLP, RTS */
 }
 
 /*
@@ -40,22 +40,16 @@ void abi_MenuRandomStep(void)
     uint8_t p = cpu.p;
     uint16_t a;
 
-    cyc(68);
     a = (uint16_t)(rd8(b | 0x1189) << 8);
-    cyc(44);
     a = (uint16_t)(a | rd8(b | 0x118A));
     a = (uint16_t)(a >> 1);
     p &= (uint8_t)~P_C;
-    cyc(74);
     a = op_adc16(a, rd16(b | 0x1189), &p);
-    cyc(24);
     a = op_adc16(a, rd16(b | 0x1189), &p);
-    cyc(24);
     a ^= rd16(b | 0x11DD);
-    cyc(24);
     wr16(b | 0x1189, a);
     cpu.a = a;
-    cyc(70);                            /* PLP, RTS */
+    /* PLP, RTS */
 }
 
 /*
@@ -69,16 +63,14 @@ void abi_MenuRandomStep(void)
  */
 void abi_MenuDimOnL(void)
 {
-    cyc(24);
     cpu.a = (uint16_t)(rd16((uint32_t)cpu.db << 16 | 0x118F) & 0x0020);
     cpu.p = nz16(cpu.p, cpu.a);
     if (!cpu.a)
-        { cyc(88); return; }           /* AND, BEQ taken, RTS */
+        return;   /* AND, BEQ taken, RTS */
     cpu.a = 0x0004;
     cpu.p = nz8(cpu.p, 0x04);
-    cyc(110);
     wr8(INIDISP, 0x04);
-    cyc(64);                            /* REP, RTS */
+    /* REP, RTS */
 }
 
 /*
@@ -93,11 +85,9 @@ void MenuWaitFrame(uint8_t bank)
 {
     uint32_t a = (uint32_t)bank << 16 | 0x11D8;
 
-    cyc(68);
-    wr16(a, cyc_then(48, (uint16_t)(rd16(a) | 0x0001)));
-    while (rd16(cyc_then(24, a)))
-        { cyc(22); ; }
-    cyc(86);
+    wr16(a, ((uint16_t)(rd16(a) | 0x0001)));
+    wait_zero16(a);                      /* the vertical blank code clears it */
+    (void)rd16(a);
 }
 
 void abi_MenuWaitFrame(void)
@@ -125,21 +115,15 @@ void MenuRunFrames(void)
     uint8_t p = cpu.p, a;
 
     cpu.p |= P_M;
-    cyc(22);
     do {
-        cyc(68);
         MenuWaitFrame(cpu.db);
         cpu.a = 0x0000;
-        (cyc(62), MenuActorsRun());
-        cyc(62);
+        (MenuActorsRun());
         cpu.a = MenuOamBuild(&cpu.x, &cpu.y);
         b = (uint32_t)cpu.db << 16;
-        cyc(46);
-        wr8(b | 0x11D7, cyc_then(40, (uint8_t)(rd8(b | 0x11D7) | 0x1F)));
-        cyc(24);
+        wr8(b | 0x11D7, ((uint8_t)(rd8(b | 0x11D7) | 0x1F)));
         a = rd8(b | 0x11DA);
-    } while (a != rd8(cyc_then(24, b | 0x11DB)));
-    cyc(86);
+    } while (a != rd8((b | 0x11DB)));
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | a);
     cpu.p = p;
 }
@@ -158,15 +142,11 @@ static uint16_t actor_find8(uint8_t kind, uint16_t x)
 {
     uint16_t i;
 
-    cyc(86);
     wr8(0x0011E1, kind);
-    cyc(24);
     for (i = (uint16_t)(rd16(0x0011F7) - 2); !(i & 0x8000); i = (uint16_t)(i - 2)) {
-        cyc(74);
         x = rd16(0x001239 + i);
-        cyc(22);
-        if (rd8((uint16_t)(x + 0x1A)) == rd8(cyc_then(24, 0x0011E1)))
-            break; else { cyc(28); }
+        if (rd8((uint16_t)(x + 0x1A)) == rd8((0x0011E1)))
+            break;
     }
     return x;
 }
@@ -178,16 +158,12 @@ static void menu_frame(void)
     uint32_t b;
     uint8_t f;
 
-    cyc(46);
     MenuWaitFrame(cpu.db);
     cpu.a = 0x0000;
-    (cyc(62), MenuActorsRun());
-    cyc(62);
+    (MenuActorsRun());
     cpu.a = MenuOamBuild(&cpu.x, &cpu.y);
     b = (uint32_t)cpu.db << 16;
-    cyc(46);
     f = (uint8_t)(rd8(b | 0x11D7) | 0x0F);
-    cyc(40);
     wr8(b | 0x11D7, f);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | f);
 }
@@ -201,26 +177,18 @@ static void region_stop(void)
     uint16_t x;
 
     x = actor_find8(0x0F, cpu.x);
-    cyc(80);
     if (rd8((uint16_t)(x + 0x14)) != 0x1E) {
-        cyc(70);
         wr8((uint16_t)(x + 0x14), 0x1E);
-        cyc(22);
         wr8((uint16_t)(x + 0x16), 0x00);
-        cyc(22);
         wr8((uint16_t)(x + 0x18), 0x00);
     }
-    cyc(38);
     wr8((uint16_t)(x + 0x06), 0x60);
     x = actor_find8(0x10, x);
-    cyc(80);
     wr8((uint16_t)(x + 0x10), 0x00);
     cpu.x = x;
-    (cyc(62), MenuActorsRun());
-    cyc(62);
+    (MenuActorsRun());
     cpu.a = MenuOamBuild(&cpu.x, &cpu.y);
-    cyc(46);
-    wr8(0x0011D7, cyc_then(40, (uint8_t)(rd8(0x0011D7) | 0x0F)));
+    wr8(0x0011D7, ((uint8_t)(rd8(0x0011D7) | 0x0F)));
     cpu_loop_forever(0x0BAE8A);
 }
 
@@ -239,12 +207,10 @@ static void region_stop(void)
  */
 void MenuRegionCheck(void)
 {
-    cyc(178);
     uint8_t p = cpu.p, db = cpu.db, s = rd8(STAT78) & 0x10;
 
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | s);
     if (!s) {
-        cyc(136);
         cpu.p = p;
         cpu.db = db;
         return;
@@ -277,8 +243,7 @@ void abi_MenuRegionPal(void)
    $18FB set. */
 static int held_or_18fb(uint32_t b)
 {
-    cyc(46);
-    return (rd16(b | 0x0309) & 0x000F) || (rd16(cyc_then(64, b | 0x030D)) & 0x000F) || rd16(cyc_then(72, 0x0018FB));
+    return (rd16(b | 0x0309) & 0x000F) || (rd16((b | 0x030D)) & 0x000F) || rd16((0x0018FB));
 }
 
 /*
@@ -302,19 +267,14 @@ uint16_t MenuHeldRestart(void)
     cpu.p &= (uint8_t)~(P_M | P_X);
     if (!held_or_18fb(b)) {
         cpu.p = nz16(cpu.p, 0x0000);
-        cyc(82);
         return 0x0000;
-    } else { cyc(116); }
+    }
     MenuActorFind(cpu.db, 0x000F, &x, &y, &p);
-    cyc(22);
     a = rd16((uint16_t)(x + 0x14));
     p = (uint8_t)((p & ~P_C) | (a >= 0x0018 ? P_C : 0));
     if (a != 0x0018) {
-        cyc(86);
         wr16((uint16_t)(x + 0x14), 0x0018);
-        cyc(22);
         wr16((uint16_t)(x + 0x16), 0x0000);
-        cyc(22);
         wr16((uint16_t)(x + 0x18), 0x0000);
     }
     cpu.x = x;
@@ -324,7 +284,6 @@ uint16_t MenuHeldRestart(void)
         menu_frame();
         cpu.p &= (uint8_t)~(P_M | P_X);
     } while (held_or_18fb(b));
-    cyc(82);
     cpu.p = nz16(cpu.p, 0xFFFF);
     return 0xFFFF;
 }
@@ -353,31 +312,22 @@ void MenuScreen0Run(void)
     do {
         cpu.p &= (uint8_t)~(P_M | P_X);
         MenuScreenOpen0();
-        cyc(76);
         do {
-            cyc(22);
             menu_frame();
             cpu.p &= (uint8_t)~(P_M | P_X);
             b = (uint32_t)cpu.db << 16;
-            cyc(46);
             cpu.a = rd16(b | 0x11EB);
         } while (!cpu.a);
-        cyc(62);
         MenuRegionCheck();
-        cpu.a = (cyc(46), MenuHeldRestart());
+        cpu.a = (MenuHeldRestart());
     } while (cpu.a == 0xFFFF);
     b = (uint32_t)cpu.db << 16;
-    cyc(102);
     wr8(b | (uint16_t)INIDISP, 0x80);
-    cyc(24);
     wr8(b | (uint16_t)NMITIMEN, 0x00);
-    cyc(24);
     wr8(b | (uint16_t)HDMAEN, 0x00);
-    cyc(24);
     wr8(b | (uint16_t)MDMAEN, 0x00);
     cpu.a = 0x0080;
     cpu.p = (uint8_t)((cpu.p & ~(P_Z | P_C)) | P_N | P_M);
-    cyc(44);
 }
 
 void abi_MenuScreen0Run(void)

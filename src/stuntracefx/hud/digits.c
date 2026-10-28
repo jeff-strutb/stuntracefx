@@ -13,11 +13,9 @@
 
 /* The tile bytes of sprite entry `offset` (in bytes) and the one after it;
    second is the time to the second store, each copy's own (44, or 38). */
-static void digit(uint32_t tile_byte, uint8_t d, uint32_t second)
+static void digit(uint32_t tile_byte, uint8_t d)
 {
-    cyc(44);
     wr8(tile_byte, (uint8_t)(d << 1));
-    cyc(second);
     wr8(tile_byte + 4, (uint8_t)((d << 1) + 1));
 }
 
@@ -47,41 +45,28 @@ static TimeEnd hud_draw_time(void)
     uint16_t base;
     uint8_t v;
 
-    cyc(136);
     if (rd8(0x000D2B) != 0x01) {
-        cyc(56);
         uint16_t hold = rd16(0x000E5D);
         if (hold == 0)
             goto draw;
         hold--;
-        cyc(54);
         wr16(0x000E5D, hold);
         end.x = hold;
         end.x_set = 1;
-    } else { cyc(38); }
-    cyc(24);
+    }
     end.a = rd8(0x000D4E);
     if (end.a == 0)
-        { cyc(16); return end; }
+        return end;
 draw:
-    cyc(46);
     base = rd16(HUD_TIME_SPRITE);
-    cyc(24);
     v = rd8(RACE_TIME_SECONDS);
-    cyc(16);
-    digit(OAM_BUFFER + 0x1A + base, v & 0x0F, 44);
-    cyc(88);
-    digit(OAM_BUFFER + 0x12 + base, v >> 4, 44);
-    cyc(24);
+    digit(OAM_BUFFER + 0x1A + base, v & 0x0F);
+    digit(OAM_BUFFER + 0x12 + base, v >> 4);
     v = rd8(RACE_TIME_FRACTION);
-    cyc(16);
-    digit(OAM_BUFFER + 0x0A + base, v & 0x0F, 44);
-    cyc(88);
-    digit(OAM_BUFFER + 0x02 + base, v >> 4, 44);
-    cyc(24);
+    digit(OAM_BUFFER + 0x0A + base, v & 0x0F);
+    digit(OAM_BUFFER + 0x02 + base, v >> 4);
     v = rd8(RACE_TIME_MINUTES);
-    cyc(16);
-    digit(OAM_BUFFER + 0x22 + base, v & 0x0F, 44);
+    digit(OAM_BUFFER + 0x22 + base, v & 0x0F);
     end.drew = 1;
     end.a = (uint8_t)(((v & 0x0F) << 1) + 1);
     end.x = base;
@@ -101,7 +86,6 @@ void abi_HudDrawTime(void)
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | end.a);
     if (end.x_set)
         cpu.x = (cpu.p & P_X) ? (uint8_t)end.x : end.x;
-    cyc(70);
 }
 
 /*
@@ -114,20 +98,15 @@ void abi_HudDrawTime(void)
  */
 static uint8_t hud_draw_digits_19ec(int *drew)
 {
-    cyc(46);
     uint8_t v, blank = rd8(0x000D4E);
 
     *drew = 0;
     if (blank)
-        return blank;
-    cyc(48);
+        return (blank);   /* BNE taken to .done */
     v = rd8(0x0019EC);
-    cyc(10);
-    digit(OAM_BUFFER + 0x16A, v & 0x0F, 38);
-    cyc(32);
+    digit(OAM_BUFFER + 0x16A, v & 0x0F);
     v = rd8(0x0019EC);
-    cyc(50);
-    digit(OAM_BUFFER + 0x162, v >> 4, 38);
+    digit(OAM_BUFFER + 0x162, v >> 4);
     *drew = 1;
     return (uint8_t)(((v >> 4) << 1) + 1);
 }
@@ -148,7 +127,6 @@ void abi_HudDrawDigits19EC(void)
     cpu.p = (uint8_t)(nz8(cpu.p, a) | P_M);
     if (drew)
         cpu.p &= (uint8_t)~P_C;
-    cyc(42);
 }
 
 /*
@@ -164,39 +142,28 @@ void abi_HudDrawDigits19EC(void)
 uint8_t HudDrawNumber3(uint8_t n, uint16_t offset, uint8_t *p)
 {
     uint8_t count;
-    uint32_t c;
 
     wr8(0x0000F1, 0x00);
     while (n >= 100) {
         *p = (uint8_t)((*p & ~P_V) | (((n ^ 100) & (n ^ (uint8_t)(n - 100)) & 0x80) ? P_V : 0));
         n = (uint8_t)(n - 100);
-        cyc(64);
-        count = rd8(0x0000F1);
-        cyc(6);
+        count = rd8_rmw(0x0000F1);
         wr8(0x0000F1, (uint8_t)(count + 1));
-        cyc(22);
     }
-    cyc(76);
     count = rd8(0x0000F1);
-    digit(OAM_BUFFER + 2 + offset, count, 44);
-    cyc(44);
+    digit(OAM_BUFFER + 2 + offset, count);
     wr8(0x0000F1, 0x00);
-    c = 64;                             /* the first ten; 86 for each after */
+                                 /* the first ten; 86 for each after */
     while (n >= 10) {
         *p = (uint8_t)((*p & ~P_V) | (((n ^ 10) & (n ^ (uint8_t)(n - 10)) & 0x80) ? P_V : 0));
         n = (uint8_t)(n - 10);
-        cyc(c);
-        c = 86;
-        count = rd8(0x0000F1);
-        cyc(6);
+        count = rd8_rmw(0x0000F1);
         wr8(0x0000F1, (uint8_t)(count + 1));
     }
-    cyc(c == 86 ? 98 : 76);             /* out after a ten, or with none */
+    /* out after a ten, or with none */
     count = rd8(0x0000F1);
-    digit(OAM_BUFFER + 0x0A + offset, count, 44);
-    cyc(28);
-    digit(OAM_BUFFER + 0x12 + offset, n, 44);
-    cyc(42);
+    digit(OAM_BUFFER + 0x0A + offset, count);
+    digit(OAM_BUFFER + 0x12 + offset, n);
     return (uint8_t)((n << 1) + 1);
 }
 
@@ -215,10 +182,9 @@ static uint8_t draw_value(uint8_t bank, uint16_t value, uint16_t offset, uint8_t
 {
     uint8_t v;
 
-    cyc(46);
     v = rd8((uint32_t)bank << 16 | value);
-    cyc(offset == 0x0128 ? 108 : 130);  /* REP, LDX, (A and B: BRA to the tail), JSR */
-    return cyc_then(64, HudDrawNumber3(v, offset, p));
+    /* REP, LDX, (A and B: BRA to the tail), JSR */
+    return (HudDrawNumber3(v, offset, p));
 }
 
 static void abi_draw_value(uint16_t value, uint16_t offset)
@@ -312,13 +278,9 @@ void HudCountUp19EC(uint8_t bank, uint16_t obj, uint8_t *p)
 {
     uint32_t b = (uint32_t)bank << 16;
 
-    cyc(30);
-    wr8(b | (uint16_t)(0x2025 + obj), cyc_then(46, (uint8_t)(rd8(b | (uint16_t)(0x2025 + obj)) | 0x01)));
-    cyc(60);
-    wr8(b | 0x19EC, cyc_then(54, adc_bcd8(rd8(b | 0x19EC), 0x01, 0, p)));
-    cyc(92);
+    wr8(b | (uint16_t)(0x2025 + obj), ((uint8_t)(rd8(b | (uint16_t)(0x2025 + obj)) | 0x01)));
+    wr8(b | 0x19EC, (adc_bcd8(rd8(b | 0x19EC), 0x01, 0, p)));
     SoundPort0QueuePush(0x3C);
-    cyc(42);
 }
 
 void abi_HudCountUp19EC(void)
@@ -342,13 +304,10 @@ void abi_HudCountUp19EC(void)
 static uint8_t hud_digit_sprites_62(uint8_t bank, uint8_t *digit)
 {
     uint32_t b = (uint32_t)bank << 16;
-    cyc(24);
-    uint8_t d = rd8(b | 0x0D4C) ? (cyc(54), 0x01) : rd8(cyc_then(46, b | 0x0DF4));
+    uint8_t d = rd8(b | 0x0D4C) ? (0x01) : rd8((b | 0x0DF4));
 
     *digit = d;
-    cyc(38);
     wr8(b | 0x046F, (uint8_t)(d << 1));
-    cyc(38);
     wr8(b | 0x0473, (uint8_t)((d << 1) + 1));
     return (uint8_t)((d << 1) + 1);
 }
@@ -366,7 +325,6 @@ void abi_HudDigitSprites62(void)
 
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
     cpu.p = (uint8_t)((nz8(cpu.p, v) & ~P_C) | ((d & 0x80) ? P_C : 0));
-    cyc(42);
 }
 
 uint16_t GsuRecordRaise6A(uint8_t bank, uint16_t rec, uint8_t amount, uint8_t *p);
@@ -408,23 +366,22 @@ void abi_HudCountMove19EECopy(void);
 void abi_HudCountMove19EE(void)
 {
     uint32_t b = (uint32_t)cpu.db << 16;
-    cyc(46);
     uint8_t v = rd8(b | 0x0E59);
 
     cpu.p |= P_M;
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
     cpu.p = nz8(cpu.p, v);
     if (v)
-        return; else { cyc(94); }
+        return;
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | 0x35);
     abi_SoundPort0QueuePush();
     cpu.p |= P_M;
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | 0x7F);
-    (cyc(100), abi_GsuRecordRaise6A());
+    (abi_GsuRecordRaise6A());
     cpu.p |= P_M;
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | 0x7F);
-    (cyc(100), abi_GsuRecordLower82());
-    (cyc(72), abi_HudCountMove19EECopy());
+    (abi_GsuRecordLower82());
+    (abi_HudCountMove19EECopy());
 }
 
 /*
@@ -441,15 +398,10 @@ void abi_HudCountMove19EECopy(void)
     uint32_t b = (uint32_t)cpu.db << 16;
     uint16_t n;
 
-    cyc(46);
     n = rd16(b | 0x19EE);
-    cyc(24);
     wr16(b | 0x19F0, n);
-    cyc(24);
     wr16(b | 0x19EE, 0x0000);
-    cyc(62);
     wr8(b | 0x19F2, 0x01);
     cpu.a = (uint16_t)((n & 0xFF00) | 0x01);
     cpu.p = (uint8_t)(nz8(cpu.p, 0x01) | P_M);
-    cyc(42);
 }

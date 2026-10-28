@@ -261,6 +261,7 @@ void snes_cart_irq(int level) { cart_irq = level; }
 uint64_t gsu_host_clock(void) { return snes_clock; }
 int gsu_host_untimed(void) { return snes_untimed(); }
 void gsu_host_irq(int level) { snes_cart_irq(level); }
+void gsu_host_irq_at(int level, uint64_t clock) { (void)clock; snes_cart_irq(level); }
 uint8_t gsu_host_open_bus(void) { return snes_mdr; }
 uint32_t gsu_host_ram_size(void) { return snes_cart->sfx_ram_size; }
 uint8_t gsu_host_rom(uint32_t off, int fetch, int *unheld)

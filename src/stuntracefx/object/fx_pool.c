@@ -27,24 +27,16 @@ typedef struct {
 /* One pool: each free block whose end is the next block in the chain, and
    that next block free, takes it in: sizes added, its link taken over. The
    walk then goes on from the block taken in. */
-/* gsuwalk: the code of each copy of pool_merge, read from the ROM */
-static const GsuCode pool_merge_fetch[2][19] = {
-    {{0x048899, 3}, {0x04889c, 2}, {0x04889e, 6}, {0x0488a4, 2}, {0x0488a6, 4}, {0x0488c9, 5}, {0x04889b, 1}, {0x0488a6, 14}, {0x0488c9, 5}, {0x04889b, 1}, {0x0488a6, 19}, {0x0488b9, 4}, {0x0488ce, 7}, {0x04889b, 1}, {0x0488c8, 6}, {0x04889b, 1}, {0x0488b9, 11}, {0x0488c4, 3}, {0x0488c7, 1}},
-    {{0x0488d6, 3}, {0x0488d9, 2}, {0x0488db, 6}, {0x0488e1, 2}, {0x0488e3, 4}, {0x048906, 5}, {0x0488d8, 1}, {0x0488e3, 14}, {0x048906, 5}, {0x0488d8, 1}, {0x0488e3, 19}, {0x0488f6, 4}, {0x04890b, 7}, {0x0488d8, 1}, {0x048905, 6}, {0x0488d8, 1}, {0x0488f6, 11}, {0x048901, 3}, {0x048904, 1}},
-};
 
-static void pool_merge(uint16_t head, FxPoolWalk *w, int copy)
+static void pool_merge(uint16_t head, FxPoolWalk *w)
 {
     w->r1 = head;
-    gsu_codes(pool_merge_fetch[copy], 1);
     for (;;) {
-        gsu_codes(pool_merge_fetch[copy] + 1, 1);
         w->r2 = gsu_ldw(w->r1);                      /* the next block */
         w->r1 = gsu_inc(gsu_inc(w->r1));             /* this block + 2 */
         gsu_moves(w->r2);
         if (gsu.z)
-            return; else { gsu_codes(pool_merge_fetch[copy] + 2, 1); }
-        gsu_codes(pool_merge_fetch[copy] + 3, 1);
+            return;
         w->r0 = gsu_ldw(w->r1);                      /* this block's size */
         gsu_moves(w->r0);
         if (!gsu.s) {
@@ -53,27 +45,21 @@ static void pool_merge(uint16_t head, FxPoolWalk *w, int copy)
             gsu_sub(w->r3, w->r2, 0);
             if (gsu.z) {
                 w->r2 = gsu_inc(gsu_inc(w->r2));
-                gsu_codes(pool_merge_fetch[copy] + 10, 1);
                 w->r3 = gsu_ldw(w->r2);              /* the next block's size */
                 gsu_moves(w->r3);
                 if (!gsu.s) {
                     w->r0 = gsu_add(gsu_add(w->r0, w->r3, 0), 2, 0);
                     w->r2 = gsu_dec(gsu_dec(w->r2));
-                    gsu_codes(pool_merge_fetch[copy] + 16, 1);
                     gsu_stw(w->r1, w->r0);
                     w->r1 = gsu_dec(gsu_dec(w->r1));
-                    gsu_codes(pool_merge_fetch[copy] + 17, 1);
                     w->r0 = gsu_ldw(w->r2);          /* its link */
-                    gsu_codes(pool_merge_fetch[copy] + 18, 1);
                     gsu_stw(w->r1, w->r0);
                     w->r1 = gsu_inc(gsu_inc(w->r1));
-                    gsu_codes(pool_merge_fetch[copy] + 14, 2);
                 } else {
                     w->r2 = gsu_dec(gsu_dec(w->r2));
-                    gsu_codes(pool_merge_fetch[copy] + 11, 3);
                 }
-            } else { gsu_codes(pool_merge_fetch[copy] + 7, 3); }
-        } else { gsu_codes(pool_merge_fetch[copy] + 4, 3); }
+            }
+        }
         w->r1 = w->r2;
     }
 }
@@ -93,10 +79,8 @@ static void pool_merge(uint16_t head, FxPoolWalk *w, int copy)
  */
 FxPoolWalk FxPoolsMerge(FxPoolWalk w)
 {
-    pool_merge(FX_POOL_FIRST, &w, GSU_COPY(0));
-    gsu_code(0x04889e, 6); gsu_code(0x0488d5, 1);
-    pool_merge(FX_POOL_SECOND, &w, GSU_COPY(1));
-    gsu_code(0x0488db, 6); gsu_code(0x048912, 3);
+    pool_merge(FX_POOL_FIRST, &w);
+    pool_merge(FX_POOL_SECOND, &w);
     return w;
 }
 
@@ -127,9 +111,7 @@ void abi_FxPoolsMergeProgram(void)
 {
     gsu.r[10] = FX_STACK;
     gsu.r[11] = 0x8896;
-    gsu_code(0x04888f, 7); gsu_code(0x048898, 1);
     abi_FxPoolsMerge();
-    gsu_code(0x048896, 1);
 }
 
 typedef struct {
@@ -152,75 +134,57 @@ typedef struct {
  * record kept or 0, R9 and R7 from the last record seen; OV, S clear, Z
  * set; the last RAM address the last word read or written.
  */
-FxSweepRegs FxListSweep(uint16_t owner, uint16_t stack, FxSweepRegs g, int copy)
+FxSweepRegs FxListSweep(uint16_t owner, uint16_t stack, FxSweepRegs g)
 {
-    gsu_code(0x04a463, 6);
     g.r8 = gsu_ldw(gsu_add(REC_LIST, owner, 0));
     gsu_moves(g.r8);
     if (gsu.z)
-        { gsu_code(0x04a469, 4); gsu_code(0x04a489, 3); return g; } else { gsu_code(0x04a469, 4); }
+        return g;
     g.r12 = 1;
     g.r2 = 0;
-    gsu_code(0x04a46d, 6);
     do {
-        gsu_code(0x04a473, 4);
         g.r0 = gsu_ldw(gsu_add(REC_FLAGS10, g.r8, 0));
         g.r9 = gsu_and(g.r0, g.r12);
         if (!gsu.z) {
             g.r0 = gsu_bic(g.r0, g.r12);             /* kept: clear the mark */
-            gsu_code(0x04a477, 8);
             gsu_sbk(g.r0);
             g.r2 = g.r8;
-            gsu_code(0x04a47f, 6);
             g.r0 = gsu_ldw(gsu_add(REC_NEXT, g.r8, 0));
         } else {
-            gsu_code(0x04a477, 4); gsu_code(0x04a48c, 7);
             g.r7 = gsu_ldw(gsu_add(REC_NEXT, g.r8, 0));
             gsu_moves(g.r2);
             if (gsu.z)
-                { { gsu_code(0x04a493, 10); gsu_stw(gsu_add(REC_LIST, owner, 0), g.r7); gsu_code(0x04a49d, 2); gsu_code(0x04a4a4, 1); } }
+                { { gsu_stw(gsu_add(REC_LIST, owner, 0), g.r7); } }
             else
-                { gsu_code(0x04a493, 4); gsu_code(0x04a49f, 6); gsu_stw(gsu_add(REC_NEXT, g.r2, 0), g.r7); }
-            gsu_code(0x04a4a5, 2);
+                gsu_stw(gsu_add(REC_NEXT, g.r2, 0), g.r7);
             gsu_stw(stack, g.r7);
             stack = gsu_inc(gsu_inc(stack));
             g.r8 = gsu_inc(gsu_inc(g.r8));
-            gsu_code(0x04a4a7, 5);
             g.r0 = gsu_ldw(g.r8);
             g.r7 = g.r0;
             gsu_moves(g.r7);
             if (gsu.s)
-                { g.r7 = gsu_inc(gsu_not(g.r7)); gsu_code(0x04a4ac, 8); } else { gsu_code(0x04a4ac, 4); gsu_code(0x04a4b3, 1); }
+                g.r7 = gsu_inc(gsu_not(g.r7));
             g.r8 = gsu_dec(gsu_dec(g.r8));
             g.r7 = FX_POOL_FIRST;
             g.r9 = gsu_inc(gsu_inc(g.r8));
-            gsu_code(0x04a4b4, 10);
             g.r0 = gsu_ldw(g.r9);
             gsu_moves(g.r0);
             if (gsu.s) {
                 g.r0 = gsu_inc(gsu_not(g.r0));
-                gsu_code(0x04a4be, 8);
                 gsu_stw(g.r9, g.r0);
-                gsu_code(0x04a4c6, 2); gsu_code(0x04a4cc, 1);
             } else {
-                gsu_code(0x04a4be, 4); gsu_code(0x04a4c8, 2);
                 g.r0 = gsu_ldw(g.r7);
-                gsu_code(0x04a4ca, 1);
                 gsu_stw(g.r8, g.r0);
-                gsu_code(0x04a4cb, 2);
                 gsu_stw(g.r7, g.r8);
             }
             stack = gsu_dec(gsu_dec(stack));
-            gsu_code(0x04a4cd, 4);
             g.r7 = gsu_ldw(stack);
             g.r0 = g.r7;
-            gsu_code(0x04a4d1, 4); gsu_code(0x04a484, 1);
         }
         g.r8 = g.r0;
         gsu_moves(g.r8);
-    } while (gsu_code_loop(0x04a472, 1, gsu_code_loop(0x04a485, 4, !gsu.z)));
-    gsu_code(0x04a485, 4);
-    gsu_code(0x04a489, 3);
+    } while (((!gsu.z)));
     return g;
 }
 
@@ -229,15 +193,13 @@ FxRegs FxListSweepRegs(FxRegs g)
 {
     FxSweepRegs s = {g.r[0], g.r[2], g.r[7], g.r[8], g.r[9], g.r[12]};
 
-    gsu_code(0x04a2f6, 6); gsu_code(0x04a462, 1);
-    s = FxListSweep(g.r[6], g.r[10], s, GSU_COPY(0));
+    s = FxListSweep(g.r[6], g.r[10], s);
     g.r[0] = s.r0;
     g.r[2] = s.r2;
     g.r[7] = s.r7;
     g.r[8] = s.r8;
     g.r[9] = s.r9;
     g.r[12] = s.r12;
-    gsu_code(0x04a2fc, 1);
     return g;
 }
 
@@ -245,7 +207,7 @@ void abi_FxListSweep(void)
 {
     FxSweepRegs g = {gsu.r[0], gsu.r[2], gsu.r[7], gsu.r[8], gsu.r[9], gsu.r[12]};
 
-    g = FxListSweep(gsu.r[6], gsu.r[10], g, GSU_COPY(0));
+    g = FxListSweep(gsu.r[6], gsu.r[10], g);
     gsu.r[0] = g.r0;
     gsu.r[2] = g.r2;
     gsu.r[7] = g.r7;
@@ -284,44 +246,33 @@ void abi_FxListSweep(void)
  * address the record + $1C. Without: S, Z from R1 (set), the last RAM
  * address R10.
  */
-FxRegs FxPoolTake(FxRegs g, int copy)
+FxRegs FxPoolTake(FxRegs g)
 {
     uint16_t *sp = &g.r[10];
 
-    gsu_code(0x04893b, 2);
     gsu_push(sp, g.r[4]);
-    gsu_code(0x04893d, 4);
     gsu_push(sp, g.r[3]);
     g.r[1] = g.r[4];
-    gsu_code(0x048941, 2); gsu_cache(0x8943); gsu_code(0x048943, 5);
     gsu_push(sp, g.r[3]);
-    gsu_code(0x048948, 2);
     for (;;) {                                        /* an exact fit */
-        gsu_code(0x04894a, 2);
         g.r[2] = gsu_ldw(g.r[3]);
         g.r[3] = gsu_inc(gsu_inc(g.r[3]));
-        gsu_code(0x04894c, 3);
         g.r[0] = gsu_sub(gsu_ldw(g.r[3]), g.r[1], 0);
         if (gsu.z) {
-            gsu_code(0x04894f, 3); gsu_code(0x04896e, 4);
             g.r[0] = gsu_pull(sp);
             g.r[1] = gsu_inc(gsu_not(g.r[1]));
             g.r[0] = gsu_sub(g.r[0], g.r[0], 0);
-            gsu_code(0x048972, 6); gsu_code(0x048989, 1);
             goto mark;
-        } else { gsu_code(0x04894f, 3); }
+        }
         g.r[3] = g.r[2];
         gsu_moves(g.r[3]);
         if (gsu.z)
-            { gsu_code(0x048952, 5); break; } else { gsu_code(0x048952, 5); gsu_code(0x048949, 1); }
+            break;
     }
-    gsu_code(0x048957, 5);
     g.r[3] = gsu_pull(sp);
     for (;;) {                                        /* a bigger block */
-        gsu_code(0x04895c, 2);
         g.r[2] = gsu_ldw(g.r[3]);
         g.r[3] = gsu_inc(gsu_inc(g.r[3]));
-        gsu_code(0x04895e, 3);
         g.r[0] = gsu_sub(gsu_ldw(g.r[3]), g.r[1], 0);
         if (!gsu.s) {
             g.r[0] = gsu_sub(g.r[0], 4, 0);
@@ -330,87 +281,67 @@ FxRegs FxPoolTake(FxRegs g, int copy)
                 g.r[1] = gsu_add(g.r[1], g.r[0], 0);
                 g.r[1] = gsu_inc(gsu_not(g.r[1]));
                 g.r[0] = 0xFFFC;
-                gsu_code(0x048961, 3); gsu_code(0x048978, 15);
-            } else { gsu_code(0x048961, 3); gsu_code(0x048978, 5); gsu_code(0x048986, 1); }
+            }
             g.r[0] = gsu_add(g.r[0], 4, 0);
-            gsu_code(0x048987, 3);
             gsu_stw(g.r[3], g.r[0]);
             goto mark;
-        } else { gsu_code(0x048961, 3); }
+        }
         g.r[3] = g.r[2];
         gsu_moves(g.r[3]);
         if (gsu.z)
-            { gsu_code(0x048964, 5); break; } else { gsu_code(0x048964, 5); gsu_code(0x04895b, 1); }
+            break;
     }
     g.r[1] = 0;
-    gsu_code(0x048969, 5); gsu_code(0x048992, 1);
     goto done;
 mark:
     ;
     g.r[2] = gsu_add(g.r[3], g.r[0], 0);
-    gsu_code(0x04898a, 5);
     gsu_stw(g.r[2], g.r[1]);
     g.r[2] = gsu_dec(gsu_dec(g.r[2]));
     g.r[1] = g.r[2];
-gsu_code(0x04898f, 4);
 done:
     ;
-    gsu_code(0x048993, 4);
     g.r[3] = gsu_pull(sp);
-    gsu_code(0x048997, 4);
     g.r[4] = gsu_pull(sp);
     gsu_moves(g.r[1]);
     if (gsu.z)
-        { gsu_code(0x04899b, 4); gsu_code(0x0489f7, 3); return g; } else { gsu_code(0x04899b, 4); }
+        return g;
     g.r[0] = FX_POOL_FIRST;
     gsu_sub(g.r[0], g.r[3], 0);
     g.r[0] = FX_POOL_SECOND;
     gsu_sub(g.r[0], g.r[3], 0);
     g.r[2] = gsu_add(2, g.r[1], 0);
-    gsu_code(0x04899f, 23);
     g.r[0] = gsu_ldw(g.r[2]);
     g.r[2] = gsu_inc(gsu_inc(g.r[2]));
     gsu_moves(g.r[0]);
     if (gsu.s)
-        { g.r[0] = gsu_inc(gsu_not(g.r[0])); gsu_code(0x0489b6, 9); } else { gsu_code(0x0489b6, 6); gsu_code(0x0489be, 1); }
+        g.r[0] = gsu_inc(gsu_not(g.r[0]));
     g.r[0] = gsu_sub(g.r[0], 4, 0);
     if (!gsu.z) {                              /* BEQ, then BMI: each its own way on */
         if (!gsu.s) {
             g.r[12] = g.r[0];
             g.r[0] = gsu_sub(g.r[0], g.r[0], 0);
             g.r[13] = 0x89CB;
-            gsu_code(0x0489bf, 13);
             do {
-                gsu_code(0x0489cc, 2);
                 gsu_stb(g.r[2], (uint8_t)g.r[0]);
                 g.r[2] = gsu_inc(g.r[2]);
-            } while (gsu_code_loop(0x0489cb, 1, gsu_code_loop(0x0489ce, 2, gsu_count_down(&g.r[12]))));
-            gsu_code(0x0489ce, 2);
-            gsu_code(0x0489d0, 1);
-        } else { gsu_code(0x0489bf, 7); gsu_code(0x0489d0, 1); }
-    } else { gsu_code(0x0489bf, 4); gsu_code(0x0489d0, 1); }
+            } while (((gsu_count_down(&g.r[12]))));
+        }
+    }
     g.r[0] = gsu_add(REC_POOL, g.r[1], 0);
-    gsu_code(0x0489d1, 5);
     gsu_stw(g.r[0], g.r[3]);
-    gsu_code(0x0489d6, 4);
     g.r[2] = gsu_ldw(FX_RECORDS);
     g.r[0] = gsu_add(REC_ALL_NEXT, g.r[1], 0);
-    gsu_code(0x0489da, 5);
     gsu_stw(g.r[0], g.r[2]);
-    gsu_code(0x0489df, 4);
     gsu_stw(FX_RECORDS, g.r[1]);
     gsu_moves(g.r[2]);
     if (!gsu.z) {
         g.r[0] = gsu_add(REC_ALL_PREV, g.r[2], 0);
-        gsu_code(0x0489e3, 10);
         gsu_stw(g.r[0], g.r[1]);
-    } else { gsu_code(0x0489e3, 4); gsu_code(0x0489ec, 1); }
-    gsu_code(0x0489ed, 6);
+    }
     g.r[2] = gsu_ldw(gsu_add(REC_FLAGS1C, g.r[1], 0));
     g.r[0] = gsu_or(0x0004, g.r[2]);
-    gsu_code(0x0489f3, 5);
     gsu_sbk(g.r[0]);
-    gsu_code(0x0489f8, 2);
     return g;
 }
 
@@ -419,7 +350,7 @@ void abi_FxPoolTake(void)
     FxRegs g;
 
     memcpy(g.r, gsu.r, sizeof g.r);
-    g = FxPoolTake(g, GSU_COPY(0));
+    g = FxPoolTake(g);
     memcpy(gsu.r, g.r, 15 * sizeof g.r[0]);
 }
 
@@ -434,88 +365,38 @@ void abi_FxPoolTake(void)
 /* The start of each program below: R10 = the stack, a record of `bytes`
    from the pool `pool` (FxPoolTake, R11 = `ret`), its address left at
    $238E for the S-CPU. Returns whether there is one. */
-/* gsuwalk: the code of each copy of record_new, read from the ROM */
-static const GsuCode record_new_fetch[6][3] = {
-    {{0x048b34, 13}, {0x04893a, 1}, {0x048b41, 5}},
-    {{0x048b65, 13}, {0x04893a, 1}, {0x048b72, 5}},
-    {{0x048c0b, 13}, {0x04893a, 1}, {0x048c18, 5}},
-    {{0x048c3c, 13}, {0x04893a, 1}, {0x048c49, 5}},
-    {{0x048c6d, 13}, {0x04893a, 1}, {0x048c7a, 5}},
-    {{0x048c96, 13}, {0x04893a, 1}, {0x048ca3, 5}},
-};
 
-static int record_new(FxRegs *g, uint16_t bytes, uint16_t pool, uint16_t ret, int copy)
+static int record_new(FxRegs *g, uint16_t bytes, uint16_t pool, uint16_t ret)
 {
     g->r[10] = FX_STACK;
     g->r[4] = bytes;
     g->r[3] = pool;
     g->r[11] = ret;
-    gsu_codes(record_new_fetch[copy], 2);
-    *g = FxPoolTake(*g, GSU_COPY(0));
-    gsu_codes(record_new_fetch[copy] + 2, 1);
+    *g = FxPoolTake(*g);
     gsu_stw(FX_NEW_RECORD, g->r[1]);
     gsu_moves(g->r[1]);
     return !gsu.z;
 }
 
 /* Field `field` of the new record R1 = `value`, through R2 and R0. */
-/* gsuwalk: the code of each copy of record_set, read from the ROM */
-static const GsuCode record_set_fetch[15][1] = {
-    {{0x048b4b, 8}},
-    {{0x048b53, 8}},
-    {{0x048b5b, 8}},
-    {{0x048ba4, 8}},
-    {{0x048c22, 8}},
-    {{0x048c2a, 8}},
-    {{0x048c32, 8}},
-    {{0x048c53, 8}},
-    {{0x048c5b, 8}},
-    {{0x048c63, 8}},
-    {{0x048c84, 8}},
-    {{0x048c8c, 8}},
-    {{0x048cad, 8}},
-    {{0x048cb5, 8}},
-    {{0x048cbd, 8}},
-};
 
-static void record_set(FxRegs *g, uint16_t field, uint16_t value, int copy)
+static void record_set(FxRegs *g, uint16_t field, uint16_t value)
 {
     g->r[2] = value;
     g->r[0] = gsu_add(field, g->r[1], 0);
-    gsu_codes(record_set_fetch[copy], 1);
     gsu_stw(g->r[0], g->r[2]);
 }
 
 /* The first pool's programs: a $34-byte record with its mass (+$2A), flags
    (+$16) and mode (+$1A). */
-/* gsuwalk: the code of each copy of record_new_first, read from the ROM */
-static const GsuCode record_new_first_fetch[4][3] = {
-    {{0x048b46, 4}, {0x048b62, 1}, {0x048b46, 5}},
-    {{0x048c1d, 4}, {0x048c39, 1}, {0x048c1d, 5}},
-    {{0x048c4e, 4}, {0x048c6a, 1}, {0x048c4e, 5}},
-    {{0x048ca8, 4}, {0x048cc4, 1}, {0x048ca8, 5}},
-};
 
-/* gsuwalk: the copy of record_new each copy of record_new_first calls */
-static const uint8_t record_new_in_record_new_first[4] = {0, 2, 3, 5};
-
-/* gsuwalk: the copy of record_set each copy of record_new_first calls */
-static const uint8_t record_set_in_record_new_first[4] = {0, 4, 7, 12};
-
-/* gsuwalk: the copy of record_set each copy of record_new_first calls */
-static const uint8_t record_set_in_record_new_first_2[4] = {1, 5, 8, 13};
-
-/* gsuwalk: the copy of record_set each copy of record_new_first calls */
-static const uint8_t record_set_in_record_new_first_3[4] = {2, 6, 9, 14};
-
-static FxRegs record_new_first(FxRegs g, uint16_t ret, uint16_t mass, uint16_t flags, uint16_t mode, int copy)
+static FxRegs record_new_first(FxRegs g, uint16_t ret, uint16_t mass, uint16_t flags, uint16_t mode)
 {
-    if (record_new(&g, 0x0034, FX_POOL_FIRST, ret, GSU_COPY(record_new_in_record_new_first[copy]))) {
-        gsu_codes(record_new_first_fetch[copy] + 2, 1);
-        record_set(&g, REC_MASS, mass, GSU_COPY(record_set_in_record_new_first[copy]));
-        record_set(&g, REC_FLAGS16, flags, GSU_COPY(record_set_in_record_new_first_2[copy]));
-        record_set(&g, REC_MODE, mode, GSU_COPY(record_set_in_record_new_first_3[copy]));
-    } else { gsu_codes(record_new_first_fetch[copy], 2); }
+    if (record_new(&g, 0x0034, FX_POOL_FIRST, ret)) {
+        record_set(&g, REC_MASS, mass);
+        record_set(&g, REC_FLAGS16, flags);
+        record_set(&g, REC_MODE, mode);
+    }
     return g;
 }
 
@@ -539,7 +420,7 @@ static FxRegs record_new_first(FxRegs g, uint16_t ret, uint16_t mass, uint16_t f
  */
 FxRegs FxRecordNew426(FxRegs g)
 {
-    return record_new_first(g, 0x8B41, 0x0040, 0x0008, 0x0426, GSU_COPY(0));
+    return record_new_first(g, 0x8B41, 0x0040, 0x0008, 0x0426);
 }
 
 void abi_FxRecordNew426(void)
@@ -557,7 +438,7 @@ void abi_FxRecordNew426(void)
  */
 FxRegs FxRecordNew424(FxRegs g)
 {
-    return record_new_first(g, 0x8C18, 0x0040, 0x0008, 0x0424, GSU_COPY(1));
+    return record_new_first(g, 0x8C18, 0x0040, 0x0008, 0x0424);
 }
 
 void abi_FxRecordNew424(void)
@@ -575,7 +456,7 @@ void abi_FxRecordNew424(void)
  */
 FxRegs FxRecordNew426B(FxRegs g)
 {
-    return record_new_first(g, 0x8C49, 0x0040, 0x0020, 0x0426, GSU_COPY(2));
+    return record_new_first(g, 0x8C49, 0x0040, 0x0020, 0x0426);
 }
 
 void abi_FxRecordNew426B(void)
@@ -596,11 +477,10 @@ void abi_FxRecordNew426B(void)
  */
 FxRegs FxRecordNewCamera(FxRegs g)
 {
-    if (record_new(&g, 0x0034, FX_POOL_FIRST, 0x8C7A, GSU_COPY(4))) {
-        gsu_code(0x048c7f, 5);
-        record_set(&g, REC_FLAGS16, 0x0020, GSU_COPY(10));
-        record_set(&g, REC_MODE, 0x042E, GSU_COPY(11));
-    } else { gsu_code(0x048c7f, 4); gsu_code(0x048c93, 1); }
+    if (record_new(&g, 0x0034, FX_POOL_FIRST, 0x8C7A)) {
+        record_set(&g, REC_FLAGS16, 0x0020);
+        record_set(&g, REC_MODE, 0x042E);
+    }
     return g;
 }
 
@@ -619,7 +499,7 @@ void abi_FxRecordNewCamera(void)
  */
 FxRegs FxRecordNew42D(FxRegs g)
 {
-    return record_new_first(g, 0x8CA3, 0x0000, 0x0020, 0x042D, GSU_COPY(3));
+    return record_new_first(g, 0x8CA3, 0x0000, 0x0020, 0x042D);
 }
 
 void abi_FxRecordNew42D(void)
@@ -642,30 +522,23 @@ void abi_FxRecordNew42D(void)
  */
 FxRegs FxRecordNew422(FxRegs g)
 {
-    if (!record_new(&g, 0x002A, FX_POOL_SECOND, 0x8B72, GSU_COPY(1)))
-        { gsu_code(0x048b77, 4); gsu_code(0x048bab, 1); return g; } else { gsu_code(0x048b77, 4); }
-    gsu_code(0x048b7b, 5);
+    if (!record_new(&g, 0x002A, FX_POOL_SECOND, 0x8B72))
+        return g;
     g.r[0] = gsu_inc(gsu_ldw(FX_COUNT_422));
-    gsu_code(0x048b80, 2);
     gsu_sbk(g.r[0]);
-    gsu_code(0x048b82, 4);
     g.r[2] = gsu_ldw(FX_LIST_422);
     gsu_moves(g.r[2]);
     if (!gsu.z) {
         g.r[0] = gsu_add(REC_LINK_422, g.r[2], 0);
-        gsu_code(0x048b86, 10);
         gsu_stw(g.r[0], g.r[1]);
-    } else { gsu_code(0x048b86, 4); gsu_code(0x048b8f, 1); }
-    gsu_code(0x048b90, 4);
+    }
     gsu_stw(FX_LIST_422, g.r[1]);
-    gsu_code(0x048b94, 6);
     g.r[2] = gsu_ldw(gsu_add(REC_FLAGS16, g.r[1], 0));
     g.r[0] = 0x0181;
     g.r[2] = gsu_or(g.r[0], g.r[2]);
     g.r[0] = gsu_add(REC_FLAGS16, g.r[1], 0);
-    gsu_code(0x048b9a, 10);
     gsu_stw(g.r[0], g.r[2]);
-    record_set(&g, REC_MODE, 0x0422, GSU_COPY(3));
+    record_set(&g, REC_MODE, 0x0422);
     return g;
 }
 
@@ -696,92 +569,68 @@ void abi_FxObjectFreeChildren(void);
  */
 void abi_FxObjectFree(void)
 {
-    gsu_code(0x048a09, 2);
     gsu_push(&gsu.r[10], gsu.r[11]);
     gsu.r[0] = gsu_add(0x0018, gsu.r[1], 0);
-    gsu_code(0x048a0b, 6);
     gsu.r[0] = gsu_ldw(gsu.r[0]);
     gsu_moves(gsu.r[0]);
     if (!gsu.z) {
-        gsu_code(0x048a11, 7);
         gsu_push(&gsu.r[10], gsu.r[8]);
         gsu.r[6] = gsu.r[1];
         gsu.r[11] = 0x8A20;
-        gsu_code(0x048a18, 8); gsu_code(0x04a441, 1);
         abi_FxListClearBit0();
         gsu.r[11] = 0x8A25;
-        gsu_code(0x048a20, 5); gsu_code(0x04a462, 1);
         abi_FxListSweep();
-        gsu_code(0x048a25, 5);
         gsu.r[8] = gsu_pull(&gsu.r[10]);
-    } else { gsu_code(0x048a11, 4); gsu_code(0x048a29, 1); }
+    }
     gsu.r[0] = gsu_add(0x0016, gsu.r[1], 0);
-    gsu_code(0x048a2a, 4);
     gsu.r[0] = gsu_ldw(gsu.r[0]);
     gsu.r[2] = 0x0002;
     gsu.r[0] = gsu_and(gsu.r[0], gsu.r[2]);
     if (!gsu.z) {
         gsu.r[11] = 0x8A39;
-        gsu_code(0x048a2e, 11); gsu_code(0x048aa2, 1);
         abi_FxObjectFreeChildren();
-        gsu_code(0x048a39, 1);
-    } else { gsu_code(0x048a2e, 6); gsu_code(0x048a39, 1); }
+    }
     gsu.r[2] = gsu_add(0x0006, gsu.r[1], 0);
-    gsu_code(0x048a3a, 6);
     gsu.r[2] = gsu_ldw(gsu.r[2]);
     gsu.r[3] = gsu_add(0x0004, gsu.r[1], 0);
-    gsu_code(0x048a40, 6);
     gsu.r[3] = gsu_ldw(gsu.r[3]);
     gsu_moves(gsu.r[2]);
     if (!gsu.z) {
         gsu.r[0] = gsu_add(0x0004, gsu.r[2], 0);
-        gsu_code(0x048a46, 10);
         gsu_stw(gsu.r[0], gsu.r[3]);
-        gsu_code(0x048a50, 2); gsu_code(0x048a56, 1);
     } else
-        { gsu_code(0x048a46, 4); gsu_code(0x048a52, 5); gsu_stw(0x2332, gsu.r[3]); }
+        gsu_stw(0x2332, gsu.r[3]);
     gsu_moves(gsu.r[3]);
     if (!gsu.z) {
         gsu.r[0] = gsu_add(0x0006, gsu.r[3], 0);
-        gsu_code(0x048a57, 10);
         gsu_stw(gsu.r[0], gsu.r[2]);
-    } else { gsu_code(0x048a57, 4); gsu_code(0x048a60, 1); }
+    }
     gsu.r[3] = gsu_add(0x0008, gsu.r[1], 0);
-    gsu_code(0x048a61, 6);
     gsu.r[3] = gsu_ldw(gsu.r[3]);
     gsu.r[1] = gsu_inc(gsu_inc(gsu.r[1]));
-    gsu_code(0x048a67, 3);
     gsu.r[0] = gsu_ldw(gsu.r[1]);
     gsu.r[2] = gsu.r[0];
     gsu_moves(gsu.r[2]);
     if (gsu.s)
-        { gsu.r[2] = gsu_inc(gsu_not(gsu.r[2])); gsu_code(0x048a6a, 8); } else { gsu_code(0x048a6a, 4); gsu_code(0x048a71, 1); }
+        gsu.r[2] = gsu_inc(gsu_not(gsu.r[2]));
     gsu.r[0] = 0x1098;
     gsu_sub(gsu.r[0], gsu.r[3], 0);
     gsu.r[0] = 0x1D70;
     gsu_sub(gsu.r[0], gsu.r[3], 0);
     gsu.r[1] = gsu_dec(gsu_dec(gsu.r[1]));
     gsu.r[3] = gsu_add(0x0008, gsu.r[1], 0);
-    gsu_code(0x048a72, 24);
     gsu.r[3] = gsu_ldw(gsu.r[3]);
     gsu.r[2] = gsu_inc(gsu_inc(gsu.r[1]));
-    gsu_code(0x048a8a, 5);
     gsu.r[0] = gsu_ldw(gsu.r[2]);
     gsu_moves(gsu.r[0]);
     if (gsu.s) {
         gsu.r[0] = gsu_inc(gsu_not(gsu.r[0]));
-        gsu_code(0x048a8f, 8);
         gsu_stw(gsu.r[2], gsu.r[0]);
-        gsu_code(0x048a97, 2); gsu_code(0x048a9d, 1);
     } else {
-        gsu_code(0x048a8f, 4); gsu_code(0x048a99, 2);
         gsu.r[0] = gsu_ldw(gsu.r[3]);
-        gsu_code(0x048a9b, 1);
         gsu_stw(gsu.r[1], gsu.r[0]);
-        gsu_code(0x048a9c, 2);
         gsu_stw(gsu.r[3], gsu.r[1]);
     }
-    gsu_code(0x048a9e, 4);
     gsu_pull(&gsu.r[10]);
 }
 
@@ -798,29 +647,21 @@ void abi_FxObjectFree(void)
  */
 void abi_FxObjectFreeChildren(void)
 {
-    gsu_code(0x048aa3, 2);
     gsu_push(&gsu.r[10], gsu.r[11]);
-    gsu_code(0x048aa5, 4);
     gsu_push(&gsu.r[10], gsu.r[1]);
     gsu.r[4] = gsu_add(0x003E, gsu.r[1], 0);
-    gsu_code(0x048aa9, 8);
     gsu.r[4] = gsu_ldw(gsu.r[4]);
     for (;;) {
         gsu_moves(gsu.r[4]);
         if (gsu.z)
-            { gsu_code(0x048ab1, 4); gsu_code(0x048ac7, 1); break; } else { gsu_code(0x048ab1, 4); }
+            break;
         gsu.r[1] = gsu.r[4];
         gsu.r[4] = gsu_add(0x0034, gsu.r[1], 0);
-        gsu_code(0x048ab5, 9);
         gsu.r[4] = gsu_ldw(gsu.r[4]);
         gsu.r[11] = 0x8AC2;
-        gsu_code(0x048abe, 4); gsu_code(0x048a08, 1);
         (abi_FxObjectFree());
         gsu.r[1] = gsu.r[4];
-        gsu_code(0x048ac2, 5); gsu_code(0x048ab0, 1);
     }
-    gsu_code(0x048ac8, 4);
     gsu.r[1] = gsu_pull(&gsu.r[10]);
-    gsu_code(0x048acc, 4);
     gsu_pull(&gsu.r[10]);
 }

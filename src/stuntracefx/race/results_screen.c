@@ -9,6 +9,7 @@
  */
 #include "machine.h"
 #include "cpu_ops.h"
+#include "assets.h"
 
 void abi_SoundPort0QueuePush(void);
 void abi_SoundPort0QueuePushX8(void);
@@ -38,10 +39,8 @@ static void lda8_imm(uint8_t v)
 /* INC of a work-RAM byte; N, Z from it. */
 static void inc8_mem(uint32_t addr)
 {
-    cyc(24);
-    uint8_t v = (uint8_t)(rd8(addr) + 1);
+    uint8_t v = (uint8_t)(rd8_rmw(addr) + 1);
 
-    cyc(6);
     wr8(addr, v);
     cpu.p = nz8(cpu.p, v);
 }
@@ -71,9 +70,7 @@ static uint8_t high_digit_tile(uint8_t v)
 {
     unsigned i;
 
-    cyc(2);
     for (i = 0; i < 4; i++) {
-        cyc(13);
         cpu.p = (uint8_t)((cpu.p & ~P_C) | (v & 1));
         v >>= 1;
     }
@@ -84,7 +81,6 @@ static uint8_t high_digit_tile(uint8_t v)
 /* AND #$0F, CLC, ADC #$C0: a digit's tile from the low nibble. */
 static uint8_t low_digit_tile(uint8_t v)
 {
-    cyc(2);
     v &= 0x0F;
     cpu.p = nz8(cpu.p, v);
     cpu.p &= (uint8_t)~P_C;
@@ -95,16 +91,14 @@ static uint8_t low_digit_tile(uint8_t v)
 static int pressed(uint32_t b, uint16_t mask)
 {
     op_rep(P_M);
-    cyc(2);
     op_lda16(b | 0x0D1A);
-    cpu.p = (uint8_t)((cpu.p & ~P_Z) | ((cpu.a & mask) ? (cyc(40), 0) : (cyc(40), P_Z)));
+    cpu.p = (uint8_t)((cpu.p & ~P_Z) | ((cpu.a & mask) ? (0) : (P_Z)));
     return (cpu.a & mask) != 0;
 }
 
 /* Sound $45 or $46 on port 0, 8-bit; the push states its widths' time. */
 static void sound(uint8_t s)
 {
-    cyc(62);
     lda8_imm(s);
     abi_SoundPort0QueuePushX8();
 }
@@ -112,7 +106,6 @@ static void sound(uint8_t s)
 /* TilemapPaletteCycle on y entries from offset x, X 16-bit. */
 static void palette_cycle(uint16_t x, uint16_t y)
 {
-    cyc(94);
     op_rep(P_X);
     cpu.x = x;
     cpu.p = nz16(cpu.p, x);
@@ -126,23 +119,13 @@ static uint16_t step_dispatch(uint32_t b, uint16_t t)
 {
     uint16_t target;
 
-    cyc(98);
     op_lda8(b | 0x0D59);
     asl8();
     cpu.x = (uint16_t)(cpu.a & 0x00FF);
     cpu.p = nz8(cpu.p, (uint8_t)cpu.x);
-    cyc(74);
     target = rd16(0x070000 | (uint16_t)(t + cpu.x));
     jump_routine(0x070000 | target);
     return target;
-}
-
-/* The steps ChampionshipScreenStep (tilemap.c) also runs: it states their
-   RTS; the others state it themselves. */
-static unsigned step_rts(uint16_t target)
-{
-    (void)target;
-    return 0;
 }
 
 /*
@@ -158,23 +141,21 @@ void abi_ResultsScreenStep(void)
 {
     uint32_t b = (uint32_t)cpu.db << 16;
 
-    cyc(24);
     op_lda8(b | 0x0D2B);
     asl8();
     cpu.x = (uint16_t)(cpu.a & 0x00FF);
     cpu.p = nz8(cpu.p, (uint8_t)cpu.x);
     switch (cpu.x) {
     case 0:
-        cyc(step_rts(step_dispatch(b, 0xC6C3)));
+        step_dispatch(b, 0xC6C3);
         return;
     case 2:
-        cyc(step_rts(step_dispatch(b, 0xC715)));
+        step_dispatch(b, 0xC715);
         return;
     case 4:
-        cyc(116);
         return;
     case 6:
-        cyc(step_rts(step_dispatch(b, 0xC6EB)));
+        step_dispatch(b, 0xC6EB);
         return;
     default:
         jump_routine(0x070000 | rd16(0x070000 | (uint16_t)(0xC6B2 + cpu.x)));
@@ -200,18 +181,15 @@ void abi_PlaceFrameFromValue(void)
     if (v >= 0x24)
         f = 0x09;
     else {
-        cyc(54);
         cmp8_imm(0x18);
         if (v >= 0x18)
             f = 0x06;
         else {
-            cyc(26);
             cmp8_imm(0x0C);
-            f = v >= 0x0C ? (cyc(6), 0x03) : 0x00;
+            f = v >= 0x0C ? (0x03) : 0x00;
         }
     }
     lda8_imm(f);
-    cyc(146);
     wr8(((uint32_t)cpu.db << 16) | 0x10C3, f);
     op_rep(P_M);
 }
@@ -227,34 +205,28 @@ static void record_cars(uint32_t b, uint16_t empty)
 
     for (n = 0; n < 3; n++) {
         op_rep(P_M);
-        cyc(24);
         op_lda16(b | (uint16_t)(0x0F2B + 2 * n));
         if (empty == 0x0000) {
-            cyc(22);
             if (!cpu.a)
                 continue;
         } else {
-            cyc(46);
             op_cmp16(empty);
             if (cpu.a == empty)
                 continue;
         }
-        cyc(18);
         op_lda16(b | (uint16_t)(0x0F13 + 2 * n));
         abi_PlaceFrameFromValue();
         op_sep(P_M);
         if (n == 0)
-            { cyc(88); wr8(b | 0x10C3, (uint8_t)cpu.a); } else { cyc(64); }
+            wr8(b | 0x10C3, (uint8_t)cpu.a);
         lda8_imm(ys[n]);
-        cyc(40);
         wr8(b | 0x10BF, ys[n]);
         op_rep(P_M);
         cpu.y = (uint16_t)(0x0130 + 0x10 * n);
         cpu.p = nz16(cpu.p, cpu.y);
-        (cyc(86), abi_SpritePieces3());
+        (abi_SpritePieces3());
         op_sep(P_M);
         lda8_imm(0x60);
-        cyc(62);
         wr8(b | (uint16_t)(0x0588 + n), 0x60);
     }
 }
@@ -270,59 +242,44 @@ static void records_wait(uint8_t next, const uint16_t *rows, uint16_t count, uin
     uint16_t place;
     uint8_t v;
 
-    cyc(22);
     if (pressed(b, 0x9000)) {
-        cyc(38);
         op_sep(P_M);
         sound(0x46);
         lda8_imm(next);
-        cyc(40);
         wr8(b | 0x0D59, next);
         lda8_imm(0x55);
-        cyc(40);
         wr8(b | 0x0588, 0x55);
-        cyc(24);
         wr8(b | 0x0589, 0x55);
-        cyc(24);
         wr8(b | 0x058A, 0x55);
         lda8_imm(0x05);
-        cyc(40);
         wr8(b | 0x10A2, 0x05);
         return;
     }
     op_rep(P_M | P_X);
-    cyc(30);
     op_lda16(b | 0x10C9);
     place = cpu.a;
     if (place) {
-        cyc(56);
         op_cmp16(0x0002);
-        palette_cycle(place == 0x0002 ? (cyc(6), rows[1]) : place > 0x0002 ? rows[2] : (cyc(16), rows[0]), count);
-    } else { cyc(22); }
+        palette_cycle(place == 0x0002 ? (rows[1]) : place > 0x0002 ? rows[2] : (rows[0]), count);
+    }
     op_sep(P_M);
-    cyc(46);
     op_lda8(b | 0x0E3B);
     v = (uint8_t)(cpu.a & 0x07);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
     cmp8_imm(0x07);
     if (v == 0x07) {
-        cyc(72);
         v = (uint8_t)(rd8(b | 0x10BB) + 1);
         cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
         cmp8_imm(0x04);
         if (v >= 0x04)
             lda8_imm(0x00);
-        cyc(86);
         wr8(b | 0x10BB, (uint8_t)cpu.a);
-    } else { cyc(54); }
+    }
     lda8_imm(0x3E);
-    cyc(40);
     wr8(b | 0x10C5, 0x3E);
     lda8_imm(x);
-    cyc(40);
     wr8(b | 0x10BD, x);
     lda8_imm(0xF4);
-    cyc(40);
     wr8(b | 0x10C1, 0xF4);
     record_cars(b, empty);
 }
@@ -342,7 +299,6 @@ void abi_StuntRecordsWait(void)
     static const uint16_t rows[3] = {0x018F, 0x024F, 0x09AF};
 
     records_wait(0x0A, rows, 0x0007, 0x40, 0x0000);
-    cyc(42);
 }
 
 /*
@@ -357,7 +313,6 @@ void abi_TimedRecordsWait(void)
     static const uint16_t rows[3] = {0x0195, 0x0255, 0x0315};
 
     records_wait(0x0D, rows, 0x000B, 0x58, 0xFFFF);
-    cyc(42);
 }
 
 /*
@@ -371,16 +326,12 @@ void abi_ResultsNext(void)
     uint32_t b = (uint32_t)cpu.db << 16;
 
     op_sep(P_M);
-    cyc(46);
     wr8(b | 0x0E5F, 0x00);
     lda8_imm(0x06);
-    cyc(40);
     wr8(b | 0x0D22, 0x06);
     lda8_imm(0x00);
-    cyc(40);
     wr8(b | 0x0D23, 0x00);
     inc8_mem(b | 0x0D59);
-    cyc(42);
 }
 
 /*
@@ -392,9 +343,8 @@ void abi_ResultsNext(void)
  */
 void abi_ResultsUnpackNext(void)
 {
-    cyc(62);
     abi_RecordsUnpackCourseRunning();
-    (cyc(0), abi_ResultsNext());
+    (abi_ResultsNext());
 }
 
 /*
@@ -406,11 +356,8 @@ void abi_ResultsUnpackNext(void)
  */
 void abi_KeepTimeDigits(void)
 {
-    cyc(62);
     wr16(0x0000F1, cpu.y);
-    cyc(16);
     wr16(0x0000F3, cpu.x);
-    cyc(16);
     wr16(0x0000F5, cpu.a);
 }
 
@@ -430,39 +377,32 @@ void abi_ScoreTiles(void)
     uint8_t lo, hi;
     unsigned i;
 
-    cyc(102);
     wr16(0x0000F1, cpu.a);
     op_sep(P_M);
     lo = (uint8_t)cpu.a;
-    wr8((uint32_t)(TILES + 16 + x), cyc_then(98, low_digit_tile(lo)));
-    cyc(16);
+    wr8((uint32_t)(TILES + 16 + x), (low_digit_tile(lo)));
     lo = rd8(0x0000F1);
-    wr8((uint32_t)(TILES + 14 + x), cyc_then(64, high_digit_tile(lo)));
-    cyc(16);
+    wr8((uint32_t)(TILES + 14 + x), (high_digit_tile(lo)));
     hi = rd8(0x0000F2);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | hi);
     cmp8_imm(0x40);
     if (hi < 0x40) {
-        wr8((uint32_t)(TILES + 2 + x), cyc_then(124, low_digit_tile(hi)));
-        cyc(16);
+        wr8((uint32_t)(TILES + 2 + x), (low_digit_tile(hi)));
         hi = rd8(0x0000F2);
-        wr8((uint32_t)(TILES + x), cyc_then(64, high_digit_tile(hi)));
+        wr8((uint32_t)(TILES + x), (high_digit_tile(hi)));
         lda8_imm(0xC4);
-        cyc(48);
         wr8((uint32_t)(TILES + 6 + x), 0xC4);
         lda8_imm(0xC0);
-        cyc(48);
         wr8((uint32_t)(TILES + 8 + x), 0xC0);
         op_rep(P_M);
         return;
-    } else { cyc(76); }
+    }
     op_sep(P_M);
     for (i = 0; i < 7; i++)
-        { cyc(48); wr8((uint32_t)(TILES - 2 + 2 * i + x), word[i]); }
-    cyc(16);
+        wr8((uint32_t)(TILES - 2 + 2 * i + x), word[i]);
     lda8_imm(0x24);
     for (i = 0; i < 7; i++)
-        { cyc(32); wr8((uint32_t)(TILES - 1 + 2 * i + x), 0x24); }
+        wr8((uint32_t)(TILES - 1 + 2 * i + x), 0x24);
     op_rep(P_M);
 }
 
@@ -480,22 +420,15 @@ void abi_TimeTiles(void)
     uint8_t v;
 
     op_sep(P_M);
-    cyc(150);
     v = rd8(0x0000F5);
     cpu.p = nz8(cpu.p, v);
     cpu.p &= (uint8_t)~P_C;
-    cyc(78);
     wr8((uint32_t)(TILES + x), op_adc8(v, 0xC0, &cpu.p));
-    cyc(16);
-    wr8((uint32_t)(TILES + 4 + x), cyc_then(64, high_digit_tile(rd8(0x0000F3))));
-    cyc(16);
-    wr8((uint32_t)(TILES + 6 + x), cyc_then(76, low_digit_tile(rd8(0x0000F3))));
-    cyc(16);
-    wr8((uint32_t)(TILES + 10 + x), cyc_then(64, high_digit_tile(rd8(0x0000F1))));
-    cyc(16);
+    wr8((uint32_t)(TILES + 4 + x), (high_digit_tile(rd8(0x0000F3))));
+    wr8((uint32_t)(TILES + 6 + x), (low_digit_tile(rd8(0x0000F3))));
+    wr8((uint32_t)(TILES + 10 + x), (high_digit_tile(rd8(0x0000F1))));
     v = low_digit_tile(rd8(0x0000F1));
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
-    cyc(76);
     wr8((uint32_t)(TILES + 12 + x), v);
     op_rep(P_M);
 }
@@ -510,14 +443,12 @@ static void name_tiles(uint16_t at)
     op_sep(P_M);
     v = (uint16_t)(a & 0x001F);
     cpu.p &= (uint8_t)~P_C;
-    cyc(176);
     wr8((uint32_t)(TILES + at + x), op_adc8((uint8_t)v, 0xCA, &cpu.p));
     op_rep(P_M);
     v = (uint16_t)(a << 3);
     v = (uint16_t)(v << 8 | v >> 8);
     op_sep(P_M);
     cpu.p &= (uint8_t)~P_C;
-    cyc(228);
     wr8((uint32_t)(TILES + at + 2 + x), op_adc8((uint8_t)(v & 0x1F), 0xCA, &cpu.p));
     op_rep(P_M);
     v = (uint16_t)(a >> 2);
@@ -526,7 +457,6 @@ static void name_tiles(uint16_t at)
     cpu.p &= (uint8_t)~P_C;
     v = op_adc8((uint8_t)(v & 0x1F), 0xCA, &cpu.p);
     cpu.a = (uint16_t)((uint16_t)(a >> 2) << 8 & 0xFF00) | v;
-    cyc(184);
     wr8((uint32_t)(TILES + at + 4 + x), (uint8_t)v);
     op_rep(P_M);
 }
@@ -558,7 +488,6 @@ void abi_NameTiles26(void)
    the tilemap buffer ($440 bytes from $70:3000, MVN), then DigitTiles1184. */
 static void panel(uint16_t x, uint16_t pic)
 {
-    cyc(72);
     uint8_t db = cpu.db, p;
     unsigned i;
 
@@ -569,10 +498,8 @@ static void panel(uint16_t x, uint16_t pic)
     abi_GsuCF42To3000();
     p = cpu.p;
     op_rep(P_M | P_X);
-    cyc(220);
     for (i = 0; i < 0x0440; i++)
-        { cyc(36); wr8((uint32_t)(TILES + i), rd8((uint32_t)(0x703000 + i))); }
-    cyc(72);
+        wr8((uint32_t)(TILES + i), rd8((uint32_t)(0x703000 + i)));
     cpu.a = 0xFFFF;
     cpu.x = 0x3440;
     cpu.y = 0x9817;
@@ -595,29 +522,24 @@ void abi_StuntRecordsDraw(void)
     uint32_t b = (uint32_t)cpu.db << 16;
     unsigned n;
 
-    int broke = 0;
 
     panel(0x001F, 0xFB21);
     op_rep(P_M | P_X);
     for (n = 0; n < 3; n++) {
-        cyc(n ? 66 : 24);
         op_lda16(b | (uint16_t)(0x0F2B + 2 * n));
         if (!cpu.a)
-            { broke = 1; break; }
+             break;
         cpu.x = (uint16_t)(0x0190 + 0xC0 * n);
         cpu.p = nz16(cpu.p, cpu.x);
         abi_ScoreTiles();
-        cyc(66);
         op_lda16(b | (uint16_t)(0x0F43 + 2 * n));
         abi_NameTiles26();
     }
-    cyc(broke ? 44 : 64);               /* BEQ taken, or the RTS; SEP */
+    /* BEQ taken, or the RTS; SEP */
     op_sep(P_M);
     inc8_mem(b | 0x0D59);
     lda8_imm(0x02);
-    cyc(40);
     wr8(b | 0x10A2, 0x02);
-    cyc(42);
 }
 
 /*
@@ -631,9 +553,7 @@ void abi_ResultsPanelFAB5(void)
 {
     panel(0x001F, 0xFAB5);
     op_sep(P_M);
-    cyc(22);
     inc8_mem(((uint32_t)cpu.db << 16) | 0x0D59);
-    cyc(42);
 }
 
 /*
@@ -650,16 +570,14 @@ void abi_TimedRecordsDraw(void)
     uint32_t b = (uint32_t)cpu.db << 16;
     unsigned n;
 
-    int broke = 0;
 
     panel(0x001C, 0xF3F2);
     op_rep(P_M);
     for (n = 0; n < 3; n++) {
-        cyc(n ? 66 : 24);
         op_lda16(b | (uint16_t)(0x0F2B + 2 * n));
         op_cmp16(0xFFFF);
         if (cpu.a == 0xFFFF)
-            { broke = 1; break; } else { cyc(86); }
+             break;
         abi_TimeUnpackBcd();
         abi_KeepTimeDigits();
         if (n)
@@ -667,17 +585,14 @@ void abi_TimedRecordsDraw(void)
         cpu.x = (uint16_t)(0x0194 + 0xC0 * n);
         cpu.p = nz16(cpu.p, cpu.x);
         abi_TimeTiles();
-        cyc(66);
         op_lda16(b | (uint16_t)(0x0F43 + 2 * n));
         abi_NameTiles16();
     }
-    cyc(broke ? 68 : 64);               /* CMP, BEQ taken, or the RTS; SEP */
+    /* CMP, BEQ taken, or the RTS; SEP */
     op_sep(P_M);
     inc8_mem(b | 0x0D59);
     lda8_imm(0x02);
-    cyc(40);
     wr8(b | 0x10A2, 0x02);
-    cyc(42);
 }
 
 /*
@@ -690,9 +605,7 @@ void abi_ResultsPanelF38E(void)
 {
     panel(0x001C, 0xF38E);
     op_sep(P_M);
-    cyc(22);
     inc8_mem(((uint32_t)cpu.db << 16) | 0x0D59);
-    cyc(42);
 }
 
 /* B or START on the records: step `skip` (sound $46) for a placed player
@@ -700,34 +613,26 @@ void abi_ResultsPanelF38E(void)
 static void records_choice(uint32_t b, uint8_t skip, int check_10cd)
 {
     if (!pressed(b, 0x9000))
-        { cyc(6 + 42); return; }
+        return;
     op_rep(P_M | P_X);
     if (check_10cd) {
-        cyc(2);
         op_lda16(b | 0x10CD);
         op_and16(0x00FF);
         if (cpu.a)
-            { cyc(22); goto next; } else { cyc(60); }
+            goto next;
     }
-    cyc(2);
     op_lda16(b | 0x10C9);
     if (!cpu.a)
         goto next;
     op_sep(P_M);
     lda8_imm(skip);
-    cyc(78);
     wr8(b | 0x0D59, skip);
-    cyc(16);
     sound(0x46);
-    cyc(42);
     return;
 next:
-    cyc(44);
     op_sep(P_M);
     inc8_mem(b | 0x0D59);
-    cyc(16);
     sound(0x46);
-    cyc(42);
 }
 
 /*
@@ -743,11 +648,10 @@ void abi_StuntRecordsChoice(void)
     uint32_t b = (uint32_t)cpu.db << 16;
 
     op_sep(P_M);
-    cyc(46);
     op_lda8(b | 0x19EC);
     cmp8_imm(0x40);
     if ((uint8_t)cpu.a == 0x40)
-        { cyc(32); palette_cycle(0x0199, 0x0007); } else { cyc(38); }
+        palette_cycle(0x0199, 0x0007);
     op_rep(P_M | P_X);
     records_choice(b, 0x0C, 1);
 }
@@ -780,20 +684,14 @@ void abi_ResultsPanelFB99(void)
 
     op_sep(P_M);
     lda8_imm(0x00);
-    cyc(62);
     wr8(b | 0x0D23, 0x00);
-    cyc(24);
     wr8(b | 0x0DD4, 0x00);
-    cyc(24);
     wr8(b | 0x0DD5, 0x00);
     panel(0x001F, 0xFB99);
     op_sep(P_M);
-    cyc(22);
     inc8_mem(b | 0x0D59);
     lda8_imm(0x02);
-    cyc(40);
     wr8(b | 0x0D23, 0x02);
-    cyc(42);
 }
 
 /*
@@ -812,20 +710,17 @@ void abi_ResultsPanelFA39(void)
     int total, record;
 
     op_sep(P_M);
-    cyc(46);
     op_lda8(b | 0x0EEF);
     total = (uint8_t)cpu.a != 0;
     if (total)
-        { cyc(62); abi_ResultsTotalTiles(); }
-    cyc(total ? 24 : 46);               /* LDA abs, or BEQ taken first */
+        abi_ResultsTotalTiles();
+    /* LDA abs, or BEQ taken first */
     op_lda8(b | 0x0F81);
     cmp8_imm(0xFF);
     record = (uint8_t)cpu.a != 0xFF;
     if (record)
-        { cyc(78); abi_RecordTimeTiles(); }
-    cyc(record ? 0 : 38);
+        abi_RecordTimeTiles();
     inc8_mem(b | 0x0D59);
-    cyc(42);
 }
 
 /*
@@ -837,7 +732,6 @@ void abi_ResultsPanelFA39(void)
  */
 void abi_ResultsPicture4000(void)
 {
-    cyc(72);
     uint32_t b = (uint32_t)cpu.db << 16;
 
     op_rep(P_M | P_X);
@@ -846,26 +740,20 @@ void abi_ResultsPicture4000(void)
     op_lda16_imm(0xC770);
     abi_GsuCF42To4000();
     op_sep(P_M);
-    cyc(94);
     inc8_mem(b | 0x0D59);
-    cyc(24);
     wr8(b | 0x10A2, 0x00);
-    cyc(24);
     wr8(b | 0x10A3, 0x00);
-    cyc(42);
 }
 
 /* $10A0 = the car $0D89's word from the table at $07:CCB7. */
 static void car_picture(uint32_t b)
 {
     op_rep(P_M | P_X);
-    cyc(24);
     op_lda16(b | 0x0D89);
     op_and16(0x00FF);
     op_asl16();
     op_tax16();
-    cyc(92);
-    op_lda16(0x07CCB7 + cpu.x);
+    op_lda16(ASSET_car_picture_07CCB7 + cpu.x);
     wr16(b | 0x10A0, cpu.a);
 }
 
@@ -882,11 +770,9 @@ void abi_ResultsCarPicture(void)
 
     op_sep(P_M);
     lda8_imm(0x12);
-    cyc(62);
     wr8(b | 0x0D23, 0x12);
     inc8_mem(b | 0x0D59);
     car_picture(b);
-    cyc(42);
 }
 
 /* The menu's rows: the chosen row (offset x, y entries) cycles its
@@ -894,21 +780,20 @@ void abi_ResultsCarPicture(void)
 static void menu_rows(uint16_t x, uint16_t y, void (*a)(void), void (*c)(void))
 {
     op_sep(P_M);
-    cyc(22);
     palette_cycle(x, y);
-    (cyc(46), a());
-    (cyc(88), c());
-    cyc(84);                            /* c's RTS, then the menu's */
+    (a());
+    (c());
+    /* c's RTS, then the menu's */
 }
 
 static void rows_retry(void)
 {
-    (cyc(6), menu_rows(0x0187, 0x0009, abi_TilemapRow207Palette4, abi_TilemapRow287Palette4));
+    (menu_rows(0x0187, 0x0009, abi_TilemapRow207Palette4, abi_TilemapRow287Palette4));
 }
 
 static void rows_course(void)
 {
-    (cyc(6), menu_rows(0x0207, 0x000D, abi_TilemapRow187Palette4, abi_TilemapRow287Palette4));
+    (menu_rows(0x0207, 0x000D, abi_TilemapRow187Palette4, abi_TilemapRow287Palette4));
 }
 
 static void rows_car(void)
@@ -926,64 +811,50 @@ static void car_change(uint32_t b, int right)
 
     if (right) {
         op_sep(P_M | P_X);
-        cyc(16);
         sound(0x45);
-        cyc(24);
         op_lda8(b | 0x0D89);
         v = (uint8_t)(cpu.a + 1);
         lda8_imm(v);
         cmp8_imm(0x03);
         if (v == 0x03) {
-            cyc(76);
             cpu.x = rd8(b | 0x0D2B);
             cpu.p = (uint8_t)((nz8(cpu.p, (uint8_t)(cpu.x - 0x03)) & ~P_C) | ((uint8_t)cpu.x >= 0x03 ? P_C : 0));
             if ((uint8_t)cpu.x != 0x03) {
-                cyc(64);
                 op_lda8(0x70FC0B);
-                cpu.p = (uint8_t)((cpu.p & ~P_Z) | (((uint8_t)cpu.a & 0x04) ? (cyc(32), 0) : (cyc(16), P_Z)));
+                cpu.p = (uint8_t)((cpu.p & ~P_Z) | (((uint8_t)cpu.a & 0x04) ? (0) : (P_Z)));
                 lda8_imm((uint8_t)cpu.a & 0x04 ? 0x03 : 0x00);
             }
         } else if (v > 0x03) {
-            cyc(46);
             lda8_imm(0x00);
-        } else { cyc(46); }
-    cyc(2);
+        }
         } else {
-        cyc(38);
         op_sep(P_M);
         sound(0x45);
-        cyc(24);
         op_lda8(b | 0x0D89);
         v = (uint8_t)(cpu.a - 1);
         lda8_imm(v);
         if (v & 0x80) {
             lda8_imm(0x03);
-            cyc(70);
             cpu.x = rd8(b | 0x0D2B);
             cpu.p = (uint8_t)((nz8(cpu.p, (uint8_t)(cpu.x - 0x03)) & ~P_C) | ((uint8_t)cpu.x >= 0x03 ? P_C : 0));
             if ((uint8_t)cpu.x != 0x03) {
-                cyc(64);
                 op_lda8(0x70FC0B);
-                cpu.p = (uint8_t)((cpu.p & ~P_Z) | (((uint8_t)cpu.a & 0x04) ? (cyc(32), 0) : (cyc(16), P_Z)));
+                cpu.p = (uint8_t)((cpu.p & ~P_Z) | (((uint8_t)cpu.a & 0x04) ? (0) : (P_Z)));
                 lda8_imm((uint8_t)cpu.a & 0x04 ? 0x03 : 0x02);
             }
-            cyc(2);
         }
     }
-    cyc(60);
     wr8(b | 0x0D89, (uint8_t)cpu.a);
     op_sep(P_M | P_X);
-    cyc(right ? 46 : 24);               /* BRA, or not; LDA abs */
+    /* BRA, or not; LDA abs */
     op_lda8(b | 0x0D89);
     cpu.x = (uint16_t)(cpu.a & 0x00FF);
     cpu.p = nz8(cpu.p, (uint8_t)cpu.x);
-    cyc(86);
-    op_lda8(0x07CE93 + cpu.x);
+    op_lda8(ASSET_car_change_07CE93 + cpu.x);
     wr8(0x0018CB, (uint8_t)cpu.a);
-    (cyc(62), abi_SelectionSave());
+    (abi_SelectionSave());
     op_sep(P_M);
     lda8_imm(0x12);
-    cyc(62);
     wr8(b | 0x0D23, 0x12);
     car_picture(b);
 }
@@ -1009,90 +880,67 @@ void abi_ResultsMenu(void)
     uint8_t c, f, v;
 
     op_sep(P_M);
-    cyc(46);
     op_lda8(b | 0x0E3A);
     if ((uint8_t)cpu.a)
-        { cyc(58); return; } else { cyc(44); }
+        return;
     if (pressed(b, 0x9000)) {
         op_sep(P_M);
-        cyc(46);
         op_lda8(b | 0x0DD4);
         c = (uint8_t)cpu.a;
         cmp8_imm(0x02);
         if (c < 0x02) {
             lda8_imm(0x01);
-            cyc(72);
             wr8(b | 0x0E3A, 0x01);
-            cyc(16);
             sound(0x46);
-            cyc(42);
             return;
         }
         if (c == 0x02) {
-            cyc(60);
             inc8_mem(b | 0x0DD4);
-            cyc(16);
             sound(0x46);
-            (cyc(24), rows_car());
+            (rows_car());
             return;
         }
         lda8_imm(0x00);
-        cyc(94);
         wr8(b | 0x0DD4, 0x00);
-        cyc(16);
         sound(0x46);
         lda8_imm(0x55);
-        cyc(40);
         wr8(b | 0x0582, 0x55);
-        (cyc(18), rows_retry());
+        (rows_retry());
         return;
     }
     op_sep(P_M);
     lda8_imm(0x02);
-    cyc(68);
     wr8(b | 0x0D23, 0x02);
-    cyc(24);
     op_lda8(b | 0x0DD4);
     c = (uint8_t)cpu.a;
     if (c == 0x00) {
-        cyc(44);
         if (pressed(b, 0x0400)) {
             op_sep(P_M);
-            cyc(46);
             op_lda8(b | 0x10CD);
             if (!(uint8_t)cpu.a) {
-                cyc(16);
                 inc8_mem(b | 0x0DD4);
-                cyc(16);
                 sound(0x45);
-                cyc(16);
                 rows_course();
                 return;
-            } else { cyc(16); }
+            }
         }
         rows_retry();
         return;
-    } else { cyc(76); }
+    }
     cmp8_imm(0x02);
     if (c == 0x01) {
-        cyc(16);
         if (pressed(b, 0x0800)) {
             op_sep(P_M);
-            cyc(52);
             wr8(b | 0x0DD4, 0x00);
-            cyc(16);
             sound(0x45);
-            cyc(16);
             rows_retry();
             return;
         }
         if (pressed(b, 0x0400)) {
-            cyc(22);
             op_sep(P_M);
             inc8_mem(b | 0x0DD4);
-            cyc(16);
             sound(0x45);
-            (cyc(24), rows_car());
+            (rows_car());
             return;
         }
         rows_course();
@@ -1100,66 +948,50 @@ void abi_ResultsMenu(void)
     }
     if (c == 0x02) {
         if (!pressed(b, 0x0800)) {
-            cyc(30);
             rows_car();
             return;
-        } else { cyc(44); }
+        }
         op_sep(P_M);
         sound(0x45);
         lda8_imm(0x01);
-        cyc(40);
         wr8(b | 0x0DD4, 0x01);
-        (cyc(16), rows_course());
+        (rows_course());
         return;
     }
     op_sep(P_M);
-    cyc(64);
     op_lda8(b | 0x0E3B);
     f = (uint8_t)cpu.a;
-    cpu.p = (uint8_t)((cpu.p & ~P_Z) | ((f & 0x08) ? 0 : (cyc(54), P_Z)));
+    cpu.p = (uint8_t)((cpu.p & ~P_Z) | ((f & 0x08) ? 0 : (P_Z)));
     if (!(f & 0x08)) {
         lda8_imm(0x55);
     } else {
-        cyc(62);
         v = rd8(b | 0x10A4);
         cpu.p |= P_C;
         v = op_sbc8(v, 0x08, &cpu.p);
-        cyc(38);
         wr8(b | 0x0445, v);
-        cyc(24);
         v = rd8(b | 0x10A4);
         cpu.p &= (uint8_t)~P_C;
         v = op_adc8(v, 0x40, &cpu.p);
-        cyc(54);
         wr8(b | 0x0449, v);
-        cyc(24);
         v = rd8(b | 0x10A6);
         cpu.p &= (uint8_t)~P_C;
         v = op_adc8(v, 0x18, &cpu.p);
-        cyc(54);
         wr8(b | 0x0446, v);
-        cyc(24);
         wr8(b | 0x044A, v);
         lda8_imm(0x19);
-        cyc(40);
         wr8(b | 0x0447, 0x19);
-        cyc(24);
         wr8(b | 0x044B, 0x19);
         lda8_imm(0x76);
-        cyc(40);
         wr8(b | 0x0448, 0x76);
         lda8_imm(0x36);
-        cyc(40);
         wr8(b | 0x044C, 0x36);
         lda8_imm(0x50);
     }
-    cyc(40);
     wr8(b | 0x0582, (uint8_t)cpu.a);
-    cyc(22);
     if (pressed(b, 0x0100))
         car_change(b, 1);
-    else { cyc(28); if (pressed(b, 0x0200))
-        car_change(b, 0); else { cyc(6); } }
+    else { if (pressed(b, 0x0200))
+        car_change(b, 0); }
     rows_car();
 }
 
@@ -1185,26 +1017,19 @@ void abi_ResultsChampionScreen(void)
 
     op_rep(P_M | P_X);
     for (x = 0x01FE; x >= 0; x -= 2) {
-        cyc(104);
-        op_lda16((uint32_t)(0x1F8600 + x));
+        op_lda16((uint32_t)(ASSET_ResultsChampionScreen_1F8600 + x));
         wr16((uint32_t)(0x7EFD65 + x), cpu.a);
-        cyc(26);
     }
     cpu.x = 0xFFFE;
     cpu.p = nz16(cpu.p, 0xFFFE);
     op_lda16_imm(0xFFE0);
-    cyc(28);
     wr16(b | 0x0D8E, 0xFFE0);
     op_lda16_imm(0xFFE8);
-    cyc(10);
     wr16(b | 0x0D92, 0xFFE8);
     op_lda16_imm(0x005C);
-    cyc(10);
     wr16(b | 0x2108, 0x005C);
     op_sep(P_M);
-    cyc(22);
     inc8_mem(b | 0x0D59);
-    cyc(42);
 }
 
 /*
@@ -1218,19 +1043,14 @@ void abi_ResultsWaitWindow(void)
 {
     uint32_t b = (uint32_t)cpu.db << 16;
 
-    cyc(24);
     op_lda8(b | 0x19D8);
     if (!(uint8_t)cpu.a) {
-        cyc(16);
         inc8_mem(b | 0x0D59);
-        cyc(24);
         lda8_imm(0x28);
         abi_SoundPort0QueuePushRaw();
-    } else { cyc(30); }
+    }
     lda8_imm(0x06);
-    cyc(32);
     wr8(b | 0x0D23, 0x06);
-    cyc(42);
 }
 
 /* The results' text line: $0D45's low nibble 2; direct page $F2 = $60,
@@ -1238,39 +1058,30 @@ void abi_ResultsWaitWindow(void)
 static void total_line(uint32_t b)
 {
     op_sep(P_M);
-    cyc(46);
     op_lda8(b | 0x0D45);
     lda8_imm((uint8_t)(((uint8_t)cpu.a & 0xF0) | 0x02));
-    cyc(56);
     wr8(b | 0x0D45, (uint8_t)cpu.a);
     lda8_imm(0x60);
-    cyc(32);
     wr8(0x0000F2, 0x60);
     lda8_imm(0x67);
-    cyc(32);
     wr8(0x0000F3, 0x67);
     lda8_imm(0x2F);
-    cyc(32);
     wr8(0x0000F4, 0x2F);
     lda8_imm(0xC0);
-    cyc(32);
     wr8(0x0000F1, 0xC0);
     lda8_imm(0x38);
-    cyc(32);
     wr8(0x0000F5, 0x38);
-    (cyc(46), abi_OamTextLine());
+    (abi_OamTextLine());
 }
 
 /* $0D23 = 4, the next step, $0E43 = at (16-bit). */
 static void total_line_end(uint32_t b, uint16_t at)
 {
     lda8_imm(0x04);
-    cyc(40);
     wr8(b | 0x0D23, 0x04);
     inc8_mem(b | 0x0D59);
     op_rep(P_M);
     op_lda16_imm(at);
-    cyc(10);
     wr16(b | 0x0E43, at);
 }
 
@@ -1288,7 +1099,6 @@ void abi_ResultsTotalLine(void)
 
     total_line(b);
     total_line_end(b, 0x0190);
-    cyc(42);
 }
 
 void abi_ResultsTotalTiles(void);
@@ -1307,13 +1117,12 @@ void abi_ResultsTotalLineWords(void)
     uint32_t b = (uint32_t)cpu.db << 16;
 
     total_line(b);
-    (cyc(46), abi_OamWordRow5());
+    (abi_OamWordRow5());
     total_line_end(b, 0x018E);
     op_sep(P_M);
-    cyc(46);
     op_lda8(b | 0x0EEC);
     if ((uint8_t)cpu.a)
-        { cyc(40); jump_routine(0x07D3F6); } else { cyc(22 + 42); }
+        jump_routine(0x07D3F6);
 }
 
 /* A BCD count byte at `at` one more (SED, CLC, ADC #1, CLD) shown as two
@@ -1323,22 +1132,17 @@ static void count_digits(uint32_t b, uint16_t at, uint32_t hi, uint32_t lo)
     uint8_t v;
 
     cpu.p |= P_D;
-    cyc(54);
     op_lda8(b | at);
     cpu.p &= (uint8_t)~P_C;
     v = op_adc8((uint8_t)cpu.a, 0x01, &cpu.p);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
-    cyc(54);
     wr8(b | at, v);
     cpu.p &= (uint8_t)~P_D;
     v = low_digit_tile(v);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
-    cyc(90);
     wr8(lo, v);
-    cyc(24);
     v = high_digit_tile(rd8(b | at));
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
-    cyc(64);
     wr8(hi, v);
 }
 
@@ -1363,50 +1167,40 @@ void abi_StuntResultsCount(void)
 
     op_sep(P_M);
     lda8_imm(0x02);
-    cyc(62);
     wr8(b | 0x0D23, 0x02);
-    cyc(24);
     op_lda8(b | 0x19EC);
     v = (uint8_t)cpu.a;
     cmp8_imm(0x40);
     if (v == 0x40) {
-        cyc(38);
         for (i = 0; i < 7; i++) {
             lda8_imm(word[i]);
-            cyc(48);
             wr8((uint32_t)(0x7F956F + 2 * i), word[i]);
         }
         palette_cycle(0x0199, 0x0007);
     } else {
-        cyc(56);
         uint8_t m = rd8(b | 0x0E80);
 
         cpu.p = (uint8_t)((nz8(cpu.p, (uint8_t)(v - m)) & ~P_C) | (v >= m ? P_C : 0));
         if (v != m) {
             count_digits(b, 0x0E80, 0x7F956F, 0x7F9571);
-            cyc(42);
             return;
-        } else { cyc(22); }
+        }
     }
-    cyc(24);
     op_lda8(b | 0x0E70);
     v = (uint8_t)cpu.a;
     {
-        cyc(24);
         uint8_t m = rd8(b | 0x0E81);
 
         cpu.p = (uint8_t)((nz8(cpu.p, (uint8_t)(v - m)) & ~P_C) | (v >= m ? P_C : 0));
         if (v != m) {
             count_digits(b, 0x0E81, 0x7F95EF, 0x7F95F1);
-            cyc(42);
             return;
         }
     }
-    cyc(100);                           /* BEQ taken, LDA #, JSL */
+    /* BEQ taken, LDA #, JSL */
     lda8_imm(0x3F);
     abi_SoundPort0QueuePushRawWide();
     inc8_mem(b | 0x0D59);
-    cyc(42);
 }
 
 /* One character of lap Y's split ($0EDE + Y: hundredths, seconds, minutes)
@@ -1419,42 +1213,34 @@ static void lap_char(void)
     uint32_t b = (uint32_t)cpu.db << 16;
     uint16_t y = cpu.y, at;
     uint8_t v;
-    unsigned tail = 86;
 
-    cyc(48);
     cpu.x = rd8(b | 0x0E3F);
     cpu.x |= (uint16_t)(rd8(b | 0x0E40) << 8);
     cpu.p = nz16(cpu.p, cpu.x);
     switch (cpu.x) {
     case 0x00:
-        cyc(70);
         cpu.x = rd16(b | 0x0E43);
         cpu.p = nz16(cpu.p, cpu.x);
-        cyc(30);
         op_lda8(b | (uint16_t)(0x0EE0 + y));
         cpu.p &= (uint8_t)~P_C;
         v = op_adc8((uint8_t)cpu.a, 0xC0, &cpu.p);
         break;
     case 0x02:
-        cyc(70);
         cpu.x = rd16(b | 0x0E43);
         cpu.p = nz16(cpu.p, cpu.x);
         v = 0xE6;
         cpu.p = nz8(cpu.p, v);
-        tail = 70;                      /* LDA #, BRA, STA long */
+                              /* LDA #, BRA, STA long */
         break;
     case 0x04:
-        cyc(70);
         cpu.x = rd16(b | 0x0E43);
         cpu.p = nz16(cpu.p, cpu.x);
-        cyc(30);
         op_lda8(b | (uint16_t)(0x0EDF + y));
         {
             uint8_t t = (uint8_t)cpu.a;
             unsigned i;
 
             for (i = 0; i < 4; i++) {
-                cyc(17);
                 cpu.p = (uint8_t)((cpu.p & ~P_C) | (t & 1));
                 t >>= 1;
             }
@@ -1462,78 +1248,59 @@ static void lap_char(void)
         }
         break;
     case 0x06:
-        cyc(70);
         cpu.x = rd16(b | 0x0E43);
         cpu.p = nz16(cpu.p, cpu.x);
-        cyc(30);
         op_lda8(b | (uint16_t)(0x0EDF + y));
-        cyc(12);
         v = low_digit_tile((uint8_t)cpu.a);
         break;
     case 0x08:
-        cyc(70);
         cpu.x = rd16(b | 0x0E43);
         cpu.p = nz16(cpu.p, cpu.x);
         v = 0xE7;
         cpu.p = nz8(cpu.p, v);
-        tail = 70;
         break;
     case 0x0A:
-        cyc(70);
         cpu.x = rd16(b | 0x0E43);
         cpu.p = nz16(cpu.p, cpu.x);
-        cyc(30);
         op_lda8(b | (uint16_t)(0x0EDE + y));
         v = high_digit_tile((uint8_t)cpu.a);
         break;
     case 0x0C:
-        cyc(70);
         cpu.x = rd16(b | 0x0E43);
         cpu.p = nz16(cpu.p, cpu.x);
-        cyc(30);
         op_lda8(b | (uint16_t)(0x0EDE + y));
         v = low_digit_tile((uint8_t)cpu.a);
         cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
-        cyc(76);
         wr8((uint32_t)(TILES + cpu.x), v);
-        cyc(24);
         op_lda8(b | 0x0D59);
         v = (uint8_t)(cpu.a + 1);
         cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
         cpu.p = nz8(cpu.p, v);
-        cyc(38);
         wr8(b | 0x0D59, v);
-        cyc(30);
         cmp8_imm(0x0B);
         if (v == 0x0B) {
-            cyc(34);
             lda8_imm(0x3F);
-            (cyc(8), abi_SoundPort0QueuePushRaw());
+            (abi_SoundPort0QueuePushRaw());
             at = 0x00F4;
         } else
             at = 0x0074;
         op_rep(P_M);
-        cyc(32);
         op_lda16(b | 0x0E43);
         op_add16(at);
-        cyc(at == 0x00F4 ? 84 : 62);    /* CLC, ADC #; the sound path: BRA */
+        /* CLC, ADC #; the sound path: BRA */
         wr16(b | 0x0E43, cpu.a);
-        cyc(24);
         wr16(b | 0x0E3F, 0x0000);
-        cyc(42);
         return;
     default:
-        jump_routine(0x070000 | rd16(0x07D191 + cpu.x));
+        jump_routine(0x070000 | rd16(ASSET_lap_char_07D191 + cpu.x));
         return;
     }
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
-    cyc(tail);
     wr8((uint32_t)(TILES + cpu.x), v);
     inc8_mem(b | 0x0E3F);
     inc8_mem(b | 0x0E3F);
     inc8_mem(b | 0x0E43);
     inc8_mem(b | 0x0E43);
-    cyc(42);
 }
 
 /* SEP #$20, REP #$10, Y = the lap's offset, lap_char. */
@@ -1543,7 +1310,7 @@ static void lap_chars(uint16_t y)
     op_rep(P_X);
     cpu.y = y;
     cpu.p = nz16(cpu.p, y);
-    (cyc(22), lap_char());
+    (lap_char());
 }
 
 /*
@@ -1562,7 +1329,6 @@ void abi_LapCharsLap1(void)
     op_sep(P_M);
     op_rep(P_X);
     lda8_imm(0x02);
-    cyc(62);
     wr8(b | 0x0D23, 0x02);
     cpu.y = 0x0000;
     cpu.p = nz16(cpu.p, 0);
@@ -1617,48 +1383,33 @@ void abi_RaceTimeTiles(void)
     uint8_t d;
 
     op_sep(P_M);
-    cyc(46);
-    wr8(0x7F9765, cyc_then(76, low_digit_tile(rd8(b | 0x0EE9))));
-    cyc(24);
-    wr8(0x7F9769, cyc_then(64, high_digit_tile(rd8(b | 0x0EE8))));
-    cyc(24);
-    wr8(0x7F976B, cyc_then(76, low_digit_tile(rd8(b | 0x0EE8))));
-    cyc(24);
-    wr8(0x7F976F, cyc_then(64, high_digit_tile(rd8(b | 0x0EE7))));
-    cyc(24);
+    wr8(0x7F9765, (low_digit_tile(rd8(b | 0x0EE9))));
+    wr8(0x7F9769, (high_digit_tile(rd8(b | 0x0EE8))));
+    wr8(0x7F976B, (low_digit_tile(rd8(b | 0x0EE8))));
+    wr8(0x7F976F, (high_digit_tile(rd8(b | 0x0EE7))));
     d = low_digit_tile(rd8(b | 0x0EE7));
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | d);
-    cyc(76);
     wr8(0x7F9771, d);
     op_sep(P_M | P_X);
-    cyc(24);
     op_lda8(b | 0x0D48);
     d = (uint8_t)cpu.a;
     cpu.p &= (uint8_t)~P_C;
-    cyc(52);
     d = op_adc8((uint8_t)(d << 1), rd8(b | 0x0D48), &cpu.p);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | d);
     cpu.x = d;
     cpu.p = nz8(cpu.p, d);
-    cyc(38);
     op_lda8(b | 0x0EE7);
-    cyc(30);
     wr8(b | (uint16_t)(0x0EF9 + cpu.x), (uint8_t)cpu.a);
-    cyc(24);
     op_lda8(b | 0x0EE8);
-    cyc(30);
     wr8(b | (uint16_t)(0x0EFA + cpu.x), (uint8_t)cpu.a);
-    cyc(24);
     op_lda8(b | 0x0EE9);
-    cyc(30);
     wr8(b | (uint16_t)(0x0EFB + cpu.x), (uint8_t)cpu.a);
     inc8_mem(b | 0x0D59);
-    cyc(42);
 }
 
 /* SEP #$20, REP #$10, TilemapPaletteFill on y entries from x with the
    palette bits f at $F1. */
-static void palette_fill(uint16_t x, uint16_t y, uint8_t f, unsigned t)
+static void palette_fill(uint16_t x, uint16_t y, uint8_t f)
 {
     op_sep(P_M);
     op_rep(P_X);
@@ -1667,7 +1418,6 @@ static void palette_fill(uint16_t x, uint16_t y, uint8_t f, unsigned t)
     cpu.y = y;
     cpu.p = nz16(cpu.p, y);
     lda8_imm(f);
-    cyc(t);
     wr8(0x0000F1, f);
     abi_TilemapPaletteFill();
 }
@@ -1685,34 +1435,26 @@ void abi_ResultsBlinkWait(void)
     uint32_t b = (uint32_t)cpu.db << 16;
 
     inc8_mem(b | 0x0E3F);
-    cyc(24);
     op_lda8(b | 0x0E3F);
     cmp8_imm(0x3C);
     if ((uint8_t)cpu.a < 0x3C) {
-        cyc(60);
         op_sep(P_M);
         palette_cycle(0x038F, 0x0007);
-        cyc(42);
         return;
     }
-    cyc(56);
     wr8(b | 0x0E3F, 0x00);
     inc8_mem(b | 0x0D59);
-    cyc(24);
     lda8_imm(0x28);
     abi_SoundPort0QueuePushRaw();
-    palette_fill(0x038F, 0x0007, 0x00, 94);
-    cyc(42);
+    palette_fill(0x038F, 0x0007, 0x00);
 }
 
 /* The digit tiles of the byte at `at` (read for each): its high nibble at
    hi and low nibble at lo. */
 static void bcd_tiles(uint32_t at, uint32_t hi, uint32_t lo)
 {
-    cyc(24);
-    wr8(hi, cyc_then(64, high_digit_tile(rd8(at))));
-    cyc(24);
-    wr8(lo, cyc_then(76, low_digit_tile(rd8(at))));
+    wr8(hi, (high_digit_tile(rd8(at))));
+    wr8(lo, (low_digit_tile(rd8(at))));
 }
 
 /* A time's minutes digit at `at`: blank (tile $0F, with bit 0 of the
@@ -1726,21 +1468,15 @@ static void minutes_tile(uint8_t mins, uint32_t at)
     cmp8_imm(0xC0);
     if (t == 0xC0) {
         lda8_imm(0x0F);
-        cyc(112);
         wr8(at, 0x0F);
-        cyc(32);
         v = (uint8_t)(rd8(at + 1) | 0x01);
         lda8_imm(v);
-        cyc(48);
         wr8(at + 1, v);
-        cyc(22);                        /* BRA */
+        /* BRA */
     } else {
-        cyc(102);
         wr8(at, t);
-        cyc(32);
         v = (uint8_t)(rd8(at + 1) & 0xE2);
         lda8_imm(v);
-        cyc(48);
         wr8(at + 1, v);
     }
 }
@@ -1758,25 +1494,17 @@ void abi_ResultsTotalTiles(void)
     uint32_t b = (uint32_t)cpu.db << 16;
     uint8_t v;
 
-    cyc(24);
     minutes_tile(rd8(b | 0x0EEF), 0x7F95F7);
-    cyc(24);
-    wr8(0x7F95F9, cyc_then(76, low_digit_tile(rd8(b | 0x0EEF))));
+    wr8(0x7F95F9, (low_digit_tile(rd8(b | 0x0EEF))));
     lda8_imm(0xE6);
-    cyc(48);
     wr8(0x7F95FB, 0xE6);
     bcd_tiles(b | 0x0EEE, 0x7F95FD, 0x7F95FF);
     lda8_imm(0xE7);
-    cyc(48);
     wr8(0x7F9601, 0xE7);
-    cyc(24);
-    wr8(0x7F9603, cyc_then(64, high_digit_tile(rd8(b | 0x0EED))));
-    cyc(24);
+    wr8(0x7F9603, (high_digit_tile(rd8(b | 0x0EED))));
     v = low_digit_tile(rd8(b | 0x0EED));
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
-    cyc(76);
     wr8(0x7F9605, v);
-    cyc(42);
 }
 
 /* A decimal-mode byte at `at` less m with borrow (SEC first when sec). */
@@ -1784,13 +1512,11 @@ static uint8_t bcd_sub(uint32_t b, uint16_t at, uint8_t m, int sec)
 {
     uint8_t v;
 
-    cyc(24);
     op_lda8(b | at);
     if (sec)
-        { cyc(14); cpu.p |= P_C; }
+        cpu.p |= P_C;
     v = op_sbc8((uint8_t)cpu.a, m, &cpu.p);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
-    cyc(24);
     wr8(b | at, v);
     return v;
 }
@@ -1800,13 +1526,11 @@ static uint8_t bcd_add(uint32_t b, uint16_t at, uint8_t m, int clc)
 {
     uint8_t v;
 
-    cyc(8);
     op_lda8(b | at);
     if (clc)
-        { cyc(14); cpu.p &= (uint8_t)~P_C; }
+        cpu.p &= (uint8_t)~P_C;
     v = op_adc8((uint8_t)cpu.a, m, &cpu.p);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
-    cyc(40);
     wr8(b | at, v);
     return v;
 }
@@ -1817,14 +1541,11 @@ static void bcd_add_mem(uint32_t b, uint16_t at, uint16_t from, int clc)
 {
     uint8_t v;
 
-    cyc(24);
     op_lda8(b | at);
     if (clc)
-        { cyc(14); cpu.p &= (uint8_t)~P_C; }
-    cyc(24);
+        cpu.p &= (uint8_t)~P_C;
     v = op_adc8((uint8_t)cpu.a, rd8(b | from), &cpu.p);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
-    cyc(24);
     wr8(b | at, v);
 }
 
@@ -1834,9 +1555,7 @@ static void bonus_move(uint32_t b, uint8_t lo, uint8_t mid)
 {
     bcd_sub(b, 0x0EEA, lo, 1);
     bcd_sub(b, 0x0EEB, mid, 0);
-    cyc(16);
     bcd_add(b, 0x0EED, lo, 1);
-    cyc(16);
     bcd_add(b, 0x0EEE, mid, 0);
 }
 
@@ -1858,132 +1577,98 @@ void abi_ResultsBonusCount(void)
     uint32_t b = (uint32_t)cpu.db << 16;
     uint8_t v;
 
-    cyc(24);
     op_lda8(b | 0x0E3F);
     v = (uint8_t)(cpu.a + 1);
     lda8_imm(v);
     cmp8_imm(0xFA);
     if (v >= 0xFA)
-        { cyc(10); lda8_imm(0xFA); }
-    cyc(76);
+        lda8_imm(0xFA);
     wr8(b | 0x0E3F, (uint8_t)cpu.a);
-    cyc(32);
     cmp8_imm(0x12);
-    if ((uint8_t)cpu.a >= 0x12 && (cyc(22), pressed(b, 0x9000))) {
-        cyc(36);
+    if ((uint8_t)cpu.a >= 0x12 && (pressed(b, 0x9000))) {
         op_sep(P_M);
         cpu.p |= P_D;
         bcd_add_mem(b, 0x0EED, 0x0EEA, 1);
-        cyc(24);
         op_lda8(b | 0x0EEE);
-        cyc(24);
         v = op_adc8((uint8_t)cpu.a, rd8(b | 0x0EEB), &cpu.p);
         cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
         if (cpu.p & P_C) {
             cpu.p |= P_C;
             v = op_sbc8(v, 0x60, &cpu.p);
             cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
-            cyc(54);
             wr8(b | 0x0EEE, v);
-            cyc(16);
             bcd_add(b, 0x0EEF, 0x01, 1);
-            cyc(24);
             op_lda8(b | 0x0EEE);
-        } else { cyc(22); }
-        cyc(24);
+        }
         wr8(b | 0x0EEE, (uint8_t)cpu.a);
         cmp8_imm(0x60);
         if ((uint8_t)cpu.a >= 0x60) {
             v = op_sbc8((uint8_t)cpu.a, 0x60, &cpu.p);
             cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
-            cyc(56);
             wr8(b | 0x0EEE, v);
-            cyc(16);
             bcd_add(b, 0x0EEF, 0x01, 1);
-        } else { cyc(38); }
+        }
         bcd_add_mem(b, 0x0EEF, 0x0EEC, 0);
-        cyc(24);
         wr8(b | 0x0EEA, 0x00);
-        cyc(24);
         wr8(b | 0x0EEB, 0x00);
-        cyc(24);
         wr8(b | 0x0EEC, 0x00);
         inc8_mem(b | 0x0D59);
         lda8_imm(0x02);
-        cyc(40);
         wr8(b | 0x10A2, 0x02);
-        cyc(24);
         lda8_imm(0x3F);
         abi_SoundPort0QueuePushRawX8();
-        cyc(24);                        /* JMP */
+        /* JMP */
         goto tiles;
     }
     op_sep(P_M);
     cpu.p |= P_D;
-    cyc(66);
     op_lda8(b | 0x0EEC);
     if ((uint8_t)cpu.a) {
-        cyc(46);
         bcd_sub(b, 0x0EEA, 0x17, 1);
         bcd_sub(b, 0x0EEB, 0x02, 0);
         if (!(cpu.p & P_C)) {
             cpu.p &= (uint8_t)~P_C;
             v = op_adc8((uint8_t)cpu.a, 0x60, &cpu.p);
             cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
-            cyc(70);
             wr8(b | 0x0EEB, v);
             bcd_sub(b, 0x0EEC, 0x01, 1);
-        } else { cyc(22); }
-        cyc(16);
+        }
         bcd_add(b, 0x0EED, 0x17, 1);
-        cyc(16);
         bcd_add(b, 0x0EEE, 0x02, 0);
     } else {
-        cyc(46);
         op_lda8(b | 0x0EEB);
         v = (uint8_t)cpu.a;
         if (!v) {
-            cyc(22);
             if (!bcd_sub(b, 0x0EEA, 0x01, 1)) {
-                cyc(16);
                 inc8_mem(b | 0x0D59);
                 lda8_imm(0x02);
-                cyc(40);
                 wr8(b | 0x10A2, 0x02);
-                cyc(24);
                 lda8_imm(0x3F);
                 abi_SoundPort0QueuePushRaw();
-            } else { cyc(30); }
-            cyc(8);
+            }
             bcd_add(b, 0x0EED, 0x01, 1);
-            cyc(16);
             bcd_add(b, 0x0EEE, 0x00, 0);
         } else {
-            cyc(54);
             cmp8_imm(0x01);
             if (v == 0x01)
                 bonus_move(b, 0x73, 0x00);
             else
-                { cyc(18); bonus_move(b, 0x57, 0x00); }
+                bonus_move(b, 0x57, 0x00);
         }
-        cyc(22);
     }
-    cyc(24);
     op_lda8(b | 0x0EEE);
     cmp8_imm(0x60);
     if ((uint8_t)cpu.a >= 0x60) {
         v = op_sbc8((uint8_t)cpu.a, 0x60, &cpu.p);
         cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
-        cyc(56);
         wr8(b | 0x0EEE, v);
-        cyc(30);                        /* CLC, LDA */
+        /* CLC, LDA */
         cpu.p &= (uint8_t)~P_C;
         bcd_add(b, 0x0EEF, 0x01, 0);
-    } else { cyc(38); }
+    }
 tiles:
     cpu.p &= (uint8_t)~P_D;
-    cyc(38);
-    wr8(0x7F9765, cyc_then(76, low_digit_tile(rd8(b | 0x0EEC))));
+    wr8(0x7F9765, (low_digit_tile(rd8(b | 0x0EEC))));
     bcd_tiles(b | 0x0EEB, 0x7F9769, 0x7F976B);
     bcd_tiles(b | 0x0EEA, 0x7F976F, 0x7F9771);
     abi_ResultsTotalTiles();
@@ -1995,11 +1680,8 @@ static uint8_t car_times(uint32_t b)
     uint8_t c;
 
     cpu.p &= (uint8_t)~P_C;
-    cyc(38);
     op_lda8(b | 0x0D48);
-    cyc(24);
     c = op_adc8((uint8_t)cpu.a, rd8(b | 0x0D48), &cpu.p);
-    cyc(24);
     c = op_adc8(c, rd8(b | 0x0D48), &cpu.p);
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | c);
     cpu.x = c;
@@ -2026,62 +1708,51 @@ void abi_ResultsRecordCompare(void)
     static const uint16_t mine[3] = {0x0EEF, 0x0EEE, 0x0EED};
     uint8_t x, v, m;
     int r = 0;
-    unsigned i, last = 3;
+    unsigned i;
 
     op_sep(P_M | P_X);
     x = car_times(b);
     for (i = 0; i < 3; i++) {
-        cyc(38);
         op_lda8(b | mine[i]);
         v = (uint8_t)cpu.a;
-        cyc(24);
         m = rd8(b | (uint16_t)(at[i] + x));
-        cpu.p = (uint8_t)((nz8(cpu.p, (uint8_t)(v - m)) & ~P_C) | (v >= m ? (cyc(18), P_C) : 0));
+        cpu.p = (uint8_t)((nz8(cpu.p, (uint8_t)(v - m)) & ~P_C) | (v >= m ? (P_C) : 0));
         if (v < m) {
             r = -1;
             break;
         }
         if (v != m) {
             r = 1;
-            last = i;
             break;
         }
     }
-    cyc(r > 0 && last == 2 ? 14 : 20);  /* BCC, BEQ not taken at the last compare */
+    /* BCC, BEQ not taken at the last compare */
     if (r > 0) {
-        palette_fill(0x0221, 0x0008, 0x10, 102);
-        cyc(22);                        /* BRA */
+        palette_fill(0x0221, 0x0008, 0x10);
+        /* BRA */
     } else if (r < 0) {
-        cyc(26);
         op_lda8(b | (uint16_t)(0x0F78 + x));
         cmp8_imm(0xFF);
         if ((uint8_t)cpu.a != 0xFF)
-            { cyc(32); palette_fill(0x0361, 0x0008, 0x10, 102); } else { cyc(38); }
-        cyc(22);
+            palette_fill(0x0361, 0x0008, 0x10);
         op_sep(P_M);
         palette_cycle(0x0221, 0x0008);
     }
-    cyc(22);
     if (pressed(b, 0x9000)) {
         op_sep(P_M);
         lda8_imm(0x01);
-        cyc(62);
         wr8(b | 0x0E3A, 0x01);
-    } else { cyc(6); }
+    }
     op_sep(P_M);
-    cyc(46);
     op_lda8(b | 0x10A2);
-    cyc(38);
     cmp8_imm(0x07);
     if ((uint8_t)cpu.a == 0x07)
-        { cyc(42); return; } else { cyc(32); }
+        return;
     cmp8_imm(0x01);
     if ((uint8_t)cpu.a != 0x01)
-        { cyc(42); return; }
+        return;
     lda8_imm(0x03);
-    cyc(34);
     wr8(b | 0x10A2, 0x03);
-    cyc(42);
 }
 
 /*
@@ -2099,38 +1770,27 @@ void abi_RecordTimeTiles(void)
 
     op_sep(P_X);
     x = car_times(b);
-    cyc(38);
     t = high_digit_tile(rd8(b | (uint16_t)(0x0F78 + x)));
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | t);
     cmp8_imm(0xC0);
     if (t == 0xC0) {
         lda8_imm(0x0F);
-        cyc(112);
         wr8(0x7F9737, 0x0F);
-        cyc(32);
         v = (uint8_t)(rd8(0x7F9738) | 0x01);
         lda8_imm(v);
-        cyc(48);
         wr8(0x7F9738, v);
     } else {
-        cyc(102);
         wr8(0x7F9737, t);
     }
-    cyc(t == 0xC0 ? 46 : 24);           /* BRA, or not; LDA abs,X */
-    wr8(0x7F9739, cyc_then(76, low_digit_tile(rd8(b | (uint16_t)(0x0F78 + x)))));
+    /* BRA, or not; LDA abs,X */
+    wr8(0x7F9739, (low_digit_tile(rd8(b | (uint16_t)(0x0F78 + x)))));
     lda8_imm(0xE6);
-    cyc(48);
     wr8(0x7F973B, 0xE6);
     bcd_tiles(b | (uint16_t)(0x0F77 + x), 0x7F973D, 0x7F973F);
     lda8_imm(0xE7);
-    cyc(48);
     wr8(0x7F9741, 0xE7);
-    cyc(24);
-    wr8(0x7F9743, cyc_then(64, high_digit_tile(rd8(b | (uint16_t)(0x0F76 + x)))));
-    cyc(24);
+    wr8(0x7F9743, (high_digit_tile(rd8(b | (uint16_t)(0x0F76 + x)))));
     v = low_digit_tile(rd8(b | (uint16_t)(0x0F76 + x)));
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
-    cyc(76);
     wr8(0x7F9745, v);
-    cyc(42);
 }

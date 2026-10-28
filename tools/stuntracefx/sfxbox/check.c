@@ -1513,6 +1513,15 @@ void cyc(uint32_t clocks)
     if (machine_live && on_cpu_thread()) { cyc_said += clocks; cyc_mark(clocks); }
 }
 
+/* The time stated cycle by cycle: the harness only needs its sum. */
+void cycs(uint64_t lengths)
+{
+    uint32_t clocks = 0;
+    for (; lengths; lengths >>= 4)
+        clocks += (uint32_t)(lengths & 15);
+    cyc(clocks);
+}
+
 void cpu_restart(uint32_t at, void (*entry)(void))
 {
     (void)entry;

@@ -21,21 +21,17 @@ uint16_t PpuMultiplierSetLowByteTimes8(uint8_t v)
 {
     uint16_t factor = (uint16_t)(v << 3);
 
-    cyc(168);
     wr8(M7A, (uint8_t)factor);
-    cyc(52);
     wr8(M7A, (uint8_t)(factor >> 8));
     return factor;
 }
 
 void abi_PpuMultiplierSetLowByteTimes8(void)
 {
-    cyc(0);
     uint16_t factor = PpuMultiplierSetLowByteTimes8((uint8_t)cpu.a);
 
     cpu.a = (uint16_t)(factor << 8 | factor >> 8);
     cpu.p = (uint8_t)(nz8(cpu.p, (uint8_t)(factor >> 8)) & ~(P_C | P_M));
-    cyc(64);
 }
 
 /*
@@ -47,9 +43,7 @@ void abi_PpuMultiplierSetLowByteTimes8(void)
  */
 uint16_t PpuMultiply(uint8_t v)
 {
-    cyc(54);
     wr8(M7B, v);
-    cyc(54);
     return rd16(MPYM);
 }
 
@@ -57,5 +51,4 @@ void abi_PpuMultiply(void)
 {
     cpu.a = PpuMultiply((uint8_t)cpu.a);
     cpu.p = (uint8_t)(nz16(cpu.p, cpu.a) & ~P_M);
-    cyc(42);
 }

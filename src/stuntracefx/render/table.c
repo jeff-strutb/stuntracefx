@@ -19,20 +19,18 @@
  * R1 = the entry; R4 = (entry - 1) * 8; R6 = 8; the last RAM address $1092;
  * OV, S, CY, Z from the final add (table + 2, plus R4).
  */
-uint16_t FxTableEntryWords(uint16_t entry, int copy)
+uint16_t FxTableEntryWords(uint16_t entry)
 {
     uint16_t offset = (uint16_t)((entry - 1) * 8);
 
-    gsu_code(0x04cd8c, 4);
     return (uint16_t)(gsu_ldw(GSU_TABLE_ADDR) + 2 + offset);
 }
 
 void abi_FxTableEntryWords(void)
 {
     uint16_t entry = gsu.r[0];
-    gsu_code(0x04cd84, 8);
     uint16_t offset = (uint16_t)gsu_lmult((uint16_t)(entry - 1), 8);
-    uint16_t addr = FxTableEntryWords(entry, GSU_COPY(0));
+    uint16_t addr = FxTableEntryWords(entry);
 
     gsu_add((uint16_t)(addr - offset), offset, 0);
     gsu.r[0] = entry;
@@ -40,5 +38,4 @@ void abi_FxTableEntryWords(void)
     gsu.r[4] = offset;
     gsu.r[5] = addr;
     gsu.r[6] = 8;
-    gsu_code(0x04cd90, 8);
 }

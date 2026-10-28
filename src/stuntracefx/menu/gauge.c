@@ -7,6 +7,7 @@
 #include "machine.h"
 #include "cpu_ops.h"
 #include "wram.h"
+#include "assets.h"
 
 #define MENU_GAUGE 0x00117Eu
 
@@ -22,31 +23,22 @@ uint16_t MenuGaugeFromButtonB(void)
 {
     uint16_t g;
 
-    cyc(76);
     if (rd16(JOY1_HELD) & 0x8000) {
-        cyc(78);
         g = (uint16_t)(rd16(MENU_GAUGE) + 0x0028);
         if (g >= 0x00FF)
-            { cyc(18); g = 0x00FF; }
-        cyc(116);
+            g = 0x00FF;
         wr16(MENU_GAUGE, g);
     } else {
-        cyc(72);
         g = rd16(MENU_GAUGE);
         if (g != 0) {
             g = (uint16_t)(g - 0x000C);
             if (g & 0x8000)
-                { cyc(18); g = 0; }
-            cyc(108);
+                g = 0;
             wr16(MENU_GAUGE, g);
         }
-        cyc(22);
     }
-    cyc(32);
     g = rd16(MENU_GAUGE);
-    cyc(16);
     wr16(0x000002, g);
-    cyc(22);
     return g;
 }
 
@@ -68,8 +60,7 @@ void abi_MenuGaugeFromButtonB(void)
  */
 uint16_t MenuGaugeSlideToTarget(void)
 {
-    cyc(68);
-    uint16_t g = rd16(MENU_GAUGE), target = rd16(cyc_then(16, 0x000002));
+    uint16_t g = rd16(MENU_GAUGE), target = rd16((0x000002));
 
     if (g != target) {
         int down = g >= target;
@@ -77,22 +68,16 @@ uint16_t MenuGaugeSlideToTarget(void)
         if (down)
             g = (uint16_t)(g - 0x0008);
         else
-            { cyc(6); g = (uint16_t)(g + 0x0004); }
-        cyc(94);
+            g = (uint16_t)(g + 0x0004);
         wr16(MENU_GAUGE, g);
         if (!((uint16_t)(g - target) & 0x8000)) {
-            cyc(92);
             g = rd16(MENU_GAUGE);
-            cyc(16);
             wr16(0x000002, g);
-            cyc(70);
             return g;
         }
-        cyc(down ? 62 : 40);        /* SEC, SBC, BPL; the down arm's BRA */
+        /* SEC, SBC, BPL; the down arm's BRA */
     }
-    cyc(70);
     wr16(MENU_GAUGE, 0xFF00);
-    cyc(92);
     return 0xFF00;
 }
 
@@ -122,20 +107,16 @@ uint16_t GaugeTableIndex(uint8_t bank, uint16_t value)
     uint16_t obj, kind, off = 0;
     unsigned i;
 
-    cyc(90);
     wr16(0x0011DF, value);
-    cyc(24);
     obj = rd16((uint32_t)bank << 16 | 0x0346);
-    cyc(32);
     kind = rd16(0x7E2027 + obj);
     for (i = 0; i < 5; i++)
-        { cyc(40); if (kind == gauge_kinds[i]) {
-            cyc(6);
+        { if (kind == gauge_kinds[i]) {
             off = gauge_offsets[i];
             break;
         } }
-    cyc(i == 4 ? 70 : 92);                  /* the last case has no BRA */
-    return cyc_then(84, (uint16_t)(off + rd16(0x0011DF)));
+    /* the last case has no BRA */
+    return ((uint16_t)(off + rd16(0x0011DF)));
 }
 
 void abi_GaugeTableIndex(void)
@@ -159,24 +140,19 @@ void abi_GaugeTableIndex(void)
  */
 uint16_t GaugeFromSpeed(uint8_t bank, uint16_t *x)
 {
-    cyc(60);
     uint16_t a = rd16(0x000002);
 
     if (a) {
         *x = a;
-        cyc(92);
         a = rd16(0x70004A + *x);
         if (a & 0x8000)
-            { cyc(46); a = (uint16_t)((uint16_t)(~a + 1) >> 1); }
-        cyc(178);
+            a = (uint16_t)((uint16_t)(~a + 1) >> 1);
         if (a >= 0x0257)
-            { cyc(18); a = 0x0257; }
+            a = 0x0257;
         a = (uint16_t)(a >> 2);
         *x = GaugeTableIndex(bank, a);
-        cyc(76);
-        a = rd8(0x0BB158 + *x);
-    } else { cyc(84); }                 /* CMP, BNE, BRL */
-    cyc(48);
+        a = rd8(ASSET_GaugeFromSpeed_0BB158 + *x);
+    }                  /* CMP, BNE, BRL */
     wr16(0x000002, a);
     return a;
 }
@@ -186,7 +162,7 @@ void abi_GaugeFromSpeed(void)
     uint16_t x = cpu.x;
 
     cpu.a = GaugeFromSpeed(cpu.db, &x);
-    cpu.x = (cpu.p & P_X) ? (cyc(70), (uint8_t)x) : (cyc(70), x);
+    cpu.x = (cpu.p & P_X) ? ((uint8_t)x) : (x);
 }
 
 /*
@@ -202,15 +178,12 @@ void abi_GaugeFromSpeedZero(void)
 {
     uint16_t x, a;
 
-    cyc(84);
     x = GaugeTableIndex(cpu.db, 0x0000);
-    cyc(124);
-    a = rd8(0x0BB158 + x);
+    a = rd8(ASSET_GaugeFromSpeed_0BB158 + x);
     wr16(0x000002, a);
     cpu.a = a;
     cpu.x = x;
     cpu.s++;
-    cyc(20);
     op_plp(rd8((uint16_t)cpu.s));
 }
 
@@ -230,33 +203,22 @@ void abi_GaugeFromSpeedZero(void)
  */
 uint16_t SpeedGaugeUpdate(uint8_t bank, uint16_t a, uint16_t *x)
 {
-    cyc(60);
     wr16(0x000002, a);
-    cyc(54);
     if (rd8(0x000D53)) {
-        cyc(48);
         if (rd8(0x000DD6) >= 0x06) {
-            cyc(84);
             a = GaugeFromSpeed(bank, x);
         } else {
-            cyc(78);
             a = MenuGaugeFromButtonB();
         }
-    cyc(70);
         } else {
-        cyc(68);
         a = GaugeFromSpeed(bank, x);
-        cyc(124);
         if (rd8(0x000DD6) < 0x06) {
-            cyc(78);
             a = rd16((uint32_t)bank << 16 | 0x117E);
             if (!(a & 0x8000))
-                { cyc(62); a = MenuGaugeSlideToTarget(); } else { cyc(22); }
-        } else { cyc(38); }
+                a = MenuGaugeSlideToTarget();
+        }
     }
-    cyc(38);
     a = (uint16_t)((a & 0xFF00) | rd8(0x000002));
-    cyc(32);
     wr8(0x000E49, (uint8_t)a);
     return a;
 }
@@ -266,7 +228,7 @@ void abi_SpeedGaugeUpdate(void)
     uint16_t x = cpu.x;
 
     cpu.a = SpeedGaugeUpdate(cpu.db, cpu.a, &x);
-    cpu.x = (cpu.p & P_X) ? (uint8_t)x : (cyc(72), x);
+    cpu.x = (cpu.p & P_X) ? (uint8_t)x : (x);
 }
 
 #define GAUGE_2 0x1180u   /* the second gauge, through the data bank */
@@ -294,99 +256,68 @@ uint16_t SpeedGauge2Update(uint8_t bank, uint16_t a)
     uint32_t b = (uint32_t)bank << 16;
     uint16_t x, g, t, v;
 
-    cyc(60);
     wr16(0x000002, a);
-    cyc(46);
     if (rd8(b | 0x0D53)) {
-        cyc(92);
         if (rd16(b | 0x030D) & 0x8000) {
-            cyc(70);
             g = (uint16_t)(rd16(b | GAUGE_2) + 0x0010);
             if (g >= 0x007F)
-                { cyc(18); g = 0x007F; }
-            cyc(108);
+                g = 0x007F;
             wr16(b | GAUGE_2, g);
         } else {
-            cyc(64);
             g = rd16(b | GAUGE_2);
             if (g) {
                 g = (uint16_t)(g - 0x0006);
                 if (g & 0x8000)
-                    { cyc(18); g = 0x0000; }
-                cyc(100);
+                    g = 0x0000;
                 wr16(b | GAUGE_2, g);
             }
-            cyc(22);
         }
-        cyc(24);
         g = rd16(b | GAUGE_2);
-        cyc(54);
         wr8(0x000E47, (uint8_t)g);
         return g;
     }
-    cyc(60);
     a = rd16(0x000002);
     if (!a) {
-        cyc(168);
         wr16(0x000E47, a);
         return a;
     }
     x = a;
-    cyc(122);
     v = rd16(0x70004A + x);
-    cyc(60);
-    wr16(0x000002, (v & 0x8000) ? (cyc(2), 0x0000) : (uint16_t)(v >> 2));
-    cyc(v & 0x8000 ? 32 : 54);          /* the LSR arm's BRA */
+    wr16(0x000002, (v & 0x8000) ? (0x0000) : (uint16_t)(v >> 2));
+    /* the LSR arm's BRA */
     if ((uint16_t)(rd16(0x700044 + x) - 4) & 0x8000) {
-        cyc(78);
         t = (uint16_t)(rd16(0x700050 + x) >> 3);
-        cyc(72);
         t = (uint16_t)(t + rd16(0x000002));
     } else {
-        cyc(72);
         v = rd16(0x70004A + x);
         t = (uint16_t)((v & 0x8000) | v >> 1);
         if (t & 0x8000)
-            { cyc(54); t = (uint16_t)(~t + 1); }
-        cyc(60);
+            t = (uint16_t)(~t + 1);
     }
     if (t >= 0x00FF)
-        { cyc(18); t = 0x00FF; }
-    cyc(62);
+        t = 0x00FF;
     wr16(0x000002, t);
-    cyc(24);
     g = rd16(b | GAUGE_2);
     if (g & 0x8000) {
-        cyc(38);
         a = rd16(0x000002);
-        cyc(90);
         wr8(0x000E47, (uint8_t)a);
         return a;
     }
-    cyc(76);
     g = rd16(b | GAUGE_2);
-    cyc(16);
     t = rd16(0x000002);
     if (g != t) {
         int down = g > t;
-        g = (uint16_t)(down ? g - 4 : (cyc(6), g + 4));
-        cyc(94);
+        g = (uint16_t)(down ? g - 4 : (g + 4));
         wr16(b | GAUGE_2, g);
-        cyc(30);
         v = (uint16_t)(g - rd16(0x000002) + 4);
-        if ((v & 0x8000) || (cyc(40), v >= 0x0008)) {
-            cyc(84);
+        if ((v & 0x8000) || (v >= 0x0008)) {
             a = rd16(b | GAUGE_2);
-            cyc(54);
             wr8(0x000E47, (uint8_t)a);
             return a;
-        } else { cyc(down ? 54 : 32); }   /* down: BRA to the shared store */
+        }   /* down: BRA to the shared store */
     }
-    cyc(70);
     wr16(b | GAUGE_2, 0xFFFF);
-    cyc(16);
     a = rd16(0x000002);
-    cyc(76);
     wr8(0x000E47, (uint8_t)a);
     return a;
 }
@@ -394,5 +325,4 @@ uint16_t SpeedGauge2Update(uint8_t bank, uint16_t a)
 void abi_SpeedGauge2Update(void)
 {
     cpu.a = SpeedGauge2Update(cpu.db, cpu.a);
-    cyc(72);
 }

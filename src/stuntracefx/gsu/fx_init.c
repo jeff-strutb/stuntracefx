@@ -27,44 +27,34 @@
  * = $1234; R3 = the word read back; R10 = $0240; R12 = 0; R13 = $8831;
  * RAMBR = 0; Z, CY set, S, OV clear; the last RAM address $235C.
  */
-static FxRegs pools(FxRegs g, int copy);
+static FxRegs pools(FxRegs g);
 static FxRegs ram_bad(FxRegs g);
 
 FxRegs FxInit(FxRegs g)
 {
     g.r[10] = FX_STACK;
     g.r[0] = gsu_sub(g.r[0], g.r[0], 0);
-    gsu_code(0x048801, 6);
     gsu_ramb(0);
     g.r[0] = gsu_sub(g.r[0], g.r[0], 0);
-    gsu_code(0x048807, 5);
     gsu_stw(0x2732, g.r[0]);
     g.r[0] = gsu_sub(g.r[0], g.r[0], 0);
-    gsu_code(0x04880c, 5);
     gsu_stw(FX_RAM_BAD, g.r[0]);
     g.r[1] = FX_RAM_TEST;
     g.r[2] = g.r[0] = 0x1234;
-    gsu_code(0x048811, 9);
     gsu_stw(g.r[1], g.r[0]);
     g.r[0] = gsu_sub(g.r[0], g.r[0], 0);
-    gsu_code(0x04881a, 3);
     g.r[3] = gsu_ldw(g.r[1]);
-    gsu_code(0x04881d, 1);
     g.r[0] = gsu_ldw(g.r[1]);
     gsu_sub(g.r[0], g.r[2], 0);
     if (!gsu.z)
-        { gsu_code(0x04881e, 5); return ram_bad(g); } else { gsu_code(0x04881e, 4); gsu_code(0x048828, 1); }
-    return pools(g, GSU_COPY(0));
+        return ram_bad(g);
+    return pools(g);
 }
 
 /* The rest of FxInit after the RAM test (04:8828): clears the pools and
    sets the starting words. */
-/* gsuwalk: the code of each copy of pools, read from the ROM */
-static const GsuCode pools_fetch[1][7] = {
-    {{0x048863, 5}, {0x048868, 4}, {0x04886c, 4}, {0x048870, 4}, {0x048874, 4}, {0x048878, 4}, {0x04887c, 4}},
-};
 
-static FxRegs pools(FxRegs g, int copy)
+static FxRegs pools(FxRegs g)
 {
     static const uint16_t zeros[7] = {0x2B94, 0x2B92, 0x2684, 0x2686, 0x1090, 0x2470, 0x273C};
     int i;
@@ -73,53 +63,41 @@ static FxRegs pools(FxRegs g, int copy)
     g.r[0] = gsu_sub(g.r[0], g.r[0], 0);
     g.r[12] = FX_CLEAR_WORDS;
     g.r[13] = 0x8831;
-    gsu_code(0x048829, 9);
     do {
         int again;
 
-        gsu_code(0x048832, 1);
         gsu_stw(g.r[1], g.r[0]);
         g.r[1] = gsu_inc(g.r[1]);
         again = gsu_count_down(&g.r[12]);
         g.r[1] = gsu_inc(g.r[1]);
         if (!again)
-            { gsu_code(0x048833, 2); break; } else { gsu_code(0x048833, 2); gsu_code(0x048831, 1); }
+            break;
     } while (1);
     g.r[0] = 0x0100;
-    gsu_code(0x048835, 8);
     gsu_stw(0x2636, g.r[0]);
     g.r[0] = 0xFFFF;
-    gsu_code(0x04883d, 6);
     gsu_stw(0x2382, g.r[0]);
-    gsu_code(0x048843, 4);
     gsu_stw(0x2380, g.r[0]);
     g.r[0] = 0xFFFF;
-    gsu_code(0x048847, 6);
     gsu_stw(0x2642, g.r[0]);
     g.r[1] = FX_POOL_FIRST;
     g.r[0] = gsu_sub(g.r[0], g.r[0], 0);
-    gsu_code(0x04884d, 5);
     gsu_stw(g.r[1], g.r[0]);
     g.r[1] = gsu_inc(gsu_inc(g.r[1]));
     g.r[0] = 0x0CD8;
-    gsu_code(0x048852, 6);
     gsu_stw(g.r[1], g.r[0]);
     g.r[1] = FX_POOL_SECOND;
     g.r[0] = gsu_sub(g.r[0], g.r[0], 0);
-    gsu_code(0x048858, 5);
     gsu_stw(g.r[1], g.r[0]);
     g.r[1] = gsu_inc(gsu_inc(g.r[1]));
     g.r[0] = 0x05BE;
-    gsu_code(0x04885d, 6);
     gsu_stw(g.r[1], g.r[0]);
     g.r[0] = gsu_sub(g.r[0], g.r[0], 0);
     for (i = 0; i < 7; i++)
-        { gsu_codes(pools_fetch[0] + i, 1); gsu_stw(zeros[i], g.r[0]); }
+        gsu_stw(zeros[i], g.r[0]);
     g.r[0] = 3;
-    gsu_code(0x048880, 6);
     gsu_stw(0x2472, g.r[0]);
     g.r[0] = 0;
-    gsu_code(0x048886, 7);
     gsu_stw(FX_RAM_TEST, g.r[0]);
     return g;
 }
@@ -138,9 +116,8 @@ static FxRegs pools(FxRegs g, int copy)
 static FxRegs ram_bad(FxRegs g)
 {
     g.r[0] = 0x000F;
-    gsu_code(0x048823, 6);
     gsu_stw(FX_RAM_BAD, g.r[0]);
-    return pools(g, GSU_COPY(0));
+    return pools(g);
 }
 
 void abi_FxInitRamBad(void)

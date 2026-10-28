@@ -16,15 +16,12 @@
 /* One halving as CMP #$8000 (or #$80) / ROR A / BPL / ADC #0 does it: an
    arithmetic shift whose negative results round toward zero. CMP, ROR,
    then BPL taken (I + 36), or not and the ADC (2I + 30). */
-static uint16_t halve(uint16_t v, uint16_t sign, uint32_t imm)
+static uint16_t halve(uint16_t v, uint16_t sign)
 {
     uint16_t r = (uint16_t)((v >> 1) | (v & sign));
 
     if (r & sign) {
-        cyc(2 * imm + 30);
         r = (uint16_t)(r + (v & 1));
-    } else {
-        cyc(imm + 36);
     }
     return r;
 }
@@ -36,48 +33,47 @@ static uint16_t halve(uint16_t v, uint16_t sign, uint32_t imm)
 static uint16_t approach(uint16_t target, int wide, uint16_t min, int shifts, int *moved, uint8_t *p)
 {
     uint16_t mask = wide ? 0xFFFF : 0x00FF, sign = wide ? 0x8000 : 0x0080;
-    uint32_t imm = wide ? 24 : 16;
     uint16_t cur, d, s;
     int i;
 
     target &= mask;
-    cyc(16);                                    /* to the CMP's read */
+    /* to the CMP's read */
     cur = wide ? rd16(APPROACH_VALUE) : rd8(APPROACH_VALUE);
     *moved = target != cur;
     if (!*moved) {
-        cyc(64);                                /* BNE, JML, the tail's LDA */
+        /* BNE, JML, the tail's LDA */
         cur = wide ? rd16(APPROACH_VALUE) : rd8(APPROACH_VALUE);
         *p = (uint8_t)(wide ? nz16(*p, cur) : nz8(*p, (uint8_t)cur)) | P_C;
         return cur;
     }
-    cyc(52);                                    /* BNE taken, SEC, SBC */
+    /* BNE taken, SEC, SBC */
     cur = wide ? rd16(APPROACH_VALUE) : rd8(APPROACH_VALUE);
     d = (uint16_t)(target - cur) & mask;
     if (!(d & sign)) {
         if (d < min) {
-            cyc(3 * imm + 54);                  /* CMP, BMI, CMP, BPL, LDA #, BRA */
+            /* CMP, BMI, CMP, BPL, LDA #, BRA */
             d = min;
         } else {
-            cyc(2 * imm + 38);                  /* CMP, BMI, CMP, BPL taken */
+            /* CMP, BMI, CMP, BPL taken */
         }
     } else if (!((uint16_t)(d + min) & sign)) {
-        cyc(3 * imm + 38);                      /* CMP, BMI taken, CMP, BMI, LDA # */
+        /* CMP, BMI taken, CMP, BMI, LDA # */
         d = (uint16_t)(-min) & mask;
     } else {
-        cyc(2 * imm + 44);                      /* CMP, BMI taken, CMP, BMI taken */
+        /* CMP, BMI taken, CMP, BMI taken */
     }
     for (i = 0; i < shifts; i++)
-        d = halve(d, sign, imm) & mask;
-    cyc(30);                                    /* CLC, ADC */
+        d = halve(d, sign) & mask;
+    /* CLC, ADC */
     cur = wide ? rd16(APPROACH_VALUE) : rd8(APPROACH_VALUE);
     s = (uint16_t)(d + cur) & mask;
     *p = (uint8_t)((*p & ~(P_C | P_V)) | ((~(d ^ cur) & (d ^ s) & sign) ? P_V : 0));
-    cyc(16);                                    /* STA */
+    /* STA */
     if (wide)
         wr16(APPROACH_VALUE, s);
     else
         wr8(APPROACH_VALUE, (uint8_t)s);
-    cyc(46);                                    /* BRL, the tail's LDA */
+    /* BRL, the tail's LDA */
     s = wide ? rd16(APPROACH_VALUE) : rd8(APPROACH_VALUE);
     *p = wide ? nz16(*p, s) : nz8(*p, (uint8_t)s);
     return s;
@@ -89,7 +85,7 @@ static void abi_approach(int wide, uint16_t min, int shifts)
     uint8_t p = cpu.p;
     uint16_t v = approach(cpu.a, wide, min, shifts, &moved, &p);
 
-    cpu.a = wide ? (cyc(58), v) : (cyc(58), (uint16_t)((cpu.a & 0xFF00) | v));
+    cpu.a = wide ? (v) : ((uint16_t)((cpu.a & 0xFF00) | v));
     cpu.p = p;
 }
 
@@ -124,7 +120,7 @@ uint16_t ApproachQuarterMin4(uint16_t target, int *moved, uint8_t *p)
 
 void abi_ApproachQuarterMin4(void)
 {
-    cyc(62);                                    /* JSL */
+    /* JSL */
     abi_approach(1, 4, 2);
 }
 
@@ -141,7 +137,6 @@ uint16_t ApproachEighthMin8(uint16_t target, int *moved, uint8_t *p)
 
 void abi_ApproachEighthMin8(void)
 {
-    cyc(48);
     abi_approach(1, 8, 3);
 }
 
@@ -255,7 +250,6 @@ uint16_t ApproachQuarterMin4Byte(uint8_t target, int *moved, uint8_t *p)
 
 void abi_ApproachQuarterMin4Byte(void)
 {
-    cyc(0);
     abi_approach(0, 4, 2);
 }
 

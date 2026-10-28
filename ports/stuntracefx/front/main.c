@@ -121,6 +121,10 @@ static void pacing_write(uint32_t addr, uint8_t value)
             fnv(w + 0x300, 0x20000 - 0x300, fnv(w, 0x100, 2166136261u)), fnv(nshvc_sram(), 0x10000, 2166136261u));
 }
 
+/* the game's cost profile, measured from its ROM by nativeshvc's
+   tools/nshvc-profile (docs/cost-profile.md): cost_profile.c */
+extern const nshvc_cost_profile stuntracefx_cost_profile;
+
 NSHVC_MAIN(argc, argv)
 {
     static nshvc_cart cart;
@@ -136,6 +140,7 @@ NSHVC_MAIN(argc, argv)
             nshvc_set_write_hook(pacing_write);
         }
     cart_describe(&cart);
+    cart.cost_profile = &stuntracefx_cost_profile;
     nshvc_set_hooks(&hooks);
     return nshvc_main(&cart, argc, argv);
 }

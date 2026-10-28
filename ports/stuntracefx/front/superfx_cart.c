@@ -9,8 +9,8 @@
  *
  * The console gives the chip its clock, IRQ line, open bus and the ROM
  * (gsu_host_*); a program the S-CPU starts runs its C from the cartridge's
- * routines (the routine at PBR:R15; flags bit 0: its first instruction is
- * CACHE).
+ * routines (the routine at PBR:R15) to its STOP, and takes the time its
+ * row of the cartridge's cost profile gives it (gsu_host_price).
  */
 #include "nshvc/cart.h"
 
@@ -22,8 +22,8 @@ int front_rom_unheld;
 
 /* ---- what the connector gives the chip (superfx.h) ---- */
 uint64_t gsu_host_clock(void) { return nshvc_cart_clock(); }
-int gsu_host_untimed(void) { return nshvc_untimed(); }
 void gsu_host_irq(int level) { nshvc_cart_irq(level); }
+void gsu_host_irq_at(int level, uint64_t clock) { nshvc_cart_irq_at(level, clock); }
 uint8_t gsu_host_open_bus(void) { return nshvc_open_bus(); }
 uint32_t gsu_host_ram_size(void) { return ram_size; }
 uint8_t gsu_host_rom(uint32_t off, int fetch, int *unheld)
@@ -35,14 +35,47 @@ uint8_t gsu_host_rom(uint32_t off, int fetch, int *unheld)
     return v;
 }
 void gsu_host_fatal(const char *msg) { nshvc_fatal("%s", msg); }
-GsuHostCoro *gsu_host_coro_current(void) { return (GsuHostCoro *)nshvc_coro_current(); }
-GsuHostCoro *gsu_host_coro_new(void (*fn)(void *), void *arg, size_t stack)
+
+/* ---- its programs' prices ---- */
+/* Each program's load model (superfx.h GsuPrice) from the cartridge's
+   cost profile (nshvc_cart.cost_profile, docs/cost-profile.md, made by
+   nativeshvc's tools/nshvc-profile from the original's jobs): a fixed part
+   in Super FX clocks and a weight for each RAM access it makes by kind
+   (LOAD, STORE, FLUSH, RPIX, the profile's order), in 1/GSU_PRICE_ONE of a
+   clock; its rows sorted by entry (PBR:R15), and a row for a program not
+   listed. With no profile, a program costs its accesses at the chip's bus
+   speed, 5 clocks each. */
+static const nshvc_cost_profile *profile;
+
+static void price_of(const nshvc_chip_program *row, GsuPrice *out)
 {
-    return (GsuHostCoro *)nshvc_coro_new(fn, arg, stack);
+    out->fixed = row->fixed;
+    for (int k = 0; k < GSU_OPS; k++)
+        out->weight[k] = row->weight[k];
 }
-void gsu_host_coro_switch(GsuHostCoro *from, GsuHostCoro *to)
+
+void gsu_host_price(uint8_t bank, uint16_t addr, GsuPrice *out)
 {
-    nshvc_coro_switch((nshvc_coro *)from, (nshvc_coro *)to);
+    uint32_t pc = (uint32_t)bank << 16 | addr;
+    size_t lo = 0, hi;
+    if (!profile) {
+        out->fixed = 0;
+        for (int k = 0; k < GSU_OPS; k++)
+            out->weight[k] = 5 * GSU_PRICE_ONE;
+        return;
+    }
+    hi = (size_t)profile->program_count;
+    while (lo < hi) {
+        size_t m = lo + (hi - lo) / 2;
+        if (profile->programs[m].entry < pc)
+            lo = m + 1;
+        else
+            hi = m;
+    }
+    if (lo < (size_t)profile->program_count && profile->programs[lo].entry == pc)
+        price_of(&profile->programs[lo], out);
+    else
+        price_of(&profile->chip_default, out);
 }
 
 /* ---- its programs: the cartridge's routines ---- */
@@ -54,18 +87,14 @@ static void run_program(uint8_t bank, uint16_t addr)
     r->abi();
 }
 
-static int cache_first(uint8_t bank, uint16_t addr)
-{
-    const nshvc_routine *r = nshvc_cart_routine((uint32_t)bank << 16 | addr);
-    return r && (r->flags & 1);
-}
-
 /* ---- the board ---- */
 static void power(const nshvc_cart *cart)
 {
+    profile = cart->cost_profile;
+    if (profile && profile->chip_ops != GSU_OPS)
+        nshvc_fatal("the cost profile prices %d Super FX op kinds, the chip makes %d", profile->chip_ops, GSU_OPS);
     ram_size = cart->sram_size;
     snes_gsu_run_hook = run_program;
-    snes_gsu_cache_first_hook = cache_first;
     gsu_reset();
 }
 
@@ -101,7 +130,6 @@ static int cpu_read(uint32_t addr, uint8_t *v)
     int reg;
     if (!decodes(addr, &at, &reg))
         return 0;
-    gsu_sync();
     *v = reg ? gsu_reg_read((uint16_t)addr) : snes_sfx_ram()[at];
     return 1;
 }
@@ -112,7 +140,6 @@ static int cpu_write(uint32_t addr, uint8_t v)
     int reg;
     if (!decodes(addr, &at, &reg))
         return 0;
-    gsu_sync();
     if (reg)
         gsu_reg_write((uint16_t)addr, v);
     else
@@ -156,15 +183,17 @@ static int held_irq;
 
 static void hold(int on)
 {
-    if (on)
+    if (on) {
         held_irq = gsu_irq();
-    else
+        gsu_hold(1);
+    } else {
+        gsu_hold(0);
         gsu_irq_put(held_irq);
+    }
 }
 
 static uint8_t *ram(uint32_t *size)
 {
-    gsu_sync();
     *size = ram_size;
     return snes_sfx_ram();
 }
@@ -176,7 +205,6 @@ const nshvc_chip front_superfx = {
     .write = cpu_write,
     .peek = cpu_peek,
     .rom_at = rom_at,
-    .sync = gsu_sync,
     .hold = hold,
     .ram = ram,
     .busy = gsu_running,

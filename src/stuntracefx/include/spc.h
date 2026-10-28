@@ -27,21 +27,17 @@ extern SpcRegs spc;
 uint8_t spc_rd(uint16_t addr);
 void spc_wr(uint16_t addr, uint8_t v);
 
-/* The time the original spends before an access of the C's (spc_rd, spc_wr),
-   besides the access: its opcode and operand fetches, dummy reads and
-   internal cycles from the cycle after the access before to the cycle of
-   this one's own, `n` SPC700 cycles. A call states the cycles after its last
-   access through the end of its RET too. A routine that calls another states
-   its own CALL's cycles. The checks compare it with the original's. */
-void spc_cyc(unsigned n);
+/* The sound CPU's waits (nativeshvc contract 2.0): its reads, writes and
+   work take no time; time passes only here, the console (and the S-CPU)
+   running until ready(ctx) holds. Returns the SPC700 cycles waited. */
+uint32_t spc_wait_until(int (*ready)(void *ctx), void *ctx);
 
 /* spc_wr with its time stated after its arguments are evaluated (a value that
    reads: spc_wr_cyc(a, f(spc_rd(b)), n) states the read's time inside the
    argument and the write's here). It is spc_wr with the time after the
    arguments, which spc_wr itself, a primitive the checks provide, cannot take. */
-static inline void spc_wr_cyc(uint16_t addr, uint8_t v, unsigned before)
+static inline void spc_wr_cyc(uint16_t addr, uint8_t v)
 {
-    spc_cyc(before);
     spc_wr(addr, v);
 }
 
@@ -67,13 +63,10 @@ static inline void spc_set_psw(uint8_t v)
    fetches and the idle cycle, with the push's own), before the second, and
    after it (the idle cycles up to the routine's first fetch): the return
    address pushed (high byte first), then the routine. */
-static inline void spc_call(void (*abi)(void), uint16_t ret, unsigned first, unsigned second, unsigned after)
+static inline void spc_call(void (*abi)(void), uint16_t ret)
 {
-    spc_cyc(first);
     spc_push((uint8_t)(ret >> 8));
-    spc_cyc(second);
     spc_push((uint8_t)ret);
-    spc_cyc(after);
     abi();
 }
 
@@ -84,6 +77,12 @@ static inline void spc_call(void (*abi)(void), uint16_t ret, unsigned first, uns
    checks end the call there and take `entry` on its own. */
 void spc_restart(uint16_t at, void (*entry)(void));
 
+/* Which driver's code is in the SPC700's RAM at $10B0-$260E: 1 once the
+   battle driver's block list ($1A:F091) is uploaded over the race
+   driver's, 0 once a block of any other list covers $10B0 again (apu_upload.c sets it as the blocks go out). The race
+   driver's CALL $10B0 (SpcReset) reaches whichever is there. */
+extern int spc_battle_resident;
+
 /* JMP $FFC0: the console's boot ROM (the SPC700's own, not the game's): it
    takes the next upload from the S-CPU by its transfer protocol and runs
    it. Never returns. */
@@ -92,11 +91,9 @@ void spc_boot_rom(void);
 /* RET, with the cycles before the first pull (the opcode fetch, the dummy
    read and the idle cycle included) and before the second: the return address
    pulled (low byte first); the checks end the call at it. */
-static inline uint16_t spc_ret(unsigned first, unsigned second)
+static inline uint16_t spc_ret(void)
 {
-    spc_cyc(first);
     uint16_t lo = spc_pull();
-    spc_cyc(second);
     return (uint16_t)(lo | spc_pull() << 8);
 }
 

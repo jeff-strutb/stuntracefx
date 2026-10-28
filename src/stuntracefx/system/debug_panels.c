@@ -56,39 +56,34 @@ static uint32_t dbw(uint16_t a)
    pushed before, and the printer: the value in A with N and Z from it. */
 static void print16(void (*print)(void), uint16_t v, uint16_t pos)
 {
-    cyc(70);
     wr16(TEXT_POS, pos);
-    wr16(dbw(TEXT_HALF), cyc_then(48, 0x0000));
+    wr16(dbw(TEXT_HALF), (0x0000));
     cpu.a = v;
     cpu.p = nz16(cpu.p, v);
-    (cyc(98), print());
+    (print());
 }
 
 /* The same with M 8-bit: $46 and $47 stored as bytes, $0307 a byte, one
    byte pulled into A's low byte. */
 static void print8(void (*print)(void), uint8_t v, uint16_t pos)
 {
-    cyc(54);
     wr8(TEXT_POS, (uint8_t)pos);
-    cyc(32);
     wr8(TEXT_POS + 1, (uint8_t)(pos >> 8));
-    wr8(dbw(TEXT_HALF), cyc_then(40, 0x00));
+    wr8(dbw(TEXT_HALF), (0x00));
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
     cpu.p = nz8(cpu.p, v);
-    (cyc(90), print());
+    (print());
 }
 
 /* A 16-bit field of a Super FX record (LDA.L $70:field,X). */
 static uint16_t fx_field(uint16_t field, uint16_t x)
 {
-    cyc(16);
     return rd16(GSU_RAM + field + x);
 }
 
 /* The same straight after a print: the opcode and operand bytes 16 later. */
 static uint16_t fx_field_w(uint16_t field, uint16_t x)
 {
-    cyc(16);
     return fx_field(field, x);
 }
 
@@ -113,44 +108,34 @@ void DebugTimersPanel(void)
     uint8_t p, b, db;
 
     cpu.p = (uint8_t)((cpu.p | P_M) & ~P_X);
-    cyc(76);
     wr8(TEXT_POS, 0x00);
-    cyc(32);
     wr8(TEXT_POS + 1, 0x00);
-    wr8(dbw(TEXT_HALF), cyc_then(40, 0x00));
-    cyc(54);
+    wr8(dbw(TEXT_HALF), (0x00));
     wr8(TEXT_PTR + 2, 0x08);
-    cyc(2);
     for (;;) {
-        cyc(138);
         b = rd8(TIMER_LIST + x);
         if (!b)
-            { cyc(12); break; }
+            break;
         pos = rd16(TEXT_POS);
-        cyc(46);
         wr16(TEXT_PTR, x);
         p = (uint8_t)(cpu.p & ~P_C);
-        cyc(54);
         v = rd16(TEXT_PTR);
-        cyc(16);
         wr16(TEXT_PTR, op_adc16((uint16_t)TIMER_LIST, v, &p));
         cpu.p = p;
         abi_DebugPrint();
         p &= (uint8_t)~P_C;
         x = op_adc16(x, 0x0009, &p);
-        cyc(366);
         db = rd8(TIMER_LIST + x);
         at = rd16(TIMER_LIST + 1 + x);
         v = rd16(((uint32_t)db << 16) + at);
         cpu.a = v;
         cpu.x = at;
         cpu.p = nz16(p, v);
-        (cyc(90), abi_DebugPrintDecimalWord());
+        (abi_DebugPrintDecimalWord());
         p &= (uint8_t)~P_C;
         x = op_adc16(x, 0x0003, &p);
         p &= (uint8_t)~P_C;
         pos = op_adc16(pos, 0x0040, &p);
-        cyc(178);
         wr16(TEXT_POS, pos);
         cpu.a = pos;
         cpu.p = p;
@@ -179,10 +164,8 @@ void DebugMatchSpeedPanel(void)
     uint16_t x, v;
 
     cpu.p &= (uint8_t)~(P_M | P_X);
-    cyc(54);
     x = rd16(FX_MATCH_2476);
     cpu.x = x;
-    cyc(30);
     v = fx_field(0x004A, x);
     print16(abi_DebugPrintDecimalWord, v, 0x2840);
 }
@@ -190,7 +173,7 @@ void DebugMatchSpeedPanel(void)
 void abi_DebugMatchSpeedPanel(void)
 {
     DebugMatchSpeedPanel();
-    cyc(44);                            /* RTL */
+    /* RTL */
 }
 
 /*
@@ -205,10 +188,8 @@ void DebugLastCarPanel(void)
 {
     uint16_t x, v;
 
-    cyc(32);
     x = rd16(FX_CAR_LAST);
     cpu.x = x;
-    cyc(30);
     v = fx_field(0x006A, x);
     print16(abi_DebugPrintDecimalWord, v, 0x0440);
 }
@@ -216,7 +197,7 @@ void DebugLastCarPanel(void)
 void abi_DebugLastCarPanel(void)
 {
     DebugLastCarPanel();
-    cyc(44);                            /* RTL */
+    /* RTL */
 }
 
 /*
@@ -231,20 +212,15 @@ void DebugPanelNone(void)
 
 void abi_DebugPanelNone(void)
 {
-    cyc(44);
 }
 
 /* Fields +$88, +$7A, +$86 and +$84 of the car record at X, printed in
    decimal in four columns of one row. */
 static void car_row(uint16_t x, uint16_t row)
 {
-    cyc(30);
     print16(abi_DebugPrintDecimalWord, fx_field(0x0088, x), (uint16_t)(0x0400 + row));
-    cyc(16);
     print16(abi_DebugPrintDecimalWord, fx_field(0x007A, x), (uint16_t)(0x1400 + row));
-    cyc(16);
     print16(abi_DebugPrintDecimalWord, fx_field(0x0086, x), (uint16_t)(0x2800 + row));
-    cyc(16);
     print16(abi_DebugPrintDecimalWord, fx_field(0x0084, x), (uint16_t)(0x3C00 + row));
 }
 
@@ -263,19 +239,16 @@ void DebugCarsPanel(void)
 {
     uint16_t x, row;
 
-    print16(abi_DebugPrintDecimalWord, rd16(cyc_then(24, dbw(GSU_WAIT_POLLS))), 0x5040);
-    print16(abi_DebugPrintDecimalWord, rd16(cyc_then(24, dbw(GSU_AB13_POLLS))), 0x5080);
-    cyc(32);
+    print16(abi_DebugPrintDecimalWord, rd16((dbw(GSU_WAIT_POLLS))), 0x5040);
+    print16(abi_DebugPrintDecimalWord, rd16((dbw(GSU_AB13_POLLS))), 0x5080);
     x = rd16(FX_CARS);
     cpu.x = x;
     car_row(x, 0x0040);
     for (row = 0x0080; row <= 0x0100; row = (uint16_t)(row + 0x0040)) {
-        cyc(16);
         x = fx_field(0x0074, x);
         cpu.x = x;
         car_row(x, row);
     }
-    cyc(44);
 }
 
 void abi_DebugCarsPanel(void)
@@ -292,16 +265,14 @@ void abi_DebugCarsPanel(void)
  */
 void DebugFxTestPanel(void)
 {
-    cyc(32);
     print16(abi_DebugPrintDecimalWord, rd16(FX_RAM_TEST), 0x3980);
-    cyc(32);
     print16(abi_DebugPrintDecimalWord, rd16(FX_PART_Z_SPEED), 0x39C0);
 }
 
 void abi_DebugFxTestPanel(void)
 {
     DebugFxTestPanel();
-    cyc(44);                            /* RTL */
+    /* RTL */
 }
 
 /*
@@ -322,42 +293,30 @@ void DebugModelNamesPanel(void)
     uint16_t x, part, model, pos;
     uint8_t p;
 
-    cyc(32);
     x = rd16(FX_CAR_LAST);
     cpu.x = x;
-    cyc(30);
     x = fx_field(0x003E, x);
-    cyc(84);
     wr16(TEXT_POS, 0x0840);
-    wr16(dbw(TEXT_HALF), cyc_then(48, 0x0000));
-    cyc(16);
+    wr16(dbw(TEXT_HALF), (0x0000));
     wr16(TEXT_PTR + 1, 0x0000);
     p = cpu.p;
     do {
-        cyc(82);
         part = fx_field(0x0018, x);
-        cyc(76);
         while (part) {
             model = fx_field(0x000C, part);
             p &= (uint8_t)~P_C;
-            cyc(30);
-            wr16(TEXT_PTR, cyc_then(54, op_adc16(fx_field(0x0014, model), 0x001C, &p)));
-            cyc(16);
+            wr16(TEXT_PTR, (op_adc16(fx_field(0x0014, model), 0x001C, &p)));
             pos = rd16(TEXT_POS);
             cpu.a = pos;
             cpu.x = model;
             cpu.p = p;
-            (cyc(30), abi_DebugPrint());
+            (abi_DebugPrint());
             p &= (uint8_t)~P_C;
-            cyc(112);
             wr16(TEXT_POS, op_adc16(pos, 0x0040, &p));
-            cyc(52);
             part = fx_field(0x000E, part);
         }
-        cyc(68);
         x = fx_field(0x0034, x);
     } while (x);
-    cyc(74);
     cpu.a = 0x0000;
     cpu.x = 0x0000;
     cpu.p = nz16(p, 0x0000);
@@ -383,28 +342,20 @@ void DebugModelChainPanel(void)
     uint16_t x, pos, v;
 
     cpu.p &= (uint8_t)~P_M;
-    cyc(54);
     x = rd16(FX_CAR_LAST);
     cpu.x = x;
-    cyc(30);
     x = fx_field(0x003E, x);
     cpu.x = x;
-    cyc(30);
     print16(abi_DebugPrintDecimalWord, fx_field(0x0042, x), 0x08C0);
     for (pos = 0x0900; pos <= 0x0980; pos = (uint16_t)(pos + 0x0040)) {
-        cyc(16);
         x = fx_field(0x0034, x);
         cpu.x = x;
-        cyc(30);
         print16(abi_DebugPrintDecimalWord, fx_field(0x0042, x), pos);
     }
-    cyc(16);
     v = fx_field(0x0034, x);
-    x = rd16(cyc_then(24, dbw(VIEW_OBJECT)));
-    cyc(32);
+    x = rd16((dbw(VIEW_OBJECT)));
     v = rd16(OBJ_STATS + x);
     x = v;
-    cyc(30);
     v = fx_field(0x0080, x);
     cpu.x = x;
     cpu.a = v;
@@ -414,7 +365,7 @@ void DebugModelChainPanel(void)
 void abi_DebugModelChainPanel(void)
 {
     DebugModelChainPanel();
-    cyc(44);                            /* RTL */
+    /* RTL */
 }
 
 /*
@@ -432,25 +383,17 @@ void DebugLastCarMotionPanel(void)
     uint16_t x;
     uint8_t b;
 
-    cyc(32);
     x = rd16(FX_CAR_LAST);
     cpu.x = x;
-    cyc(30);
     print16(abi_DebugPrintDecimalWord, fx_field(0x004E, x), 0x4900);
-    cyc(16);
     print16(abi_DebugPrintDecimalWord, fx_field(0x004A, x), 0x4940);
-    cyc(16);
     print16(abi_DebugPrintDecimalWord, fx_field(0x002E, x), 0x4980);
-    cyc(16);
     print16(abi_DebugPrintDecimalWord, fx_field(0x0030, x), 0x49C0);
-    cyc(16);
     print16(abi_DebugPrintDecimalWord, fx_field(0x0032, x), 0x4A00);
-    cyc(32);
     print16(abi_DebugPrintDecimalWord, rd16(FX_TRAFFIC_CLOSE), 0x1C40);
-    cyc(32);
     print16(abi_DebugPrintDecimalWord, rd16(FX_TRAFFIC_DIST), 0x1C80);
     cpu.p |= P_M;
-    b = rd8(cyc_then(46, dbw(WORK_1F41)));
+    b = rd8((dbw(WORK_1F41)));
     cpu.a = (uint16_t)((cpu.a & 0xFF00) | b);
     cpu.p = nz8(cpu.p, b);
 }
@@ -458,7 +401,7 @@ void DebugLastCarMotionPanel(void)
 void abi_DebugLastCarMotionPanel(void)
 {
     DebugLastCarMotionPanel();
-    cyc(44);                            /* RTL */
+    /* RTL */
 }
 
 /*
@@ -479,27 +422,21 @@ void DebugTrafficHexPanel(void)
     uint16_t x;
     uint8_t b;
 
-    cyc(32);
     print8(abi_DebugPrintHexWord, rd8(FX_RAM_TEST), 0x0940);
-    cyc(32);
     print8(abi_DebugPrintHexWord, rd8(FX_PART_Z_SPEED), 0x0980);
-    cyc(32);
     print8(abi_DebugPrintHexWord, rd8(FX_TRAFFIC_CLOSE), 0x1D40);
-    cyc(32);
     print8(abi_DebugPrintHexWord, rd8(FX_TRAFFIC_DIST), 0x1D80);
-    x = rd16(cyc_then(24, dbw(VIEW_OBJECT)));
-    cyc(32);
+    x = rd16((dbw(VIEW_OBJECT)));
     b = rd8(OBJ_STATS + x);
     x = (uint16_t)((cpu.a & 0xFF00) | b);
     cpu.x = x;
-    cyc(46);
     print8(abi_DebugPrintHexWord, rd8(GSU_RAM + 0x0046 + x), 0x3140);
 }
 
 void abi_DebugTrafficHexPanel(void)
 {
     DebugTrafficHexPanel();
-    cyc(44);                            /* RTL */
+    /* RTL */
 }
 
 /*
@@ -517,27 +454,25 @@ void DebugWorkBytesPanel(void)
     uint8_t v, c;
     int i;
 
-    print8(abi_DebugPrintHexWord, rd8(cyc_then(24, dbw(WORK_1F41))), 0x4940);
-    cyc(32);
+    print8(abi_DebugPrintHexWord, rd8((dbw(WORK_1F41))), 0x4940);
     v = rd8(FX_PART_Z_SPEED);
     v = (uint8_t)((v ^ 0xFF) + 1);
     c = 0;
     for (i = 0; i < 5; i++) {
-        cyc(36);
         c = v & 1;
         v = (uint8_t)((v >> 1) | (v & 0x80));
     }
     cpu.p = (uint8_t)((cpu.p & ~P_C) | c);
     print8(abi_DebugPrintHexWord, v, 0x4980);
-    print8(abi_DebugPrintHexWord, rd8(cyc_then(24, dbw(WORK_1F43))), 0x49C0);
-    print8(abi_DebugPrintHexWord, rd8(cyc_then(24, dbw(WORK_1F41))), 0x0940);
-    print8(abi_DebugPrintHexWord, rd8(cyc_then(24, dbw(WORK_1F43))), 0x0980);
+    print8(abi_DebugPrintHexWord, rd8((dbw(WORK_1F43))), 0x49C0);
+    print8(abi_DebugPrintHexWord, rd8((dbw(WORK_1F41))), 0x0940);
+    print8(abi_DebugPrintHexWord, rd8((dbw(WORK_1F43))), 0x0980);
 }
 
 void abi_DebugWorkBytesPanel(void)
 {
     DebugWorkBytesPanel();
-    cyc(44);                            /* RTL */
+    /* RTL */
 }
 
 /* X = the viewed object's statistics record: the byte at +$22 of the
@@ -547,8 +482,7 @@ static uint16_t view_record8(void)
     uint16_t x;
     uint8_t b;
 
-    x = rd16(cyc_then(24, dbw(VIEW_OBJECT)));
-    cyc(32);
+    x = rd16((dbw(VIEW_OBJECT)));
     b = rd8(OBJ_STATS + x);
     x = (uint16_t)((cpu.a & 0xFF00) | b);
     cpu.x = x;
@@ -568,18 +502,15 @@ void DebugViewRecordPanel(void)
 {
     uint16_t x = view_record8();
 
-    cyc(46);
     print8(abi_DebugPrintHexWord, rd8(GSU_RAM + 0x0010 + x), 0x49C0);
-    cyc(32);
     print8(abi_DebugPrintHexWord, rd8(GSU_RAM + 0x0058 + x), 0x0880);
-    cyc(32);
     print8(abi_DebugPrintHexWord, rd8(FX_TRAFFIC_CLOSE), 0x0900);
 }
 
 void abi_DebugViewRecordPanel(void)
 {
     DebugViewRecordPanel();
-    cyc(44);                            /* RTL */
+    /* RTL */
 }
 
 /*
@@ -595,17 +526,15 @@ void DebugViewSpeedPanel(void)
 {
     uint16_t x = view_record8();
 
-    cyc(46);
     print8(abi_DebugPrintHexWord, rd8(GSU_RAM + 0x004A + x), 0x4B00);
-    cyc(32);
     print8(abi_DebugPrintHexWord, rd8(FX_RECORD_READY), 0x4440);
-    print8(abi_DebugPrintHexWord, rd8(cyc_then(24, dbw(WORK_1F64))), 0x44C0);
+    print8(abi_DebugPrintHexWord, rd8((dbw(WORK_1F64))), 0x44C0);
 }
 
 void abi_DebugViewSpeedPanel(void)
 {
     DebugViewSpeedPanel();
-    cyc(44);                            /* RTL */
+    /* RTL */
 }
 
 /* Prints the object at the head of bucket X, then up to three more along
@@ -618,21 +547,17 @@ static int bucket_row(uint16_t x, uint16_t pos)
     uint16_t v;
     int i;
 
-    cyc(46);
     v = rd16(OBJECT_BUCKETS + x);
     print16(abi_DebugPrintHexWord, v, pos);
     for (i = 1; i < 5; i++) {
-        cyc(60);
         x = cpu.a;
         cpu.x = x;
         cpu.p = nz16(cpu.p, x);
         if (!x)
             return 0;
-        cyc(2);
         v = rd16(OBJ_NEXT + x);
         print16(abi_DebugPrintHexWord, v, (uint16_t)(pos + 0x1400 * i));
     }
-    cyc(24);
     return 1;
 }
 
@@ -656,20 +581,17 @@ void DebugBucketsPanel(void)
     uint16_t v, x;
 
     cpu.p &= (uint8_t)~P_M;
-    v = rd16(cyc_then(46, dbw(VIEW_POS_Y_HI))) & 0x00FF;
+    v = rd16((dbw(VIEW_POS_Y_HI))) & 0x00FF;
     cpu.p = (uint8_t)((cpu.p & ~P_C) | (v >> 3 & 1));
     v = (uint16_t)(((v >> 4) + 1) & 0x00FE);
-    cyc(118);
     print16(abi_DebugPrintHexWord, v, 0x1C40);
-    print16(abi_DebugPrintHexWord, rd16(cyc_then(32, FX_PUSH_TURN)), 0x3040);
+    print16(abi_DebugPrintHexWord, rd16((FX_PUSH_TURN)), 0x3040);
     cpu.p &= (uint8_t)~P_X;
-    x = rd16(cyc_then(46, dbw(VIEW_OBJECT)));
+    x = rd16((dbw(VIEW_OBJECT)));
     cpu.x = x;
-    cyc(32);
     print16(abi_DebugPrintHexWord, rd16(OBJ_BUCKET + x), 0x1E80);
-    print16(abi_DebugPrintHexWord, rd16(cyc_then(24, dbw(VIEW_AREA))), 0x1EC0);
-    x = rd16(cyc_then(46, dbw(VIEW_OBJECT)));
-    cyc(32);
+    print16(abi_DebugPrintHexWord, rd16((dbw(VIEW_AREA))), 0x1EC0);
+    x = rd16((dbw(VIEW_OBJECT)));
     v = rd16(OBJ_BUCKET + x);
     cpu.x = v;
     bucket_row(v, 0x0900);
@@ -681,7 +603,7 @@ void DebugBucketsPanel(void)
 void abi_DebugBucketsPanel(void)
 {
     DebugBucketsPanel();
-    cyc(20);                            /* RTL */
+    /* RTL */
 }
 
 /*
@@ -696,19 +618,16 @@ void DebugFxWordsPanel(void)
 {
     uint16_t x;
 
-    cyc(32);
     print16(abi_DebugPrintHexWord, rd16(FX_RAM_TEST), 0x4940);
-    cyc(32);
     x = rd16(FX_CAR_LAST);
     cpu.x = x;
-    cyc(30);
     print16(abi_DebugPrintHexWord, fx_field(0x0080, x), 0x4A00);
 }
 
 void abi_DebugFxWordsPanel(void)
 {
     DebugFxWordsPanel();
-    cyc(44);                            /* RTL */
+    /* RTL */
 }
 
 /*
@@ -728,37 +647,31 @@ void DebugCounterPanel(void)
     uint16_t x;
 
     cpu.p |= P_M;
-    cyc(54);
     print8(abi_DebugPrintDecimalByte, rd8(FX_GSU_108E), 0x0440);
     cpu.p &= (uint8_t)~P_M;
-    print16(abi_DebugPrintHexWord, rd16(cyc_then(46, dbw(GSU_WAIT_POLLS))), 0x0480);
-    print16(abi_DebugPrintHexWord, rd16(cyc_then(24, dbw(GSU_AB13_POLLS))), 0x04C0);
+    print16(abi_DebugPrintHexWord, rd16((dbw(GSU_WAIT_POLLS))), 0x0480);
+    print16(abi_DebugPrintHexWord, rd16((dbw(GSU_AB13_POLLS))), 0x04C0);
     cpu.p &= (uint8_t)~P_X;
-    x = rd16(cyc_then(46, dbw(VIEW_OBJECT)));
+    x = rd16((dbw(VIEW_OBJECT)));
     cpu.x = x;
     cpu.p |= P_M;
-    cyc(54);
     print8(abi_DebugPrintDecimalByte, rd8(OBJ_4C + x), 0x0500);
-    cyc(32);
     print8(abi_DebugPrintDecimalByte, rd8(OBJ_4E + x), 0x0540);
     cpu.p &= (uint8_t)~P_M;
-    cyc(54);
     x = rd16(FX_CAR_LAST);
     cpu.x = x;
-    cyc(30);
     print16(abi_DebugPrintHexWord, fx_field(0x0050, x), 0x0600);
     print16(abi_DebugPrintHexWord, fx_field_w(0x004E, x), 0x0640);
     print16(abi_DebugPrintHexWord, fx_field_w(0x004A, x), 0x0680);
     print16(abi_DebugPrintHexWord, fx_field_w(0x003C, x), 0x06C0);
     print16(abi_DebugPrintHexWord, fx_field_w(0x0056, x), 0x0700);
-    cyc(32);
     print16(abi_DebugPrintHexWord, rd16(FX_RAM_TEST), 0x0740);
 }
 
 void abi_DebugCounterPanel(void)
 {
     DebugCounterPanel();
-    cyc(44);                            /* RTL */
+    /* RTL */
 }
 
 /*
@@ -774,7 +687,7 @@ void DebugPanelSep(void)
 
 void abi_DebugPanelSep(void)
 {
-    (cyc(66), DebugPanelSep());
+    (DebugPanelSep());
 }
 
 /*
@@ -791,14 +704,13 @@ void DebugFxTestWordPanel(void)
     uint16_t v;
 
     cpu.p &= (uint8_t)~(P_M | P_X);
-    v = rd16(cyc_then(46, dbw(DRAW_SIDE_20)));
+    v = rd16((dbw(DRAW_SIDE_20)));
     cpu.a = v;
-    cyc(32);
     print16(abi_DebugPrintHexWord, rd16(FX_RAM_TEST), 0x5040);
 }
 
 void abi_DebugFxTestWordPanel(void)
 {
     DebugFxTestWordPanel();
-    cyc(44);                            /* RTL */
+    /* RTL */
 }
