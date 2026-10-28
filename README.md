@@ -198,18 +198,26 @@ Shift is SELECT. The attract demos always play in Original mode.
   0.70x, writes 0.60x, I/O reads 0.14x); a per-kind fit was tried and
   dropped, as it overcharges access-dense code about 2.5x.
 - **Enhanced mode** makes the game independent of processor speed, as a
-  modern game is: the race ticks at a steady 60 a second, sharing each
-  original race frame's step over its ticks, with neither the S-CPU
-  (nativeshvc contract 2.2, `nshvc_set_cpu_costs`) nor the Super FX taking
-  time. The finished Super FX pictures (the race screen, both halves of
-  the split screen, the menus' 3D) go to nativeshvc's **canvas** (contract
-  2.4) instead of being copied to video memory, which one vertical blank
-  could not hold at 60: each buffer is handed at its flip, keyed by the
+  modern game is, with a fixed time step and the picture drawn between:
+  the race runs the original's whole step every 6 TV frames (its physics
+  and handling step for step the original's), and the 5 frames between
+  show the 3D drawn part of the way from the step's start to its end, so
+  the 3D moves every frame at 60. The menus' 3D (car selection's turning
+  car) shares each of its steps over the frames instead, which matches
+  the original's turn rate. The main CPU (nativeshvc contract 2.2,
+  `nshvc_set_cpu_costs`) and the Super FX take no time for that 3D work
+  only: the boot, the menus and the sound driver's uploads and commands,
+  and the raster interrupt, keep the original's timing. The pictures (the
+  race screen, both halves of the split screen, the menus' 3D) go to
+  nativeshvc's **canvas** (contract 2.4) instead of video memory, which
+  one vertical blank could not hold: each is handed keyed by the
   video-memory characters it stands in for, and the console places it by
-  its own rules at the window's resolution. Original mode is unchanged by
-  it. The race intro runs about 15% shorter: its steps count race frames,
-  which the original ran slow under load (about 7.25 TV frames each,
-  against Enhanced's fixed 6). The countdown is timed and matches.
+  its own rules at the window's resolution; in the race's pause the
+  canvas shows those characters as the copies would have left them.
+  Original mode is unchanged by it. The race intro runs about 15% shorter:
+  its steps count race frames, which the original ran slow under load
+  (about 7.25 TV frames each, against Enhanced's fixed 6). The countdown
+  is timed and matches.
 
 **State (October 28, 2026).** The game boots, plays its menus and runs
 races in both modes. Not yet right:

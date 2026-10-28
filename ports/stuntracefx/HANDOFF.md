@@ -32,8 +32,20 @@ run; `rm_enhanced()` in remaster.c; demos stay Original), with a badge
 (front/art.c). Original mode: the cost profile, approximate, races about
 5% fast (5.64 against 5.95 TV frames a race frame; the C makes fewer
 S-CPU accesses than the original the weights were fitted to; a per-kind
-fit was dropped). Enhanced: Super FX jobs free (superfx_cart.c), S-CPU
-costs off (contract 2.2), the race at a steady 60 ticks a second; the
+fit was dropped). Enhanced: the race in the original's whole steps, one
+each 6 TV frames, the 3D drawn at j/6 between the step's start and end on
+the frames between (remaster.c whole_tween, tween.c; ac89d148; Jeff:
+"whole steps, definitely": sharing a step over ticks broke the handling,
+its dead zones and tire forces acting on part-way state); two players a
+step late, from the last step's pictures to this one's. The menus' 3D
+keeps per-tick shares (its turn rate matches; whole steps would turn it
+4x fast). Super FX jobs free (superfx_cart.c); S-CPU costs off only in
+race frames, menus' 3D frames and the drawing between (remaster.c
+cpu_costs, d68f7779), on in the raster IRQ (c56dac1f) and everywhere
+else, so the sound handshakes keep the original's timing. The race's
+pause shows the race buffers as VRAM would hold them (every race copy
+kept, b05fbbb3). The menus' VblankUpdates skip on "picture completed" is
+left clear when the picture went to the canvas (f0e023f7). The
 pictures on nativeshvc's canvas (contract 2.4, a04400dc), `remaster/
 picture.c` with the stages in video/dma.c (1-player buffers at VRAM words
 $0000/$2200, 416 8 bpp characters; 2-player sets $0000/$2000, 360 4 bpp)
