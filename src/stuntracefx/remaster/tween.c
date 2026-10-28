@@ -141,7 +141,7 @@ int rm_tween_buffers(int num, int den, uint8_t *at_2c00, uint8_t *at_9400)
     uint8_t *w = nshvc_wram(), *s = nshvc_sram();
     Regs65816 cpu_kept = cpu;
     RegsGSU gsu_kept = gsu;
-    int untimed = nshvc_untimed(), i, n, drew, two = w[0x0D62] != 0, mask;
+    int i, n, drew, two = w[0x0D62] != 0, mask;
     unsigned k, rec;
 
     if (!rm_tween_ready())
@@ -201,12 +201,10 @@ int rm_tween_buffers(int num, int den, uint8_t *at_2c00, uint8_t *at_9400)
     }
 
     nshvc_hold_interrupts(1);
-    nshvc_set_untimed(1);
     rm_tween_start_side = 2 * num < den;
     drew = rm_redraw_run(two ? RmTweenDrawTwoPlayers : RmTweenDraw);
     rm_tween_start_side = 0;
     rm_tween_step = 0;  /* a redraw: no port, no wait (remaster.h) */
-    nshvc_set_untimed(untimed);
     nshvc_hold_interrupts(0);
     /* one player: the buffer drawn in (its start at $021A, the one the
        Super FX draws in next); two players: both, one player's each */

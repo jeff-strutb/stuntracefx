@@ -1,8 +1,8 @@
 /*
  * remaster.c: Frame rate 60 (remaster.h). The race's loop runs a game frame
  * each tick, 1/60 s: a race frame waits for its tick (the vertical blank's
- * start), then runs untimed, as native code (console_ext.h), its Super FX
- * programs to their STOPs; at its end its screen goes to the display at
+ * start), then runs its work as native code (contract 2.0: the main CPU's
+ * work takes no time), its Super FX programs with their own durations; at its end its screen goes to the display at
  * once (the game's upload stages in one go), and the simulation steps a
  * tick at a time. Not in the attract's demos ($10DA set), which replay the
  * original's buttons frame by frame. The option is taken at each frame's
@@ -21,13 +21,14 @@
 static int rm_on;                       /* Frame rate 60 */
 static int rm_pace;                     /* video frames a race frame: 1 at 60; 0 the original's */
 static int rm_share_on;                 /* the steps shared out over RM_TICKS ticks */
+static int rm_frame60;                  /* in a race frame at 60: from its tick to its step over */
 /* each field's carried share (rm_share), by its address: work RAM, the
    Super FX's RAM; in 1/RM_SHARE_ONE of a unit */
 static int32_t rm_carry_w[0x20000], rm_carry_s[0x10000];
 
-int rm_tick60(void) { return rm_pace && nshvc_untimed(); }
+int rm_tick60(void) { return rm_pace && rm_frame60; }
 
-int rm_sharing(void) { return rm_share_on && nshvc_untimed(); }
+int rm_sharing(void) { return rm_share_on && rm_frame60; }
 
 int rm_sharing_on(void) { return rm_share_on; }
 
@@ -74,6 +75,12 @@ static void redraw_wait(void)
 {
     if (rm_redraw && redraw_out)
         longjmp(*redraw_out, 1);
+}
+
+/* Every wait of the game's (waits.h) comes here first: a redraw never waits */
+void rm_wait_point(void)
+{
+    redraw_wait();
 }
 
 int rm_redraw_run(void (*draw)(void))
@@ -133,7 +140,6 @@ void rm_hud_redraw_in(int hold)
     uint8_t *w = nshvc_wram(), *s = nshvc_sram();
     Regs65816 cpu_now = cpu;
     RegsGSU gsu_now = gsu;
-    int untimed = nshvc_untimed();
     if ((!hud_ok && !(rm_tween_start_side && hud_stopped == rm_ticks)) || rm_ticks - hud_tick >= RM_TICKS)
         return;
     /* the Super FX's RAM outside the two screen buffers ($2C00-$FBFF) kept
@@ -149,10 +155,8 @@ void rm_hud_redraw_in(int hold)
     cpu = hud_cpu;
     if (hold)
         nshvc_hold_interrupts(1);
-    nshvc_set_untimed(1);
     if (!rm_redraw_run(hud_draw))
         hud_ok = 0, hud_stopped = rm_ticks;  /* the HUD's own loop this step: no more redraws of it */
-    nshvc_set_untimed(untimed);
     if (hold)
         nshvc_hold_interrupts(0);
     memcpy(w, now_w, sizeof now_w);
@@ -168,14 +172,14 @@ void rm_race_frame(void)
     redraw_wait();
     if (!rm_pace)
         return;
-    nshvc_set_untimed(0);
+    rm_frame60 = 0;
     rm_waiting = 1;                     /* the frame hook in the wait: a clean point (tween.c) */
     for (n = 0; n < rm_pace; n++)       /* the tick */
         nshvc_wait_vblank();
     rm_waiting = 0;
     if (rm_share_on)                    /* counted after the wait: the frame hook in it shows the last */
         rm_ticks++;
-    nshvc_set_untimed(1);
+    rm_frame60 = 1;
 }
 
 void rm_race_frame_paced(void)
@@ -185,22 +189,22 @@ void rm_race_frame_paced(void)
         return;
     if (rm_share_on)
         rm_ticks++;
-    nshvc_set_untimed(1);
+    rm_frame60 = 1;
 }
 
 void rm_step_over(void)
 {
     redraw_wait();
-    nshvc_set_untimed(0);
+    rm_frame60 = 0;
 }
 
 void rm_race_frame_end(void)
 {
-    nshvc_set_untimed(0);
+    rm_frame60 = 0;
 }
 
 /* At each frame's end (the front end calls it). RM_REF_PACE=N (a check,
-   not an option): the original's whole steps, untimed, one each N video
+   not an option): the original's whole steps, one each N video
    frames, to compare a run at 60 with the original at a steady pace. */
 void rm_frame_end(void)
 {

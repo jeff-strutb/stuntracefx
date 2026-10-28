@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build Stunt Race FX native: the port's game (ports/stuntracefx/game, lifted
+# Build Stunt Race FX native: the game (src/stuntracefx, lifted
 # from the decomp's C and checked against the original), the machine layer (ports/common/snes), the port's
 # runtime (ports/stuntracefx/runtime) and one host (ports/common/host).
 #   env: HOST     null (default: headless, for tests) | macos | windows |
@@ -15,8 +15,7 @@
 #                 else Homebrew's; on macOS it runs on MoltenVK), gl
 #                 (Windows' default; offscreen only on macOS), soft (the
 #                 headless default)
-#        GAME     the game's C (default ports/stuntracefx/game; src/stuntracefx
-#                 builds the reference the port's copy is checked against)
+#        GAME     the game's C (default src/stuntracefx)
 #        ASSETS   a variant of the assets (tools/assets.py): ios (the iOS
 #                 host's default: TAP TO START on the title)
 #        SRFX_ROM your cartridge's ROM (default reference/stuntracefx/Stunt
@@ -29,7 +28,7 @@ cd "$(dirname "$0")/../.."
 HOST=${HOST:-null}
 CC=${CC:-clang}
 OUT=${OUT:-build/stuntracefx/port/$HOST}
-GAME=${GAME:-ports/stuntracefx/game}
+GAME=${GAME:-src/stuntracefx}
 ROM=${SRFX_ROM:-reference/stuntracefx/Stunt Race FX (USA) (Rev 1).sfc}
 case "$OUT" in build/*) ;; *) echo "link: OUT must be under build/ (got $OUT)" >&2; exit 2;; esac
 TARGET=$($CC -dumpmachine)

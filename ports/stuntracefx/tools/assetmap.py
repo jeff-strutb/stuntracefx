@@ -10,7 +10,7 @@ and the port never reads it; the C stands for it and no asset holds it.
 Every other byte is data: read by the original (by the S-CPU, DMA, the
 Super FX or the SPC700's upload), read by the port, or never touched (so
 content no trace reached still comes along). Data runs between code are cut
-where the game's C addresses a table by a constant (ports/stuntracefx/game:
+where the game's C addresses a table by a constant (src/stuntracefx:
 the table is named for the function that does) and where the C function
 reading them changes (the CENSUS files the port writes under
 PORT_ROMCENSUS, cart.h); each piece is named for its reader and its
@@ -35,7 +35,7 @@ OUT = os.path.join(ROOT, 'ports', 'stuntracefx', 'assets.csv')
 NAMED = os.path.join(ROOT, 'ports', 'stuntracefx', 'assets_named.csv')
 CPU_OP, DATA = 0x33, 0x4C | 0x4000
 MIN_PIECE = 16          # a reader's piece shorter than this joins its neighbour
-GAME = os.path.join(ROOT, 'ports', 'stuntracefx', 'game')
+GAME = os.path.join(ROOT, 'src', 'stuntracefx')
 
 
 def c_tables():

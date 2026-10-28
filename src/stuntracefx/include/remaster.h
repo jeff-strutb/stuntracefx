@@ -62,6 +62,9 @@ int rm_redraw_run(void (*draw)(void));
    holds), the soft reset and engine sounds are not, nor anything that
    reaches the APU's ports */
 int rm_redrawing(void);
+/* every wait of the game's comes here first: a redraw (an in-between
+   frame) that reaches a wait is let go (waits.h) */
+void rm_wait_point(void);
 /* rm_step_due for work whose original steps were k video frames: the
    menus' 3D screens (RaceFrameStep's) took 4 */
 int rm_step_due_every(unsigned k);
