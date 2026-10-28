@@ -704,10 +704,25 @@ static void split_picture(uint32_t b, uint16_t x)
 }
 
 /* The split screen's stages, by $0D23 (the table at $AA4B). */
+/* Remaster, Enhanced: in the race's pause ($0D2D set) BG1 shows the
+   buffer of the last flip ($0D81: -1 A, 1 B) from VRAM, which the race's
+   copies to the canvas left out: the canvas shows its characters as the
+   copies would have left them */
+static void pause_canvas(uint32_t b)
+{
+    uint16_t shown = rd16(b | 0x0D81);
+
+    if (!rd8(b | 0x0D2D) || !rm_canvas_ready() || rd8(b | 0x0D62) || (shown != 0xFFFF && shown != 0x0001))
+        return;
+    rm_canvas_kept(RM_CANVAS_RACE);
+    rm_canvas_show_copied_once(shown == 0x0001 ? 0x2200 : 0x0000, 416, 8);
+}
+
 static void split_stage(uint32_t b)
 {
     uint8_t s;
 
+    pause_canvas(b);
     cpu.p |= P_M | P_X;
     cpu.x &= 0x00FF;
     cpu.y &= 0x00FF;
@@ -861,11 +876,14 @@ void abi_NmiFrameUpload(void)
 static int race_canvas[2];
 
 /* VramDmaFromGsuRam, or with the buffer on the canvas only its end: the
-   screen mode given back as the copy leaves it */
+   screen mode given back as the copy leaves it. Either way the bytes are
+   kept as VRAM holds them (rm_canvas_copy), for the race's pause, whose
+   picture is VRAM's as the copies left it. */
 static void gsu_ram_to_vram(int canvas)
 {
     uint8_t mode;
 
+    rm_canvas_copy(cpu.y, cpu.x, cpu.a, cpu.a, 1);
     if (!canvas) {
         abi_VramDmaFromGsuRam();
         return;

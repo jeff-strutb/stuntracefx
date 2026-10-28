@@ -160,6 +160,8 @@ void rm_canvas_show_copied(unsigned word, unsigned count, unsigned bpp);
    last step's to this one's): the last set's pictures in this one's
    place, this one's kept for the next */
 void rm_canvas_show_copied_late(unsigned word, unsigned count, unsigned bpp);
+/* rm_canvas_show_copied unless the canvas already shows just that */
+void rm_canvas_show_copied_once(unsigned word, unsigned count, unsigned bpp);
 void rm_canvas_narrow(unsigned word, unsigned count);
 void rm_canvas_off(void);
 enum { RM_CANVAS_RACE = 1, RM_CANVAS_MENU = 2 };

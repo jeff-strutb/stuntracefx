@@ -145,6 +145,16 @@ void rm_canvas_show_copied(unsigned word, unsigned count, unsigned bpp)
     canvas_hand();
 }
 
+void rm_canvas_show_copied_once(unsigned word, unsigned count, unsigned bpp)
+{
+    if (canvas_on && canvas_word == word && canvas_count == count && canvas_bpp == bpp &&
+        !memcmp(canvas_src, vram_shadow + word * 2, (size_t)count * bpp * 8)) {
+        canvas_seen = 1;
+        return;
+    }
+    rm_canvas_show_copied(word, count, bpp);
+}
+
 void rm_canvas_show_copied_late(unsigned word, unsigned count, unsigned bpp)
 {
     static uint8_t last[360 * 32];
