@@ -217,4 +217,5 @@ void rm_frame_end(void)
     rm_on = rm_option(RM_OPT_FRAMERATE) && nshvc_peek(0x7E10DA) == 0;
     rm_pace = ref ? ref : rm_on;
     rm_share_on = rm_on && !ref;
+    rm_canvas_frame_end();
 }

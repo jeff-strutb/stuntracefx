@@ -121,6 +121,30 @@ void RmRaceScreenShow(void);
    block, a pixel repeated scale x scale, into out (count * 64 * scale *
    scale bytes) */
 void rm_picture_chars(const uint8_t *data, unsigned count, unsigned bpp, unsigned scale, uint8_t *out);
+/* The console's canvas (nativeshvc 2.4) in BG1's characters' place
+   (picture.c). rm_canvas_ready: Enhanced, and the console has one (the
+   screen's uploads then leave the Super FX's picture out of VRAM).
+   rm_canvas_show: count 8 bpp characters of Super FX RAM at src stand in
+   for those at VRAM word `word`, at the window's resolution.
+   rm_canvas_copy: an upload the canvas stands in for, rows of `bytes`
+   from Super FX RAM at src, `stride` apart, kept as VRAM would hold them
+   from word `word` on; rm_canvas_show_copied: count characters of bpp
+   bits a pixel kept so from word `word` on the canvas.
+   rm_canvas_narrow: the canvas kept for its characters from VRAM word
+   `word`, count of them, VRAM's the rest. rm_canvas_off: VRAM's
+   characters again. rm_canvas_kept: owner's uploads (the race
+   screen's, the menus' 3D picture's) ran this frame; a frame without the
+   uploads of the screen that handed the canvas turns it off. rm_canvas_frame_end: at each frame's end, the canvas off when the
+   race screen has gone, handed again when the window's k changed. */
+int rm_canvas_ready(void);
+void rm_canvas_show(unsigned word, uint16_t src, unsigned count);
+void rm_canvas_copy(unsigned word, uint16_t src, unsigned bytes, unsigned stride, unsigned rows);
+void rm_canvas_show_copied(unsigned word, unsigned count, unsigned bpp);
+void rm_canvas_narrow(unsigned word, unsigned count);
+void rm_canvas_off(void);
+enum { RM_CANVAS_RACE = 1, RM_CANVAS_MENU = 2 };
+void rm_canvas_kept(int owner);
+void rm_canvas_frame_end(void);
 /* the menus' 3D picture to the display at once: system/vblank_updates.c */
 void RmMenuPictureShow(void);
 

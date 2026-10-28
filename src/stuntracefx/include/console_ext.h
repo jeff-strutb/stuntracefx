@@ -23,5 +23,10 @@ uint8_t *nshvc_wram(void);
 uint8_t *nshvc_sram(void);
 /* Interrupts held while code runs between frames (from the frame hook) */
 void nshvc_hold_interrupts(int on);
+/* A canvas in a layer's characters' place at the window's resolution
+   (contract 2.4): k, the window's pixels a console pixel (0: no canvas
+   here); count characters from VRAM word word_addr, each 8k x 8k texels */
+int nshvc_ext_canvas_scale(void);
+void nshvc_ext_canvas_chars(int layer, unsigned word_addr, int count, const uint8_t *texels, int k);
 
 #endif

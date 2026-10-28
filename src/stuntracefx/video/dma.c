@@ -116,11 +116,11 @@ uint16_t VramDmaRowsFromGsuRam(uint16_t src, uint16_t vram, uint8_t rows)
     return mode;
 }
 
-void abi_VramDmaRowsFromGsuRam(void)
+/* VramDmaRowsFromGsuRam's registers at its end for rows from `first`, the
+   screen mode `mode` written last */
+static void rows_exit(uint16_t first, uint8_t rows, uint16_t mode)
 {
-    uint8_t rows = (uint8_t)cpu.y;
-    uint16_t last = (uint16_t)(cpu.a + 0x0200 * (uint8_t)(rows - 2));
-    uint16_t mode = VramDmaRowsFromGsuRam(cpu.a, cpu.x, rows);
+    uint16_t last = (uint16_t)(first + 0x0200 * (uint8_t)(rows - 2));
 
     if (rows != 1) {
         uint32_t sum = (uint32_t)last + 0x0200;
@@ -131,6 +131,14 @@ void abi_VramDmaRowsFromGsuRam(void)
     cpu.x = 0x01;
     cpu.y = 0;
     cpu.p = (uint8_t)(nz16(cpu.p, mode) | P_X);
+}
+
+void abi_VramDmaRowsFromGsuRam(void)
+{
+    uint8_t rows = (uint8_t)cpu.y;
+    uint16_t first = cpu.a;
+
+    rows_exit(first, rows, VramDmaRowsFromGsuRam(first, cpu.x, rows));
 }
 
 /*
@@ -611,13 +619,20 @@ static void upload_sprites_palette(uint32_t b)
     cpu.p = nz16(cpu.p, 0);
 }
 
+/* Remaster, Enhanced (remaster.h): the two players' screens by the
+   console's canvas, not VRAM: whether the set at VRAM word $0000 (0) or
+   $2000 (1), player 1's columns then player 2's, 360 4 bpp characters,
+   goes to the canvas is taken at its first stage, kept to its flip */
+static int split_canvas[2];
+
 /* The rows stages ($A9B1, $A9D3, $A9FA, $AA1C): with $0D7F set (or clear,
    by want), the next stage, rows from Super FX RAM, $0357 = 1, and BG1/2's
    tile bases when nba is nonzero. */
 static void upload_rows(uint32_t b, int want, uint16_t n, uint16_t src,
                         uint16_t vram, uint8_t nba)
 {
-    uint16_t sel;
+    uint16_t sel, mode;
+    int set;
 
     sel = rd16(b | 0x0D7F);
     cpu.a = sel;
@@ -625,11 +640,26 @@ static void upload_rows(uint32_t b, int want, uint16_t n, uint16_t src,
     if (!sel != !want)
         return;
     next_stage(b, n);
+    set = vram >= 0x2000;
+    if (want)
+        split_canvas[set] = rm_canvas_ready();
     ld3(src, vram, 0x0012, 0x0012);
-    abi_VramDmaRowsFromGsuRam();
+    if (split_canvas[set]) {
+        rm_canvas_copy(vram, src, 0x0140, 0x0200, 0x12);
+        mode = rd16(GSU_SCMR_SHADOW) | 0x0018;
+        wr16(GSU_SCMR, mode);
+        rows_exit(src, 0x12, mode);
+    } else {
+        abi_VramDmaRowsFromGsuRam();
+    }
     flag_0357(b, 1);
-    if (nba)
+    if (nba) {
         put8(BG12NBA, nba);
+        if (split_canvas[set])
+            rm_canvas_show_copied(set ? 0x2000 : 0x0000, 360, 4);
+        else
+            rm_canvas_off();
+    }
 }
 
 /* The split screen's DMA of $7F:9BD7 ($1680 bytes) to VRAM word x, then
@@ -823,6 +853,48 @@ void abi_NmiFrameUpload(void)
     op_plp(p0);
 }
 
+/* Remaster, Enhanced (remaster.h): the race screen's buffers by the
+   console's canvas, not VRAM. Whether buffer A (0) or B (1) goes to the
+   canvas is taken at its first stage, kept to its flip. */
+static int race_canvas[2];
+
+/* VramDmaFromGsuRam, or with the buffer on the canvas only its end: the
+   screen mode given back as the copy leaves it */
+static void gsu_ram_to_vram(int canvas)
+{
+    uint8_t mode;
+
+    if (!canvas) {
+        abi_VramDmaFromGsuRam();
+        return;
+    }
+    mode = rd8(GSU_SCMR_SHADOW) | 0x18;
+    wr8(GSU_SCMR, mode);
+    cpu.a = (uint16_t)(0x1800 | mode);
+    cpu.p = (uint8_t)(nz8(cpu.p, mode) | P_M);
+}
+
+/* A buffer's last copy to VRAM, with the canvas showing the other: the
+   copy fills the characters both share ($2200-$33FF) and the flip lands
+   in the frame after it begins, so from that frame the canvas keeps the
+   other's 272 characters outside them (`keep`), VRAM the rest, as VRAM
+   alone would show that frame */
+static void race_overlap(int buf, unsigned keep)
+{
+    if (!race_canvas[buf])
+        rm_canvas_narrow(keep, 272);
+}
+
+/* A buffer's flip: its 416 characters (208 x 128) from Super FX RAM at src
+   on the canvas at VRAM word `word`, or, copied to VRAM, the canvas off */
+static void race_flip(int buf, uint16_t src, unsigned word)
+{
+    if (race_canvas[buf])
+        rm_canvas_show(word, src, 416);
+    else
+        rm_canvas_off();
+}
+
 /* NmiFrameUpload's race screen stage: X = $0D7D, the stage by the table at
    $7E:A7D1. Returns 0 for the entry $1C, CgramUploadAll, which the stage
    code reaches by its own JSR elsewhere and here would take P's place on
@@ -831,6 +903,7 @@ static int race_stage(uint32_t b)
 {
     uint16_t sel;
 
+    rm_canvas_kept(RM_CANVAS_RACE);
     cpu.p &= (uint8_t)~(P_M | P_X);
     cpu.x = rd16(b | 0x0D7D);
     cpu.p = nz16(cpu.p, cpu.x);
@@ -845,8 +918,9 @@ static int race_stage(uint32_t b)
             break;
         }
         next_stage(b, 0x0002);
+        race_canvas[0] = rm_canvas_ready();
         ld3(0x2200, 0x2C00, 0x0000, 0x2200);
-        abi_VramDmaFromGsuRam();
+        gsu_ram_to_vram(race_canvas[0]);
         cpu.p &= (uint8_t)~(P_M | P_X);
         ld3(0x0200, 0xE3D7, 0x5BC0, 0x5BC0);
         abi_VramDmaFromBank7F();
@@ -855,7 +929,7 @@ static int race_stage(uint32_t b)
         delay_a(1);
         next_stage(b, 0x0004);
         ld3(0x2200, 0x4E00, 0x1100, 0x2200);
-        abi_VramDmaFromGsuRam();
+        gsu_ram_to_vram(race_canvas[0]);
         cpu.p &= (uint8_t)~(P_M | P_X);
         ld3(0x0240, 0xE5D7, 0x5CC0, 0x5CC0);
         abi_VramDmaFromBank7F();
@@ -866,8 +940,10 @@ static int race_stage(uint32_t b)
         next_stage(b, 0x0006);
         op_lda16(b | 0x0D9A);
         wr16(0x7F348D, cpu.a);
+        race_overlap(0, 0x3400);
         ld3(0x2400, 0x7000, 0x2200, 0x2400);
-        abi_VramDmaFromGsuRam();
+        gsu_ram_to_vram(race_canvas[0]);
+        race_flip(0, 0x2C00, 0x0000);
         cpu.p |= P_M;
         put8(BG12NBA, 0x60);
         put8(BG1SC, 0x78);
@@ -891,8 +967,9 @@ static int race_stage(uint32_t b)
         }
         delay_a(1);
         next_stage(b, 0x0008);
+        race_canvas[1] = rm_canvas_ready();
         ld3(0x2200, 0xB800, 0x3400, 0x2200);
-        abi_VramDmaFromGsuRam();
+        gsu_ram_to_vram(race_canvas[1]);
         cpu.p &= (uint8_t)~(P_M | P_X);
         ld3(0x0200, 0xE817, 0x5DE0, 0x5DE0);
         abi_VramDmaFromBank7F();
@@ -901,7 +978,7 @@ static int race_stage(uint32_t b)
         delay_a(1);
         next_stage(b, 0x000A);
         ld3(0x2200, 0xDA00, 0x4500, 0x2200);
-        abi_VramDmaFromGsuRam();
+        gsu_ram_to_vram(race_canvas[1]);
         cpu.p &= (uint8_t)~(P_M | P_X);
         ld3(0x0240, 0xEA17, 0x5EE0, 0x5EE0);
         abi_VramDmaFromBank7F();
@@ -914,8 +991,10 @@ static int race_stage(uint32_t b)
         wr16(b | 0x0D7D, 0x0000);
         op_lda16(b | 0x0D9C);
         wr16(0x7F348D, cpu.a);
+        race_overlap(1, 0x0000);
         ld3(0x2400, 0x9400, 0x2200, 0x2400);
-        abi_VramDmaFromGsuRam();
+        gsu_ram_to_vram(race_canvas[1]);
+        race_flip(1, 0x9400, 0x2200);
         cpu.p |= P_M;
         copy8(BG2HOFS, b | 0x0D94);
         copy8(BG2HOFS, b | 0x0D95);

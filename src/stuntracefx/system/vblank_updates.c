@@ -8,6 +8,8 @@
 #include "machine.h"
 #include "waits.h"
 #include "hw.h"
+#include "wram.h"
+#include "remaster.h"
 
 uint8_t VramDmaWideRowsFromGsuRam(uint8_t rows_less_one, uint16_t src, uint16_t vram, uint16_t *next);
 void CgramDmaIfPending(void);
@@ -26,17 +28,52 @@ static uint32_t dbw(uint8_t bank, uint16_t a)
     return (uint32_t)bank << 16 | a;
 }
 
+/* Remaster, Enhanced (remaster.h): the picture by the console's canvas,
+   not VRAM. Whether set 0 (VRAM word $0000, BG1's tilemap at $6000) or set
+   1 ($0B00, $6400), the 13 columns of 11 8 bpp characters from $70:2C00,
+   goes to the canvas is taken at its first stage, kept to its flip. */
+static int menu_canvas[2];
+
 /* One stage of the upload: the next stage, then VramDmaWideRowsFromGsuRam
-   (rows - 1, source, VRAM). Returns A as that routine leaves it: the
+   (rows - 1, source, VRAM), or with the set on the canvas the rows kept
+   for it and the routine's end (the source after the last row at $FB,
+   the screen mode given back). Returns A as that routine leaves it: the
    source's high byte after the last row, and the screen mode value. */
-static uint16_t upload_rows(uint8_t bank, uint16_t next, uint8_t rows_less_one, uint16_t src, uint16_t vram)
+static uint16_t upload_rows(uint8_t bank, int set, uint16_t next, uint8_t rows_less_one, uint16_t src, uint16_t vram)
 {
     uint8_t mode;
     uint16_t end;
 
     wr16(dbw(bank, 0x0D7D), (next));
-    mode = VramDmaWideRowsFromGsuRam(rows_less_one, src, vram, &end);
+    if (menu_canvas[set]) {
+        rm_canvas_copy(vram, src, 0x02C0, 0x0400, rows_less_one + 1u);
+        end = (uint16_t)(src + 0x0400 * (rows_less_one + 1u));
+        wr16(0x0000FB, end);
+        mode = rd8(GSU_SCMR_SHADOW) | 0x18;
+        wr8(GSU_SCMR, mode);
+    } else {
+        mode = VramDmaWideRowsFromGsuRam(rows_less_one, src, vram, &end);
+    }
     return (uint16_t)((end & 0xFF00) | mode);
+}
+
+/* Remaster, Enhanced: a set's last stage. Copied to VRAM while the canvas
+   shows the other set, the copy fills the characters both share
+   ($0B00-$11DF), so the canvas keeps the other's 88 characters outside
+   them (`keep`); at the flip the set goes to the canvas, or the canvas
+   off. */
+static void menu_overlap(int set, unsigned keep)
+{
+    if (!menu_canvas[set])
+        rm_canvas_narrow(keep, 88);
+}
+
+static void menu_flip(int set)
+{
+    if (menu_canvas[set])
+        rm_canvas_show_copied(set ? 0x0B00 : 0x0000, 143, 8);
+    else
+        rm_canvas_off();
 }
 
 /* The last stage: $0357 = 1, BG1's tilemap at `sc`, and bit 5 of $11D7
@@ -72,22 +109,33 @@ uint16_t GsuPictureUploadStep(uint8_t bank, int *copied)
 {
     uint16_t stage = rd16((dbw(bank, 0x0D7D))), a = 0;
 
+    uint8_t f;
+
     *copied = 1;
+    rm_canvas_kept(RM_CANVAS_MENU);
     switch (stage) {
     case 0x0:
-        return (upload_rows(bank, 0x0002, 3, 0x2C00, 0x0000));
+        menu_canvas[0] = rm_canvas_ready();
+        return (upload_rows(bank, 0, 0x0002, 3, 0x2C00, 0x0000));
     case 0x2:
-        return (upload_rows(bank, 0x0004, 3, 0x3C00, 0x0580));
+        return (upload_rows(bank, 0, 0x0004, 3, 0x3C00, 0x0580));
     case 0x4:
-        a = upload_rows(bank, 0x0006, 4, 0x4C00, 0x0B00);
-        return ((uint16_t)((a & 0xFF00) | upload_done(bank, 0x60)));
+        menu_overlap(0, 0x11E0);
+        a = upload_rows(bank, 0, 0x0006, 4, 0x4C00, 0x0B00);
+        f = upload_done(bank, 0x60);
+        menu_flip(0);
+        return ((uint16_t)((a & 0xFF00) | f));
     case 0x8:
-        return (upload_rows(bank, 0x000A, 3, 0x5000, 0x1760));
+        menu_canvas[1] = rm_canvas_ready();
+        return (upload_rows(bank, 1, 0x000A, 3, 0x5000, 0x1760));
     case 0xA:
-        return (upload_rows(bank, 0x000C, 3, 0x4000, 0x11E0));
+        return (upload_rows(bank, 1, 0x000C, 3, 0x4000, 0x11E0));
     case 0xC:
-        a = upload_rows(bank, 0x0006, 4, 0x2C00, 0x0B00);
-        return ((uint16_t)((a & 0xFF00) | upload_done(bank, 0x64)));
+        menu_overlap(1, 0x0000);
+        a = upload_rows(bank, 1, 0x0006, 4, 0x2C00, 0x0B00);
+        f = upload_done(bank, 0x64);
+        menu_flip(1);
+        return ((uint16_t)((a & 0xFF00) | f));
     }
     *copied = 0;
     return a;
