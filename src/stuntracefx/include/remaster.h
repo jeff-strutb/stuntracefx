@@ -116,6 +116,11 @@ void rm_step_over(void);
 void rm_frame_end(void);
 /* the finished screen to the display at once: video/dma.c */
 void RmRaceScreenShow(void);
+/* Enhanced mode's picture (picture.c): count characters of planar data at
+   bpp bits a pixel decoded to colour indices, each an 8 * scale square
+   block, a pixel repeated scale x scale, into out (count * 64 * scale *
+   scale bytes) */
+void rm_picture_chars(const uint8_t *data, unsigned count, unsigned bpp, unsigned scale, uint8_t *out);
 /* the menus' 3D picture to the display at once: system/vblank_updates.c */
 void RmMenuPictureShow(void);
 
