@@ -1,5 +1,14 @@
 # Stunt Race FX native port: plan
 
+> **Superseded (2026-10-28).** This plan predates the cartridge/console
+> split. The game is now built as a cartridge (`src/stuntracefx`, unchanged
+> by any port) on the nativeshvc console library, from
+> `ports/stuntracefx/front/`; its timing is behaviour exact through a
+> measured cost profile, not cycle exact, and the C states no instruction
+> time (`cyc`, `gsu_cyc` are gone). See the README's "Timing" and "Playing
+> it natively" sections and `docs/stuntracefx/PLAN.md`. Kept for its
+> decisions on graphics, resolution and the remaster.
+
 The decomp (`src/stuntracefx`) is complete: byte exact at M2 and cycle exact
 on all three processors. The port now stops being a console. Today the
 decomp's C runs on `ports/common/snes`, a model of the console under it
@@ -21,8 +30,10 @@ port.
   the samples' codec, the Gaussian kernel a resampler, ADSR an envelope.
   Steps on the way may keep a register-shaped interface for one verified
   move at a time; each such interface is removed before the work is done.
-- **The port has its own copy of the game** (`ports/stuntracefx/game`),
-  lifted from the decomp. The decomp stays unchanged as the reference; the
+- **The port had its own copy of the game** (`ports/stuntracefx/game`),
+  lifted from the decomp; it has since been folded back into `src/stuntracefx`
+  and removed: the decomp's C is the game nativeshvc plays (docs/stuntracefx/
+  PLAN.md, rule 20). The decomp stays unchanged as the reference; the
   copy is checked against the original at every step. This replaces
   "ports never edit decomp source" with "ports never edit `src/`; the port's
   copy answers to the oracle".

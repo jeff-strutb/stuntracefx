@@ -75,6 +75,57 @@ In lockstep the original instance executes the same routine at the same
 moment, so the hybrid is charged exactly the cycles the original spent. State
 then stays comparable frame by frame.
 
+### Timing: behavior-exact (2026-10-28)
+
+The decomp's C is the cartridge played on nativeshvc (the console), and both
+are behavior-accurate native implementations, not emulators. The C's logic
+is bit-exact, so it behaves as the original does. No processor's time is
+stated in the C: the S-CPU's cyc()/cycs(), the Super FX's ~9,400 code-fetch
+statements (gsu_code, gsu_cache, gsu_cyc) and the sound driver's ~6,100
+spc_cyc() calls were all removed. Instruction timing is an emulator's
+bookkeeping and was never in the original source, so its absence is correct
+for preservation even where it costs playability (Jeff, 2026-10-28). The
+cycle-exact work is kept on branch shelf/cycle-exact.
+
+Where the game's behavior depends on the chips' time (it moves a fixed amount
+per race frame and its race loop never waits, so its speed and slowdown were
+how long the work took), each chip charges a cost for the work it is handed,
+and the game states nothing:
+
+- nativeshvc (contract 2.1) charges each S-CPU access its bus time plus a
+  weight per access kind (read/write x work RAM, ROM, cartridge RAM, I/O).
+- The cartridge's Super FX (ports/common/snes/superfx.c) charges each program
+  fixed + weight x count of the operations it observes (RAM loads, stores,
+  pixel-cache flush bytes, RPIX reads); a program runs to its STOP when
+  started, GO and the IRQ showing its end at start + duration.
+- The weights are the game's cost profile, measured from the original ROM on
+  the reference by nativeshvc's tools/nshvc-profile (its docs/cost-profile.md
+  is the standard): a fixed non-negative least-squares fit, never hand-set.
+  The cartridge declares it once at power-on
+  (ports/stuntracefx/front/cost_profile.c). First report: S-CPU per-frame
+  bias -0.7%, mean error 5.3%; Super FX main programs about 3% per job.
+  Frame rate is never a fit input, only a check (the --pacing log of $06D4
+  against the original's). Acceptance bar: to be set from this report.
+
+Time otherwise passes only where the original waited: on vertical and
+horizontal blank, its own interrupts' flags, the Super FX finishing, the
+sound CPU's ports and timers, and the fixed delays it gave the sound CPU
+(src/stuntracefx/include/waits.h; every such place is listed in
+build/stuntracefx/behavior/syncpoints.md and syncpoints_spc.md). The sound
+driver's slowdowns are not reproduced: where the original's driver fell a
+timer tick or more behind in busy music (and from 8 ticks behind dropped
+music and effect ticks), the untimed driver never falls behind, so the music
+plays as written (Jeff, 2026-10-28).
+
+Open (2026-10-28): the untimed sound driver's own upload loop (SpcReload)
+reads port 1 in the 6-clock gap between the S-CPU's index and byte, so about
+31% of a course's music bytes land wrong (garbled race music; the effect
+reader can then loop forever, freezing the game). Fix proposed and verified
+in nativeshvc: the SPC700's accesses cost their bus time, inherent to the
+chip; awaiting Jeff's approval. Three fixed delays still give their lengths
+in clocks from the original's loops (cpu_ops.h delay_turns, misc.c
+DelayLoop13, halt.c).
+
 T4 gates (on top of T3):
 
 - **Gate S, symbolic.** No literal ROM or RAM address in the routine's
@@ -221,9 +272,11 @@ Bookkeeping:
     notes) when found, not only into session notes.
 19. No provenance traces anywhere: files, comments, tool output, commit messages. No
     em dashes. No attribution trailers. provcheck runs from the first commit.
-20. Ports never edit decomp source (`src/`). The native port lifts its own
-    copy (`ports/stuntracefx/game`) and checks it against the original; see
-    `ports/stuntracefx/PLAN.md`.
+20. The game is the decomp's C (`src/stuntracefx`): the cartridge nativeshvc
+    plays, checked against the original on nativeshvc. Fixes go into it; there
+    is no separate copy. Only the cartridge's glue lives outside it
+    (`ports/stuntracefx/front`: the build, the Super FX on nativeshvc's
+    connector, the front end's hooks).
 21. Parallelise long runs across the cores; heavy jobs one at a time.
 
 ## 7. Risks named now

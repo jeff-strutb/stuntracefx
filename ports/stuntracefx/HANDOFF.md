@@ -5,6 +5,27 @@ first built; partly out of date: it still describes the console model).
 State as of commit 99a18db, 2026-10-21. Everything is local; nothing is
 pushed.
 
+
+**State, 2026-10-28.** The game is built as a cartridge on the nativeshvc
+console library: `sh ports/stuntracefx/front/build.sh` (needs
+`../nativeshvc` and its library built; contract 2.1 and the cost-profile
+standard are in nativeshvc's working tree, not yet committed there). The
+standard is behaviour exact, not cycle exact: the C states no instruction
+time on any processor (cyc/cycs, gsu_code/gsu_cache/gsu_cyc, spc_cyc
+removed; tools `decyc.py`, `dropdead.py`). Time passes in the console's
+waits (`src/stuntracefx/include/waits.h`) and in what the chips charge:
+nativeshvc charges each S-CPU access bus time plus a per-kind weight, and
+the Super FX (`ports/common/snes/superfx.c`) charges each program a fixed
+part plus weights per observed operation, both from the game's cost
+profile (`front/cost_profile.c`, measured from the ROM by nativeshvc's
+`tools/nshvc-profile`). Races run at the original's pace. Open: race music
+garbled and a later freeze, from the untimed sound driver's upload loop
+(fix verified in nativeshvc, awaiting approval: SPC700 accesses cost their
+bus time); the attract demo's slide-gate path not yet rechecked. The rules
+below predate this and stand only where they don't conflict with it: the
+console is nativeshvc, and its register-level contract is the accepted
+API. The cycle-exact work is on branch shelf/cycle-exact.
+
 ## The rules (Jeff's, all standing)
 
 - **Zero emulation when done.** The finished port is the game's own source
@@ -61,8 +82,9 @@ check above covers 21 plays.
 
 ## Done
 
-- `ports/stuntracefx/game`: the port's own copy of the decomp, built by
-  link.sh (GAME= selects another tree).
+- The game's C is the decomp's own, `src/stuntracefx` (the port's copy,
+  `ports/stuntracefx/game`, was folded back into it and removed); link.sh
+  and front/build.sh build it (GAME= selects another tree).
 - No ROM image is built in: the build extracts the game's data as named
   assets (`assets.csv`: 2,049 assets, 862,346 bytes; names by hand in
   `assets_named.csv`; `tools/assets.py`

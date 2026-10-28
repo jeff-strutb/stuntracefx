@@ -1,5 +1,11 @@
 # Stunt Race FX: the native port
 
+> **Out of date (2026-10-28).** This describes the first native port, on
+> its own console model (`ports/common/snes`). The game now runs on the
+> nativeshvc console library from `ports/stuntracefx/front/`; of
+> `ports/common/snes` only the cartridge's Super FX (`superfx.c`) is used.
+> See the README's "Playing it natively" section.
+
 The decompilation (`src/stuntracefx`, complete at M1 and M2) as a native
 64-bit program, built by any C compiler, with a thin platform layer under
 it. The same principles as the Boss Rally and Top Gear Rally ports:

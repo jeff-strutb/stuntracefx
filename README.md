@@ -1,16 +1,18 @@
-# Stunt Race FX: bit-exact & cycle-exact decompilation
+# Stunt Race FX: bit-exact decompilation
 
-**Complete: 100% of the game's code is decompiled, behaviour exact, byte
-exact and cycle exact.** Started October 11, 2026; behaviour and byte exact
-October 18, 2026; cycle exact on all three processors October 20, 2026.
+**Complete: 100% of the game's code is decompiled, behaviour exact and byte
+exact.** Started October 11, 2026; behaviour and byte exact October 18, 2026.
+The C is the game itself, played natively on
+[nativeshvc](#playing-it-natively-on-nativeshvc), a native SNES console
+library, with no emulation of any processor.
 
-> **Cycle exact, clock for clock, on every processor.** The C does not just
-> compute what the original computes: it takes exactly as long to do it.
-> Across all 325 scripts (161 of gameplay, 164 unit tests that reach debug
-> screens, unused code and rarely taken branches), every interval the C
-> states between two memory accesses matches the original's to the master
-> clock, on the S-CPU (65816), the Super FX (GSU-1) and the SPC700 at once:
-> **0 clocks off, every script identical.** See [Cycle-exact](#cycle-exact).
+> **Behaviour exact, not cycle exact.** The C states no instruction timing:
+> instruction counts are an emulator's bookkeeping and were never part of the
+> original source. Where the game's behaviour depends on how long the
+> original chips took (its race speed, its frame drops), each chip charges a
+> cost for the work it is given, from a cost profile measured from the
+> original ROM by a documented, tool-driven standard. See
+> [Timing](#timing-behaviour-exact).
 
 | | Behaviour exact (M1) | Byte exact (M2) |
 |---|---|---|
@@ -30,8 +32,6 @@ October 18, 2026; cycle exact on all three processors October 20, 2026.
   identical). Routines that never return (they restart or stop the game)
   are judged by that lockstep run.
 - **The whole ROM rebuilds byte for byte** from the companion assembly.
-- **Every routine is cycle exact.** With all the C in place, all 325 scripts
-  run 0 master clocks off the original on the S-CPU, Super FX and SPC700.
 
 The numbers are from the full gate on the final tree (`python3
 tools/stuntracefx/gate.py --full`, with every script retraced); the
@@ -102,49 +102,101 @@ produced these bytes, so no C can rebuild them. Each routine therefore has two
 sources:
 
 - **C, the decompilation.** Readable C per routine, certified behaviour exact
-  against the running original (T3). A native port is built from it later and
-  never edits it.
+  against the running original (T3). It is also the game a native build
+  plays: the cartridge, on the nativeshvc console.
 - **Assembly, the byte-exact companion.** Symbolic, commented assembly that
   rebuilds the ROM byte for byte (T4). It is the reading the C is written
   from, and the byte-exact rebuild proves that reading is right.
 
-## Cycle-exact
+## Timing: behaviour exact
 
-**Done: the whole decompilation is cycle exact on all three processors.**
-This is the third proof, and the hardest. Behaviour exact says the C gives
-the same answers; byte exact says the assembly is the same program. Cycle
-exact says the C *is* the original in time as well: run in place of the
-original code, it spends the same master clocks between every pair of memory
-accesses, on the S-CPU, the Super FX and the SPC700 together.
+**The standard is behaviour exact, not cycle exact** (decided October 28,
+2026). The C states no instruction time on any processor. Statements of how
+long the original's instructions took (`cyc()` on the S-CPU, code-fetch
+statements on the Super FX, `spc_cyc()` on the SPC700) are an emulator's
+bookkeeping: they were never in the original source, so a preservation
+decompilation does not carry them, even where that makes the code harder
+to play natively.
 
-| | Scripts | Clocks off | State |
-|---|---|---|---|
-| Gameplay (attract, Speed, Stunt, Battle Trax, Test Run, menus, seeded random play) | 161 | **0** | identical |
-| Unit tests (debug screens, unused screens and code, rarely taken branches) | 164 | **0** | identical |
-| **All** | **325** | **0** on S-CPU, Super FX and SPC700 | **identical** |
+**Why timing still matters.** Stunt Race FX ties its speed to its chips: a
+race frame moves the cars a fixed amount however long it took to compute,
+and the race loop never waits. On the SNES its pace, and its slowdown under
+load, came from how long the S-CPU and the Super FX took to do each frame's
+work. With no time at all, a race never advances.
 
-**How it is checked.** Each routine's C states the time its original
-instructions take (`cyc(N)` on the S-CPU; on the Super FX, the code bytes
-the C stands for, derived from the ROM; on the SPC700, its own clocks). The
-lockstep run places every memory access the C makes on the original's
-matching access, and compares the clocks the original spent since the
-access before with the clocks the C stated: any difference, of even one
-master clock, is a failure. Every number comes from the original's
-instructions, never fitted to a measurement. Where one C helper stands for
-code the original reaches several ways, each caller passes its own time.
-The only interval in the whole run not compared is one in `unit_hud_colours`
-that a state load cuts before the original returns: there is no original
-return there to compare with.
+**How it is kept.** Each chip charges a cost for the work the game hands
+it, and nothing in the game's C says what that is:
 
-**Why it matters.** On the SNES, timing *is* behaviour. When a frame drops,
-where an interrupt lands mid-routine, when the S-CPU waits on the Super FX
-for the shared bus, and when the sound CPU answers a command all depend on
-exactly how long each piece of code takes. A decompilation that is only
-behaviour exact can still play differently: a lag frame in another place, a
-raster effect a line off, a sound a frame late. Cycle exact closes that
-last gap. It is a complete record of how the original *runs*, not only of
-what it computes, and it gives a native port the original's exact pacing to
-keep, or to drop on purpose.
+- The console (nativeshvc) charges each S-CPU access its real bus time, plus
+  a weight per kind of access (read or write; work RAM, ROM, cartridge RAM,
+  I/O) for the CPU work around it that the C does not make.
+- The cartridge's Super FX charges each program a fixed part plus a weight
+  per operation it observes (RAM loads and stores, pixel-cache flushes,
+  pixel reads), so a busy frame costs more, as on the original.
+- The weights are the game's **cost profile**, measured from the original
+  ROM on the reference emulator by nativeshvc's tool (`tools/nshvc-profile`,
+  standard in nativeshvc's `docs/cost-profile.md`): ROM in, profile and
+  report out, by a fixed fit, never set by a person. The cartridge declares
+  it once at power-on (`ports/stuntracefx/front/cost_profile.c`).
+
+The first report: the S-CPU's per-frame time is predicted with -0.7% bias
+and 5.3% mean error (bus time alone would be 76% short); the Super FX's two
+main programs, 92% of its time, within about 3% per job. That is behaviour
+exact on average, not frame for frame: a frame the original only just made
+or missed can land a TV frame differently. The acceptance bar is still to
+be set.
+
+**History.** The C was first made cycle exact against the original under the
+lockstep harness (all 325 scripts 0 master clocks off on all three
+processors, October 20, 2026). That work, its tools and its cycle
+statements are kept on branch `shelf/cycle-exact`.
+
+## Playing it natively on nativeshvc
+
+**nativeshvc**, a separate project checked out beside this one, is a native SNES console library: the PPU,
+the sound DSP, DMA and HDMA, timers, interrupts, the multiplier and divider
+and the memory map, with real hardware timing. It runs no processor
+instructions. A game is C calling into the console's registers, under a
+written contract (`docs/contract.md` there).
+
+The decomp's C (`src/stuntracefx`) is the cartridge: the game's three
+programs as native C, with no separate port copy. On top of it:
+
+| | |
+|---|---|
+| `ports/stuntracefx/front/` | the cartridge's description for nativeshvc (`main.c`, `cart.c`), its Super FX on nativeshvc's chip connector (`superfx_cart.c`), its cost profile (`cost_profile.c`, generated), touch and art |
+| `ports/common/snes/superfx.c` | the cartridge's Super FX: its registers, RAM and pixel caches, a program run to its STOP when started, its duration from the cost profile |
+| `src/stuntracefx/include/waits.h` | the places the original waited on the hardware (vertical and horizontal blank, its own interrupts' flags, the Super FX, the sound CPU's ports), as the console's waits |
+
+```sh
+sh ports/stuntracefx/front/build.sh                       # headless (nativeshvc build/null)
+OUT=build/stuntracefx/front/macos NSHVC_BUILD=build/macos \
+  LIBS="-framework Cocoa -framework QuartzCore -framework AudioToolbox -framework CoreAudio -framework GameController -framework Metal -framework Foundation" \
+  sh ports/stuntracefx/front/build.sh                     # a macOS window
+build/stuntracefx/front/null/stuntracefx --script PLAY --headless --out DIR   # an input-only play
+```
+
+The build expects nativeshvc's checkout beside this one (`NSHVC=../nativeshvc`)
+and its library built. `--pacing FILE` logs each race frame's TV frames
+(`$06D4`), the measure to compare with the original's.
+
+**State (October 28, 2026).** The game boots, plays its menus and runs
+races at the original's pace on its measured profile. Not yet right:
+
+- **Race music garbled, and a freeze later in a race.** The sound driver's
+  own upload loop reads a port in a 6-clock gap the hardware never exposed,
+  because the untimed sound CPU takes no time between two reads; about 31%
+  of the uploaded music bytes land wrong, and the effect reader can loop on
+  bad data. nativeshvc has confirmed the cause; the fix (the SPC700's
+  accesses cost their bus time, inherent to the chip) awaits approval as a
+  contract change.
+- **The attract demo** reaches a slide-gate path (09:EC71) no recording of
+  the original reaches; it was seen before the cost profile and is not yet
+  rechecked.
+- nativeshvc's contract 2.1 and the cost-profile standard are built in its
+  working tree but not yet committed there.
+- The sound driver's own slowdowns in busy music are not reproduced (a
+  decision: the driver is untimed, so the music plays as written).
 
 ## Current Status
 
@@ -275,6 +327,8 @@ passes the provenance check.
     config/stuntracefx/          verdict ledgers
     tools/stuntracefx/           tracer, disassembler, build, gates, oracles, progress
     tools/stuntracefx/sfxbox/    the headless runner and both oracles
+    ports/stuntracefx/front/     the native build: the cartridge on nativeshvc
+    ports/common/snes/           the cartridge's Super FX (superfx.c)
     tools/common/                git hooks, provenance check
     tools/toolchains/            pinned asar and bsnes (staged by setup.sh), local patches
     docs/stuntracefx/            plan, standard, handbook, dated notes
