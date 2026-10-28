@@ -68,12 +68,16 @@ static void menu_overlap(int set, unsigned keep)
         rm_canvas_narrow(keep, 88);
 }
 
-static void menu_flip(int set)
+static void menu_flip(uint8_t bank, int set)
 {
-    if (menu_canvas[set])
+    if (menu_canvas[set]) {
         rm_canvas_show_copied(set ? 0x0B00 : 0x0000, 143, 8);
-    else
+        /* no copy took the blank's time: bit 5 of $11D7 left clear, so
+           VblankUpdates' palette, VRAM and sprite transfers still run */
+        wr8(dbw(bank, 0x11D7), (uint8_t)(rd8(dbw(bank, 0x11D7)) & 0xDF));
+    } else {
         rm_canvas_off();
+    }
 }
 
 /* The last stage: $0357 = 1, BG1's tilemap at `sc`, and bit 5 of $11D7
@@ -123,7 +127,7 @@ uint16_t GsuPictureUploadStep(uint8_t bank, int *copied)
         menu_overlap(0, 0x11E0);
         a = upload_rows(bank, 0, 0x0006, 4, 0x4C00, 0x0B00);
         f = upload_done(bank, 0x60);
-        menu_flip(0);
+        menu_flip(bank, 0);
         return ((uint16_t)((a & 0xFF00) | f));
     case 0x8:
         menu_canvas[1] = rm_canvas_ready();
@@ -134,7 +138,7 @@ uint16_t GsuPictureUploadStep(uint8_t bank, int *copied)
         menu_overlap(1, 0x0000);
         a = upload_rows(bank, 1, 0x0006, 4, 0x2C00, 0x0B00);
         f = upload_done(bank, 0x64);
-        menu_flip(1);
+        menu_flip(bank, 1);
         return ((uint16_t)((a & 0xFF00) | f));
     }
     *copied = 0;
