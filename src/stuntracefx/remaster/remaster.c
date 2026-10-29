@@ -197,6 +197,7 @@ void rm_race_frame(void)
     for (rm_wait_k = 0; rm_wait_k < (rm_whole ? RM_TICKS : rm_pace); rm_wait_k++)
         nshvc_wait_vblank();
     rm_waiting = 0;
+    rm_tween_backdrop_back();
     if (rm_share_on)                    /* counted after the wait: the frame hook in it shows the last */
         rm_ticks++;
     frame60(1);
@@ -224,6 +225,8 @@ static void whole_tween(void)
         rm_canvas_show_players(px[0], px[1]);
     else if (m)                         /* in the place of the buffer the step showed */
         rm_canvas_replace(px[m - 1]);
+    if (m)
+        rm_tween_backdrop_show();
 }
 
 void rm_race_frame_paced(void)
@@ -240,11 +243,14 @@ void rm_race_frame_paced(void)
 void rm_step_over(void)
 {
     redraw_wait();
+    rm_tween_backdrop_back();
     frame60(0);
 }
 
 void rm_race_frame_end(void)
 {
+    if (rm_tick60())
+        rm_tween_backdrop_late();
     frame60(0);
 }
 

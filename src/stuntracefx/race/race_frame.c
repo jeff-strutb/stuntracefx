@@ -993,7 +993,8 @@ static void frame_time(uint8_t db, uint8_t p0)
    tween.c), as RaceFrameRun draws it and nothing else: the view from
    player 1's car, the draw list (the bucket triggers, ObjectDrawListBuild,
    the records to the Super FX), the view matrix and the sort (program
-   $AEF8), HUD panel B's frame (FrameRunGsuAB13B: the parameters, program
+   $AEF8), the backdrop's angles (BackdropAnglesFromView), HUD panel B's
+   frame (FrameRunGsuAB13B: the parameters, program
    $01:AB13, the HUD's digits, gauges and map markers), then the text
    program or the HUD as its step drew it (rm_hud_redraw), into the buffer
    the Super FX draws in. No physics, no object handlers, no upload.
@@ -1033,6 +1034,7 @@ void RmTweenDraw(void)
     op_sep(P_M);
     op_rep(P_X);
     abi_ViewUpdateAndGsuAEF8();
+    abi_BackdropAnglesFromView();       /* the backdrop's angles from the view drawn (tween.c shows them) */
     op_sep(P_M);
     b = (uint32_t)cpu.db << 16;
     wr8(b | 0x1F07, 0x01);

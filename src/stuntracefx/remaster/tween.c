@@ -14,6 +14,7 @@
 #include <string.h>
 
 #include "machine.h"
+#include "hw.h"
 #include "gsu.h"
 #include "console_ext.h"
 #include "remaster.h"
@@ -136,6 +137,133 @@ static void between_view(uint8_t *w, unsigned slot, int num, int den)
 
 const uint8_t *rm_tween_end_sram(void) { return kept_s; }
 
+/* The backdrop (BG2, video/backdrop.c) as the in-between frame's view has
+   it. The 3D's redraw sets it as a race frame does, then the state goes
+   back; the console would only show it at the next buffer's flip, a step
+   later, so the hills would turn in steps under a 3D that turns smoothly.
+   One player: the rows BackdropRowsUpdate copied for the buffer drawn in
+   ($0D7F, its tilemap at $7F:E3D7 + $440 each) and its scroll pair, the
+   vertical less that buffer's base ($7E:E811); shown in the place of the
+   shown buffer's ($0D81: -1 A, 1 B; its rows at VRAM $5BC0 or $5DE0) by
+   rm_tween_backdrop_show. Two players: both halves' pairs and gradient
+   addresses ($0D8E-$0D99), which the raster interrupt writes to the PPU
+   every frame, put in work RAM for the frames of the wait and back
+   before the next step (rm_tween_backdrop_back), with the gradient's
+   addresses the interrupt copies from them each frame
+   (GradientPointersToBank7F: $7F:348D, $7F:3493) as its copy of the
+   game's own would have left them. */
+static uint8_t bd_rows[0x440], bd_pairs[12], bd_was[12];
+static uint16_t bd_hofs, bd_vofs;
+static int bd_ok, bd_two, bd_put;
+/* One player's sky: HudColourStep builds a gradient band each step from
+   the view's angle ($0D96), one of three at $7F:EC57 ($100 bytes each),
+   and keeps its address for the buffer drawn in ($0D9A + $0D7F * 2),
+   which the buffer's flip gives the gradient's channel ($7F:348D). The
+   band the redraw built, shown by its address in the frames of the wait;
+   the three bands and the address back before the next step. */
+static uint8_t gr_band[0x100], gr_was[0x300 + 2];
+static uint16_t gr_at;
+static int gr_put;
+
+static void backdrop_keep(const uint8_t *w, int two)
+{
+    unsigned sel = word(w, 0x0D7F) & 1;
+
+    bd_two = two;
+    bd_ok = 1;
+    if (two) {
+        memcpy(bd_pairs, w + 0x0D8E, sizeof bd_pairs);
+        return;
+    }
+    memcpy(bd_rows, w + 0x1E3D7 + 0x440 * sel, sizeof bd_rows);
+    bd_hofs = word(w, 0x0D92 + 2 * sel);
+    gr_at = word(w, 0x0D9A + 2 * sel);
+    if (gr_at >= 0xEC57 && gr_at <= 0xEE57)
+        memcpy(gr_band, w + 0x10000 + gr_at, sizeof gr_band);
+    else
+        gr_at = 0;
+    bd_vofs = (uint16_t)(word(w, 0x0D8E + 2 * sel) - word(w, 0xE811 + 2 * sel));
+}
+
+void rm_tween_backdrop_show(void)
+{
+    uint8_t *w = nshvc_wram();
+    unsigned shown, i;
+    uint16_t v;
+
+    if (!bd_ok)
+        return;
+    bd_ok = 0;
+    if (bd_two) {
+        if (!bd_put)
+            memcpy(bd_was, w + 0x0D8E, sizeof bd_was);
+        bd_put = 1;
+        memcpy(w + 0x0D8E, bd_pairs, sizeof bd_pairs);
+        return;
+    }
+    shown = word(w, 0x0D81) == 0x0001;
+    wr8(VMAIN, 0x80);
+    wr8(VMADDL, shown ? 0xE0 : 0xC0);
+    wr8(VMADDL + 1, shown ? 0x5D : 0x5B);
+    for (i = 0; i < sizeof bd_rows; i++)
+        wr8(VMDATAL + (i & 1), bd_rows[i]);
+    if (gr_at) {
+        if (!gr_put) {
+            memcpy(gr_was, w + 0x1EC57, 0x300);
+            memcpy(gr_was + 0x300, w + 0x1348D, 2);
+        }
+        gr_put = 1;
+        memcpy(w + 0x10000 + gr_at, gr_band, sizeof gr_band);
+        w[0x1348D] = (uint8_t)gr_at;
+        w[0x1348E] = (uint8_t)(gr_at >> 8);
+    }
+    v = (uint16_t)(bd_vofs + word(w, 0xE811 + 2 * shown));
+    wr8(BG2HOFS, (uint8_t)bd_hofs);
+    wr8(BG2HOFS, (uint8_t)(bd_hofs >> 8));
+    wr8(BG2VOFS, (uint8_t)v);
+    wr8(BG2VOFS, (uint8_t)(v >> 8));
+}
+
+/* Two players' pictures show a step late (remaster.c whole_tween), so on
+   a step's frame too the halves' backdrop is the last step's, which the
+   picture shown was drawn with: put in at the race frame's end */
+void rm_tween_backdrop_late(void)
+{
+    static uint8_t last[12];
+    static int last_ok;
+    uint8_t *w = nshvc_wram(), now[12];
+
+    if (!w[0x0D62] || !rm_whole_steps()) {
+        last_ok = 0;
+        return;
+    }
+    memcpy(now, w + 0x0D8E, sizeof now);
+    if (last_ok) {
+        memcpy(bd_was, now, sizeof bd_was);
+        bd_put = 1;
+        memcpy(w + 0x0D8E, last, sizeof last);
+    }
+    memcpy(last, now, sizeof last);
+    last_ok = 1;
+}
+
+void rm_tween_backdrop_back(void)
+{
+    bd_ok = 0;
+    if (gr_put) {
+        memcpy(nshvc_wram() + 0x1EC57, gr_was, 0x300);
+        memcpy(nshvc_wram() + 0x1348D, gr_was + 0x300, 2);
+    }
+    gr_put = 0;
+    if (bd_put) {
+        uint8_t *w = nshvc_wram();
+        memcpy(w + 0x0D8E, bd_was, sizeof bd_was);
+        memcpy(w + 0x1348D, w + 0x0D96, 2);     /* as the interrupt's copy of them left them */
+        memcpy(w + 0x13493, w + 0x0D98, 2);
+    }
+    bd_put = 0;
+}
+
 int rm_tween_buffers(int num, int den, uint8_t *at_2c00, uint8_t *at_9400)
 {
     uint8_t *w = nshvc_wram(), *s = nshvc_sram();
@@ -209,6 +337,8 @@ int rm_tween_buffers(int num, int den, uint8_t *at_2c00, uint8_t *at_9400)
     /* one player: the buffer drawn in (its start at $021A, the one the
        Super FX draws in next); two players: both, one player's each */
     mask = !drew ? 0 : two ? 3 : word(s, 0x021A) == 0x2C00 ? 1 : 2;
+    if (drew)
+        backdrop_keep(w, two);
     if (mask & 1)
         memcpy(at_2c00, s + 0x2C00, RM_TWEEN_BYTES);
     if (mask & 2)

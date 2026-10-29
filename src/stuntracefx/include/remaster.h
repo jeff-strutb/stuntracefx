@@ -188,6 +188,13 @@ int rm_tween(int num, int den, uint8_t *pixels, uint16_t *shown);
    those drawn (1 $2C00, 2 $9400; a two-player race draws both, player 1
    in the buffer $021A gives at the tick's start), 0 when not ready */
 int rm_tween_buffers(int num, int den, uint8_t *at_2c00, uint8_t *at_9400);
+/* the backdrop (BG2) as the last rm_tween_buffers drew it, shown with its
+   picture; and the game's own back before the next step */
+void rm_tween_backdrop_show(void);
+void rm_tween_backdrop_back(void);
+/* two players: the last step's backdrop on the step's own frame, as its
+   pictures are (at the race frame's end) */
+void rm_tween_backdrop_late(void);
 /* whether the option shares the steps out (Frame rate 60, not the
    reference pace) */
 int rm_sharing_on(void);
