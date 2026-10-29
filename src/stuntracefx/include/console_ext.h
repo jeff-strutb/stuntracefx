@@ -34,6 +34,7 @@ void nshvc_ext_canvas_chars(int layer, unsigned word_addr, int count, const uint
    layer's page of it, the data port's writes landing in a page at once,
    sprites past X 255 (contract 2.3); the window's size in points */
 void nshvc_ext_screen(int width, int height);
+void nshvc_ext_screen_origin(int x, int y);   /* contract 2.6 */
 void nshvc_ext_vram(int kb);
 void nshvc_ext_vram_page(int page);
 void nshvc_ext_layer_page(int layer, int page);
