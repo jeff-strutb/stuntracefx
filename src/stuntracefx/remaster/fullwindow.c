@@ -1985,7 +1985,8 @@ static void panels_draw(void)
    into the texels (sprites_draw) and the console's are off, so that they
    go anywhere on the screen, past its 256th row too, which the console's
    Y does not reach. The sprites the original's screen kept out of sight
-   are left out: the bezel's sides (characters $40-$47, palette 3), those
+   are left out: the bezel's sides (characters $40-$47, palette 3) and its
+   start lamps once the race runs (lamp_hidden), those
    wholly in the lines it blanked (above 16, from 208, and wrapped past
    255 into the top), those off the console's 256 columns, and those under
    the bezel (below priority 3, which BG1's priority-1 tiles cover, and
@@ -2018,6 +2019,15 @@ static void sprites_write(void)
    with its box, else by the columns and rows of its piece, the sprites
    that touch it and those that touch them (a picture of several sprites
    moves whole); those below it are in the 3D's view, moved with it. */
+/* The bezel's start lamps (characters $A0-$AF, palette 3: the lights and
+   their housings at the view's top corners), which the original's bezel
+   kept all race: in the full window only while the start runs (player 1's
+   race phase $0DD6 below 6, the race's) */
+static int lamp_hidden(unsigned t, unsigned at)
+{
+    return (t & 0x1F0) == 0xA0 && (at & 0x0E) == 0x06 && nshvc_wram()[0x0DD6] >= 0x06;
+}
+
 static int spr_root(int *up, int i)
 {
     while (up[i] != i)
@@ -2040,7 +2050,7 @@ static void sprites_draw(void)
         if (xx >= 256)
             xx -= 512;
         up[i] = i;
-        shown[i] = !(((t & 0x1F8) == 0x40 && (at & 0x0E) == 0x06) || yy + h > 256 || yy >= PANEL_END ||
+        shown[i] = !(((t & 0x1F8) == 0x40 && (at & 0x0E) == 0x06) || lamp_hidden(t, at) || yy + h > 256 || yy >= PANEL_END ||
                      xx + (int)h <= 0 || xx >= 256 || yy + h <= RACE_ROW0 ||
                      ((at & 0x30) != 0x30 && (xx + (int)h <= VIEW_X || xx >= VIEW_X + VIEW_W ||
                                               (int)(yy + h) <= VIEW_Y || (int)yy >= VIEW_Y + VIEW_H)));
