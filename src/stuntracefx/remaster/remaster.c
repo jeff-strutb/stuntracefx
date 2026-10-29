@@ -213,12 +213,13 @@ void rm_race_frame(void)
         drawing = 1;
         cpu_costs(0);
         fw_picture(0);
+        fw_sky();
         drawing = 0;
         cpu_costs(0);
     }
     for (rm_wait_k = 0; rm_wait_k < (rm_whole ? RM_TICKS : rm_pace); rm_wait_k++)
         nshvc_wait_vblank();
-    fw_before_step();                   /* the work RAM the full window borrowed, the game's again */
+    fw_before_step();                   /* the work RAM the full window borrowed, the game's again (then tween.c's) */
     rm_waiting = 0;
     rm_tween_backdrop_back();
     if (rm_share_on)                    /* counted after the wait: the frame hook in it shows the last */
@@ -245,8 +246,10 @@ static void whole_tween(void)
         m = fw_picture(j);
         drawing = 0;
         cpu_costs(0);
+        fw_sky_take();                  /* the gradient's bytes the game's as tween.c keeps them */
         if (m)
             rm_tween_backdrop_show();
+        fw_sky();
         return;
     }
     m = rm_tween_buffers(j, RM_TICKS, px[0], px[1]);
@@ -274,6 +277,7 @@ void rm_race_frame_paced(void)
 void rm_step_over(void)
 {
     redraw_wait();
+    fw_before_step();
     rm_tween_backdrop_back();
     frame60(0);
 }

@@ -98,6 +98,10 @@ int fw_upload_line(void);
 /* a race frame's wait over, its step to run (remaster.c): the work RAM the
    full window borrowed for its own HDMA given back */
 void fw_before_step(void);
+/* the sky's lines for the picture shown (remaster.c, after the backdrop's
+   own for it) */
+void fw_sky(void);
+void fw_sky_take(void);
 void fw_vblank_uploads(void);
 void fw_upload_done(void);
 /* at each frame's end: the console's screen and BG1 set for the mode */

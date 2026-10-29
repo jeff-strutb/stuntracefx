@@ -1430,8 +1430,8 @@ int fw_picture(int j)
    its scroll; the rest of the map VRAM's), a 4 bpp pixel as its colour
    index (palette * 16 + pixel, as BG1's 8 bpp texels index colours). BG2
    itself is then off. Past the original view's top and bottom, where its
-   map holds nothing the original showed, its edge rows go on (the sky
-   above, the ground's colour below). */
+   map holds nothing the original showed: the sky above (colour 1, which
+   fw_sky sets line by line), its bottom row below (the ground's colour). */
 #define BG2_MAP  0x5800                 /* BG2SC $5A: 32 x 64 at $5800 */
 #define BG2_CHARS 0x6000                /* BG12NBA $6x */
 
@@ -1451,9 +1451,14 @@ static void backdrop_draw(void)
     for (Y = 0; Y < (unsigned)th; Y++) {
         int32_t y = (VIEW_CY * 256 + ((int32_t)Y * 2 + 1 - 2 * VIEW_CY * K) * 128 * 256 / (2 * f)) >> 8;
         unsigned row, cell, py;
-        if (y < VIEW_Y)                 /* past the original view's top and bottom its edge rows go on */
-            y = VIEW_Y;
-        if (y > VIEW_Y + VIEW_H - 1)
+        if (y < VIEW_Y) {               /* above the original's view: the sky (colour 1, its line's) */
+            uint8_t *o = tex + (size_t)Y * tw;
+            for (X = 0; X < (unsigned)tw; X++)
+                if (!o[X])
+                    o[X] = 1;
+            continue;
+        }
+        if (y > VIEW_Y + VIEW_H - 1)    /* below it its bottom row goes on (the ground's colour) */
             y = VIEW_Y + VIEW_H - 1;
         row = (unsigned)(y + 1 + vofs) & 511, cell = BG2_MAP + (row >> 3) * 32, py = row & 7;
         uint8_t *o = tex + (size_t)Y * tw;
@@ -1734,9 +1739,111 @@ static void page_table_take(void)
     table_in = 0;
 }
 
+/* The sky: colour 1 a line, by HDMA channels 2 (CGADD from the table at
+   $7F:3497) and 3 (CGDATA, indirect, from the table at $7F:3489:
+   GradientSetup's four entries, $17 lines of one colour, $50 lines of a
+   colour each, $18 of one, $50 of one each, from addresses in bank $7F;
+   the second's the picture's colour band, one of three at $7F:EC57 +
+   $100 n, its address at $7F:348D). In the full window the HDMA is
+   exactly the original's (its transfers take the S-CPU's time), only its
+   four addresses point elsewhere: to colours, in the two bands the
+   picture's isn't, that give each line the colour the original showed at
+   the line the same height above the horizon in its view (above the view
+   its top line's; the band's 80 lines from line 23, held at their ends).
+   The bytes are the game's again while a step runs, and before tween.c's
+   in-between band goes in (fw_sky_take), so that its kept copy and this
+   file's are the game's; at the step this file's are put back first and
+   tween.c's after. */
+#define SKY_TABLE 0x13489u              /* $7F:3489, CGDATA's table: four entries of a count and an address */
+#define SKY_BANDS 0x1EC57u              /* $7F:EC57, the three bands */
+static uint8_t sky_kept[13 + 0x300];
+static int sky_in;
+static unsigned sky_game, sky_mine;     /* the band address the game (or tween.c) set, and this file's */
+
+void fw_sky_take(void);
+
+static void sky_take(void)
+{
+    uint8_t *w = nshvc_wram();
+    if (!sky_in)
+        return;
+    memcpy(w + SKY_TABLE, sky_kept, 13);
+    memcpy(w + SKY_BANDS, sky_kept + 13, 0x300);
+    sky_in = 0;
+}
+
+/* the original's colour for the full window's line h, from the band */
+static uint16_t sky_colour(const uint16_t *band, int h)
+{
+    double f = (double)fw_focal() / K, y = (double)h - 1.0 + 0.5;
+    int l = (int)floor(VIEW_CY + (y - VIEW_CY) * 128.0 / f), k;
+    if (l < VIEW_Y)
+        l = VIEW_Y;
+    k = l - 23;
+    if (k < 0)
+        k = 0;
+    if (k > 79)
+        k = 79;
+    return band[k];
+}
+
+void fw_sky(void)
+{
+    /* the four entries: their first line and whether a colour each line */
+    static const int first[4] = {0, 0x17, 0x17 + 0x50, 0x17 + 0x50 + 0x18}, each[4] = {0, 1, 0, 1};
+    uint8_t *w = nshvc_wram();
+    unsigned at = w[0x1348D] | w[0x1348E] << 8, band, spare[2], k = 0, e, i;
+    uint16_t src[80];
+
+    if (!on || !handed)
+        return;
+    /* the second entry's address is this file's own after its first frame,
+       until the game or tween.c writes the picture's band there again */
+    if (!sky_in || at != sky_mine)
+        sky_game = at;
+    at = sky_game;
+    if (at < 0xEC57 || at > 0xEE57 || (at - 0xEC57) % 0x100)
+        return;
+    if (w[SKY_TABLE] != 0x17 || w[SKY_TABLE + 3] != 0xD0 || w[SKY_TABLE + 6] != 0x18 || w[SKY_TABLE + 9] != 0xD0)
+        return;                         /* not GradientSetup's table */
+    band = (at - 0xEC57) / 0x100;
+    for (i = 0; i < 80; i++)
+        src[i] = (uint16_t)(w[0x10000 + at + 2 * i] | w[0x10000 + at + 2 * i + 1] << 8);
+    if (!sky_in) {
+        memcpy(sky_kept, w + SKY_TABLE, 13);
+        memcpy(sky_kept + 13, w + SKY_BANDS, 0x300);
+        sky_in = 1;
+    }
+    for (i = 0; i < 3; i++)
+        if (i != band)
+            spare[k++] = i;
+    /* entries 0 and 1 in the first spare band (2 + 160 bytes), 2 and 3 in
+       the second; a single colour that of its run's last line nearest the
+       horizon's side (line $16, line $67) */
+    for (e = 0; e < 4; e++) {
+        unsigned a = 0xEC57 + spare[e / 2] * 0x100 + (e & 1) * 2, lines = each[e] ? 80 : 1;
+        uint8_t *o = w + 0x10000 + a;
+        for (i = 0; i < lines; i++) {
+            uint16_t c = sky_colour(src, each[e] ? first[e] + (int)i : first[e + 1] - 1);
+            o[2 * i] = (uint8_t)c;
+            o[2 * i + 1] = (uint8_t)(c >> 8);
+        }
+        w[SKY_TABLE + 3 * e + 1] = (uint8_t)a;
+        w[SKY_TABLE + 3 * e + 2] = (uint8_t)(a >> 8);
+        if (e == 1)
+            sky_mine = a;
+    }
+}
+
+void fw_sky_take(void)
+{
+    sky_take();
+}
+
 void fw_before_step(void)
 {
     page_table_take();
+    sky_take();
 }
 
 /* the full window's registers (costs off, the caller's): BG1's map and
@@ -1778,6 +1885,7 @@ static void bg1_back(void)
             wr8(ch7[i], ch7_kept[i]);
     ch7_set = 0;
     page_table_take();
+    sky_take();
     if (screen_w != 256) {
         nshvc_ext_screen(256, 224);
         screen_w = 256;
