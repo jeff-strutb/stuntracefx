@@ -1138,7 +1138,18 @@ static void gather_return(int count)
  * rest as the last call leaves them. The ROM buffer moves as on the
  * Super FX.
  */
+static void gather_original(void);
+
 void abi_FxPolygonGather(void)
+{
+    int exact = fw_exact_gather_begin(R[0], R[14]);   /* Enhanced's full window: the shape in 32 bits */
+
+    gather_original();
+    if (exact)
+        fw_exact_gather_end();
+}
+
+static void gather_original(void)
 {
     int go;
 

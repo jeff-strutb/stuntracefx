@@ -86,6 +86,11 @@ void fw_draw_list(void);
 void fw_clear(void);
 /* FxPolygonDraw's, while the full window's picture draws: 1 when done here */
 int fw_exact_tex_draw(void);
+/* FxPolygonGather's, while the full window's picture draws: begin with its
+   count and index bytes' R14 (1 when it is done here), end after the
+   original's run, its list, count and R0 replaced */
+int fw_exact_gather_begin(uint16_t count, uint16_t r14);
+void fw_exact_gather_end(void);
 
 /* A picture j / RM_TICKS of the way through the step just run, drawn and
    handed to the canvas (remaster.c, at a race frame's wait); 0 when no

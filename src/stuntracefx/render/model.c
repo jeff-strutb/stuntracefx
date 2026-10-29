@@ -2144,6 +2144,12 @@ l9199:
     R[0] = gsu_and(R[1], R[5]);
     R[0] = gsu_sub(R[0], R[1], 0);
     t = gsu.z;
+    /* Enhanced's full window: a face with points both behind the view and
+       in front is never rejected here, where the outcodes of the points
+       behind are the projection's mirror of them; the near plane's clip
+       and the exact projection decide (fw_exact_gather_begin) */
+    if (!t && fw_view_active() && (R[5] & 0x0010) && (R[5] & 0x1000))
+        t = 1;
     if (t) { goto l91A6; }
     goto l923F;
 l91A6:

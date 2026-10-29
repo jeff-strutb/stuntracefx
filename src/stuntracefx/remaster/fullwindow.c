@@ -522,12 +522,15 @@ void fw_facing_cross(uint16_t *hi, uint16_t *lo)
     c = (x[1] - x[0]) * (y[2] - y[0]) - (y[1] - y[0]) * (x[2] - x[0]);
     if (behind) {
         /* a point behind the view: the projected cross product is f^2
-           det(p0, p1, p2) / (z0 z1 z2), whose sign in front is det's, the
-           face's facing from the points themselves */
+           det(p0, p1, p2) / (z0 z1 z2), its sign det's times z0 z1 z2's
+           (FxModelFacing then XORs it with the points' bytes, which mark
+           those behind, z < 0, as FxProjectPoint does: the face's facing
+           from the points themselves) */
         double d = (double)vx[0] * ((double)vy[1] * vz[2] - (double)vz[1] * vy[2]) -
                    (double)vy[0] * ((double)vx[1] * vz[2] - (double)vz[1] * vx[2]) +
                    (double)vz[0] * ((double)vx[1] * vy[2] - (double)vy[1] * vx[2]);
-        c = d > 0 ? 0x10000 : d < 0 ? -0x10000 : 0;
+        int odd = (vz[0] < 0) ^ (vz[1] < 0) ^ (vz[2] < 0);
+        c = d == 0 ? 0 : (d > 0) != odd ? 0x10000 : -0x10000;
     }
     if (c > 0x7FFFFFFF)
         c = 0x7FFFFFFF;
@@ -816,6 +819,98 @@ int fw_exact_tex_draw(void)
     ram16w(0x014A, 0);
     ex_n = -1;
     return 1;
+}
+
+/* FxPolygonGather's (raster.c, 01:98D7) in the full window: a face of the
+   model drawer's with a point behind the view, near-clipped and projected.
+   The original adds each point to the object's position in 16 bits and
+   clips at depth 0, which holds for the objects its 45-degree cull keeps;
+   the full window keeps the objects beside the view too, a long one's far
+   points past 32767 deep wrapping to behind (a wall beside the car taken
+   for a line, dropped a picture at a time). Here the points are summed in
+   32 bits, clipped at the near plane in view space and projected exactly;
+   the original runs as ever, its list, count and R0 replaced after. */
+static int32_t ga_x[EXACT_MAX], ga_y[EXACT_MAX], ga_z[EXACT_MAX];
+static int ga_n = -1;
+
+int fw_exact_gather_begin(uint16_t count, uint16_t r14)
+{
+    int i;
+
+    ga_n = -1;
+    if (!fw_view_active() || count < 2 || count > EXACT_MAX)
+        return 0;
+    for (i = 0; i < count; i++) {
+        uint16_t a;
+        gsu_r14((uint16_t)(r14 + i));
+        a = (uint16_t)(0x0340 + 6 * gsu_getb());
+        ga_x[i] = (int16_t)ram16(a) + (int16_t)ram16(0x0026);
+        ga_y[i] = (int16_t)ram16((uint16_t)(a + 2)) + (int16_t)ram16(0x0028);
+        ga_z[i] = (int16_t)ram16((uint16_t)(a + 4)) + (int16_t)ram16(0x002A);
+    }
+    gsu_r14(r14);                       /* the original reads them again */
+    ga_n = count;
+    return 1;
+}
+
+void fw_exact_gather_end(void)
+{
+    double cx[EXACT_MAX + 2], cy[EXACT_MAX + 2], cz[EXACT_MAX + 2];
+    double f = fw_focal(), ox = tw / 2, oy = (double)view_cy() * K + cy_off;
+    uint16_t list = ram16(0x005A);
+    int i, m = 0, n = ga_n, lines = n == 2, in[4] = {0, 0, 0, 0};
+
+    if (n < 0)
+        return;
+    ga_n = -1;
+    for (i = 0; i < (lines ? 1 : n); i++) {
+        int j = (i + 1) % n, ain = ga_z[i] >= NEAR_Z, bin = ga_z[j] >= NEAR_Z;
+        double t = ain != bin ? (double)(NEAR_Z - ga_z[i]) / (ga_z[j] - ga_z[i]) : 0;
+        if (lines) {                    /* a line: both ends kept, one behind moved to the crossing */
+            if (!ain && !bin)
+                break;
+            cx[0] = ain ? ga_x[i] : ga_x[i] + t * (ga_x[j] - ga_x[i]);
+            cy[0] = ain ? ga_y[i] : ga_y[i] + t * (ga_y[j] - ga_y[i]);
+            cz[0] = ain ? ga_z[i] : NEAR_Z;
+            cx[1] = bin ? ga_x[j] : ga_x[i] + t * (ga_x[j] - ga_x[i]);
+            cy[1] = bin ? ga_y[j] : ga_y[i] + t * (ga_y[j] - ga_y[i]);
+            cz[1] = bin ? ga_z[j] : NEAR_Z;
+            m = 2;
+            break;
+        }
+        if (ain && m < EXACT_MAX)
+            cx[m] = ga_x[i], cy[m] = ga_y[i], cz[m++] = ga_z[i];
+        if (ain != bin && m < EXACT_MAX) {
+            cx[m] = ga_x[i] + t * (ga_x[j] - ga_x[i]);
+            cy[m] = ga_y[i] + t * (ga_y[j] - ga_y[i]);
+            cz[m++] = NEAR_Z;
+        }
+    }
+    if (!lines && m < 3)
+        m = 0;
+    for (i = 0; i < m; i++) {
+        double sx = ox + cx[i] * f / cz[i], sy = oy + cy[i] * f / cz[i];
+        int64_t X = (int64_t)floor(sx), Y = (int64_t)floor(sy);
+        uint16_t at = (uint16_t)(list + 4 * i);
+        if (X > 0x3FFFFFFF) X = 0x3FFFFFFF;
+        if (X < -0x3FFFFFFF) X = -0x3FFFFFFF;
+        if (Y > 0x3FFFFFFF) Y = 0x3FFFFFFF;
+        if (Y < -0x3FFFFFFF) Y = -0x3FFFFFFF;
+        in[0] |= X >= 0;
+        in[1] |= X <= tw - 1;
+        in[2] |= Y >= 0;
+        in[3] |= Y <= th;
+        ram16w(at, (uint16_t)(X < -0x8000 ? -0x8000 : X > 0x7FFF ? 0x7FFF : X));
+        ram16w((uint16_t)(at + 2), (uint16_t)(Y < -0x8000 ? -0x8000 : Y > 0x7FFF ? 0x7FFF : Y));
+        ex_x[i] = X;
+        ex_y[i] = Y;
+    }
+    if (!(in[0] && in[1] && in[2] && in[3]))   /* wholly past one edge */
+        m = 0;
+    ex_list = list;
+    ex_n = m ? m : -1;
+    ram16w(0x0040, (uint16_t)m);
+    gsu.r[0] = (uint16_t)m;
 }
 
 /* FW_CHECK's second pass (the original's view in place): a pixel PLOT puts
