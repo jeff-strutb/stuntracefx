@@ -2414,6 +2414,7 @@ static void takeover(void)
     wr8(TM, 0x13);                      /* BG1, BG2 (the hills, bg2_prepare) and the sprites, as the race's */
     wr8(TMW, 0x00);
     screen_set();
+    nshvc_ext_sprite_wrap(0);           /* Y page 0's sprites nowhere above line 1 (those above it on page -1) */
     nshvc_ext_layer_page(1, 1);         /* BG2 on page 1: its map and characters at $5800-$7FFF (bg2_prepare) */
     wr8(INIDISP, w[0x0D61]);
     nshvc_set_cpu_costs(1);
@@ -2461,6 +2462,7 @@ void fw_frame_end(void)
     {                                   /* back to the original's screen */
         nshvc_set_cpu_costs(0);
         screen_back();
+        nshvc_ext_sprite_wrap(1);
         nshvc_ext_layer_page(1, 0);
         sprites_write();
         if (staged)
