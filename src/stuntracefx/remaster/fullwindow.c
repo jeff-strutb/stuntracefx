@@ -339,6 +339,7 @@ void fw_span_fill_cpu(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
 }
 
 void (*fw_span_filler)(uint8_t *out, int w, int h, const FwSpan *sp, size_t n) = fw_span_fill_cpu;
+uint8_t *(*fw_texels_alloc)(size_t len);
 
 /* the spans drawn into the texels */
 static void span_flush(void)
@@ -1585,8 +1586,12 @@ static int size_for_window(void)
         th = H * K;
         need = (size_t)tw * th;
         if (need > tex_size) {
-            free(tex);
-            tex = malloc(need);
+            if (fw_texels_alloc) {          /* the GPU's memory, which it fills */
+                tex = fw_texels_alloc(need);
+            } else {
+                free(tex);
+                tex = malloc(need);
+            }
             tex_size = tex ? need : 0;
             if (!tex_size)
                 return 0;

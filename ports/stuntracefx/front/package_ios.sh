@@ -25,7 +25,7 @@ if [ ! -f "$NSHVC/$NB/libnshvc.a" ]; then
 fi
 cmake --build "$NSHVC/$NB" >/dev/null
 OUT=build/stuntracefx/front/ios-$SDK
-NSHVC="$NSHVC" NSHVC_BUILD=$NB OUT=$OUT ASSETS=ios CC="xcrun -sdk $SDK clang -target $TGT" DEFS=-DNSHVC_HOST_IOS=1 \
+GPU_METAL=1 NSHVC="$NSHVC" NSHVC_BUILD=$NB OUT=$OUT ASSETS=ios CC="xcrun -sdk $SDK clang -target $TGT" DEFS=-DNSHVC_HOST_IOS=1 \
   LIBS="-framework UIKit -framework CoreGraphics -framework QuartzCore -framework AudioToolbox -framework AVFoundation -framework GameController -framework Metal -framework Foundation" \
   sh ports/stuntracefx/front/build.sh
 APP="$OUT/Stunt Race FX.app"

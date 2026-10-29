@@ -97,6 +97,8 @@ typedef struct {
 void fw_span_fill_cpu(uint8_t *out, int w, int h, const FwSpan *sp, size_t n);
 extern void (*fw_span_filler)(uint8_t *out, int w, int h, const FwSpan *sp, size_t n);
 uint8_t fw_texel(uint8_t bank, uint16_t at);
+/* the texels' memory: malloc's, or a front end's the GPU shares (NULL: malloc) */
+extern uint8_t *(*fw_texels_alloc)(size_t len);
 /* FxDrawList's fill into the texels (raster.c, while fw_drawing) */
 void fw_draw_list(void);
 /* FxScreenClear's, while fw_drawing: the texels to colour 0 */

@@ -19,6 +19,9 @@
 #include "front.h"
 #include "remaster.h"
 #include "menuwindow.h"
+#if FW_GPU_METAL
+int gpu_metal_init(void);
+#endif
 #include "rm_options.h"
 
 /* ---- the console, for the touch scheme ---- */
@@ -169,6 +172,9 @@ NSHVC_MAIN(argc, argv)
             setvbuf(pacing_f, NULL, _IOLBF, 0);
         }
     nshvc_set_write_hook(pacing_write);
+#if FW_GPU_METAL
+    gpu_metal_init();                   /* the full window's picture on the cartridge's GPU */
+#endif
     cart_describe(&cart);
     cart.cost_profile = &stuntracefx_cost_profile;
     nshvc_set_hooks(&hooks);

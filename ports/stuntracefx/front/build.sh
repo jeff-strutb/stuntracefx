@@ -49,6 +49,13 @@ for f in $(find "$GAME" -name '*.c' | sort) "$OUT/gen/routines.c" "$OUT/gen/asse
   OBJS="$OBJS $o"
 done
 $CC -c "$OUT/gen/assets.S" -I"$OUT/gen" -o "$OUT/obj/assets_S.o"
+# GPU_METAL=1 (the macOS and iOS apps): the full window's picture filled by
+# the cartridge's GPU (gpu_metal.m)
+if [ -n "$GPU_METAL" ]; then
+  DEFS="$DEFS -DFW_GPU_METAL=1"
+  $CC -O2 -fobjc-arc -Wall $DEFS -I"$FRONT" -I"$OUT/include" -I"$NSHVC/include" -c "$FRONT/gpu_metal.m" -o "$OUT/obj/front_gpu_metal.o"
+  OBJS="$OBJS $OUT/obj/front_gpu_metal.o"
+fi
 for f in main cart superfx_cart touch art cost_profile; do
   $CC -O2 -std=gnu11 -Wall $DEFS -I"$FRONT" -I"$OUT/include" -I"$NSHVC/include" -Iports/common/snes -c "$FRONT/$f.c" -o "$OUT/obj/front_$f.o"
   OBJS="$OBJS $OUT/obj/front_$f.o"
