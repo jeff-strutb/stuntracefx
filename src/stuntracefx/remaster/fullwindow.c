@@ -1251,35 +1251,81 @@ void fw_draw_list(void)
 
 /* ---- the picture to the console ------------------------------------------ */
 
-/* BG1 in the full window: its map at word 0 of VRAM pages 1 and 2, the
-   characters from word 0 (BG12NBA's low nibble 0), the picture's first
-   rows of cells read from page 1 and the rest from page 2 (its page
-   switched down the screen by HDMA channel 7 writing $21C0). Page 1's
-   characters end at its top (character 1023, the most a map names), page
-   2's begin after its map, so the canvas runs through both from page 1's
-   first: page 1's cells, the characters of page 2's map (no picture's),
-   page 2's cells. On a 224-line screen the map is 64 x 32 cells (BG1SC
-   $01, 64 characters' words), rows 0-13 on page 1 and 14-27 on page 2; on
-   a taller one (256 across) 32 x 32 (BG1SC $00, 32 characters' words),
-   rows 0-26 on page 1 and the rest, to 30 more, on page 2: the rows below
-   the original's 224 lines take its line 224's page, so they and that
-   line's cell row are page 2's, at most 992 characters. Under the race's
-   scroll the picture's cell (c, r) is at map row r - 2 (wrapping in 32)
-   and, the console's column 0 being the screen's (W - 256) / 2, at map
-   column c - (W - 256) / 16. */
+/* BG1 in the full window: its map at word 0 of VRAM pages 1 to 3, the
+   characters from word 0 (BG12NBA's low nibble 0), a band of the
+   picture's rows of cells read from each page (its page switched down the
+   screen by HDMA channel 7 writing $21C0). Page 1's characters end at its
+   top (character 1023, the most a map names), the others' begin after
+   their map, so the canvas runs through them from page 1's first: page
+   1's cells, then each page's whole 1,024 characters (its map's and those
+   past its cells none of the picture's). On a 224-line screen the map is
+   64 x 32 cells (BG1SC $01, 64 characters' words), rows 0-13 on page 1
+   and 14-27 on page 2. On a taller one (256 across) the console's lines
+   sit in its middle, from row T = (H - 224) / 2 (nshvc_ext_screen_origin):
+   the rows above take line 1's page and those below line 224's, so page 1
+   has the rows above and the lines' first ones, page 3 line 217's on and
+   the rows below, page 2 those between, at most 31 rows of cells each
+   with a 32 x 32 map (BG1SC $00, 32 characters' words). Under the race's
+   scroll the picture's cell (c, r) is at map row r - T / 8 - 2 (wrapping
+   in 32) and, the console's column 0 being the screen's (W - 256) / 2, at
+   map column c - (W - 256) / 16. */
 #define BG12_NBA 0x60                   /* BG1's characters from word 0, BG2's as the race's ($6000) */
+#define PAGES_MAX 3
 static int tall(void) { return H > 224; }
-static unsigned page_rows(void) { return tall() ? 27 : 14; }      /* page 1's rows of cells */
+static int origin_row(void) { return (H - 224) / 2; }
 static unsigned map_chars(void) { return tall() ? 32 : 64; }      /* the characters the map's words take */
+static int npages;                      /* the pages the picture's rows are on */
+static unsigned page_lo[PAGES_MAX + 1], page_hi[PAGES_MAX + 1];  /* each page's rows of cells, from lo to hi */
+
+/* the pages' bands of rows of cells, and channel 7's table: page 1 for the
+   lines to page 1's last row, page 2 to line 216, page 3 after (a count
+   past 127 in two) */
+static uint8_t page_table[10];
+
+static void pages_lay(void)
+{
+    unsigned t = (unsigned)origin_row() / 8, a, n = 0, rest;
+
+    if (!tall()) {
+        npages = 2;
+        page_lo[1] = 0, page_hi[1] = 14;
+        page_lo[2] = 14, page_hi[2] = 28;
+        a = 14;
+    } else {
+        a = 248 / 8 - t < 14 ? 248 / 8 - t : 14;     /* the lines' rows of cells on page 1 */
+        npages = 3;
+        page_lo[1] = 0, page_hi[1] = t + a;
+        page_lo[2] = t + a, page_hi[2] = t + 27;
+        page_lo[3] = t + 27, page_hi[3] = (unsigned)H / 8;
+    }
+    page_table[n++] = (uint8_t)(a * 8);
+    page_table[n++] = 0x01;
+    if (tall()) {
+        for (rest = 216 - a * 8; rest; ) {
+            unsigned c = rest > 112 ? 112 : rest;
+            page_table[n++] = (uint8_t)c;
+            page_table[n++] = 0x02;
+            rest -= c;
+        }
+        page_table[n++] = 0x01;
+        page_table[n++] = 0x03;
+    } else {
+        page_table[n++] = 0x01;
+        page_table[n++] = 0x02;
+    }
+    page_table[n++] = 0x00;
+    while (n < sizeof page_table)
+        page_table[n++] = 0x00;
+}
 
 /* the screen's size for the window: its aspect at 224 lines (256 at 4:3,
    the console's pixels 8:7), whole pairs of cells across (the console's
    picture at its centre then starts on a cell), 256 to 512, the width of
    BG1's 64-cell map; narrower than 4:3, 256 across and taller, in whole
-   cells, the original's lines its top: to 464 lines, the rows below line
-   224 all on one page */
+   pairs of cells (the console's lines then start on a cell): to 704
+   lines, the rows above line 1 and below line 224 each one page's */
 #define W_MAX 512
-#define H_MAX 464
+#define H_MAX 704
 
 static void size_of_window(int *w, int *h)
 {
@@ -1296,7 +1342,7 @@ static void size_of_window(int *w, int *h)
         if (*w > W_MAX)
             *w = W_MAX;
     } else {
-        *h = (int)(224.0f / a / 8.0f + 0.5f) * 8;
+        *h = (int)(224.0f / a / 16.0f + 0.5f) * 16;
         if (*h > H_MAX)
             *h = H_MAX;
     }
@@ -1316,6 +1362,7 @@ static int size_for_window(void)
         H = h;
         tw = W * K;
         th = H * K;
+        pages_lay();
         need = (size_t)tw * th + (size_t)64 * 64 * K * K;
         if (need > tex_size) {
             free(tex);
@@ -1337,15 +1384,15 @@ static int size_for_window(void)
 
 static unsigned cells_across(void) { return (unsigned)W / 8; }
 static unsigned cells_down(void) { return (unsigned)H / 8; }
-static unsigned page1_first(void) { return 1024 - page_rows() * cells_across(); }
+static unsigned page1_first(void) { return 1024 - (page_hi[1] - page_lo[1]) * cells_across(); }
 
 static void maps_write(void)
 {
     unsigned p, half, mr, mc, cells = cells_across(), shift = (unsigned)(W - 256) / 16;
-    unsigned split = page_rows(), down = cells_down(), across = tall() ? 32 : 64;
+    unsigned across = tall() ? 32 : 64, t = (unsigned)origin_row() / 8;
 
-    nshvc_ext_vram(192);
-    for (p = 1; p <= 2; p++) {
+    nshvc_ext_vram(npages == 3 ? 256 : 192);
+    for (p = 1; p <= (unsigned)npages; p++) {
         nshvc_ext_vram_direct((int)p);
         wr8(VMAIN, 0x80);
         wr8(VMADDL, 0x00);
@@ -1354,14 +1401,12 @@ static void maps_write(void)
             for (mr = 0; mr < 32; mr++)
                 for (mc = half * 32; mc < half * 32 + 32; mc++) {
                     /* the page's row of cells at map row mr: its rows are fewer than 32 */
-                    unsigned pr = (mr + RACE_ROW0 / 8) & 31, pc = (mc + shift) & 63, t = 0;
-                    if (p == 2 && pr < split)
-                        pr += 32;
-                    if (pc < cells && pr < down && (pr < split) == (p == 1))
-                        t = p == 1 ? page1_first() + pr * cells + pc : map_chars() + (pr - split) * cells + pc;
-                    t |= 0x2000;        /* priority 1, as the game's */
-                    wr8(VMDATAL, (uint8_t)t);
-                    wr8(VMDATAH, (uint8_t)(t >> 8));
+                    unsigned pr = page_lo[p] + ((mr + t + RACE_ROW0 / 8 - page_lo[p]) & 31), pc = (mc + shift) & 63, c = 0;
+                    if (pc < cells && pr < page_hi[p])
+                        c = p == 1 ? page1_first() + pr * cells + pc : map_chars() + (pr - page_lo[p]) * cells + pc;
+                    c |= 0x2000;        /* priority 1, as the game's */
+                    wr8(VMDATAL, (uint8_t)c);
+                    wr8(VMDATAH, (uint8_t)(c >> 8));
                 }
     }
     nshvc_ext_vram_direct(-1);
@@ -1372,24 +1417,33 @@ static void maps_write(void)
 /* the texels as the canvas's characters in its order, each 8k x 8k */
 static void hand(void)
 {
-    unsigned cells = cells_across(), half = cells * page_rows(), gap = map_chars();
-    unsigned n = cells * cells_down() + gap, i, r, cell;
+    unsigned cells = cells_across(), first = page1_first(), gap = map_chars(), n, i, r, p;
     size_t side = (size_t)8 * K;
 
+    /* page 1's cells, then each page from its character 0 to its last cell's */
+    n = (1024 - first) + 1024 * (unsigned)(npages - 2) + gap + (page_hi[npages] - page_lo[npages]) * cells;
     for (i = 0; i < n; i++) {
         uint8_t *o = chars + (size_t)i * side * side;
         const uint8_t *s;
-        if (i >= half && i < half + gap) {
-            memset(o, 0, side * side);
-            continue;
+        unsigned c, cell;
+        if (i < 1024 - first) {
+            p = 1;
+            cell = i;
+        } else {
+            p = 2 + (i - (1024 - first)) / 1024;
+            c = (i - (1024 - first)) % 1024;
+            if (c < gap || c - gap >= (page_hi[p] - page_lo[p]) * cells) {
+                memset(o, 0, side * side);
+                continue;
+            }
+            cell = page_lo[p] * cells + c - gap;
         }
-        cell = i < half ? i : i - gap;
         s = tex + (size_t)(cell / cells) * side * tw + (size_t)(cell % cells) * side;
         for (r = 0; r < side; r++)
             memcpy(o + r * side, s + r * tw, side);
     }
     rm_canvas_taken();
-    nshvc_ext_canvas_chars(0, 0x8000u + page1_first() * 32u, (int)n, chars, K);
+    nshvc_ext_canvas_chars(0, 0x8000u + first * 32u, (int)n, chars, K);
     if (!handed) {                      /* the first picture: the screen taken over with it, in the same blank */
         nshvc_hold_interrupts(1);
         takeover();
@@ -2082,10 +2136,7 @@ void fw_vblank_uploads(void)
    step, and the channel's registers as the game left them when the full
    window ends. */
 #define PAGE_TABLE 0x1FFF0u             /* in work RAM: $7F:FFF0 */
-/* page 1 for page_rows()'s lines (a count past 127 in two), then page 2 */
-static const uint8_t page_table[2][7] = {{14 * 8, 0x01, 0x01, 0x02, 0x00},
-                                         {112, 0x01, 27 * 8 - 112, 0x01, 0x01, 0x02, 0x00}};
-static uint8_t table_kept[7], ch7_kept[5];
+static uint8_t table_kept[sizeof page_table], ch7_kept[5];
 static int table_in, ch7_set, screen_w = 256, screen_h = 224;
 
 static void page_table_put(void)
@@ -2094,7 +2145,7 @@ static void page_table_put(void)
     if (table_in)
         return;
     memcpy(table_kept, w + PAGE_TABLE, sizeof table_kept);
-    memcpy(w + PAGE_TABLE, page_table[tall()], sizeof page_table[0]);
+    memcpy(w + PAGE_TABLE, page_table, sizeof page_table);
     table_in = 1;
 }
 
@@ -2147,7 +2198,7 @@ static void sky_take(void)
    held to the view's lines */
 static int sky_line(int h)
 {
-    double f = (double)fw_focal() / K, y = (double)h - 1.0 + 0.5;
+    double f = (double)fw_focal() / K, y = origin_row() + (double)h - 1.0 + 0.5;
     int l = (int)floor(VIEW_CY + (y - view_cy()) * 128.0 / f);
     if (l < VIEW_Y)
         l = VIEW_Y;
@@ -2246,7 +2297,7 @@ static void bg1_set(void)
     page_table_put();
     if (screen_w != W || screen_h != H) {
         nshvc_ext_screen(W, H);
-        nshvc_ext_screen_origin(-1, 0);
+        nshvc_ext_screen_origin(-1, origin_row());
         screen_w = W;
         screen_h = H;
     }
