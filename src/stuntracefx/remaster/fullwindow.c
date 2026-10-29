@@ -6,9 +6,8 @@
  *                lines, or 256 across and taller with the original's
  *                lines its top rows (nshvc_ext_screen_origin);
  *   BG1          the Super FX's picture (the 3D and the HUD's pieces) and
- *                the panels, at the window's resolution: on VRAM pages 1-3,
- *                its maps naming a character for each of the screen's
- *                cells, which the canvas stands in for; its window off;
+ *                the panels, at the window's resolution: the canvas over
+ *                the whole screen (nshvc_ext_canvas_screen); its window off;
  *   BG2          the hills, the console's: the game's map and characters
  *                on page 1 (bg2_prepare), the rows its bezel hid the band's
  *                own sky, at the game's scroll;
@@ -55,16 +54,15 @@ static int seen;                        /* the race screen's stages ran this fra
 static int unseen = 2;                  /* frames since they last did */
 static int W = 256, H = 224, K = 1;     /* the screen's width and height, texels a console pixel */
 static int tw, th;                      /* the texels' size */
-static uint8_t *tex, *chars;
+static uint8_t *tex;
 static size_t tex_size;
-static int map_w, map_h;                /* the size BG1's maps were written for */
 static int handed;                      /* the canvas is the full window's */
 static int staged;                      /* this frame's upload stage ran in the full window */
 
 static void panels_draw(void);
 static void sprites_write(void);
 static void sprites_place(void);
-static void bg1_set(void);
+static void screen_set(void);
 static void takeover(void);
 
 /* the view on the original's screen: its column 0 and row 0 (BG1's map
@@ -1418,81 +1416,22 @@ void fw_draw_list(void)
 
 /* ---- the picture to the console ------------------------------------------ */
 
-/* BG1 in the full window: its map at word 0 of VRAM pages 1 to 3, the
-   characters from word 0 (BG12NBA's low nibble 0), a band of the
-   picture's rows of cells read from each page (its page switched down the
-   screen by HDMA channel 7 writing $21C0). Page 1's characters end at its
-   top (character 1023, the most a map names), the others' begin after
-   their map, so the canvas runs through them from page 1's first: page
-   1's cells, then each page's whole 1,024 characters (its map's and those
-   past its cells none of the picture's). On a 224-line screen the map is
-   64 x 32 cells (BG1SC $01, 64 characters' words), rows 0-13 on page 1
-   and 14-27 on page 2. On a taller one (256 across) the console's lines
-   sit in its middle, from row T = (H - 224) / 2 (nshvc_ext_screen_origin):
-   the rows above take line 1's page and those below line 224's, so page 1
-   has the rows above and the lines' first ones, page 3 line 217's on and
-   the rows below, page 2 those between, at most 31 rows of cells each
-   with a 32 x 32 map (BG1SC $00, 32 characters' words). Under the race's
-   scroll the picture's cell (c, r) is at map row r - T / 8 - 2 (wrapping
-   in 32) and, the console's column 0 being the screen's (W - 256) / 2, at
-   map column c - (W - 256) / 16. */
-#define BG12_NBA 0x60                   /* BG1's characters from word 0, BG2's as the race's ($6000) */
-#define PAGES_MAX 3
+/* BG1 in the full window: the canvas over the whole screen
+   (nshvc_ext_canvas_screen), the texels in the screen's order, at priority
+   1 as the race's BG1 tiles. On a screen taller than 224 the console's
+   lines sit in its middle, from row T = (H - 224) / 2
+   (nshvc_ext_screen_origin): the console's hills and the sky's lines then
+   lie about the 3D's horizon as on the original's screen. */
 static int tall(void) { return H > 224; }
 static int origin_row(void) { return (H - 224) / 2; }
-static unsigned map_chars(void) { return tall() ? 32 : 64; }      /* the characters the map's words take */
-static int npages;                      /* the pages the picture's rows are on */
-static unsigned page_lo[PAGES_MAX + 1], page_hi[PAGES_MAX + 1];  /* each page's rows of cells, from lo to hi */
-
-/* the pages' bands of rows of cells, and channel 7's table: page 1 for the
-   lines to page 1's last row, page 2 to line 216, page 3 after (a count
-   past 127 in two) */
-static uint8_t page_table[10];
-
-static void pages_lay(void)
-{
-    unsigned t = (unsigned)origin_row() / 8, a, n = 0, rest;
-
-    if (!tall()) {
-        npages = 2;
-        page_lo[1] = 0, page_hi[1] = 14;
-        page_lo[2] = 14, page_hi[2] = 28;
-        a = 14;
-    } else {
-        a = 248 / 8 - t < 14 ? 248 / 8 - t : 14;     /* the lines' rows of cells on page 1 */
-        npages = 3;
-        page_lo[1] = 0, page_hi[1] = t + a;
-        page_lo[2] = t + a, page_hi[2] = t + 27;
-        page_lo[3] = t + 27, page_hi[3] = (unsigned)H / 8;
-    }
-    page_table[n++] = (uint8_t)(a * 8);
-    page_table[n++] = 0x01;
-    if (tall()) {
-        for (rest = 216 - a * 8; rest; ) {
-            unsigned c = rest > 112 ? 112 : rest;
-            page_table[n++] = (uint8_t)c;
-            page_table[n++] = 0x02;
-            rest -= c;
-        }
-        page_table[n++] = 0x01;
-        page_table[n++] = 0x03;
-    } else {
-        page_table[n++] = 0x01;
-        page_table[n++] = 0x02;
-    }
-    page_table[n++] = 0x00;
-    while (n < sizeof page_table)
-        page_table[n++] = 0x00;
-}
 
 /* the screen's size for the window: its aspect at 224 lines (256 at 4:3,
    the console's pixels 8:7), whole pairs of cells across (the console's
-   picture at its centre then starts on a cell), 256 to 512, the width of
-   BG1's 64-cell map; narrower than 4:3, 256 across and taller, in whole
-   pairs of cells (the console's lines then start on a cell): to 704
-   lines, the rows above line 1 and below line 224 each one page's */
-#define W_MAX 512
-#define H_MAX 704
+   picture at its centre then starts on a cell); narrower than 4:3, 256
+   across and taller, in whole pairs of cells (the console's lines then
+   start on a cell); to 1024 each way */
+#define W_MAX 1024
+#define H_MAX 1024
 
 static void size_of_window(int *w, int *h)
 {
@@ -1529,14 +1468,11 @@ static int size_for_window(void)
         H = h;
         tw = W * K;
         th = H * K;
-        pages_lay();
-        need = (size_t)tw * th + (size_t)64 * 64 * K * K;
+        need = (size_t)tw * th;
         if (need > tex_size) {
             free(tex);
-            free(chars);
             tex = malloc(need);
-            chars = malloc(need);
-            tex_size = tex && chars ? need : 0;
+            tex_size = tex ? need : 0;
             if (!tex_size)
                 return 0;
         }
@@ -1549,68 +1485,11 @@ static int size_for_window(void)
    across 0): the picture's row y is the map's row y - 16 */
 #define RACE_ROW0 16
 
-static unsigned cells_across(void) { return (unsigned)W / 8; }
-static unsigned cells_down(void) { return (unsigned)H / 8; }
-static unsigned page1_first(void) { return 1024 - (page_hi[1] - page_lo[1]) * cells_across(); }
-
-static void maps_write(void)
-{
-    unsigned p, half, mr, mc, cells = cells_across(), shift = (unsigned)(W - 256) / 16;
-    unsigned across = tall() ? 32 : 64, t = (unsigned)origin_row() / 8;
-
-    nshvc_ext_vram(npages == 3 ? 256 : 192);
-    for (p = 1; p <= (unsigned)npages; p++) {
-        nshvc_ext_vram_direct((int)p);
-        wr8(VMAIN, 0x80);
-        wr8(VMADDL, 0x00);
-        wr8(VMADDH, 0x00);
-        for (half = 0; half < across / 32; half++)  /* a 64-cell map: two 32-cell screens, one after the other */
-            for (mr = 0; mr < 32; mr++)
-                for (mc = half * 32; mc < half * 32 + 32; mc++) {
-                    /* the page's row of cells at map row mr: its rows are fewer than 32 */
-                    unsigned pr = page_lo[p] + ((mr + t + RACE_ROW0 / 8 - page_lo[p]) & 31), pc = (mc + shift) & 63, c = 0;
-                    if (pc < cells && pr < page_hi[p])
-                        c = p == 1 ? page1_first() + pr * cells + pc : map_chars() + (pr - page_lo[p]) * cells + pc;
-                    c |= 0x2000;        /* priority 1, as the game's */
-                    wr8(VMDATAL, (uint8_t)c);
-                    wr8(VMDATAH, (uint8_t)(c >> 8));
-                }
-    }
-    nshvc_ext_vram_direct(-1);
-    map_w = W;
-    map_h = H;
-}
-
-/* the texels as the canvas's characters in its order, each 8k x 8k */
+/* the texels to the canvas, the screen's picture */
 static void hand(void)
 {
-    unsigned cells = cells_across(), first = page1_first(), gap = map_chars(), n, i, r, p;
-    size_t side = (size_t)8 * K;
-
-    /* page 1's cells, then each page from its character 0 to its last cell's */
-    n = (1024 - first) + 1024 * (unsigned)(npages - 2) + gap + (page_hi[npages] - page_lo[npages]) * cells;
-    for (i = 0; i < n; i++) {
-        uint8_t *o = chars + (size_t)i * side * side;
-        const uint8_t *s;
-        unsigned c, cell;
-        if (i < 1024 - first) {
-            p = 1;
-            cell = i;
-        } else {
-            p = 2 + (i - (1024 - first)) / 1024;
-            c = (i - (1024 - first)) % 1024;
-            if (c < gap || c - gap >= (page_hi[p] - page_lo[p]) * cells) {
-                memset(o, 0, side * side);
-                continue;
-            }
-            cell = page_lo[p] * cells + c - gap;
-        }
-        s = tex + (size_t)(cell / cells) * side * tw + (size_t)(cell % cells) * side;
-        for (r = 0; r < side; r++)
-            memcpy(o + r * side, s + r * tw, side);
-    }
     rm_canvas_taken();
-    nshvc_ext_canvas_chars(0, 0x8000u + first * 32u, (int)n, chars, K);
+    nshvc_ext_canvas_screen(0, tex, tw, th, K, 1, 0);
     if (!handed) {                      /* the first picture: the screen taken over with it, in the same blank */
         nshvc_hold_interrupts(1);
         takeover();
@@ -1968,7 +1847,7 @@ int fw_picture(int j)
                                            and flipped BG1's map and characters */
         nshvc_hold_interrupts(1);
         nshvc_set_cpu_costs(0);
-        bg1_set();
+        screen_set();
         nshvc_set_cpu_costs(1);
         nshvc_hold_interrupts(0);
     }
@@ -2310,35 +2189,9 @@ void fw_vblank_uploads(void)
     nshvc_hold_interrupts(0);
 }
 
-/* BG1's page down the screen: HDMA channel 7, mode 0, to $21C0 from a
-   table at work RAM $7F:FFF0 (past everything the game uses): page 1 for
-   the lines of the picture's rows 0-13, then page 2. The table's bytes
-   are the game's again (kept, put back) while the game's own code runs a
-   step, and the channel's registers as the game left them when the full
-   window ends. */
-#define PAGE_TABLE 0x1FFF0u             /* in work RAM: $7F:FFF0 */
-static uint8_t table_kept[sizeof page_table], ch7_kept[5];
-static int table_in, ch7_set, screen_w = 256, screen_h = 224;
+static int screen_w = 256, screen_h = 224;
 
 void fw_screen_lost(void) { screen_w = screen_h = 0; }
-
-static void page_table_put(void)
-{
-    uint8_t *w = nshvc_wram();
-    if (table_in)
-        return;
-    memcpy(table_kept, w + PAGE_TABLE, sizeof table_kept);
-    memcpy(w + PAGE_TABLE, page_table, sizeof page_table);
-    table_in = 1;
-}
-
-static void page_table_take(void)
-{
-    if (!table_in)
-        return;
-    memcpy(nshvc_wram() + PAGE_TABLE, table_kept, sizeof table_kept);
-    table_in = 0;
-}
 
 /* The sky: colour 1 a line, by HDMA channels 2 (CGADD from the table at
    $7F:3497) and 3 (CGDATA, indirect, from the table at $7F:3489: entries
@@ -2456,28 +2309,19 @@ void fw_sky_take(void)
 
 void fw_before_step(void)
 {
-    page_table_take();
     sky_take();
 }
 
-/* the full window's registers (costs off, the caller's): BG1's map and
-   characters, its page's HDMA, the screen's width */
-static void bg1_set(void)
+/* the full window's screen (costs off, the caller's): its size and the
+   console's picture's place on it, VRAM to 128 KB (page 1, the hills') */
+static void screen_set(void)
 {
-    static const uint32_t ch7[5] = {DMAP7, BBAD7, A1T7L, A1T7L + 1, A1B7};
-    static const uint8_t v[5] = {0x00, 0xC0, (uint8_t)PAGE_TABLE, (uint8_t)(PAGE_TABLE >> 8), 0x7F};
-    int i;
+    static int vram;
 
-    if (!ch7_set) {
-        for (i = 0; i < 5; i++)
-            ch7_kept[i] = rd8(ch7[i]);
-        ch7_set = 1;
+    if (!vram) {
+        nshvc_ext_vram(128);
+        vram = 1;
     }
-    for (i = 0; i < 5; i++)
-        wr8(ch7[i], v[i]);
-    wr8(BG1SC, tall() ? 0x00 : 0x01);
-    wr8(BG12NBA, BG12_NBA);
-    page_table_put();
     if (screen_w != W || screen_h != H) {
         nshvc_ext_screen(W, H);
         nshvc_ext_screen_origin(-1, origin_row());
@@ -2486,21 +2330,9 @@ static void bg1_set(void)
     }
 }
 
-/* the original's: BG1's map and characters for the buffer shown ($0D81: 1
-   buffer B), channel 7's registers, the console's screen */
-static void bg1_back(void)
+/* the console's screen again */
+static void screen_back(void)
 {
-    static const uint32_t ch7[5] = {DMAP7, BBAD7, A1T7L, A1T7L + 1, A1B7};
-    const uint8_t *w = nshvc_wram();
-    int b = (w[0x0D81] | w[0x0D82] << 8) == 0x0001, i;
-
-    wr8(BG1SC, b ? 0x7C : 0x78);
-    wr8(BG12NBA, b ? 0x62 : 0x60);
-    if (ch7_set)
-        for (i = 0; i < 5; i++)
-            wr8(ch7[i], ch7_kept[i]);
-    ch7_set = 0;
-    page_table_take();
     sky_take();
     if (screen_w != 256 || screen_h != 224) {
         nshvc_ext_screen(256, 224);
@@ -2581,10 +2413,8 @@ static void takeover(void)
     sprites_place();
     wr8(TM, 0x13);                      /* BG1, BG2 (the hills, bg2_prepare) and the sprites, as the race's */
     wr8(TMW, 0x00);
-    bg1_set();
-    wr8(HDMAEN, (uint8_t)(w[0x0D45] | 0x80));
-    nshvc_ext_layer_page(0, 1);
-    nshvc_ext_layer_page(1, 1);         /* BG2 on page 1 too: its map and characters at $5800-$7FFF (bg2_prepare) */
+    screen_set();
+    nshvc_ext_layer_page(1, 1);         /* BG2 on page 1: its map and characters at $5800-$7FFF (bg2_prepare) */
     wr8(INIDISP, w[0x0D61]);
     nshvc_set_cpu_costs(1);
 }
@@ -2623,18 +2453,14 @@ void fw_frame_end(void)
         nshvc_set_cpu_costs(1);
         nshvc_hold_interrupts(0);
     }
-    if (!(on && (map_w != W || map_h != H)) && !(was && !on)) {
+    if (!(was && !on)) {
         staged = 0;
         return;
     }
     nshvc_hold_interrupts(1);
-    if (on && (map_w != W || map_h != H))  /* VRAM's pages 1 and 2 and BG1's maps there, for this size */
-        maps_write();
-    if (was && !on) {                   /* back to the original's screen */
+    {                                   /* back to the original's screen */
         nshvc_set_cpu_costs(0);
-        bg1_back();
-        wr8(HDMAEN, nshvc_wram()[0x0D45]);
-        nshvc_ext_layer_page(0, 0);
+        screen_back();
         nshvc_ext_layer_page(1, 0);
         sprites_write();
         if (staged)

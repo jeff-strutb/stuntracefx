@@ -30,6 +30,7 @@ void nshvc_set_cpu_costs(int on);
    here); count characters from VRAM word word_addr, each 8k x 8k texels */
 int nshvc_ext_canvas_scale(void);
 void nshvc_ext_canvas_chars(int layer, unsigned word_addr, int count, const uint8_t *texels, int k);
+void nshvc_ext_canvas_screen(int layer, const uint8_t *texels, int w, int h, int k, int priority, int palette);   /* contract 2.8 */
 /* The screen past the console's 256 x 224, VRAM past its 64 KB and a
    layer's page of it, the data port's writes landing in a page at once,
    sprites past X 255 (contract 2.3); the window's size in points */
