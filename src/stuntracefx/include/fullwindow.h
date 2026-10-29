@@ -15,6 +15,7 @@
 #ifndef SRFX_FULLWINDOW_H
 #define SRFX_FULLWINDOW_H
 
+#include <stddef.h>
 #include <stdint.h>
 
 /* the full-window race this frame (Enhanced, one player's race screen,
@@ -80,6 +81,22 @@ int fw_exact_clip(void);
 void fw_facing_point(int slot, uint16_t addr);
 void fw_facing_cross(uint16_t *hi, uint16_t *lo);
 
+/* A span of the picture's (fullwindow.c): row y, columns x0 to x1; flat,
+   the colour; textured, each pixel's texel at ((v << 8 | u) & mask) + base
+   in bank, u and v (32.32) at column x u + du (x - xl) and v + dv (x - xl),
+   through COLOR's and PLOT's rules (por, the colour's high nibble hi) */
+typedef struct {
+    int32_t y, x0, x1, pad0;
+    int64_t xl, u, du, v, dv;
+    uint16_t base, mask;
+    uint8_t bank, por, hi, colour, textured, pad1[7];
+} FwSpan;
+/* the spans to the texels (out, w x h): the reference on the CPU, and the
+   one in use, which a front end with a GPU sets; fw_texel the bytes it
+   reads, the Super FX's memory */
+void fw_span_fill_cpu(uint8_t *out, int w, int h, const FwSpan *sp, size_t n);
+extern void (*fw_span_filler)(uint8_t *out, int w, int h, const FwSpan *sp, size_t n);
+uint8_t fw_texel(uint8_t bank, uint16_t at);
 /* FxDrawList's fill into the texels (raster.c, while fw_drawing) */
 void fw_draw_list(void);
 /* FxScreenClear's, while fw_drawing: the texels to colour 0 */

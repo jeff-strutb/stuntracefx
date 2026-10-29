@@ -61,6 +61,7 @@ static int staged;                      /* this frame's upload stage ran in the 
 
 static void panels_draw(void);
 static void sprites_write(void);
+static void span_flush(void);
 static void sprites_place(void);
 static void screen_set(void);
 static void takeover(void);
@@ -215,6 +216,7 @@ static void hud_place(void)
 {
     int a, b, x, y, i, j, g0[HUD_PIECES], g1[HUD_PIECES], h0[HUD_PIECES], h1[HUD_PIECES], s[HUD_PIECES], t[HUD_PIECES];
 
+    span_flush();                       /* the 3D first, the HUD over it */
     for (a = 0; a < hud_n; a++)
         for (b = 0; b < a; b++)
             if (hp_y0[a] <= hp_y1[b] && hp_y0[b] <= hp_y1[a] && hp_x0[a] <= hp_x1[b] + HUD_GAP &&
@@ -256,6 +258,96 @@ static void hud_place(void)
 
 static int cropping;                    /* FW_CCHECK's pictures: the 3D alone */
 
+/* ---- the picture's spans ------------------------------------------------- */
+/*
+ * The 3D's pixels as spans, in the order they are drawn: the fill's edge
+ * walks (the game's own rules, here) give each row of a polygon its first
+ * and last column and, textured, its u and v; span_fill then writes the
+ * pixels (fw_span_filler: the GPU's where the front end has one, else
+ * span_fill_cpu, the reference). A flat span is a colour; a textured one
+ * fetches each pixel's texel at ((v << 8 | u) & mask) + base in its bank,
+ * u and v in 32.32 fixed point from the span's left end, through COLOR's
+ * and PLOT's rules (the plot options, the colour's frozen high nibble).
+ */
+static FwSpan *spans;
+static size_t nspans, cap_spans;
+
+static FwSpan *span_new(void)
+{
+    if (nspans == cap_spans) {
+        size_t c = cap_spans ? cap_spans * 2 : 65536;
+        FwSpan *n = realloc(spans, c * sizeof *n);
+        if (!n)
+            return NULL;
+        spans = n;
+        cap_spans = c;
+    }
+    return &spans[nspans++];
+}
+
+static void span_flat(int32_t y, int32_t x0, int32_t x1, uint8_t c)
+{
+    FwSpan *p;
+    if (y < 0 || y >= th || x1 < x0 || !(p = span_new()))
+        return;
+    memset(p, 0, sizeof *p);
+    p->y = y;
+    p->x0 = x0;
+    p->x1 = x1;
+    p->colour = c;
+}
+
+/* the texel fetch, as the Super FX reads it (fw_span_filler's need the
+   banks' bytes: fw_span_bank) */
+uint8_t fw_texel(uint8_t bank, uint16_t at) { return gsu_rd8((uint32_t)bank << 16 | at); }
+
+/* COLOR from a texel byte, then PLOT's rule: the colour written, or -1 */
+static int texel_colour(uint8_t v, uint8_t por, uint8_t hi)
+{
+    uint8_t c = por & 0x04 ? (uint8_t)(hi | v >> 4) : por & 0x08 ? (uint8_t)(hi | (v & 0x0F)) : v;
+    if (!(por & 0x01)) {
+        if (por & 0x08) {
+            if (!(c & 0x0F))
+                return -1;
+        } else if (!c) {
+            return -1;
+        }
+    }
+    return c;
+}
+
+void fw_span_fill_cpu(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
+{
+    size_t i;
+    (void)h;
+    for (i = 0; i < n; i++) {
+        const FwSpan *p = &sp[i];
+        uint8_t *o = out + (size_t)p->y * w;
+        int32_t x;
+        if (!p->textured) {
+            memset(o + p->x0, p->colour, (size_t)(p->x1 - p->x0 + 1));
+            continue;
+        }
+        for (x = p->x0; x <= p->x1; x++) {
+            int64_t k = x - p->xl;
+            unsigned iu = (unsigned)((p->u + p->du * k) >> 32) & 0xFF, iv = (unsigned)((p->v + p->dv * k) >> 32) & 0xFF;
+            int c = texel_colour(fw_texel(p->bank, (uint16_t)(((iv << 8 | iu) & p->mask) + p->base)), p->por, p->hi);
+            if (c >= 0)
+                o[x] = (uint8_t)c;
+        }
+    }
+}
+
+void (*fw_span_filler)(uint8_t *out, int w, int h, const FwSpan *sp, size_t n) = fw_span_fill_cpu;
+
+/* the spans drawn into the texels */
+static void span_flush(void)
+{
+    if (nspans)
+        fw_span_filler(tex, tw, th, spans, nspans);
+    nspans = 0;
+}
+
 void fw_plot(uint16_t x, uint16_t y)
 {
     int c = plot_colour(), i, j;
@@ -285,10 +377,13 @@ void fw_plot(uint16_t x, uint16_t y)
                 o[i] = (uint8_t)c;
         return;
     }
-    if (x < tw && y < th)
-        tex[(size_t)y * tw + x] = (uint8_t)c;
-    if (checking)
+    if (checking) {
+        if (x < tw && y < th)
+            tex[(size_t)y * tw + x] = (uint8_t)c;
         check_alias(x, y, c);
+    } else if (x < tw && y < th) {
+        span_flat(y, x, x, (uint8_t)c);
+    }
 }
 
 uint8_t fw_rpix(uint16_t x, uint16_t y)
@@ -303,6 +398,7 @@ uint8_t fw_rpix(uint16_t x, uint16_t y)
             return 0;
         return tex[(size_t)py * K * tw + (size_t)px * K];
     }
+    span_flush();                       /* a read of the 3D: what is drawn so far */
     return x < tw && y < th ? tex[(size_t)y * tw + x] : 0;
 }
 
@@ -321,6 +417,7 @@ uint8_t gsu_rpix16(uint16_t x, uint16_t y)
 
 void fw_clear(void)
 {
+    nspans = 0;                         /* drawn over: none of them shows */
     memset(tex, 0, (size_t)tw * th);
 }
 
@@ -984,6 +1081,10 @@ static void flat_row(int32_t l, int32_t r, int32_t y)
         l = 0;
     if (r >= tw)
         r = tw - 1;
+    if (!checking) {
+        span_flat(y, l, r, (uint8_t)c);
+        return;
+    }
     o = tex + (size_t)y * tw;
     for (x = l; x <= r; x++)
         o[x] = (uint8_t)c;
@@ -1342,19 +1443,33 @@ static uint16_t tex_polygon(uint16_t p, int n)
             tu = (uint16_t)(ul + ram16(TEX_U_OFF));
             tv = (uint16_t)(vl + ram16(TEX_V_OFF));
             if (tex_precise() && row >= 0 && row < th) {
-                uint8_t *o = tex + (size_t)row * tw;
                 double hdu = remainder(r.hu - l.hu, 256.0) / width, hdv = remainder(r.hv - l.hv, 256.0) / width;
                 double hu0 = l.hu + ram16(TEX_U_OFF) / 256.0, hv0 = l.hv + ram16(TEX_V_OFF) / 256.0;
+                FwSpan *sp;
                 x0 = xl < 0 ? 0 : xl;
                 x1 = xl + (int64_t)width < tw ? xl + (int64_t)width : tw;
-                for (x = x0; x < x1; x++) {
-                    double fu = hu0 + hdu * (double)(x - xl), fv = hv0 + hdv * (double)(x - xl);
-                    unsigned iu = (unsigned)((int64_t)floor(fu) & 0xFF), iv = (unsigned)((int64_t)floor(fv) & 0xFF);
-                    uint16_t at = (uint16_t)(((iv << 8 | iu) & mask) + base);
-                    int c;
-                    gsu_color(gsu_rd8((uint32_t)bank << 16 | at));
-                    if ((c = plot_colour()) >= 0)
-                        o[x] = (uint8_t)c;
+                if (x0 < x1 && (sp = span_new())) {
+                    int64_t k = x1 - 1 - xl;
+                    unsigned iu, iv;
+                    memset(sp, 0, sizeof *sp);
+                    sp->y = row;
+                    sp->x0 = (int32_t)x0;
+                    sp->x1 = (int32_t)(x1 - 1);
+                    sp->xl = xl;
+                    sp->u = llround(hu0 * 4294967296.0);
+                    sp->du = llround(hdu * 4294967296.0);
+                    sp->v = llround(hv0 * 4294967296.0);
+                    sp->dv = llround(hdv * 4294967296.0);
+                    sp->bank = bank;
+                    sp->base = base;
+                    sp->mask = mask;
+                    sp->por = gsu.por;
+                    sp->hi = (uint8_t)(gsu.colr & 0xF0);
+                    sp->textured = 1;
+                    /* COLOR's register as the span's last pixel leaves it */
+                    iu = (unsigned)((sp->u + sp->du * k) >> 32) & 0xFF;
+                    iv = (unsigned)((sp->v + sp->dv * k) >> 32) & 0xFF;
+                    gsu_color(fw_texel(bank, (uint16_t)(((iv << 8 | iu) & mask) + base)));
                 }
             } else if (row >= 0 && row < th) {
                 uint8_t *o = tex + (size_t)row * tw;
@@ -1545,6 +1660,7 @@ static void check_picture(int j)
     rm_hud_state(1);
     memcpy(nshvc_sram() + 0x10000, bank71, sizeof bank71);
     fw_drawing = 0;
+    span_flush();
     if (hud_n)                          /* a redraw let go before the HUD's end: its pieces */
         hud_place();
     fw_hud = 0;
@@ -1605,6 +1721,7 @@ static void kcheck_picture(int j)
     rm_hud_state(1);
     memcpy(nshvc_sram() + 0x10000, bank71, sizeof bank71);
     fw_drawing = 0;
+    span_flush();
     if (hud_n)                          /* a redraw let go before the HUD's end: its pieces */
         hud_place();
     fw_hud = 0;
@@ -1695,6 +1812,7 @@ static int ccheck_draw(int j, uint8_t *buf, int w, int h, int off)
     rm_hud_state(1);
     memcpy(nshvc_sram() + 0x10000, bank71, sizeof bank71);
     fw_drawing = 0;
+    span_flush();
     if (hud_n)                          /* a redraw let go before the HUD's end: its pieces */
         hud_place();
     fw_hud = 0;
@@ -1858,6 +1976,7 @@ int fw_picture(int j)
     list_gen++;
     m = rm_tween_buffers(j, RM_TICKS, scratch[0], scratch[1]);
     fw_drawing = 0;
+    span_flush();
     if (hud_n)                          /* a redraw let go before the HUD's end: its pieces */
         hud_place();
     fw_hud = 0;
