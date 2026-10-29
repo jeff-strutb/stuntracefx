@@ -10,6 +10,7 @@
  * vertex ORed into $014A.
  */
 #include "gsu.h"
+#include "fullwindow.h"
 #include "gsu_ops.h"
 
 #define FX_COUNT 0x0040u    /* the vertex count */
@@ -330,6 +331,8 @@ static int clip_edge(void (*clip)(void), uint16_t ret, int reload)
  */
 void abi_FxPolygonDraw(void)
 {
+    if (fw_exact_tex_draw())            /* Enhanced's full window: clipped exactly */
+        return;
     gsu_push(&gsu.r[10], gsu.r[11]);
     gsu_stw(FX_CODES, gsu.r[5]);
     gsu.r[9] = gsu_ldw(FX_POINTS_N);

@@ -383,7 +383,9 @@ static uint32_t sw_gen[0x8000], list_gen = 1;
  * as it stands, so a clipped face meets its unclipped neighbours.
  */
 #define EXACT_MAX 32
+#define NEAR_Z 1                        /* the full window's near plane, in view space */
 static int64_t ex_x[EXACT_MAX], ex_y[EXACT_MAX];
+static int32_t ex_vx[EXACT_MAX], ex_vy[EXACT_MAX], ex_vz[EXACT_MAX];  /* the model drawer's points in view space */
 static int ex_n = -1;
 static uint16_t ex_list;
 
@@ -439,14 +441,22 @@ void fw_exact_point(int16_t x, int16_t y, int16_t z)
 }
 
 /* the model drawer's point by index, exact */
-static void model_point(uint16_t index, int64_t *sx, int64_t *sy)
+static void model_view(uint16_t index, int32_t *x, int32_t *y, int32_t *z)
 {
     uint16_t a = (uint16_t)(0x0340 + 6 * index);
-    int16_t x = (int16_t)(ram16(a) + ram16(0x0026)), y = (int16_t)(ram16((uint16_t)(a + 2)) + ram16(0x0028));
-    int32_t z = (int16_t)(ram16((uint16_t)(a + 4)) + ram16(0x002A));
 
-    if (z >= 0x100 && z > 0x43FE)       /* the model drawer's far points: their depth held at $43FE */
-        z = 0x43FE;
+    *x = (int16_t)(ram16(a) + ram16(0x0026));
+    *y = (int16_t)(ram16((uint16_t)(a + 2)) + ram16(0x0028));
+    *z = (int16_t)(ram16((uint16_t)(a + 4)) + ram16(0x002A));
+    if (*z >= 0x100 && *z > 0x43FE)     /* the model drawer's far points: their depth held at $43FE */
+        *z = 0x43FE;
+}
+
+static void model_point(uint16_t index, int64_t *sx, int64_t *sy)
+{
+    int32_t x, y, z;
+
+    model_view(index, &x, &y, &z);
     project_exact(x, y, z, sx, sy);
 }
 
@@ -457,6 +467,7 @@ void fw_exact_model_point(uint16_t index)
         return;
     }
     model_point(index, &ex_x[ex_n], &ex_y[ex_n]);
+    model_view(index, &ex_vx[ex_n], &ex_vy[ex_n], &ex_vz[ex_n]);
     ex_n++;
 }
 
@@ -473,13 +484,26 @@ void fw_facing_point(int slot, uint16_t addr)
 void fw_facing_cross(uint16_t *hi, uint16_t *lo)
 {
     int64_t x[3], y[3], c;
-    int i;
+    int32_t vx[3], vy[3], vz[3];
+    int i, behind = 0;
 
     if (!fw_view_active())
         return;
-    for (i = 0; i < 3; i++)
+    for (i = 0; i < 3; i++) {
         model_point((uint16_t)((facing_at[i] - 0x04E4) / 6), &x[i], &y[i]);
+        model_view((uint16_t)((facing_at[i] - 0x04E4) / 6), &vx[i], &vy[i], &vz[i]);
+        behind |= vz[i] < NEAR_Z;
+    }
     c = (x[1] - x[0]) * (y[2] - y[0]) - (y[1] - y[0]) * (x[2] - x[0]);
+    if (behind) {
+        /* a point behind the view: the projected cross product is f^2
+           det(p0, p1, p2) / (z0 z1 z2), whose sign in front is det's, the
+           face's facing from the points themselves */
+        double d = (double)vx[0] * ((double)vy[1] * vz[2] - (double)vz[1] * vy[2]) -
+                   (double)vy[0] * ((double)vx[1] * vz[2] - (double)vz[1] * vx[2]) +
+                   (double)vz[0] * ((double)vx[1] * vy[2] - (double)vy[1] * vx[2]);
+        c = d > 0 ? 0x10000 : d < 0 ? -0x10000 : 0;
+    }
     if (c > 0x7FFFFFFF)
         c = 0x7FFFFFFF;
     if (c < -0x7FFFFFFFLL - 1)
@@ -684,6 +708,89 @@ void fw_exact_vertex(uint16_t at, uint16_t index)
     sw_val[at >> 1] = (int32_t)x;
     sw_val[(uint16_t)(at + 2) >> 1] = (int32_t)y;
     sw_gen[at >> 1] = sw_gen[(uint16_t)(at + 2) >> 1] = list_gen;
+}
+
+/* FxPolygonDraw's (polygon.c, 01:C339) in the full window: a textured face
+   of the model drawer's whose points are not all on the screen, clipped
+   exactly. The original clips it against the view's four planes and its
+   near plane in 16-bit steps, which holds for the faces its 45-degree
+   cull lets through; the full window keeps the objects beside the view
+   too, whose faces reach behind it, where those steps go wrong. Here it
+   is clipped at the near plane in view space (u and v carried along the
+   edges in 3D, so true at the new points) and projected exactly, the
+   screen's edges left to the fill (each row and column off the screen
+   stepped at once, from the exact points in the side table). The list
+   and count as FxPolygonProject leaves them. */
+int fw_exact_tex_draw(void)
+{
+    static double cx[2][EXACT_MAX + 2], cy[2][EXACT_MAX + 2], cz[2][EXACT_MAX + 2], cu[2][EXACT_MAX + 2],
+        cv[2][EXACT_MAX + 2];
+    uint16_t list, n;
+    int i, m = 0, left = 1, right = 1, above = 1, below = 1;
+    double f = fw_focal(), ox = tw / 2, oy = (double)view_cy() * K + cy_off;
+
+    /* nothing read unless in the full window: the Super FX's accesses are
+       timed in Original */
+    if (!fw_view_active() || ex_n < 3)
+        return 0;
+    list = ram16(0x005A);
+    n = ram16(0x0146);
+    if (list != ex_list || n != ex_n)
+        return 0;
+    for (i = 0; i < (int)n; i++) {
+        uint16_t at = (uint16_t)(list + 8 * i);
+        cx[0][i] = ex_vx[i];
+        cy[0][i] = ex_vy[i];
+        cz[0][i] = ex_vz[i];
+        cu[0][i] = ram16((uint16_t)(at + 4)) / 256.0;
+        cv[0][i] = ram16((uint16_t)(at + 6)) / 256.0;
+    }
+    for (i = 0; i < (int)n; i++) {
+        int j = (i + 1) % n, ain = cz[0][i] >= NEAR_Z, bin = cz[0][j] >= NEAR_Z;
+        if (ain && m < EXACT_MAX + 2) {
+            cx[1][m] = cx[0][i]; cy[1][m] = cy[0][i]; cz[1][m] = cz[0][i]; cu[1][m] = cu[0][i]; cv[1][m] = cv[0][i];
+            m++;
+        }
+        if (ain != bin && m < EXACT_MAX + 2) {
+            double t = (NEAR_Z - cz[0][i]) / (cz[0][j] - cz[0][i]);
+            cx[1][m] = cx[0][i] + t * (cx[0][j] - cx[0][i]);
+            cy[1][m] = cy[0][i] + t * (cy[0][j] - cy[0][i]);
+            cz[1][m] = NEAR_Z;
+            cu[1][m] = cu[0][i] + t * (cu[0][j] - cu[0][i]);
+            cv[1][m] = cv[0][i] + t * (cv[0][j] - cv[0][i]);
+            m++;
+        }
+    }
+    if (m < 3 || m > EXACT_MAX)
+        m = 0;
+    for (i = 0; i < m; i++) {
+        double sx = ox + cx[1][i] * f / cz[1][i], sy = oy + cy[1][i] * f / cz[1][i];
+        int64_t X = (int64_t)floor(sx), Y = (int64_t)floor(sy);
+        uint16_t at = (uint16_t)(list + 8 * i);
+        if (X > 0x3FFFFFFF) X = 0x3FFFFFFF;
+        if (X < -0x3FFFFFFF) X = -0x3FFFFFFF;
+        if (Y > 0x3FFFFFFF) Y = 0x3FFFFFFF;
+        if (Y < -0x3FFFFFFF) Y = -0x3FFFFFFF;
+        left &= X < 0;
+        right &= X >= tw;
+        above &= Y < 0;
+        below &= Y >= th;
+        ram16w(at, (uint16_t)(X < -0x8000 ? -0x8000 : X > 0x7FFF ? 0x7FFF : X));
+        ram16w((uint16_t)(at + 2), (uint16_t)(Y < -0x8000 ? -0x8000 : Y > 0x7FFF ? 0x7FFF : Y));
+        ram16w((uint16_t)(at + 4), (uint16_t)(int)floor(cu[1][i] * 256.0 + 0.5));
+        ram16w((uint16_t)(at + 6), (uint16_t)(int)floor(cv[1][i] * 256.0 + 0.5));
+        sw_val[at >> 1] = (int32_t)X;
+        sw_val[(uint16_t)(at + 2) >> 1] = (int32_t)Y;
+        sw_gen[at >> 1] = sw_gen[(uint16_t)(at + 2) >> 1] = list_gen;
+    }
+    if (m && (left || right || above || below))     /* wholly off one side */
+        m = 0;
+    gsu.r[0] = (uint16_t)m;
+    ram16w(0x0040, (uint16_t)m);
+    ram16w(0x0146, (uint16_t)m);
+    ram16w(0x014A, 0);
+    ex_n = -1;
+    return 1;
 }
 
 /* FW_CHECK's second pass (the original's view in place): a pixel PLOT puts

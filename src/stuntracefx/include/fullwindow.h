@@ -84,6 +84,8 @@ void fw_facing_cross(uint16_t *hi, uint16_t *lo);
 void fw_draw_list(void);
 /* FxScreenClear's, while fw_drawing: the texels to colour 0 */
 void fw_clear(void);
+/* FxPolygonDraw's, while the full window's picture draws: 1 when done here */
+int fw_exact_tex_draw(void);
 
 /* A picture j / RM_TICKS of the way through the step just run, drawn and
    handed to the canvas (remaster.c, at a race frame's wait); 0 when no
