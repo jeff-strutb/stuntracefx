@@ -5,13 +5,15 @@
  *                (nshvc_ext_screen): 256 x 224 at 4:3, wider at 224
  *                lines, or 256 across and taller with the original's
  *                lines its top rows (nshvc_ext_screen_origin);
- *   BG1          on VRAM pages 1 and 2: its maps name a character for
- *                each of the screen's cells, which the canvas stands in
- *                for; both buffers' maps ($7800 with the characters at
- *                word 0, $7C00 with them at $2000) name the same, so the
- *                game's flips between them change nothing; its window
- *                off; BG1 alone shows, the backdrop, panels and sprites
- *                drawn into its texels;
+ *   BG1          the Super FX's picture (the 3D and the HUD's pieces) and
+ *                the panels, at the window's resolution: on VRAM pages 1-3,
+ *                its maps naming a character for each of the screen's
+ *                cells, which the canvas stands in for; its window off;
+ *   BG2          the hills, the console's: the game's map and characters
+ *                on page 1 (bg2_prepare), the rows its bezel hid the band's
+ *                own sky, at the game's scroll;
+ *   the sprites  the console's, the HUD's placed at the screen's edges
+ *                (sprites_place);
  *   the texels   (W k) x (H k), drawn by the redraw with the view over
  *                the whole screen (fw_view_words), handed to the canvas
  *                each frame of the race's wait (fw_picture);
@@ -20,10 +22,10 @@
  *                and leaves the screen on, so every line shows the picture.
  *
  * The view: its centre W / 2 across and the original's (32 + 64 = line 96)
- * down, half the rows a taller screen adds lower, focal length 157.5 (the
- * original's 104 / 128 half-width at 4:3) whatever the size, so the field
- * of view grows with the window across and down; all of it k times in
- * texels.
+ * down, half the rows a taller screen adds lower, focal length 128, the
+ * original's, whatever the size: the 3D at the console's scale, so the
+ * console's hills turn with it, and the field of view grows with the
+ * window across and down; all of it k times in texels.
  */
 #include <math.h>
 #include <stdio.h>
@@ -54,10 +56,6 @@ static int unseen = 2;                  /* frames since they last did */
 static int W = 256, H = 224, K = 1;     /* the screen's width and height, texels a console pixel */
 static int tw, th;                      /* the texels' size */
 static uint8_t *tex, *chars;
-/* each texel's layer as the console orders them: 0 nothing (the backdrop's
-   colour or the sky's), 1 BG2 at priority 0, 2 BG2 at priority 1, 3 BG1
-   (the 3D, the HUD, the panels) */
-static uint8_t *lay;
 static size_t tex_size;
 static int map_w, map_h;                /* the size BG1's maps were written for */
 static int handed;                      /* the canvas is the full window's */
@@ -65,10 +63,9 @@ static int staged;                      /* this frame's upload stage ran in the 
 
 static void panels_draw(void);
 static void sprites_write(void);
-static void sprites_draw(void);
+static void sprites_place(void);
 static void bg1_set(void);
 static void takeover(void);
-static void backdrop_draw(void);
 
 /* the view on the original's screen: its column 0 and row 0 (BG1's map
    names the view's character 0 at row 2, column 3, under the race's
@@ -334,7 +331,7 @@ void fw_clear(void)
 /* the one-player race's centre and edges, as ViewParamsByPlayers sets them */
 static const uint16_t k_race1p[6] = {0x0068, 0x0040, 0x0000, 0x00CF, 0x0000, 0x0080};
 
-int fw_focal(void) { return (315 * K + 1) / 2; }
+int fw_focal(void) { return 128 * K; }
 int fw_half_width(void) { return tw / 2; }
 
 int fw_view_words(const uint16_t w[6], uint16_t out[8])
@@ -1537,11 +1534,9 @@ static int size_for_window(void)
         if (need > tex_size) {
             free(tex);
             free(chars);
-            free(lay);
             tex = malloc(need);
             chars = malloc(need);
-            lay = malloc(need);
-            tex_size = tex && chars && lay ? need : 0;
+            tex_size = tex && chars ? need : 0;
             if (!tex_size)
                 return 0;
         }
@@ -1897,7 +1892,7 @@ static void ccheck_picture(int j)
 
 /* FW_PROF=1 (a check): each stage of the full window's pictures timed, the
    mean milliseconds a picture written to stderr each 120 */
-enum { PR_REDRAW, PR_LAYERS, PR_BACKDROP, PR_PANELS, PR_SPRITES, PR_HAND, PR_N };
+enum { PR_REDRAW, PR_PANELS, PR_SPRITES, PR_HAND, PR_N };
 static double prof_ms[PR_N];
 static long prof_pics;
 static double prof_t;
@@ -1919,8 +1914,8 @@ static void prof_mark(int stage)
         prof_ms[stage] += t - prof_t;
     prof_t = t;
     if (stage == PR_HAND && ++prof_pics == 120) {
-        fprintf(stderr, "fwprof %dx%d k%d ms a picture: redraw %.2f layers %.2f backdrop %.2f panels %.2f sprites %.2f hand %.2f\n",
-                W, H, K, prof_ms[0] / 120, prof_ms[1] / 120, prof_ms[2] / 120, prof_ms[3] / 120, prof_ms[4] / 120, prof_ms[5] / 120);
+        fprintf(stderr, "fwprof %dx%d k%d ms a picture: redraw %.2f panels %.2f sprites %.2f hand %.2f\n",
+                W, H, K, prof_ms[0] / 120, prof_ms[1] / 120, prof_ms[2] / 120, prof_ms[3] / 120);
         memset(prof_ms, 0, sizeof prof_ms);
         prof_pics = 0;
     }
@@ -1994,83 +1989,17 @@ int fw_picture(int j)
     if (getenv("FW_CCHECK"))
         ccheck_picture(j);
     prof_mark(PR_REDRAW);
-    for (i = 0; i < (size_t)tw * th; i++)  /* the 3D and the HUD: BG1's */
-        lay[i] = tex[i] ? 3 : 0;
-    prof_mark(PR_LAYERS);
-    backdrop_draw();
-    prof_mark(PR_BACKDROP);
     panels_draw();
     prof_mark(PR_PANELS);
-    sprites_draw();
+    nshvc_hold_interrupts(1);
+    nshvc_set_cpu_costs(0);
+    sprites_place();                    /* the panels' boxes found: the sprites in them with them */
+    nshvc_set_cpu_costs(1);
+    nshvc_hold_interrupts(0);
     prof_mark(PR_SPRITES);
     hand();
     prof_mark(PR_HAND);
     return 1;
-}
-
-/* ---- the backdrop ------------------------------------------------------------ */
-
-/* The backdrop (BG2: the hills, and the sky in colour 1, which the
-   gradient's HDMA sets line by line) drawn under the 3D at the 3D's
-   scale, where the 3D leaves colour 0, so it turns and pitches with it:
-   texel (X, Y) shows the original's screen at the point the original's
-   view (focal length 128) puts in the same direction, its BG2 as the
-   redraw left it (rm_tween_backdrop: its map rows for the buffer shown and
-   its scroll; the rest of the map VRAM's), a 4 bpp pixel as its colour
-   index (palette * 16 + pixel, as BG1's 8 bpp texels index colours). BG2
-   itself is then off. Past the original view's top and bottom, where its
-   map holds nothing the original showed: the sky above (colour 1, which
-   fw_sky sets line by line), its bottom row below (the ground's colour). */
-#define BG2_MAP  0x5800                 /* BG2SC $5A: 32 x 64 at $5800 */
-#define BG2_CHARS 0x6000                /* BG12NBA $6x */
-
-static void backdrop_draw(void)
-{
-    static int32_t col_x[8192];
-    const uint16_t *v = nshvc_vram();
-    const uint8_t *rows;
-    unsigned at, X, Y;
-    uint16_t hofs, vofs;
-    int32_t f = fw_focal();
-
-    if (!rm_tween_backdrop(&rows, &at, &hofs, &vofs) || tw > 8192)
-        return;
-    for (X = 0; X < (unsigned)tw; X++)  /* the original's column, in 1/256ths of a pixel */
-        col_x[X] = (VIEW_X + VIEW_W / 2) * 256 + ((int32_t)X * 2 + 1 - tw) * 128 * 256 / (2 * f);
-    for (Y = 0; Y < (unsigned)th; Y++) {
-        int32_t y = (VIEW_CY * 256 + ((int32_t)Y * 2 + 1 - 2 * view_cy() * K) * 128 * 256 / (2 * f)) >> 8;
-        unsigned row, cell, py;
-        if (y < VIEW_Y) {               /* above the original's view: the sky (colour 1, its line's) */
-            uint8_t *o = tex + (size_t)Y * tw;
-            for (X = 0; X < (unsigned)tw; X++)
-                if (!o[X])
-                    o[X] = 1;
-            continue;
-        }
-        if (y > VIEW_Y + VIEW_H - 1)    /* below it its bottom row goes on (the ground's colour) */
-            y = VIEW_Y + VIEW_H - 1;
-        row = (unsigned)(y + 1 + vofs) & 511, cell = BG2_MAP + (row >> 3) * 32, py = row & 7;
-        uint8_t *o = tex + (size_t)Y * tw;
-        for (X = 0; X < (unsigned)tw; X++) {
-            unsigned col, a, px, py2, c;
-            uint16_t e, w0, w1;
-            if (o[X])
-                continue;
-            col = (unsigned)((col_x[X] >> 8) + hofs) & 255;
-            a = cell + (col >> 3);
-            e = a >= at && a < at + 0x220 ? (uint16_t)(rows[(a - at) * 2] | rows[(a - at) * 2 + 1] << 8) : v[a];
-            px = e & 0x4000 ? col & 7 : 7 - (col & 7);
-            py2 = e & 0x8000 ? 7 - py : py;
-            a = (BG2_CHARS + (e & 0x3FF) * 16 + py2) & 0x7FFF;
-            w0 = v[a];
-            w1 = v[(a + 8) & 0x7FFF];
-            c = (w0 >> px & 1) | (w0 >> (px + 8) & 1) << 1 | (w1 >> px & 1) << 2 | (w1 >> (px + 8) & 1) << 3;
-            if (c) {
-                o[X] = (uint8_t)((e >> 10 & 7) * 16 + c);
-                lay[(size_t)Y * tw + X] = e & 0x2000 ? 2 : 1;
-            }
-        }
-    }
 }
 
 /* ---- the panels ------------------------------------------------------------ */
@@ -2196,10 +2125,10 @@ static void panels_draw(void)
             for (q = 0; q < m; q++) {
                 int a = part[q][0], b = part[q][1];
                 size_t at = (size_t)(PANEL_TOP + b + H - 224 - safe_px[3]) * K * tw + (size_t)(a + s) * K;
-                uint8_t *o = tex + at, *l = lay + at;   /* at: the band moved up by the safe area's bottom */
-                for (j = 0; j < K; j++, o += tw, l += tw)
+                uint8_t *o = tex + at;   /* at: the band moved up by the safe area's bottom */
+                for (j = 0; j < K; j++, o += tw)
                     for (i = 0; i < K; i++)
-                        o[i] = px[b][a], l[i] = 3;
+                        o[i] = px[b][a];
             }
         }
 }
@@ -2207,10 +2136,10 @@ static void panels_draw(void)
 /* ---- the screen ------------------------------------------------------------ */
 
 /* The sprites: the game's table (work RAM $0375: 512 bytes, then the 32
-   of each sprite's X bit 8 and size). In the full window they are drawn
-   into the texels (sprites_draw) and the console's are off, so that they
-   go anywhere on the screen, past its 256th row too, which the console's
-   Y does not reach. The sprites the original's screen kept out of sight
+   of each sprite's X bit 8 and size). In the full window the console draws
+   them, by its own order and priorities against BG1 and BG2, each placed
+   on the larger screen (sprites_place: OAM, and nshvc_ext_sprite_page for
+   the columns and rows past the console's). The sprites the original's screen kept out of sight
    are left out: the bezel's sides (characters $40-$47, palette 3) and its
    start lamps once the race runs (lamp_hidden), those
    wholly in the lines it blanked (above 16, from 208, and wrapped past
@@ -2221,7 +2150,7 @@ static void panels_draw(void)
 #define OAM_TABLE 0x0375
 #define OBJ_CHARS 0x6000
 
-/* the table to OAM as the game has it, the extended X bits off (the
+/* the table to OAM as the game has it, every sprite's pages 0 (the
    original's screen again) */
 static void sprites_write(void)
 {
@@ -2233,18 +2162,16 @@ static void sprites_write(void)
     for (i = 0; i < 544; i++)
         wr8(OAMDATA, o[i]);
     for (i = 0; i < 128; i++)
-        nshvc_ext_sprite_x(i, 0);
+        nshvc_ext_sprite_page(i, 0, 0);
 }
 
-/* Into the texels as the console composes them: at each pixel the sprite
-   of the lowest number with a pixel there (the console's order), then by
-   its priority against the backgrounds (lay): 3 over everything, 2 under
-   BG1 (its priority-1 tiles), 1 and 0 under BG2's priority-1 tiles too; a
-   4 bpp pixel as colour 128 + its palette * 16 + the pixel. Those at
-   priority 3 are the HUD's, each anchored as the HUD: in the panels' band
-   with its box, else by the columns and rows of its piece, the sprites
-   that touch it and those that touch them (a picture of several sprites
-   moves whole); those below it are in the 3D's view, moved with it. */
+/* Placed as the HUD is: those at priority 3 are the HUD's, each anchored:
+   in the panels' band with its box, else by the columns and rows of its
+   piece, the sprites that touch it and those that touch them (a picture of
+   several sprites moves whole); those below it are the 3D's, in its view,
+   which is the original's projection about the screen's middle, so they
+   keep their place on the console's picture. Hidden ones go 32 pages of
+   rows down, past any screen. */
 /* The bezel's start lamps (characters $A0-$AF, palette 3: the lights and
    their housings at the view's top corners), which the original's bezel
    kept all race: in the full window only while the start runs (player 1's
@@ -2261,13 +2188,12 @@ static int spr_root(int *up, int i)
     return i;
 }
 
-static void sprites_draw(void)
+static void sprites_place(void)
 {
-    static uint16_t obj[H_MAX][W_MAX];  /* the sprites' layer: 0 none, else priority << 8 | colour, + 1 */
     const uint8_t *o = nshvc_wram() + OAM_TABLE;
-    const uint16_t *v = nshvc_vram();
-    int i, n = 0, x0 = W, x1 = -1, y0 = H, y1 = -1, x, y, a, b;
+    int i, b, ox = (W - 256) / 2, oy = origin_row();
     int sx0[128], sy0[128], sz[128], up[128], px0[128], px1[128], py0[128], py1[128], shown[128];
+    uint8_t high[32];
 
     for (i = 0; i < 128; i++) {         /* the sprites shown, and their pieces */
         unsigned yy = o[i * 4 + 1], h = (o[512 + i / 4] >> (2 * (i & 3)) & 2) ? 16 : 8;
@@ -2286,8 +2212,8 @@ static void sprites_draw(void)
         if (!shown[i])
             continue;
         for (b = 0; b < i; b++)         /* touching (overlapping or side by side), of the same kind */
-            if (shown[b] && ((o[b * 4 + 3] & 0x30) == 0x30) == ((at & 0x30) == 0x30) && sx0[b] <= xx + (int)h && xx <= sx0[b] + sz[b] && sy0[b] <= (int)yy + (int)h &&
-                (int)yy <= sy0[b] + sz[b])
+            if (shown[b] && ((o[b * 4 + 3] & 0x30) == 0x30) == ((at & 0x30) == 0x30) && sx0[b] <= xx + (int)h &&
+                xx <= sx0[b] + sz[b] && sy0[b] <= (int)yy + (int)h && (int)yy <= sy0[b] + sz[b])
                 up[spr_root(up, b)] = spr_root(up, i);
     }
     for (i = 0; i < 128; i++)
@@ -2300,73 +2226,45 @@ static void sprites_draw(void)
             if (sy0[i] < py0[g]) py0[g] = sy0[i];
             if (sy0[i] + sz[i] - 1 > py1[g]) py1[g] = sy0[i] + sz[i] - 1;
         }
-    for (i = 127; i >= 0; i--) {
-        unsigned y = (unsigned)sy0[i], h = (unsigned)sz[i];
-        unsigned t = o[i * 4 + 2] | (o[i * 4 + 3] & 1) << 8, at = o[i * 4 + 3];
-        int x = sx0[i], s, vs, r, c, g = spr_root(up, i);
-        if (!shown[i])
-            continue;
-        if ((at & 0x30) != 0x30) {
-            /* below priority 3, in the view: the 3D's (a rival's marker,
-               what shows where the 3D leaves colour 0), its piece's middle
-               moved as the 3D is: about the view's centre, at its scale */
-            double sc = (double)fw_focal() / K / 128.0, cx = (px0[g] + px1[g] + 1) / 2.0, cy = (py0[g] + py1[g] + 1) / 2.0;
-            s = (int)floor(W / 2.0 + (cx - (VIEW_X + VIEW_W / 2)) * sc - cx + 0.5);
-            vs = (int)floor(view_cy() + (cy - VIEW_CY) * sc - cy + 0.5);
-        } else {
-            s = anchor_shift(px0[g], px1[g]);
-            vs = anchor_shift_y(py0[g], py1[g]);
-        }
-        if ((int)y + (int)h > PANEL_TOP) {
-            vs = H - 224 - safe_px[3];
-            for (b = 0; b < nboxes; b++)
-                if (x + (int)h / 2 >= box_x0[b] && x + (int)h / 2 <= box_x1[b])
-                    s = box_shift[b];
-        }
-        x += s;
-        for (r = 0; r < (int)h; r++) {
-            int sy = (int)y + vs + r, ry = at & 0x80 ? (int)h - 1 - r : r;
-            if (sy < 0 || sy >= H)
-                continue;
-            for (c = 0; c < (int)h; c++) {
-                int sx = x + c, cx = at & 0x40 ? (int)h - 1 - c : c, bit = 7 - (cx & 7);
-                unsigned ch = (t & 0x100) | ((t + (unsigned)(ry >> 3) * 16) & 0xF0) | ((t + (unsigned)(cx >> 3)) & 0x0F);
-                unsigned w = (OBJ_CHARS + ch * 16 + (unsigned)(ry & 7)) & 0x7FFF, px;
-                uint16_t w0 = v[w], w1 = v[(w + 8) & 0x7FFF];
-                if (sx < 0 || sx >= W)
-                    continue;
-                px = (w0 >> bit & 1) | (w0 >> (bit + 8) & 1) << 1 | (w1 >> bit & 1) << 2 | (w1 >> (bit + 8) & 1) << 3;
-                if (!px)
-                    continue;
-                obj[sy][sx] = (uint16_t)(((at >> 4 & 3) << 8 | (128 + (at >> 1 & 7) * 16 + px)) + 1);
-                if (sx < x0) x0 = sx;
-                if (sx > x1) x1 = sx;
-                if (sy < y0) y0 = sy;
-                if (sy > y1) y1 = sy;
-                n++;
+    memcpy(high, o + 512, sizeof high);
+    wr8(OAMADDL, 0x00);
+    wr8(OAMADDH, 0x00);
+    for (i = 0; i < 128; i++) {
+        int g = spr_root(up, i), s = ox, vs = oy, x, y, xp = 0, yp = 32;
+        unsigned at = o[i * 4 + 3], h = (unsigned)sz[i];
+        if (shown[i]) {
+            if ((at & 0x30) == 0x30) {  /* the HUD's: to the screen's edges */
+                s = anchor_shift(px0[g], px1[g]);
+                vs = anchor_shift_y(py0[g], py1[g]);
+                if (sy0[i] + (int)h > PANEL_TOP) {
+                    vs = H - 224 - safe_px[3];
+                    for (b = 0; b < nboxes; b++)
+                        if (sx0[i] + (int)h / 2 >= box_x0[b] && sx0[i] + (int)h / 2 <= box_x1[b])
+                            s = box_shift[b];
+                }
             }
+            /* from the screen's place to the console picture's: its column 0
+               at ox, its line 1 at oy; the pages past its 9-bit X and its
+               256 rows */
+            x = sx0[i] + s - ox;
+            y = sy0[i] + vs - oy;
+            xp = x >= 256 ? (x - 256) / 512 + 1 : x < -256 ? -((-256 - x + 511) / 512) : 0;
+            x -= 512 * xp;
+            yp = y >= 0 ? y / 256 : -((255 - y) / 256);
+            y -= 256 * yp;
+        } else {
+            x = 0;
+            y = 0xF0;
         }
+        high[i / 4] = (uint8_t)((high[i / 4] & ~(1u << (2 * (i & 3)))) | ((unsigned)(x >> 8) & 1) << (2 * (i & 3)));
+        nshvc_ext_sprite_page(i, xp, yp);
+        wr8(OAMDATA, (uint8_t)x);
+        wr8(OAMDATA, (uint8_t)y);
+        wr8(OAMDATA, o[i * 4 + 2]);
+        wr8(OAMDATA, o[i * 4 + 3]);
     }
-    if (!n)
-        return;
-    for (y = y0; y <= y1; y++)
-        for (x = x0; x <= x1; x++) {
-            unsigned e = obj[y][x];
-            uint8_t *q, *ql;
-            if (!e)
-                continue;
-            obj[y][x] = 0;
-            e--;
-            q = tex + (size_t)y * K * tw + (size_t)x * K;
-            ql = lay + (size_t)y * K * tw + (size_t)x * K;
-            /* the console's order in mode 3: priority 3 over all, 2 over
-               BG2, 1 and 0 under BG2's priority-1 tiles; all under BG1's
-               (priority 1) */
-            for (b = 0; b < K; b++, q += tw, ql += tw)
-                for (a = 0; a < K; a++)
-                    if (ql[a] < ((e >> 8) == 3 ? 4 : (e >> 8) == 2 ? 3 : 2))
-                        q[a] = (uint8_t)e;
-        }
+    for (i = 0; i < 32; i++)
+        wr8(OAMDATA, high[i]);
 }
 
 /* The race's upload stage (system/raster.c, 7E:A56B: the frame's uploads in
@@ -2612,6 +2510,65 @@ static void bg1_back(void)
     }
 }
 
+/* The hills (BG2) on VRAM page 1 for the console to draw, as the game has
+   them on page 0 (its map $5800, 32 x 64, characters from $6000), less what
+   the original's bezel and blank lines hid: the map's rows the view's
+   scroll shows (the two buffers' bands, $0D8E + 2 n) kept, the rest (the
+   pause's words, the HUD's pieces) the band's own sky, a character of
+   colour 1 alone, which the gradient sets line by line: the sky above the
+   hills, the ground's colours below, as opaque as the original's sky (the
+   sprites it hides stay hidden). Written each frame, held, outside the
+   game's time, as the in-between frames' rows are (tween.c). */
+#define BG2_MAP_AT 0x5800
+#define BG2_CHARS_AT 0x6000
+
+/* whether a 4 bpp character's 64 pixels are all colour 1 */
+static int all_colour1(const uint16_t *v, unsigned ch)
+{
+    unsigned r, at = (BG2_CHARS_AT + ch * 16) & 0x7FFF;
+    for (r = 0; r < 8; r++)
+        if (v[(at + r) & 0x7FFF] != 0x00FF || v[(at + 8 + r) & 0x7FFF] != 0)
+            return 0;
+    return 1;
+}
+
+static void bg2_prepare(void)
+{
+    static uint16_t map[0x800];
+    const uint16_t *v = nshvc_vram();
+    const uint8_t *w = nshvc_wram();
+    uint8_t keep[64] = {0};
+    unsigned i, r, sel, sky = 0xFFFF;
+
+    for (sel = 0; sel < 2; sel++) {     /* the rows the view's lines show, each buffer's */
+        unsigned vofs = (unsigned)(w[0x0D8E + 2 * sel] | w[0x0D8F + 2 * sel] << 8);
+        for (r = VIEW_Y; r < VIEW_Y + VIEW_H; r++)
+            keep[((r + vofs) & 511) >> 3] = 1;
+    }
+    for (r = 0; r < 64 && sky == 0xFFFF; r++)   /* the bands' sky: an entry whose character is colour 1 alone */
+        for (i = 0; i < 32 && keep[r]; i++)
+            if (all_colour1(v, v[BG2_MAP_AT + r * 32 + i] & 0x3FF)) {
+                sky = v[BG2_MAP_AT + r * 32 + i];
+                break;
+            }
+    for (r = 0; r < 64; r++)
+        for (i = 0; i < 32; i++)
+            map[r * 32 + i] = keep[r] || sky == 0xFFFF ? v[BG2_MAP_AT + r * 32 + i] : (uint16_t)sky;
+    nshvc_ext_vram_direct(1);
+    wr8(VMAIN, 0x80);
+    wr8(VMADDL, (uint8_t)BG2_MAP_AT);
+    wr8(VMADDH, (uint8_t)(BG2_MAP_AT >> 8));
+    for (i = 0; i < 0x800; i++) {
+        wr8(VMDATAL, (uint8_t)map[i]);
+        wr8(VMDATAH, (uint8_t)(map[i] >> 8));
+    }
+    for (i = 0; i < 0x2000; i++) {      /* the characters as page 0 has them */
+        wr8(VMDATAL, (uint8_t)v[BG2_CHARS_AT + i]);
+        wr8(VMDATAH, (uint8_t)(v[BG2_CHARS_AT + i] >> 8));
+    }
+    nshvc_ext_vram_direct(-1);
+}
+
 /* the screen the full window's: the sprites, BG1 on page 1, the view's
    window off and the screen on (the stage's blank was for its uploads);
    work the original never did, so it takes none of the S-CPU's time (an
@@ -2621,11 +2578,13 @@ static void takeover(void)
     uint8_t *w = nshvc_wram();
 
     nshvc_set_cpu_costs(0);
-    wr8(TM, 0x01);                      /* BG1 alone: the backdrop and the sprites are in its texels */
+    sprites_place();
+    wr8(TM, 0x13);                      /* BG1, BG2 (the hills, bg2_prepare) and the sprites, as the race's */
     wr8(TMW, 0x00);
     bg1_set();
     wr8(HDMAEN, (uint8_t)(w[0x0D45] | 0x80));
     nshvc_ext_layer_page(0, 1);
+    nshvc_ext_layer_page(1, 1);         /* BG2 on page 1 too: its map and characters at $5800-$7FFF (bg2_prepare) */
     wr8(INIDISP, w[0x0D61]);
     nshvc_set_cpu_costs(1);
 }
@@ -2657,6 +2616,13 @@ void fw_frame_end(void)
        made with interrupts held, where the console's time does not pass
        (and only when there are any: a hold may move where a due interrupt
        is taken) */
+    if (on && handed) {                 /* the hills' page, as the game's VRAM now has them */
+        nshvc_hold_interrupts(1);
+        nshvc_set_cpu_costs(0);
+        bg2_prepare();
+        nshvc_set_cpu_costs(1);
+        nshvc_hold_interrupts(0);
+    }
     if (!(on && (map_w != W || map_h != H)) && !(was && !on)) {
         staged = 0;
         return;
@@ -2669,6 +2635,7 @@ void fw_frame_end(void)
         bg1_back();
         wr8(HDMAEN, nshvc_wram()[0x0D45]);
         nshvc_ext_layer_page(0, 0);
+        nshvc_ext_layer_page(1, 0);
         sprites_write();
         if (staged)
             wr8(TM, 0x13);              /* the race screen's, as the stage set it */
