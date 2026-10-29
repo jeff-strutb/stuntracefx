@@ -151,7 +151,15 @@ NSHVC_MAIN(argc, argv)
 {
     static nshvc_cart cart;
     static const nshvc_hooks hooks = { .key = on_key, .touch = on_touch, .frame = on_frame };
+    static char fps_path[1024];
     int i;
+    /* FW_PROF (a check): nativeshvc's frame log too, in the temporary
+       folder (TMPDIR) where a sandboxed app can write it */
+    if (getenv("FW_PROF") && !getenv("NSHVC_FPS_LOG") && getenv("TMPDIR")) {
+        snprintf(fps_path, sizeof fps_path, "%s/fps.log", getenv("TMPDIR"));
+        setenv("NSHVC_FPS_LOG", fps_path, 1);
+        fprintf(stderr, "fwprof: nativeshvc's frame log at %s\n", fps_path);
+    }
     for (i = 1; i < argc; i++)
         if (!strcmp(argv[i], "--pacing") && i + 1 < argc) {
             if (!(pacing_f = fopen(argv[i + 1], "w"))) {

@@ -11,7 +11,7 @@
  * background's layer (the one whose map is a repeating texture: the
  * granite, the title's checks) reads, outside the console's picture, a
  * map of that texture alone (nshvc_ext_layer_outside, the map passed as
- * data, once nativeshvc has it: MW_LAYER_OUTSIDE), so the window is filled
+ * data), so the window is filled
  * with it at its own scroll and the holes its map has for the screen's
  * contents (the 3D car's window) stay inside.
  *
@@ -31,11 +31,11 @@
 
 const uint16_t *nshvc_vram(void);
 
-/* nshvc_ext_layer_outside is requested of nativeshvc and not yet in its
-   contract: until it is (MW_LAYER_OUTSIDE), the background's layer shows
-   its own map past the console's picture, wrapped */
+/* nshvc_ext_layer_outside (nativeshvc 25a9be2): the background's texture
+   past the console's picture; MW_LAYER_OUTSIDE=0 shows its own map there
+   instead, wrapped */
 #ifndef MW_LAYER_OUTSIDE
-#define MW_LAYER_OUTSIDE 0
+#define MW_LAYER_OUTSIDE 1
 #endif
 
 /* the game's last writes to the PPU's registers $2100-$213F */

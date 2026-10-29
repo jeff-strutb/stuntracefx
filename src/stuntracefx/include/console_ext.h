@@ -41,6 +41,7 @@ void nshvc_ext_layer_page(int layer, int page);
 void nshvc_ext_vram_direct(int page);
 void nshvc_ext_sprite_x(int sprite, int on);
 void nshvc_ext_layer_clip(int layer, int on);       /* contract 2.7 */
+void nshvc_ext_layer_outside(int layer, const uint16_t *map, int size);
 void nshvc_window_size(float *w, float *h);
 void nshvc_safe_area(float *left, float *top, float *right, float *bottom);
 
