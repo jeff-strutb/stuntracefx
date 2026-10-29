@@ -138,9 +138,12 @@ static void progress_cb(void *ctx, double f, const char *s)
     if (self.buildNow) {
         rb_check c;
         self.romOK = self.rom && rb_check_rom(self.rom.fileSystemRepresentation, &c, NULL, NULL, NULL);
+        if (!self.romOK) {              /* a scripted run: its result on stdout, its status the exit code */
+            printf("failed: %s\n", self.rom ? c.note : "no --rom given");
+            exit(1);
+        }
         [self toRom:nil];
-        if (self.romOK)
-            [self startBuild];
+        [self startBuild];
     } else {
         [self showTarget];
     }
