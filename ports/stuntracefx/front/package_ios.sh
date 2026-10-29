@@ -53,9 +53,9 @@ cat > "$APP/Info.plist" <<EOP
   <key>UIRequiresFullScreen</key><true/>
   <key>UIStatusBarHidden</key><true/>
   <key>UISupportedInterfaceOrientations</key>
-  <array><string>UIInterfaceOrientationLandscapeRight</string><string>UIInterfaceOrientationLandscapeLeft</string></array>
+  <array><string>UIInterfaceOrientationLandscapeRight</string><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationPortrait</string></array>
   <key>UISupportedInterfaceOrientations~ipad</key>
-  <array><string>UIInterfaceOrientationLandscapeRight</string><string>UIInterfaceOrientationLandscapeLeft</string></array>
+  <array><string>UIInterfaceOrientationLandscapeRight</string><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationPortrait</string><string>UIInterfaceOrientationPortraitUpsideDown</string></array>
   <key>UIApplicationSceneManifest</key>
   <dict>
     <key>UIApplicationSupportsMultipleScenes</key><false/>
