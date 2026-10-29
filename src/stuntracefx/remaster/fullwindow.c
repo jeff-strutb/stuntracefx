@@ -29,6 +29,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "machine.h"
 #include "hw.h"
@@ -177,17 +178,20 @@ static int anchor_shift_y(int y0, int y1)
 
 /* The HUD's pieces as whole pieces: while the HUD draws, each Super FX
    program's pixels go to a layer of the original's screen (hud_px, the
-   colour + 1) and, as the program ends (fw_gsu_program), onto the texels
-   as one piece by its columns' anchor */
+   colour + 1; hud_id, the program's piece) and, as the HUD ends
+   (fw_hud_end), onto the texels: the pieces near each other (a message
+   one program a word) joined, each join by its columns' and rows' anchor */
+#define HUD_PIECES 96
+#define HUD_GAP 24                      /* pieces this near across (on rows they share) are one: a message's words */
 static uint16_t hud_px[224][256];
+static uint8_t hud_id[224][256];
 static int hud_run, hud_x0, hud_x1, hud_y0, hud_y1;
+static int hud_n, hp_x0[HUD_PIECES], hp_x1[HUD_PIECES], hp_y0[HUD_PIECES], hp_y1[HUD_PIECES], hp_up[HUD_PIECES];
 
 void fw_gsu_program(int begin)
 {
-    int x, y, s, t, i, j;
-
     if (begin) {
-        hud_run = fw_hud && !checking;
+        hud_run = fw_hud && !checking && hud_n < HUD_PIECES;
         hud_x0 = hud_y0 = 0x7FFF;
         hud_x1 = hud_y1 = -1;
         return;
@@ -197,19 +201,62 @@ void fw_gsu_program(int begin)
     hud_run = 0;
     if (hud_x1 < 0)
         return;
-    s = anchor_shift(hud_x0, hud_x1);
-    t = anchor_shift_y(hud_y0, hud_y1);
-    for (y = hud_y0; y <= hud_y1; y++)
-        for (x = hud_x0; x <= hud_x1; x++) {
-            uint8_t *o;
-            if (!hud_px[y][x])
-                continue;
-            o = tex + (size_t)(y + t) * K * tw + (size_t)(x + s) * K;
-            for (j = 0; j < K; j++, o += tw)
-                for (i = 0; i < K; i++)
-                    o[i] = (uint8_t)(hud_px[y][x] - 1);
-            hud_px[y][x] = 0;
+    hp_x0[hud_n] = hud_x0;
+    hp_x1[hud_n] = hud_x1;
+    hp_y0[hud_n] = hud_y0;
+    hp_y1[hud_n] = hud_y1;
+    hp_up[hud_n] = hud_n;
+    hud_n++;
+}
+
+static int hud_root(int i)
+{
+    while (hp_up[i] != i)
+        i = hp_up[i] = hp_up[hp_up[i]];
+    return i;
+}
+
+static void hud_place(void)
+{
+    int a, b, x, y, i, j, g0[HUD_PIECES], g1[HUD_PIECES], h0[HUD_PIECES], h1[HUD_PIECES], s[HUD_PIECES], t[HUD_PIECES];
+
+    for (a = 0; a < hud_n; a++)
+        for (b = 0; b < a; b++)
+            if (hp_y0[a] <= hp_y1[b] && hp_y0[b] <= hp_y1[a] && hp_x0[a] <= hp_x1[b] + HUD_GAP &&
+                hp_x0[b] <= hp_x1[a] + HUD_GAP)
+                hp_up[hud_root(a)] = hud_root(b);
+    for (a = 0; a < hud_n; a++)
+        g0[a] = h0[a] = 0x7FFF, g1[a] = h1[a] = -1;
+    for (a = 0; a < hud_n; a++) {
+        int g = hud_root(a);
+        if (hp_x0[a] < g0[g]) g0[g] = hp_x0[a];
+        if (hp_x1[a] > g1[g]) g1[g] = hp_x1[a];
+        if (hp_y0[a] < h0[g]) h0[g] = hp_y0[a];
+        if (hp_y1[a] > h1[g]) h1[g] = hp_y1[a];
+    }
+    for (a = 0; a < hud_n; a++)
+        if (hud_root(a) == a) {
+            s[a] = anchor_shift(g0[a], g1[a]);
+            t[a] = anchor_shift_y(h0[a], h1[a]);
         }
+    for (a = 0; a < hud_n; a++) {
+        int g = hud_root(a);
+        for (y = hp_y0[a]; y <= hp_y1[a]; y++)
+            for (x = hp_x0[a]; x <= hp_x1[a]; x++) {
+                uint8_t *o;
+                if (!hud_px[y][x] || hud_id[y][x] != a)
+                    continue;
+                o = tex + (size_t)(y + t[g]) * K * tw + (size_t)(x + s[g]) * K;
+                for (j = 0; j < K; j++, o += tw)
+                    for (i = 0; i < K; i++)
+                        o[i] = (uint8_t)(hud_px[y][x] - 1);
+            }
+    }
+    for (a = 0; a < hud_n; a++)
+        for (y = hp_y0[a]; y <= hp_y1[a]; y++)
+            for (x = hp_x0[a]; x <= hp_x1[a]; x++)
+                hud_px[y][x] = 0;
+    hud_n = 0;
 }
 
 static int cropping;                    /* FW_CCHECK's pictures: the 3D alone */
@@ -225,6 +272,7 @@ void fw_plot(uint16_t x, uint16_t y)
         if (py >= 224)
             return;
         hud_px[py][px] = (uint16_t)(c + 1);
+        hud_id[py][px] = (uint8_t)hud_n;
         if (px < hud_x0) hud_x0 = px;
         if (px > hud_x1) hud_x1 = px;
         if (py < hud_y0) hud_y0 = py;
@@ -360,6 +408,8 @@ void fw_hud_begin(void)
 
 void fw_hud_end(void)
 {
+    if (fw_hud && hud_n)
+        hud_place();
     fw_hud = 0;
 }
 
@@ -1621,6 +1671,8 @@ static void check_picture(int j)
     rm_hud_state(1);
     memcpy(nshvc_sram() + 0x10000, bank71, sizeof bank71);
     fw_drawing = 0;
+    if (hud_n)                          /* a redraw let go before the HUD's end: its pieces */
+        hud_place();
     fw_hud = 0;
     checking = 0;
     if (!a || a != b)
@@ -1679,6 +1731,8 @@ static void kcheck_picture(int j)
     rm_hud_state(1);
     memcpy(nshvc_sram() + 0x10000, bank71, sizeof bank71);
     fw_drawing = 0;
+    if (hud_n)                          /* a redraw let go before the HUD's end: its pieces */
+        hud_place();
     fw_hud = 0;
     tex = tex_k;
     K = k;
@@ -1767,6 +1821,8 @@ static int ccheck_draw(int j, uint8_t *buf, int w, int h, int off)
     rm_hud_state(1);
     memcpy(nshvc_sram() + 0x10000, bank71, sizeof bank71);
     fw_drawing = 0;
+    if (hud_n)                          /* a redraw let go before the HUD's end: its pieces */
+        hud_place();
     fw_hud = 0;
     cropping = 0;
     cy_off = 0;
@@ -1839,6 +1895,72 @@ static void ccheck_picture(int j)
         }
 }
 
+/* FW_PROF=1 (a check): each stage of the full window's pictures timed, the
+   mean milliseconds a picture written to stderr each 120 */
+enum { PR_REDRAW, PR_LAYERS, PR_BACKDROP, PR_PANELS, PR_SPRITES, PR_HAND, PR_N };
+static double prof_ms[PR_N];
+static long prof_pics;
+static double prof_t;
+
+static double prof_now(void)
+{
+    struct timespec t;
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return t.tv_sec * 1e3 + t.tv_nsec / 1e6;
+}
+
+static void prof_mark(int stage)
+{
+    double t;
+    if (!getenv("FW_PROF"))
+        return;
+    t = prof_now();
+    if (stage >= 0)
+        prof_ms[stage] += t - prof_t;
+    prof_t = t;
+    if (stage == PR_HAND && ++prof_pics == 120) {
+        fprintf(stderr, "fwprof %dx%d k%d ms a picture: redraw %.2f layers %.2f backdrop %.2f panels %.2f sprites %.2f hand %.2f\n",
+                W, H, K, prof_ms[0] / 120, prof_ms[1] / 120, prof_ms[2] / 120, prof_ms[3] / 120, prof_ms[4] / 120, prof_ms[5] / 120);
+        memset(prof_ms, 0, sizeof prof_ms);
+        prof_pics = 0;
+    }
+}
+
+/* FW_PROF's frames: the time from one frame's end to the next's (the
+   whole frame, the console's run and the present included) and the frame
+   end's own work (rm_frame_end: the pictures drawn there), the mean and
+   the most, each 120 frames */
+void fw_prof_frame(int begin)
+{
+    static double last, start, gap_sum, gap_max, work_sum, work_max;
+    static long n;
+    double t;
+
+    if (!getenv("FW_PROF"))
+        return;
+    t = prof_now();
+    if (begin) {
+        if (last > 0) {
+            double g = t - last;
+            gap_sum += g;
+            if (g > gap_max)
+                gap_max = g;
+        }
+        last = start = t;
+        return;
+    }
+    t -= start;
+    work_sum += t;
+    if (t > work_max)
+        work_max = t;
+    if (++n == 120) {
+        fprintf(stderr, "fwprof frames: %.2f ms apart (most %.2f), the frame end's work %.2f (most %.2f), full window %d\n",
+                gap_sum / 120, gap_max, work_sum / 120, work_max, on);
+        gap_sum = gap_max = work_sum = work_max = 0;
+        n = 0;
+    }
+}
+
 int fw_picture(int j)
 {
     static uint8_t scratch[2][RM_TWEEN_BYTES];
@@ -1857,10 +1979,13 @@ int fw_picture(int j)
     }
     if (getenv("FW_CHECK"))
         check_picture(j);
+    prof_mark(-1);
     fw_drawing = 1;
     list_gen++;
     m = rm_tween_buffers(j, RM_TICKS, scratch[0], scratch[1]);
     fw_drawing = 0;
+    if (hud_n)                          /* a redraw let go before the HUD's end: its pieces */
+        hud_place();
     fw_hud = 0;
     if (!m)
         return 0;
@@ -1868,12 +1993,18 @@ int fw_picture(int j)
         kcheck_picture(j);
     if (getenv("FW_CCHECK"))
         ccheck_picture(j);
+    prof_mark(PR_REDRAW);
     for (i = 0; i < (size_t)tw * th; i++)  /* the 3D and the HUD: BG1's */
         lay[i] = tex[i] ? 3 : 0;
+    prof_mark(PR_LAYERS);
     backdrop_draw();
+    prof_mark(PR_BACKDROP);
     panels_draw();
+    prof_mark(PR_PANELS);
     sprites_draw();
+    prof_mark(PR_SPRITES);
     hand();
+    prof_mark(PR_HAND);
     return 1;
 }
 

@@ -112,6 +112,8 @@ void fw_sky_take(void);
 /* the menus' screen changed the screen's size: the full window sets its
    own again when it next takes the screen */
 void fw_screen_lost(void);
+/* FW_PROF's frame times: at rm_frame_end's start (1) and end (0) */
+void fw_prof_frame(int begin);
 void fw_vblank_uploads(void);
 void fw_upload_done(void);
 /* at each frame's end: the console's screen and BG1 set for the mode */

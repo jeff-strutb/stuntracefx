@@ -327,6 +327,7 @@ void rm_frame_end(void)
     static int ref = -1;
     if (ref < 0)
         ref = getenv("RM_REF_PACE") ? atoi(getenv("RM_REF_PACE")) : 0;
+    fw_prof_frame(1);
     fw_vblank_uploads();
     rm_tween_frame_end();
     rm_on = rm_option(RM_OPT_FRAMERATE) && nshvc_peek(0x7E10DA) == 0;
@@ -337,4 +338,5 @@ void rm_frame_end(void)
     rm_canvas_frame_end();
     fw_frame_end();
     mw_frame_end();
+    fw_prof_frame(0);
 }
