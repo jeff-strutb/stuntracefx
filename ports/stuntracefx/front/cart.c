@@ -68,7 +68,10 @@ void cart_describe(nshvc_cart *cart)
     cart->rom_pages = pages;
     cart->rom_read = asset_read;
     cart->rom_size = port_rom_size;
-    cart->sram_size = 0x10000;      /* the Super FX's RAM, battery backed */
+    /* the Super FX's RAM, battery backed: 128 KB, the board's largest;
+       the original uses the first 64 KB, Enhanced's view distance the
+       second (remaster.h RM_FAR_*) */
+    cart->sram_size = 0x20000;
     cart->battery = 1;
     cart->save_from = 0xFC00;       /* the records; the rest is the Super FX's work */
     cart->save_size = 0x400;

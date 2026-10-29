@@ -2,7 +2,10 @@
  * draw_list.c: the list of objects the Super FX draws this frame, built in
  * work RAM from the objects in the buckets the trigger list names.
  */
+#include <string.h>
+
 #include "machine.h"
+#include "remaster.h"
 
 #define DRAW_COUNT 0x7E0CEEu      /* records written (at most $31) */
 #define TRIGGER_POS 0x7E1F2Bu     /* offset into the trigger list */
@@ -12,7 +15,15 @@
 #define DRAW_LIST 0xF77Fu         /* the records, 30 bytes each, bank $7E */
 #define DRAW_SIDE 0x7E1F07u       /* nonzero: the view is on the far side */
 #define OBJ(o, f) (0x7E2000u + (uint16_t)((f) + (o)))
-#define REC(r, f) (0x7E0000u + (uint16_t)((f) + (r)))
+#define REC(r, f) (rec_bank + (uint16_t)((f) + (r)))
+
+/* Remaster, Enhanced: the bank the records go to (work RAM's; the far
+   records' in the Super FX's second bank, rm_far_records), whether this
+   one is far (the object's own fields left as they are, not counted),
+   and the objects given a near record this frame */
+static uint32_t rec_bank = 0x7E0000u;
+static int rec_far;
+static uint8_t rec_near[0x8000];
 
 /* Object `o`'s draw record at `r`: position (relative to the view at
    $C5/$C7/$C9 unless bit 7 of +$24 says absolute) and its depth key at
@@ -58,7 +69,8 @@ static uint16_t draw_record(uint16_t o, uint16_t r)
     }
     v = rd8(OBJ(o, 0x24));
     wr8(REC(r, 0x07), v);
-    wr8(OBJ(o, 0x24), (uint8_t)(v & 0xFD));
+    if (!rec_far)
+        wr8(OBJ(o, 0x24), (uint8_t)(v & 0xFD));
     v = rd8(OBJ(o, 0x5A));
     if (!(v & 0x80))
         v = rd8(0x7E05E9);
@@ -77,6 +89,9 @@ static uint16_t draw_record(uint16_t o, uint16_t r)
     wr8(REC(r, 0x1C), (rd8(OBJ(o, 0x5F))));
     wr8(REC(r, 0x1D), (rd8(OBJ(o, 0x60))));
     wr16(REC(r, 0x16), (rd16(OBJ(o, 0x5D))));
+    if (rec_far)
+        return (uint16_t)(r + RM_FAR_SIZE);
+    rec_near[o & 0x7FFF] = 1;
     wr16_rmw(DRAW_COUNT, ((uint16_t)(rd16_rmw(DRAW_COUNT) + 1)));
     return (uint16_t)(r + 0x1E);
 }
@@ -165,12 +180,70 @@ static void draw_triggers(void)
     }
 }
 
+/* Remaster, Enhanced: view distance past the original's. The draw list
+   comes from the cells of a block ahead of the view (the trigger list),
+   at most $31 records; every other object the list would draw, in every
+   cell of the map, gets a record too, in the Super FX's second bank
+   ($71, RM_FAR_*), with its place from the view in 32 bits, which the
+   Super FX's frame program draws behind the near ones (render/frame.c).
+   The objects themselves are not touched: what is activated, and when,
+   is the trigger list's as before. Left out: objects placed in view
+   space (+$24 bit 7) and effect emitters (bit 2), the near cell's. */
+static void far_record(uint16_t o, unsigned i)
+{
+    uint16_t r = (uint16_t)(RM_FAR_RECORDS + i * RM_FAR_SIZE);
+    int32_t d[3];
+    unsigned k;
+
+    draw_record(o, r);
+    d[0] = (int16_t)rd16(OBJ(o, 0x0C)) - (int16_t)rd16(0x0000C5);
+    d[1] = (int16_t)rd16(OBJ(o, 0x0E)) - (int16_t)rd16(0x0000C7);
+    d[2] = (int16_t)rd16(OBJ(o, 0x10)) - (int16_t)rd16(0x0000C9);
+    for (k = 0; k < 3; k++) {
+        wr16(REC(r, RM_FAR_PLACE + 4 * k), (uint16_t)d[k]);
+        wr16(REC(r, RM_FAR_PLACE + 4 * k + 2), (uint16_t)((uint32_t)d[k] >> 16));
+    }
+    /* the depth key's lift for drawing first (as draw_record's $1F40) */
+    wr8(REC(r, RM_FAR_LIFT), (uint8_t)(rd16(OBJ(o, 0x09)) & 0x0001));
+}
+
+static void far_records(void)
+{
+    unsigned cell, n = 0;
+    uint16_t o;
+
+    rec_bank = 0x710000u;
+    rec_far = 1;
+    for (cell = 0; cell < 0x400; cell++)
+        for (o = rd16(0x7F0000 + 2 * cell); o; o = rd16(OBJ(o, 0x3C))) {
+            uint8_t f = rd8(OBJ(o, 0x24));
+            if (rec_near[o & 0x7FFF] || (f & 0x84) || n >= RM_FAR_MAX)
+                continue;
+            if ((f & 0x20) || rd16(OBJ(o, 0x04)) == 0xA040 || rd16(OBJ(o, 0x04)) < 0x8000)
+                continue;
+            if (f & 0x40) {     /* drawn on one side only, as drawn() */
+                if ((rd8(OBJ(o, 0x26)) == 0x02) == (rd8(DRAW_SIDE) != 0))
+                    continue;
+            }
+            far_record(o, n++);
+        }
+    wr16(0x710000u | RM_FAR_COUNT, (uint16_t)n);
+    rec_bank = 0x7E0000u;
+    rec_far = 0;
+}
+
 void ObjectDrawListBuild(void)
 {
+    int far = rm_enhanced() && rm_whole_steps();     /* a race's (not the menus' 3D) */
+
+    if (far)
+        memset(rec_near, 0, sizeof rec_near);
     wr16(DRAW_COUNT, 0x0000);
     wr16(TRIGGER_POS, 0x0000);
     wr16(DRAW_NEXT, DRAW_LIST);
     draw_triggers();
+    if (far)
+        far_records();
 }
 
 void abi_ObjectDrawListBuild(void)

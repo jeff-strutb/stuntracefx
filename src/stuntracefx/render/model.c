@@ -19,6 +19,7 @@
  */
 #include "gsu.h"
 #include "gsu_ops.h"
+#include "remaster.h"
 
 #define R gsu.r
 
@@ -201,7 +202,7 @@ l85B6:
     t = gsu.z;
     R[0] = gsu_sub(R[0], R[0], 0);
     if (t) { goto l8609; }
-    R[1] = gsu_ldw(FX_OBJECT_Z);
+    R[1] = rm_far_shift ? rm_far_depth : gsu_ldw(FX_OBJECT_Z);   /* Remaster: a far object's shade by its own depth */
     R[0] = gsu_getbh(R[0]);
     gsu_r14(gsu_inc(R[14]));
     R[0] = gsu_add(R[0], R[1], 0);
@@ -241,7 +242,7 @@ l85FC:
     t = 1;
     if (t) goto l8651;
 l8609:
-    R[1] = gsu_ldw(FX_OBJECT_Z);
+    R[1] = rm_far_shift ? rm_far_depth : gsu_ldw(FX_OBJECT_Z);   /* Remaster: a far object's shade by its own depth */
     R[0] = gsu_getbh(R[0]);
     gsu_r14(gsu_inc(R[14]));
     R[0] = gsu_add(R[0], R[1], 0);
@@ -477,6 +478,11 @@ l8778:
     R[0] = gsu_hib(R[0]);
     R[0] = gsu_sex(R[0]);
     gsu_stw(FX_LIGHT_LOCAL_Z, R[0]);
+    if (rm_far_shift) {     /* Remaster: a far object drawn scaled down (remaster.h), its light as it is */
+        unsigned m;
+        for (m = FX_VIEW_MATRIX_0; m <= FX_VIEW_MATRIX_8; m += 2)
+            gsu_stw((uint16_t)m, (uint16_t)((int16_t)gsu_ldw((uint16_t)m) >> rm_far_shift));
+    }
     R[0] = gsu_ldw(FX_POINT_SHIFT);
     R[0] = gsu_sub(R[0], 3, 0);
     t = !gsu.s;
@@ -1749,6 +1755,8 @@ l8F49:
     if (t) { goto l8F5E; }
     R[1] = gsu_lsr(R[1]);
 l8F5E:
+    if (rm_far_shift)                   /* Remaster: a far object's sprite scaled down with it */
+        R[1] = (uint16_t)(R[1] >> rm_far_shift);
     gsu_stw(FX_MODEL_CE, R[1]);
     gsu_stw(FX_ROM_R14, R[14]);
     R[0] = gsu_sub(R[0], R[0], 0);

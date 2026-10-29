@@ -11,9 +11,14 @@
  * through registers (returns pulled from the R10 stack) go through
  * frame_run's dispatch on the address they reach.
  */
+#include <stdlib.h>
+#include <string.h>
+
 #include "gsu.h"
 #include "gsu_ops.h"
 #include "draw_list.h"
+#include "remaster.h"
+#include "console_ext.h"
 
 #define R gsu.r
 
@@ -87,6 +92,14 @@ void abi_FxScreenClear(void);
 void abi_FxSpriteMaterial(void);
 void abi_FxTextNotice(void);
 
+static void far_pass(void);
+void abi_FxObjectsDraw(void);
+static int far_drawing;                 /* the far objects' pass: each slot's halvings */
+static uint8_t far_slot_shift[0x31];
+static uint16_t far_slot_depth[0x31];   /* its true depth, at most $7FFF */
+int rm_far_shift;
+uint16_t rm_far_depth;
+
 /* The code from address at until it jumps to ret (the caller's return;
    $FFFF for a program, which ends at its STOP). */
 static void frame_run(uint16_t at, uint16_t ret)
@@ -107,6 +120,8 @@ lAB13:
     R[11] = 0xAB22;
     abi_FxScreenClear();
 lAB22:
+    if (rm_enhanced())
+        far_pass();                     /* Remaster: the far objects first (remaster.h) */
     R[10] = 0x0240;
     R[0] = gsu_sub(R[0], R[0], 0);
     gsu_stw(FX_MODEL_1B4, R[0]);
@@ -175,6 +190,11 @@ lAB8C:
     R[10] = gsu_inc(R[10]);
     R[10] = gsu_inc(R[10]);
 lAB90:
+    if (far_drawing) {                  /* Remaster: the far slot's halvings and depth */
+        unsigned k = (uint16_t)(R[1] - 0x0AAA) / 0x1E % 0x31;
+        rm_far_shift = far_slot_shift[k];
+        rm_far_depth = far_slot_depth[k];
+    }
     R[0] = gsu_sub(R[0], R[0], 0);
     gsu_romb(R[0]);
     R[0] = gsu_sub(R[0], R[0], 0);
@@ -317,7 +337,7 @@ lAC6D:
     gsu_stw(R[10], R[3]);
     R[10] = gsu_inc(R[10]);
     R[10] = gsu_inc(R[10]);
-    R[0] = R[6];
+    R[0] = rm_far_shift ? rm_far_depth : R[6];  /* Remaster: a far object's model by its own depth */
     R[5] = 0x0BB8;
     gsu_sub(R[0], R[5], 0);   /* CMP */
     t = gsu.cy;
@@ -485,6 +505,8 @@ lB100:
     if (t) { goto lB10B; }
     R[1] = 0x0001;
 lB10B:
+    if (rm_far_shift)                   /* Remaster: a far sprite's size scaled down with its place */
+        R[1] = (uint16_t)((int16_t)R[1] >> rm_far_shift);
     R[5] = R[1];
     R[1] = gsu_ldw(FX_OBJECT_X);
     R[2] = gsu_ldw(FX_OBJECT_Y);
@@ -504,6 +526,8 @@ lB123:
     at = nx;
     goto dispatch;
 lB128:
+    if (rm_far_shift)
+        R[1] = (uint16_t)((int16_t)R[1] >> rm_far_shift);
     gsu_stw(R[10], R[1]);
     R[10] = gsu_inc(R[10]);
     R[10] = gsu_inc(R[10]);
@@ -2135,6 +2159,106 @@ enter:
 void abi_FxFrameProgram(void)
 {
     frame_run(0xAB13, 0xFFFF);
+}
+
+/* Remaster, Enhanced: the far records (remaster.h) drawn before the near
+   list. Each is turned by the view matrix ($00E4, as the sort does, in
+   32 bits), left out behind the view or past its sides (the sort's
+   tests: Z + radius below 0, |X| - radius not below |Z|), and halved
+   until its place fits 14 bits; they are drawn farthest first by their
+   depth (+ $1F40 when lifted, + the shape's bias, as the sort keys
+   them), $31 slots at a time in the near slots' place ($0AAA), through
+   FxObjectsDraw. The first bank's work RAM and the registers are kept
+   and put back, so the near list draws from what it would have: only
+   the pixels stay. */
+typedef struct {
+    int32_t key;
+    int16_t at[3];
+    uint8_t shift;
+    uint16_t rec, depth;
+} FarObject;
+
+static int far_cmp(const void *a, const void *b)
+{
+    int32_t x = ((const FarObject *)a)->key, y = ((const FarObject *)b)->key;
+    return x < y ? 1 : x > y ? -1 : 0;
+}
+
+static uint16_t far_word(uint32_t a)
+{
+    return (uint16_t)(gsu_rd8(a) | gsu_rd8(a + 1) << 8);
+}
+
+static void far_pass(void)
+{
+    static FarObject far[RM_FAR_MAX];
+    uint8_t *ram = nshvc_sram();
+    RegsGSU kept = gsu;
+    unsigned count = far_word(0x710000u | RM_FAR_COUNT), i, n = 0, b, k, c;
+    int16_t m[9];
+
+    if (!count || count > RM_FAR_MAX)
+        return;
+    ram[0x10000 + RM_FAR_COUNT] = ram[0x10000 + RM_FAR_COUNT + 1] = 0;
+    for (i = 0; i < 9; i++)
+        m[i] = (int16_t)far_word(0x700000u | (0x00E4 + 2 * i));
+    for (i = 0; i < count; i++) {
+        uint32_t r = 0x710000u | (uint16_t)(RM_FAR_RECORDS + i * RM_FAR_SIZE);
+        int64_t d[3], v[3], big = 0;
+        uint16_t shape = far_word(r + 0x08);
+        int32_t radius = (int16_t)(gsu_rd8(shape + 0x10u) | gsu_rd8(shape + 0x11u) << 8);
+        int32_t bias = (int16_t)(gsu_rd8(shape + 0x05u) | gsu_rd8(shape + 0x06u) << 8);
+        unsigned s = 0;
+
+        for (k = 0; k < 3; k++)
+            d[k] = (int32_t)(far_word(r + RM_FAR_PLACE + 4 * k) | (uint32_t)far_word(r + RM_FAR_PLACE + 4 * k + 2) << 16);
+        for (c = 0; c < 3; c++)     /* column c: the slot's +$12, +$10, +$14 */
+            v[c] = (d[0] * m[c] >> 15) + (d[1] * m[3 + c] >> 15) + (d[2] * m[6 + c] >> 15);
+        if (v[2] + radius < 0 || llabs(v[0]) - radius >= llabs(v[2]))
+            continue;
+        for (k = 0; k < 3; k++)
+            if (llabs(v[k]) > big)
+                big = llabs(v[k]);
+        while ((big >> s) > 0x3FFF)
+            s++;
+        far[n].key = (int32_t)v[2] + bias + (gsu_rd8(r + RM_FAR_LIFT) ? 0x1F40 : 0);
+        for (k = 0; k < 3; k++)
+            far[n].at[k] = (int16_t)(v[k] >> s);
+        far[n].shift = (uint8_t)s;
+        far[n].depth = (uint16_t)(v[2] > 0x7FFF ? 0x7FFF : v[2] < 0 ? 0 : v[2]);
+        far[n].rec = (uint16_t)(RM_FAR_RECORDS + i * RM_FAR_SIZE);
+        n++;
+    }
+    if (!n)
+        return;
+    qsort(far, n, sizeof far[0], far_cmp);
+    memcpy(ram + 0x10000 + RM_FAR_KEEP, ram, 0x2C00);
+    memcpy(ram + 0x10000 + RM_FAR_KEEP + 0x2C00, ram + 0xFC00, 0x400);
+    far_drawing = 1;
+    for (b = 0; b < n; b += 0x31) {
+        unsigned in = n - b < 0x31 ? n - b : 0x31;
+        for (k = 0; k < in; k++) {
+            const FarObject *f = &far[b + k];
+            uint16_t slot = (uint16_t)(0x0AAA + k * 0x1E);
+            memcpy(ram + slot, ram + 0x10000 + f->rec, 0x1E);
+            gsu_stw(slot, k + 1 < in ? (uint16_t)(slot + 0x1E) : 0);
+            gsu_stw((uint16_t)(slot + 0x12), (uint16_t)f->at[0]);
+            gsu_stw((uint16_t)(slot + 0x10), (uint16_t)f->at[1]);
+            gsu_stw((uint16_t)(slot + 0x14), (uint16_t)f->at[2]);
+            far_slot_shift[k] = f->shift;
+            far_slot_depth[k] = f->depth;
+        }
+        gsu_stw(GSU_DRAW_LIST, 0x0AAA);
+        R[10] = 0x0240;
+        gsu_stw(FX_MODEL_1B4, 0);
+        R[11] = 0xFFFE;
+        abi_FxObjectsDraw();
+    }
+    far_drawing = 0;
+    rm_far_shift = 0;
+    memcpy(ram, ram + 0x10000 + RM_FAR_KEEP, 0x2C00);
+    memcpy(ram + 0xFC00, ram + 0x10000 + RM_FAR_KEEP + 0x2C00, 0x400);
+    gsu = kept;
 }
 
 /*

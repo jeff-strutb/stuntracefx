@@ -167,6 +167,25 @@ void rm_canvas_off(void);
 enum { RM_CANVAS_RACE = 1, RM_CANVAS_MENU = 2 };
 void rm_canvas_kept(int owner);
 void rm_canvas_frame_end(void);
+/* Enhanced's view distance (object/draw_list.c, render/frame.c): the
+   far records in the Super FX's second bank ($71): the count, then each
+   a draw record (30 bytes, as the near ones at $7E:F77F) and its place
+   from the view in 32 bits (X, Y, Z at +RM_FAR_PLACE). The Super FX's
+   frame program takes them, turns them to the view, and draws those in
+   view behind the near ones, each farther than 16 bits hold scaled down
+   by rm_far_shift halvings (its place, its model's matrix, its sprite's
+   size), which the drawing reads while it draws that object. */
+#define RM_FAR_COUNT   0x0000u
+#define RM_FAR_RECORDS 0x0100u
+#define RM_FAR_SIZE    0x30u
+#define RM_FAR_PLACE   0x20u
+#define RM_FAR_LIFT    0x2Cu        /* 1: the key lifted by $1F40, as a near record's */
+#define RM_FAR_MAX     0x0136u
+#define RM_FAR_KEEP    0x8000u      /* the first bank's work RAM kept while the far ones draw */
+extern int rm_far_shift;
+extern uint16_t rm_far_depth;    /* its true depth, at most $7FFF: its shade and its model by distance */
+void rm_far_draw(void);
+
 /* the menus' 3D picture to the display at once: system/vblank_updates.c */
 void RmMenuPictureShow(void);
 
