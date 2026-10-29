@@ -60,6 +60,26 @@ void fw_race_stage(void);
    front/superfx_cart.c): the HUD's pieces placed whole */
 void fw_gsu_program(int begin);
 
+/* The screen clip from the projection's exact results (full window):
+   fw_exact_begin as a polygon's projected list at `list` is made, then each
+   vertex's view-space point (fw_exact_point) or the model drawer's point by
+   index (fw_exact_model_point); fw_exact_clip at FxPolygonClipScreen's
+   entry: 1 when it clipped the list (R0 the count), 0 to clip as ever */
+void fw_exact_begin(uint16_t list);
+void fw_exact_point(int16_t x, int16_t y, int16_t z);
+void fw_exact_model_point(uint16_t index);
+/* the model drawer's vertex of point `index` written into the draw list
+   at `at`: its exact place kept for the fill where the projection held it */
+void fw_exact_vertex(uint16_t at, uint16_t index);
+/* the face at `list` goes on to a clip (model.c): its vertices' marks gone,
+   the clip writes its own */
+void fw_exact_unmark(uint16_t list);
+int fw_exact_clip(void);
+/* FxModelFacing (model.c): each triangle's three points' addresses, then
+   its cross product (high and low words) from the exact points */
+void fw_facing_point(int slot, uint16_t addr);
+void fw_facing_cross(uint16_t *hi, uint16_t *lo);
+
 /* FxDrawList's fill into the texels (raster.c, while fw_drawing) */
 void fw_draw_list(void);
 /* FxScreenClear's, while fw_drawing: the texels to colour 0 */

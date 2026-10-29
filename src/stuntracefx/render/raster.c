@@ -1241,8 +1241,10 @@ void abi_FxPolygonGather(void)
     R[12] = gsu_ldw(FX_COUNT);
     R[7] = FX_CLIP_LIST;
     R[8] = gsu_ldw(FX_POLY_OUT);
+    fw_exact_begin(R[8]);               /* Enhanced's full window: the vertices kept exact */
     do {
         near_load(1, 2, 6, 0);
+        fw_exact_point((int16_t)R[1], (int16_t)R[2], (int16_t)R[6]);
         R[11] = 0x9A18;
         (abi_FxProjectVertex());
         gsu_stw(R[8], R[1]);
@@ -1325,6 +1327,8 @@ static int clip_polygon_edge(int k)
 
 void abi_FxPolygonClipScreen(void)
 {
+    if (fw_exact_clip())                /* Enhanced's full window: from the exact vertices */
+        return;
 
     R[8] = gsu_ldw(FX_POLY_OUT);
     R[9] = FX_CLIP_LIST;

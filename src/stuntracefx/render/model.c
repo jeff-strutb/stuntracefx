@@ -2082,11 +2082,14 @@ l9142:
     R[6] = gsu_inc(R[6]);
     R[6] = gsu_inc(R[6]);
     R[7] = R[6];
+    fw_exact_begin(R[7]);               /* Enhanced's full window: the vertices kept exact */
     R[9] = 0x04E4;
     R[5] = 0x0000;
     R[13] = 0x914E;
 l914E:
     R[4] = gsu_getb();
+    fw_exact_model_point(R[4]);
+    fw_exact_vertex(R[6], R[4]);
     gsu_r14(gsu_inc(R[14]));
     R[0] = gsu_umult(R[4], 6);
     R[8] = gsu_add(R[0], R[9], 0);
@@ -2147,6 +2150,7 @@ l91A6:
     gsu_stw(FX_OUTCODES, R[5]);
     gsu_stw(FX_ROM_R14, R[14]);
     gsu_stw(FX_POLY_OUT, R[7]);
+    fw_exact_unmark(R[7]);              /* Enhanced's full window: a face to clip keeps no marks */
     R[0] = gsu_lob(R[5]);
     t = gsu.z;
     if (t) { goto l91CA; }
@@ -2477,6 +2481,7 @@ l93C1:
     gsu_r14(gsu_inc(R[14]));
     R[0] = gsu_mult(R[0], 6);
     R[0] = gsu_add(R[0], R[9], 0);
+    fw_facing_point(0, R[0]);
     R[1] = gsu_ldw(R[0]);
     R[0] = gsu_inc(R[0]);
     R[0] = gsu_inc(R[0]);
@@ -2488,6 +2493,7 @@ l93C1:
     gsu_r14(gsu_inc(R[14]));
     R[0] = gsu_mult(R[0], 6);
     R[8] = gsu_add(R[0], R[9], 0);
+    fw_facing_point(1, R[8]);
     R[0] = gsu_ldw(R[8]);
     R[8] = gsu_inc(R[8]);
     R[8] = gsu_inc(R[8]);
@@ -2502,6 +2508,7 @@ l93C1:
     gsu_r14(gsu_inc(R[14]));
     R[0] = gsu_mult(R[0], 6);
     R[8] = gsu_add(R[0], R[9], 0);
+    fw_facing_point(2, R[8]);
     R[0] = gsu_ldw(R[8]);
     R[8] = gsu_inc(R[8]);
     R[8] = gsu_inc(R[8]);
@@ -2519,6 +2526,7 @@ l93C1:
     { uint32_t p = gsu_lmult(R[2], R[6]); R[4] = (uint16_t)p; R[2] = (uint16_t)(p >> 16); }
     R[4] = gsu_sub(R[4], R[1], 0);
     R[2] = gsu_sub(R[2], R[7], !gsu.cy);
+    fw_facing_cross(&R[2], &R[4]);       /* Enhanced's full window: from the exact points */
     R[0] = gsu_add(R[5], R[5], 0);
     R[0] = gsu_add(R[0], R[0], 0);
     R[0] = gsu_add(R[0], R[0], 0);
@@ -2544,6 +2552,7 @@ l9427:
     gsu_r14(gsu_inc(R[14]));
     R[0] = gsu_umult(R[0], 6);
     R[0] = gsu_add(R[0], R[9], 0);
+    fw_facing_point(0, R[0]);
     R[1] = facing_coord(R[0]);
     R[0] = gsu_inc(R[0]);
     R[0] = gsu_inc(R[0]);
@@ -2552,6 +2561,7 @@ l9427:
     gsu_r14(gsu_inc(R[14]));
     R[0] = gsu_umult(R[0], 6);
     R[8] = gsu_add(R[0], R[9], 0);
+    fw_facing_point(1, R[8]);
     R[0] = facing_coord(R[8]);
     R[8] = gsu_inc(R[8]);
     R[8] = gsu_inc(R[8]);
@@ -2562,6 +2572,7 @@ l9427:
     gsu_r14(gsu_inc(R[14]));
     R[0] = gsu_umult(R[0], 6);
     R[8] = gsu_add(R[0], R[9], 0);
+    fw_facing_point(2, R[8]);
     R[0] = facing_coord(R[8]);
     R[8] = gsu_inc(R[8]);
     R[8] = gsu_inc(R[8]);
@@ -2575,6 +2586,7 @@ l9427:
     { uint32_t p = gsu_lmult(R[2], R[6]); R[4] = (uint16_t)p; R[2] = (uint16_t)(p >> 16); }
     R[4] = gsu_sub(R[4], R[1], 0);
     R[0] = gsu_sub(R[2], R[7], !gsu.cy);
+    fw_facing_cross(&R[0], &R[4]);       /* Enhanced's full window: from the exact points */
     R[0] = gsu_hib(R[0]);
     gsu_stb(R[11], (uint8_t)R[0]);
     t = gsu_count_down(&R[12]);

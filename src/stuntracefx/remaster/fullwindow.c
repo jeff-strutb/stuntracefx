@@ -22,6 +22,7 @@
  * whatever the width, so the field of view across grows with the window
  * and the one up and down stays; all of it k times in texels.
  */
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -326,6 +327,265 @@ static uint16_t ram16(uint16_t a) { return (uint16_t)(ram8(a) | ram8((uint16_t)(
 static void ram8w(uint16_t a, uint8_t v) { gsu_wr8(0x700000u | a, v); }
 static void ram16w(uint16_t a, uint16_t v) { ram8w(a, (uint8_t)v); ram8w((uint16_t)(a + 1), (uint8_t)(v >> 8)); }
 
+/* the draw list's vertices the projection held, exact (below, vw) */
+static int32_t sw_val[0x8000];
+static uint32_t sw_gen[0x8000], list_gen = 1;
+
+/* ---- the screen clip from the projection's exact results ------------------ */
+/*
+ * The projection holds a point's offset from the screen's centre to $3FFF
+ * (FxRatioClamp keeps its direction from the centre), which the original's
+ * 208-column view meets only beside the camera; at k texels a pixel the
+ * same 16 bits are k times closer to the screen, so the screen clip's
+ * edges towards a held point, a face's facing and a textured face's
+ * texture would all change with k (a ceiling over the road lost at k = 4).
+ * So in the full window each polygon's vertices are also kept in 64 bits
+ * as the projection makes them with its hold scaled by k (project_exact),
+ * and the screen clip (FxPolygonClipScreen), the model drawer's facing and
+ * the fill of textured faces (which are never screen clipped) use those:
+ * the picture is the same at every k. The vertices come from
+ * FxPolygonGather (its projection loop's inputs) or the model drawer's
+ * point table by index (the list it writes into the draw list); where the
+ * projection's own vertex is within 16 texels of the scaled one it is used
+ * as it stands, so a clipped face meets its unclipped neighbours.
+ */
+#define EXACT_MAX 32
+static int64_t ex_x[EXACT_MAX], ex_y[EXACT_MAX];
+static int ex_n = -1;
+static uint16_t ex_list;
+
+void fw_exact_begin(uint16_t list)
+{
+    unsigned i;
+
+    for (i = 0; i < EXACT_MAX * 4; i++)  /* the list's words: none held yet (a polygon dropped may have left some) */
+        sw_gen[(uint16_t)(list + 2 * i) >> 1] = 0;
+    ex_list = list;
+    ex_n = fw_view_active() ? 0 : -1;
+}
+
+/* A point's place on the screen from its view-space point, k times the
+   console's: the projection's rule, centre + X f / Z, with its hold scaled
+   by k: past $3FFF k texels from the centre on its larger axis the point
+   is drawn in, along its line from the centre, to that distance, as
+   FxRatioClamp holds it at $3FFF in the console's pixels. So every k
+   draws the same picture, k times as fine. */
+static void project_exact(int64_t x, int64_t y, int64_t z, int64_t *sx, int64_t *sy)
+{
+    int64_t f = fw_focal(), rx, ry, m, lim = 0x3FFFLL * K;
+
+    if (!z)
+        z = 1;
+    rx = x * f / z;
+    ry = y * f / z;
+    m = llabs(rx) > llabs(ry) ? llabs(rx) : llabs(ry);
+    if (m > lim) {
+        rx = rx * lim / m;
+        ry = ry * lim / m;
+    }
+    *sx = tw / 2 + rx;
+    *sy = (int64_t)VIEW_CY * K + ry;
+}
+
+void fw_exact_unmark(uint16_t list)
+{
+    unsigned i;
+
+    for (i = 0; i < EXACT_MAX * 4; i++)
+        sw_gen[(uint16_t)(list + 2 * i) >> 1] = 0;
+}
+
+void fw_exact_point(int16_t x, int16_t y, int16_t z)
+{
+    if (ex_n < 0 || ex_n >= EXACT_MAX) {
+        ex_n = -1;
+        return;
+    }
+    project_exact(x, y, z, &ex_x[ex_n], &ex_y[ex_n]);
+    ex_n++;
+}
+
+/* the model drawer's point by index, exact */
+static void model_point(uint16_t index, int64_t *sx, int64_t *sy)
+{
+    uint16_t a = (uint16_t)(0x0340 + 6 * index);
+    int16_t x = (int16_t)(ram16(a) + ram16(0x0026)), y = (int16_t)(ram16((uint16_t)(a + 2)) + ram16(0x0028));
+    int32_t z = (int16_t)(ram16((uint16_t)(a + 4)) + ram16(0x002A));
+
+    if (z >= 0x100 && z > 0x43FE)       /* the model drawer's far points: their depth held at $43FE */
+        z = 0x43FE;
+    project_exact(x, y, z, sx, sy);
+}
+
+void fw_exact_model_point(uint16_t index)
+{
+    if (ex_n < 0 || ex_n >= EXACT_MAX) {
+        ex_n = -1;
+        return;
+    }
+    model_point(index, &ex_x[ex_n], &ex_y[ex_n]);
+    ex_n++;
+}
+
+/* FxModelFacing's cross product of three projected points ($04E4 + 6 i),
+   from the exact points: the facing of a face with a point the projection
+   held would turn with it */
+static uint16_t facing_at[3];
+
+void fw_facing_point(int slot, uint16_t addr)
+{
+    facing_at[slot] = addr;
+}
+
+void fw_facing_cross(uint16_t *hi, uint16_t *lo)
+{
+    int64_t x[3], y[3], c;
+    int i;
+
+    if (!fw_view_active())
+        return;
+    for (i = 0; i < 3; i++)
+        model_point((uint16_t)((facing_at[i] - 0x04E4) / 6), &x[i], &y[i]);
+    c = (x[1] - x[0]) * (y[2] - y[0]) - (y[1] - y[0]) * (x[2] - x[0]);
+    if (c > 0x7FFFFFFF)
+        c = 0x7FFFFFFF;
+    if (c < -0x7FFFFFFFLL - 1)
+        c = -0x7FFFFFFFLL - 1;
+    *hi = (uint16_t)((uint32_t)c >> 16);
+    *lo = (uint16_t)c;
+    gsu.s = (*hi & 0x8000) != 0;
+    gsu.z = *hi == 0;
+}
+
+/* the polygon (or a line, 2 vertices) clipped to the view's edges, as
+   FxPolygonClipScreen's: inside x from the left edge to the right one and
+   y from the top to the bottom one, both ends included; a line's crossing
+   with the bottom edge one row inside it */
+static long exact_seen, exact_held, exact_off;
+
+static void exact_report(void)
+{
+    fprintf(stderr, "fwexact: %ld vertices clipped, %ld held at $3FFF, %ld others off by more than 2\n", exact_seen,
+            exact_held, exact_off);
+}
+
+int fw_exact_clip(void)
+{
+    static int64_t px[2][EXACT_MAX * 2], py[2][EXACT_MAX * 2];
+    int n = gsu.r[0], e, i, m, s = 0;
+    int64_t edge[4];
+    uint16_t list;
+
+    /* nothing read unless in the full window: the Super FX's accesses are
+       timed in Original */
+    if (!fw_view_active() || ex_n < 2 || n != ex_n)
+        return 0;
+    list = ram16(0x005A);
+    if (list != ex_list)
+        return 0;
+    if (getenv("FW_EXACTCHECK")) {      /* a check: the exact vertices against the projection's, where it did not hold them */
+        static long seen, held, off;
+        static int reported;
+        for (i = 0; i < n; i++) {
+            int64_t x = (int16_t)ram16((uint16_t)(list + 4 * i)), y = (int16_t)ram16((uint16_t)(list + 4 * i + 2));
+            int64_t rx = x - tw / 2, ry = y - (int64_t)VIEW_CY * K;
+            seen++;
+            if (rx >= 0x3FF0 || rx <= -0x3FF0 || ry >= 0x3FF0 || ry <= -0x3FF0) {
+                held++;
+                continue;
+            }
+            if (llabs(x - ex_x[i]) > 2 || llabs(y - ex_y[i]) > 2) {
+                if (++off <= 10)
+                    fprintf(stderr, "fwexact: vertex %d,%d against exact %lld,%lld\n", (int)x, (int)y, (long long)ex_x[i], (long long)ex_y[i]);
+            }
+        }
+        if (!reported) {
+            reported = 1;
+            atexit(exact_report);
+        }
+        exact_seen = seen;
+        exact_held = held;
+        exact_off = off;
+    }
+    edge[0] = (int16_t)ram16(0x0038);
+    edge[1] = (int16_t)ram16(0x003A);
+    edge[2] = (int16_t)ram16(0x003C);
+    edge[3] = (int16_t)ram16(0x003E);
+    /* the projection's own vertex where it did not hold it (the far
+       points' table rounds a few texels from the exact, and the clipped
+       polygon must meet its neighbours), the exact one where it held or
+       wrapped it */
+    for (i = 0; i < n; i++) {
+        int64_t x = (int16_t)ram16((uint16_t)(list + 4 * i)), y = (int16_t)ram16((uint16_t)(list + 4 * i + 2));
+        int own = llabs(x - ex_x[i]) <= 16 && llabs(y - ex_y[i]) <= 16;
+        px[0][i] = own ? x : ex_x[i];
+        py[0][i] = own ? y : ex_y[i];
+    }
+    for (e = 0; e < 4 && n; e++) {
+        int vertical = e < 2, high = e & 1;
+        int64_t E = edge[e];
+        m = 0;
+        for (i = 0; i < (n == 2 ? 1 : n); i++) {
+            int j = (i + 1) % n;
+            int64_t ax = px[s][i], ay = py[s][i], bx = px[s][j], by = py[s][j];
+            int64_t av = vertical ? ax : ay, bv = vertical ? bx : by;
+            int ain = high ? av <= E : av >= E, bin = high ? bv <= E : bv >= E;
+            int64_t at = n == 2 && e == 3 ? E - 1 : E;
+            if (n == 2) {                   /* a line: both ends kept, an outside one moved to the crossing */
+                int64_t q[2][2] = {{ax, ay}, {bx, by}};
+                int k;
+                if (!ain && !bin) {
+                    m = 0;
+                    break;
+                }
+                for (k = 0; k < 2; k++)
+                    if (!(k ? bin : ain)) {
+                        int64_t d = bv - av;
+                        if (vertical) {
+                            q[k][0] = at;
+                            q[k][1] = ay + (E - av) * (by - ay) / d;
+                        } else {
+                            q[k][1] = at;
+                            q[k][0] = ax + (E - av) * (bx - ax) / d;
+                        }
+                    }
+                px[!s][0] = q[0][0]; py[!s][0] = q[0][1];
+                px[!s][1] = q[1][0]; py[!s][1] = q[1][1];
+                m = 2;
+                break;
+            }
+            if (ain) {
+                px[!s][m] = ax;
+                py[!s][m++] = ay;
+            }
+            if (ain != bin && m < EXACT_MAX * 2) {   /* the crossing */
+                int64_t d = bv - av;
+                if (vertical) {
+                    px[!s][m] = E;
+                    py[!s][m++] = ay + (E - av) * (by - ay) / d;
+                } else {
+                    px[!s][m] = ax + (E - av) * (bx - ax) / d;
+                    py[!s][m++] = E;
+                }
+            }
+        }
+        n = m;
+        s = !s;
+        if (n < 3 && !(n == 2 && ex_n == 2))
+            n = 0;
+    }
+    for (i = 0; i < n; i++) {
+        ram16w((uint16_t)(list + 4 * i), (uint16_t)px[s][i]);
+        ram16w((uint16_t)(list + 4 * i + 2), (uint16_t)py[s][i]);
+        sw_gen[(uint16_t)(list + 4 * i) >> 1] = sw_gen[(uint16_t)(list + 4 * i + 2) >> 1] = 0;
+    }
+    gsu.r[0] = (uint16_t)n;
+    ram16w(0x0098, (uint16_t)n);
+    ex_n = -1;
+    return 1;
+}
+
+
 static uint16_t reciprocal(uint32_t n)
 {
     uint32_t at = RECIPROCALS + 2u * n;
@@ -336,15 +596,15 @@ static uint16_t reciprocal(uint32_t n)
 
 /* an edge's slope in 24.8: dx times the reciprocal of its height, the
    product's bits from 7 up; past 255 rows the division it stands for */
-static int32_t slope(int32_t dx, uint32_t rows)
+static int64_t slope(int64_t dx, uint32_t rows)
 {
     if (rows >= 256)
-        return (int32_t)(((int64_t)dx * 256) / (int64_t)rows);
-    return (int32_t)(((int64_t)dx * (int16_t)reciprocal(rows)) >> 7);
+        return (dx * 256) / (int64_t)rows;
+    return (dx * (int16_t)reciprocal(rows)) >> 7;
 }
 
 /* an edge's x stepped: set to 0 when it has gone just below it (to -8.0) */
-static int32_t edge_step(int32_t x, int32_t step)
+static int64_t edge_step(int64_t x, int64_t step)
 {
     x += step;
     if (x < 0 && x >= -0x800)
@@ -352,7 +612,46 @@ static int32_t edge_step(int32_t x, int32_t step)
     return x;
 }
 
-static int32_t vw(uint16_t a) { return (int16_t)ram16(a); }
+/* The draw list's vertices the projection held, exact: a word's exact
+   value by its address in the Super FX's RAM (sw_val), good for this list
+   (sw_gen, the list's generation: a list drawn, every one gone) */
+
+static int32_t vw(uint16_t a) { return sw_gen[a >> 1] == list_gen ? sw_val[a >> 1] : (int16_t)ram16(a); }
+
+/* a vertex word copied, its exact value with it (the fill's copies) */
+static void wcopy(uint16_t dst, uint16_t src)
+{
+    ram16w(dst, ram16(src));
+    if (sw_gen[src >> 1] == list_gen) {
+        sw_val[dst >> 1] = sw_val[src >> 1];
+        sw_gen[dst >> 1] = list_gen;
+    } else {
+        sw_gen[dst >> 1] = 0;
+    }
+}
+
+static void model_point(uint16_t index, int64_t *sx, int64_t *sy);
+
+void fw_exact_vertex(uint16_t at, uint16_t index)
+{
+    int64_t x, y;
+    int16_t x16, y16;
+
+    if (!fw_view_active()) {
+        sw_gen[at >> 1] = sw_gen[(uint16_t)(at + 2) >> 1] = 0;
+        return;
+    }
+    model_point(index, &x, &y);
+    x16 = (int16_t)ram16((uint16_t)(0x04E4 + 6 * index));
+    y16 = (int16_t)ram16((uint16_t)(0x04E6 + 6 * index));
+    if (llabs(x - x16) <= 16 && llabs(y - y16) <= 16) {     /* not held: the projection's own */
+        sw_gen[at >> 1] = sw_gen[(uint16_t)(at + 2) >> 1] = 0;
+        return;
+    }
+    sw_val[at >> 1] = (int32_t)x;
+    sw_val[(uint16_t)(at + 2) >> 1] = (int32_t)y;
+    sw_gen[at >> 1] = sw_gen[(uint16_t)(at + 2) >> 1] = list_gen;
+}
 
 /* FW_CHECK's second pass (the original's view in place): a pixel PLOT puts
    on a row from 128 to 255 lands, in the Super FX's 128-line layout, on
@@ -390,16 +689,17 @@ static uint16_t flat_polygon(uint16_t p, int n)
 {
     uint16_t v = (uint16_t)(p + 1), size = (uint16_t)(4 * n), dst = (uint16_t)(v - size), top_at = 0, src = v;
     uint16_t left_at, right_at;
-    int32_t ymin = 0x7FFF, ymax = -0x8000, lrows, rrows, row, lx, rx, ls = 0, rs = 0;
+    int32_t ymin = 0x7FFFFFFF, ymax = -0x7FFFFFFF, lrows, rrows, row;
+    int64_t lx, rx, ls = 0, rs = 0;
     int i;
     gsu.por = 0;
     gsu_color(ram8(p));
     for (i = 0; i < n; i++) {                  /* the vertices copied below */
         int32_t y;
-        ram16w(dst, ram16(src));
+        wcopy(dst, src);
         dst = (uint16_t)(dst + 2);
         src = (uint16_t)(src + 2);
-        ram16w(dst, ram16(src));
+        wcopy(dst, src);
         y = vw(src);
         if (y < ymin) {
             ymin = y;
@@ -432,7 +732,8 @@ static uint16_t flat_polygon(uint16_t p, int n)
     left_at = (uint16_t)(left_at + 4);
     rrows = 0;
     {
-        int32_t from = lx, to, y;
+        int64_t from = lx, to;
+        int32_t y;
         for (;;) {
             to = vw(left_at);
             y = vw((uint16_t)(left_at + 2));
@@ -449,7 +750,8 @@ static uint16_t flat_polygon(uint16_t p, int n)
     }
     for (;;) {
         if (!rrows) {
-            int32_t from = (rx + 0x7F) >> 8, to, y;
+            int64_t from = (rx + 0x7F) >> 8, to;
+            int32_t y;
             for (;;) {
                 y = vw(right_at);
                 right_at = (uint16_t)(right_at - 2);
@@ -466,9 +768,22 @@ static uint16_t flat_polygon(uint16_t p, int n)
             rx = from * 256;
         }
         do {
-            int32_t l = lx >> 8, r = rx >> 8;
+            int64_t l = lx >> 8, r = rx >> 8;
+            if (row >= th)                  /* past the screen's last row: nothing more to draw */
+                return (uint16_t)(v + size);
+            if (!checking && row < -th && lrows > 1 && rrows > 1) {    /* rows far above the screen: stepped at once */
+                int32_t k = -th - row;
+                if (k > lrows - 1) k = lrows - 1;
+                if (k > rrows - 1) k = rrows - 1;
+                lx += ls * k;
+                rx += rs * k;
+                lrows -= k;
+                rrows -= k;
+                row += k;
+                continue;
+            }
             if (r >= l)
-                flat_row(l, r, row);
+                flat_row(l < -0x7FFFFFFF ? -0x7FFFFFFF : (int32_t)l, r > 0x7FFFFFFF ? 0x7FFFFFFF : (int32_t)r, row);
             lx = edge_step(lx, ls);
             lrows--;
             rx = edge_step(rx, rs);
@@ -478,7 +793,8 @@ static uint16_t flat_polygon(uint16_t p, int n)
         if (lrows)
             continue;
         {
-            int32_t from = (lx + 0x7F) >> 8, to, y;
+            int64_t from = (lx + 0x7F) >> 8, to;
+            int32_t y;
             for (;;) {
                 to = vw(left_at);
                 y = vw((uint16_t)(left_at + 2));
@@ -562,20 +878,36 @@ static uint16_t row_step(uint16_t r, uint16_t l, uint32_t n)
 }
 
 typedef struct {
-    int32_t x;                  /* 24.8 */
-    int32_t slope, rows;
+    int64_t x;                  /* 24.8 */
+    int64_t slope;
+    int32_t rows;
     uint16_t at;
     uint16_t u, v, du, dv;      /* 8.8 */
+    /* the same at full precision (the full window's own pictures): the
+       texels at the row, their steps a row, the end vertex's */
+    double hu, hv, hdu, hdv;
+    uint8_t vu, vv;
 } TexEdge;
+
+/* the textured fill at full precision: the original's edges and spans, its
+   u and v without its 8.8 steps' rounding, which over the thousands of rows
+   a polygon near the camera spans at k texels a pixel leaves the texture
+   standing still; the check's pass (the original's view) keeps the 8.8 */
+static int tex_precise(void) { return !checking; }
 
 /* A7D9 / A879: the next edge, forward (left) or back (right) */
 static int tex_edge(TexEdge *e, int32_t row, int left)
 {
-    int32_t from, to, y;
+    int64_t from, to;
+    int32_t y;
     uint16_t u, v, u_prev, v_prev;
     to = (e->x + 0x7F) >> 8;
     u = (uint16_t)(e->u >> 8);
     v = (uint16_t)(e->v >> 8);
+    if (tex_precise()) {                /* from the vertex the last edge ended at */
+        u = e->vu;
+        v = e->vv;
+    }
     for (;;) {
         from = to;
         u_prev = u;
@@ -605,6 +937,12 @@ static int tex_edge(TexEdge *e, int32_t row, int left)
     e->u = (uint16_t)(u_prev << 8 | u_prev >> 8);
     e->dv = uv_step((uint16_t)(v - v_prev), (uint32_t)e->rows);
     e->v = (uint16_t)(v_prev << 8 | v_prev >> 8);
+    e->hu = u_prev;
+    e->hv = v_prev;
+    e->hdu = (double)(int8_t)(uint8_t)(u - u_prev) / e->rows;
+    e->hdv = (double)(int8_t)(uint8_t)(v - v_prev) / e->rows;
+    e->vu = (uint8_t)u;
+    e->vv = (uint8_t)v;
     return 1;
 }
 
@@ -614,7 +952,7 @@ static uint16_t tex_polygon(uint16_t p, int n)
     uint8_t bank = ram8(p);
     uint16_t word = ram16((uint16_t)(p + 1)), base = ram16((uint16_t)(p + 3)), mask = ram16((uint16_t)(p + 5));
     uint16_t v = (uint16_t)(p + 7), size = (uint16_t)(8 * n), src = v, dst = (uint16_t)(v - size), top_at = 0;
-    int32_t ymin = 0x7FFF, ymax = -0x8000, row;
+    int32_t ymin = 0x7FFFFFFF, ymax = -0x7FFFFFFF, row;
     TexEdge l, r;
     int i;
     gsu.por = 0;
@@ -622,8 +960,8 @@ static uint16_t tex_polygon(uint16_t p, int n)
     gsu.por = (uint8_t)((word >> 8) & 0x1F);
     for (i = 0; i < n; i++) {                  /* u and v moved down a byte */
         int32_t y = vw((uint16_t)(src + 2));
-        ram16w(dst, ram16(src));
-        ram16w((uint16_t)(dst + 2), (uint16_t)y);
+        wcopy(dst, src);
+        wcopy((uint16_t)(dst + 2), (uint16_t)(src + 2));
         if (y < ymin) {
             ymin = y;
             top_at = (uint16_t)(dst + 2);
@@ -644,6 +982,8 @@ static uint16_t tex_polygon(uint16_t p, int n)
         l.x = r.x = vw(t) * 256;
         l.u = r.u = (uint16_t)(ram8((uint16_t)(t + 4)) << 8);
         l.v = r.v = (uint16_t)(ram8((uint16_t)(t + 6)) << 8);
+        l.vu = r.vu = ram8((uint16_t)(t + 4));
+        l.vv = r.vv = ram8((uint16_t)(t + 6));
         l.at = (uint16_t)(t + 8);
         r.at = (uint16_t)(t + size);
     }
@@ -664,9 +1004,28 @@ static uint16_t tex_polygon(uint16_t p, int n)
             left_rows = 0;
             count = l.rows;
         }
+        if (row >= th)                      /* past the screen's last row */
+            break;
+        if (!checking && row < -th && count > 1) {  /* rows far above the screen: stepped at once */
+            int32_t k = -th - row;
+            if (k > count - 1)
+                k = count - 1;
+            l.x += l.slope * k;
+            r.x += r.slope * k;
+            l.u = (uint16_t)(l.u + l.du * k);
+            r.u = (uint16_t)(r.u + r.du * k);
+            l.v = (uint16_t)(l.v + l.dv * k);
+            r.v = (uint16_t)(r.v + r.dv * k);
+            l.hu += l.hdu * k;
+            r.hu += r.hdu * k;
+            l.hv += l.hdv * k;
+            r.hv += r.hdv * k;
+            row += k;
+            count -= k;
+        }
         while (count--) {
-            int32_t xl = l.x >> 8, xr = r.x >> 8, x;
-            uint32_t width = xr >= xl ? (uint32_t)(xr - xl + 1) : 1;
+            int64_t xl = l.x >> 8, xr = r.x >> 8, x, x0, x1;
+            uint32_t width = xr >= xl ? (uint32_t)(xr - xl + 1 > 0xFFFFFFF ? 0xFFFFFFF : xr - xl + 1) : 1;
             uint16_t du, dv, tu, tv;
             uint16_t ur = r.u, ul = l.u, vr = r.v, vl = l.v;
             r.u = (uint16_t)(r.u + r.du);
@@ -677,15 +1036,33 @@ static uint16_t tex_polygon(uint16_t p, int n)
             l.v = (uint16_t)(l.v + l.dv);
             tu = (uint16_t)(ul + ram16(TEX_U_OFF));
             tv = (uint16_t)(vl + ram16(TEX_V_OFF));
-            if (row >= 0 && row < th) {
+            if (tex_precise() && row >= 0 && row < th) {
                 uint8_t *o = tex + (size_t)row * tw;
-                for (x = xl; x < xl + (int32_t)width; x++) {
+                double hdu = remainder(r.hu - l.hu, 256.0) / width, hdv = remainder(r.hv - l.hv, 256.0) / width;
+                double hu0 = l.hu + ram16(TEX_U_OFF) / 256.0, hv0 = l.hv + ram16(TEX_V_OFF) / 256.0;
+                x0 = xl < 0 ? 0 : xl;
+                x1 = xl + (int64_t)width < tw ? xl + (int64_t)width : tw;
+                for (x = x0; x < x1; x++) {
+                    double fu = hu0 + hdu * (double)(x - xl), fv = hv0 + hdv * (double)(x - xl);
+                    unsigned iu = (unsigned)((int64_t)floor(fu) & 0xFF), iv = (unsigned)((int64_t)floor(fv) & 0xFF);
+                    uint16_t at = (uint16_t)(((iv << 8 | iu) & mask) + base);
+                    int c;
+                    gsu_color(gsu_rd8((uint32_t)bank << 16 | at));
+                    if ((c = plot_colour()) >= 0)
+                        o[x] = (uint8_t)c;
+                }
+            } else if (row >= 0 && row < th) {
+                uint8_t *o = tex + (size_t)row * tw;
+                /* the texels left of the screen stepped at once */
+                x0 = xl < 0 ? 0 : xl;
+                x1 = xl + (int64_t)width < tw ? xl + (int64_t)width : tw;
+                tu = (uint16_t)(tu + du * (uint64_t)(x0 - xl));
+                tv = (uint16_t)(tv + dv * (uint64_t)(x0 - xl));
+                for (x = x0; x < x1; x++) {
                     uint16_t at = (uint16_t)((((tv & 0xFF00) | tu >> 8) & mask) + base);
                     int c;
                     tv = (uint16_t)(tv + dv);
                     tu = (uint16_t)(tu + du);
-                    if (x < 0 || x >= tw)
-                        continue;
                     gsu_color(gsu_rd8((uint32_t)bank << 16 | at));
                     if ((c = plot_colour()) >= 0) {
                         o[x] = (uint8_t)c;
@@ -696,6 +1073,10 @@ static uint16_t tex_polygon(uint16_t p, int n)
             }
             l.x = edge_step(l.x, l.slope);
             r.x = edge_step(r.x, r.slope);
+            l.hu += l.hdu;
+            r.hu += r.hdu;
+            l.hv += l.hdv;
+            r.hv += r.hdv;
             row++;
         }
         l.rows = left_rows;
@@ -725,6 +1106,7 @@ void fw_draw_list(void)
         else
             at = tex_polygon(at, (uint8_t)~type);
     }
+    list_gen++;                         /* the list drawn: its exact vertices gone */
 }
 
 /* ---- the picture to the console ------------------------------------------ */
@@ -888,12 +1270,14 @@ static void check_picture(int j)
        which the redraw does not put back */
     rm_hud_state(0);
     memcpy(bank71, nshvc_sram() + 0x10000, sizeof bank71);
+    list_gen++;
     a = rm_tween_buffers(j, RM_TICKS, gsu_px[0], gsu_px[1]);
     rm_hud_state(1);
     memcpy(nshvc_sram() + 0x10000, bank71, sizeof bank71);
     checking = 1;
     fw_drawing = 1;
     memset(tex, 0, (size_t)tw * th);
+    list_gen++;
     b = rm_tween_buffers(j, RM_TICKS, skip[0], skip[1]);
     rm_hud_state(1);
     memcpy(nshvc_sram() + 0x10000, bank71, sizeof bank71);
@@ -918,15 +1302,15 @@ static void check_picture(int j)
    against it. Edges land a texel apart, so a few in a hundred differ; an
    object lost or misplaced at k shows as a picture far past that. Reported
    at exit: the pictures, the mean and the worst (frame, part differing). */
-static long kc_pictures;
+static long kc_pictures, kc_over;
 static double kc_sum, kc_worst[5];
 static uint32_t kc_worst_frame[5];
 
 static void kcheck_report(void)
 {
     int i;
-    fprintf(stderr, "fwkcheck: k %d, %ld pictures, %.2f%% of pixels differ on average; worst:", K, kc_pictures,
-            kc_pictures ? 100.0 * kc_sum / kc_pictures : 0.0);
+    fprintf(stderr, "fwkcheck: k %d, %ld pictures, %.2f%% of pixels differ on average, %ld past 10%%; worst:", K,
+            kc_pictures, kc_pictures ? 100.0 * kc_sum / kc_pictures : 0.0, kc_over);
     for (i = 0; i < 5; i++)
         fprintf(stderr, " %.2f%% (frame %u)", 100.0 * kc_worst[i], kc_worst_frame[i]);
     fprintf(stderr, "\n");
@@ -951,6 +1335,7 @@ static void kcheck_picture(int j)
     fw_drawing = 1;
     rm_hud_state(0);
     memcpy(bank71, nshvc_sram() + 0x10000, sizeof bank71);
+    list_gen++;
     m = rm_tween_buffers(j, RM_TICKS, scratch[0], scratch[1]);
     rm_hud_state(1);
     memcpy(nshvc_sram() + 0x10000, bank71, sizeof bank71);
@@ -969,6 +1354,7 @@ static void kcheck_picture(int j)
             differ += one[y * W + x] != tex[(size_t)(y * K + K / 2) * tw + x * K + K / 2];
     part = (double)differ / (W * 224);
     kc_sum += part;
+    kc_over += part > 0.10;
     if (getenv("FW_KDUMP") && nshvc_frames() == (uint32_t)atoi(getenv("FW_KDUMP"))) {
         /* the two as pictures, k = 1 then k's centres: FW_KDUMP's frame, to FW_KDUMPF.1.ppm and .k.ppm */
         const uint16_t *cg = nshvc_cgram();
@@ -1019,6 +1405,7 @@ int fw_picture(int j)
     if (getenv("FW_CHECK"))
         check_picture(j);
     fw_drawing = 1;
+    list_gen++;
     m = rm_tween_buffers(j, RM_TICKS, scratch[0], scratch[1]);
     fw_drawing = 0;
     fw_hud = 0;
