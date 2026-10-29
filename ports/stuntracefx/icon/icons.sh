@@ -14,6 +14,7 @@ OUT=$1
 [ -n "$OUT" ] || { echo "icons: OUT?" >&2; exit 2; }
 SRC="$(cd "$(dirname "$0")" && pwd)/icon.jpg"
 mkdir -p "$OUT/png"
+OUT="$(cd "$OUT" && pwd)"   # absolute: actool's daemon has its own working directory
 png() {   # size: OUT/png/SIZE.png, square, RGB (no alpha: iOS refuses one)
   [ -f "$OUT/png/$1.png" ] && [ ! "$SRC" -nt "$OUT/png/$1.png" ] && return
   sips -s format png -z "$1" "$1" "$SRC" --out "$OUT/png/$1.png" >/dev/null
