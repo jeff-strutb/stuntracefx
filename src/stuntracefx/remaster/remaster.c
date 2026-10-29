@@ -218,6 +218,7 @@ void rm_race_frame(void)
     }
     for (rm_wait_k = 0; rm_wait_k < (rm_whole ? RM_TICKS : rm_pace); rm_wait_k++)
         nshvc_wait_vblank();
+    fw_before_step();                   /* the work RAM the full window borrowed, the game's again */
     rm_waiting = 0;
     rm_tween_backdrop_back();
     if (rm_share_on)                    /* counted after the wait: the frame hook in it shows the last */

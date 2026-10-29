@@ -17,6 +17,7 @@
 
 #include "front.h"
 #include "remaster.h"
+#include "fullwindow.h"
 #include "superfx.h"
 
 static uint32_t ram_size;
@@ -93,7 +94,9 @@ static void run_program(uint8_t bank, uint16_t addr)
     const nshvc_routine *r = nshvc_cart_routine((uint32_t)bank << 16 | addr);
     if (!r)
         nshvc_fatal("Super FX program at $%02X:%04X has no C", bank, addr);
+    fw_gsu_program(1);                  /* Enhanced's full window: the HUD's pieces whole (fullwindow.h) */
     r->abi();
+    fw_gsu_program(0);
 }
 
 /* ---- the board ---- */

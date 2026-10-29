@@ -56,6 +56,10 @@ void fw_hud_end(void);
 /* the race screen's stages ran (video/dma.c), this frame */
 void fw_race_stage(void);
 
+/* a Super FX program begins (1) or ends (0) (the cartridge's board,
+   front/superfx_cart.c): the HUD's pieces placed whole */
+void fw_gsu_program(int begin);
+
 /* FxDrawList's fill into the texels (raster.c, while fw_drawing) */
 void fw_draw_list(void);
 /* FxScreenClear's, while fw_drawing: the texels to colour 0 */
@@ -71,6 +75,9 @@ int fw_picture(int j);
    first); and at its end, in the full window, the sprites and BG1 set for
    it and the screen on again */
 int fw_upload_line(void);
+/* a race frame's wait over, its step to run (remaster.c): the work RAM the
+   full window borrowed for its own HDMA given back */
+void fw_before_step(void);
 void fw_vblank_uploads(void);
 void fw_upload_done(void);
 /* at each frame's end: the console's screen and BG1 set for the mode */
