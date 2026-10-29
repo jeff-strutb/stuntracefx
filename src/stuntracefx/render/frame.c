@@ -19,6 +19,8 @@
 #include "draw_list.h"
 #include "remaster.h"
 #include "console_ext.h"
+#include "widescreen.h"
+#include "fullwindow.h"
 
 #define R gsu.r
 
@@ -552,7 +554,7 @@ lB147:
     at = nx;
     goto dispatch;
 lB14C:
-    R[0] = 0x00F0;
+    R[0] = fw_view_active() ? (uint16_t)(0x00F0 * fw_k()) : 0x00F0;    /* Enhanced's full window: the cap in its texels */
     R[0] = gsu_sub(R[0], R[1], 0);
     t = !gsu.s;
     R[0] = gsu_add(R[0], R[1], 0);
@@ -1769,7 +1771,7 @@ lBE31:
     R[6] = gsu_getb();
     gsu_r14(gsu_inc(R[14]));
     R[6] = gsu_getbh(R[6]);
-    R[9] = gsu_fmult(R[9], R[6]);
+    R[9] = ws_scale_mult(R[9], R[6]);
     R[9] = gsu_rol(R[9]);
     R[1] = gsu_ldw(FX_MODEL_34);
     R[1] = gsu_add(R[1], R[9], 0);
@@ -1786,7 +1788,7 @@ lBE5B:
     if (t) { goto lBE69; }
     goto lBF4D;
 lBE69:
-    R[5] = gsu_fmult(R[5], R[6]);
+    R[5] = ws_scale_mult(R[5], R[6]);
     R[5] = gsu_rol(R[5]);
     R[2] = gsu_ldw(FX_MODEL_36);
     R[0] = 0x0014;

@@ -193,6 +193,11 @@ void rm_canvas_narrow(unsigned word, unsigned count)
     canvas_hand();
 }
 
+void rm_canvas_taken(void)
+{
+    canvas_on = 0;
+}
+
 void rm_canvas_off(void)
 {
     if (canvas_on)

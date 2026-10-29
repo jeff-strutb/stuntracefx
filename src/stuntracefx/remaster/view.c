@@ -12,6 +12,7 @@
 #include <stdlib.h>
 
 #include "widescreen.h"
+#include "fullwindow.h"
 
 /* the one-player race's centre and edges, as ViewParamsByPlayers sets
    them (two players' and the menus' differ) */
@@ -57,6 +58,8 @@ int ws_focal(void)
 {
     if (!ready)
         setup();
+    if (fw_view_active())               /* Enhanced's full-window picture */
+        return fw_focal();
     return active ? focal : 128;
 }
 
@@ -80,7 +83,7 @@ int ws_view_planes(const uint16_t w[6], uint16_t planes[2])
 
 int ws_cull_keeps(uint16_t over, uint16_t depth)
 {
-    int f = ws_focal(), hw = 104;
+    int f = ws_focal(), hw = fw_view_active() ? fw_half_width() : 104;
 
     /* the view's half-angle passes 45 degrees only when hw > f */
     return hw > f && (uint32_t)over * (uint32_t)f < (uint32_t)depth * (uint32_t)hw;

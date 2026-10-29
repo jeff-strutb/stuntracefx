@@ -185,6 +185,20 @@ static void backdrop_keep(const uint8_t *w, int two)
     bd_vofs = (uint16_t)(word(w, 0x0D8E + 2 * sel) - word(w, 0xE811 + 2 * sel));
 }
 
+int rm_tween_backdrop(const uint8_t **rows, unsigned *at, uint16_t *hofs, uint16_t *vofs)
+{
+    const uint8_t *w = nshvc_wram();
+    unsigned shown = word(w, 0x0D81) == 0x0001;
+
+    if (!bd_ok || bd_two)
+        return 0;
+    *rows = bd_rows;
+    *at = shown ? 0x5DE0 : 0x5BC0;
+    *hofs = bd_hofs;
+    *vofs = (uint16_t)(bd_vofs + word(w, 0xE811 + 2 * shown));
+    return 1;
+}
+
 void rm_tween_backdrop_show(void)
 {
     uint8_t *w = nshvc_wram();

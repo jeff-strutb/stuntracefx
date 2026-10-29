@@ -251,7 +251,7 @@ void abi_FxHazeSample(void)
             if (!skip) {
                 gsu.r[1] = gsu_add(gsu.r[0], gsu.r[3], 0);
                 gsu.r[2] = gsu.r[4];
-                gsu.r[0] = gsu_rpix((uint8_t)gsu.r[1], (uint8_t)gsu.r[2]);
+                gsu.r[0] = gsu_rpix16(gsu.r[1], gsu.r[2]);
                 gsu_sz(gsu.r[0]);
                 gsu_stw(gsu.r[11], gsu.r[0]);
                 gsu.r[11] = gsu_inc(gsu_inc(gsu.r[11]));
@@ -317,7 +317,7 @@ void abi_FxHazePlot(void)
         gsu.r[2] = gsu_ldb(gsu.r[3]);
         gsu.r[3] = gsu_inc(gsu.r[3]);
         more = gsu_count_down(&gsu.r[12]);
-        gsu_plot((uint8_t)gsu.r[1], (uint8_t)gsu.r[2]);     /* LOOP's delay slot */
+        gsu_plot16(gsu.r[1], gsu.r[2]);     /* LOOP's delay slot */
         gsu.r[1] = (uint16_t)(gsu.r[1] + 1);
         if (!more)
             break;

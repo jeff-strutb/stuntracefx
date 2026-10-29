@@ -10,6 +10,7 @@
 #include "draw_list.h"
 #include "fx_calls.h"
 #include "remaster.h"
+#include "widescreen.h"
 
 #define REC_NEXT 0x0Eu
 #define REC_X 0x1Eu
@@ -453,7 +454,7 @@ static int fx_scale_for(void)
 
 static int fx_project(int c, uint16_t centre, uint16_t bound, int rb)
 {
-    gsu.r[0] = gsu_fmult(gsu.r[c], gsu.r[6]);
+    gsu.r[0] = ws_scale_mult(gsu.r[c], gsu.r[6]);
     gsu.r[5] = gsu_ldw(centre);
     gsu.r[c] = gsu_add(gsu.r[0], gsu.r[5], 0);
     gsu.r[rb] = gsu_ldw(bound);

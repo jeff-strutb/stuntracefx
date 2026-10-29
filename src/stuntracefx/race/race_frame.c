@@ -8,6 +8,7 @@
 #include "cpu_ops.h"
 #include "assets.h"
 #include "remaster.h"
+#include "fullwindow.h"
 
 void abi_ObjectsRunHandlers(void);
 void abi_CameraFollowStep(void);
@@ -1014,6 +1015,7 @@ void RmTweenDraw(void)
 {
     uint32_t b;
 
+    fw_view_begin();                    /* Enhanced's full-window picture: its view */
     op_sep(P_M);
     op_rep(P_X);
     cpu.db = 0x02;
@@ -1041,6 +1043,7 @@ void RmTweenDraw(void)
     wr16(b | 0x1AE8, 0x0000);
     op_sep(P_M);
     abi_FrameRunGsuAB13B();
+    fw_hud_begin();                     /* Enhanced's full-window picture: the HUD's pieces placed */
     if (rd16(0x702732)) {
         op_sep(P_M);
         cpu.a = (uint16_t)((cpu.a & 0xFF00) | 0x01);
@@ -1048,6 +1051,7 @@ void RmTweenDraw(void)
         abi_GsuRun();
     } else
         rm_hud_redraw_in(0);
+    fw_hud_end();
 }
 
 /* The same for a two-player race, as RaceFrameRunTwoPlayers draws it:

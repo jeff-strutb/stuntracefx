@@ -17,6 +17,7 @@
 #include "console_ext.h"
 #include "remaster.h"
 #include "rm_options.h"
+#include "fullwindow.h"
 
 static int rm_on;                       /* Frame rate 60 */
 static int rm_pace;                     /* video frames a race frame: 1 at 60; 0 the original's */
@@ -117,6 +118,20 @@ static int hud_ok;
 static unsigned hud_stopped;            /* the tick whose redraw reached the HUD's loop */
 int rm_tween_start_side;
 
+void rm_hud_state(int put_back)
+{
+    static int ok;
+    static unsigned stopped;
+
+    if (put_back) {
+        hud_ok = ok;
+        hud_stopped = stopped;
+    } else {
+        ok = hud_ok;
+        stopped = hud_stopped;
+    }
+}
+
 void RmRaceHud(void)
 {
     if (!rm_tick60()) {
@@ -194,6 +209,13 @@ void rm_race_frame(void)
     frame60(0);
     rm_whole = rm_share_on;
     rm_waiting = 1;                     /* the frame hook in the wait: a clean point (tween.c) */
+    if (rm_whole && fw_on()) {          /* the full window: the step's own picture drawn again */
+        drawing = 1;
+        cpu_costs(0);
+        fw_picture(0);
+        drawing = 0;
+        cpu_costs(0);
+    }
     for (rm_wait_k = 0; rm_wait_k < (rm_whole ? RM_TICKS : rm_pace); rm_wait_k++)
         nshvc_wait_vblank();
     rm_waiting = 0;
@@ -218,6 +240,14 @@ static void whole_tween(void)
         return;
     drawing = 1;                        /* the 3D's work, free as the race frame's */
     cpu_costs(0);
+    if (fw_on()) {                      /* the full window's picture (fullwindow.c) */
+        m = fw_picture(j);
+        drawing = 0;
+        cpu_costs(0);
+        if (m)
+            rm_tween_backdrop_show();
+        return;
+    }
     m = rm_tween_buffers(j, RM_TICKS, px[0], px[1]);
     drawing = 0;
     cpu_costs(0);
@@ -291,6 +321,7 @@ void rm_frame_end(void)
     static int ref = -1;
     if (ref < 0)
         ref = getenv("RM_REF_PACE") ? atoi(getenv("RM_REF_PACE")) : 0;
+    fw_vblank_uploads();
     rm_tween_frame_end();
     rm_on = rm_option(RM_OPT_FRAMERATE) && nshvc_peek(0x7E10DA) == 0;
     rm_pace = ref ? ref : rm_on;
@@ -298,4 +329,5 @@ void rm_frame_end(void)
     cpu_costs(1);
     whole_tween();
     rm_canvas_frame_end();
+    fw_frame_end();
 }

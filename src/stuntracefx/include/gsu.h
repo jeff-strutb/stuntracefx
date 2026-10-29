@@ -52,6 +52,11 @@ void gsu_wr8(uint32_t addr, uint8_t value);
 /* PLOT and RPIX at (x, y) with the current colour, options and screen. */
 void gsu_plot(uint8_t x, uint8_t y);
 uint8_t gsu_rpix(uint8_t x, uint8_t y);
+/* The same from the registers' whole words: the low bytes, as PLOT and RPIX
+   take them, except while Enhanced's full-window picture is drawn
+   (fullwindow.h), which takes the words */
+void gsu_plot16(uint16_t x, uint16_t y);
+uint8_t gsu_rpix16(uint16_t x, uint16_t y);
 
 /* The screen's layout as PLOT reads it: 0-2 the 128, 160 and 192-line
    heights (SCMR bits 2 and 5), 3 the sprite layout (POR bit 4). */

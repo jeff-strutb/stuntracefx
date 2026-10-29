@@ -222,7 +222,7 @@ void abi_FxTextDraw(void)
 
 end:
     ;
-    gsu.r[0] = gsu_rpix((uint8_t)gsu.r[1], (uint8_t)gsu.r[2]);
+    gsu.r[0] = gsu_rpix16(gsu.r[1], gsu.r[2]);
     gsu_sz(gsu.r[0]);
     gsu_pull(&gsu.r[10]);       /* the return address, into R15 */
 }

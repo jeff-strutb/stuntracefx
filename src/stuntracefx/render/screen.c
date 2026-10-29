@@ -5,6 +5,7 @@
  */
 #include "gsu.h"
 #include "draw_list.h"
+#include "fullwindow.h"
 
 #define FX_SCREEN_START 0x021Au  /* the word holding the buffer's start */
 #define FX_SCREEN_WORDS 0x3400u
@@ -35,6 +36,8 @@ uint16_t FxScreenClear(void)
 
 void abi_FxScreenClear(void)
 {
+    if (fw_drawing)                     /* Enhanced's full-window picture's texels */
+        fw_clear();
     gsu.r[1] = FxScreenClear();
     gsu.r[0] = 0;
     gsu.r[12] = 0;

@@ -20,6 +20,8 @@
 #include "gsu.h"
 #include "gsu_ops.h"
 #include "remaster.h"
+#include "widescreen.h"
+#include "fullwindow.h"
 
 #define R gsu.r
 
@@ -133,6 +135,15 @@ static const uint16_t commands[26] = {
 };
 
 /* The code from address at until it jumps to ret (the caller's return). */
+/* FxModelFacing's loop for an object wholly on the screen (01:941B) reads
+   each point's x and y as a byte, which holds them on the original's
+   screen; Enhanced's full-window picture (fullwindow.h) has them past 255,
+   and there the whole words */
+static uint16_t facing_coord(uint16_t a)
+{
+    return fw_view_active() ? gsu_ldw(a) : gsu_ldb(a);
+}
+
 static void model_run(uint16_t at, uint16_t ret)
 {
     int t;
@@ -1141,11 +1152,11 @@ l8C0E:
     R[6] = gsu_getb();
     gsu_r14(gsu_inc(R[14]));
     R[6] = gsu_getbh(R[6]);
-    R[0] = gsu_fmult(R[1], R[6]);
+    R[0] = ws_scale_mult(R[1], R[6]);
     R[1] = gsu_ldw(FX_MODEL_34);
     R[0] = gsu_add(R[0], R[1], 0);
     R[1] = R[0];
-    R[0] = gsu_fmult(R[2], R[6]);
+    R[0] = ws_scale_mult(R[2], R[6]);
     R[2] = gsu_ldw(FX_MODEL_36);
     R[0] = gsu_add(R[0], R[2], 0);
     R[2] = R[0];
@@ -1255,7 +1266,7 @@ l8CCA:
     R[0] = gsu_ldw(R[7]);
     R[0] = gsu_add(R[0], R[3], 0);
     R[6] = gsu_getbh(R[6]);
-    R[0] = gsu_fmult(R[0], R[6]);
+    R[0] = ws_scale_mult(R[0], R[6]);
     R[0] = gsu_add(R[0], R[1], 0);
     gsu_stw(R[8], R[0]);
     gsu_r14(0x0000);
@@ -1271,7 +1282,7 @@ l8CEC:
 l8CF0:
     R[8] = gsu_inc(R[8]);
     R[8] = gsu_inc(R[8]);
-    R[0] = gsu_fmult(R[2], R[6]);
+    R[0] = ws_scale_mult(R[2], R[6]);
     R[0] = gsu_add(R[0], R[9], 0);
     gsu_stw(R[8], R[0]);
     t = gsu.s;
@@ -2533,29 +2544,29 @@ l9427:
     gsu_r14(gsu_inc(R[14]));
     R[0] = gsu_umult(R[0], 6);
     R[0] = gsu_add(R[0], R[9], 0);
-    R[1] = gsu_ldb(R[0]);
+    R[1] = facing_coord(R[0]);
     R[0] = gsu_inc(R[0]);
     R[0] = gsu_inc(R[0]);
-    R[2] = gsu_ldb(R[0]);
+    R[2] = facing_coord(R[0]);
     R[0] = gsu_getb();
     gsu_r14(gsu_inc(R[14]));
     R[0] = gsu_umult(R[0], 6);
     R[8] = gsu_add(R[0], R[9], 0);
-    R[0] = gsu_ldb(R[8]);
+    R[0] = facing_coord(R[8]);
     R[8] = gsu_inc(R[8]);
     R[8] = gsu_inc(R[8]);
     R[3] = gsu_sub(R[0], R[1], 0);
-    R[0] = gsu_ldb(R[8]);
+    R[0] = facing_coord(R[8]);
     R[7] = gsu_sub(R[0], R[2], 0);
     R[0] = gsu_getb();
     gsu_r14(gsu_inc(R[14]));
     R[0] = gsu_umult(R[0], 6);
     R[8] = gsu_add(R[0], R[9], 0);
-    R[0] = gsu_ldb(R[8]);
+    R[0] = facing_coord(R[8]);
     R[8] = gsu_inc(R[8]);
     R[8] = gsu_inc(R[8]);
     R[1] = gsu_sub(R[0], R[1], 0);
-    R[0] = gsu_ldb(R[8]);
+    R[0] = facing_coord(R[8]);
     R[2] = gsu_sub(R[0], R[2], 0);
     R[6] = R[1];
     { uint32_t p = gsu_lmult(R[7], R[6]); R[4] = (uint16_t)p; R[7] = (uint16_t)(p >> 16); }

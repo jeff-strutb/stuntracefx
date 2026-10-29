@@ -45,7 +45,7 @@ static void fx_blit(uint16_t rows, int bytes, uint16_t skip, uint16_t loop)
                 uint16_t at = gsu_add(gsu_and(gsu.r[3], 3), gsu.r[9], 0);
 
                 fx_color(gsu_ldb(at));
-                gsu_plot((uint8_t)gsu.r[1], (uint8_t)gsu.r[2]);
+                gsu_plot16(gsu.r[1], gsu.r[2]);
                 gsu.r[1]++;
                 gsu.r[3] = gsu_ror(gsu_ror(gsu.r[3]));
             }

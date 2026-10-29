@@ -27,6 +27,13 @@ int ws_focal(void);
    set), 0 otherwise. */
 int ws_view_planes(const uint16_t w[6], uint16_t planes[2]);
 
+/* FMULT of v by a scale from the table at $14:896C (2^23 / depth: focal
+   length 128) at the view's focal length: v * scale * f >> 23, FMULT's own
+   high word at 128 (its flags FMULT's either way). Every projection by the
+   table goes through it (render/project.c, the copies in model.c, frame.c
+   and object/fx_record.c). */
+uint16_t ws_scale_mult(uint16_t v, uint16_t scale);
+
 /* The sort's cull: 1 when an object the original's 45 degree test drops
    (|X| - radius not below |Z|) is inside the wide view after all. */
 int ws_cull_keeps(uint16_t over, uint16_t depth);

@@ -162,7 +162,7 @@ void abi_FxProjectPoint(void)
 /* FMULT by the depth's scale (2^23 / depth, so focal length 128), at the
    view's focal length f (Widescreen): v * scale * f >> 23, which at f = 128
    is FMULT's own high word. */
-static uint16_t scale_mult(uint16_t v, uint16_t scale)
+uint16_t ws_scale_mult(uint16_t v, uint16_t scale)
 {
     int f = ws_focal();
 
@@ -216,13 +216,13 @@ void FxProjectScaled(void)
     gsu.r[6] = (gsu_getb());
     gsu_r14(gsu_inc(gsu.r[14]));
     gsu.r[6] = gsu_getbh(gsu.r[6]);
-    gsu.r[0] = scale_mult(gsu.r[1], gsu.r[6]);
+    gsu.r[0] = ws_scale_mult(gsu.r[1], gsu.r[6]);
     gsu.r[1] = gsu_ldw(FX_CENTRE);
     gsu.r[1] = gsu_add(gsu.r[1], gsu.r[0], 0);
-    gsu.r[0] = scale_mult(gsu.r[2], gsu.r[6]);
+    gsu.r[0] = ws_scale_mult(gsu.r[2], gsu.r[6]);
     gsu.r[2] = gsu_ldw(FX_CENTRE + 2);
     gsu.r[2] = gsu_add(gsu.r[2], gsu.r[0], 0);
-    gsu.r[0] = scale_mult(gsu.r[5], gsu.r[6]);
+    gsu.r[0] = ws_scale_mult(gsu.r[5], gsu.r[6]);
     gsu.r[5] = gsu.r[0];
 }
 
@@ -293,11 +293,11 @@ void abi_FxProjectVertex(void)
     gsu.r[6] = (gsu_getb());
     gsu_r14(gsu_inc(gsu.r[14]));
     gsu.r[6] = gsu_getbh(gsu.r[6]);
-    gsu.r[0] = scale_mult(gsu.r[1], gsu.r[6]);
+    gsu.r[0] = ws_scale_mult(gsu.r[1], gsu.r[6]);
     gsu.r[1] = gsu_ldw(FX_CENTRE);
     gsu.r[0] = gsu_add(gsu.r[0], gsu.r[1], 0);
     gsu.r[1] = gsu.r[0];
-    gsu.r[0] = scale_mult(gsu.r[2], gsu.r[6]);
+    gsu.r[0] = ws_scale_mult(gsu.r[2], gsu.r[6]);
     gsu.r[2] = gsu_ldw(FX_CENTRE + 2);
     gsu.r[0] = gsu_add(gsu.r[0], gsu.r[2], 0);
     gsu.r[2] = gsu.r[0];

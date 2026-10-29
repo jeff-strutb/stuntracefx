@@ -41,6 +41,9 @@ int rm_step_due(void);
    as its step drew it on every frame shown. */
 void RmRaceHud(void);
 void rm_hud_redraw(void);
+/* the HUD redraw's own state (whether its redraws go on) kept (0) and put
+   back (1): for a check that draws a picture more than once */
+void rm_hud_state(int put_back);
 /* the same with the interrupts already held by the caller (tween.c) */
 void rm_hud_redraw_in(int hold);
 /* set by tween.c while it draws an in-between frame on the start's side
@@ -69,6 +72,14 @@ int rm_redrawing(void);
 /* every wait of the game's comes here first: a redraw (an in-between
    frame) that reaches a wait is let go (waits.h) */
 void rm_wait_point(void);
+/* The console's time standing still for the code running now: Enhanced's
+   full window runs the race's upload stage at the vertical blank's start,
+   interrupts held and the S-CPU's accesses free (fullwindow.c), as the
+   original ran it before the vertical blank, before the step. There a wait
+   for time alone (a set delay, the H-blank) is over at once, and the
+   stage's two copies (the palette, the sprite table: video/dma.c) are made
+   by the S-CPU's writes, a DMA's being the console's time. */
+int rm_time_still(void);
 /* rm_step_due for work whose original steps were k video frames: the
    menus' 3D screens (RaceFrameStep's) took 4 */
 int rm_step_due_every(unsigned k);
@@ -144,6 +155,9 @@ void rm_picture_chars(const uint8_t *data, unsigned count, unsigned bpp, unsigne
    uploads of the screen that handed the canvas turns it off. rm_canvas_frame_end: at each frame's end, the canvas off when the
    race screen has gone, handed again when the window's k changed. */
 int rm_canvas_ready(void);
+/* the canvas handed by another (Enhanced's full-window race, fullwindow.c):
+   not this file's to hand again or turn off */
+void rm_canvas_taken(void);
 void rm_canvas_show(unsigned word, uint16_t src, unsigned count);
 /* the same from bytes in buffer order; and a two-player set (360 4 bpp
    characters) from the players' buffers, 18 columns of $140 bytes $200
@@ -210,6 +224,10 @@ int rm_tween_buffers(int num, int den, uint8_t *at_2c00, uint8_t *at_9400);
 /* the backdrop (BG2) as the last rm_tween_buffers drew it, shown with its
    picture; and the game's own back before the next step */
 void rm_tween_backdrop_show(void);
+/* The one-player backdrop the last redraw drew with, as
+   rm_tween_backdrop_show would put it: its rows of BG2's map ($440 bytes)
+   for VRAM word *at, and BG2's scroll; 0 when there is none */
+int rm_tween_backdrop(const uint8_t **rows, unsigned *at, uint16_t *hofs, uint16_t *vofs);
 void rm_tween_backdrop_back(void);
 /* two players: the last step's backdrop on the step's own frame, as its
    pictures are (at the race frame's end) */

@@ -27,6 +27,7 @@
 #include "gsu.h"
 #include "gsu_ops.h"
 #include "draw_list.h"
+#include "fullwindow.h"
 
 #define R gsu.r
 
@@ -1398,6 +1399,17 @@ void abi_FxDrawList(void)
 {
     int minus;
 
+    if (fw_drawing) {                   /* Enhanced's full-window picture: the fill at 16 bits */
+        R[1] = gsu_ldw(FX_LIST_END);
+        if (R[1] == DRAW_LIST)
+            return;
+        fw_draw_list();
+        R[1] = DRAW_LIST;               /* then as A91E: the list emptied, the model's ROM bank back */
+        gsu_stw(FX_LIST_END, R[1]);
+        R[0] = gsu_ldw(FX_ROM_BANK);
+        gsu_romb(R[0]);
+        return;
+    }
     R[1] = gsu_ldw(FX_LIST_END);
     R[0] = DRAW_LIST;
     R[0] = gsu_sub(R[0], R[1], 0);

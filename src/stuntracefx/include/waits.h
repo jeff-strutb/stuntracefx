@@ -41,6 +41,8 @@ static inline uint64_t wait_mem(uint32_t addr, int wide, uint16_t mask, uint16_t
 {
     WaitMem w = {addr, mask, value, (uint8_t)wide, (uint8_t)equal};
 
+    if (rm_time_still() && (addr & 0xFFFF) == 0x4212)  /* the H-blank's status: time alone changes it */
+        return 0;
     rm_wait_point();
     return nshvc_wait_until(wait_mem_ready, &w);
 }
@@ -57,6 +59,8 @@ static inline void wait_clocks(uint64_t clocks)
 {
     uint64_t until;
 
+    if (rm_time_still())
+        return;
     rm_wait_point();
     until = nshvc_cart_clock() + clocks;
     nshvc_wait_until(wait_clock_ready, &until);

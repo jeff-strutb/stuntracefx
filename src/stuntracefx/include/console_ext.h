@@ -30,5 +30,16 @@ void nshvc_set_cpu_costs(int on);
    here); count characters from VRAM word word_addr, each 8k x 8k texels */
 int nshvc_ext_canvas_scale(void);
 void nshvc_ext_canvas_chars(int layer, unsigned word_addr, int count, const uint8_t *texels, int k);
+/* The screen past the console's 256 x 224, VRAM past its 64 KB and a
+   layer's page of it, the data port's writes landing in a page at once,
+   sprites past X 255 (contract 2.3); the window's size in points */
+void nshvc_ext_screen(int width, int height);
+void nshvc_ext_vram(int kb);
+void nshvc_ext_vram_page(int page);
+void nshvc_ext_layer_page(int layer, int page);
+void nshvc_ext_vram_direct(int page);
+void nshvc_ext_sprite_x(int sprite, int on);
+void nshvc_window_size(float *w, float *h);
+void nshvc_safe_area(float *left, float *top, float *right, float *bottom);
 
 #endif

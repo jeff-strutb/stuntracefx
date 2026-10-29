@@ -6,6 +6,7 @@
 #include "hw.h"
 #include "draw_list.h"
 #include "cpu_ops.h"
+#include "fullwindow.h"
 
 /*
  * @routine 7E:A2FD WaitHBlank
@@ -407,7 +408,7 @@ void abi_RasterStage(void)
         (abi_PalettesStep());
         break;
     case 0xA53D:
-        put8(VTIMEL, 0xD0);
+        put8(VTIMEL, fw_upload_line());     /* 208; Enhanced's full window: the fallback (fullwindow.c) */
         irq_ack();
         put8(b | 0x0D3F, 0x06);
         (abi_WindowHdmaNormal());
@@ -436,6 +437,7 @@ void abi_RasterStage(void)
         put8(b | 0x0D3F, 0x04);
         window_colours(b, 0x19AC);
         (abi_WindowsSetupSelect());
+        fw_upload_done();               /* Enhanced's full window: the screen on again, BG1 its */
         break;
     case 0xA5B6:
         ldx8((rd8(b | 0x0D61)));

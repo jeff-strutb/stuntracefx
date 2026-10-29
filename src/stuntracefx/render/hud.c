@@ -79,7 +79,7 @@ static void color(uint16_t v)
 
 static void plot(void)
 {
-    gsu_plot((uint8_t)R[1], (uint8_t)R[2]);
+    gsu_plot16(R[1], R[2]);
     R[1]++;
 }
 
@@ -87,7 +87,7 @@ static void plot(void)
 
 static uint16_t rpix(void)
 {
-    uint16_t r = gsu_rpix((uint8_t)R[1], (uint8_t)R[2]);
+    uint16_t r = gsu_rpix16(R[1], R[2]);
 
     gsu_sz(r);
     return r;

@@ -13,6 +13,7 @@
 #include "wram.h"
 #include "cpu_ops.h"
 #include "remaster.h"
+#include "fullwindow.h"
 
 /* DMA channel 0, mode 1 (two registers, write once) to VMDATAL/H. */
 static void vram_channel(uint16_t size, uint16_t src, uint16_t vram)
@@ -149,6 +150,19 @@ void abi_VramDmaRowsFromGsuRam(void)
  * Entry: M 8-bit, X 16-bit; X = source address, Y = byte count.
  * Exit: A low byte = 1; X = $0400; N, Z clear; Y unchanged.
  */
+/* Remaster (remaster.h rm_time_still): where the console's time stands
+   still a DMA's bytes go by the S-CPU's writes instead, its channel left as
+   the transfer leaves it (its count 0, its address past the block) */
+static void dma0_by_cpu(uint32_t from, uint16_t size, uint32_t to)
+{
+    uint16_t i;
+
+    for (i = 0; i < size; i++)
+        wr8(to, rd8(from + i));
+    wr16(A1T0L, (uint16_t)(from + size));
+    wr16(DAS0L, 0x0000);
+}
+
 void OamDma(uint16_t src, uint16_t size)
 {
     wr16(A1T0L, src);
@@ -157,6 +171,10 @@ void OamDma(uint16_t src, uint16_t size)
     wr16(DAS0L, size);
     wr16(DMAP0, 0x0400);
     wr8(A1B0, 0x00);
+    if (rm_time_still()) {
+        dma0_by_cpu(src, size, OAMDATA);
+        return;
+    }
     wr8(MDMAEN, 0x01);
 }
 
@@ -205,6 +223,10 @@ void CgramDma(uint16_t src, uint8_t colour, uint16_t size)
     wr16(DMAP0, 0x2200);
     wr8(CGADD, colour);
     wr8(A1B0, 0x7E);
+    if (rm_time_still()) {
+        dma0_by_cpu(0x7E0000u | src, size, CGDATA);
+        return;
+    }
     wr8(MDMAEN, 0x01);
 }
 
@@ -909,6 +931,8 @@ static void race_overlap(int buf, unsigned keep)
    on the canvas at VRAM word `word`, or, copied to VRAM, the canvas off */
 static void race_flip(int buf, uint16_t src, unsigned word)
 {
+    if (fw_on())                        /* the full window's pictures are drawn again (fullwindow.c) */
+        return;
     if (race_canvas[buf])
         rm_canvas_show(word, src, 416);
     else
@@ -924,6 +948,7 @@ static int race_stage(uint32_t b)
     uint16_t sel;
 
     rm_canvas_kept(RM_CANVAS_RACE);
+    fw_race_stage();
     cpu.p &= (uint8_t)~(P_M | P_X);
     cpu.x = rd16(b | 0x0D7D);
     cpu.p = nz16(cpu.p, cpu.x);

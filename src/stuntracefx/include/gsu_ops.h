@@ -182,7 +182,7 @@ static inline void gsu_ramb(uint16_t a)
 /* PLOT: a pixel at (R1, R2), then R1 steps right. */
 static inline void gsu_plot_r1(void)
 {
-    gsu_plot((uint8_t)gsu.r[1], (uint8_t)gsu.r[2]);
+    gsu_plot16(gsu.r[1], gsu.r[2]);
     gsu.r[1] = (uint16_t)(gsu.r[1] + 1);
 }
 
@@ -208,7 +208,7 @@ static inline uint16_t gsu_umult(uint16_t a, uint16_t b)
    from it. */
 static inline uint16_t gsu_rpix_r(uint16_t x, uint16_t y)
 {
-    uint16_t v = gsu_rpix((uint8_t)x, (uint8_t)y);
+    uint16_t v = gsu_rpix16(x, y);
 
     gsu_sz(v);
     return v;

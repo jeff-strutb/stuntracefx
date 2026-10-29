@@ -3,6 +3,7 @@
  */
 #include "machine.h"
 #include "widescreen.h"
+#include "fullwindow.h"
 
 /*
  * @routine 7E:E2C9 GsuParamsUpdate
@@ -46,18 +47,23 @@ uint16_t GsuParamsFromDp(uint8_t bank)
 {
     static const uint8_t from[8] = {0xCE, 0xD0, 0x2A, 0x2E, 0x2C, 0x30, 0x32, 0x34};
     static const uint32_t to[8] = {0x700034, 0x700036, 0x700038, 0x70003A, 0x70003C, 0x70003E, 0x700092, 0x700094};
-    uint16_t v = 0, w[6], planes[2];
+    uint16_t v = 0, w[6], planes[2], full[8];
     unsigned i;
-    int wide = 0;
+    int wide = 0, fw = 0;
 
     wr8((uint32_t)bank << 16 | 0x05EF, 0xFF);
+    if (fw_drawing) {                   /* Enhanced's full-window picture: its view's words */
+        for (i = 0; i < 6; i++)
+            w[i] = rd16(from[i]);
+        fw = fw_view_words(w, full);
+    }
     for (i = 0; i < 8; i++) {
         v = rd16(from[i]);
         if (i < 6)
             w[i] = v;
         else if (i == 6)
             wide = ws_view_planes(w, planes);
-        wr16(to[i], i >= 6 && wide ? planes[i - 6] : v);   /* Widescreen: the wide view's planes */
+        wr16(to[i], fw ? full[i] : i >= 6 && wide ? planes[i - 6] : v);   /* Widescreen: the wide view's planes */
     }
     return v;
 }
