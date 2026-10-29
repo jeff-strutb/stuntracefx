@@ -232,7 +232,22 @@ int rm_tween_backdrop(const uint8_t **rows, unsigned *at, uint16_t *hofs, uint16
     return 1;
 }
 
+static void backdrop_show(int rows);
+
 void rm_tween_backdrop_show(void)
+{
+    backdrop_show(1);
+}
+
+/* the step's own picture's (remaster.c rm_race_frame): its rows not
+   written to VRAM, where the step's uploads are, mid-frame; the full
+   window's page has them from where they come (rm_backdrop_view) */
+void rm_tween_backdrop_show_page(void)
+{
+    backdrop_show(0);
+}
+
+static void backdrop_show(int rows)
 {
     uint8_t *w = nshvc_wram();
     unsigned shown, i;
@@ -249,11 +264,13 @@ void rm_tween_backdrop_show(void)
         return;
     }
     shown = word(w, 0x0D81) == 0x0001;
-    wr8(VMAIN, 0x80);
-    wr8(VMADDL, shown ? 0xE0 : 0xC0);
-    wr8(VMADDL + 1, shown ? 0x5D : 0x5B);
-    for (i = 0; i < sizeof bd_rows; i++)
-        wr8(VMDATAL + (i & 1), bd_rows[i]);
+    if (rows) {
+        wr8(VMAIN, 0x80);
+        wr8(VMADDL, shown ? 0xE0 : 0xC0);
+        wr8(VMADDL + 1, shown ? 0x5D : 0x5B);
+        for (i = 0; i < sizeof bd_rows; i++)
+            wr8(VMDATAL + (i & 1), bd_rows[i]);
+    }
     if (gr_at) {
         if (!gr_put) {
             memcpy(gr_was, w + 0x1EC57, 0x300);

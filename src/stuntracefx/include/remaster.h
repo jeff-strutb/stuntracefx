@@ -229,6 +229,9 @@ void rm_tween_backdrop_show(void);
    for VRAM word *at, and BG2's scroll; 0 when there is none */
 int rm_tween_backdrop(const uint8_t **rows, unsigned *at, uint16_t *hofs, uint16_t *vofs);
 void rm_tween_backdrop_back(void);
+/* the same for the step's own picture, its rows on the full window's page
+   alone (not written to VRAM) */
+void rm_tween_backdrop_show_page(void);
 /* BackdropRowsUpdate's rows for buffer sel (video/tilemap.c): from the
    backdrop map's byte x ($7F:93D7, or $BBD7 by $0DA4 bit 14; rows of
    $140 bytes, 128 entries a turn and 32 more), 32 entries a row */
