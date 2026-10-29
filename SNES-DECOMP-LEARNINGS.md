@@ -19,9 +19,18 @@ charges a cost from a profile measured from the ROM (the project README,
 "Timing"). The cycle-matching harness described here (bus-cycle replay,
 lockstep) remains how the C was proven behaviour exact.
 
+**After the decomp (2026-10-19 to 2026-10-28).** The ten days after 100%
+went into making the C cycle exact, then running it natively on a console
+library, converting it to plain typed C, and building an Enhanced mode.
+Much of that was spent learning what the standard should have been from
+the start. Sections 15-20 are those lessons; read 15 before writing a line
+of timing code.
+
 **How to read this.** Section 0 is the rules of engagement. Sections 1-4 are
 the standard and the architecture to build. Section 5 is the order of work.
-Sections 6-12 are the rules and traps, each learned at a measured cost. Treat
+Sections 6-12 are the rules and traps, each learned at a measured cost.
+Sections 15-20 cover what comes after the decomp: the standard for timing,
+running the C natively, plain C, and an enhanced mode. Treat
 every rule here as settled: it was tried the other way and failed. Re-open one
 only with new evidence, never on a hunch.
 
@@ -63,6 +72,41 @@ These cost the most time and money when broken. They apply to any working sessio
    generated files, if the project requires it (this one did, enforced by a
    pre-commit hook that also rejects typographic dashes).
 10. **"Stop" means stop.** No more batches after it.
+11. **State the limits before building.** Before building anything against a
+    standard, write down what the method cannot reach (cases it does not
+    cover, outside dependencies, untested scale) and put that to the
+    maintainer first. A timing pipeline was built for hours and its limits
+    (straight-line code only, ~13,000 places left; console divergences
+    capping pairing) were admitted only at the end, though every one was
+    knowable from the first reads. When a run shows a new limit, report it
+    that moment.
+12. **Integrate in the first hour.** A generator or converter's real bugs
+    show only when its whole output runs in the game. One spent ~7 hours
+    polishing names and gotos before its first end-to-end run, then found
+    the bugs one rebuild at a time. Run the whole thing end to end first,
+    correctness before cosmetics.
+13. **Diff first, biggest cause first.** Compare the original with the C
+    directly (per interval, per access), rank causes by bytes or clocks,
+    fix the largest. A day went into a fix-one-tool-failure-rerun loop on
+    Super FX timing; the three real causes each took minutes once the
+    original's fetches were set beside the C's.
+14. **Cheapest proof first; full runs only when the whole game must run.**
+    Pure renames: compare object files (identical objects prove it, no
+    run). Behaviour changes: the scripts that reach the changed code.
+    One full gate when a step is done. Seven 12-20 minute gates in one
+    session for small changes wasted hours; so did re-sweeping all 325
+    scripts to reconfirm known facts. Before any run, name the new fact it
+    yields and the smallest set of runs that yields it.
+15. **"Done" means the full standard.** A step reported done at "meter 0"
+    still had 2,734 functions on a register copy; that was read, rightly,
+    as being misled. A stepping stone is named as one in the same sentence,
+    with its count, every time. Never define a metric the compromise can
+    satisfy.
+16. **Words are exact.** "IDENTICAL" means 0 difference in everything
+    compared, timing included. With state matching and time off, say
+    "state matches; timing off by N clocks (X%)".
+17. **Status at least every 5 minutes** of work, in one line with a count
+    or percentage. Hours without a report are not accepted.
 
 ---
 
@@ -798,3 +842,258 @@ known dead routine. Finish when it reports 0 unnamed and 0 orphans.
 | chunk / prune / randplay | fast, high-coverage gate scripts |
 | holes / who | uncovered byte runs per tag; scripts reaching an address |
 | precommit / provcheck | header rules, filing, provenance, dashes |
+
+---
+
+## 15. Settle the standard before timing work
+
+Stunt Race FX spent the days after 100% making its C **cycle exact** (every
+script 0 master clocks off on all three processors, 2026-10-20), then two
+more days trying to carry that onto a native console, before the maintainer
+ruled it was never the standard wanted. Decide this on day one:
+
+| Tier | What it is | How it is proven |
+|---|---|---|
+| ASM | bit-exact symbolic source; rebuilds the ROM byte for byte | image gate |
+| C | behaviour exact: each routine's inputs to outputs exactly the original's | A5 + A7 (sections 4.5, 4.6) |
+| Enhanced | the C brought to a modern standard (speed independent, wider, smoother) | its own checks; Original stays the record |
+
+**Cycle exact is not a decompilation standard.** Stating how long the
+original's instructions took (`cyc(n)` after each access, Super FX code-fetch
+statements, `spc_cyc`) is an emulator written out in C. It was never in the
+original source, it took ~16,000 statements on the S-CPU and ~9,400 on the
+Super FX, it had to be refitted whenever the platform under it changed, and
+a static prover for it stalled at 743 of 1,934 routines. All of it was
+removed (kept on a shelf branch). Variants were proposed and rejected for the
+same reason: a boundary call at every original instruction, the cycle values
+renamed as "CPU work" statements, time attached to hardware accesses.
+
+**Preservation keeps the original's design, flaws included.** Source that
+plays worse natively (no pacing of its own) is correct for the preservation
+tier; document the cost, then fix playability as its own step (sections 16
+and 19). Never fix it by quietly changing the preserved C.
+
+**The lockstep harness was still worth building.** Bus-cycle replay is what
+proved the C behaviour exact; that is its job. Do not then make the C carry
+the cycles.
+
+Cycle-exact tooling, should anyone need it for a harness: a MILP solver over
+probe deltas (record each `cyc` site's clocks, cut intervals at call/return
+pairs matched by LCS, solve least change with one floor per literal, weight
+equations by count, drop unmeetable rows and re-solve) took S-CPU error from
+0.165% to 0.0197% in a day where hand fixing ran ~5 minutes a site. For the
+Super FX the code-fetch statements were derived from the ROM by a walker
+(structured C in, fixed point when writing twice changes nothing), never
+learned from runs; every remaining miss was the C not following the
+original (guessed branch pairings, wrong code tables), fixed at the cause.
+
+## 16. Timing without instruction time
+
+**Find what depends on time.** Stunt Race FX's race loop never waits: a race
+frame moves the cars a fixed amount however long it took, so race speed is
+set by how long the S-CPU and Super FX took. Untimed, races ran 29-41% fast;
+with no time at all a race never advances. Check this for any game before
+removing timing: which loops wait on hardware, and which just run.
+
+**Waits at synchronisation points.** Every place the original polled
+hardware (vblank, hblank, its own interrupt flags, Super FX done, the APU
+ports, DMA) becomes an explicit console wait in one header (`waits.h`).
+Counters the original ticked inside a wait loop (here $FE in the Super FX
+wait) must come out with the original's values.
+
+**Chips charge costs, not instructions.** Each chip charges for the work the
+game hands it, measured from the original, declared once by the cartridge:
+
+- **S-CPU:** each access its real bus time plus a weight per kind of access
+  (read/write x work RAM/ROM/cartridge RAM/I/O) for the work around it the C
+  does not make. Fit the weights on frame totals. A per-kind fit was tried
+  and dropped: each weight is an average over all code, so access-dense code
+  (a colour blend) was overcharged ~2.5x and race frames doubled. The C
+  makes fewer accesses than the asm (work-RAM reads 0.70x, writes 0.60x,
+  I/O reads 0.14x here), so expect a residual: races run ~5% fast (5.64
+  TV frames per race frame against 5.95). Bus time alone was 76% short.
+- **Super FX:** a program runs to its STOP the moment it is started; its
+  duration is a per-program model, a fixed part plus weights times the
+  operations it was observed to do (RAM loads and stores, pixel-cache
+  flushes, pixel reads). The two main programs (92% of its time) came out
+  within ~3% per job. The chip keeps only data effects (pixel caches, ROM
+  buffer, code-cache bytes).
+- **SPC700:** an untimed sound CPU is wrong. The driver's upload loop read a
+  port in a 6-clock gap the hardware never exposed; ~31% of uploaded music
+  bytes landed wrong and the effect reader looped on bad data. With a bus
+  cost per access kind the upload went exact (0 of 52,517 bytes).
+- **The profile is a standard, not a hand setting:** a tool measures the
+  original on the reference emulator and fits fixed weights by a fixed
+  method (non-negative least squares) to a fixed report. Frame rate is
+  never a fit input, only a check. Profiles are the game's, declared at
+  power-on; a chip-wide allowance ran this game ~15% fast.
+
+The result is behaviour exact on average, not frame for frame: a frame the
+original only just made or missed can land a TV frame differently. Plays of
+the C against recordings of the original are a gut check here, never
+pass/fail.
+
+## 17. Running the C natively: cartridge and console
+
+**No port copy.** The decomp's C is the game. A separate port tree drifted,
+duplicated every fix, and was folded back in. The C runs on a native console
+library (here nativeshvc: PPU, DSP, DMA/HDMA, timers, interrupts, the
+multiplier/divider and the memory map in C, running no processor
+instructions) under a written contract. The game is the cartridge: its own
+coprocessor (the Super FX) plugs in through the console's chip connector.
+Only cartridge glue lives outside the decomp (front end, chip, cost profile,
+art).
+
+**What counts as emulation.** Interpreting or simulating the original's
+processor or instructions, in any form, for any reason, timing included. Not
+emulation: the C making bus accesses (`rd8`/`wr8`/`rd16`/`wr16`/`rd24`), a
+register calling convention at by-address entries, `call_routine` by
+address, interrupts taken between the C's operations, a chip connector. The
+console implements documented hardware behaviour natively (BRR is a codec,
+Gaussian interpolation a resampler, ADSR an envelope).
+
+**The reference emulator is the oracle, never the source.** Use bsnes to
+check native parts (pixels, DSP samples, frame pacing, state); never port or
+cite its code. Modelling DMA timing from its source was reverted. Rebuilding
+the console to emulator accuracy was declined as emulation by another name.
+
+**The cartridge meets the console's standard.** The console does not bend
+for the game: it refused cartridge-RAM pokes, injected calls, unit starts
+and an SPC hook, since no real SNES runs a game that way. So:
+
+- **Verify only by input:** wait, press, hold, shot, dump, save, load,
+  controller and peripheral input. Code no input play reaches is reported
+  unverified, not proven by injection. The unit calls of section 9 belong
+  to the decomp's harness, not to the native build.
+- Fixes go in the game's C, never as a request for a console deviation.
+- Game features the hardware lacks (widescreen, 60 Hz, touch, a canvas)
+  are opt-in console extensions, hardware-shaped and game neutral, exact
+  when off. The game's engine implements the feature; the console only
+  provides the API. Work that is the console's (hosts, display refresh,
+  presenting frames) goes to the console's maintainers.
+
+**Traps met moving the C onto the console:**
+
+- **RAM interrupt stubs need C.** The console runs no machine code, so the
+  game's WRAM vectors ($00:0108 RTI, $00:010C JSL RasterIrq) became C with
+  the real pushes and pulls.
+- **Read-modify-writes are their own operation** (`rd8_rmw`, `wr16_rmw`):
+  found by shape (read, write to the same address); a 16-bit RMW writes the
+  high byte first. 186 sites here, checked dynamically on a race play.
+- **Timing fitted on one platform does not move to another.** Cycle values
+  fitted on the harness (whose charging differed, e.g. an untimed RMW high
+  byte) did not land at the hardware's times on the console; another
+  reason not to carry them (section 15).
+- **Run headless and in a window from the same build;** keep the player's
+  save away from headless runs.
+
+## 18. Plain typed C
+
+Behaviour-exact C straight from the asm is register shaped (`cpu.a`,
+`set_p`, flag helpers, gotos over Super FX translations). Making it proper C
+(typed parameters and returns, no register file, no gotos, named work RAM)
+was a separate phase. What worked and what did not:
+
+- **Proper means proper.** A mechanical "carried registers" form (each
+  routine takes a copy of the register file) took the meter to 0 while
+  2,734 of 4,610 functions were still register shaped. That is a stepping
+  stone, not plain C (rule 15).
+- **Leaf first.** Convert files whose outside callees are already typed;
+  converting upper files first turns them into adapter glue.
+- **Adapters keep the full exit state** callers still read, including
+  incidental registers (last vertex, offsets, link register): dropping them
+  made 7 of 23 plays differ. Typed callees called from register code must
+  keep their exit flags.
+- **Prove each file with an old-vs-new harness:** the same routine from the
+  pre-conversion commit and the new one, side by side on random and curated
+  inputs, with coverage; a whole-tree version (two libraries loaded
+  locally, 1,938 routines, a 1 GB stack thread because frame loops recurse)
+  proven to fail on a planted defect. Harness stubs must dispatch computed
+  calls for real, or old glue never runs its targets.
+- **The harness cannot see interrupt frames and the gate can.** Run the
+  full gate before moving main for any change to loops, restarts or glue.
+  One such failure was the carried restart primitive not taking the
+  registers back after the original ran; found by bisecting subsets of the
+  change in about a minute each.
+- **The build tool's regexes are part of the oracle.** Wrapping
+  `call_routine(0x...)` in a new form hid the address from the scan that
+  marks jump entries, and a noreturn piece then compared 0 frames.
+- **Work RAM as a typed struct:** names first (generated from the asm's
+  `wram.inc`, proven by identical objects), then record fields, then a
+  generated `union wram` with offsets static-asserted and accessors that
+  wrap or carry into the next bank exactly as the C did. Audit data-bank
+  accesses by logging every bank-relative access over the gate: 5,193 sites
+  reached, all but two fixed-bank. A unit call with an unrealistic DB is
+  not evidence of the game's bank.
+- **A generator for the Super FX** (decode, flow fixpoint, structured
+  emitter) produced 0 gotos and passed, but cost ~7 hours and was ordered
+  removed; the conversion continued by hand. Scope a generator plainly
+  before starting (rule 11) and integrate it in hour one (rule 12). Its bug
+  classes are worth knowing for any GSU translator: delay-slot operands on
+  taken branches, inlining past a reassignment, push-then-jump calls, R10 as
+  data versus stack, returns past the caller.
+- **Parallel batches by many workers did not pay** here either; one session
+  converting files directly, committing each verified file, did.
+
+## 19. Enhanced mode
+
+A modern mode is the C changed, so it is a separate tier beside the
+preserved one, never in place of it. Both modes ship; the original's stays
+the default and the record. Switch at run time (here Tab, with a badge) and
+keep the original mode byte identical when the enhanced flag is off: any bus
+read added in an enhanced path breaks that, so check it with the
+original-mode plays.
+
+**Speed independence is a property of the game's loop, not of the chips.**
+Speeding up the modelled chips to get 60 Hz was rejected (it also hung the
+boot's APU handshake). The game must tick at a fixed rate and do its own
+work per tick.
+
+**Run the original's whole step; draw between.** Stunt Race FX's race steps
+once per ~6 TV frames. Sharing each step's change over 6 ticks was tried
+and failed: non-linear physics (dead zones, tyre forces) acting on partial
+state turned the car ~3.4x too slowly. What works: run the whole original
+step every 6 frames (byte identical to the original's rules at a fixed
+pace) and draw the 3D at j/6 of the way from the step's start to its end in
+the 5 frames between. Where sharing does match the original (the menus'
+turning car: same turn rate), keep it. Expect what was tied to load to
+change: the race intro, counted in race frames the original ran slow, is
+~15% shorter.
+
+**Free only the work that is the enhancement's.** The S-CPU and Super FX
+take no time for the 3D work only; boot, menus, sound uploads and the raster
+interrupt keep the original's timing.
+
+**More pictures than vblank can upload.** At 60 the race's screen (26 KB a
+tick in 1P) overran vblank and VRAM dropped writes. The fix is a console
+canvas: each buffer is handed keyed by the VRAM characters it stands for, at
+its flip, and the console places it by its own rules at the window's
+resolution. Overlapping buffer layouts must narrow the canvas before the
+last VRAM-path copy when switching back, or one frame tears. Verify the
+canvas against a decode of the VRAM it replaces, keyed by line, tile and
+index.
+
+**Order:** speed independence and widescreen before high-resolution
+polygons; the renderer must draw both the original fill exactly (on the GPU,
+the game's own span rule in the shader) and high resolution, with no
+software raster in the display path.
+
+## 20. Process lessons from the later phases
+
+- **Agree the end state in writing** (section 15's table) before a phase
+  starts. Most of the waste after 100% was building toward a standard
+  nobody wanted.
+- **Explain before acting** when the maintainer questions an approach:
+  answer and stop; no multi-file change before agreement.
+- **Peers share one checkout:** commit named files only (`git commit --
+  <files>`), never a directory; agree file areas per session so two never
+  edit the same file; ask peer sessions directly instead of relaying
+  through the maintainer; settle splits with them and proceed.
+- **Branches for shelved work:** cycle exact, the old port and the
+  generator each went to a named branch so main stayed clean and the work
+  stayed recoverable.
+- **zsh does not word-split `$VAR`** (use `${=VAR}`); this caused a false
+  "60 at 144 Hz" scare and a broken sweep.
+- **Check the build is fresh** before trusting "0 differing": a failed
+  build leaves the old binary, and a comparison tool once ran a stale one
+  for days.
