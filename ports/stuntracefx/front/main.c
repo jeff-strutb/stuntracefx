@@ -18,6 +18,7 @@
 
 #include "front.h"
 #include "remaster.h"
+#include "menuwindow.h"
 #include "rm_options.h"
 
 /* ---- the console, for the touch scheme ---- */
@@ -135,8 +136,8 @@ static void pacing_write(uint32_t addr, uint8_t value)
 {
     uint8_t bank = (uint8_t)(addr >> 16);
     const uint8_t *w = nshvc_wram();
-    (void)value;
-    if ((addr & 0xFFFF) != 0x06D4 || !(bank == 0x7E || (bank & 0x7F) < 0x40))
+    mw_ppu_write(addr, value);          /* Enhanced's menus: the PPU's registers */
+    if (!pacing_f || (addr & 0xFFFF) != 0x06D4 || !(bank == 0x7E || (bank & 0x7F) < 0x40))
         return;
     fprintf(pacing_f, "%u %06X %u %08x %08x\n", nshvc_frames(), 0u, w[0x306],
             fnv(w + 0x300, 0x20000 - 0x300, fnv(w, 0x100, 2166136261u)), fnv(nshvc_sram(), 0x10000, 2166136261u));
@@ -158,8 +159,8 @@ NSHVC_MAIN(argc, argv)
                 return 2;
             }
             setvbuf(pacing_f, NULL, _IOLBF, 0);
-            nshvc_set_write_hook(pacing_write);
         }
+    nshvc_set_write_hook(pacing_write);
     cart_describe(&cart);
     cart.cost_profile = &stuntracefx_cost_profile;
     nshvc_set_hooks(&hooks);

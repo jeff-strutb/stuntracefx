@@ -18,6 +18,7 @@
 #include "remaster.h"
 #include "rm_options.h"
 #include "fullwindow.h"
+#include "menuwindow.h"
 
 static int rm_on;                       /* Frame rate 60 */
 static int rm_pace;                     /* video frames a race frame: 1 at 60; 0 the original's */
@@ -335,4 +336,5 @@ void rm_frame_end(void)
     whole_tween();
     rm_canvas_frame_end();
     fw_frame_end();
+    mw_frame_end();
 }

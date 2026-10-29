@@ -2139,6 +2139,8 @@ void fw_vblank_uploads(void)
 static uint8_t table_kept[sizeof page_table], ch7_kept[5];
 static int table_in, ch7_set, screen_w = 256, screen_h = 224;
 
+void fw_screen_lost(void) { screen_w = screen_h = 0; }
+
 static void page_table_put(void)
 {
     uint8_t *w = nshvc_wram();

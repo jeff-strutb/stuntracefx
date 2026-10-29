@@ -104,6 +104,9 @@ void fw_before_step(void);
    own for it) */
 void fw_sky(void);
 void fw_sky_take(void);
+/* the menus' screen changed the screen's size: the full window sets its
+   own again when it next takes the screen */
+void fw_screen_lost(void);
 void fw_vblank_uploads(void);
 void fw_upload_done(void);
 /* at each frame's end: the console's screen and BG1 set for the mode */
