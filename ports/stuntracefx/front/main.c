@@ -173,7 +173,8 @@ NSHVC_MAIN(argc, argv)
         }
     nshvc_set_write_hook(pacing_write);
 #if FW_GPU_METAL
-    gpu_metal_init();                   /* the full window's picture on the cartridge's GPU */
+    if (!getenv("FW_CPUFILL"))          /* FW_CPUFILL=1 (a check): the CPU's fill, to compare */
+        gpu_metal_init();               /* the full window's picture on the cartridge's GPU */
 #endif
     cart_describe(&cart);
     cart.cost_profile = &stuntracefx_cost_profile;
