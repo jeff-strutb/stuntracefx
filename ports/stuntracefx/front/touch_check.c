@@ -23,10 +23,16 @@ void front_window(float *w, float *h) { *w = W; *h = H; }
 float front_safe_top(void) { return 0; }
 void front_buttons(uint16_t b) { buttons = b; }
 int front_auto_accelerate(void) { return autoacc; }
-int front_overlay_image(const uint32_t *argb, int w, int h) { (void)argb; (void)w; (void)h; return 0; }
+/* the overlay: each image its own id; the last alpha and shown flag placed */
+static int overlays;
+static float placed_alpha[16];
+static int placed_shown[16];
+int front_overlay_image(const uint32_t *argb, int w, int h) { (void)argb; (void)w; (void)h; return overlays++; }
 void front_overlay_place(int id, float cx, float cy, float s, float a, float al, int v)
 {
-    (void)id; (void)cx; (void)cy; (void)s; (void)a; (void)al; (void)v;
+    (void)cx; (void)cy; (void)s; (void)a;
+    placed_alpha[id] = al;
+    placed_shown[id] = v;
 }
 uint32_t *art_picture(int which, int *w, int *h);
 
@@ -201,8 +207,44 @@ static void art_checks(void)
     free(p);
 }
 
+/* the mode's badge: shown 180 frames at launch and after each change of
+   mode, at 0.85; then faded out over 30 frames; then hidden */
+static void badge_at(const char *what, int mode, uint32_t at, int want_orig, int want_enh, float want_alpha)
+{
+    const int orig = overlays - 2, enh = overlays - 1, id = mode ? enh : orig;
+    now = at;
+    art_place_mode(mode, 8, 8);
+    checks++;
+    if (placed_shown[orig] != want_orig || placed_shown[enh] != want_enh
+        || fabsf(placed_alpha[id] - want_alpha) > 1e-4f) {
+        failures++;
+        printf("FAIL badge %s: original %d, enhanced %d, alpha %.4f; want %d, %d, %.4f\n", what,
+               placed_shown[orig], placed_shown[enh], placed_alpha[id], want_orig, want_enh, want_alpha);
+    }
+}
+
+static void badge_checks(void)
+{
+    art_make_mode();
+    badge_at("launch", 0, 1000, 1, 0, 0.85f);
+    badge_at("launch + 179", 0, 1179, 1, 0, 0.85f);
+    badge_at("fade start", 0, 1180, 1, 0, 0.85f);
+    badge_at("fade half", 0, 1195, 1, 0, 0.425f);
+    badge_at("fade last", 0, 1209, 1, 0, 0.85f / 30);
+    badge_at("faded", 0, 1210, 0, 0, 0);
+    badge_at("long after", 0, 5000, 0, 0, 0);
+    badge_at("to Enhanced", 1, 5001, 0, 1, 0.85f);
+    badge_at("Enhanced + 200", 1, 5201, 0, 1, 0.85f * (1 - 20.0f / 30));
+    badge_at("Enhanced faded", 1, 5211, 0, 0, 0);
+    badge_at("back to Original", 0, 6000, 1, 0, 0.85f);
+    badge_at("Original + 100", 0, 6100, 1, 0, 0.85f);
+    badge_at("to Enhanced mid-show", 1, 6101, 0, 1, 0.85f);
+    badge_at("its own 3 s", 1, 6280, 0, 1, 0.85f);
+}
+
 int main(void)
 {
+    badge_checks();
     driving_checks();
     menu_checks();
     art_checks();

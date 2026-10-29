@@ -41,7 +41,8 @@ void touch_view(TouchView *v);
 void art_make(void);
 void art_place(const TouchView *v);
 /* the mode's badge (every host): made once, then placed each frame with
-   its top-left corner at (left, top), in window points */
+   its top-left corner at (left, top), in window points; shown for three
+   seconds at launch and after each change of mode, then faded out */
 void art_make_mode(void);
 void art_place_mode(int enhanced, float left, float top);
 

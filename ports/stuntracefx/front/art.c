@@ -196,13 +196,29 @@ void art_make_mode(void)
     id_enhanced = hand_over(badge("ENHANCED", 0x4AA8F5));
 }
 
+/* the badge shows at launch and on each change of mode: BADGE_SHOW frames
+   at full, then fades out over BADGE_FADE */
+#define BADGE_SHOW 180
+#define BADGE_FADE 30
+
 void art_place_mode(int enhanced, float left, float top)
 {
+    static int shown_mode = -1;
+    static uint32_t since;
     const float s = 1.0f / DENSITY, cx = left + BADGE_W / 2.0f, cy = top + BADGE_H / 2.0f;
+    uint32_t age;
+    float a;
     if (id_original < 0)
         return;
-    front_overlay_place(id_original, cx, cy, s, 0, 0.85f, !enhanced);
-    front_overlay_place(id_enhanced, cx, cy, s, 0, 0.85f, enhanced);
+    if (enhanced != shown_mode) {
+        shown_mode = enhanced;
+        since = front_frames();
+    }
+    age = front_frames() - since;
+    a = age < BADGE_SHOW ? 1.0f
+      : age < BADGE_SHOW + BADGE_FADE ? 1.0f - (float)(age - BADGE_SHOW) / BADGE_FADE : 0.0f;
+    front_overlay_place(id_original, cx, cy, s, 0, 0.85f * a, !enhanced && a > 0);
+    front_overlay_place(id_enhanced, cx, cy, s, 0, 0.85f * a, enhanced && a > 0);
 }
 
 /* the pictures as made, for a check (touch_check.c): 0 wheel, 1 brake,

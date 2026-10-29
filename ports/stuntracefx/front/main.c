@@ -1,7 +1,8 @@
 /*
  * main.c: Stunt Race FX on nativeshvc (front.h). The game (game/) is the
  * cartridge; this is what it adds to the console's front end: its keys
- * (Tab Original or Enhanced mode, with a badge saying which; F1 Frame rate
+ * (Tab Original or Enhanced mode, with a badge saying which for three
+ * seconds; F1 Frame rate
  * 60, F2 Widescreen), its Remaster Options taken at each frame's end, and a
  * touch screen as its controls (touch.c, art.c).
  *
