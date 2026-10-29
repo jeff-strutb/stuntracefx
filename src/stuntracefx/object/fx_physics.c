@@ -247,7 +247,13 @@ l8FDF:
     R[0] = R[0];
     gsu_moves(R[0]);
     t = gsu.z;
-    R[0] = (uint16_t)(R[0] + rm_share_fx(FX_INIT_2472, 0xFFFF));   /* DEC; Remaster: a tick's share */
+    /* DEC. Remaster: not shared out (remaster.h): it counts the program's
+       runs since the car was set up, two of them posed, the third the
+       car handler's setup (the car's +$2C, +$40, +$48); shared over a
+       step's ticks the posed runs are twelve, the parts' flags (+$1C bit
+       4) are set by then and the setup is skipped: car selection's tyres
+       turned 90 degrees */
+    R[0] = (uint16_t)(R[0] - 1);
     if (t) { goto l8FE9; }
     gsu_sbk(R[0]);
 l8FE9:
