@@ -326,6 +326,16 @@ static int texel_colour(uint8_t v, uint8_t por, uint8_t hi)
     return c;
 }
 
+/* a perspective-correct span's texel coordinate: a / q, its whole part's
+   low byte (0 where it is out of range: a pixel just past a face's edge) */
+static unsigned persp_texel(float a, float q)
+{
+    float t = a / q;
+    if (!(t > -1.0e9f && t < 1.0e9f))
+        t = 0.0f;
+    return (unsigned)(int)floorf(t) & 0xFF;
+}
+
 void fw_span_fill_cpu(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
 {
     size_t i;
@@ -336,6 +346,16 @@ void fw_span_fill_cpu(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
         int32_t x;
         if (!p->textured) {
             memset(o + p->x0, p->colour, (size_t)(p->x1 - p->x0 + 1));
+            continue;
+        }
+        if (p->textured == 2) {
+            for (x = p->x0; x <= p->x1; x++) {
+                float k = (float)(x - p->xl), q = fmaf(p->pdq, k, p->pq);
+                unsigned iu = persp_texel(fmaf(p->pda, k, p->pa), q), iv = persp_texel(fmaf(p->pdb, k, p->pb), q);
+                int c = texel_colour(fw_texel(p->bank, (uint16_t)(((iv << 8 | iu) & p->mask) + p->base)), p->por, p->hi);
+                if (c >= 0)
+                    o[x] = (uint8_t)c;
+            }
             continue;
         }
         for (x = p->x0; x <= p->x1; x++) {
@@ -841,6 +861,24 @@ static int64_t slope(int64_t dx, uint32_t rows)
     return (dx * (int16_t)reciprocal(rows)) >> 7;
 }
 
+/* The full window's own pictures: an edge's x (24.8) at a row exactly,
+   from its two vertices, from + (to - from) (row - y0) / rows, rounded
+   down; and each edge from the vertex the last one ended at. The
+   original's 24.8 slope, its fraction cut, and its next edge from where
+   the last one's steps left it, hold for the short edges of its screen;
+   an edge from a point the near plane's clip puts tens of thousands of
+   rows away is off by a hundred texels or more at its end, by a
+   different amount each picture, and the face's part on the screen
+   moves and goes (a wall's sign beside the car). The check's pass (the
+   original's view) keeps the original's. */
+static int64_t edge_x(int64_t from, int64_t to, int32_t y0, int32_t rows, int32_t row)
+{
+    int64_t num = (to - from) * 256 * (int64_t)(row - y0), q = num / rows;
+    if (num % rows && num < 0)
+        q--;
+    return from * 256 + q;
+}
+
 /* an edge's x stepped: set to 0 when it has gone just below it (to -8.0) */
 static int64_t edge_step(int64_t x, int64_t step)
 {
@@ -889,6 +927,91 @@ void fw_exact_vertex(uint16_t at, uint16_t index)
     sw_val[at >> 1] = (int32_t)x;
     sw_val[(uint16_t)(at + 2) >> 1] = (int32_t)y;
     sw_gen[at >> 1] = sw_gen[(uint16_t)(at + 2) >> 1] = list_gen;
+}
+
+/* A textured face's planes for its perspective-correct fill. For a face
+   in view space on the plane n . P = d, the point a pixel shows is t r with
+   r = ((sx - ox) / f, (sy - oy) / f, 1), t = d / (n . r), so 1 / z =
+   (n / d) . r; and u, linear over the face, is g . P for the g its three
+   points give (P rows, u's), so u / z = g . r: each a plane in r, which a
+   row's pixels step along evenly. From the three of its points farthest
+   apart; u and v as the edge walk takes them, each the nearest turn of the
+   first point's. Good for the draw list it was made in (list_gen). */
+typedef struct { double q[3], a[3], b[3]; uint32_t gen; } TexPlane;
+/* FW_AFFINE=1 (a check): the affine fill, the original's, to compare */
+static int fw_affine(void)
+{
+    static int on = -1;
+    if (on < 0)
+        on = getenv("FW_AFFINE") != NULL;
+    return on;
+}
+static TexPlane tex_planes[0x8000];
+
+static void cross3(const double *a, const double *b, double *c)
+{
+    c[0] = a[1] * b[2] - a[2] * b[1];
+    c[1] = a[2] * b[0] - a[0] * b[2];
+    c[2] = a[0] * b[1] - a[1] * b[0];
+}
+
+static double dot3(const double *a, const double *b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
+
+void fw_tex_plane(uint16_t list, uint16_t r3)
+{
+    TexPlane *t = &tex_planes[list >> 1];
+    double P[EXACT_MAX][3], u[EXACT_MAX], v[EXACT_MAX], best = 0, e1[3], e2[3], c[3], d, det, bc[3], ca[3], ab[3];
+    int n = ex_n, i, j, k, ia = 0, ib = 1, ic = 2;
+
+    t->gen = 0;
+    /* nothing read unless in the full window: the Super FX's accesses are
+       timed in Original */
+    if (!fw_view_active() || !(r3 & 0x8000) || n < 3 || list != ex_list)
+        return;
+    for (i = 0; i < n; i++) {
+        P[i][0] = ex_vx[i];
+        P[i][1] = ex_vy[i];
+        P[i][2] = ex_vz[i];
+        u[i] = ram16((uint16_t)(list + 8 * i + 4)) / 256.0;
+        v[i] = ram16((uint16_t)(list + 8 * i + 6)) / 256.0;
+    }
+    for (i = 0; i < n; i++)             /* the three farthest apart: the largest triangle */
+        for (j = i + 1; j < n; j++)
+            for (k = j + 1; k < n; k++) {
+                double a2;
+                e1[0] = P[j][0] - P[i][0]; e1[1] = P[j][1] - P[i][1]; e1[2] = P[j][2] - P[i][2];
+                e2[0] = P[k][0] - P[i][0]; e2[1] = P[k][1] - P[i][1]; e2[2] = P[k][2] - P[i][2];
+                cross3(e1, e2, c);
+                a2 = dot3(c, c);
+                if (a2 > best) {
+                    best = a2;
+                    ia = i;
+                    ib = j;
+                    ic = k;
+                }
+            }
+    if (best <= 0)
+        return;
+    e1[0] = P[ib][0] - P[ia][0]; e1[1] = P[ib][1] - P[ia][1]; e1[2] = P[ib][2] - P[ia][2];
+    e2[0] = P[ic][0] - P[ia][0]; e2[1] = P[ic][1] - P[ia][1]; e2[2] = P[ic][2] - P[ia][2];
+    cross3(e1, e2, c);
+    d = dot3(c, P[ia]);
+    cross3(P[ib], P[ic], bc);
+    cross3(P[ic], P[ia], ca);
+    cross3(P[ia], P[ib], ab);
+    det = dot3(P[ia], bc);
+    if (fabs(d) < 1e-9 * sqrt(best) || fabs(det) < 1e-9)
+        return;                         /* seen edge on, or through the eye: the affine fill's */
+    u[ib] = u[ia] + remainder(u[ib] - u[ia], 256.0);
+    u[ic] = u[ia] + remainder(u[ic] - u[ia], 256.0);
+    v[ib] = v[ia] + remainder(v[ib] - v[ia], 256.0);
+    v[ic] = v[ia] + remainder(v[ic] - v[ia], 256.0);
+    for (i = 0; i < 3; i++) {
+        t->q[i] = c[i] / d;
+        t->a[i] = (u[ia] * bc[i] + u[ib] * ca[i] + u[ic] * ab[i]) / det;
+        t->b[i] = (v[ia] * bc[i] + v[ib] * ca[i] + v[ic] * ab[i]) / det;
+    }
+    t->gen = list_gen;
 }
 
 /* FxPolygonDraw's (polygon.c, 01:C339) in the full window: a textured face
@@ -1107,7 +1230,8 @@ static uint16_t flat_polygon(uint16_t p, int n)
     uint16_t v = (uint16_t)(p + 1), size = (uint16_t)(4 * n), dst = (uint16_t)(v - size), top_at = 0, src = v;
     uint16_t left_at, right_at;
     int32_t ymin = 0x7FFFFFFF, ymax = -0x7FFFFFFF, lrows, rrows, row;
-    int64_t lx, rx, ls = 0, rs = 0;
+    int64_t lx, rx, ls = 0, rs = 0, lfrom = 0, lto = 0, rfrom = 0, rto = 0;     /* each edge's (edge_x) */
+    int32_t ly0 = 0, ln = 1, ry0 = 0, rn = 1;
     int i;
     gsu.por = 0;
     gsu_color(ram8(p));
@@ -1146,6 +1270,7 @@ static uint16_t flat_polygon(uint16_t p, int n)
     right_at = (uint16_t)(left_at + size - 2);
     lx = vw(left_at);
     rx = lx * 256;
+    rto = lx;
     left_at = (uint16_t)(left_at + 4);
     rrows = 0;
     {
@@ -1164,10 +1289,14 @@ static uint16_t flat_polygon(uint16_t p, int n)
         }
         ls = slope(to - from, (uint32_t)lrows);
         lx = from * 256;
+        lfrom = from;
+        lto = to;
+        ly0 = row;
+        ln = lrows;
     }
     for (;;) {
         if (!rrows) {
-            int64_t from = (rx + 0x7F) >> 8, to;
+            int64_t from = checking ? (rx + 0x7F) >> 8 : rto, to;
             int32_t y;
             for (;;) {
                 y = vw(right_at);
@@ -1183,9 +1312,19 @@ static uint16_t flat_polygon(uint16_t p, int n)
             }
             rs = slope(to - from, (uint32_t)rrows);
             rx = from * 256;
+            rfrom = from;
+            rto = to;
+            ry0 = row;
+            rn = rrows;
         }
         do {
-            int64_t l = lx >> 8, r = rx >> 8;
+            int64_t l, r;
+            if (!checking) {
+                lx = edge_x(lfrom, lto, ly0, ln, row);
+                rx = edge_x(rfrom, rto, ry0, rn, row);
+            }
+            l = lx >> 8;
+            r = rx >> 8;
             if (row >= th)                  /* past the screen's last row: nothing more to draw */
                 return (uint16_t)(v + size);
             if (!checking && row < -th && lrows > 1 && rrows > 1) {    /* rows far above the screen: stepped at once */
@@ -1210,7 +1349,7 @@ static uint16_t flat_polygon(uint16_t p, int n)
         if (lrows)
             continue;
         {
-            int64_t from = (lx + 0x7F) >> 8, to;
+            int64_t from = checking ? (lx + 0x7F) >> 8 : lto, to;
             int32_t y;
             for (;;) {
                 to = vw(left_at);
@@ -1225,6 +1364,10 @@ static uint16_t flat_polygon(uint16_t p, int n)
             }
             ls = slope(to - from, (uint32_t)lrows);
             lx = from * 256;
+            lfrom = from;
+            lto = to;
+            ly0 = row;
+            ln = lrows;
         }
     }
 }
@@ -1304,6 +1447,8 @@ typedef struct {
        texels at the row, their steps a row, the end vertex's */
     double hu, hv, hdu, hdv;
     uint8_t vu, vv;
+    int64_t from, to;           /* its vertices' x, its first row and its rows (edge_x) */
+    int32_t y0, n;
 } TexEdge;
 
 /* the textured fill at full precision: the original's edges and spans, its
@@ -1318,7 +1463,7 @@ static int tex_edge(TexEdge *e, int32_t row, int left)
     int64_t from, to;
     int32_t y;
     uint16_t u, v, u_prev, v_prev;
-    to = (e->x + 0x7F) >> 8;
+    to = tex_precise() ? e->to : (e->x + 0x7F) >> 8;
     u = (uint16_t)(e->u >> 8);
     v = (uint16_t)(e->v >> 8);
     if (tex_precise()) {                /* from the vertex the last edge ended at */
@@ -1349,6 +1494,10 @@ static int tex_edge(TexEdge *e, int32_t row, int left)
     if (e->rows < 0)
         return 0;
     e->x = from * 256;
+    e->from = from;
+    e->to = to;
+    e->y0 = row;
+    e->n = e->rows;
     e->slope = slope(to - from, (uint32_t)e->rows);
     e->du = uv_step((uint16_t)(u - u_prev), (uint32_t)e->rows);
     e->u = (uint16_t)(u_prev << 8 | u_prev >> 8);
@@ -1372,6 +1521,8 @@ static uint16_t tex_polygon(uint16_t p, int n)
     int32_t ymin = 0x7FFFFFFF, ymax = -0x7FFFFFFF, row;
     TexEdge l, r;
     int i;
+    /* the face's planes (fw_tex_plane): a perspective-correct fill */
+    const TexPlane *pl = tex_planes[v >> 1].gen == list_gen && !fw_affine() ? &tex_planes[v >> 1] : NULL;
     gsu.por = 0;
     gsu_color((uint8_t)word);
     gsu.por = (uint8_t)((word >> 8) & 0x1F);
@@ -1397,6 +1548,7 @@ static uint16_t tex_polygon(uint16_t p, int n)
     {
         uint16_t t = (uint16_t)(top_at - 2);
         l.x = r.x = vw(t) * 256;
+        l.to = r.to = vw(t);
         l.u = r.u = (uint16_t)(ram8((uint16_t)(t + 4)) << 8);
         l.v = r.v = (uint16_t)(ram8((uint16_t)(t + 6)) << 8);
         l.vu = r.vu = ram8((uint16_t)(t + 4));
@@ -1441,7 +1593,13 @@ static uint16_t tex_polygon(uint16_t p, int n)
             count -= k;
         }
         while (count--) {
-            int64_t xl = l.x >> 8, xr = r.x >> 8, x, x0, x1;
+            int64_t xl, xr, x, x0, x1;
+            if (tex_precise()) {
+                l.x = edge_x(l.from, l.to, l.y0, l.n, row);
+                r.x = edge_x(r.from, r.to, r.y0, r.n, row);
+            }
+            xl = l.x >> 8;
+            xr = r.x >> 8;
             uint32_t width = xr >= xl ? (uint32_t)(xr - xl + 1 > 0xFFFFFFF ? 0xFFFFFFF : xr - xl + 1) : 1;
             uint16_t du, dv, tu, tv;
             uint16_t ur = r.u, ul = l.u, vr = r.v, vl = l.v;
@@ -1477,9 +1635,35 @@ static uint16_t tex_polygon(uint16_t p, int n)
                     sp->por = gsu.por;
                     sp->hi = (uint8_t)(gsu.colr & 0xF0);
                     sp->textured = 1;
+                    if (pl) {           /* the face's planes: perspective-correct, from its first pixel */
+                        double f = fw_focal(), rx = ((double)x0 + 0.5 - tw / 2) / f;
+                        double ry = ((double)row + 0.5 - ((double)view_cy() * K + cy_off)) / f;
+                        double ou = ram16(TEX_U_OFF) / 256.0, ov = ram16(TEX_V_OFF) / 256.0, q[3], a[3], b[3];
+                        int j;
+                        for (j = 0; j < 3; j++) {
+                            q[j] = pl->q[j];
+                            a[j] = pl->a[j] + ou * pl->q[j];
+                            b[j] = pl->b[j] + ov * pl->q[j];
+                        }
+                        sp->textured = 2;
+                        sp->xl = x0;
+                        sp->pq = (float)(q[0] * rx + q[1] * ry + q[2]);
+                        sp->pdq = (float)(q[0] / f);
+                        sp->pa = (float)(a[0] * rx + a[1] * ry + a[2]);
+                        sp->pda = (float)(a[0] / f);
+                        sp->pb = (float)(b[0] * rx + b[1] * ry + b[2]);
+                        sp->pdb = (float)(b[0] / f);
+                        k = x1 - 1 - x0;
+                    }
                     /* COLOR's register as the span's last pixel leaves it */
-                    iu = (unsigned)((sp->u + sp->du * k) >> 32) & 0xFF;
-                    iv = (unsigned)((sp->v + sp->dv * k) >> 32) & 0xFF;
+                    if (sp->textured == 2) {
+                        float kf = (float)k, qk = fmaf(sp->pdq, kf, sp->pq);
+                        iu = persp_texel(fmaf(sp->pda, kf, sp->pa), qk);
+                        iv = persp_texel(fmaf(sp->pdb, kf, sp->pb), qk);
+                    } else {
+                        iu = (unsigned)((sp->u + sp->du * k) >> 32) & 0xFF;
+                        iv = (unsigned)((sp->v + sp->dv * k) >> 32) & 0xFF;
+                    }
                     gsu_color(fw_texel(bank, (uint16_t)(((iv << 8 | iu) & mask) + base)));
                 }
             } else if (row >= 0 && row < th) {
@@ -2487,10 +2671,11 @@ static void screen_back(void)
    backdrop its 256 lines show (from the backdrop map at $7F:93D7, a turn
    128 columns: rm_backdrop_view), which a wider screen would show again
    and again; page 1's map is 64 x 64 (BG2SC $4B, at $4800, while the full
-   window is on), the shown buffer's rows the backdrop's own columns on
-   either side of the console's picture: whole to a screen 512 wide, past
-   that the map's 64 columns again. Written each frame, held, outside the
-   game's time, as the in-between frames' rows are (tween.c). */
+   window is on) and past the console's picture BG2 reads a map 128 x 64
+   (nshvc_ext_layer_outside, contract 2.10), a turn across: the shown
+   buffer's rows the backdrop's own columns either side of the picture,
+   whole at any width. Written each frame, held, outside the game's time,
+   as the in-between frames' rows are (tween.c). */
 #define BG2_MAP_AT 0x5800
 #define BG2_CHARS_AT 0x6000
 #define BG2_WIDE_AT 0x4800
@@ -2507,12 +2692,13 @@ static int all_colour1(const uint16_t *v, unsigned ch)
 }
 
 /* buffer sel's rows (map rows 30-46 for buffer A, 47-63 for B, 17 of
-   them) across the 64 columns: column c the backdrop's entry at
-   the layer's x c * 8 taken within 256 of the console's picture's middle,
+   them) across a map `cols` wide (64, 128): column c the backdrop's entry
+   at the layer's x c * 8 taken within cols * 4 of the console's picture's
+   middle,
    the game's row (from byte x, its first entry the map's column 0) run on
    either way round the turn; past the map's end ($2800) $20C0, as the
    game fills */
-static void bg2_backdrop(uint16_t *map, const uint8_t *keep, unsigned sel)
+static void bg2_backdrop(uint16_t *map, unsigned cols, const uint8_t *keep, unsigned sel)
 {
     const uint8_t *w = nshvc_wram();
     uint16_t x, src, hofs;
@@ -2527,14 +2713,14 @@ static void bg2_backdrop(uint16_t *map, const uint8_t *keep, unsigned sel)
         unsigned r = first + i, at = (unsigned)x + i * 0x140;
         if (!keep[r])
             continue;
-        for (c = 0; c < 64; c++) {
-            int lx = (int)c * 8, e;
-            while (lx < mid - 256)
-                lx += 512;
-            while (lx >= mid + 256)
-                lx -= 512;
+        for (c = 0; c < cols; c++) {
+            int lx = (int)c * 8, e, half = (int)cols * 4;
+            while (lx < mid - half)
+                lx += 2 * half;
+            while (lx >= mid + half)
+                lx -= 2 * half;
             e = lx >= 0 ? lx / 8 : -((7 - lx) / 8);
-            map[r * 64 + c] = at >= 0x2800 ? 0x20C0
+            map[r * cols + c] = at >= 0x2800 ? 0x20C0
                 : (uint16_t)(w[0x10000 + ((src + at - col * 2 + (((int)col + e) & 127) * 2) & 0xFFFF)] |
                              w[0x10000 + ((src + at - col * 2 + (((int)col + e) & 127) * 2 + 1) & 0xFFFF)] << 8);
         }
@@ -2545,7 +2731,7 @@ static int bg2sc_kept = -1;             /* the game's BG2SC while the full windo
 
 static void bg2_prepare(void)
 {
-    static uint16_t map[64 * 64];
+    static uint16_t map[64 * 64], out[128 * 64];
     const uint16_t *v = nshvc_vram();
     const uint8_t *w = nshvc_wram();
     uint8_t keep[64] = {0};
@@ -2568,7 +2754,12 @@ static void bg2_prepare(void)
     for (r = 0; r < 64; r++)
         for (i = 0; i < 64; i++)
             map[r * 64 + i] = keep[r] || sky == 0xFFFF ? v[BG2_MAP_AT + r * 32 + (i & 31)] : (uint16_t)sky;
-    bg2_backdrop(map, keep, sel);
+    for (r = 0; r < 64; r++)
+        for (i = 0; i < 128; i++)
+            out[r * 128 + i] = map[r * 64 + (i & 63)];
+    bg2_backdrop(map, 64, keep, sel);
+    bg2_backdrop(out, 128, keep, sel);
+    nshvc_ext_layer_outside(1, out, 5);
     nshvc_ext_vram_direct(1);
     wr8(VMAIN, 0x80);
     wr8(VMADDL, (uint8_t)BG2_WIDE_AT);
@@ -2602,6 +2793,22 @@ void fw_backdrop_update(void)
     nshvc_hold_interrupts(0);
 }
 
+/* CGWSEL for the full window: the original's colour window (window 1,
+   the bezel's opening, or the view's) is where its picture is, which in
+   the full window is the whole screen, the bezel gone; past the console's
+   columns the console has every pixel outside both windows. So in each of
+   its two fields (bits 7-6, clip to black; 5-4, colour maths prevented)
+   "outside the window" (01) is never (00) and "inside" (10) always (11):
+   the crash's red over the view is over the whole screen, not the
+   original's view's box in it (the panels' boxes, BG1's too, with it) */
+static int cgwsel_game = -1;            /* the game's, put back when the full window goes */
+
+static uint8_t cgwsel_full(uint8_t c)
+{
+    static const uint8_t field[4] = {0, 0, 3, 3};
+    return (uint8_t)((c & 0x0F) | field[c >> 6 & 3] << 6 | field[c >> 4 & 3] << 4);
+}
+
 /* the screen the full window's: the sprites, BG1 on page 1, the view's
    window off and the screen on (the stage's blank was for its uploads);
    work the original never did, so it takes none of the S-CPU's time (an
@@ -2614,6 +2821,8 @@ static void takeover(void)
     sprites_place();
     wr8(TM, 0x13);                      /* BG1, BG2 (the hills, bg2_prepare) and the sprites, as the race's */
     wr8(TMW, 0x00);
+    cgwsel_game = mw_ppu_last(0x2130);  /* the stage's, just set (WindowsSetupSelect) */
+    wr8(CGWSEL, cgwsel_full((uint8_t)cgwsel_game));
     screen_set();
     nshvc_ext_sprite_wrap(0);           /* Y page 0's sprites nowhere above line 1 (those above it on page -1) */
     nshvc_ext_layer_page(1, 1);         /* BG2 on page 1: its map at $4800, 64 x 64, characters from $6000 (bg2_prepare) */
@@ -2670,6 +2879,10 @@ void fw_frame_end(void)
         nshvc_ext_layer_page(1, 0);
         if (bg2sc_kept >= 0)            /* the game's map for BG2 again */
             wr8(BG2SC, (uint8_t)bg2sc_kept);
+        if (cgwsel_game >= 0)           /* and its colour window */
+            wr8(CGWSEL, (uint8_t)cgwsel_game);
+        cgwsel_game = -1;
+        nshvc_ext_layer_outside(1, NULL, 0);
         bg2sc_kept = -1;
         sprites_write();
         if (staged)

@@ -7,7 +7,8 @@
  * order they were drawn, so a pixel ends as the CPU's fill leaves it
  * (fw_span_fill_cpu, the reference): a flat span its colour, a textured
  * one its texel at ((v << 8 | u) & mask) + base in its bank, u and v the
- * same 32.32 fixed point, through COLOR's and PLOT's rules. The picture is
+ * same 32.32 fixed point (a perspective-correct one's the same floats,
+ * multiply-adds and divides), through COLOR's and PLOT's rules. The picture is
  * in memory the CPU and the GPU share (fw_texels_alloc), so the GPU writes
  * the texels the canvas takes. The texels' banks: ROM's read once, RAM's
  * ($70, $71) each fill. FW_GPUCHECK=1 (a check): each fill drawn by the CPU
@@ -23,7 +24,13 @@
 static NSString *const kernel_source = @
 "#include <metal_stdlib>\n"
 "using namespace metal;\n"
-"struct Span { int y, x0, x1, pad0; long xl, u, du, v, dv; ushort base, mask; uchar bank, por, hi, colour, textured, pad1[7]; };\n"
+"struct Span { int y, x0, x1, pad0; long xl, u, du, v, dv; ushort base, mask; uchar bank, por, hi, colour, textured, pad1[7];\n"
+"              float pq, pdq, pa, pda, pb, pdb, pad2[2]; };\n"
+"static uint persp_texel(float a, float q) {\n"
+"    float t = precise::divide(a, q);\n"
+"    if (!(t > -1.0e9f && t < 1.0e9f)) t = 0.0f;\n"
+"    return (uint)(int)precise::floor(t) & 255;\n"
+"}\n"
 "static int texel_colour(uchar v, uchar por, uchar hi) {\n"
 "    uchar c = (por & 4) ? (uchar)(hi | (v >> 4)) : (por & 8) ? (uchar)(hi | (v & 15)) : v;\n"
 "    if (!(por & 1)) { if (por & 8) { if (!(c & 15)) return -1; } else if (!c) return -1; }\n"
@@ -43,6 +50,15 @@ static NSString *const kernel_source = @
 "        if (a > b) continue;\n"
 "        if (!s.textured) { for (int x = a; x <= b; x++) o[x] = s.colour; continue; }\n"
 "        device const uchar *bank = banks + (ulong)slot[s.bank] * 65536;\n"
+"        if (s.textured == 2) {\n"
+"            for (int x = a; x <= b; x++) {\n"
+"                float k = (float)(x - (int)s.xl), q = precise::fma(s.pdq, k, s.pq);\n"
+"                uint iu = persp_texel(precise::fma(s.pda, k, s.pa), q), iv = persp_texel(precise::fma(s.pdb, k, s.pb), q);\n"
+"                int c = texel_colour(bank[(ushort)((((iv << 8) | iu) & s.mask) + s.base)], s.por, s.hi);\n"
+"                if (c >= 0) o[x] = (uchar)c;\n"
+"            }\n"
+"            continue;\n"
+"        }\n"
 "        for (int x = a; x <= b; x++) {\n"
 "            long k = (long)x - s.xl;\n"
 "            uint iu = (uint)((s.u + s.du * k) >> 32) & 255, iv = (uint)((s.v + s.dv * k) >> 32) & 255;\n"
@@ -205,7 +221,11 @@ int gpu_metal_init(void)
     if (!dev)
         return 0;
     queue = [dev newCommandQueue];
-    lib = [dev newLibraryWithSource:kernel_source options:nil error:&err];
+    {
+        MTLCompileOptions *opt = [MTLCompileOptions new];
+        opt.fastMathEnabled = NO;       /* the floats as the CPU's fill computes them */
+        lib = [dev newLibraryWithSource:kernel_source options:opt error:&err];
+    }
     if (!lib) {
         fprintf(stderr, "gpu_metal: the kernel: %s\n", err.localizedDescription.UTF8String);
         return 0;

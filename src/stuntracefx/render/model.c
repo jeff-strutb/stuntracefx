@@ -2134,6 +2134,7 @@ l914E:
 l918B:
     t = gsu_count_down(&R[12]);
     if (t) { goto l914E; }
+    fw_tex_plane(R[7], R[3]);           /* Enhanced's full window: a textured face's planes */
     R[0] = gsu_lob(R[5]);
     t = !gsu.z;
     if (t) { goto l9199; }

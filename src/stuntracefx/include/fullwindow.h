@@ -84,13 +84,21 @@ void fw_facing_cross(uint16_t *hi, uint16_t *lo);
 /* A span of the picture's (fullwindow.c): row y, columns x0 to x1; flat,
    the colour; textured, each pixel's texel at ((v << 8 | u) & mask) + base
    in bank, u and v (32.32) at column x u + du (x - xl) and v + dv (x - xl),
-   through COLOR's and PLOT's rules (por, the colour's high nibble hi) */
+   through COLOR's and PLOT's rules (por, the colour's high nibble hi);
+   textured 2, perspective-correct: u = (pa + pda k) / (pq + pdq k) and v =
+   (pb + pdb k) / (pq + pdq k) at k = x - xl, each a multiply-add and a
+   divide in float as written (fw_span_fill_cpu, the GPU's the same) */
 typedef struct {
     int32_t y, x0, x1, pad0;
     int64_t xl, u, du, v, dv;
     uint16_t base, mask;
     uint8_t bank, por, hi, colour, textured, pad1[7];
+    float pq, pdq, pa, pda, pb, pdb, pad2[2];
 } FwSpan;
+/* a textured face's planes (model.c, after its points): its 1 / z, u / z
+   and v / z for its draw-list vertices at `list`, from its points in view
+   space (R3 negative: the face is textured) */
+void fw_tex_plane(uint16_t list, uint16_t r3);
 /* the spans to the texels (out, w x h): the reference on the CPU, and the
    one in use, which a front end with a GPU sets; fw_texel the bytes it
    reads, the Super FX's memory */
