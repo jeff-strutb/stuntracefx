@@ -288,13 +288,22 @@ static FwSpan *span_new(void)
 static void span_flat(int32_t y, int32_t x0, int32_t x1, uint8_t c)
 {
     FwSpan *p;
-    if (y < 0 || y >= th || x1 < x0 || !(p = span_new()))
+    if (y < 0 || y >= th || x1 < x0)
         return;
-    memset(p, 0, sizeof *p);
+    if (nspans) {                       /* the last one's run on: the same pixels as two */
+        p = &spans[nspans - 1];
+        if (!p->textured && p->y == y && p->colour == c && p->x1 + 1 == x0) {
+            p->x1 = x1;
+            return;
+        }
+    }
+    if (!(p = span_new()))
+        return;
     p->y = y;
     p->x0 = x0;
     p->x1 = x1;
     p->colour = c;
+    p->textured = 0;
 }
 
 /* the texel fetch, as the Super FX reads it (fw_span_filler's need the
