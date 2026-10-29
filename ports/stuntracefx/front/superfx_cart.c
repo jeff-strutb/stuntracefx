@@ -29,9 +29,15 @@ void gsu_host_irq(int level) { nshvc_cart_irq(level); }
 void gsu_host_irq_at(int level, uint64_t clock) { nshvc_cart_irq_at(level, clock); }
 uint8_t gsu_host_open_bus(void) { return nshvc_open_bus(); }
 uint32_t gsu_host_ram_size(void) { return ram_size; }
+int cart_rom_held(uint32_t off, uint8_t *v);
+
 uint8_t gsu_host_rom(uint32_t off, int fetch, int *unheld)
 {
     uint8_t v;
+    if (cart_rom_held(off, &v)) {       /* the cartridge's ROM, its own chip's read */
+        *unheld = 0;
+        return v;
+    }
     front_rom_unheld = 0;
     v = nshvc_cart_rom(off, NSHVC_ROM_CHIP | (fetch ? FRONT_ROM_FETCH : 0));
     *unheld = front_rom_unheld;

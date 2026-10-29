@@ -30,11 +30,31 @@ static const PortAsset *find(uint32_t off)
     return NULL;
 }
 
+/* the assets' bytes at their ROM offsets, and which offsets one holds: a
+   read in a page no asset holds whole looks there, not through the list
+   (the Super FX's textures and bitmaps, read a byte at a time); the
+   bytes no asset holds are none of them */
+static uint8_t *held_bytes, *held_bits;
+
+/* a ROM byte an asset holds, for the cartridge's own Super FX: 1 and the
+   byte, or 0 (none holds it: nativeshvc's path decides, cart.c's rules) */
+int cart_rom_held(uint32_t off, uint8_t *v)
+{
+    if (!held_bits || off >= port_rom_size || !(held_bits[off >> 3] >> (off & 7) & 1))
+        return 0;
+    *v = held_bytes[off];
+    return 1;
+}
+
 static uint8_t asset_read(uint32_t off, int who)
 {
-    const PortAsset *a = find(off);
-    if (a)
-        return a->data[off - a->rom];
+    if (held_bits && off < port_rom_size && held_bits[off >> 3] >> (off & 7) & 1)
+        return held_bytes[off];
+    if (!held_bits) {
+        const PortAsset *a = find(off);
+        if (a)
+            return a->data[off - a->rom];
+    }
     if (who & FRONT_ROM_FETCH) {
         front_rom_unheld = 1;
         return 0;
@@ -53,6 +73,18 @@ void cart_describe(nshvc_cart *cart)
     pages = (const uint8_t **)calloc(n, sizeof *pages);
     if (!pages)
         nshvc_fatal("no memory for the cartridge's pages");
+    held_bytes = (uint8_t *)calloc(port_rom_size, 1);
+    held_bits = (uint8_t *)calloc((port_rom_size + 7) / 8, 1);
+    if (!held_bytes || !held_bits)
+        nshvc_fatal("no memory for the cartridge's assets");
+    for (p = 0; p < (uint32_t)port_asset_count; p++) {
+        const PortAsset *a = &port_assets[p];
+        uint32_t i;
+        for (i = 0; i < a->size && a->rom + i < port_rom_size; i++) {
+            held_bytes[a->rom + i] = a->data[i];
+            held_bits[(a->rom + i) >> 3] |= (uint8_t)(1u << ((a->rom + i) & 7));
+        }
+    }
     /* each page one asset holds whole, for reads with no lookup */
     for (p = 0; p < n; p++) {
         const PortAsset *a = find(p << 8);
