@@ -113,18 +113,23 @@ static void check_alias(int32_t x, int32_t y, int c);
 static int hud_x(int x) { return checking ? x : x + VIEW_X + (W - 256) / 2; }
 static int hud_y(int y) { return checking ? y : y + VIEW_Y; }
 
-/* The HUD anchored to the window's edges: a piece of the original's screen
-   spanning columns x0 to x1 (the original's 256) moves, on a screen wider
-   than 256, to the left edge when it lies left of the screen's middle, to
-   the right edge when right of it, and stays centred when across it: the
-   columns it is shifted by from the original's screen to this one */
+/* The HUD anchored to the edges of its box: the screen's middle, at most
+   16:9 wide (UI_W_MAX: 16:9 at 224 lines is 341 1/3), so that on a wider
+   screen it does not sit at the far edges. A piece of the original's
+   screen spanning columns x0 to x1 (the original's 256) moves, on a
+   screen wider than 256, to the box's left edge when it lies left of the
+   screen's middle, to its right edge when right of it, and stays centred
+   when across it: the columns it is shifted by from the original's
+   screen to this one */
+#define UI_W_MAX 340
+
 static int anchor_shift(int x0, int x1)
 {
-    int ox = (W - 256) / 2;
+    int ox = (W - 256) / 2, margin = W > UI_W_MAX ? (W - UI_W_MAX) / 2 : 0;
     if (x1 < 128 - 8)
-        return 0;
+        return margin;
     if (x0 > 128 + 8)
-        return 2 * ox;
+        return 2 * ox - margin;
     return ox;
 }
 
