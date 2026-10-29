@@ -3,8 +3,8 @@
 **Complete: 100% of the game's code is decompiled, behaviour exact and byte
 exact.** Started October 11, 2026; behaviour and byte exact October 18, 2026.
 The C is the game itself, played natively on
-[nativeshvc](#playing-it-natively-on-nativeshvc), a native SNES console
-library, with no emulation of any processor.
+[nativeshvc](https://github.com/jeff-strutb/nativeshvc), a native SNES console
+library ([how it plays here](#playing-it-natively-on-nativeshvc)), with no emulation of any processor.
 
 > **Behaviour exact, not cycle exact.** The C states no instruction timing:
 > instruction counts are an emulator's bookkeeping and were never part of the
@@ -153,7 +153,7 @@ statements are kept on branch `shelf/cycle-exact`.
 
 ## Playing it natively on nativeshvc
 
-**nativeshvc**, a separate project checked out beside this one, is a native SNES console library: the PPU,
+**[nativeshvc](https://github.com/jeff-strutb/nativeshvc)**, a separate project checked out beside this one, is a native SNES console library: the PPU,
 the sound DSP, DMA and HDMA, timers, interrupts, the multiplier and divider
 and the memory map, with real hardware timing. It runs no processor
 instructions. A game is C calling into the console's registers, under a
