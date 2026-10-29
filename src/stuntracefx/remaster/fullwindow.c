@@ -53,6 +53,10 @@ static int unseen = 2;                  /* frames since they last did */
 static int W = 256, H = 224, K = 1;     /* the screen's width and height, texels a console pixel */
 static int tw, th;                      /* the texels' size */
 static uint8_t *tex, *chars;
+/* each texel's layer as the console orders them: 0 nothing (the backdrop's
+   colour or the sky's), 1 BG2 at priority 0, 2 BG2 at priority 1, 3 BG1
+   (the 3D, the HUD, the panels) */
+static uint8_t *lay;
 static size_t tex_size;
 static int map_w, map_h;                /* the size BG1's maps were written for */
 static int handed;                      /* the canvas is the full window's */
@@ -126,13 +130,34 @@ static int hud_y(int y) { return checking ? y : y + VIEW_Y; }
    screen to this one */
 #define UI_W_MAX 340
 
+/* the window's safe area (nshvc_safe_area: a phone's notch, rounded
+   corners, home bar) in console pixels, left, top, right, bottom; the
+   HUD's edges kept inside it. FW_SAFE=l,t,r,b (points) sets it for a
+   check. */
+static int safe_px[4];
+
+static void safe_area_update(void)
+{
+    float in[4] = {0, 0, 0, 0}, ww = 0, wh = 0, per;
+    const char *e = getenv("FW_SAFE");
+    int i;
+
+    nshvc_safe_area(&in[0], &in[1], &in[2], &in[3]);
+    if (e)
+        sscanf(e, "%f,%f,%f,%f", &in[0], &in[1], &in[2], &in[3]);
+    nshvc_window_size(&ww, &wh);
+    per = ww > 0 && wh > 0 ? (W / ww < H / wh ? W / ww : H / wh) : 0;
+    for (i = 0; i < 4; i++)
+        safe_px[i] = in[i] > 0 ? (int)ceilf(in[i] * per) : 0;
+}
+
 static int anchor_shift(int x0, int x1)
 {
     int ox = (W - 256) / 2, margin = W > UI_W_MAX ? (W - UI_W_MAX) / 2 : 0;
     if (x1 < 128 - 8)
-        return margin;
+        return margin > safe_px[0] ? margin : safe_px[0];
     if (x0 > 128 + 8)
-        return 2 * ox - margin;
+        return 2 * ox - (margin > safe_px[2] ? margin : safe_px[2]);
     return ox;
 }
 
@@ -144,9 +169,9 @@ static int anchor_shift_y(int y0, int y1)
 {
     int oy = H - 224, c = (y0 + y1) / 2;
     if (c < VIEW_CY - 16)
-        return 0;
+        return safe_px[1];
     if (c > VIEW_CY + 16)
-        return oy;
+        return oy - safe_px[3];
     return oy / 2;
 }
 
@@ -1367,9 +1392,11 @@ static int size_for_window(void)
         if (need > tex_size) {
             free(tex);
             free(chars);
+            free(lay);
             tex = malloc(need);
             chars = malloc(need);
-            tex_size = tex && chars ? need : 0;
+            lay = malloc(need);
+            tex_size = tex && chars && lay ? need : 0;
             if (!tex_size)
                 return 0;
         }
@@ -1721,6 +1748,7 @@ int fw_picture(int j)
 {
     static uint8_t scratch[2][RM_TWEEN_BYTES];
     int m;
+    size_t i;
 
     if (!on)
         return 0;
@@ -1745,6 +1773,8 @@ int fw_picture(int j)
         kcheck_picture(j);
     if (getenv("FW_CCHECK"))
         ccheck_picture(j);
+    for (i = 0; i < (size_t)tw * th; i++)  /* the 3D and the HUD: BG1's */
+        lay[i] = tex[i] ? 3 : 0;
     backdrop_draw();
     panels_draw();
     sprites_draw();
@@ -1809,8 +1839,10 @@ static void backdrop_draw(void)
             w0 = v[a];
             w1 = v[(a + 8) & 0x7FFF];
             c = (w0 >> px & 1) | (w0 >> (px + 8) & 1) << 1 | (w1 >> px & 1) << 2 | (w1 >> (px + 8) & 1) << 3;
-            if (c)
+            if (c) {
                 o[X] = (uint8_t)((e >> 10 & 7) * 16 + c);
+                lay[(size_t)Y * tw + X] = e & 0x2000 ? 2 : 1;
+            }
         }
     }
 }
@@ -1937,10 +1969,11 @@ static void panels_draw(void)
             }
             for (q = 0; q < m; q++) {
                 int a = part[q][0], b = part[q][1];
-                uint8_t *o = tex + (size_t)(PANEL_TOP + b + H - 224) * K * tw + (size_t)(a + s) * K;
-                for (j = 0; j < K; j++, o += tw)
+                size_t at = (size_t)(PANEL_TOP + b + H - 224 - safe_px[3]) * K * tw + (size_t)(a + s) * K;
+                uint8_t *o = tex + at, *l = lay + at;   /* at: the band moved up by the safe area's bottom */
+                for (j = 0; j < K; j++, o += tw, l += tw)
                     for (i = 0; i < K; i++)
-                        o[i] = px[b][a];
+                        o[i] = px[b][a], l[i] = 3;
             }
         }
 }
@@ -1976,14 +2009,15 @@ static void sprites_write(void)
         nshvc_ext_sprite_x(i, 0);
 }
 
-/* Into the texels as the console composes them over BG1: at each pixel
-   the sprite of the lowest number with a pixel there (the console's
-   order), at priority 3 over BG1, below it only where BG1's texel is 0
-   (BG1's tiles at priority 1); a 4 bpp pixel as colour 128 + its palette
-   * 16 + the pixel. Each anchored as the HUD: in the panels' band with its
-   box, else by the columns and rows of its piece, the sprites that touch
-   it and those that touch them (a picture of several sprites moves
-   whole). */
+/* Into the texels as the console composes them: at each pixel the sprite
+   of the lowest number with a pixel there (the console's order), then by
+   its priority against the backgrounds (lay): 3 over everything, 2 under
+   BG1 (its priority-1 tiles), 1 and 0 under BG2's priority-1 tiles too; a
+   4 bpp pixel as colour 128 + its palette * 16 + the pixel. Those at
+   priority 3 are the HUD's, each anchored as the HUD: in the panels' band
+   with its box, else by the columns and rows of its piece, the sprites
+   that touch it and those that touch them (a picture of several sprites
+   moves whole); those below it are in the 3D's view, moved with it. */
 static int spr_root(int *up, int i)
 {
     while (up[i] != i)
@@ -2015,8 +2049,8 @@ static void sprites_draw(void)
         sz[i] = (int)h;
         if (!shown[i])
             continue;
-        for (b = 0; b < i; b++)         /* touching: overlapping or side by side */
-            if (shown[b] && sx0[b] <= xx + (int)h && xx <= sx0[b] + sz[b] && sy0[b] <= (int)yy + (int)h &&
+        for (b = 0; b < i; b++)         /* touching (overlapping or side by side), of the same kind */
+            if (shown[b] && ((o[b * 4 + 3] & 0x30) == 0x30) == ((at & 0x30) == 0x30) && sx0[b] <= xx + (int)h && xx <= sx0[b] + sz[b] && sy0[b] <= (int)yy + (int)h &&
                 (int)yy <= sy0[b] + sz[b])
                 up[spr_root(up, b)] = spr_root(up, i);
     }
@@ -2036,10 +2070,19 @@ static void sprites_draw(void)
         int x = sx0[i], s, vs, r, c, g = spr_root(up, i);
         if (!shown[i])
             continue;
-        s = anchor_shift(px0[g], px1[g]);
-        vs = anchor_shift_y(py0[g], py1[g]);
+        if ((at & 0x30) != 0x30) {
+            /* below priority 3, in the view: the 3D's (a rival's marker,
+               what shows where the 3D leaves colour 0), its piece's middle
+               moved as the 3D is: about the view's centre, at its scale */
+            double sc = (double)fw_focal() / K / 128.0, cx = (px0[g] + px1[g] + 1) / 2.0, cy = (py0[g] + py1[g] + 1) / 2.0;
+            s = (int)floor(W / 2.0 + (cx - (VIEW_X + VIEW_W / 2)) * sc - cx + 0.5);
+            vs = (int)floor(view_cy() + (cy - VIEW_CY) * sc - cy + 0.5);
+        } else {
+            s = anchor_shift(px0[g], px1[g]);
+            vs = anchor_shift_y(py0[g], py1[g]);
+        }
         if ((int)y + (int)h > PANEL_TOP) {
-            vs = H - 224;
+            vs = H - 224 - safe_px[3];
             for (b = 0; b < nboxes; b++)
                 if (x + (int)h / 2 >= box_x0[b] && x + (int)h / 2 <= box_x1[b])
                     s = box_shift[b];
@@ -2073,15 +2116,19 @@ static void sprites_draw(void)
     for (y = y0; y <= y1; y++)
         for (x = x0; x <= x1; x++) {
             unsigned e = obj[y][x];
-            uint8_t *q;
+            uint8_t *q, *ql;
             if (!e)
                 continue;
             obj[y][x] = 0;
             e--;
             q = tex + (size_t)y * K * tw + (size_t)x * K;
-            for (b = 0; b < K; b++, q += tw)
+            ql = lay + (size_t)y * K * tw + (size_t)x * K;
+            /* the console's order in mode 3: priority 3 over all, 2 over
+               BG2, 1 and 0 under BG2's priority-1 tiles; all under BG1's
+               (priority 1) */
+            for (b = 0; b < K; b++, q += tw, ql += tw)
                 for (a = 0; a < K; a++)
-                    if ((e >> 8) == 3 || !q[a])
+                    if (ql[a] < ((e >> 8) == 3 ? 4 : (e >> 8) == 2 ? 3 : 2))
                         q[a] = (uint8_t)e;
         }
 }
@@ -2367,6 +2414,7 @@ void fw_frame_end(void)
     /* only in a race frame's wait for its step (this hook runs in it every
        frame of the race): the pause, the end's fades and the screens
        before and after keep the original's screen and their own timing */
+    safe_area_update();
     on = unseen <= 1 && rm_enhanced() && rm_option(RM_OPT_WIDESCREEN) && rm_canvas_ready() && !nshvc_wram()[0x0D62] && rm_whole_steps() &&
          rm_in_tick_wait() && size_for_window();
     /* the writes here are the full window's own, in no original's time:
