@@ -55,6 +55,7 @@ static int W = 256, H = 224;            /* the screen asked for */
 static int bg = -1;                     /* the background's layer (0-2), or -1 */
 static uint16_t filler_of[64 * 64];     /* the map the filler was made from */
 static int filler_layer = -1, filler_sc = -1;
+static int bg_pure;                     /* the background's map is its texture alone (no holes) */
 
 /* the screen for the window: its aspect at the console's 8:7 pixels, the
    console's 256 x 224 at 4:3, wider or taller (even), to 1024 */
@@ -175,7 +176,10 @@ static void filler_make(int layer)
     static uint16_t tile[32 * 32];
     int px, py, r, c;
 
-    filler_ok = texture_of(layer, tile, &px, &py) > 0;
+    double share = texture_of(layer, tile, &px, &py);
+
+    filler_ok = share > 0;
+    bg_pure = share >= 1.0;
     if (!filler_ok)
         return;
     for (r = 0; r < 32; r++)
@@ -203,8 +207,12 @@ static void layers(int clip_on, int b)
 {
     int l;
 
+    /* the background past the console's picture: its texture (the outside
+       map), or until nativeshvc has it its own map wrapped, which only a
+       map of the texture alone shows right (the car window's hole would
+       repeat there, the car in it); else kept to the picture too */
     for (l = 0; l < 5; l++)
-        nshvc_ext_layer_clip(l, clip_on && l != b);
+        nshvc_ext_layer_clip(l, clip_on && (l != b || (!MW_LAYER_OUTSIDE && !bg_pure)));
 #if MW_LAYER_OUTSIDE
     for (l = 0; l < 4; l++)
         nshvc_ext_layer_outside(l, clip_on && l == b && filler_ok ? filler : NULL, 0);
