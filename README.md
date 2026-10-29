@@ -1,5 +1,18 @@
 # Stunt Race FX: bit-exact decompilation
 
+<p>
+<img src="docs/stuntracefx/img/original-race.png" width="43%" alt="Stunt Race FX in Original mode: the coupe chasing two rivals through the trees, in the original's 4:3 screen with its bezel and panels">
+<img src="docs/stuntracefx/img/enhanced-race.png" width="56%" alt="Stunt Race FX in Enhanced mode: the coupe on the same course at 16:9, the 3D, hills and HUD filling the window">
+</p>
+
+*Left: Original mode, the decompiled game on
+[nativeshvc](https://github.com/jeff-strutb/nativeshvc) as the cartridge drew
+it, at its own pace. Right: Enhanced mode on the same course, at 60 frames a
+second and filling a 16:9 window, the 3D drawn at the window's resolution on
+the GPU ([the native build](#playing-it-natively-on-nativeshvc)). Both are
+shots from the native build's headless renderer, which the GPU's is checked
+against.*
+
 **Complete: 100% of the game's code is decompiled, behaviour exact and byte
 exact.** Started October 11, 2026; behaviour and byte exact October 18, 2026.
 The C is the game itself, played natively on
@@ -167,73 +180,130 @@ programs as native C, with no separate port copy. On top of it:
 | `ports/stuntracefx/front/` | the cartridge's description for nativeshvc (`main.c`, `cart.c`), its Super FX on nativeshvc's chip connector (`superfx_cart.c`), its cost profile (`cost_profile.c`, generated), touch and art |
 | `ports/common/snes/superfx.c` | the cartridge's Super FX: its registers, RAM and pixel caches, a program run to its STOP when started, its duration from the cost profile |
 | `src/stuntracefx/include/waits.h` | the places the original waited on the hardware (vertical and horizontal blank, its own interrupts' flags, the Super FX, the sound CPU's ports), as the console's waits |
+| `src/stuntracefx/remaster/` | Enhanced mode: the 60-frame steps and the pictures between (`remaster.c`, `tween.c`), the full-window race (`fullwindow.c`) and menus (`menuwindow.c`), the options (`options.c`) |
+| `ports/stuntracefx/front/gpu_metal.m` | the cartridge's GPU on Apple devices: the full window's 3D filled by a Metal kernel |
+
+### Platforms
+
+| Build | How | Drawn by |
+|---|---|---|
+| **macOS** (Apple silicon and Intel, macOS 12+) | `NSHVC=../nativeshvc sh ports/stuntracefx/front/package_app.sh`, then open `build/stuntracefx/front/macos/Stunt Race FX.app` | Metal: the console's compositor and the cartridge's 3D fill |
+| **iPhone and iPad** | `IOS_SDK=iphoneos IOS_SIGN=... IOS_PROFILE=... sh ports/stuntracefx/front/package_ios.sh` | Metal; touch controls, landscape and portrait |
+| **Windows** (10+, 64-bit) | the builder, or `ports/stuntracefx/front/build.sh` with MinGW | OpenGL 3.3; the 3D fill on the CPU |
+| headless | `sh ports/stuntracefx/front/build.sh` (nativeshvc `build/null`) | the CPU: the plays and checks |
+
+Players don't need this tree: **Stunt Race FX Builder**
+([builder/](builder/README.md)) builds the Mac app, the iPhone's `.ipa` or the
+Windows folder from the player's own No-Intro ROM, checked by MD5, and ships
+none of the ROM's data. Linux is not built yet.
 
 ```sh
-sh ports/stuntracefx/front/build.sh                       # headless (nativeshvc build/null)
-OUT=build/stuntracefx/front/macos NSHVC_BUILD=build/macos \
-  LIBS="-framework Cocoa -framework QuartzCore -framework AudioToolbox -framework CoreAudio -framework GameController -framework Metal -framework Foundation" \
-  sh ports/stuntracefx/front/build.sh                     # a macOS window
 build/stuntracefx/front/null/stuntracefx --script PLAY --headless --out DIR   # an input-only play
 ```
 
-The build expects nativeshvc's checkout beside this one (`NSHVC=../nativeshvc`)
-and its library built. `--pacing FILE` logs each race frame's TV frames
-(`$06D4`), the measure to compare with the original's.
+The build expects nativeshvc's checkout beside this one (`NSHVC=../nativeshvc`,
+contract 2.10 or later, at least its commit 2345987).
+`--pacing FILE` logs each race frame's TV frames (`$06D4`), the measure to
+compare with the original's.
 
 ### Original and Enhanced modes
 
 A preserved decompilation has three tiers: the assembly, bit exact; the C,
 behaviour exact; and an Enhanced mode, the C brought to a modern standard
-with nativeshvc's extensions. The native build plays both C modes. **Tab**
-switches between them; a badge in the corner says which is on, and the
-choice is saved (`remaster.cfg`, the Frame rate 60 option;
-`RM_OPT_FRAMERATE=1` forces Enhanced for a run without saving). Right
-Shift is SELECT. The attract demos always play in Original mode.
+with nativeshvc's extensions. The native build plays both C modes.
+**Enhanced is the default.** **Tab** switches between them, and a badge says
+which is on for three seconds at launch and at each change; the choice is
+saved (`remaster.cfg`; `RM_OPT_FRAMERATE=0` or `1` forces one for a run).
+**F2** turns Enhanced's full window off and on (4:3 or the window's shape).
+Right Shift is SELECT. The attract demos always play in Original mode.
 
 - **Original mode** is the preservation record: the game paced by its
-  chips' work, from the cost profile above, slowdown included. The pace
-  is approximate: races run about 5% fast (5.64 TV frames a race frame
-  against the original's 5.95). The profile's S-CPU weights were fitted to
-  the original's accesses, and the C makes fewer of them (work-RAM reads
-  0.70x, writes 0.60x, I/O reads 0.14x); a per-kind fit was tried and
-  dropped, as it overcharges access-dense code about 2.5x.
+  chips' work, from the cost profile above, slowdown included, on the
+  original's 4:3 screen. The pace is approximate: races run about 5% fast
+  (5.64 TV frames a race frame against the original's 5.95). The profile's
+  S-CPU weights were fitted to the original's accesses, and the C makes
+  fewer of them (work-RAM reads 0.70x, writes 0.60x, I/O reads 0.14x); a
+  per-kind fit was tried and dropped, as it overcharges access-dense code
+  about 2.5x.
 - **Enhanced mode** makes the game independent of processor speed, as a
-  modern game is, with a fixed time step and the picture drawn between:
-  the race runs the original's whole step every 6 TV frames (its physics
-  and handling step for step the original's), and the 5 frames between
-  show the 3D drawn part of the way from the step's start to its end, so
-  the 3D moves every frame at 60. The menus' 3D (car selection's turning
-  car) shares each of its steps over the frames instead, which matches
-  the original's turn rate. The main CPU (nativeshvc contract 2.2,
-  `nshvc_set_cpu_costs`) and the Super FX take no time for that 3D work
-  only: the boot, the menus and the sound driver's uploads and commands,
-  and the raster interrupt, keep the original's timing. The pictures (the
-  race screen, both halves of the split screen, the menus' 3D) go to
-  nativeshvc's **canvas** (contract 2.4) instead of video memory, which
-  one vertical blank could not hold: each is handed keyed by the
-  video-memory characters it stands in for, and the console places it by
-  its own rules at the window's resolution; in the race's pause the
-  canvas shows those characters as the copies would have left them.
-  Original mode is unchanged by it. The race intro runs about 15% shorter:
-  its steps count race frames, which the original ran slow under load
-  (about 7.25 TV frames each, against Enhanced's fixed 6). The countdown
-  is timed and matches.
+  modern game is, and fits it to the window. Its game state is the
+  original's, step for step: only how it is shown changes.
 
-**State (October 28, 2026).** The game boots, plays its menus and runs
-races in both modes. Not yet right:
+### Enhanced mode's features
 
-- **Race music garbled, and a freeze later in a race.** The sound driver's
-  own upload loop reads a port in a 6-clock gap the hardware never exposed,
-  because the untimed sound CPU takes no time between two reads; about 31%
-  of the uploaded music bytes land wrong, and the effect reader can loop on
-  bad data. nativeshvc has confirmed the cause; the fix (the SPC700's
-  accesses cost their bus time, inherent to the chip) awaits approval as a
-  contract change.
-- **The attract demo** reaches a slide-gate path (09:EC71) no recording of
-  the original reaches; it was seen before the cost profile and is not yet
+- **60 frames a second, the original's physics.** A race runs the
+  original's whole step every 6 TV frames (its physics and handling step
+  for step the original's), and the 5 frames between show the 3D drawn
+  part of the way from the step's start to its end, the hills and the sky
+  turning with it. The menus' 3D (car selection's turning car) shares each
+  of its steps over the frames instead, which matches the original's turn
+  rate. The 3D's work takes no console time (contract 2.2); the boot, the
+  menus, the sound driver and the raster interrupt keep the original's
+  timing.
+- **The race fills the window, any shape and size.** The window can be
+  resized to anything: 4:3, 16:9, ultrawide, or narrower than 4:3 down to
+  portrait (a phone held upright). The console's screen becomes the
+  window's shape (to 1024 console pixels each way) with the original's
+  picture at its centre, and the 3D is drawn across all of it at the
+  window's own resolution, the same picture at every scale.
+- **Everything in view is drawn.** Objects beside the view and as far as
+  the course goes are kept (the original's 45-degree cull and draw distance
+  are lifted for it), and faces that reach behind the camera are clipped
+  exactly at a near plane instead of in the original's 16-bit steps.
+- **Textures perspective-correct.** The original's textures are affine,
+  which a wide view turns into streaks at its edges (the grandstands
+  beside the road); Enhanced fills each textured face from its planes in
+  view space. Each edge of every face is placed exactly from its corners.
+- **The hills and the sky across the whole window.** The backdrop's full
+  turn (1,024 pixels) is laid either side of the original's picture, so the
+  hills are seamless at any width and turn every frame; the sky's gradient
+  is remapped to the 3D's horizon on every line.
+- **The HUD in reach.** The race's messages, timer, speed and panels are
+  placed in a box at most 16:9 wide, inside the screen's safe area (a
+  notch, rounded corners), so on an ultrawide screen they don't sit at the
+  far edges.
+- **The menus fill the window too,** their background texture carried past
+  the original's screen and their contents kept to it.
+- **Touch controls** on the iPhone and iPad (the gas held while steering,
+  an option).
+
+### How it is drawn: the cartridge and the console
+
+The split is the hardware's. On the SNES the Super FX drew the whole 3D
+picture on the cartridge and handed it to the console as BG1; the console
+drew everything else. The native build keeps that:
+
+- **The cartridge** (`src/stuntracefx/remaster/fullwindow.c`) draws the
+  Super FX's picture at the window's resolution: the game's own Super FX
+  programs run as C, and their polygons become spans that the cartridge's
+  GPU fills (Metal on Apple devices: `ports/stuntracefx/front/gpu_metal.m`;
+  the CPU elsewhere, with the CPU's fill as the reference the GPU's is
+  checked against, 0 pixels apart). The picture goes to the console as BG1
+  (`nshvc_ext_canvas_screen`).
+- **The console** (nativeshvc) draws the rest by its own rules: the hills
+  (BG2) from the game's maps (on a VRAM page of their own, with
+  `nshvc_ext_layer_outside` past the original's picture), the sprites, the
+  sky's gradient by the game's HDMA, colour maths and brightness, on a
+  screen the window's shape (`nshvc_ext_screen`, `nshvc_ext_screen_origin`).
+
+Nothing in Original mode passes through any of this.
+
+### State (October 29, 2026)
+
+The game boots, plays its menus and runs races in both modes, on macOS, the
+iPhone and Windows. Known and not yet right:
+
+- In Enhanced's crash flash (the screen tinted red), the bottom panels are
+  tinted too, where the original's window kept them clear; they are in the
+  same BG1 picture as the 3D.
+- The Windows build fills the 3D on the CPU; GL and Vulkan fills are not
+  written yet.
+- The race music: the fix for its garbled upload (the sound CPU's accesses
+  costing their bus time) is in nativeshvc (328e308); the music has not
+  been rechecked since.
+- The attract demo reaches a slide-gate path (09:EC71) no recording of the
+  original reaches; it was seen before the cost profile and is not yet
   rechecked.
-- nativeshvc's contract 2.1 and the cost-profile standard are built in its
-  working tree but not yet committed there.
 - The sound driver's own slowdowns in busy music are not reproduced (a
   decision: the driver is untimed, so the music plays as written).
 
