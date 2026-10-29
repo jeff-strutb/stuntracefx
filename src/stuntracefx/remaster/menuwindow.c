@@ -50,6 +50,11 @@ void mw_ppu_write(uint32_t addr, uint8_t value)
         reg[a - 0x2100] = value;
 }
 
+uint8_t mw_ppu_last(uint16_t addr)
+{
+    return addr >= 0x2100 && addr < 0x2140 ? reg[addr - 0x2100] : 0;
+}
+
 static int on;                          /* the menus in the whole window */
 static int W = 256, H = 224;            /* the screen asked for */
 static int bg = -1;                     /* the background's layer (0-2), or -1 */

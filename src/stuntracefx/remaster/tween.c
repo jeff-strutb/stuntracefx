@@ -164,6 +164,36 @@ static int bd_ok, bd_two, bd_put;
 static uint8_t gr_band[0x100], gr_was[0x300 + 2];
 static uint16_t gr_at;
 static int gr_put;
+/* where each buffer's rows came from (rm_backdrop_rows): the game's, and
+   the in-between frame's while it is shown */
+static uint16_t rows_x[2], rows_src[2], bd_x, bd_src, shown_x, shown_src, shown_hofs;
+static int rows_ok[2], bd_rows_ok, shown_ok;
+
+void rm_backdrop_rows(unsigned sel, uint16_t x)
+{
+    rows_x[sel & 1] = x;
+    rows_src[sel & 1] = (word(nshvc_wram(), 0x0DA4) & 0x4000) ? 0xBBD7 : 0x93D7;
+    rows_ok[sel & 1] = 1;
+}
+
+int rm_backdrop_view(unsigned sel, uint16_t *x, uint16_t *src, uint16_t *hofs)
+{
+    const uint8_t *w = nshvc_wram();
+
+    sel &= 1;
+    if (shown_ok && sel == (word(w, 0x0D81) == 0x0001)) {
+        *x = shown_x;
+        *src = shown_src;
+        *hofs = shown_hofs;
+        return 1;
+    }
+    if (!rows_ok[sel])
+        return 0;
+    *x = rows_x[sel];
+    *src = rows_src[sel];
+    *hofs = word(w, 0x0D92 + 2 * sel);
+    return 1;
+}
 
 static void backdrop_keep(const uint8_t *w, int two)
 {
@@ -176,6 +206,9 @@ static void backdrop_keep(const uint8_t *w, int two)
         return;
     }
     memcpy(bd_rows, w + 0x1E3D7 + 0x440 * sel, sizeof bd_rows);
+    bd_x = rows_x[sel];
+    bd_src = rows_src[sel];
+    bd_rows_ok = rows_ok[sel];
     bd_hofs = word(w, 0x0D92 + 2 * sel);
     gr_at = word(w, 0x0D9A + 2 * sel);
     if (gr_at >= 0xEC57 && gr_at <= 0xEE57)
@@ -232,6 +265,10 @@ void rm_tween_backdrop_show(void)
         w[0x1348E] = (uint8_t)(gr_at >> 8);
     }
     v = (uint16_t)(bd_vofs + word(w, 0xE811 + 2 * shown));
+    shown_x = bd_x;
+    shown_src = bd_src;
+    shown_hofs = bd_hofs;
+    shown_ok = bd_rows_ok;
     wr8(BG2HOFS, (uint8_t)bd_hofs);
     wr8(BG2HOFS, (uint8_t)(bd_hofs >> 8));
     wr8(BG2VOFS, (uint8_t)v);
@@ -264,6 +301,7 @@ void rm_tween_backdrop_late(void)
 void rm_tween_backdrop_back(void)
 {
     bd_ok = 0;
+    shown_ok = 0;
     if (gr_put) {
         memcpy(nshvc_wram() + 0x1EC57, gr_was, 0x300);
         memcpy(nshvc_wram() + 0x1348D, gr_was + 0x300, 2);
@@ -283,7 +321,8 @@ int rm_tween_buffers(int num, int den, uint8_t *at_2c00, uint8_t *at_9400)
     uint8_t *w = nshvc_wram(), *s = nshvc_sram();
     Regs65816 cpu_kept = cpu;
     RegsGSU gsu_kept = gsu;
-    int i, n, drew, two = w[0x0D62] != 0, mask;
+    int i, n, drew, two = w[0x0D62] != 0, mask, rows_kept_ok[2];
+    uint16_t rows_kept_x[2], rows_kept_src[2];
     unsigned k, rec;
 
     if (!rm_tween_ready())
@@ -344,6 +383,9 @@ int rm_tween_buffers(int num, int den, uint8_t *at_2c00, uint8_t *at_9400)
 
     nshvc_hold_interrupts(1);
     rm_tween_start_side = 2 * num < den;
+    memcpy(rows_kept_x, rows_x, sizeof rows_x);     /* the game's records back after the redraw's */
+    memcpy(rows_kept_src, rows_src, sizeof rows_src);
+    memcpy(rows_kept_ok, rows_ok, sizeof rows_ok);
     drew = rm_redraw_run(two ? RmTweenDrawTwoPlayers : RmTweenDraw);
     rm_tween_start_side = 0;
     rm_tween_step = 0;  /* a redraw: no port, no wait (remaster.h) */
@@ -353,6 +395,9 @@ int rm_tween_buffers(int num, int den, uint8_t *at_2c00, uint8_t *at_9400)
     mask = !drew ? 0 : two ? 3 : word(s, 0x021A) == 0x2C00 ? 1 : 2;
     if (drew)
         backdrop_keep(w, two);
+    memcpy(rows_x, rows_kept_x, sizeof rows_x);
+    memcpy(rows_src, rows_kept_src, sizeof rows_src);
+    memcpy(rows_ok, rows_kept_ok, sizeof rows_ok);
     if (mask & 1)
         memcpy(at_2c00, s + 0x2C00, RM_TWEEN_BYTES);
     if (mask & 2)

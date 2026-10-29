@@ -213,7 +213,11 @@ void rm_race_frame(void)
     if (rm_whole && fw_on()) {          /* the full window: the step's own picture drawn again */
         drawing = 1;
         cpu_costs(0);
-        fw_picture(0);
+        if (fw_picture(0)) {
+            fw_sky_take();              /* its backdrop in the place of the step's (uploaded at the frame's start) */
+            rm_tween_backdrop_show();
+        }
+        fw_backdrop_update();           /* the hills' page for the buffer the step's flip shows */
         fw_sky();
         drawing = 0;
         cpu_costs(0);

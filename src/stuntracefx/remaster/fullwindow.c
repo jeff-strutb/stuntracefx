@@ -39,6 +39,7 @@
 #include "console_ext.h"
 #include "remaster.h"
 #include "fullwindow.h"
+#include "menuwindow.h"
 #include "rm_options.h"
 
 uint64_t nshvc_wait_until(int (*ready)(void *ctx), void *ctx);
@@ -2482,10 +2483,18 @@ static void screen_back(void)
    pause's words, the HUD's pieces) the band's own sky, a character of
    colour 1 alone, which the gradient sets line by line: the sky above the
    hills, the ground's colours below, as opaque as the original's sky (the
-   sprites it hides stay hidden). Written each frame, held, outside the
+   sprites it hides stay hidden). The game's map holds the 32 columns of the
+   backdrop its 256 lines show (from the backdrop map at $7F:93D7, a turn
+   128 columns: rm_backdrop_view), which a wider screen would show again
+   and again; page 1's map is 64 x 64 (BG2SC $4B, at $4800, while the full
+   window is on), the shown buffer's rows the backdrop's own columns on
+   either side of the console's picture: whole to a screen 512 wide, past
+   that the map's 64 columns again. Written each frame, held, outside the
    game's time, as the in-between frames' rows are (tween.c). */
 #define BG2_MAP_AT 0x5800
 #define BG2_CHARS_AT 0x6000
+#define BG2_WIDE_AT 0x4800
+#define BG2_WIDE_SC 0x4B                /* $4800, 64 x 64 */
 
 /* whether a 4 bpp character's 64 pixels are all colour 1 */
 static int all_colour1(const uint16_t *v, unsigned ch)
@@ -2497,15 +2506,55 @@ static int all_colour1(const uint16_t *v, unsigned ch)
     return 1;
 }
 
+/* buffer sel's rows (map rows 30-46 for buffer A, 47-63 for B, 17 of
+   them) across the 64 columns: column c the backdrop's entry at
+   the layer's x c * 8 taken within 256 of the console's picture's middle,
+   the game's row (from byte x, its first entry the map's column 0) run on
+   either way round the turn; past the map's end ($2800) $20C0, as the
+   game fills */
+static void bg2_backdrop(uint16_t *map, const uint8_t *keep, unsigned sel)
+{
+    const uint8_t *w = nshvc_wram();
+    uint16_t x, src, hofs;
+    unsigned first = sel ? 47 : 30, col, i, c;
+    int mid;
+
+    if (!rm_backdrop_view(sel, &x, &src, &hofs))
+        return;
+    col = (x % 0x140) / 2;
+    mid = 128 + (int16_t)hofs;
+    for (i = 0; i < 17 && first + i < 64; i++) {
+        unsigned r = first + i, at = (unsigned)x + i * 0x140;
+        if (!keep[r])
+            continue;
+        for (c = 0; c < 64; c++) {
+            int lx = (int)c * 8, e;
+            while (lx < mid - 256)
+                lx += 512;
+            while (lx >= mid + 256)
+                lx -= 512;
+            e = lx >= 0 ? lx / 8 : -((7 - lx) / 8);
+            map[r * 64 + c] = at >= 0x2800 ? 0x20C0
+                : (uint16_t)(w[0x10000 + ((src + at - col * 2 + (((int)col + e) & 127) * 2) & 0xFFFF)] |
+                             w[0x10000 + ((src + at - col * 2 + (((int)col + e) & 127) * 2 + 1) & 0xFFFF)] << 8);
+        }
+    }
+}
+
+static int bg2sc_kept = -1;             /* the game's BG2SC while the full window has its own */
+
 static void bg2_prepare(void)
 {
-    static uint16_t map[0x800];
+    static uint16_t map[64 * 64];
     const uint16_t *v = nshvc_vram();
     const uint8_t *w = nshvc_wram();
     uint8_t keep[64] = {0};
     unsigned i, r, sel, sky = 0xFFFF;
 
-    for (sel = 0; sel < 2; sel++) {     /* the rows the view's lines show, each buffer's */
+    sel = (w[0x0D81] | w[0x0D82] << 8) == 0x0001;   /* the rows the view's lines show, the shown buffer's
+                                                       (the page is made again after each flip: the frame's end,
+                                                       fw_backdrop_update): past its view the other's band */
+    {
         unsigned vofs = (unsigned)(w[0x0D8E + 2 * sel] | w[0x0D8F + 2 * sel] << 8);
         for (r = VIEW_Y; r < VIEW_Y + VIEW_H; r++)
             keep[((r + vofs) & 511) >> 3] = 1;
@@ -2517,21 +2566,40 @@ static void bg2_prepare(void)
                 break;
             }
     for (r = 0; r < 64; r++)
-        for (i = 0; i < 32; i++)
-            map[r * 32 + i] = keep[r] || sky == 0xFFFF ? v[BG2_MAP_AT + r * 32 + i] : (uint16_t)sky;
+        for (i = 0; i < 64; i++)
+            map[r * 64 + i] = keep[r] || sky == 0xFFFF ? v[BG2_MAP_AT + r * 32 + (i & 31)] : (uint16_t)sky;
+    bg2_backdrop(map, keep, sel);
     nshvc_ext_vram_direct(1);
     wr8(VMAIN, 0x80);
-    wr8(VMADDL, (uint8_t)BG2_MAP_AT);
-    wr8(VMADDH, (uint8_t)(BG2_MAP_AT >> 8));
-    for (i = 0; i < 0x800; i++) {
-        wr8(VMDATAL, (uint8_t)map[i]);
-        wr8(VMDATAH, (uint8_t)(map[i] >> 8));
+    wr8(VMADDL, (uint8_t)BG2_WIDE_AT);
+    wr8(VMADDH, (uint8_t)(BG2_WIDE_AT >> 8));
+    for (i = 0; i < 64 * 64; i++) {     /* the map: the screens 32 x 32, left then right, top then bottom */
+        unsigned at = (i >> 10 & 1) * 32 + (i >> 11) * 32 * 64 + (i >> 5 & 31) * 64 + (i & 31);
+        wr8(VMDATAL, (uint8_t)map[at]);
+        wr8(VMDATAH, (uint8_t)(map[at] >> 8));
     }
+    wr8(VMADDL, (uint8_t)BG2_CHARS_AT);
+    wr8(VMADDH, (uint8_t)(BG2_CHARS_AT >> 8));
     for (i = 0; i < 0x2000; i++) {      /* the characters as page 0 has them */
         wr8(VMDATAL, (uint8_t)v[BG2_CHARS_AT + i]);
         wr8(VMDATAH, (uint8_t)(v[BG2_CHARS_AT + i] >> 8));
     }
     nshvc_ext_vram_direct(-1);
+}
+
+/* the hills' page made again now, for the buffer the step's flip (its
+   uploads at the frame's start) shows and the step's own picture's
+   backdrop (remaster.c rm_race_frame), before the frame's lines, which
+   would show the page the last frame's end made */
+void fw_backdrop_update(void)
+{
+    if (!on || !handed)
+        return;
+    nshvc_hold_interrupts(1);
+    nshvc_set_cpu_costs(0);
+    bg2_prepare();
+    nshvc_set_cpu_costs(1);
+    nshvc_hold_interrupts(0);
 }
 
 /* the screen the full window's: the sprites, BG1 on page 1, the view's
@@ -2548,7 +2616,10 @@ static void takeover(void)
     wr8(TMW, 0x00);
     screen_set();
     nshvc_ext_sprite_wrap(0);           /* Y page 0's sprites nowhere above line 1 (those above it on page -1) */
-    nshvc_ext_layer_page(1, 1);         /* BG2 on page 1: its map and characters at $5800-$7FFF (bg2_prepare) */
+    nshvc_ext_layer_page(1, 1);         /* BG2 on page 1: its map at $4800, 64 x 64, characters from $6000 (bg2_prepare) */
+    if (bg2sc_kept < 0)
+        bg2sc_kept = mw_ppu_last(0x2108);
+    wr8(BG2SC, BG2_WIDE_SC);
     wr8(INIDISP, w[0x0D61]);
     nshvc_set_cpu_costs(1);
 }
@@ -2597,6 +2668,9 @@ void fw_frame_end(void)
         screen_back();
         nshvc_ext_sprite_wrap(1);
         nshvc_ext_layer_page(1, 0);
+        if (bg2sc_kept >= 0)            /* the game's map for BG2 again */
+            wr8(BG2SC, (uint8_t)bg2sc_kept);
+        bg2sc_kept = -1;
         sprites_write();
         if (staged)
             wr8(TM, 0x13);              /* the race screen's, as the stage set it */

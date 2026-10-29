@@ -675,6 +675,7 @@ static uint16_t backdrop_rows_update(uint8_t bank, uint16_t *xo, uint16_t *yo)
     x = (uint16_t)(((rd16(b | 0x06CF) >> 3) & 0x00FE) + rd16((0x0000F1)));
     wr16(0x0000F1, 0x0011);
     sel = rd16(0x000D7F);
+    rm_backdrop_rows(sel & 1, x);       /* Remaster: where the rows come from (fullwindow.c) */
     y = sel ? (0x0440) : 0x0000;
     end = sel ? 0x0880 : 0x0440;
     for (;;) {

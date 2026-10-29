@@ -128,6 +128,9 @@ void fw_before_step(void);
    own for it) */
 void fw_sky(void);
 void fw_sky_take(void);
+/* the hills' page on VRAM page 1 made now, for a backdrop put in before
+   the frame's lines (the step's own picture's) */
+void fw_backdrop_update(void);
 /* the menus' screen changed the screen's size: the full window sets its
    own again when it next takes the screen */
 void fw_screen_lost(void);

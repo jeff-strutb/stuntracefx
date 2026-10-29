@@ -229,6 +229,15 @@ void rm_tween_backdrop_show(void);
    for VRAM word *at, and BG2's scroll; 0 when there is none */
 int rm_tween_backdrop(const uint8_t **rows, unsigned *at, uint16_t *hofs, uint16_t *vofs);
 void rm_tween_backdrop_back(void);
+/* BackdropRowsUpdate's rows for buffer sel (video/tilemap.c): from the
+   backdrop map's byte x ($7F:93D7, or $BBD7 by $0DA4 bit 14; rows of
+   $140 bytes, 128 entries a turn and 32 more), 32 entries a row */
+void rm_backdrop_rows(unsigned sel, uint16_t x);
+/* the one-player backdrop in buffer sel's rows of BG2's map (the game's,
+   or the in-between frame's while it is shown in the place of the buffer
+   $0D81 shows): its rows' byte x and map (bank $7F) and BG2's horizontal
+   scroll; 0 when unknown */
+int rm_backdrop_view(unsigned sel, uint16_t *x, uint16_t *src, uint16_t *hofs);
 /* two players: the last step's backdrop on the step's own frame, as its
    pictures are (at the race frame's end) */
 void rm_tween_backdrop_late(void);
