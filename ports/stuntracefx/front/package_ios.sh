@@ -1,7 +1,8 @@
 #!/bin/sh
 # Stunt Race FX for iOS on nativeshvc, as build/stuntracefx/front/ios-SDK/
 # Stunt Race FX.app: the front end (front/build.sh) on nativeshvc's iOS host,
-# the game's data built in (the ios assets: TAP TO START), an Info.plist.
+# the game's data built in (the ios assets: TAP TO START), an Info.plist,
+# the icon (icon/icons.sh).
 #   IOS_SDK      iphonesimulator (default) | iphoneos
 #   IOS_SIGN     iphoneos: the signing identity (security find-identity)
 #   IOS_PROFILE  iphoneos: the provisioning profile for the bundle id
@@ -75,6 +76,10 @@ cat > "$APP/Info.plist" <<EOP
 </plist>
 EOP
 printf 'APPL????' > "$APP/PkgInfo"
+# the icon: actool's compiled catalog and its Info.plist keys
+IOS_SDK=$SDK sh ports/stuntracefx/icon/icons.sh "$OUT/icon" >/dev/null
+cp "$OUT/icon/ios/Assets.car" "$OUT"/icon/ios/AppIcon*.png "$APP/"
+/usr/libexec/PlistBuddy -c "Merge $OUT/icon/ios/partial.plist" "$APP/Info.plist" >/dev/null
 if [ "$SDK" = iphoneos ]; then
   [ -n "$IOS_SIGN" ] && [ -f "$IOS_PROFILE" ] || { echo "package_ios: iphoneos needs IOS_SIGN and IOS_PROFILE" >&2; exit 2; }
   cp "$IOS_PROFILE" "$APP/embedded.mobileprovision"

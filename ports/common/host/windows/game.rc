@@ -1,10 +1,14 @@
 /* game.rc: what a Windows build of a port says about itself: its
  * name and version, and a manifest (no elevation). game_rc.h, written by the
- * link script, names the game. */
+ * link script, names the game, and its icon (GAME_ICO) if it has one: icon 1,
+ * the window class's. */
 #include <windows.h>
 #include "game_rc.h"
 
 1 RT_MANIFEST "game.manifest"
+#ifdef GAME_ICO
+1 ICON GAME_ICO
+#endif
 
 VS_VERSION_INFO VERSIONINFO
 FILEVERSION     GAME_VER_MAJOR, GAME_VER_MINOR, 0, 0

@@ -119,7 +119,8 @@ case "$HOST" in
   macos)   compile ports/common/host/macos/host_macos.m "-Wall -fobjc-arc -Iports/common/host"
            LIBS="$LIBS -framework Cocoa -framework QuartzCore -framework AudioToolbox -framework CoreAudio -framework GameController";;
   windows) compile ports/common/host/windows/host_windows.c "-Wall -Iports/common/host"
-           ports/common/host/windows/game_rc.sh "Stunt Race FX" "Stunt Race FX.exe" "$OUT/obj/game.res.o"
+           sh ports/stuntracefx/icon/icons.sh "$OUT/icon" >/dev/null
+           ICO="$OUT/icon/game.ico" ports/common/host/windows/game_rc.sh "Stunt Race FX" "Stunt Race FX.exe" "$OUT/obj/game.res.o"
            OBJS="$OBJS $OUT/obj/game.res.o"
            LIBS="$LIBS -lole32 -luuid -lxinput9_1_0 -lshell32 -lgdi32 -luser32 -mwindows";;
   ios)     compile ports/common/host/ios/host_ios.m "-Wall -fobjc-arc -Iports/common/host"

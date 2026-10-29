@@ -1,7 +1,8 @@
 #!/bin/sh
 # Package the iOS build as build/stuntracefx/port/ios-SDK/Stunt Race FX.app:
 # the executable (the game's data built in from SRFX_ROM, see link.sh) and
-# an Info.plist. The app needs no ROM and nothing from this tree.
+# an Info.plist and the icon (icon/icons.sh). The app needs no ROM and
+# nothing from this tree.
 #   env: IOS_SDK      iphonesimulator (default) | iphoneos
 #        IOS_SIGN     iphoneos: the signing identity (security find-identity)
 #        IOS_PROFILE  iphoneos: the provisioning profile for the bundle id,
@@ -65,6 +66,10 @@ cat > "$APP/Info.plist" <<EOP
 </plist>
 EOP
 printf 'APPL????' > "$APP/PkgInfo"
+# the icon: actool's compiled catalog and its Info.plist keys
+IOS_SDK=$SDK sh ports/stuntracefx/icon/icons.sh "$OUT/icon" >/dev/null
+cp "$OUT/icon/ios/Assets.car" "$OUT"/icon/ios/AppIcon*.png "$APP/"
+/usr/libexec/PlistBuddy -c "Merge $OUT/icon/ios/partial.plist" "$APP/Info.plist" >/dev/null
 # the Settings app's page: Auto-Accelerate (host/ios PortTouch)
 mkdir -p "$APP/Settings.bundle"
 cat > "$APP/Settings.bundle/Root.plist" <<'EOP'

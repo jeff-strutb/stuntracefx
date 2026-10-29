@@ -58,5 +58,14 @@ for f in superfx; do
   $CC -O2 -std=gnu11 -Wall $DEFS -Iports/common/snes -c "ports/common/snes/$f.c" -o "$OUT/obj/chip_$f.o"
   OBJS="$OBJS $OUT/obj/chip_$f.o"
 done
-$CC -o "$OUT/stuntracefx" $OBJS "$OUT/obj/assets_S.o" "$NSHVC/$NB/libnshvc.a" -lm $LIBS
-echo "built $OUT/stuntracefx"
+# a Windows build: its name, version and icon (nativeshvc's window class
+# loads icon 1)
+EXE=
+case "$($CC -dumpmachine)" in
+  *mingw*|*windows*)
+    sh ports/stuntracefx/icon/icons.sh "$OUT/icon" >/dev/null
+    ICO="$OUT/icon/game.ico" sh ports/common/host/windows/game_rc.sh "Stunt Race FX" "Stunt Race FX.exe" "$OUT/obj/game_res.o"
+    OBJS="$OBJS $OUT/obj/game_res.o"; EXE=.exe;;
+esac
+$CC -o "$OUT/stuntracefx$EXE" $OBJS "$OUT/obj/assets_S.o" "$NSHVC/$NB/libnshvc.a" -lm $LIBS
+echo "built $OUT/stuntracefx$EXE"
