@@ -81,11 +81,21 @@ int ws_view_planes(const uint16_t w[6], uint16_t planes[2])
     return 1;
 }
 
+/* The sort's cull keeps an object whose nearest side (its centre's
+   distance across less its radius, over) is within 45 degrees of the view
+   (over < depth): the original's view reaches 104 / 128 of that, a margin
+   past the screen's edges which a long object, its radius short of its
+   length, needs. Enhanced's full window keeps every object in front of
+   the view, however far across: its faces are clipped to the screen one
+   by one, and no margin past the edges holds every object's length. A
+   wider check view (PORT_FOCAL) keeps those within its half-width over
+   the focal length, where that is past 45 degrees. */
 int ws_cull_keeps(uint16_t over, uint16_t depth)
 {
-    int f = ws_focal(), hw = fw_view_active() ? fw_half_width() : 104;
+    int f = ws_focal(), hw = 104;
 
-    /* the view's half-angle passes 45 degrees only when hw > f */
+    if (fw_view_active())
+        return 1;
     return hw > f && (uint32_t)over * (uint32_t)f < (uint32_t)depth * (uint32_t)hw;
 }
 

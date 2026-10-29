@@ -77,6 +77,9 @@ static void backdrop_draw(void);
 /* the view's centre line on this screen: the original's, the rows a taller
    screen adds shared above and below it */
 static int view_cy(void) { return VIEW_CY + (H - 224) / 2; }
+/* FW_CCHECK's larger picture: texels added above the screen (its centre
+   that much lower) */
+static int cy_off;
 
 int fw_width(void) { return tw; }
 int fw_height(void) { return th; }
@@ -184,11 +187,13 @@ void fw_gsu_program(int begin)
         }
 }
 
+static int cropping;                    /* FW_CCHECK's pictures: the 3D alone */
+
 void fw_plot(uint16_t x, uint16_t y)
 {
     int c = plot_colour(), i, j;
 
-    if (c < 0)
+    if (c < 0 || (fw_hud && cropping))
         return;
     if (fw_hud && hud_run) {
         int px = (uint8_t)x + VIEW_X, py = (uint8_t)y + VIEW_Y;
@@ -261,7 +266,7 @@ int fw_half_width(void) { return tw / 2; }
 
 int fw_view_words(const uint16_t w[6], uint16_t out[8])
 {
-    int i, f = fw_focal(), cy = view_cy() * K, below = th - cy;
+    int i, f = fw_focal(), cy = view_cy() * K + cy_off, below = th - cy;
 
     if (!fw_drawing || fw_hud)
         return 0;
@@ -412,7 +417,7 @@ static void project_exact(int64_t x, int64_t y, int64_t z, int64_t *sx, int64_t 
         ry = ry * lim / m;
     }
     *sx = tw / 2 + rx;
-    *sy = (int64_t)view_cy() * K + ry;
+    *sy = (int64_t)view_cy() * K + cy_off + ry;
 }
 
 void fw_exact_unmark(uint16_t list)
@@ -516,7 +521,7 @@ int fw_exact_clip(void)
         static int reported;
         for (i = 0; i < n; i++) {
             int64_t x = (int16_t)ram16((uint16_t)(list + 4 * i)), y = (int16_t)ram16((uint16_t)(list + 4 * i + 2));
-            int64_t rx = x - tw / 2, ry = y - (int64_t)view_cy() * K;
+            int64_t rx = x - tw / 2, ry = y - (int64_t)view_cy() * K - cy_off;
             seen++;
             if (rx >= 0x3FF0 || rx <= -0x3FF0 || ry >= 0x3FF0 || ry <= -0x3FF0) {
                 held++;
@@ -1437,6 +1442,120 @@ static void kcheck_picture(int j)
         }
 }
 
+/* FW_CCHECK=M (a check): each picture's 3D drawn twice more from the same
+   state, at this screen and at one M console pixels larger on every side
+   with the same projection (the centre M lower and across), and the first
+   compared with the larger one's middle, where each draws anything (any
+   colour with FW_CCOLOUR; an affine texture shifts where a face is cut
+   differently): an object or face the game
+   leaves out near the screen's edges, which the larger one draws, shows
+   as a difference (reported at exit; FW_CDUMPF + FW_CDUMP: a frame's
+   pictures as PPMs) */
+static long cc_pictures, cc_over;
+static double cc_sum, cc_worst[5];
+static uint32_t cc_worst_frame[5];
+
+static void ccheck_report(void)
+{
+    fprintf(stderr, "fwccheck: %ld pictures, %.3f%% of texels differ on average, %ld past 0.5%%; worst: "
+            "%.3f%% (frame %u) %.3f%% (frame %u) %.3f%% (frame %u) %.3f%% (frame %u) %.3f%% (frame %u)\n",
+            cc_pictures, cc_pictures ? 100.0 * cc_sum / cc_pictures : 0.0, cc_over,
+            100 * cc_worst[0], cc_worst_frame[0], 100 * cc_worst[1], cc_worst_frame[1], 100 * cc_worst[2],
+            cc_worst_frame[2], 100 * cc_worst[3], cc_worst_frame[3], 100 * cc_worst[4], cc_worst_frame[4]);
+}
+
+static int ccheck_draw(int j, uint8_t *buf, int w, int h, int off)
+{
+    static uint8_t scratch[2][RM_TWEEN_BYTES], bank71[0x10000];
+    uint8_t *tex_k = tex;
+    int tw_k = tw, th_k = th, m;
+
+    tex = buf;
+    tw = w;
+    th = h;
+    cy_off = off;
+    cropping = 1;
+    memset(tex, 0, (size_t)tw * th);
+    fw_drawing = 1;
+    rm_hud_state(0);
+    memcpy(bank71, nshvc_sram() + 0x10000, sizeof bank71);
+    list_gen++;
+    m = rm_tween_buffers(j, RM_TICKS, scratch[0], scratch[1]);
+    rm_hud_state(1);
+    memcpy(nshvc_sram() + 0x10000, bank71, sizeof bank71);
+    fw_drawing = 0;
+    fw_hud = 0;
+    cropping = 0;
+    cy_off = 0;
+    tex = tex_k;
+    tw = tw_k;
+    th = th_k;
+    return m;
+}
+
+static void ccheck_picture(int j)
+{
+    static uint8_t *a, *b;
+    static size_t a_size, b_size;
+    int mg = atoi(getenv("FW_CCHECK")) * K, bw = tw + 2 * mg, bh = th + 2 * mg, x, y, i;
+    long differ = 0;
+    double part;
+
+    if (mg <= 0 || bw > 16384)
+        return;
+    if ((size_t)tw * th > a_size) {
+        free(a);
+        a = malloc(a_size = (size_t)tw * th);
+    }
+    if ((size_t)bw * bh > b_size) {
+        free(b);
+        b = malloc(b_size = (size_t)bw * bh);
+    }
+    if (!a || !b)
+        return;
+    if (!ccheck_draw(j, a, tw, th, 0) || !ccheck_draw(j, b, bw, bh, mg))
+        return;
+    if (!cc_pictures++)
+        atexit(ccheck_report);
+    for (y = 0; y < th; y++)
+        for (x = 0; x < tw; x++)
+            differ += getenv("FW_CCOLOUR") ? a[(size_t)y * tw + x] != b[(size_t)(y + mg) * bw + x + mg]
+                                           : !a[(size_t)y * tw + x] != !b[(size_t)(y + mg) * bw + x + mg];
+    part = (double)differ / ((double)tw * th);
+    cc_sum += part;
+    cc_over += part > 0.005;
+    if (getenv("FW_CDUMP") && nshvc_frames() == (uint32_t)atoi(getenv("FW_CDUMP"))) {
+        const uint16_t *cg = nshvc_cgram();
+        char path[512];
+        int which;
+        for (which = 0; which < 2; which++) {
+            FILE *f;
+            int ww = which ? bw : tw, hh = which ? bh : th;
+            const uint8_t *p = which ? b : a;
+            snprintf(path, sizeof path, "%s.%s.ppm", getenv("FW_CDUMPF"), which ? "big" : "screen");
+            if (!(f = fopen(path, "wb")))
+                continue;
+            fprintf(f, "P6\n%d %d\n255\n", ww, hh);
+            for (y = 0; y < hh; y++)
+                for (x = 0; x < ww; x++) {
+                    uint16_t c = cg[p[(size_t)y * ww + x]];
+                    fputc((c & 31) << 3, f);
+                    fputc((c >> 5 & 31) << 3, f);
+                    fputc((c >> 10 & 31) << 3, f);
+                }
+            fclose(f);
+        }
+    }
+    for (i = 0; i < 5; i++)
+        if (part > cc_worst[i]) {
+            memmove(cc_worst + i + 1, cc_worst + i, (4 - i) * sizeof cc_worst[0]);
+            memmove(cc_worst_frame + i + 1, cc_worst_frame + i, (4 - i) * sizeof cc_worst_frame[0]);
+            cc_worst[i] = part;
+            cc_worst_frame[i] = nshvc_frames();
+            break;
+        }
+}
+
 int fw_picture(int j)
 {
     static uint8_t scratch[2][RM_TWEEN_BYTES];
@@ -1463,6 +1582,8 @@ int fw_picture(int j)
         return 0;
     if (getenv("FW_KCHECK"))            /* before the backdrop and panels: the 3D and HUD alone */
         kcheck_picture(j);
+    if (getenv("FW_CCHECK"))
+        ccheck_picture(j);
     backdrop_draw();
     panels_draw();
     sprites_draw();
