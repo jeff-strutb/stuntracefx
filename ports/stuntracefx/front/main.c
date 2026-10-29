@@ -161,7 +161,11 @@ NSHVC_MAIN(argc, argv)
        folder (TMPDIR) where a sandboxed app can write it */
     if (getenv("FW_PROF") && !getenv("NSHVC_FPS_LOG") && getenv("TMPDIR")) {
         snprintf(fps_path, sizeof fps_path, "%s/fps.log", getenv("TMPDIR"));
+#ifdef _WIN32
+        _putenv_s("NSHVC_FPS_LOG", fps_path);
+#else
         setenv("NSHVC_FPS_LOG", fps_path, 1);
+#endif
         fprintf(stderr, "fwprof: nativeshvc's frame log at %s\n", fps_path);
     }
     for (i = 1; i < argc; i++)
