@@ -6,11 +6,18 @@
 # starts, which must already be on GitHub. Running it again at the same
 # version replaces the files of that release.
 #
-# Usage: builder/release.sh [--dry-run]
+# --no-build publishes the zips already in build/builder/dist, which must
+# have been built from HEAD (build.sh writes the commit to dist/REV): for
+# zips built and checked before the release.
+#
+# Usage: builder/release.sh [--dry-run] [--no-build]
 set -e
 cd "$(dirname "$0")/.."
-DRY=0
-[ "$1" = --dry-run ] && DRY=1
+DRY=0 BUILD=1
+for a in "$@"; do
+    [ "$a" = --dry-run ] && DRY=1
+    [ "$a" = --no-build ] && BUILD=0
+done
 
 VERSION=${VERSION:-0.9}
 TAG=v$VERSION
@@ -29,7 +36,12 @@ if [ $DRY = 0 ] && ! git merge-base --is-ancestor $REV origin/main; then
     exit 1
 fi
 
-VERSION=$VERSION builder/build.sh
+if [ $BUILD = 1 ]; then
+    VERSION=$VERSION REV=$REV builder/build.sh
+elif [ "$(cat $DIST/REV 2>/dev/null)" != "$REV" ] || [ ! -f $MAC ] || [ ! -f $WIN ]; then
+    echo "release: the zips in $DIST are not built from HEAD ($REV); build them first" >&2
+    exit 1
+fi
 
 NOTES=$(mktemp)
 cat > $NOTES <<EOF

@@ -11,8 +11,8 @@
 # none of the cartridge's data in it (ASSETS_DATA=file: the game reads
 # romdata.bin, which the builder writes from the player's ROM);
 # check_payload.py proves that before anything is packaged. The payload is
-# built from HEAD (a worktree of it at build/builder/tree), never from the
-# working tree, so what is released is what is committed.
+# built from HEAD, or REV (a worktree of it at build/builder/tree), never
+# from the working tree, so what is released is what is committed.
 #
 # VERSION: 0.9 unless set.
 # Needs nativeshvc's checkout (NSHVC, ../nativeshvc), the ROM under
@@ -33,7 +33,7 @@ ROM="reference/stuntracefx/Stunt Race FX (USA) (Rev 1).sfc"
 echo "Stunt Race FX Builder $VERSION"
 
 # ---- the source: HEAD, as committed ----------------------------------------------------------
-REV=$(git rev-parse HEAD)
+REV=${REV:-$(git rev-parse HEAD)}   # (release.sh: the commit it tags)
 if [ -d "$TREE" ]; then
     git worktree remove --force "$TREE" 2>/dev/null || rm -rf "$TREE"
     git worktree prune
@@ -152,4 +152,5 @@ cp $B/payload-windows/stuntracefx.exe "$B/win/Stunt Race FX Builder/game/"
 (cd $B/win && zip -qrX "$DIST/StuntRaceFXBuilder-$VERSION-Windows.zip" "Stunt Race FX Builder")
 
 git worktree remove --force "$TREE"
+echo $REV > $DIST/REV          # the source these zips are from (release.sh --no-build)
 ls -la $DIST
