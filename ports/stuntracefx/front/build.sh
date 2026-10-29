@@ -8,6 +8,8 @@
 #     OUT=build/stuntracefx/front/null
 #     GAME=src/stuntracefx        the game's C (or a copy of it: cycgame.py's)
 #     ASSETS=                     a variant of the assets (tools/assets.py: ios)
+#     ASSETS_DATA=file            no asset bytes built in: read from romdata.bin (the
+#                                 builder's payload; tools/assets.py, cart.c)
 #     CC=clang                    the compiler (with its target, for iOS)
 #     DEFS=                       the host's defines (-DNSHVC_HOST_IOS=1 for iOS)
 #     LIBS=                       the host's frameworks and libraries
@@ -36,7 +38,7 @@ fi
 
 cp "$GAME"/include/*.h "$OUT/include/"
 SRFX_GAME="$GAME" python3 ports/stuntracefx/tools/routines.py "$ROM" "$OUT/gen/routines.c" >/dev/null
-python3 ports/stuntracefx/tools/assets.py "$ROM" "$OUT/gen" $ASSETS >/dev/null
+ASSETS_DATA=$ASSETS_DATA python3 ports/stuntracefx/tools/assets.py "$ROM" "$OUT/gen" $ASSETS >/dev/null
 OBJS=
 # the newest of the game's headers: an object older than it is built again
 HDR=$(ls -t "$GAME"/include/*.h | head -1)
@@ -48,7 +50,15 @@ for f in $(find "$GAME" -name '*.c' | sort) "$OUT/gen/routines.c" "$OUT/gen/asse
   fi
   OBJS="$OBJS $o"
 done
-$CC -c "$OUT/gen/assets.S" -I"$OUT/gen" -o "$OUT/obj/assets_S.o"
+ASSETS_O="$OUT/obj/assets_S.o"
+if [ "$ASSETS_DATA" = file ]; then
+  DEFS="$DEFS -DSRFX_ROMDATA_FILE=1"
+  case "$($CC -dumpmachine)" in *apple*) LIBS="$LIBS -framework CoreFoundation";; esac   # (the app's Resources)
+  ASSETS_O=
+  rm -f "$OUT/obj/assets_S.o"
+else
+  $CC -c "$OUT/gen/assets.S" -I"$OUT/gen" -o "$ASSETS_O"
+fi
 # GPU_METAL=1 (the macOS and iOS apps): the full window's picture filled by
 # the cartridge's GPU (gpu_metal.m)
 if [ -n "$GPU_METAL" ]; then
@@ -74,5 +84,5 @@ case "$($CC -dumpmachine)" in
     ICO="$OUT/icon/game.ico" sh ports/common/host/windows/game_rc.sh "Stunt Race FX" "Stunt Race FX.exe" "$OUT/obj/game_res.o"
     OBJS="$OBJS $OUT/obj/game_res.o"; EXE=.exe;;
 esac
-$CC -o "$OUT/stuntracefx$EXE" $OBJS "$OUT/obj/assets_S.o" "$NSHVC/$NB/libnshvc.a" -lm $LIBS
+$CC -o "$OUT/stuntracefx$EXE" $OBJS $ASSETS_O "$NSHVC/$NB/libnshvc.a" -lm $LIBS
 echo "built $OUT/stuntracefx$EXE"
