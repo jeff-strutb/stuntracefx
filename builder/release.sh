@@ -2,7 +2,7 @@
 # builder/release.sh: build Stunt Race FX Builder for macOS and Windows and
 # publish both on the repository's GitHub Releases page as vVERSION.
 #
-# VERSION: 0.9 unless set. The release is tagged at HEAD as it is when this
+# VERSION: 0.91 unless set. The release is tagged at HEAD as it is when this
 # starts, which must already be on GitHub. Running it again at the same
 # version replaces the files of that release.
 #
@@ -19,7 +19,7 @@ for a in "$@"; do
     [ "$a" = --no-build ] && BUILD=0
 done
 
-VERSION=${VERSION:-0.9}
+VERSION=${VERSION:-0.91}
 TAG=v$VERSION
 DIST=build/builder/dist
 MAC=$DIST/StuntRaceFXBuilder-$VERSION-macOS.zip
@@ -49,6 +49,18 @@ Stunt Race FX Builder makes a native build of **Stunt Race FX** (Super Nintendo,
 
 The game's data is copyrighted, so the builder does not include it: you provide your ROM, the builder checks it by MD5, takes the data the game reads from it (the ROM's code is not used: the C stands for it), and produces a game that runs on its own. The ROM is not needed once the build is done.
 
+### Features
+- **The cartridge's game, native**: compiled from the decompilation's C for your machine. No emulator: the console's chips are nativeshvc's, and the cartridge's Super FX 3D chip is the game's own code.
+- **Two modes, switched with Tab** (a badge in the corner says which is on, and your choice is kept):
+  - **Original**: the game as it ran on the console, paced by the work of its chips, slowdown and all.
+  - **Enhanced**: independent of the machine's speed, as a modern game is. The race runs the cartridge's own physics step for step, and the 3D is drawn on every frame between its steps, so it moves at **60 frames a second**, in one-player and two-player races alike.
+- **Widescreen** (Enhanced, F2): a one-player race fills the window, whatever its shape, wide or tall, with more of the track and its scenery on either side; the speedometer, damage and rank panels stay framed in a 16:9 box in the middle.
+- **Sharp 3D at any size**: in Enhanced mode the 3D is drawn at your window's resolution, not stretched from the console's 256 by 224; on the Mac, iPhone and iPad the Super FX's polygons are drawn by the GPU with Metal.
+- **Touch controls** on the iPhone and iPad: a steering wheel under your right thumb (push past full lock for the hard turn), brake and boost pedals under your left, the gas held for you while you drive, a two-finger tap to pause; swipes and taps in the menus, and TAP TO START on the title.
+- **Game controllers** (and the keyboard) as the SNES pad, on every system.
+- **Records kept** as the cartridge's battery saved them, in your user folder, so a rebuild never loses them.
+- **Full screen** and any window size.
+
 ### Download
 - **macOS** (12 or later, Apple silicon and Intel; the game it builds needs the same): \`StuntRaceFXBuilder-$VERSION-macOS.zip\`. Unzip and open Stunt Race FX Builder. It is not notarized: if macOS refuses to open it, Control-click it and choose Open, or allow it in System Settings, Privacy & Security.
 - **Windows** (10 or later, 64-bit; the game it builds needs the same, and OpenGL 3.3): \`StuntRaceFXBuilder-$VERSION-Windows.zip\`. Unzip it and run \`StuntRaceFXBuilder.exe\` from the unzipped folder (the \`game\` folder beside it holds the game's code). It is not signed: if SmartScreen stops it, choose More info, then Run anyway.
@@ -69,7 +81,7 @@ The first release (Rev 0) and the European and Japanese cartridges are not suppo
 ### Playing
 - **Original** mode is the cartridge's game as it ran. **Enhanced** mode adds a 60 frames a second option (Frame rate 60) and **Widescreen** (the race fills any window shape). Tab switches between them; F1 sets the frame rate, F2 Widescreen.
 - A keyboard or a game controller is the SNES pad. On the iPhone and iPad, touch drives it, or a game controller.
-- Full screen: View, Enter Full Screen (Control-Command-F) on a Mac, Alt+Enter on Windows.
+- Full screen: View, Enter Full Screen (Control-Command-F) on a Mac, Alt+Enter or F11 on Windows.
 - Records and settings live in your user folder (Application Support on macOS, the iPhone and the iPad, AppData on Windows), so rebuilding never touches them.
 
 Source: [builder/](https://github.com/jeff-strutb/stuntracefx/tree/$REV/builder), [ports/stuntracefx/](https://github.com/jeff-strutb/stuntracefx/tree/$REV/ports/stuntracefx), [src/stuntracefx/](https://github.com/jeff-strutb/stuntracefx/tree/$REV/src/stuntracefx).

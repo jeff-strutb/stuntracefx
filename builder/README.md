@@ -26,7 +26,7 @@ the title's PUSH START as TAP TO START (`assets.py` `ios_edits`: the ROM's
 sprite sheet unpacked, edited and packed again, done in C by
 `src/core/srfx.c`). Linux is not built yet.
 
-Version 0.9. The builder and the game it builds run on macOS 12 or later
+Version 0.91. The builder and the game it builds run on macOS 12 or later
 (Apple silicon and Intel) and Windows 10 or later (64-bit, OpenGL 3.3); the
 iPhone and iPad app on iOS 15 or later.
 

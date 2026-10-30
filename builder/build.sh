@@ -14,7 +14,7 @@
 # built from HEAD, or REV (a worktree of it at build/builder/tree), never
 # from the working tree, so what is released is what is committed.
 #
-# VERSION: 0.9 unless set.
+# VERSION: 0.91 unless set.
 # Needs nativeshvc's checkout (NSHVC, ../nativeshvc), the ROM under
 # reference/stuntracefx/ that the port builds from (its asset tables and
 # routine table come from it; check_payload.py reads it to prove its
@@ -23,7 +23,7 @@
 set -e
 cd "$(dirname "$0")/.."
 ROOT=$PWD
-VERSION=${VERSION:-0.9}
+VERSION=${VERSION:-0.91}
 export VERSION                     # the Windows game's version resource too (game_rc.sh)
 NSHVC=$(cd "${NSHVC:-../nativeshvc}" && pwd)
 B=$ROOT/build/builder
