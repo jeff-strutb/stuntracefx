@@ -73,6 +73,8 @@ static int enhanced(void) { return rm_option(RM_OPT_FRAMERATE); }
 /* ---- the hooks ---- */
 static int on_key(int vk, int down)
 {
+    if (rm_type_key(vk, down))             /* a letter for the initials (typing.c) */
+        return 1;
     if (!down || (vk != 0x09 && vk != 0x70 && vk != 0x71))
         return 0;
     if (vk == 0x09) {                       /* Tab */

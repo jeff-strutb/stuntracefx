@@ -6,6 +6,7 @@
  */
 #include "machine.h"
 #include "cpu_ops.h"
+#include "remaster.h"
 
 void SoundPort0QueuePush(uint8_t command);
 int MenuActorFind(uint8_t bank, uint16_t kind, uint16_t *x, uint16_t *y, uint8_t *p);
@@ -165,10 +166,42 @@ void abi_MenuInitialsStep(void)
  * Entry: M 16-bit, X 16-bit, D = $0000. Exit: A and C as
  * MenuRowBlinkSettings; X = $11F9; Y = $0A; N, Z from X.
  */
+/* The letters typed on a keyboard since the last frame (typing.c): each
+   sets the letter at the position, with the up and down press's sound,
+   and moves on to the next position as a right press does (its sound and
+   the marker's palette reset); Backspace moves back as a left press. */
+static void typed_letters(uint8_t bank, uint16_t *x, uint16_t *y, uint8_t *p)
+{
+    int k;
+
+    rm_typing_screen();
+    while ((k = rm_typed_next()) >= 0) {
+        uint16_t pos = rd16(POSITION);
+        if (k == RM_TYPED_BACK) {
+            if (pos) {
+                sound0(bank, 0x46, p);
+                MenuRowPalette5(bank, x, y, p);
+                wr16(POSITION, (uint16_t)(pos - 1));
+            }
+            continue;
+        }
+        if (pos > 2)
+            continue;
+        sound0(bank, 0x45, p);
+        wr16((uint32_t)(LETTERS + pos * 2), (uint16_t)k);
+        if (pos < 2) {
+            sound0(bank, 0x46, p);
+            MenuRowPalette5(bank, x, y, p);
+            wr16(POSITION, (uint16_t)(pos + 1));
+        }
+    }
+}
+
 uint16_t MenuInitialsPresses(uint8_t bank, uint16_t *x, uint16_t *y, uint8_t *p)
 {
     uint16_t i, v, a;
 
+    typed_letters(bank, x, y, p);
     wr16(dbw(bank, 0x118B), (0x0000));
     i = (uint16_t)(rd16(0x001191) - 2);
     if (!(i & 0x8000)) {

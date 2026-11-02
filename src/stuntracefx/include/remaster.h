@@ -254,4 +254,14 @@ int rm_whole_steps(void);
    hook's clean point for an in-between draw) */
 int rm_in_tick_wait(void);
 
+/* Initials typed on a keyboard (typing.c): the car selection's initials
+   screen marks each frame it runs (rm_typing_screen); while it runs, the
+   front end's key hook passes keys here (rm_type_key: 1 when taken, a
+   letter A-Z or Backspace, down and up), and the screen takes them, a
+   letter 0-25 or RM_TYPED_BACK, oldest first (rm_typed_next: -1 none) */
+#define RM_TYPED_BACK 0xFF
+void rm_typing_screen(void);
+int rm_type_key(int vk, int down);
+int rm_typed_next(void);
+
 #endif

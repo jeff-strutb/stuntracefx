@@ -11,6 +11,8 @@
 /* the console run on to the next vertical blank's start (contract 2.0:
    the main CPU's work takes no time; time passes in waits) */
 void nshvc_wait_vblank(void);
+/* the video frames shown since power on */
+uint32_t nshvc_frames(void);
 /* the host's folder for saves */
 const char *nshvc_save_dir(void);
 /* a byte of the address space as it stands, with no time and no side
