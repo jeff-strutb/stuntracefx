@@ -1483,7 +1483,36 @@ typedef struct {
     uint8_t vu, vv;
     int64_t from, to;           /* its vertices' x, its first row and its rows (edge_x) */
     int32_t y0, n;
+    /* perspective-correct (tex_persp): 1 / z at its two vertices, from the
+       face's plane, and its u and v at its start and their changes to its
+       end, as the original's walk takes them */
+    double qa, qb, ua, va, dua, dva;
 } TexEdge;
+
+/* The face being filled has its planes (fw_tex_plane): its texels
+   perspective-correct. Only its 1 / z is taken from them (the plane its
+   points lie on); u and v are the original's at its vertices, carried
+   along its edges and across each row as the original's walk does, with
+   u / z, v / z and 1 / z stepping evenly instead of u and v. A plane of u
+   and v fitted to three of a face's points would not do: a quad's four
+   corners need not be one affine map of the texture (the 4WD's plate),
+   so the texture would slide over it as the three chosen change. */
+static const TexPlane *tex_persp;
+
+static double plane_q(double sx, double sy)
+{
+    double f = fw_focal(), rx = (sx - tw / 2) / f, ry = (sy - ((double)view_cy() * K + cy_off)) / f;
+    return tex_persp->q[0] * rx + tex_persp->q[1] * ry + tex_persp->q[2];
+}
+
+/* an edge's u (or v: which 0 or 1), 1 / z at the row */
+static void edge_persp(const TexEdge *e, int32_t row, double *u, double *v, double *q)
+{
+    double t = e->n ? (double)(row - e->y0) / e->n : 0, qa = e->qa, qb = e->qb;
+    *q = qa + t * (qb - qa);
+    *u = (qa * e->ua + t * (qb * (e->ua + e->dua) - qa * e->ua)) / *q;
+    *v = (qa * e->va + t * (qb * (e->va + e->dva) - qa * e->va)) / *q;
+}
 
 /* the textured fill at full precision: the original's edges and spans, its
    u and v without its 8.8 steps' rounding, which over the thousands of rows
@@ -1543,6 +1572,14 @@ static int tex_edge(TexEdge *e, int32_t row, int left)
     e->hdv = (double)(int8_t)(uint8_t)(v - v_prev) / e->rows;
     e->vu = (uint8_t)u;
     e->vv = (uint8_t)v;
+    if (tex_persp) {
+        e->ua = u_prev;
+        e->va = v_prev;
+        e->dua = (int8_t)(uint8_t)(u - u_prev);
+        e->dva = (int8_t)(uint8_t)(v - v_prev);
+        e->qa = plane_q((double)from, (double)row);
+        e->qb = plane_q((double)to, (double)(row + e->rows));
+    }
     return 1;
 }
 
@@ -1556,7 +1593,8 @@ static uint16_t tex_polygon(uint16_t p, int n)
     TexEdge l, r;
     int i;
     /* the face's planes (fw_tex_plane): a perspective-correct fill */
-    const TexPlane *pl = tex_planes[v >> 1].gen == list_gen && !fw_affine() ? &tex_planes[v >> 1] : NULL;
+    const TexPlane *pl = tex_planes[v >> 1].gen == list_gen && !fw_affine() && tex_precise() ? &tex_planes[v >> 1] : NULL;
+    tex_persp = pl;
     gsu.por = 0;
     gsu_color((uint8_t)word);
     gsu.por = (uint8_t)((word >> 8) & 0x1F);
@@ -1577,8 +1615,10 @@ static uint16_t tex_polygon(uint16_t p, int n)
         src = (uint16_t)(src + 8);
         dst = (uint16_t)(dst + 8);
     }
-    if (ymin == ymax)
+    if (ymin == ymax) {
+        tex_persp = NULL;
         return (uint16_t)(v + size);
+    }
     {
         uint16_t t = (uint16_t)(top_at - 2);
         l.x = r.x = vw(t) * 256;
@@ -1669,25 +1709,22 @@ static uint16_t tex_polygon(uint16_t p, int n)
                     sp->por = gsu.por;
                     sp->hi = (uint8_t)(gsu.colr & 0xF0);
                     sp->textured = 1;
-                    if (pl) {           /* the face's planes: perspective-correct, from its first pixel */
-                        double f = fw_focal(), rx = ((double)x0 + 0.5 - tw / 2) / f;
-                        double ry = ((double)row + 0.5 - ((double)view_cy() * K + cy_off)) / f;
-                        double ou = ram16(TEX_U_OFF) / 256.0, ov = ram16(TEX_V_OFF) / 256.0, q[3], a[3], b[3];
-                        int j;
-                        for (j = 0; j < 3; j++) {
-                            q[j] = pl->q[j];
-                            a[j] = pl->a[j] + ou * pl->q[j];
-                            b[j] = pl->b[j] + ov * pl->q[j];
+                    if (pl) {           /* perspective-correct: the row's ends from its edges (tex_persp) */
+                        double ou = ram16(TEX_U_OFF) / 256.0, ov = ram16(TEX_V_OFF) / 256.0;
+                        double uL, vL, qL, uR, vR, qR, steps = width > 1 ? (double)(width - 1) : 1.0;
+                        edge_persp(&l, row, &uL, &vL, &qL);
+                        edge_persp(&r, row, &uR, &vR, &qR);
+                        if (qL > 0 && qR > 0) {
+                            uR = uL + remainder(uR - uL, 256.0);    /* the nearer turn, as the row's step takes it */
+                            vR = vL + remainder(vR - vL, 256.0);
+                            sp->textured = 2;
+                            sp->pq = (float)qL;
+                            sp->pdq = (float)((qR - qL) / steps);
+                            sp->pa = (float)((uL + ou) * qL);
+                            sp->pda = (float)(((uR + ou) * qR - (uL + ou) * qL) / steps);
+                            sp->pb = (float)((vL + ov) * qL);
+                            sp->pdb = (float)(((vR + ov) * qR - (vL + ov) * qL) / steps);
                         }
-                        sp->textured = 2;
-                        sp->xl = x0;
-                        sp->pq = (float)(q[0] * rx + q[1] * ry + q[2]);
-                        sp->pdq = (float)(q[0] / f);
-                        sp->pa = (float)(a[0] * rx + a[1] * ry + a[2]);
-                        sp->pda = (float)(a[0] / f);
-                        sp->pb = (float)(b[0] * rx + b[1] * ry + b[2]);
-                        sp->pdb = (float)(b[0] / f);
-                        k = x1 - 1 - x0;
                     }
                     /* COLOR's register as the span's last pixel leaves it */
                     if (sp->textured == 2) {
@@ -1731,6 +1768,7 @@ static uint16_t tex_polygon(uint16_t p, int n)
         l.rows = left_rows;
         r.rows = right_rows;
     }
+    tex_persp = NULL;
     return (uint16_t)(v + size);
 }
 
