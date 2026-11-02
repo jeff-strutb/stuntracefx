@@ -257,6 +257,11 @@ static int device_open(void)
     if (best < 0)
         return 0;
     phys = list[best];
+    {
+        VkPhysicalDeviceProperties p;
+        pvkGetPhysicalDeviceProperties(phys, &p);
+        fprintf(stderr, "stuntracefx: the full window on %s (Vulkan)\n", p.deviceName);
+    }
     pvkGetPhysicalDeviceMemoryProperties(phys, &memp);
     {
         float prio = 1.0f;
