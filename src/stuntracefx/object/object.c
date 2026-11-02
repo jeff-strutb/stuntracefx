@@ -800,7 +800,10 @@ uint16_t ObjectNearFocus(uint8_t bank, uint16_t obj, uint8_t *p)
     s = (unsigned)dz + dx;
     sum = (uint16_t)s;
     *p = (uint8_t)((*p & ~P_V) | ((~(dz ^ dx) & (dz ^ sum) & 0x8000) ? P_V : 0));
-    if ((uint16_t)(sum - 0x1194) & 0x8000) {
+    /* Enhanced: a car is never far, so it is always drawn as its model
+       (with the models the distance picks, render/frame.c), never as the
+       sprite; the far state's fields are the drawing's alone */
+    if (((uint16_t)(sum - 0x1194) & 0x8000) || rm_enhanced()) {
         wr8(field(bank, obj, 0x24), (rd8((field(bank, obj, 0x24))) & 0xF7));
         wr8(field(bank, obj, 0x5F), (0x00));
         return (ObjectSet5DByKind(bank, obj, rd8((field(bank, obj, 0x49))), p));
