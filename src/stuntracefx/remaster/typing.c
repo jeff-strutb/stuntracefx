@@ -6,7 +6,8 @@
  * three. A keyboard's letters go there too: while that screen runs, the
  * front end's key hook queues each letter typed (and Backspace), and the
  * screen's frame (MenuInitialsPresses) takes them from the queue as it
- * takes the pad's presses, before them.
+ * takes the pad's presses, before them. On a touch screen with no
+ * keyboard the system's keyboard is shown while the screen runs.
  */
 #include "console_ext.h"
 #include "remaster.h"
@@ -43,6 +44,19 @@ int rm_type_key(int vk, int down)
     if (down && tail - head < sizeof queue)
         queue[tail++ % sizeof queue] = (uint8_t)code;
     return 1;                                   /* the key's release too: no button of the pad's */
+}
+
+/* once a frame: the system's keyboard shown (on a touch screen with no
+   keyboard attached; the console decides) while the screen runs */
+void rm_typing_frame(void)
+{
+    static int shown;
+    int now = seen && nshvc_frames() - seen_frame <= 10;
+
+    if (now != shown) {
+        nshvc_ext_text_input(now);
+        shown = now;
+    }
 }
 
 int rm_typed_next(void)

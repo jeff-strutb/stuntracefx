@@ -261,6 +261,9 @@ int rm_in_tick_wait(void);
    letter 0-25 or RM_TYPED_BACK, oldest first (rm_typed_next: -1 none) */
 #define RM_TYPED_BACK 0xFF
 void rm_typing_screen(void);
+/* once a frame (the front end's frame hook): the system's keyboard shown
+   on a touch screen while the initials screen runs */
+void rm_typing_frame(void);
 int rm_type_key(int vk, int down);
 int rm_typed_next(void);
 

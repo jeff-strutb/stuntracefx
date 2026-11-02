@@ -50,4 +50,12 @@ void nshvc_ext_layer_outside(int layer, const uint16_t *map, int size);
 void nshvc_window_size(float *w, float *h);
 void nshvc_safe_area(float *left, float *top, float *right, float *bottom);
 
+/* Windows past the console's picture on a larger screen (contract 2.11):
+   on, a window whose left edge is 0 reaches every column left of the
+   picture and one whose right edge is 255 every column right of it */
+void nshvc_ext_window_edges(int on);
+/* Text entry (contract 2.11): on a touch host with no keyboard attached,
+   the system's keyboard shown while on; typed keys reach the key hook */
+void nshvc_ext_text_input(int on);
+
 #endif

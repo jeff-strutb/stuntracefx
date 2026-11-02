@@ -368,6 +368,7 @@ void mw_frame_end(void)
     nshvc_hold_interrupts(1);
     nshvc_set_cpu_costs(0);
     if (!want) {                        /* the console's screen again */
+        nshvc_ext_window_edges(0);
         memset(filler_ok, 0, sizeof filler_ok);
         memset(sliding, 0, sizeof sliding);
         sprite_pages(0);
@@ -378,6 +379,10 @@ void mw_frame_end(void)
         on = 0;
     } else {
         size_of_window(&w, &h);
+        /* a window across the whole line (a panel's mask, W1 0-255) across
+           the whole screen: the panel slides in from the window's edge */
+        if (!on)
+            nshvc_ext_window_edges(1);
         if (!on || w != W || h != H) {
             nshvc_ext_screen(w, h);
             nshvc_ext_screen_origin(-1, -1);
