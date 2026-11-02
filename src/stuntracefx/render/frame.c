@@ -24,6 +24,79 @@
 
 #define R gsu.r
 
+/* Enhanced's full window: a scaled sprite's row (FxObjectSpriteRows) as
+   one textured span, not a pixel at a time. The row's loop runs as the
+   chip's does, its plots only stepping R1; the span its pixels made: from
+   the row's first column to its last, each column's texel the start's
+   fraction (R11) plus the column's steps (R9) over 65536, counted from
+   the row's first texel (R14, back for a mirrored sprite) */
+static int sprite_row;
+static uint16_t sprite_x0, sprite_y, sprite_frac, sprite_step, sprite_at;
+static int sprite_back;
+
+static void sprite_row_begin(int back)
+{
+    sprite_row = fw_sprite_rows() && R[6] < 0xFF;
+    if (!sprite_row)
+        return;
+    sprite_x0 = R[3];
+    sprite_y = R[2];
+    sprite_frac = R[11];
+    sprite_step = R[9];
+    sprite_at = R[14];
+    sprite_back = back;
+}
+
+static inline void sprite_plot(void)
+{
+    if (sprite_row)
+        R[1] = (uint16_t)(R[1] + 1);
+    else
+        gsu_plot_r1();
+}
+
+/* The loop's ADD and PLOT to the carry: the columns one texel covers,
+   R1 past them, the accumulator and flags as its last ADD leaves them */
+static uint16_t sprite_to_carry(uint16_t acc)
+{
+    uint32_t need = 0x10000u - acc, m = (need + R[9] - 1) / R[9];
+    acc = (uint16_t)(acc + (m - 1) * R[9]);
+    R[1] = (uint16_t)(R[1] + m);
+    return gsu_add(acc, R[9], 0);
+}
+
+/* The last texel's loop: a column while R0 (the right edge) less R1 is
+   not negative, to the carry; then out with the flags its last CMP or
+   ADD leaves */
+static void sprite_last(uint16_t *acc)
+{
+    int32_t room = (int16_t)(uint16_t)(R[0] - R[1]) + 1;
+    uint32_t need = 0x10000u - *acc, m = (need + R[9] - 1) / R[9];
+    if (room <= 0) {
+        gsu_sub(R[0], R[1], 0);
+        return;
+    }
+    if (m <= (uint32_t)room) {
+        *acc = (uint16_t)(*acc + (m - 1) * R[9]);
+        R[1] = (uint16_t)(R[1] + m);
+        *acc = gsu_add(*acc, R[9], 0);
+        return;
+    }
+    *acc = (uint16_t)(*acc + (uint32_t)room * R[9]);
+    R[1] = (uint16_t)(R[1] + room);
+    gsu_sub(R[0], R[1], 0);
+}
+
+static void sprite_row_end(void)
+{
+    if (!sprite_row)
+        return;
+    sprite_row = 0;
+    if (R[1] != sprite_x0)
+        fw_sprite_span(sprite_y, sprite_x0, (uint16_t)(R[1] - 1), gsu_ldw(0x00A6), sprite_at, sprite_frac,
+                       sprite_step, sprite_back);
+}
+
 /* A scaled sprite's row as a span (draw_list.h): opened as the row's loop
    is set up, with the texel rule the loop follows, and made with the
    pixels the loop plotted (R1 then less R1 now) as the row ends. */
@@ -866,6 +939,7 @@ lB365:
     R[1] = R[3];
     R[0] = R[11];
     gsu_color(gsu_getb());   /* GETC */
+    sprite_row_begin(0);
     R[12] = R[6];
     R[12] = gsu_dec(R[12]);
     t = gsu.z;
@@ -874,10 +948,14 @@ lB365:
 lB383:
     gsu_r14(gsu_inc(R[14]));
 lB384:
-    R[0] = gsu_add(R[0], R[9], 0);
-    t = !gsu.cy;
-    gsu_plot_r1();
-    if (t) goto lB384;
+    if (sprite_row && R[9]) {          /* the texel's columns at once, to the carry */
+        R[0] = sprite_to_carry(R[0]);
+    } else {
+        R[0] = gsu_add(R[0], R[9], 0);
+        t = !gsu.cy;
+        sprite_plot();
+        if (t) goto lB384;
+    }
     t = gsu_count_down(&R[12]);
     gsu_color(gsu_getb());   /* GETC */
     if (t) goto lB383;
@@ -885,14 +963,19 @@ lB38A:
     R[8] = R[0];
     R[0] = gsu_ldw(FX_SCREEN_RIGHT);
 lB38F:
+    if (sprite_row && R[9]) {          /* the last texel's columns at once: to the carry or the right edge */
+        sprite_last(&R[8]);
+        goto lB398;
+    }
     gsu_sub(R[0], R[1], 0);   /* CMP */
     t = gsu.s;
     if (t) { goto lB398; }
     R[8] = gsu_add(R[8], R[9], 0);
     t = !gsu.cy;
-    gsu_plot_r1();
+    sprite_plot();
     if (t) goto lB38F;
 lB398:
+    sprite_row_end();
     R[7] = gsu_sub(R[7], R[9], 0);
     t = gsu.cy;
     R[2] = gsu_inc(R[2]);
@@ -962,6 +1045,7 @@ lB3E9:
     R[1] = R[3];
     R[0] = R[11];
     gsu_color(gsu_getb());   /* GETC */
+    sprite_row_begin(1);
     R[12] = R[6];
     R[12] = gsu_dec(R[12]);
     t = gsu.z;
@@ -970,10 +1054,14 @@ lB3E9:
 lB407:
     gsu_r14(gsu_dec(R[14]));
 lB408:
-    R[0] = gsu_add(R[0], R[9], 0);
-    t = !gsu.cy;
-    gsu_plot_r1();
-    if (t) goto lB408;
+    if (sprite_row && R[9]) {          /* the texel's columns at once, to the carry */
+        R[0] = sprite_to_carry(R[0]);
+    } else {
+        R[0] = gsu_add(R[0], R[9], 0);
+        t = !gsu.cy;
+        sprite_plot();
+        if (t) goto lB408;
+    }
     t = gsu_count_down(&R[12]);
     gsu_color(gsu_getb());   /* GETC */
     if (t) goto lB407;
@@ -981,14 +1069,19 @@ lB40E:
     R[8] = R[0];
     R[0] = gsu_ldw(FX_SCREEN_RIGHT);
 lB413:
+    if (sprite_row && R[9]) {          /* the last texel's columns at once: to the carry or the right edge */
+        sprite_last(&R[8]);
+        goto lB41C;
+    }
     gsu_sub(R[0], R[1], 0);   /* CMP */
     t = gsu.s;
     if (t) { goto lB41C; }
     R[8] = gsu_add(R[8], R[9], 0);
     t = !gsu.cy;
-    gsu_plot_r1();
+    sprite_plot();
     if (t) goto lB413;
 lB41C:
+    sprite_row_end();
     R[7] = gsu_sub(R[7], R[9], 0);
     t = gsu.cy;
     R[2] = gsu_inc(R[2]);

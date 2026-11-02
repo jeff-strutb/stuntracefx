@@ -64,7 +64,8 @@ fi
 if [ -n "$GPU_METAL" ]; then
   DEFS="$DEFS -DFW_GPU_METAL=1"
   $CC -O2 -fobjc-arc -Wall $DEFS -I"$FRONT" -I"$OUT/include" -I"$NSHVC/include" -c "$FRONT/gpu_metal.m" -o "$OUT/obj/front_gpu_metal.o"
-  OBJS="$OBJS $OUT/obj/front_gpu_metal.o"
+  $CC -O2 -std=gnu11 -Wall $DEFS -I"$FRONT" -I"$OUT/include" -c "$FRONT/gpu_bin.c" -o "$OUT/obj/front_gpu_bin.o"
+  OBJS="$OBJS $OUT/obj/front_gpu_metal.o $OUT/obj/front_gpu_bin.o"
 fi
 for f in main cart superfx_cart touch art cost_profile; do
   $CC -O2 -std=gnu11 -Wall $DEFS -I"$FRONT" -I"$OUT/include" -I"$NSHVC/include" -Iports/common/snes -c "$FRONT/$f.c" -o "$OUT/obj/front_$f.o"

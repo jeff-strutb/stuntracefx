@@ -272,6 +272,11 @@ static int cropping;                    /* FW_CCHECK's pictures: the 3D alone */
  */
 static FwSpan *spans;
 static size_t nspans, cap_spans;
+/* the polygons the spans hold whole (textured 3) and their edges, made
+   again with each flush */
+FwPoly *fw_polys;
+FwEdge *fw_edges;
+static size_t npolys, cap_polys, nedges, cap_edges;
 
 static FwSpan *span_new(void)
 {
@@ -348,6 +353,14 @@ void fw_span_fill_cpu(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
             memset(o + p->x0, p->colour, (size_t)(p->x1 - p->x0 + 1));
             continue;
         }
+        if (p->textured == 3) {         /* a polygon's rows, in its place */
+            int32_t row;
+            FwSpan r;
+            for (row = p->y; row < p->x0; row++)
+                if (fw_poly_row(&fw_polys[p->x1], fw_edges, row, w, &r))
+                    fw_span_fill_cpu(out, w, h, &r, 1);
+            continue;
+        }
         if (p->textured == 2) {
             for (x = p->x0; x <= p->x1; x++) {
                 float k = (float)(x - p->xl), q = fmaf(p->pdq, k, p->pq);
@@ -376,7 +389,7 @@ static void span_flush(void)
 {
     if (nspans)
         fw_span_filler(tex, tw, th, spans, nspans);
-    nspans = 0;
+    nspans = npolys = nedges = 0;
 }
 
 /* the label being drawn (fw_label_begin): its position as FxTextNotice
@@ -404,6 +417,40 @@ int fw_label_begin(uint16_t x, uint16_t y)
 }
 
 void fw_label_end(void) { label_on = 0; }
+
+int fw_sprite_rows(void) { return fw_drawing && !fw_hud && !checking && !label_on; }
+
+void fw_sprite_span(uint16_t y, uint16_t x0, uint16_t x1, uint16_t bank, uint16_t at, uint16_t frac,
+                    uint16_t step, int back)
+{
+    FwSpan *p;
+    int32_t a = x0, b = x1;
+    if (y >= th || a >= tw)             /* fw_plot's: a column or row past the texels is not drawn */
+        return;
+    if (b >= tw)
+        b = tw - 1;
+    if (!(p = span_new()))
+        return;
+    memset(p, 0, sizeof *p);
+    p->y = y;
+    p->x0 = a;
+    p->x1 = b;
+    p->xl = x0;
+    p->bank = (uint8_t)bank;
+    p->mask = 0x00FF;
+    p->por = gsu.por;
+    p->hi = (uint8_t)(gsu.colr & 0xF0);
+    p->textured = 1;
+    if (!back) {                        /* texel (frac + k step) >> 16 from at */
+        p->base = at;
+        p->u = (int64_t)frac << 16;
+        p->du = (int64_t)step << 16;
+    } else {                            /* at minus it: 255 less it from at - 255 */
+        p->base = (uint16_t)(at - 0xFF);
+        p->u = ((int64_t)0xFF << 32) + (((int64_t)1 << 32) - 1) - ((int64_t)frac << 16);
+        p->du = -((int64_t)step << 16);
+    }
+}
 
 void fw_plot(uint16_t x, uint16_t y)
 {
@@ -482,7 +529,7 @@ uint8_t gsu_rpix16(uint16_t x, uint16_t y)
 
 void fw_clear(void)
 {
-    nspans = 0;                         /* drawn over: none of them shows */
+    nspans = npolys = nedges = 0;       /* drawn over: none of them shows */
     memset(tex, 0, (size_t)tw * th);
 }
 
@@ -922,6 +969,156 @@ static int64_t edge_step(int64_t x, int64_t step)
     return x;
 }
 
+/* ---- polygons whole: their rows made where they are filled -------------- */
+/*
+ * A polygon of the full window's own pictures (flat_polygon, tex_polygon)
+ * is kept as its edges, and each of its rows made from them by
+ * fw_poly_row where the spans are filled: on the GPU (the front end's,
+ * each row a thread) or here. A row is the original's: its ends each
+ * edge's x at the row (edge_x), a textured row from its left end's
+ * column for the width the original takes, a flat one from left to right
+ * when right is not left of left. u and v at a row's ends are each edge's
+ * at the row, from its start's and its change over its rows, in 32.32;
+ * the row's step their difference, the nearer turn, over its width.
+ * Perspective-correct, u / z, v / z and 1 / z step evenly instead, along
+ * each edge and across the row, in float, every multiply-add written as
+ * one (the GPU's the same steps, so the two fill alike).
+ */
+static int64_t edge_uv(int32_t a, int32_t d, int32_t y0, int32_t n, int32_t row)
+{
+    return ((int64_t)a << 32) + ((int64_t)d << 32) * (row - y0) / n;
+}
+
+static const FwEdge *edge_at(const FwEdge *e, int32_t n, int32_t row)
+{
+    int32_t i;
+    for (i = 0; i + 1 < n; i++)
+        if (row < e[i].y0 + e[i].n)
+            break;
+    return &e[i];
+}
+
+/* an edge's u or v (a, d its start and change) and 1 / z at a row */
+static float fwedge_persp(const FwEdge *e, int32_t a, int32_t d, int32_t row, float *q)
+{
+    float t = (float)(row - e->y0) / (float)e->n, a0 = e->qa * (float)a;
+    float da = fmaf(e->qb, (float)(a + d), -a0);
+    *q = fmaf(t, e->qb - e->qa, e->qa);
+    return fmaf(t, da, a0) / *q;
+}
+
+int fw_poly_row(const FwPoly *p, const FwEdge *edges, int32_t row, int32_t w, FwSpan *s)
+{
+    const FwEdge *l = edge_at(edges + p->le, p->ln, row), *r = edge_at(edges + p->re, p->rn, row);
+    int64_t xl = edge_x(l->from, l->to, l->y0, l->n, row) >> 8, xr = edge_x(r->from, r->to, r->y0, r->n, row) >> 8;
+    int64_t width, x0, x1, uL, uR, vL, vR, d;
+
+    memset(s, 0, sizeof *s);
+    s->y = row;
+    if (!p->kind) {                     /* flat: left to right, kept to the screen */
+        if (xr < xl)
+            return 0;
+        x0 = xl < 0 ? 0 : xl;
+        x1 = xr >= w ? w - 1 : xr;
+        if (x1 < x0)
+            return 0;
+        s->x0 = (int32_t)x0;
+        s->x1 = (int32_t)x1;
+        s->colour = p->colour;
+        return 1;
+    }
+    width = xr >= xl ? (xr - xl + 1 > 0xFFFFFFF ? 0xFFFFFFF : xr - xl + 1) : 1;
+    x0 = xl < 0 ? 0 : xl;
+    x1 = xl + width < w ? xl + width : w;
+    if (x0 >= x1)
+        return 0;
+    s->x0 = (int32_t)x0;
+    s->x1 = (int32_t)(x1 - 1);
+    s->xl = xl;
+    s->bank = p->bank;
+    s->base = p->base;
+    s->mask = p->mask;
+    s->por = p->por;
+    s->hi = p->hi;
+    s->textured = 1;
+    uL = edge_uv(l->ua, l->dua, l->y0, l->n, row);
+    uR = edge_uv(r->ua, r->dua, r->y0, r->n, row);
+    vL = edge_uv(l->va, l->dva, l->y0, l->n, row);
+    vR = edge_uv(r->va, r->dva, r->y0, r->n, row);
+    d = uR - uL;                        /* the nearer turn: -128 to 127.99 */
+    d = ((d + ((int64_t)128 << 32)) & (((int64_t)256 << 32) - 1)) - ((int64_t)128 << 32);
+    s->du = d / width;
+    d = vR - vL;
+    d = ((d + ((int64_t)128 << 32)) & (((int64_t)256 << 32) - 1)) - ((int64_t)128 << 32);
+    s->dv = d / width;
+    s->u = uL + ((int64_t)p->ou << 24);
+    s->v = vL + ((int64_t)p->ov << 24);
+    if (p->persp) {
+        float qL, qR, fuL = fwedge_persp(l, l->ua, l->dua, row, &qL), fuR = fwedge_persp(r, r->ua, r->dua, row, &qR);
+        float fvL = fwedge_persp(l, l->va, l->dva, row, &qL), fvR = fwedge_persp(r, r->va, r->dva, row, &qR);
+        float steps = width > 1 ? (float)(width - 1) : 1.0f, ou = (float)p->ou / 256.0f, ov = (float)p->ov / 256.0f;
+        if (qL > 0 && qR > 0) {
+            fuR = fmaf(-256.0f, floorf((fuR - fuL + 128.0f) / 256.0f), fuR);   /* the nearer turn */
+            fvR = fmaf(-256.0f, floorf((fvR - fvL + 128.0f) / 256.0f), fvR);
+            s->textured = 2;
+            s->pq = qL;
+            s->pdq = (qR - qL) / steps;
+            s->pa = (fuL + ou) * qL;
+            s->pda = fmaf(fuR + ou, qR, -s->pa) / steps;
+            s->pb = (fvL + ov) * qL;
+            s->pdb = fmaf(fvR + ov, qR, -s->pb) / steps;
+        }
+    }
+    return 1;
+}
+
+static FwPoly *poly_new(void)
+{
+    if (npolys == cap_polys) {
+        size_t c = cap_polys ? cap_polys * 2 : 4096;
+        FwPoly *n = realloc(fw_polys, c * sizeof *n);
+        if (!n)
+            return NULL;
+        fw_polys = n;
+        cap_polys = c;
+    }
+    memset(&fw_polys[npolys], 0, sizeof *fw_polys);
+    return &fw_polys[npolys++];
+}
+
+static FwEdge *edge_new(void)
+{
+    if (nedges == cap_edges) {
+        size_t c = cap_edges ? cap_edges * 2 : 16384;
+        FwEdge *n = realloc(fw_edges, c * sizeof *n);
+        if (!n)
+            return NULL;
+        fw_edges = n;
+        cap_edges = c;
+    }
+    memset(&fw_edges[nedges], 0, sizeof *fw_edges);
+    return &fw_edges[nedges++];
+}
+
+/* the polygon (its edges made) into the spans, its rows ya to yb - 1 kept
+   to the screen; 0 when none are on it */
+static int poly_put(FwPoly *p, int32_t ymin, int32_t yend)
+{
+    FwSpan *s;
+    p->ya = ymin < 0 ? 0 : ymin;
+    p->yb = yend > th ? th : yend;
+    if (p->ya >= p->yb || !p->ln || !p->rn || !(s = span_new())) {
+        npolys--;
+        return 0;
+    }
+    memset(s, 0, sizeof *s);
+    s->y = p->ya;
+    s->x0 = p->yb;
+    s->x1 = (int32_t)(p - fw_polys);
+    s->textured = 3;
+    return 1;
+}
+
 /* The draw list's vertices the projection held, exact: a word's exact
    value by its address in the Super FX's RAM (sw_val), good for this list
    (sw_gen, the list's generation: a list drawn, every one gone) */
@@ -1302,6 +1499,61 @@ static uint16_t flat_polygon(uint16_t p, int n)
     row = ymin;
     left_at = (uint16_t)(top_at - 2);
     right_at = (uint16_t)(left_at + size - 2);
+    if (!checking) {                    /* whole: its edges, its rows made where it is filled */
+        int c = plot_colour();
+        int32_t lend = ymin, rend = ymin, y;
+        int64_t from, to;
+        FwPoly *pg;
+        if (c < 0 || !(pg = poly_new()))
+            return (uint16_t)(v + size);
+        pg->colour = (uint8_t)c;
+        pg->le = (int32_t)nedges;
+        from = vw(left_at);             /* the left chain: forward from the top */
+        left_at = (uint16_t)(left_at + 4);
+        for (;;) {
+            FwEdge *f;
+            to = vw(left_at);
+            y = vw((uint16_t)(left_at + 2));
+            left_at = (uint16_t)(left_at + 4);
+            if (y - lend < 0)
+                break;
+            if (y - lend && (f = edge_new())) {
+                f->from = from;
+                f->to = to;
+                f->y0 = lend;
+                f->n = y - lend;
+                pg->ln++;
+                lend = y;
+            }
+            from = to;
+            if (lend >= th)
+                break;
+        }
+        pg->re = (int32_t)nedges;
+        from = vw((uint16_t)(top_at - 2));      /* the right chain: back from the top */
+        for (;;) {
+            FwEdge *f;
+            y = vw(right_at);
+            right_at = (uint16_t)(right_at - 2);
+            to = vw(right_at);
+            right_at = (uint16_t)(right_at - 2);
+            if (y - rend < 0)
+                break;
+            if (y - rend && (f = edge_new())) {
+                f->from = from;
+                f->to = to;
+                f->y0 = rend;
+                f->n = y - rend;
+                pg->rn++;
+                rend = y;
+            }
+            from = to;
+            if (rend >= th)
+                break;
+        }
+        poly_put(pg, ymin, lend < rend ? lend : rend);
+        return (uint16_t)(v + size);
+    }
     lx = vw(left_at);
     rx = lx * 256;
     rto = lx;
@@ -1632,6 +1884,74 @@ static uint16_t tex_polygon(uint16_t p, int n)
     }
     l.rows = r.rows = 0;
     row = ymin;
+    if (tex_precise()) {                /* whole: its edges, its rows made where it is filled */
+        FwPoly *pg = poly_new();
+        int32_t lend = ymin, rend = ymin;
+        if (!pg) {
+            tex_persp = NULL;
+            return (uint16_t)(v + size);
+        }
+        pg->kind = 1;
+        pg->persp = pl != NULL;
+        pg->bank = bank;
+        pg->base = base;
+        pg->mask = mask;
+        pg->por = gsu.por;
+        pg->hi = (uint8_t)(gsu.colr & 0xF0);
+        pg->ou = ram16(TEX_U_OFF);
+        pg->ov = ram16(TEX_V_OFF);
+        for (i = 0; i < 2; i++) {
+            TexEdge *e = i ? &r : &l;
+            int32_t *end = i ? &rend : &lend;
+            if (i)
+                pg->re = (int32_t)nedges;
+            else
+                pg->le = (int32_t)nedges;
+            while (tex_edge(e, *end, !i)) {
+                FwEdge *f = edge_new();
+                if (!f)
+                    break;
+                f->from = e->from;
+                f->to = e->to;
+                f->y0 = e->y0;
+                f->n = e->n;
+                f->ua = (int32_t)e->hu;
+                f->va = (int32_t)e->hv;
+                f->dua = (int8_t)(uint8_t)(e->vu - (uint8_t)e->hu);
+                f->dva = (int8_t)(uint8_t)(e->vv - (uint8_t)e->hv);
+                f->qa = (float)e->qa;
+                f->qb = (float)e->qb;
+                *end += e->n;
+                if (i)
+                    pg->rn++;
+                else
+                    pg->ln++;
+                if (*end >= th)
+                    break;
+            }
+        }
+        if (poly_put(pg, ymin, lend < rend ? lend : rend)) {
+            /* COLOR as the last row on the screen leaves it: its last pixel's texel */
+            FwSpan last;
+            for (row = pg->yb - 1; row >= pg->ya; row--)
+                if (fw_poly_row(pg, fw_edges, row, tw, &last)) {
+                    int64_t k = last.x1 - last.xl;
+                    unsigned iu, iv;
+                    if (last.textured == 2) {
+                        float kf = (float)k, qk = fmaf(last.pdq, kf, last.pq);
+                        iu = persp_texel(fmaf(last.pda, kf, last.pa), qk);
+                        iv = persp_texel(fmaf(last.pdb, kf, last.pb), qk);
+                    } else {
+                        iu = (unsigned)((last.u + last.du * k) >> 32) & 0xFF;
+                        iv = (unsigned)((last.v + last.dv * k) >> 32) & 0xFF;
+                    }
+                    gsu_color(fw_texel(bank, (uint16_t)(((iv << 8 | iu) & mask) + base)));
+                    break;
+                }
+        }
+        tex_persp = NULL;
+        return (uint16_t)(v + size);
+    }
     for (;;) {
         int32_t count, left_rows, right_rows;
         if (!l.rows && !tex_edge(&l, row, 1))

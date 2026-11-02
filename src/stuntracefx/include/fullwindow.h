@@ -32,6 +32,14 @@ int fw_k(void);
 /* PLOT and RPIX into the texels at (x, y), with the Super FX's colour and
    plot options (gsu.colr, gsu.por) as PLOT takes them */
 void fw_plot(uint16_t x, uint16_t y);
+/* a scaled sprite's rows as spans now (the full window's 3D: not the HUD,
+   a label or the check's pass) */
+int fw_sprite_rows(void);
+/* a scaled sprite's row (render/frame.c): columns x0 to x1 of row y, the
+   texel of column x the byte at `at` + (frac + (x - x0) step) / 65536 in
+   bank (at minus it when back), through COLOR's and PLOT's rules */
+void fw_sprite_span(uint16_t y, uint16_t x0, uint16_t x1, uint16_t bank, uint16_t at, uint16_t frac,
+                    uint16_t step, int back);
 /* The nearest car's label (FxTextNotice) in the full window's 3D: its
    string drawn with each pixel K x K texels, at the original's place on
    the view: the label's X past the view's centre (half the car's side
@@ -103,6 +111,33 @@ typedef struct {
     uint8_t bank, por, hi, colour, textured, pad1[7];
     float pq, pdq, pa, pda, pb, pdb, pad2[2];
 } FwSpan;
+/* A polygon of the draw list's whole, in the spans' order in place of its
+   rows: a span with textured 3, y its first row, x0 past its last, x1 its
+   index in fw_polys. Its rows are made from its edges by fw_poly_row (the
+   GPU's the same): rows ya to yb - 1, on the screen; left and right its
+   chains of edges in fw_edges (first, count), each row on the one whose
+   rows hold it; kind 0 flat (colour), 1 textured (bank, base, mask, por,
+   hi; ou and ov the texture's offsets, 8.8; persp: perspective-correct,
+   each edge's 1 / z at its ends) */
+typedef struct {
+    int32_t ya, yb, le, ln, re, rn, ou, ov;
+    uint16_t base, mask;
+    uint8_t bank, por, hi, colour, kind, persp, pad[6];
+} FwPoly;
+/* An edge: its ends' x (texels), its first row and its rows; u and v (the
+   texture's 0-255) at its start and their change to its end (-128 to 127,
+   the original's walk's); 1 / z at its ends */
+typedef struct {
+    int64_t from, to;
+    int32_t y0, n, ua, va, dua, dva;
+    float qa, qb;
+    int32_t pad[4];
+} FwEdge;
+extern FwPoly *fw_polys;
+extern FwEdge *fw_edges;
+/* polygon p's row `row` as a span (screen width w): 0 when nothing of it
+   is on the screen */
+int fw_poly_row(const FwPoly *p, const FwEdge *edges, int32_t row, int32_t w, FwSpan *s);
 /* a textured face's planes (model.c, after its points): its 1 / z, u / z
    and v / z for its draw-list vertices at `list`, from its points in view
    space (R3 negative: the face is textured) */

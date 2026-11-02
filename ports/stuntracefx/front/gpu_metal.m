@@ -20,6 +20,7 @@
 #include <string.h>
 
 #include "fullwindow.h"
+#include "gpu_bin.h"
 
 static NSString *const kernel_source = @
 "#include <metal_stdlib>\n"
@@ -35,6 +36,75 @@ static NSString *const kernel_source = @
 "    uchar c = (por & 4) ? (uchar)(hi | (v >> 4)) : (por & 8) ? (uchar)(hi | (v & 15)) : v;\n"
 "    if (!(por & 1)) { if (por & 8) { if (!(c & 15)) return -1; } else if (!c) return -1; }\n"
 "    return c;\n"
+"}\n"
+"struct Poly { int ya, yb, le, ln, re, rn, ou, ov; ushort base, mask; uchar bank, por, hi, colour, kind, persp, pad[6]; };\n"
+"struct Edge { long from, to; int y0, n, ua, va, dua, dva; float qa, qb; int pad[4]; };\n"
+"static long edge_x(long from, long to, int y0, int rows, int row) {\n"
+"    long num = (to - from) * 256 * (long)(row - y0), q = num / rows;\n"
+"    if (num % rows != 0 && num < 0) q--;\n"
+"    return from * 256 + q;\n"
+"}\n"
+"static long edge_uv(int a, int d, int y0, int n, int row) {\n"
+"    return ((long)a << 32) + ((long)d << 32) * (long)(row - y0) / (long)n;\n"
+"}\n"
+"static uint edge_at(device const Edge *e, int first, int n, int row) {\n"
+"    int i = 0;\n"
+"    for (; i + 1 < n; i++) if (row < e[first + i].y0 + e[first + i].n) break;\n"
+"    return (uint)(first + i);\n"
+"}\n"
+"static float edge_persp(Edge e, int a, int d, int row, thread float &q) {\n"
+"    float t = precise::divide((float)(row - e.y0), (float)e.n), a0 = e.qa * (float)a;\n"
+"    float da = precise::fma(e.qb, (float)(a + d), -a0);\n"
+"    q = precise::fma(t, e.qb - e.qa, e.qa);\n"
+"    return precise::divide(precise::fma(t, da, a0), q);\n"
+"}\n"
+"static long nearer(long d) { long t = (long)128 << 32; return ((d + t) & (((long)256 << 32) - 1)) - t; }\n"
+"/* fw_poly_row's (fullwindow.c), step for step: a polygon's row as a span */\n"
+"static bool poly_row(Poly p, device const Edge *edges, int row, int w, thread Span &s) {\n"
+"    Edge l = edges[edge_at(edges, p.le, p.ln, row)], r = edges[edge_at(edges, p.re, p.rn, row)];\n"
+"    long xl = edge_x(l.from, l.to, l.y0, l.n, row) >> 8, xr = edge_x(r.from, r.to, r.y0, r.n, row) >> 8;\n"
+"    s.y = row; s.x0 = 1; s.x1 = 0; s.textured = 0; s.colour = p.colour;\n"
+"    if (p.kind == 0) {\n"
+"        if (xr < xl) return false;\n"
+"        long x0 = xl < 0 ? 0 : xl, x1 = xr >= w ? w - 1 : xr;\n"
+"        if (x1 < x0) return false;\n"
+"        s.x0 = (int)x0; s.x1 = (int)x1; return true;\n"
+"    }\n"
+"    long width = xr >= xl ? (xr - xl + 1 > 0xFFFFFFF ? 0xFFFFFFF : xr - xl + 1) : 1;\n"
+"    long x0 = xl < 0 ? 0 : xl, x1 = xl + width < w ? xl + width : w;\n"
+"    if (x0 >= x1) return false;\n"
+"    s.x0 = (int)x0; s.x1 = (int)(x1 - 1); s.xl = xl;\n"
+"    s.bank = p.bank; s.base = p.base; s.mask = p.mask; s.por = p.por; s.hi = p.hi; s.textured = 1;\n"
+"    long uL = edge_uv(l.ua, l.dua, l.y0, l.n, row), uR = edge_uv(r.ua, r.dua, r.y0, r.n, row);\n"
+"    long vL = edge_uv(l.va, l.dva, l.y0, l.n, row), vR = edge_uv(r.va, r.dva, r.y0, r.n, row);\n"
+"    s.du = nearer(uR - uL) / width; s.dv = nearer(vR - vL) / width;\n"
+"    s.u = uL + ((long)p.ou << 24); s.v = vL + ((long)p.ov << 24);\n"
+"    if (p.persp) {\n"
+"        float qL, qR;\n"
+"        float fuL = edge_persp(l, l.ua, l.dua, row, qL), fuR = edge_persp(r, r.ua, r.dua, row, qR);\n"
+"        float fvL = edge_persp(l, l.va, l.dva, row, qL), fvR = edge_persp(r, r.va, r.dva, row, qR);\n"
+"        float steps = width > 1 ? (float)(width - 1) : 1.0f;\n"
+"        float ou = precise::divide((float)p.ou, 256.0f), ov = precise::divide((float)p.ov, 256.0f);\n"
+"        if (qL > 0 && qR > 0) {\n"
+"            fuR = precise::fma(-256.0f, precise::floor(precise::divide(fuR - fuL + 128.0f, 256.0f)), fuR);\n"
+"            fvR = precise::fma(-256.0f, precise::floor(precise::divide(fvR - fvL + 128.0f, 256.0f)), fvR);\n"
+"            s.textured = 2; s.pq = qL; s.pdq = precise::divide(qR - qL, steps);\n"
+"            s.pa = (fuL + ou) * qL; s.pda = precise::divide(precise::fma(fuR + ou, qR, -s.pa), steps);\n"
+"            s.pb = (fvL + ov) * qL; s.pdb = precise::divide(precise::fma(fvR + ov, qR, -s.pb), steps);\n"
+"        }\n"
+"    }\n"
+"    return true;\n"
+"}\n"
+"/* the polygons' rows into their places in the spans (a thread a row) */\n"
+"kernel void rows(device Span *sp [[buffer(1)]], device const Poly *polys [[buffer(8)]],\n"
+"                 device const Edge *edges [[buffer(9)]], device const uint *row_poly [[buffer(10)]],\n"
+"                 constant uint &w [[buffer(6)]], constant uint &n [[buffer(7)]], uint g [[thread_position_in_grid]]) {\n"
+"    if (g >= n) return;\n"
+"    uint at = row_poly[2 * g], pi = row_poly[2 * g + 1];\n"
+"    Poly p = polys[pi];\n"
+"    Span s;\n"
+"    poly_row(p, edges, sp[at].y, (int)w, s);\n"
+"    sp[at] = s;\n"
 "}\n"
 "kernel void fill(device uchar *out [[buffer(0)]], device const Span *sp [[buffer(1)]],\n"
 "                 device const uint *row_at [[buffer(2)]], device const uint *row_spans [[buffer(3)]],\n"
@@ -70,8 +140,8 @@ static NSString *const kernel_source = @
 
 static id<MTLDevice> dev;
 static id<MTLCommandQueue> queue;
-static id<MTLComputePipelineState> pipe_fill;
-static id<MTLBuffer> buf_out, buf_spans, buf_row_at, buf_row_spans, buf_banks, buf_slot;
+static id<MTLComputePipelineState> pipe_fill, pipe_rows;
+static id<MTLBuffer> buf_out, buf_spans, buf_row_at, buf_row_spans, buf_banks, buf_slot, buf_polys, buf_edges, buf_row_poly;
 static size_t out_len;
 static uint8_t bank_ok[256];            /* a ROM bank's bytes in buf_banks */
 static short bank_slot[256];
@@ -122,9 +192,9 @@ static void fill(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
 {
     static uint8_t *ref;
     static size_t ref_len;
-    uint32_t *row_at, *row_spans, wu = (uint32_t)w, hu = (uint32_t)h;
+    uint32_t wu = (uint32_t)w, hu = (uint32_t)h, nrows_now = 0;
     size_t i, len = (size_t)w * h;
-    int b, r;
+    int b;
 
     if (out != (uint8_t *)buf_out.contents || len > out_len) {   /* not the shared picture: the CPU's */
         fw_span_fill_cpu(out, w, h, sp, n);
@@ -141,37 +211,38 @@ static void fill(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
             fw_span_fill_cpu(ref, w, h, sp, n);
         }
     }
-    /* the rows' spans in their order */
-    buf_row_at = grow(buf_row_at, ((size_t)h + 1) * 4);
-    buf_row_spans = grow(buf_row_spans, n * 4);
-    buf_spans = grow(buf_spans, n * sizeof *sp);
-    row_at = (uint32_t *)buf_row_at.contents;
-    row_spans = (uint32_t *)buf_row_spans.contents;
-    memset(row_at, 0, ((size_t)h + 1) * 4);
-    for (i = 0; i < n; i++)
-        row_at[sp[i].y + 1]++;
-    for (r = 0; r < h; r++)
-        row_at[r + 1] += row_at[r];
+    /* every row's spans in their order (gpu_bin.h), the polygons and
+       their edges with them */
     {
-        static uint32_t *put;
-        static size_t put_len;
-        if (put_len < (size_t)h) {
-            free(put);
-            put = malloc((size_t)h * 4);
-            put_len = put ? (size_t)h : 0;
+        GpuBinSizes z;
+        gpu_bin_sizes(sp, n, &z);
+        buf_row_at = grow(buf_row_at, ((size_t)h + 1) * 4);
+        buf_row_spans = grow(buf_row_spans, z.total * 4);
+        buf_spans = grow(buf_spans, z.total * sizeof *sp);
+        buf_row_poly = grow(buf_row_poly, z.rows * 8);
+        buf_polys = grow(buf_polys, z.polys * sizeof(FwPoly));
+        buf_edges = grow(buf_edges, z.edges * sizeof(FwEdge));
+        if (!buf_row_at || !buf_row_spans || !buf_spans || !buf_row_poly || !buf_polys || !buf_edges ||
+            !gpu_bin_fill(sp, n, h, (FwSpan *)buf_spans.contents, (uint32_t *)buf_row_at.contents,
+                          (uint32_t *)buf_row_spans.contents, (uint32_t *)buf_row_poly.contents)) {
+            fw_span_fill_cpu(out, w, h, sp, n);
+            return;
         }
-        memcpy(put, row_at, (size_t)h * 4);
-        for (i = 0; i < n; i++)
-            row_spans[put[sp[i].y]++] = (uint32_t)i;
+        if (z.polys)
+            memcpy(buf_polys.contents, fw_polys, z.polys * sizeof(FwPoly));
+        if (z.edges)
+            memcpy(buf_edges.contents, fw_edges, z.edges * sizeof(FwEdge));
+        nrows_now = (uint32_t)z.rows;
     }
-    memcpy(buf_spans.contents, sp, n * sizeof *sp);
     /* the banks the textured spans read: ROM's once, RAM's ($70, $71) as
        it is now, once a fill */
     {
         uint8_t fresh[256] = {0};
         for (i = 0; i < n; i++)
             if (sp[i].textured) {
-                b = sp[i].bank;
+                b = gpu_bin_bank(&sp[i]);
+                if (b < 0)
+                    continue;
                 if (fresh[b] || (bank_ok[b] && b != 0x70 && b != 0x71))
                     continue;
                 if (!bank_put((uint8_t)b)) {        /* no slot: the CPU's */
@@ -185,6 +256,16 @@ static void fill(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
     @autoreleasepool {
         id<MTLCommandBuffer> cb = [queue commandBuffer];
         id<MTLComputeCommandEncoder> e = [cb computeCommandEncoder];
+        if (nrows_now) {                /* the polygons' rows first (the encoder's dispatches run in turn) */
+            [e setComputePipelineState:pipe_rows];
+            [e setBuffer:buf_spans offset:0 atIndex:1];
+            [e setBuffer:buf_polys offset:0 atIndex:8];
+            [e setBuffer:buf_edges offset:0 atIndex:9];
+            [e setBuffer:buf_row_poly offset:0 atIndex:10];
+            [e setBytes:&wu length:4 atIndex:6];
+            [e setBytes:&nrows_now length:4 atIndex:7];
+            [e dispatchThreads:MTLSizeMake(nrows_now, 1, 1) threadsPerThreadgroup:MTLSizeMake(64, 1, 1)];
+        }
         [e setComputePipelineState:pipe_fill];
         [e setBuffer:buf_out offset:0 atIndex:0];
         [e setBuffer:buf_spans offset:0 atIndex:1];
@@ -231,7 +312,9 @@ int gpu_metal_init(void)
         return 0;
     }
     pipe_fill = [dev newComputePipelineStateWithFunction:[lib newFunctionWithName:@"fill"] error:&err];
-    if (!pipe_fill) {
+    if (pipe_fill)
+        pipe_rows = [dev newComputePipelineStateWithFunction:[lib newFunctionWithName:@"rows"] error:&err];
+    if (!pipe_fill || !pipe_rows) {
         fprintf(stderr, "gpu_metal: the pipeline: %s\n", err.localizedDescription.UTF8String);
         return 0;
     }
