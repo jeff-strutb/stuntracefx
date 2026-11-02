@@ -379,9 +379,43 @@ static void span_flush(void)
     nspans = 0;
 }
 
+/* the label being drawn (fw_label_begin): its position as FxTextNotice
+   set it, and where that is in the texels */
+static int label_on, label_x, label_y, label_tx, label_ty;
+
+int fw_label_begin(uint16_t x, uint16_t y)
+{
+    int lw = 0x11 * K;                  /* the original's room for it: $3A - $11 */
+    if (!fw_view_active())
+        return 0;
+    label_x = x;
+    label_y = y;
+    /* x is half the side offset past the centre (tw / 2, the full
+       window's $34), in console pixels; y the original's row on its
+       128-row view, centre line 64 */
+    label_tx = tw / 2 + ((int)(int16_t)x - tw / 2) * K;
+    if (label_tx < 0)
+        label_tx = 0;
+    if (label_tx > tw - 1 - lw)
+        label_tx = tw - 1 - lw;
+    label_ty = view_cy() * K + cy_off + ((int)(int16_t)y - 64) * K;
+    label_on = 1;
+    return 1;
+}
+
+void fw_label_end(void) { label_on = 0; }
+
 void fw_plot(uint16_t x, uint16_t y)
 {
     int c = plot_colour(), i, j;
+
+    if (label_on && c >= 0 && !checking) {
+        int px = label_tx + ((int)(int16_t)x - label_x) * K, py = label_ty + ((int)(int16_t)y - label_y) * K;
+        for (j = 0; j < K; j++)
+            if (px >= 0 && px + K - 1 < tw)
+                span_flat(py + j, px, px + K - 1, (uint8_t)c);
+        return;
+    }
 
     if (c < 0 || (fw_hud && cropping))
         return;

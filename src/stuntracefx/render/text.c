@@ -8,6 +8,7 @@
  */
 #include "gsu.h"
 #include "gsu_ops.h"
+#include "fullwindow.h"
 
 #define FX_TEXT_AT 0x2732u      /* the string's address */
 #define FX_TEXT_BANK 0x2734u    /* its ROM bank */
@@ -310,7 +311,13 @@ void abi_FxTextNotice(void)
     gsu.r[0] = gsu_getbh(gsu.r[0]);
     gsu_stw(FX_TEXT_AT, gsu.r[0]);
     gsu.r[11] = 0xD1C1;
-    (abi_FxTextDraw());
+    /* Enhanced's full window: the label at the window's scale */
+    {
+        int scaled = fw_label_begin(gsu_ldw(FX_TEXT_X), gsu_ldw(FX_TEXT_Y));
+        (abi_FxTextDraw());
+        if (scaled)
+            fw_label_end();
+    }
     gsu.r[0] = gsu_sub(gsu.r[0], gsu.r[0], 0);
     gsu_stw(FX_TEXT_AT, gsu.r[0]);
 done:

@@ -32,6 +32,14 @@ int fw_k(void);
 /* PLOT and RPIX into the texels at (x, y), with the Super FX's colour and
    plot options (gsu.colr, gsu.por) as PLOT takes them */
 void fw_plot(uint16_t x, uint16_t y);
+/* The nearest car's label (FxTextNotice) in the full window's 3D: its
+   string drawn with each pixel K x K texels, at the original's place on
+   the view: the label's X past the view's centre (half the car's side
+   offset, in console pixels) K times, its row ($68, the view's centre
+   line + 40) K rows a row; x and y the position FxTextNotice set. 0 when
+   not in the full window's 3D. fw_label_end after the string. */
+int fw_label_begin(uint16_t x, uint16_t y);
+void fw_label_end(void);
 uint8_t fw_rpix(uint16_t x, uint16_t y);
 
 /* GsuParamsFromDp's eight words (the centre, the edges, the frustum
