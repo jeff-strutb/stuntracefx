@@ -18,8 +18,9 @@
 # Needs nativeshvc's checkout (NSHVC, ../nativeshvc), the ROM under
 # reference/stuntracefx/ that the port builds from (its asset tables and
 # routine table come from it; check_payload.py reads it to prove its
-# absence), Xcode's clang and the iOS SDK, cmake, and mingw-w64
-# (x86_64-w64-mingw32-*) for Windows.
+# absence), Xcode's clang and the iOS SDK, cmake, mingw-w64
+# (x86_64-w64-mingw32-*) and the Vulkan headers (VULKAN_INCLUDE, default
+# /opt/homebrew/include: brew's vulkan-headers) for Windows.
 set -e
 cd "$(dirname "$0")/.."
 ROOT=$PWD
@@ -97,7 +98,7 @@ cp $B/icon-ios/ios/Assets.car $B/icon-ios/ios/AppIcon*.png "$IAPP/"
 cp builder/src/mac/ios_sign.sh $B/payload-macos/ios_sign.sh
 
 # ---- the payload: Windows ---------------------------------------------------------------------
-game $B/game-windows build/builder-windows CC=x86_64-w64-mingw32-gcc \
+game $B/game-windows build/builder-windows CC=x86_64-w64-mingw32-gcc GPU_VULKAN=1 \
     LIBS="-lole32 -luuid -lxinput9_1_0 -lshell32 -lgdi32 -luser32 -lopengl32 -lwinmm -mwindows -static"
 x86_64-w64-mingw32-strip -o $B/payload-windows/stuntracefx.exe $B/game-windows/stuntracefx.exe
 

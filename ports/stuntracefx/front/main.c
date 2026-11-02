@@ -23,6 +23,9 @@
 #if FW_GPU_METAL
 int gpu_metal_init(void);
 #endif
+#if FW_GPU_VULKAN
+int gpu_vulkan_init(void);
+#endif
 #include "rm_options.h"
 
 /* ---- the console, for the touch scheme ---- */
@@ -183,6 +186,9 @@ NSHVC_MAIN(argc, argv)
 #if FW_GPU_METAL
     if (!getenv("FW_CPUFILL"))          /* FW_CPUFILL=1 (a check): the CPU's fill, to compare */
         gpu_metal_init();               /* the full window's picture on the cartridge's GPU */
+#elif FW_GPU_VULKAN
+    if (!getenv("FW_CPUFILL"))
+        gpu_vulkan_init();
 #endif
     cart_describe(&cart);
     cart.cost_profile = &stuntracefx_cost_profile;

@@ -67,6 +67,17 @@ if [ -n "$GPU_METAL" ]; then
   $CC -O2 -std=gnu11 -Wall $DEFS -I"$FRONT" -I"$OUT/include" -c "$FRONT/gpu_bin.c" -o "$OUT/obj/front_gpu_bin.o"
   OBJS="$OBJS $OUT/obj/front_gpu_metal.o $OUT/obj/front_gpu_bin.o"
 fi
+# GPU_VULKAN=1 (Windows, Linux): the same on a Vulkan GPU (gpu_vulkan.c,
+# the library loaded when the game starts); VULKAN_INCLUDE its headers'
+# folder (the one holding vulkan/vulkan.h)
+if [ -n "$GPU_VULKAN" ]; then
+  DEFS="$DEFS -DFW_GPU_VULKAN=1"
+  VKI=${VULKAN_INCLUDE:-/opt/homebrew/include}
+  $CC -O2 -std=gnu11 -Wall $DEFS -I"$FRONT" -I"$OUT/include" -idirafter "$VKI" -c "$FRONT/gpu_vulkan.c" -o "$OUT/obj/front_gpu_vulkan.o"
+  $CC -O2 -std=gnu11 -Wall $DEFS -I"$FRONT" -I"$OUT/include" -c "$FRONT/gpu_bin.c" -o "$OUT/obj/front_gpu_bin.o"
+  OBJS="$OBJS $OUT/obj/front_gpu_vulkan.o $OUT/obj/front_gpu_bin.o"
+  case "$($CC -dumpmachine)" in *mingw*|*windows*) ;; *) LIBS="$LIBS -ldl";; esac
+fi
 for f in main cart superfx_cart touch art cost_profile; do
   $CC -O2 -std=gnu11 -Wall $DEFS -I"$FRONT" -I"$OUT/include" -I"$NSHVC/include" -Iports/common/snes -c "$FRONT/$f.c" -o "$OUT/obj/front_$f.o"
   OBJS="$OBJS $OUT/obj/front_$f.o"

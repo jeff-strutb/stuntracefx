@@ -1,0 +1,164 @@
+#version 450
+/*
+ * rows.comp: the polygons' rows into their places in the spans, a thread
+ * a row: fw_poly_row's (fullwindow.c) steps, the Metal kernel's.
+ */
+#extension GL_GOOGLE_include_directive : require
+#include "common.glsl"
+
+layout(local_size_x = 64) in;
+layout(std430, binding = 1) buffer Spans { uint sp[]; };
+layout(std430, binding = 8) readonly buffer Polys { uint pd[]; };
+layout(std430, binding = 9) readonly buffer Edges { uint ed[]; };
+layout(std430, binding = 10) readonly buffer RowPoly { uint rp[]; };
+layout(push_constant) uniform Push { uint w; uint n; } pc;
+
+struct Edge { int64_t from_, to_; int y0, n, ua, va, dua, dva; float qa, qb; };
+
+Edge edge_read(uint i)
+{
+    uint b = i * EDGE_WORDS;
+    Edge e;
+    e.from_ = i64(ed[b], ed[b + 1]);
+    e.to_ = i64(ed[b + 2], ed[b + 3]);
+    e.y0 = int(ed[b + 4]);
+    e.n = int(ed[b + 5]);
+    e.ua = int(ed[b + 6]);
+    e.va = int(ed[b + 7]);
+    e.dua = int(ed[b + 8]);
+    e.dva = int(ed[b + 9]);
+    e.qa = uintBitsToFloat(ed[b + 10]);
+    e.qb = uintBitsToFloat(ed[b + 11]);
+    return e;
+}
+
+uint edge_at(int first, int n, int row)
+{
+    int i = 0;
+    for (; i + 1 < n; i++) {
+        uint b = uint(first + i) * EDGE_WORDS;
+        if (row < int(ed[b + 4]) + int(ed[b + 5]))
+            break;
+    }
+    return uint(first + i);
+}
+
+int64_t edge_x(int64_t from_, int64_t to_, int y0, int rows, int row)
+{
+    int64_t num = (to_ - from_) * 256l * int64_t(row - y0), q = num / int64_t(rows);
+    if (num % int64_t(rows) != 0l && num < 0l)
+        q--;
+    return from_ * 256l + q;
+}
+
+int64_t edge_uv(int a, int d, int y0, int n, int row)
+{
+    return (int64_t(a) << 32) + (int64_t(d) << 32) * int64_t(row - y0) / int64_t(n);
+}
+
+float edge_persp(Edge e, int a, int d, int row, out float q)
+{
+    precise float t = div_ieee(float(row - e.y0), float(e.n));
+    precise float a0 = e.qa * float(a);
+    precise float da = fma(e.qb, float(a + d), -a0);
+    precise float qq = fma(t, e.qb - e.qa, e.qa);
+    q = qq;
+    return div_ieee(fma(t, da, a0), qq);
+}
+
+int64_t nearer(int64_t d)
+{
+    int64_t t = int64_t(128) << 32;
+    return ((d + t) & ((int64_t(256) << 32) - 1l)) - t;
+}
+
+void span_write(uint at, Span s)
+{
+    uint b = at * SPAN_WORDS;
+    sp[b] = uint(s.y);
+    sp[b + 1] = uint(s.x0);
+    sp[b + 2] = uint(s.x1);
+    sp[b + 3] = 0u;
+    sp[b + 4] = uint(uint64_t(s.xl));
+    sp[b + 5] = uint(uint64_t(s.xl) >> 32);
+    sp[b + 6] = uint(uint64_t(s.u));
+    sp[b + 7] = uint(uint64_t(s.u) >> 32);
+    sp[b + 8] = uint(uint64_t(s.du));
+    sp[b + 9] = uint(uint64_t(s.du) >> 32);
+    sp[b + 10] = uint(uint64_t(s.v));
+    sp[b + 11] = uint(uint64_t(s.v) >> 32);
+    sp[b + 12] = uint(uint64_t(s.dv));
+    sp[b + 13] = uint(uint64_t(s.dv) >> 32);
+    sp[b + 14] = s.base | (s.mask << 16);
+    sp[b + 15] = s.bank | (s.por << 8) | (s.hi << 16) | (s.colour << 24);
+    sp[b + 16] = s.textured;
+    sp[b + 17] = 0u;
+    sp[b + 18] = floatBitsToUint(s.pq);
+    sp[b + 19] = floatBitsToUint(s.pdq);
+    sp[b + 20] = floatBitsToUint(s.pa);
+    sp[b + 21] = floatBitsToUint(s.pda);
+    sp[b + 22] = floatBitsToUint(s.pb);
+    sp[b + 23] = floatBitsToUint(s.pdb);
+}
+
+void main()
+{
+    uint g = gl_GlobalInvocationID.x;
+    if (g >= pc.n)
+        return;
+    uint at = rp[2 * g], pi = rp[2 * g + 1], pb = pi * POLY_WORDS;
+    int row = int(sp[at * SPAN_WORDS]), w = int(pc.w);
+    int le = int(pd[pb + 2]), ln = int(pd[pb + 3]), re = int(pd[pb + 4]), rn = int(pd[pb + 5]);
+    int ou = int(pd[pb + 6]), ov = int(pd[pb + 7]);
+    uint base = pd[pb + 8] & 0xFFFFu, mask = pd[pb + 8] >> 16;
+    uint bank = pd[pb + 9] & 0xFFu, por = (pd[pb + 9] >> 8) & 0xFFu, hi = (pd[pb + 9] >> 16) & 0xFFu;
+    uint colour = pd[pb + 9] >> 24, kind = pd[pb + 10] & 0xFFu, persp = (pd[pb + 10] >> 8) & 0xFFu;
+    Edge l = edge_read(edge_at(le, ln, row)), r = edge_read(edge_at(re, rn, row));
+    int64_t xl = edge_x(l.from_, l.to_, l.y0, l.n, row) >> 8, xr = edge_x(r.from_, r.to_, r.y0, r.n, row) >> 8;
+    Span s;
+    s.y = row; s.x0 = 1; s.x1 = 0; s.xl = 0l; s.u = 0l; s.du = 0l; s.v = 0l; s.dv = 0l;
+    s.base = 0u; s.mask = 0u; s.bank = 0u; s.por = 0u; s.hi = 0u; s.colour = colour; s.textured = 0u;
+    s.pq = 0.0; s.pdq = 0.0; s.pa = 0.0; s.pda = 0.0; s.pb = 0.0; s.pdb = 0.0;
+    if (kind == 0u) {
+        if (xr >= xl) {
+            int64_t x0 = xl < 0l ? 0l : xl, x1 = xr >= int64_t(w) ? int64_t(w - 1) : xr;
+            if (x1 >= x0) { s.x0 = int(x0); s.x1 = int(x1); }
+        }
+        span_write(at, s);
+        return;
+    }
+    int64_t width = xr >= xl ? (xr - xl + 1l > 0xFFFFFFFl ? 0xFFFFFFFl : xr - xl + 1l) : 1l;
+    int64_t x0 = xl < 0l ? 0l : xl, x1 = xl + width < int64_t(w) ? xl + width : int64_t(w);
+    if (x0 >= x1) {
+        span_write(at, s);
+        return;
+    }
+    s.x0 = int(x0); s.x1 = int(x1 - 1l); s.xl = xl;
+    s.bank = bank; s.base = base; s.mask = mask; s.por = por; s.hi = hi; s.textured = 1u;
+    int64_t uL = edge_uv(l.ua, l.dua, l.y0, l.n, row), uR = edge_uv(r.ua, r.dua, r.y0, r.n, row);
+    int64_t vL = edge_uv(l.va, l.dva, l.y0, l.n, row), vR = edge_uv(r.va, r.dva, r.y0, r.n, row);
+    s.du = nearer(uR - uL) / width;
+    s.dv = nearer(vR - vL) / width;
+    s.u = uL + (int64_t(ou) << 24);
+    s.v = vL + (int64_t(ov) << 24);
+    if (persp != 0u) {
+        float qL, qR, q2;
+        precise float fuL = edge_persp(l, l.ua, l.dua, row, qL), fuR = edge_persp(r, r.ua, r.dua, row, qR);
+        precise float fvL = edge_persp(l, l.va, l.dva, row, q2), fvR = edge_persp(r, r.va, r.dva, row, q2);
+        precise float steps = width > 1l ? float(width - 1l) : 1.0;
+        precise float fou = div_ieee(float(ou), 256.0), fov = div_ieee(float(ov), 256.0);
+        if (qL > 0.0 && qR > 0.0) {
+            fuR = fma(-256.0, floor(div_ieee(fuR - fuL + 128.0, 256.0)), fuR);
+            fvR = fma(-256.0, floor(div_ieee(fvR - fvL + 128.0, 256.0)), fvR);
+            s.textured = 2u;
+            s.pq = qL;
+            s.pdq = div_ieee(qR - qL, steps);
+            precise float pa = (fuL + fou) * qL, pb2 = (fvL + fov) * qL;
+            s.pa = pa;
+            s.pda = div_ieee(fma(fuR + fou, qR, -pa), steps);
+            s.pb = pb2;
+            s.pdb = div_ieee(fma(fvR + fov, qR, -pb2), steps);
+        }
+    }
+    span_write(at, s);
+}
