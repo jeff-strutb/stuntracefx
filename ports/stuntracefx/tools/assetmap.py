@@ -61,6 +61,39 @@ def c_tables():
     return out
 
 
+def script_handlers(rom):
+    """The ROM offsets of the first bytes of the handlers the course scripts
+    spawn objects with: ObjectSpawnFromScript reads each as data (is it
+    $EA?), so they are data wherever no trace reached the course. Every
+    script is walked as CourseScriptRun runs it: the one RaceStart runs
+    ($05:8000) and the 28 courses' ($03:F4A5, CourseDataPointer); the
+    spawning opcodes keep the handler's long pointer at +$0B."""
+    off = lambda bank, a: (bank & 0x7F) << 15 | (a & 0x7FFF)
+    size = {0x02: 0x16, 0x0C: 0x16, 0x10: 0x18, 0x0A: 0x19, 0x0E: 0x1A, 0x06: 1, 0x08: 2,
+            0x12: 9, 0x14: 3, 0x1A: 3, 0x16: 4, 0x18: 4}
+    spawns = (0x02, 0x0C, 0x10, 0x0A, 0x0E)
+    t = off(0x03, 0xF4A5)
+    starts = [(0x05, 0)] + [(rom[t + 3 * i + 2], (rom[t + 3 * i] | rom[t + 3 * i + 1] << 8) - 0x8000)
+                            for i in range(28)]
+    seen, out = set(), set()
+    for bank, x in starts:
+        while (bank, x) not in seen:
+            seen.add((bank, x))
+            p = off(bank, 0x8000 + x)
+            op = rom[p]
+            if op == 0x04:
+                break
+            if op == 0x00:
+                x = 0                              # back to offset 0
+                continue
+            if op not in size:
+                raise SystemExit('assetmap: course script opcode $%02X at %s' % (op, addr(p)))
+            if op in spawns:
+                out.add(off(rom[p + 0x0D], rom[p + 0x0B] | rom[p + 0x0C] << 8))
+            x += size[op]
+    return out
+
+
 def addr(off):
     return '%02X%04X' % (off >> 15, 0x8000 | (off & 0x7FFF))
 
@@ -79,6 +112,10 @@ def main(census_files):
             if reader[o] is None and name != '?':
                 reader[o] = re.sub(r'^abi_', '', name)
             fl[o] |= 0x10000                       # read by the port
+    for o in script_handlers(codemap._rom_bytes()):
+        if reader[o] is None:
+            reader[o] = 'ObjectSpawnFromScript'
+        fl[o] |= 0x10000
     code = ((fl & CPU_OP) != 0) & ((fl & DATA) == 0) & ((fl & 0x10000) == 0)
     tables = {o: f for o, f in c_tables().items() if o < n and not code[o]}
     starts = sorted(tables)
