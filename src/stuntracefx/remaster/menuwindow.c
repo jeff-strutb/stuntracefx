@@ -131,6 +131,88 @@ uint8_t mw_ppu_last(uint16_t addr)
 static int on;                          /* the menus in the whole window */
 static int W = 256, H = 224;            /* the screen asked for */
 
+/* Window 1's extent this frame: the columns from the least left edge to
+   the greatest right edge over the lines where it covers any (WH0 and WH1,
+   from the HDMA channel writing them, else the registers). 0: it covers
+   none; -1: an HDMA table this does not read (indirect, or writing other
+   registers too) */
+static int window1_extent(int *l, int *r)
+{
+    int c, lo = 256, hi = -1;
+
+    for (c = 0; c < 8; c++) {
+        const uint8_t *q = dma_reg + c * 16;
+        uint32_t at = (uint32_t)q[4] << 16 | (uint32_t)(q[3] << 8 | q[2]);
+        unsigned n, lines = 0, i, rows;
+
+        if (!(hdma_en >> c & 1) || q[1] < 0x26 || q[1] > 0x29)
+            continue;
+        if (q[1] != 0x26 || (q[0] & 0x40) || (q[0] & 7) > 1)
+            return -1;
+        n = (q[0] & 7) + 1;             /* WH0, or WH0 and WH1 */
+        while (lines < 224) {
+            uint8_t count = nshvc_peek(at);
+            at = (at & 0xFF0000) | ((at + 1) & 0xFFFF);
+            if (!count)
+                break;
+            rows = count & 0x7F ? count & 0x7F : 128;
+            for (i = 0; i < (count & 0x80 ? rows : 1u); i++) {   /* repeat: a value each line */
+                int a = nshvc_peek(at), b = n > 1 ? nshvc_peek((at & 0xFF0000) | ((at + 1) & 0xFFFF)) : reg[0x27];
+                at = (at & 0xFF0000) | ((at + n) & 0xFFFF);
+                if (a <= b) {
+                    if (a < lo) lo = a;
+                    if (b > hi) hi = b;
+                }
+            }
+            lines += rows;
+        }
+        break;
+    }
+    if (c == 8 && reg[0x26] <= reg[0x27])  /* no channel: the registers */
+        lo = reg[0x26], hi = reg[0x27];
+    *l = lo;
+    *r = hi;
+    return hi >= lo;
+}
+
+/* The menus' wipes across the whole window (nshvc_ext_window_map, contract
+   2.12). A panel's window frames what it shows on the console's picture;
+   when it then grows past the size it rested at, toward the screen's
+   edges (the course grid's PLAY panel opening out to start the race), the
+   windows are mapped from the console's (scale 1, the picture's column 0
+   at its place) toward stretched over the screen (each console column
+   W / 256 of it), as far as the window has come from its rest to the
+   edges. Otherwise the console's windows, with their edges open
+   (nshvc_ext_window_edges): a window moving along an edge (a panel's mask
+   sliding in with it) keeps to what it masks on the console's picture. */
+static void wipe_map(int reset)
+{
+    static int last_l = -1, last_r = -1, held, rest_d = -1;
+    static double t;
+    int l, r, d, got = reset ? 0 : window1_extent(&l, &r);
+
+    if (got <= 0) {
+        last_l = last_r = -1;
+        held = 0;
+        rest_d = -1;
+        t = 0;
+    } else {
+        int moved = l != last_l || r != last_r;
+        d = l < 255 - r ? l : 255 - r;  /* to the nearer edge */
+        held = moved ? 0 : held + 1;
+        if (held >= 2 && d > 0)
+            rest_d = d;
+        t = rest_d > 0 && d < rest_d ? (double)(rest_d - d) / rest_d : 0;
+        last_l = l;
+        last_r = r;
+    }
+    if (t > 0)
+        nshvc_ext_window_map(1, (int32_t)(65536 + t * ((double)W * 256 - 65536) + 0.5),
+                             (int)((1 - t) * (W - 256) / 2 + 0.5));
+    else
+        nshvc_ext_window_map(0, 65536, 0);
+}
+
 /* the screen for the window: its aspect at the console's 8:7 pixels, the
    console's 256 x 224 at 4:3, wider or taller (even), to 1024 */
 #define MW_MAX 1024
@@ -379,6 +461,7 @@ void mw_frame_end(void)
     nshvc_hold_interrupts(1);
     nshvc_set_cpu_costs(0);
     if (!want) {                        /* the console's screen again */
+        wipe_map(1);
         nshvc_ext_window_edges(0);
         memset(filler_ok, 0, sizeof filler_ok);
         memset(sliding, 0, sizeof sliding);
@@ -419,6 +502,7 @@ void mw_frame_end(void)
         }
         sprite_pages(W > 256);
         layers(1);
+        wipe_map(0);
         on = 1;
     }
     nshvc_set_cpu_costs(1);
