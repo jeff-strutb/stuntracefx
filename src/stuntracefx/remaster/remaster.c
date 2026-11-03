@@ -4,9 +4,9 @@
  * start), then runs its work as native code (contract 2.0: the main CPU's
  * work takes no time), its Super FX programs with their own durations; at its end its screen goes to the display at
  * once (the game's upload stages in one go), and the simulation steps a
- * tick at a time. Not in the attract's demos ($10DA set), which replay the
- * original's buttons frame by frame. The option is taken at each frame's
- * end.
+ * tick at a time. The attract's demos too ($10DA set): their scripts
+ * steer by the race's step count ($1A59), which whole steps keep, so they
+ * drive the original's course. The option is taken at each frame's end.
  */
 #include <stdlib.h>
 #include <setjmp.h>
@@ -334,7 +334,7 @@ void rm_frame_end(void)
     fw_prof_frame(1);
     fw_vblank_uploads();
     rm_tween_frame_end();
-    rm_on = rm_option(RM_OPT_FRAMERATE) && nshvc_peek(0x7E10DA) == 0;
+    rm_on = rm_option(RM_OPT_FRAMERATE);
     rm_pace = ref ? ref : rm_on;
     rm_share_on = rm_on && !ref;
     cpu_costs(1);

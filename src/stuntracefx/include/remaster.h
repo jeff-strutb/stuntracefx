@@ -14,7 +14,7 @@
    frames took 4 to 9 video frames, 6 on average */
 #define RM_TICKS 6
 int rm_tick60(void);
-/* Enhanced mode now (Frame rate 60 on, not in the attract's demos): the
+/* Enhanced mode now (Frame rate 60 on, the attract's demos included): the
    game's pace independent of the chips' speed, so the Super FX's programs
    take no time (superfx_cart.c) */
 int rm_enhanced(void);

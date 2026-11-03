@@ -69,8 +69,8 @@ static int driving_now(void)
 
 /* ---- the mode: Original (the original's pace, by the cost profile) or
    Enhanced (independent of the processors' speed: Frame rate 60; the main
-   CPU's work takes no console time, and the Super FX's none, outside the
-   attract's demos, rm_enhanced) ---- */
+   CPU's work takes no console time, and the Super FX's none, rm_enhanced)
+   ---- */
 static int enhanced(void) { return rm_option(RM_OPT_FRAMERATE); }
 
 /* ---- the hooks ---- */
