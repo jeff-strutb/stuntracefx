@@ -15,6 +15,7 @@
 #include "cpu_ops.h"
 #include "wram.h"
 #include "assets.h"
+#include "menuwindow.h"
 
 #define ACTOR_FIRST 0x1265u
 #define ACTOR_SIZE 0x2Cu
@@ -2293,6 +2294,25 @@ static void oam_high_step(void)
     wr16(0x001207, (uint16_t)(y + 2));
 }
 
+/* Enhanced's menus on a wider screen (menuwindow.h): a sprite's X is
+   kept from -16 - side to 255 + side, the columns the screen has past the
+   console's picture, not the console's -16 to 255; it goes into the table
+   as its low nine bits (the high one in $11F1) and on the X page that puts
+   it at its column (mw_sprite_page). 0: the console's rule (side 0), or
+   off this screen. */
+static int wide_x(uint16_t sx, int side, int sprite)
+{
+    int32_t x = (int16_t)sx, s9;
+
+    if (!side || x < -16 - side || x >= 256 + side)
+        return 0;
+    s9 = (int32_t)(((uint32_t)x & 0x1FF) ^ 0x100) - 0x100;     /* the console's -256 to 255 */
+    if (x & 0x100)
+        wr16_rmw(0x0011F1, 0x0001);
+    mw_sprite_page(sprite, (x - s9) / 512);
+    return 1;
+}
+
 /*
  * @routine 0B:B64A MenuOamBuild
  * WHAT IT DOES: Builds the sprite table at $0375 (and its high table at
@@ -2322,6 +2342,10 @@ uint16_t MenuOamBuild(uint16_t *x, uint16_t *y)
     uint32_t t;
     int c;
 
+    int side = mw_sprite_side();
+
+    if (side)
+        mw_sprites_begin();
     wr16(0x001205, 0x0000);
     wr16(0x001207, 0x0000);
     wr16(0x0011DF, 0x0007);
@@ -2343,7 +2367,10 @@ uint16_t MenuOamBuild(uint16_t *x, uint16_t *y)
             if (*y == 0x0200)
                 continue;
             sx = (uint16_t)(rd16((uint16_t)(rec + 0x02)) - rd16((0x0011ED)));
-            if (sx & 0x8000) {
+            if (side) {
+                if (!wide_x(sx, side, *y / 4))
+                    continue;
+            } else if (sx & 0x8000) {
                 if (sx < 0xFFF0)
                     continue;
                 wr16_rmw(0x0011F1, ((uint16_t)(rd16_rmw(0x0011F1) + 1)));
@@ -2387,7 +2414,10 @@ uint16_t MenuOamBuild(uint16_t *x, uint16_t *y)
             if (*y == 0x0200)
                 break;
             sx = (uint16_t)(rd16(0x7F1356 + *x) + rd16((0x0011FD)));
-            if (sx & 0x8000) {
+            if (side) {
+                if (!wide_x(sx, side, *y / 4))
+                    goto next;
+            } else if (sx & 0x8000) {
                 if (sx < 0xFFF0)
                     goto next;
                 wr16_rmw(0x0011F1, ((uint16_t)(rd16_rmw(0x0011F1) + 1)));

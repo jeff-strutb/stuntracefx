@@ -307,6 +307,9 @@ static void layers(int clip_on)
     int l, ok;
 
     for (l = 0; l < 5; l++) {
+        /* the sprites past the picture while a panel slides (the menus
+           place theirs to the screen's edges, mw_sprite_page); at rest
+           kept to it, as the next screen's wait just past it */
         int slide = l < 3 ? sliding[l] : l == 4 && (sliding[0] || sliding[1] || sliding[2]);
         /* sliding, a texture's layer too shows its own map there: the
            panel coming in on it with the texture (the granite and GAME
@@ -329,25 +332,33 @@ static void layers(int clip_on)
     set_clip = clip_on;
 }
 
-/* the sprites while a panel slides: shown past the console's picture (the
-   panels' letters and arrows are sprites), and one just past its right
-   edge (9-bit X 256 on, which the console reads as off its left) moved a
-   page right (nshvc_ext_sprite_page), so it comes in with its panel from
-   the window's right edge; at rest every sprite is back on page 0 and
-   kept to the picture, where the game parks the ones it hides */
-static uint8_t sprite_paged[128];
+/* The sprites on a wider screen: the menus' own (MenuOamBuild) out to
+   the screen's edges, each on the X page the game puts it on
+   (mw_sprite_page) for the column it means, so while a panel slides its
+   letters and frame come in from the window's edge with it (layers). The
+   pages are taken at the frame's end, as the sprite table the frame built
+   goes to the console at the next vertical blank. */
+static int8_t sprite_want[128], sprite_paged[128];
 
-static void sprite_pages(int sliding_now)
+int mw_sprite_side(void) { return on ? (W - 256) / 2 : 0; }
+
+void mw_sprites_begin(void) { memset(sprite_want, 0, sizeof sprite_want); }
+
+void mw_sprite_page(int sprite, int page)
 {
-    const uint8_t *oam = nshvc_oam();
-    int i, side = (W - 256) / 2;
+    if (sprite >= 0 && sprite < 128)
+        sprite_want[sprite] = (int8_t)page;
+}
+
+static void sprite_pages(int wide)
+{
+    int i;
 
     for (i = 0; i < 128; i++) {
-        unsigned x = oam[i * 4] | (unsigned)(oam[512 + i / 4] >> (i % 4 * 2) & 1) << 8;
-        int page = sliding_now && x >= 256 && x < 256u + (unsigned)side && oam[i * 4 + 1] < 224;
+        int page = wide ? sprite_want[i] : 0;
         if (page != sprite_paged[i]) {
             nshvc_ext_sprite_page(i, page, 0);
-            sprite_paged[i] = (uint8_t)page;
+            sprite_paged[i] = (int8_t)page;
         }
     }
 }
@@ -406,7 +417,7 @@ void mw_frame_end(void)
             last_v[l] = vofs[l];
             filler_make(l);
         }
-        sprite_pages(sliding[0] || sliding[1] || sliding[2]);
+        sprite_pages(W > 256);
         layers(1);
         on = 1;
     }
