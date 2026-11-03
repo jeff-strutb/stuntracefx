@@ -72,8 +72,10 @@ static int driving_now(void)
    Trax course screen runs with its courses not all open ($0D24 not 3):
    L held, and Select pressed with it seven times (race/course.c
    CourseScreenStep), as tools/stuntracefx/plays/speed_all_courses.sfx
-   does. The game opens them and keeps that in the save, so it is needed
-   once. Started again if the screen goes before it is done. */
+   does. The game opens them for this power on ($0D24 = 3, work RAM: it
+   writes course progress to the save too, but the courses are open only
+   while $0D24 holds), so it is played again each time the game starts.
+   Started again if the screen goes before it is done. */
 static uint32_t course_screen_frame;
 static int course_screen_seen, code_step = -1;
 
