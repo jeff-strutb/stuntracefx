@@ -458,11 +458,18 @@ void fw_label_end(void) { label_on = 0; }
 
 int fw_sprite_rows(void) { return fw_drawing && !fw_hud && !checking && !label_on; }
 
+/* the sprite being drawn is not put in the picture (a solid wheel is in its
+   place, tyres.c): its rows and plots run, their pixels left out */
+static int sprite_hidden;
+void fw_sprite_hide(int on) { sprite_hidden = on; }
+
 void fw_sprite_span(uint16_t y, uint16_t x0, uint16_t x1, uint16_t bank, uint16_t at, uint16_t frac,
                     uint16_t step, int back)
 {
     FwSpan *p;
     int32_t a = x0, b = x1;
+    if (sprite_hidden)
+        return;
     if (y >= th || a >= tw)             /* fw_plot's: a column or row past the texels is not drawn */
         return;
     if (b >= tw)
@@ -537,6 +544,8 @@ void fw_plot(uint16_t x, uint16_t y)
         if (x < tw && y < th)
             tex[(size_t)y * tw + x] = (uint8_t)c;
         check_alias(x, y, c);
+    } else if (sprite_hidden) {
+        return;
     } else if (x < tw && y < th) {
         span_flat(y, x, x, (uint8_t)c);
     }
@@ -1370,6 +1379,130 @@ int fw_exact_tex_draw(void)
     ram16w(0x014A, 0);
     ex_n = -1;
     return 1;
+}
+
+/* A flat convex face of the full window's own (tyres.c): its points in view
+   space clipped at the near plane, projected as fw_exact_tex_draw's are,
+   kept to a band 4096 texels past the screen (so the edges' sums stay in
+   range) and filled whole in colour c, as flat_polygon's faces are: its
+   top vertex, the chain forward from it the left, back from it the right */
+#define FACE_MAX 72
+#define FACE_BAND 4096.0
+static int face_clip(double (*in)[2], int n, double (*out)[2], int axis, double lim, int keep_below)
+{
+    int i, m = 0;
+    for (i = 0; i < n && m < FACE_MAX; i++) {
+        const double *a = in[i], *b = in[(i + 1) % n];
+        int ain = keep_below ? a[axis] <= lim : a[axis] >= lim, bin = keep_below ? b[axis] <= lim : b[axis] >= lim;
+        if (ain)
+            out[m][0] = a[0], out[m][1] = a[1], m++;
+        if (ain != bin && m < FACE_MAX) {
+            double t = (lim - a[axis]) / (b[axis] - a[axis]);
+            out[m][0] = a[0] + t * (b[0] - a[0]);
+            out[m][1] = a[1] + t * (b[1] - a[1]);
+            out[m][axis] = lim;
+            m++;
+        }
+    }
+    return m;
+}
+
+void fw_view_face(const double (*p)[3], int n, uint8_t c)
+{
+    static double v[FACE_MAX][3], s[2][FACE_MAX][2];
+    int64_t X[FACE_MAX], Y[FACE_MAX];
+    double f = fw_focal(), ox = tw / 2, oy = (double)view_cy() * K + cy_off, area = 0;
+    int i, m = 0, k, top = 0, at, next;
+    int32_t lend, rend;
+    FwPoly *pg;
+
+    if (!fw_view_active() || checking || n < 3 || n > FACE_MAX - 8)
+        return;
+    for (i = 0; i < n; i++) {           /* the near plane */
+        const double *a = p[i], *b = p[(i + 1) % n];
+        int ain = a[2] >= NEAR_Z, bin = b[2] >= NEAR_Z;
+        if (ain)
+            v[m][0] = a[0], v[m][1] = a[1], v[m][2] = a[2], m++;
+        if (ain != bin) {
+            double t = (NEAR_Z - a[2]) / (b[2] - a[2]);
+            v[m][0] = a[0] + t * (b[0] - a[0]);
+            v[m][1] = a[1] + t * (b[1] - a[1]);
+            v[m][2] = NEAR_Z;
+            m++;
+        }
+    }
+    for (i = 0; i < m; i++) {
+        s[0][i][0] = ox + v[i][0] * f / v[i][2];
+        s[0][i][1] = oy + v[i][1] * f / v[i][2];
+    }
+    m = face_clip(s[0], m, s[1], 0, -FACE_BAND, 0);
+    m = face_clip(s[1], m, s[0], 0, tw + FACE_BAND, 1);
+    m = face_clip(s[0], m, s[1], 1, -FACE_BAND, 0);
+    m = face_clip(s[1], m, s[0], 1, th + FACE_BAND, 1);
+    for (i = k = 0; i < m; i++) {       /* to texels, a point the same as the one before dropped */
+        int64_t x = (int64_t)floor(s[0][i][0]), y = (int64_t)floor(s[0][i][1]);
+        if (k && x == X[k - 1] && y == Y[k - 1])
+            continue;
+        X[k] = x;
+        Y[k] = y;
+        k++;
+    }
+    while (k > 1 && X[k - 1] == X[0] && Y[k - 1] == Y[0])
+        k--;
+    if (k < 3)
+        return;
+    for (i = 0; i < k; i++)
+        area += (double)X[i] * Y[(i + 1) % k] - (double)X[(i + 1) % k] * Y[i];
+    if (area == 0)
+        return;
+    if (area > 0)                       /* the forward chain the left: the points turned the other way */
+        for (i = 0; i < k / 2; i++) {
+            int64_t t = X[i];
+            X[i] = X[k - 1 - i];
+            X[k - 1 - i] = t;
+            t = Y[i];
+            Y[i] = Y[k - 1 - i];
+            Y[k - 1 - i] = t;
+        }
+    for (i = 1; i < k; i++)
+        if (Y[i] < Y[top])
+            top = i;
+    if (!(pg = poly_new()))
+        return;
+    pg->colour = c;
+    pg->le = (int32_t)nedges;
+    lend = (int32_t)Y[top];
+    for (at = top, i = 0; i < k; i++, at = next) {      /* the left chain: forward from the top */
+        FwEdge *e;
+        next = (at + 1) % k;
+        if (Y[next] < Y[at])
+            break;
+        if (Y[next] > Y[at] && (e = edge_new())) {
+            e->from = X[at];
+            e->to = X[next];
+            e->y0 = (int32_t)Y[at];
+            e->n = (int32_t)(Y[next] - Y[at]);
+            pg->ln++;
+            lend = (int32_t)Y[next];
+        }
+    }
+    pg->re = (int32_t)nedges;
+    rend = (int32_t)Y[top];
+    for (at = top, i = 0; i < k; i++, at = next) {      /* the right chain: back from the top */
+        FwEdge *e;
+        next = (at + k - 1) % k;
+        if (Y[next] < Y[at])
+            break;
+        if (Y[next] > Y[at] && (e = edge_new())) {
+            e->from = X[at];
+            e->to = X[next];
+            e->y0 = (int32_t)Y[at];
+            e->n = (int32_t)(Y[next] - Y[at]);
+            pg->rn++;
+            rend = (int32_t)Y[next];
+        }
+    }
+    poly_put(pg, (int32_t)Y[top], lend < rend ? lend : rend);
 }
 
 /* FxPolygonGather's (raster.c, 01:98D7) in the full window: a face of the

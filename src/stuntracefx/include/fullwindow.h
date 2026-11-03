@@ -154,6 +154,18 @@ extern uint8_t *(*fw_texels_alloc)(size_t len);
 void fw_draw_list(void);
 /* FxScreenClear's, while fw_drawing: the texels to colour 0 */
 void fw_clear(void);
+/* the sprite being drawn left out of the picture (1) or not (0) */
+void fw_sprite_hide(int on);
+/* a flat convex face of n points in view space, colour c, into the
+   picture (near-clipped and projected exactly) */
+void fw_view_face(const double (*p)[3], int n, uint8_t c);
+/* Enhanced's solid tyres (tyres.c), from FxObjectsDraw (frame.c): the
+   object's shape, then for a sprite past its depth test begin, its
+   colour once its material is read, and end as it returns */
+void fw_tyre_object(uint16_t shape);
+void fw_tyre_begin(void);
+void fw_tyre_colour(uint8_t colr);
+void fw_tyre_end(void);
 /* FxPolygonDraw's, while the full window's picture draws: 1 when done here */
 int fw_exact_tex_draw(void);
 /* FxPolygonGather's, while the full window's picture draws: begin with its

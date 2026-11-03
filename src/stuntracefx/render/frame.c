@@ -300,6 +300,7 @@ lAB90:
     if (t) { goto lABC2; }
     goto lAD53;
 lABC2:
+    fw_tyre_object(R[3]);              /* Enhanced: a tyre drawn as a wheel (tyres.c) */
     R[1] = gsu_inc(R[1]);
     R[1] = gsu_inc(R[1]);
     R[1] = gsu_inc(R[1]);
@@ -508,6 +509,7 @@ lACC0:
     R[11] = 0xAD2D;
     goto lB0D9;
 lAD2D:
+    fw_tyre_end();
     goto lAD53;
 lAD31:
     R[0] = gsu_ldb(R[1]);
@@ -555,6 +557,7 @@ lB0D9:
     R[0] = gsu_sub(R[0], R[3], 0);
     t = !gsu.s;
     if (t) { goto lB123; }
+    fw_tyre_begin();
     R[0] = gsu_ldw(FX_MODEL_CE);
     R[1] = R[0];
     gsu_moves(R[0]);
@@ -653,6 +656,7 @@ lB160:
     gsu_color((uint8_t)R[0]);
     R[0] = gsu_swap(R[0]);
     gsu_cmode(R[0]);
+    fw_tyre_colour(gsu.colr);
     t = 1;
     if (t) goto lB182;
     /* FxObjectSpriteAt */
