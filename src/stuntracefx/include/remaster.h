@@ -199,6 +199,11 @@ void rm_canvas_frame_end(void);
 #define RM_FAR_KEEP    0x8000u      /* the first bank's work RAM kept while the far ones draw */
 extern int rm_far_shift;
 extern uint16_t rm_far_depth;
+/* the joypads the game read this frame, recorded as a script when
+   SRFX_RECORD is set (remaster/record.c) */
+void rm_record_pads(uint16_t pad1, uint16_t pad2);
+/* the game starting (ResetVector): the recording opened, its save kept */
+void rm_record_reset(void);
 /* Enhanced's sprites drawn as solids (remaster/solids.c): each object's
    gaze as ObjectPlaceOnParent picks its pictures by it (object/object.c):
    the bytes it reads the table at $08:E8AF by for its +$18 (low) and +$19

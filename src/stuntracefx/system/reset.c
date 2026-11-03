@@ -176,6 +176,7 @@ void abi_ResetVector(void)
 {
     uint8_t old_e = cpu.e;
 
+    rm_record_reset();                  /* Remaster: a recording's start and save (remaster/record.c) */
     cpu.p |= P_I;
     cpu.p &= (uint8_t)~P_C;
     cpu.e = 0;

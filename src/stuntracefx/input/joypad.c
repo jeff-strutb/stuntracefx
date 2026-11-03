@@ -5,6 +5,7 @@
 #include "cpu_ops.h"
 #include "hw.h"
 #include "wram.h"
+#include "remaster.h"
 
 /*
  * @routine 7E:B1AE JoypadRead
@@ -31,6 +32,7 @@ uint16_t JoypadRead(void)
     wr16(JOY2_PRESSED_COPY, new2);
     wr16(JOY2_HELD, now2);
     wr16(JOY1_HELD, now1);
+    rm_record_pads(now1, now2);         /* Remaster: the controllers recorded (remaster/record.c) */
     return now1;
 }
 
@@ -60,9 +62,11 @@ uint16_t JoypadAccumulate(void)
     now = rd16(JOY1L);
     wr16(JOY1_PRESSED_COPY, ((uint16_t)(((now ^ rd16(JOY1_LAST)) & rd16((JOY1L))) | rd16((JOY1_PRESSED_COPY)))));
     wr16(JOY1_LAST, now);
+    held = now;
     now = rd16(JOY2L);
     wr16(JOY2_PRESSED_COPY, ((uint16_t)(((now ^ rd16(JOY2_LAST)) & rd16((JOY2L))) | rd16((JOY2_PRESSED_COPY)))));
     wr16(JOY2_LAST, now);
+    rm_record_pads(held, now);          /* Remaster: the controllers recorded (remaster/record.c) */
 
     now = rd16(JOY1L);
     wr16(JOY2_PRESSED, ((uint16_t)((now ^ rd16(JOY2_HELD)) & rd16((JOY1L)))));

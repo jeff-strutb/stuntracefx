@@ -13,6 +13,9 @@
  * row of the cartridge's cost profile gives it (gsu_host_price); in
  * Enhanced mode (rm_enhanced), none.
  */
+#include <stdio.h>
+#include <stdlib.h>
+
 #include "nshvc/cart.h"
 
 #include "front.h"
@@ -114,6 +117,18 @@ static void power(const nshvc_cart *cart)
     ram_size = cart->sram_size;
     snes_gsu_run_hook = run_program;
     gsu_reset();
+    {   /* a recorded play's save put back (SRFX_REPLAY_SAVE, the game's
+           remaster/record.c): the battery's records at $FC00 */
+        const char *path = getenv("SRFX_REPLAY_SAVE");
+        FILE *f = path ? fopen(path, "rb") : NULL;
+        if (path && !f)
+            nshvc_fatal("SRFX_REPLAY_SAVE: cannot read %s", path);
+        if (f) {
+            if (fread(nshvc_sram() + 0xFC00, 1, 0x400, f) != 0x400)
+                nshvc_fatal("SRFX_REPLAY_SAVE: %s is not a 1 KB save", path);
+            fclose(f);
+        }
+    }
 }
 
 /* the S-CPU's address in the chip's RAM (*at) or its registers (*reg);
