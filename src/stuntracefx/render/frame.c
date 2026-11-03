@@ -2309,7 +2309,9 @@ static void far_pass(void)
             d[k] = (int32_t)(far_word(r + RM_FAR_PLACE + 4 * k) | (uint32_t)far_word(r + RM_FAR_PLACE + 4 * k + 2) << 16);
         for (c = 0; c < 3; c++)     /* column c: the slot's +$12, +$10, +$14 */
             v[c] = (d[0] * m[c] >> 15) + (d[1] * m[3 + c] >> 15) + (d[2] * m[6 + c] >> 15);
-        if (v[2] + radius < 0 || llabs(v[0]) - radius >= llabs(v[2]))
+        /* the sort's culls: behind the view, and past 45 degrees but in
+           the full window, whose view is wider (ws_cull_keeps) */
+        if (v[2] + radius < 0 || (llabs(v[0]) - radius >= llabs(v[2]) && !fw_view_active()))
             continue;
         for (k = 0; k < 3; k++)
             if (llabs(v[k]) > big)
