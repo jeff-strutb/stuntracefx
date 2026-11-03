@@ -168,11 +168,12 @@ void abi_FxSpriteMaterial(void);
 void abi_FxTextNotice(void);
 
 static void far_pass(void);
+static void parked_pass(void);
 void abi_FxObjectsDraw(void);
 static int far_drawing;                 /* the far objects' pass: each slot's halvings */
 static uint8_t far_slot_shift[0x31];
 static uint16_t far_slot_depth[0x31];   /* its true depth, at most $7FFF */
-static uint16_t far_slot_record[0x31];  /* its far record's index (solids.c) */
+static uint16_t far_slot_index[0x31];   /* its record's index (solids.c, animate.c): a far one's 0x31 + its own */
 int rm_far_shift;
 uint16_t rm_far_depth;
 
@@ -204,6 +205,8 @@ lAB22:
     R[11] = 0xAB2E;
     goto lAB81;
 lAB2E:
+    if (rm_enhanced())
+        parked_pass();                  /* Remaster: the near list again, parked tyres in it (draw_list.c) */
     R[10] = 0x0240;
     R[0] = gsu_sub(R[0], R[0], 0);
     gsu_cmode(R[0]);
@@ -276,7 +279,7 @@ lAB90:
         /* Remaster: its angles' fractions (remaster/animate.c, model.c):
            only an in-between frame's redraw has them, drawing the list it
            built; a step's program draws the list the last step left */
-        rm_angle_frac = rm_redrawing() ? rm_record_frac[far_drawing ? 0x31 + far_slot_record[k] : k] : NULL;
+        rm_angle_frac = rm_redrawing() ? rm_record_frac[far_drawing ? far_slot_index[k] : k] : NULL;
     }
     R[0] = gsu_sub(R[0], R[0], 0);
     gsu_romb(R[0]);
@@ -310,7 +313,7 @@ lAB90:
 lABC2:
     {                                   /* Enhanced: a sprite drawn as a solid shape (solids.c), by its record */
         unsigned k = (uint16_t)(R[1] - 8 - 0x0AAA) / 0x1E % 0x31;
-        fw_solid_object(R[3], far_drawing ? 0x31 + far_slot_record[k] : k);
+        fw_solid_object(R[3], far_drawing ? far_slot_index[k] : k);
     }
     R[1] = gsu_inc(R[1]);
     R[1] = gsu_inc(R[1]);
@@ -617,6 +620,8 @@ lB123:
 lB128:
     if (rm_far_shift)
         R[1] = (uint16_t)((int16_t)R[1] >> rm_far_shift);
+    if (fw_view_active())               /* Enhanced's full window: a fixed size (the rank sign's) in its texels */
+        R[1] = (uint16_t)((int16_t)R[1] * fw_k());
     gsu_stw(R[10], R[1]);
     R[10] = gsu_inc(R[10]);
     R[10] = gsu_inc(R[10]);
@@ -2299,14 +2304,79 @@ static uint16_t far_word(uint32_t a)
     return (uint16_t)(gsu_rd8(a) | gsu_rd8(a + 1) << 8);
 }
 
+/* far record i turned to the view: its key, place, halvings and depth;
+   0 when the sort's tests leave it out */
+static int far_place(unsigned i, const int16_t m[9], FarObject *f)
+{
+    uint32_t r = 0x710000u | (uint16_t)(RM_FAR_RECORDS + i * RM_FAR_SIZE);
+    int64_t d[3], v[3], big = 0;
+    uint16_t shape = far_word(r + 0x08);
+    int32_t radius = (int16_t)(gsu_rd8(shape + 0x10u) | gsu_rd8(shape + 0x11u) << 8);
+    int32_t bias = (int16_t)(gsu_rd8(shape + 0x05u) | gsu_rd8(shape + 0x06u) << 8);
+    unsigned s = 0, k, c;
+
+    for (k = 0; k < 3; k++)
+        d[k] = (int32_t)(far_word(r + RM_FAR_PLACE + 4 * k) | (uint32_t)far_word(r + RM_FAR_PLACE + 4 * k + 2) << 16);
+    for (c = 0; c < 3; c++)     /* column c: the slot's +$12, +$10, +$14 */
+        v[c] = (d[0] * m[c] >> 15) + (d[1] * m[3 + c] >> 15) + (d[2] * m[6 + c] >> 15);
+    /* the sort's culls: behind the view, and past 45 degrees but in
+       the full window, whose view is wider (ws_cull_keeps) */
+    if (v[2] + radius < 0 || (llabs(v[0]) - radius >= llabs(v[2]) && !fw_view_active()))
+        return 0;
+    for (k = 0; k < 3; k++)
+        if (llabs(v[k]) > big)
+            big = llabs(v[k]);
+    while ((big >> s) > 0x3FFF)
+        s++;
+    f->key = (int32_t)v[2] + bias + (gsu_rd8(r + RM_FAR_LIFT) ? 0x1F40 : 0);
+    for (k = 0; k < 3; k++)
+        f->at[k] = (int16_t)(v[k] >> s);
+    f->shift = (uint8_t)s;
+    f->depth = (uint16_t)(v[2] > 0x7FFF ? 0x7FFF : v[2] < 0 ? 0 : v[2]);
+    f->rec = (uint16_t)(RM_FAR_RECORDS + i * RM_FAR_SIZE);
+    return 1;
+}
+
+/* the slot k of a batch from far object f: its record, its place in view
+   space, its halvings, depth and record index */
+static void far_slot(uint8_t *ram, unsigned k, const FarObject *f, int last)
+{
+    uint16_t slot = (uint16_t)(0x0AAA + k * 0x1E);
+
+    memcpy(ram + slot, ram + 0x10000 + f->rec, 0x1E);
+    gsu_stw(slot, last ? 0 : (uint16_t)(slot + 0x1E));
+    gsu_stw((uint16_t)(slot + 0x12), (uint16_t)f->at[0]);
+    gsu_stw((uint16_t)(slot + 0x10), (uint16_t)f->at[1]);
+    gsu_stw((uint16_t)(slot + 0x14), (uint16_t)f->at[2]);
+    far_slot_shift[k] = f->shift;
+    far_slot_depth[k] = f->depth;
+    far_slot_index[k] = (uint16_t)(0x31 + (f->rec - RM_FAR_RECORDS) / RM_FAR_SIZE);
+}
+
+/* the slots filled for a batch drawn (FxObjectsDraw from the first) */
+static void slots_draw(void)
+{
+    gsu_stw(GSU_DRAW_LIST, 0x0AAA);
+    R[10] = 0x0240;
+    gsu_stw(FX_MODEL_1B4, 0);
+    R[11] = 0xFFFE;
+    abi_FxObjectsDraw();
+}
+
+/* the parked tyres of cars in the near list (RM_FAR_PARKED), kept by the
+   far pass for parked_pass, turned to the view then */
+static FarObject parked[RM_FAR_MAX];
+static unsigned nparked;
+
 static void far_pass(void)
 {
     static FarObject far[RM_FAR_MAX];
     uint8_t *ram = nshvc_sram();
     RegsGSU kept = gsu;
-    unsigned count = far_word(0x710000u | RM_FAR_COUNT), i, n = 0, b, k, c;
+    unsigned count = far_word(0x710000u | RM_FAR_COUNT), i, n = 0, b, k;
     int16_t m[9];
 
+    nparked = 0;
     if (!count || count > RM_FAR_MAX)
         return;
     ram[0x10000 + RM_FAR_COUNT] = ram[0x10000 + RM_FAR_COUNT + 1] = 0;
@@ -2314,32 +2384,11 @@ static void far_pass(void)
         m[i] = (int16_t)far_word(0x700000u | (0x00E4 + 2 * i));
     for (i = 0; i < count; i++) {
         uint32_t r = 0x710000u | (uint16_t)(RM_FAR_RECORDS + i * RM_FAR_SIZE);
-        int64_t d[3], v[3], big = 0;
-        uint16_t shape = far_word(r + 0x08);
-        int32_t radius = (int16_t)(gsu_rd8(shape + 0x10u) | gsu_rd8(shape + 0x11u) << 8);
-        int32_t bias = (int16_t)(gsu_rd8(shape + 0x05u) | gsu_rd8(shape + 0x06u) << 8);
-        unsigned s = 0;
-
-        for (k = 0; k < 3; k++)
-            d[k] = (int32_t)(far_word(r + RM_FAR_PLACE + 4 * k) | (uint32_t)far_word(r + RM_FAR_PLACE + 4 * k + 2) << 16);
-        for (c = 0; c < 3; c++)     /* column c: the slot's +$12, +$10, +$14 */
-            v[c] = (d[0] * m[c] >> 15) + (d[1] * m[3 + c] >> 15) + (d[2] * m[6 + c] >> 15);
-        /* the sort's culls: behind the view, and past 45 degrees but in
-           the full window, whose view is wider (ws_cull_keeps) */
-        if (v[2] + radius < 0 || (llabs(v[0]) - radius >= llabs(v[2]) && !fw_view_active()))
-            continue;
-        for (k = 0; k < 3; k++)
-            if (llabs(v[k]) > big)
-                big = llabs(v[k]);
-        while ((big >> s) > 0x3FFF)
-            s++;
-        far[n].key = (int32_t)v[2] + bias + (gsu_rd8(r + RM_FAR_LIFT) ? 0x1F40 : 0);
-        for (k = 0; k < 3; k++)
-            far[n].at[k] = (int16_t)(v[k] >> s);
-        far[n].shift = (uint8_t)s;
-        far[n].depth = (uint16_t)(v[2] > 0x7FFF ? 0x7FFF : v[2] < 0 ? 0 : v[2]);
-        far[n].rec = (uint16_t)(RM_FAR_RECORDS + i * RM_FAR_SIZE);
-        n++;
+        if (gsu_rd8(r + RM_FAR_PARKED)) {
+            if (far_place(i, m, &parked[nparked]))
+                nparked++;
+        } else if (far_place(i, m, &far[n]))
+            n++;
     }
     if (!n)
         return;
@@ -2349,23 +2398,84 @@ static void far_pass(void)
     far_drawing = 1;
     for (b = 0; b < n; b += 0x31) {
         unsigned in = n - b < 0x31 ? n - b : 0x31;
-        for (k = 0; k < in; k++) {
-            const FarObject *f = &far[b + k];
-            uint16_t slot = (uint16_t)(0x0AAA + k * 0x1E);
-            memcpy(ram + slot, ram + 0x10000 + f->rec, 0x1E);
-            gsu_stw(slot, k + 1 < in ? (uint16_t)(slot + 0x1E) : 0);
-            gsu_stw((uint16_t)(slot + 0x12), (uint16_t)f->at[0]);
-            gsu_stw((uint16_t)(slot + 0x10), (uint16_t)f->at[1]);
-            gsu_stw((uint16_t)(slot + 0x14), (uint16_t)f->at[2]);
-            far_slot_shift[k] = f->shift;
-            far_slot_depth[k] = f->depth;
-            far_slot_record[k] = (uint16_t)((f->rec - RM_FAR_RECORDS) / RM_FAR_SIZE);
+        for (k = 0; k < in; k++)
+            far_slot(ram, k, &far[b + k], k + 1 == in);
+        slots_draw();
+    }
+    far_drawing = 0;
+    rm_far_shift = 0;
+    memcpy(ram, ram + 0x10000 + RM_FAR_KEEP, 0x2C00);
+    memcpy(ram + 0xFC00, ram + 0x10000 + RM_FAR_KEEP + 0x2C00, 0x400);
+    gsu = kept;
+}
+
+/* Remaster, Enhanced: a car in the near list with its tyres parked
+   (draw_list.c parked_child) has them drawn among the near objects: once
+   the near list is drawn, it is drawn again with them in it by depth (its
+   key at +$02 as the sort keyed it; a tyre's, its record's +$02, height
+   part and lift, plus its depth and its shape's bias, as the sort keys a
+   slot), a tyre before the first slot whose key is not above its own (the
+   sort's link_slot), $31 slots at a time in order. What the near list
+   painted is painted again as it was, in the same order, the tyres
+   between: a tyre behind its car's body under it, one in front over it.
+   The first bank's work RAM and the registers are kept and put back, as
+   the far pass keeps them, so the frame goes on from what the near list's
+   draw left: only the pixels stay. */
+static void parked_pass(void)
+{
+    static FarObject all[0x31 + RM_FAR_MAX];
+    static uint8_t slots[0x31][0x1E];
+    static uint16_t index[0x31 + RM_FAR_MAX];
+    uint8_t *ram = nshvc_sram();
+    RegsGSU kept = gsu;
+    unsigned n = 0, i, j, b, k, used[RM_FAR_MAX] = {0};
+    uint16_t slot;
+
+    if (!nparked)
+        return;
+    for (i = 0; i < nparked; i++) {     /* the sort's key: the record's +$02 (draw_list.c), its depth and bias */
+        uint16_t shape = far_word(0x710000u | (uint16_t)(parked[i].rec + 0x08));
+        parked[i].key = (int16_t)(far_word(0x710000u | (uint16_t)(parked[i].rec + 0x02)) + parked[i].at[2] +
+                                  (gsu_rd8(shape + 0x05u) | gsu_rd8(shape + 0x06u) << 8));
+    }
+    qsort(parked, nparked, sizeof parked[0], far_cmp);
+    for (slot = gsu_ldw(GSU_DRAW_LIST); slot && n < 0x31; slot = gsu_ldw(slot)) {
+        int16_t key = (int16_t)gsu_ldw((uint16_t)(slot + 0x02));
+        for (j = 0; j < nparked; j++)   /* the tyres keyed at or above it go before it */
+            if (!used[j] && (int16_t)(key - 1 - (int16_t)parked[j].key) < 0) {
+                used[j] = 1;
+                index[n] = 0xFFFF;
+                all[n++] = parked[j];
+            }
+        k = (slot - 0x0AAA) / 0x1E;
+        memcpy(slots[k], ram + slot, 0x1E);
+        index[n] = (uint16_t)k;
+        all[n].rec = slot;
+        n++;
+    }
+    for (j = 0; j < nparked; j++)
+        if (!used[j]) {
+            index[n] = 0xFFFF;
+            all[n++] = parked[j];
         }
-        gsu_stw(GSU_DRAW_LIST, 0x0AAA);
-        R[10] = 0x0240;
-        gsu_stw(FX_MODEL_1B4, 0);
-        R[11] = 0xFFFE;
-        abi_FxObjectsDraw();
+    memcpy(ram + 0x10000 + RM_FAR_KEEP, ram, 0x2C00);
+    memcpy(ram + 0x10000 + RM_FAR_KEEP + 0x2C00, ram + 0xFC00, 0x400);
+    far_drawing = 1;
+    for (b = 0; b < n; b += 0x31) {
+        unsigned in = n - b < 0x31 ? n - b : 0x31;
+        for (k = 0; k < in; k++) {
+            if (index[b + k] == 0xFFFF) {
+                far_slot(ram, k, &all[b + k], k + 1 == in);
+                continue;
+            }
+            slot = (uint16_t)(0x0AAA + k * 0x1E);
+            memcpy(ram + slot, slots[index[b + k]], 0x1E);
+            gsu_stw(slot, k + 1 < in ? (uint16_t)(slot + 0x1E) : 0);
+            far_slot_shift[k] = 0;
+            far_slot_depth[k] = 0;
+            far_slot_index[k] = index[b + k];
+        }
+        slots_draw();
     }
     far_drawing = 0;
     rm_far_shift = 0;

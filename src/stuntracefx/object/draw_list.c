@@ -2,6 +2,7 @@
  * draw_list.c: the list of objects the Super FX draws this frame, built in
  * work RAM from the objects in the buckets the trigger list names.
  */
+#include <math.h>
 #include <string.h>
 
 #include "machine.h"
@@ -26,15 +27,88 @@ static uint32_t rec_bank = 0x7E0000u;
 static int rec_far;
 static uint8_t rec_near[0x8000];
 
+/* Remaster, Enhanced: a car's child on its record (a tyre: ObjectChildStep,
+   $08:BB2E) that ObjectChildFollow hides while its car's record has bit 10
+   of +$16 (ObjectPoseFromRecord: the car's countdown +$36 at 1) is left
+   where it was, hidden, its record put on its car's place at times (no
+   wheel then). Enhanced draws the car all the same (never far, and past
+   the trigger list's cells in the far records), so the child is drawn with
+   it (a far record of its own, far_records), where it sits on its car: its
+   place on the car's record in the record's turn (its heading, +$24-$25),
+   learnt from each step's draw while the game places it
+   (ObjectChildFollow, $08:BF53: its record's place, Y less its +$5F and
+   $14), steady to the wheels' travel; put on the car as drawn (its place,
+   its heading +$15), turned as it was (+$14, +$16) with its steer on the
+   car's heading (its record's +$25 on the car's). A seat is its car's and
+   record's (an object's slot is used again). The memory is read as it
+   stands, taking none of the S-CPU's time, and nothing of the game's is
+   written: only the far record has it. */
+#define CHILD_SLOTS 0x136
+static struct { int16_t at[3]; uint16_t car, rec; uint8_t a14, steer, a16, known; } child_seat[CHILD_SLOTS];
+
+static uint8_t mem8(uint32_t a)
+{
+    return (a >> 16) >= 0x70 && (a >> 16) <= 0x71 ? nshvc_sram()[a & 0x1FFFF] : nshvc_wram()[a & 0x1FFFF];
+}
+
+static uint16_t mem16(uint32_t a) { return (uint16_t)(mem8(a) | mem8(a + 1) << 8); }
+
+static int parked_child(uint16_t o, uint16_t at[3], uint8_t turn[3])
+{
+    uint16_t car, cr, r, k = (uint16_t)((o - 1) / 0x62);
+    double h, c, s, x, z;
+
+    if (!rm_enhanced() || mem16(OBJ(o, 0x1A)) != 0xBB2E || (o - 1) % 0x62 || k >= CHILD_SLOTS)
+        return 0;
+    car = mem16(OBJ(o, 0x06));
+    cr = mem16(OBJ(car, 0x22));
+    r = mem16(OBJ(o, 0x22));
+    if (!cr || !r)
+        return 0;
+    if (!(mem8(OBJ(o, 0x24)) & 0x20)) {
+        if (!rm_redrawing() && !(mem16(0x700016u + cr) & 0x0400)) {     /* a step's own: its car's and its records together */
+            h = mem16(0x700024u + cr) * (2 * M_PI / 65536);
+            c = cos(h), s = sin(h);
+            x = (int16_t)(mem16(0x70001Eu + r) + mem16(0x70004Au + r) - mem16(0x70001Eu + cr));
+            z = (int16_t)(mem16(0x700022u + r) + mem16(0x70004Eu + r) - mem16(0x700022u + cr));
+            child_seat[k].at[0] = (int16_t)lround(x * c + z * s);
+            child_seat[k].at[1] = (int16_t)(mem16(0x700020u + r) + mem16(0x70004Cu + r) - (mem16(OBJ(o, 0x5F)) & 0x00FF) -
+                                            0x0014 - mem16(0x700020u + cr));
+            child_seat[k].at[2] = (int16_t)lround(z * c - x * s);
+            child_seat[k].a14 = mem8(OBJ(o, 0x14));
+            child_seat[k].steer = (uint8_t)(mem8(0x700025u + r) - mem8(0x700025u + cr));
+            child_seat[k].a16 = mem8(OBJ(o, 0x16));
+            child_seat[k].car = car;
+            child_seat[k].rec = r;
+            child_seat[k].known = 1;
+        }
+        return 0;
+    }
+    if (!(mem16(0x700016u + cr) & 0x0400) || !child_seat[k].known || child_seat[k].car != car || child_seat[k].rec != r)
+        return 0;
+    h = mem8(OBJ(car, 0x15)) * (2 * M_PI / 256);
+    c = cos(h), s = sin(h);
+    x = child_seat[k].at[0], z = child_seat[k].at[2];
+    at[0] = (uint16_t)(mem16(OBJ(car, 0x0C)) + (int16_t)lround(x * c - z * s));
+    at[1] = (uint16_t)(mem16(OBJ(car, 0x0E)) + child_seat[k].at[1]);
+    at[2] = (uint16_t)(mem16(OBJ(car, 0x10)) + (int16_t)lround(z * c + x * s));
+    turn[0] = child_seat[k].a14;
+    turn[1] = (uint8_t)(mem8(OBJ(car, 0x15)) + child_seat[k].steer);
+    turn[2] = child_seat[k].a16;
+    return 1;
+}
+
 /* Object `o`'s draw record at `r`: position (relative to the view at
    $C5/$C7/$C9 unless bit 7 of +$24 says absolute) and its depth key at
    +$02, model +$08, angles +$04-$07, link fields or 0, flags, palette and
    frame bytes and the animation word. */
 static uint16_t draw_record(uint16_t o, uint16_t r)
 {
-    uint16_t a, t;
-    uint8_t v;
+    uint16_t a, t, at[3];
+    uint8_t v, turn[3];
 
+    if (!rec_far)                       /* Remaster: a child's seat on its car learnt (parked_child) */
+        parked_child(o, at, turn);
     if (rd16(OBJ(o, 0x24)) & 0x0080) {
         wr16(REC(r, 0x12), (rd16(OBJ(o, 0x0C))));
         wr16(REC(r, 0x10), (rd16(OBJ(o, 0x0E))));
@@ -203,26 +277,43 @@ static void draw_triggers(void)
    stopped). */
 static void far_record(uint16_t o, unsigned i)
 {
-    uint16_t r = (uint16_t)(RM_FAR_RECORDS + i * RM_FAR_SIZE);
+    uint16_t r = (uint16_t)(RM_FAR_RECORDS + i * RM_FAR_SIZE), at[3];
     int32_t d[3];
+    uint8_t turn[3];
     unsigned k;
+    int parked;
 
     draw_record(o, r);
-    d[0] = (int16_t)rd16(OBJ(o, 0x0C)) - (int16_t)rd16(0x0000C5);
-    d[1] = (int16_t)rd16(OBJ(o, 0x0E)) - (int16_t)rd16(0x0000C7) + rm_look_dy(o);
-    d[2] = (int16_t)rd16(OBJ(o, 0x10)) - (int16_t)rd16(0x0000C9);
+    parked = parked_child(o, at, turn);
+    if (parked) {                       /* a parked tyre: on its car, its key's height part from there (draw_record's) */
+        int16_t dy = (int16_t)(at[1] - rd16(0x0000C7));
+        wr16(REC(r, 0x02), (uint16_t)(((dy < 0 ? -dy : dy) << 1) + (rd16(OBJ(o, 0x09)) & 0x0001 ? 0x1F40 : 0)));
+        wr8(REC(r, 0x04), turn[0]);
+        wr8(REC(r, 0x05), turn[1]);
+        wr8(REC(r, 0x06), turn[2]);
+    } else {
+        at[0] = rd16(OBJ(o, 0x0C));
+        at[1] = rd16(OBJ(o, 0x0E));
+        at[2] = rd16(OBJ(o, 0x10));
+    }
+    d[0] = (int16_t)at[0] - (int16_t)rd16(0x0000C5);
+    d[1] = (int16_t)at[1] - (int16_t)rd16(0x0000C7) + rm_look_dy(o);
+    d[2] = (int16_t)at[2] - (int16_t)rd16(0x0000C9);
     for (k = 0; k < 3; k++) {
         wr16(REC(r, RM_FAR_PLACE + 4 * k), (uint16_t)d[k]);
         wr16(REC(r, RM_FAR_PLACE + 4 * k + 2), (uint16_t)((uint32_t)d[k] >> 16));
     }
     /* the depth key's lift for drawing first (as draw_record's $1F40) */
     wr8(REC(r, RM_FAR_LIFT), (uint8_t)(rd16(OBJ(o, 0x09)) & 0x0001));
+    /* a parked tyre of a car in the near list: drawn among the near ones */
+    wr8(REC(r, RM_FAR_PARKED), (uint8_t)(parked && rec_near[mem16(OBJ(o, 0x06)) & 0x7FFF]));
 }
 
 static void far_records(void)
 {
     unsigned cell, n = 0;
-    uint16_t o;
+    uint16_t o, at[3];
+    uint8_t turn[3];
 
     rec_bank = 0x710000u;
     rec_far = 1;
@@ -233,7 +324,7 @@ static void far_records(void)
                 continue;
             if (rm_far_left_out(o))     /* waiting for its set-up, or a short life stopped (remaster/animate.c) */
                 continue;
-            if ((f & 0x20) || rd16(OBJ(o, 0x04)) == 0xA040 || rd16(OBJ(o, 0x04)) < 0x8000)
+            if (((f & 0x20) && !parked_child(o, at, turn)) || rd16(OBJ(o, 0x04)) == 0xA040 || rd16(OBJ(o, 0x04)) < 0x8000)
                 continue;
             if (f & 0x40) {     /* drawn on one side only, as drawn() */
                 if ((rd8(OBJ(o, 0x26)) == 0x02) == (rd8(DRAW_SIDE) != 0))

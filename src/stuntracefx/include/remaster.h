@@ -194,6 +194,7 @@ void rm_canvas_frame_end(void);
 #define RM_FAR_SIZE    0x30u
 #define RM_FAR_PLACE   0x20u
 #define RM_FAR_LIFT    0x2Cu        /* 1: the key lifted by $1F40, as a near record's */
+#define RM_FAR_PARKED  0x2Du        /* 1: a parked tyre of a car in the near list, drawn among the near ones (draw_list.c) */
 #define RM_FAR_MAX     0x0136u
 #define RM_FAR_KEEP    0x8000u      /* the first bank's work RAM kept while the far ones draw */
 extern int rm_far_shift;
