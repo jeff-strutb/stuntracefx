@@ -12,6 +12,9 @@
 void mw_ppu_write(uint32_t addr, uint8_t value);
 /* the last value written to PPU register addr ($2100-$213F) */
 uint8_t mw_ppu_last(uint16_t addr);
+/* whether windows 1 and 2 cover any of the screen this frame (by the HDMA
+   channel writing their edges, or the registers): 1, or -1 unread */
+int mw_windows_cover(int *w1, int *w2);
 /* at each frame's end (rm_frame_end), after the full window's */
 void mw_frame_end(void);
 /* The menus' sprites on a wider screen (MenuOamBuild): the columns the

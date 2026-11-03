@@ -175,6 +175,59 @@ static int window1_extent(int *l, int *r)
     return hi >= lo;
 }
 
+/* Whether windows 1 and 2 cover any of the screen this frame (*w1, *w2):
+   their edges (WH0-WH1, WH2-WH3) on every line, from the HDMA channel
+   writing them, direct or indirect, one to four of them from WH0 or WH2
+   (modes 0, 1 and 4), the others the registers; else the registers. 1
+   read, -1 a table this does not read */
+int mw_windows_cover(int *w1, int *w2)
+{
+    int c, any[2] = {0, 0}, w;
+
+    for (c = 0; c < 8; c++) {
+        const uint8_t *q = dma_reg + c * 16;
+        uint32_t at = (uint32_t)q[4] << 16 | (uint32_t)(q[3] << 8 | q[2]), data;
+        unsigned n, lines = 0, i, k, rows, mode = q[0] & 7, ind = q[0] & 0x40;
+        uint8_t v[4];
+
+        if (!(hdma_en >> c & 1) || q[1] < 0x26 || q[1] > 0x29)
+            continue;
+        if ((q[1] != 0x26 && q[1] != 0x28) || (mode != 0 && mode != 1 && mode != 4) || (mode == 4 && q[1] != 0x26))
+            return -1;
+        n = mode == 0 ? 1 : mode == 1 ? 2 : 4;
+        while (lines < 224) {
+            uint8_t count = nshvc_peek(at);
+            at = (at & 0xFF0000) | ((at + 1) & 0xFFFF);
+            if (!count)
+                break;
+            rows = count & 0x7F ? count & 0x7F : 128;
+            if (ind) {                      /* the lines' bytes from the address the table gives, in DASB's bank */
+                data = (uint32_t)q[7] << 16 | (uint32_t)(nshvc_peek(at) | nshvc_peek((at & 0xFF0000) | ((at + 1) & 0xFFFF)) << 8);
+                at = (at & 0xFF0000) | ((at + 2) & 0xFFFF);
+            } else
+                data = at;
+            for (i = 0; i < (count & 0x80 ? rows : 1u); i++) {   /* repeat: a value each line */
+                for (k = 0; k < 4; k++)     /* WH0-WH3 on this line: the table's, else the registers' */
+                    v[k] = k >= q[1] - 0x26u && k < q[1] - 0x26u + n ?
+                           nshvc_peek((data & 0xFF0000) | ((data + k - (q[1] - 0x26u)) & 0xFFFF)) : reg[0x26 + k];
+                data = (data & 0xFF0000) | ((data + n) & 0xFFFF);
+                for (w = 0; w < 2; w++)
+                    any[w] |= v[2 * w] <= v[2 * w + 1];
+            }
+            if (!ind)
+                at = data;
+            lines += rows;
+        }
+        break;
+    }
+    if (c == 8)                         /* no channel: the registers */
+        for (w = 0; w < 2; w++)
+            any[w] = reg[0x26 + 2 * w] <= reg[0x27 + 2 * w];
+    *w1 = any[0];
+    *w2 = any[1];
+    return 1;
+}
+
 /* The menus' wipes across the whole window (nshvc_ext_window_map, contract
    2.12). A panel's window frames what it shows on the console's picture;
    when it then grows past the size it rested at, toward the screen's

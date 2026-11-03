@@ -3370,14 +3370,21 @@ void fw_backdrop_update(void)
     nshvc_hold_interrupts(0);
 }
 
-/* CGWSEL for the full window: the original's colour window (window 1,
-   the bezel's opening, or the view's) is where its picture is, which in
-   the full window is the whole screen, the bezel gone; past the console's
-   columns the console has every pixel outside both windows. So in each of
-   its two fields (bits 7-6, clip to black; 5-4, colour maths prevented)
-   "outside the window" (01) is never (00) and "inside" (10) always (11):
-   the crash's red over the view is over the whole screen, not the
-   original's view's box in it (the panels' boxes, BG1's too, with it) */
+/* CGWSEL for the full window. Its two fields (bits 7-6, clip to black;
+   5-4, colour maths prevented) act inside or outside the colour window
+   (WOBJSEL bits 7-4: windows 2 and 1 on and inverted, WOBJLOG bits 3-2
+   their logic), which the race makes of window 1 alone: the bezel's
+   opening or the view's, or nothing (its HDMA table's lines all left past
+   right), inverted or not. In the full window the bezel is gone and the
+   view is the whole screen, so a colour window of the view, or of
+   everything, is everywhere, and one of nothing, or outside the view, is
+   nowhere: each field "inside" (10) or "outside" (01) is then always (11)
+   or never (00), as that makes it: the crash's red over the view is over
+   the whole screen (the panels' boxes, BG1's too, with it), and the
+   tunnel's subtraction inside an empty window 1 (window setup 2,
+   ColourMathSub83Windowed, its slide ended) nowhere, as the original
+   shows it. A window that covers any of the screen counts as the view's;
+   one this cannot read keeps the view's rule. */
 static int cgwsel_game = -1;            /* the game's, put back when the full window goes */
 static int wobjsel_game = -1;           /* the same for WOBJSEL */
 static int wobjsel_ours = -1;           /* the one the full window last wrote */
@@ -3401,7 +3408,22 @@ static void sprites_box(void)
 
 static uint8_t cgwsel_full(uint8_t c)
 {
-    static const uint8_t field[4] = {0, 0, 3, 3};
+    int w1 = 1, w2 = 1, sel = wobjsel_game >= 0 ? wobjsel_game : mw_ppu_last(0x2125), logic = mw_ppu_last(0x212B) >> 2 & 3;
+    int on1 = sel >> 5 & 1, on2 = sel >> 7 & 1, a, b, all;
+    uint8_t field[4];
+
+    if (mw_windows_cover(&w1, &w2) < 0)
+        w1 = w2 = 1;
+    a = (w1 ^ (sel >> 4 & 1)) & 1;      /* each window over the full window: the view everywhere, inverted or not */
+    b = (w2 ^ (sel >> 6 & 1)) & 1;
+    if (on1 && on2)
+        all = logic == 0 ? a | b : logic == 1 ? a & b : logic == 2 ? a ^ b : !(a ^ b);
+    else
+        all = on1 ? a : on2 ? b : 0;    /* no window: the colour window is nowhere */
+    field[0] = 0;
+    field[1] = all ? 0 : 3;             /* outside it */
+    field[2] = all ? 3 : 0;             /* inside it */
+    field[3] = 3;
     return (uint8_t)((c & 0x0F) | field[c >> 6 & 3] << 6 | field[c >> 4 & 3] << 4);
 }
 
