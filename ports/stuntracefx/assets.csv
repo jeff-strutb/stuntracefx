@@ -539,6 +539,7 @@ ObjectSpawnFromScript_089C33,041C33,041C34,ObjectSpawnFromScript
 ObjectSpawnFromScript_089F3B,041F3B,041F3C,ObjectSpawnFromScript
 ObjectSpawnFromScript_08AF0F,042F0F,042F10,ObjectSpawnFromScript
 cpu_08AFD7,042FD7,042FD8,cpu
+ObjectSpawnFromScript_08B079,043079,04307A,ObjectSpawnFromScript
 ObjectSpawnFromScript_08B1BA,0431BA,0431BB,ObjectSpawnFromScript
 ObjectSpawnFromScript_08B1C7,0431C7,0431C8,ObjectSpawnFromScript
 ObjectSpawnFromScript_08B1D4,0431D4,0431D5,ObjectSpawnFromScript
@@ -626,6 +627,7 @@ cpu_09A621,04A621,04A622,cpu
 cpu_09A6F9,04A6F9,04A6FA,cpu
 ObjectSpawnFromScript_09A788,04A788,04A789,ObjectSpawnFromScript
 cpu_09A877,04A877,04A878,cpu
+ObjectSpawnFromScript_09A907,04A907,04A908,ObjectSpawnFromScript
 cpu_09A997,04A997,04A998,cpu
 cpu_09AA33,04AA33,04AA34,cpu
 cpu_09AABC,04AABC,04AABD,cpu
