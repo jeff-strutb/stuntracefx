@@ -29,9 +29,15 @@
  * one of twelve round it: the lens to the view at 119.5, turned to the
  * left of the screen as the byte falls, side on at 55.5 (64 a quarter
  * turn), level. The solid eye is turned by that byte whole, the one its
- * draw record's picture was taken by (rm_record_gaze). An eye with
- * any other look than its plain one ($9AAF: a crash's, the demo script's
- * ($7E:1A5B), the fixed picture of +$25 bit 0) is drawn as its sprite.
+ * draw record's picture was taken by (rm_record_gaze). Its look is the
+ * table its pictures are taken from (frame.c, 01:AC48): its plain one
+ * ($9AAF) or, while its car's +$25 bit 6 spins it round (ObjectLampDrop:
+ * its own turn +$48 up a sixteenth a step, its size +$5F stepped), the
+ * startled one ($9AB1, the same pictures but the five facing the view:
+ * more of the eye white, its pupil small); the solid eye's face is that
+ * look's, and it turns and sizes by the same bytes. An eye with any
+ * other look (the demo script's, $7E:1A5B) or the fixed picture of +$25
+ * bit 0 is drawn as its sprite.
  *
  * FW_SPRITE_SOLIDS=1 (a check) keeps the sprites.
  */
@@ -69,16 +75,20 @@ static const Ring tyre_rings[] = {
     { -9, 13, 0xA }, { -8, 14, 0, 0, 0x5, 0x6, 0xA }, { 8, 14, 0xA }, { 9, 13 },
 };
 static const Disc tyre_side[] = { { 13, 0x9 }, { 6, 0x4 }, { 4, 0xB }, { 2, 0x9 } };
-/* an eye: 14 of its 16 texels across, 14 long, the lens ahead, the can
-   straight for 10 and its back rounded over the last 4: shaded B nearly
-   straight up, 8 up, 7 across, F down; the lens's rim C, a ring of B, the
-   glass E round the reflector's B and F; the back's middle 7 */
+/* an eye: a half dome 14 of its 16 texels across, its flat face ahead
+   (the eye) and its dome behind, the whole of it in the picture's middle:
+   the dome shaded B nearly straight up, 8 up, 7 across, F down; the face
+   plain: its rim C, a ring of B, the white E round the pupil's B and F;
+   startled: its rim F, a ring of B, more of it white, the pupil small (B,
+   C, F round a C); its back's last cap 7 */
 #define LAMP_SHADE 0, 0xB, 0x8, 0x7, 0xF
-static const Ring lamp_rings[] = {
-    { -7, 2, LAMP_SHADE }, { -6.3, 4.2, LAMP_SHADE }, { -5, 6, LAMP_SHADE }, { -3, 7, LAMP_SHADE }, { 7, 7 },
+static const Ring lamp_rings[] = {      /* round the dome from its back: 15, 30, ... 90 degrees */
+    { -3.261, 1.812, LAMP_SHADE }, { -2.562, 3.5, LAMP_SHADE }, { -1.450, 4.950, LAMP_SHADE },
+    { 0.0, 6.062, LAMP_SHADE }, { 1.688, 6.761, LAMP_SHADE }, { 3.5, 7.0 },
 };
 static const Disc lamp_lens[] = { { 7, 0xC }, { 6.2, 0xB }, { 5.2, 0xE }, { 3.2, 0xB }, { 2.2, 0xF } };
-static const Disc lamp_back[] = { { 2, 0x7 } };
+static const Disc lamp_startled[] = { { 7, 0xF }, { 6.2, 0xB }, { 5.6, 0xE }, { 2.6, 0xB }, { 2.0, 0xC }, { 1.4, 0xF }, { 0.7, 0xC } };
+static const Disc lamp_back[] = { { 1.812, 0x7 } };
 
 #define N(a) (int)(sizeof a / sizeof a[0])
 static const Solid solids[] = {
@@ -90,6 +100,7 @@ static const Solid solids[] = {
 };
 
 static const Solid *object, *armed;
+static const Disc *face;                /* an eye's face for its look (else the solid's front) */
 static unsigned record;
 static int coloured;
 static uint8_t hi, tex_bank, tex_nib;
@@ -160,14 +171,17 @@ void fw_solid_begin(void)
 {
     armed = NULL;
     coloured = 0;
+    face = NULL;
     if (!object || !fw_sprite_rows() || !fw_view_active() || sprites_kept())
         return;
     if (object->shape == 0xA190) {      /* an eye: by its gaze, in its plain look */
         const uint8_t *w = nshvc_wram();
         uint16_t o = record < RM_RECORDS ? rm_record_object[record] : 0, g = record < RM_RECORDS ? rm_record_gaze[record] : 0;
+        uint16_t look = (uint16_t)(w[(uint16_t)(0x205D + o)] | w[(uint16_t)(0x205E + o)] << 8);
         double phi, d[3];
-        if (w[0x1A5B] || !(g & 0x100) || (w[(uint16_t)(0x205D + o)] | w[(uint16_t)(0x205E + o)] << 8) != 0x9AAF)
+        if (w[0x1A5B] || !(g & 0x100) || (look != 0x9AAF && look != 0x9AB1))
             return;
+        face = look == 0x9AB1 ? lamp_startled : NULL;
         phi = (119.5 - (g & 0xFF)) * 2 * M_PI / 256;
         d[0] = -sin(phi), d[1] = 0, d[2] = -cos(phi);
         view[0][0] = d[2], view[0][1] = 0, view[0][2] = -d[0];      /* across: down x ahead */
@@ -304,7 +318,10 @@ static void draw(const Solid *s)
                 fw_view_face((const double (*)[3])p, 4, (uint8_t)(hi | shade(g, nv)));
         }
     }
-    cap(s, s->rings[s->nrings - 1].a, s->front, s->nfront, n);
+    if (face == lamp_startled)
+        cap(s, s->rings[s->nrings - 1].a, lamp_startled, N(lamp_startled), n);
+    else
+        cap(s, s->rings[s->nrings - 1].a, s->front, s->nfront, n);
     cap(s, s->rings[0].a, s->back, s->nback, n);
 }
 
@@ -312,9 +329,11 @@ static void draw(const Solid *s)
 /*
  * A tree in the race's polygon style, of its paintings' size and shape:
  * its trunk and its canopy each turned about the world's upright, their
- * half widths from their paintings row by row (the trunk every two rows,
- * the canopy every four, the widest of them), the canopy's points moved
- * in and out a little (the same for every tree) so it reads as foliage.
+ * half widths from their paintings (the trunk every two rows in ten
+ * sides, the canopy every three in 44, the widest of each), the canopy's
+ * points moved in and out and up and down a little (the same for every
+ * tree), so its small facets, about as tall as wide, take the light each
+ * its own way and it reads as the painting's foliage.
  * The canopy's outline is eased ring to ring and every other ring turned
  * half a side, so its facets interlock. Flat faces in the paintings'
  * colours by how far each faces the light, from where the painting is
@@ -387,7 +406,7 @@ static void tree_point(double x, double y, double z, double *out)
         out[j] = pos[j] + scale * (x * view[0][j] + y * view[1][j] + z * view[2][j]);
 }
 
-#define TREE_FACES 1024
+#define TREE_FACES 4096
 typedef struct { double p[4][3], key, lit, area; int n; uint8_t c; } TreeFace;
 static TreeFace faces[TREE_FACES];
 
@@ -407,7 +426,7 @@ static int lit_cmp(const void *a, const void *b)
 /* a body turned about the upright: ring k at down y[k], its points at
    radius r[k] (times jag[k][i], round it); its faces seen kept, drawn
    farthest first (it need not be convex) */
-#define TREE_SIDES_MAX 24
+#define TREE_SIDES_MAX 48
 /* a face of m points kept when seen, outward away from the upright at
    down ay; its light against the painting's and its area on the screen */
 static int nf;
@@ -461,7 +480,7 @@ static void keep_face(const double (*q)[3], int m, double ay, const Paint *pt)
    each edge of a ring to the other ring's point beside it); its faces
    seen drawn farthest first (it need not be convex) */
 static void tree_body(const double *y, const double *r, int nr, int sides, const double (*jag)[TREE_SIDES_MAX],
-                      int stagger, const Paint *pt)
+                      const double (*rise)[TREE_SIDES_MAX], int stagger, const Paint *pt)
 {
     int k, i;
     double at;
@@ -474,10 +493,10 @@ static void tree_body(const double *y, const double *r, int nr, int sides, const
             double ra0 = r[k] * jag[k][i], ra1 = r[k] * jag[k][i1], rb0 = r[k + 1] * jag[k + 1][i], rb1 = r[k + 1] * jag[k + 1][i1];
             double ta0 = 2 * M_PI * (i + o0) / sides, ta1 = 2 * M_PI * (i + 1 + o0) / sides;
             double tb0 = 2 * M_PI * (i + o1) / sides, tb1 = 2 * M_PI * (i + 1 + o1) / sides;
-            tree_point(ra0 * cos(ta0), y[k], ra0 * sin(ta0), a0);
-            tree_point(ra1 * cos(ta1), y[k], ra1 * sin(ta1), a1);
-            tree_point(rb0 * cos(tb0), y[k + 1], rb0 * sin(tb0), b0);
-            tree_point(rb1 * cos(tb1), y[k + 1], rb1 * sin(tb1), b1);
+            tree_point(ra0 * cos(ta0), y[k] + rise[k][i], ra0 * sin(ta0), a0);
+            tree_point(ra1 * cos(ta1), y[k] + rise[k][i1], ra1 * sin(ta1), a1);
+            tree_point(rb0 * cos(tb0), y[k + 1] + rise[k + 1][i], rb0 * sin(tb0), b0);
+            tree_point(rb1 * cos(tb1), y[k + 1] + rise[k + 1][i1], rb1 * sin(tb1), b1);
             if (!r[k]) {                /* a closed end: triangles to its point */
                 memcpy(q[0], a0, sizeof a0), memcpy(q[1], b1, sizeof b1), memcpy(q[2], b0, sizeof b0);
                 keep_face((const double (*)[3])q, 3, ay, pt);
@@ -517,9 +536,9 @@ static void tree_body(const double *y, const double *r, int nr, int sides, const
 
 static void tree(const Solid *s)
 {
-    static double jag[PAINT_ROWS / 2 + 4][TREE_SIDES_MAX];
+    static double jag[PAINT_ROWS / 2 + 4][TREE_SIDES_MAX], rise[PAINT_ROWS / 2 + 4][TREE_SIDES_MAX];
     double y[PAINT_ROWS / 2 + 4], r[PAINT_ROWS / 2 + 4], T = s->texels;
-    int nr = 0, v, k, i, step = s->tree == 1 ? 2 : 4, sides = s->tree == 1 ? 10 : 14;
+    int nr = 0, v, k, i, step = s->tree == 1 ? 2 : 3, sides = s->tree == 1 ? 10 : 44;
     Paint pt;
     paint_measure(s, &pt);
     if (!pt.ncolours || pt.top < 0)
@@ -539,12 +558,13 @@ static void tree(const Solid *s)
             r[k] = 0.25 * was[k - 1] + 0.5 * was[k] + 0.25 * was[k + 1];
     }
     y[nr] = pt.bottom + 1 - T / 2, r[nr++] = 0;
-    for (k = 0; k < nr; k++)            /* the canopy's points in and out a little, the same for every tree */
+    for (k = 0; k < nr; k++)            /* the canopy's points in and out and up and down a little, the same for every tree */
         for (i = 0; i < sides; i++) {
             unsigned hsh = (unsigned)(k * 7919 + i * 104729) * 2654435761u;
-            jag[k][i] = s->tree == 2 ? 0.88 + 0.24 * ((hsh >> 16) & 0xFF) / 255.0 : 1.0;
+            jag[k][i] = s->tree == 2 ? 0.91 + 0.18 * ((hsh >> 16) & 0xFF) / 255.0 : 1.0;
+            rise[k][i] = s->tree == 2 && r[k] ? 1.6 * (((hsh >> 8) & 0xFF) / 255.0 - 0.5) : 0;
         }
-    tree_body(y, r, nr, sides, (const double (*)[TREE_SIDES_MAX])jag, s->tree == 2, &pt);
+    tree_body(y, r, nr, sides, (const double (*)[TREE_SIDES_MAX])jag, (const double (*)[TREE_SIDES_MAX])rise, s->tree == 2, &pt);
 }
 
 /* FxObjectSprite returned (frame.c, 01:AD2D) */
