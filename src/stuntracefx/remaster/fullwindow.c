@@ -3379,6 +3379,25 @@ void fw_backdrop_update(void)
    the crash's red over the view is over the whole screen, not the
    original's view's box in it (the panels' boxes, BG1's too, with it) */
 static int cgwsel_game = -1;            /* the game's, put back when the full window goes */
+static int wobjsel_game = -1;           /* the same for WOBJSEL */
+static int wobjsel_ours = -1;           /* the one the full window last wrote */
+
+/* The sprites kept to the HUD's box (window 2, which the race's sprites
+   and colour window do not use, at the box's columns, the sprites masked
+   outside it): a HUD sprite across the view's edge (the start lamps') is
+   cut at the box's edge as the bezel cut it, where on a screen past 16:9
+   or inside a safe area that edge is not the screen's (view_shift) */
+static void sprites_box(void)
+{
+    int margin = W > UI_W_MAX ? (W - UI_W_MAX) / 2 : 0;
+    int l = margin > safe_px[0] ? margin : safe_px[0], r = margin > safe_px[2] ? margin : safe_px[2];
+
+    if (wobjsel_game < 0 || mw_ppu_last(0x2125) != wobjsel_ours)   /* the game's, or one it wrote since */
+        wobjsel_game = mw_ppu_last(0x2125);
+    nshvc_ext_window_columns(2, l, W - 1 - r);
+    wobjsel_ours = (wobjsel_game & 0xF0) | 0x0C;   /* the sprites' window 2 on, inverted */
+    wr8(WOBJSEL, (uint8_t)wobjsel_ours);
+}
 
 static uint8_t cgwsel_full(uint8_t c)
 {
@@ -3386,8 +3405,8 @@ static uint8_t cgwsel_full(uint8_t c)
     return (uint8_t)((c & 0x0F) | field[c >> 6 & 3] << 6 | field[c >> 4 & 3] << 4);
 }
 
-/* the screen the full window's: the sprites, BG1 on page 1, the view's
-   window off and the screen on (the stage's blank was for its uploads);
+/* the screen the full window's: the sprites (in the HUD's box,
+   sprites_box), BG1 on page 1, the view's window off and the screen on (the stage's blank was for its uploads);
    work the original never did, so it takes none of the S-CPU's time (an
    interrupt's accesses are timed, contract 2.2) */
 static void takeover(void)
@@ -3397,7 +3416,8 @@ static void takeover(void)
     nshvc_set_cpu_costs(0);
     sprites_place();
     wr8(TM, 0x13);                      /* BG1, BG2 (the hills, bg2_prepare) and the sprites, as the race's */
-    wr8(TMW, 0x00);
+    sprites_box();
+    wr8(TMW, 0x10);                     /* the sprites' window alone */
     cgwsel_game = mw_ppu_last(0x2130);  /* the stage's, just set (WindowsSetupSelect) */
     wr8(CGWSEL, cgwsel_full((uint8_t)cgwsel_game));
     screen_set();
@@ -3459,6 +3479,10 @@ void fw_frame_end(void)
         if (cgwsel_game >= 0)           /* and its colour window */
             wr8(CGWSEL, (uint8_t)cgwsel_game);
         cgwsel_game = -1;
+        nshvc_ext_window_columns(2, -1, 0);
+        if (wobjsel_game >= 0)          /* and its sprites' windows */
+            wr8(WOBJSEL, (uint8_t)wobjsel_game);
+        wobjsel_game = wobjsel_ours = -1;
         nshvc_ext_layer_outside(1, NULL, 0);
         bg2sc_kept = -1;
         sprites_write();

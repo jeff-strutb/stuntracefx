@@ -54,6 +54,13 @@ void nshvc_safe_area(float *left, float *top, float *right, float *bottom);
    on, a window whose left edge is 0 reaches every column left of the
    picture and one whose right edge is 255 every column right of it */
 void nshvc_ext_window_edges(int on);
+/* Window 1 or 2 at the screen's columns left to right on every line, in
+   place of its registers; left = -1 gives it back (contract 2.12) */
+void nshvc_ext_window_columns(int window, int left, int right);
+/* The windows' edges placed on the screen: console column c at
+   c * scale_q16 / 65536 + offset (rounded down); (65536, (W - 256) / 2)
+   the console's, (W * 256, 0) stretched over it (contract 2.12) */
+void nshvc_ext_window_map(int on, int32_t scale_q16, int offset);
 /* Text entry (contract 2.11): on a touch host with no keyboard attached,
    the system's keyboard shown while on; typed keys reach the key hook */
 void nshvc_ext_text_input(int on);
