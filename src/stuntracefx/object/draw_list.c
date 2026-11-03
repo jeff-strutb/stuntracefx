@@ -97,6 +97,7 @@ static uint16_t draw_record(uint16_t o, uint16_t r)
             rm_record_object[i] = o;
             rm_record_gaze[i] = !(g & 0x10000u) ? 0 : (uint16_t)(0x100 | (uint8_t)(nshvc_wram()[0x1F07] ? g >> 8 : g));
         }
+        rm_record_look(o, REC(r, 0), i, rec_far);   /* its angles' fractions, its drawn-only look (remaster/animate.c) */
     }
     if (rec_far)
         return (uint16_t)(r + RM_FAR_SIZE);
@@ -197,7 +198,9 @@ static void draw_triggers(void)
    Super FX's frame program draws behind the near ones (render/frame.c).
    The objects themselves are not touched: what is activated, and when,
    is the trigger list's as before. Left out: objects placed in view
-   space (+$24 bit 7) and effect emitters (bit 2), the near cell's. */
+   space (+$24 bit 7) and effect emitters (bit 2), the near cell's, and
+   those remaster/animate.c leaves out (not set up yet; a short life
+   stopped). */
 static void far_record(uint16_t o, unsigned i)
 {
     uint16_t r = (uint16_t)(RM_FAR_RECORDS + i * RM_FAR_SIZE);
@@ -206,7 +209,7 @@ static void far_record(uint16_t o, unsigned i)
 
     draw_record(o, r);
     d[0] = (int16_t)rd16(OBJ(o, 0x0C)) - (int16_t)rd16(0x0000C5);
-    d[1] = (int16_t)rd16(OBJ(o, 0x0E)) - (int16_t)rd16(0x0000C7);
+    d[1] = (int16_t)rd16(OBJ(o, 0x0E)) - (int16_t)rd16(0x0000C7) + rm_look_dy(o);
     d[2] = (int16_t)rd16(OBJ(o, 0x10)) - (int16_t)rd16(0x0000C9);
     for (k = 0; k < 3; k++) {
         wr16(REC(r, RM_FAR_PLACE + 4 * k), (uint16_t)d[k]);
@@ -227,6 +230,8 @@ static void far_records(void)
         for (o = rd16(0x7F0000 + 2 * cell); o; o = rd16(OBJ(o, 0x3C))) {
             uint8_t f = rd8(OBJ(o, 0x24));
             if (rec_near[o & 0x7FFF] || (f & 0x84) || n >= RM_FAR_MAX)
+                continue;
+            if (rm_far_left_out(o))     /* waiting for its set-up, or a short life stopped (remaster/animate.c) */
                 continue;
             if ((f & 0x20) || rd16(OBJ(o, 0x04)) == 0xA040 || rd16(OBJ(o, 0x04)) < 0x8000)
                 continue;

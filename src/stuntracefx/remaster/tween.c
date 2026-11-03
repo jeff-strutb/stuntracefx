@@ -43,6 +43,7 @@ void rm_tween_tick_start(void)
     memcpy(was_s, nshvc_sram(), sizeof was_s);
     was_gsu = gsu;
     rm_gaze_tick_start();
+    rm_animate_tick_start();
     was_tick = rm_tick_count();
     was_ok = 1;
     ticked = 1;
@@ -110,11 +111,17 @@ static void between16(uint8_t *to, const uint8_t *now, const uint8_t *was, unsig
     to[a + 1] = (uint8_t)(v >> 8);
 }
 
-static void between8(uint8_t *to, const uint8_t *now, const uint8_t *was, unsigned a, int num, int den)
+/* an object's angle byte at a set num/den of the way, and its fraction
+   (256ths) for the model drawer's matrix (remaster/animate.c) */
+static uint8_t between8(uint8_t *to, const uint8_t *now, const uint8_t *was, unsigned a, int num, int den)
 {
     int d = (int8_t)(uint8_t)(now[a] - was[a]);
+    int v = was[a] * 256 + (int)((int64_t)d * 256 * num / den);
+    int f = (int)((int64_t)d * 256 * num % den != 0 && d < 0);  /* the floor of a negative share */
 
-    to[a] = (uint8_t)(was[a] + d * num / den);
+    v -= f;
+    to[a] = (uint8_t)(v >> 8);
+    return (uint8_t)v;
 }
 
 static uint16_t word(const uint8_t *m, unsigned a)
@@ -380,10 +387,13 @@ int rm_tween_buffers(int num, int den, uint8_t *at_2c00, uint8_t *at_9400)
     /* the objects: positions +$0C/+$0E/+$10, angles +$14/+$15/+$16 */
     for (k = 0; k < 0x136; k++) {
         unsigned o = 0x2000 + 1 + k * 0x62;
+        if (rm_object_made_now(k))      /* made during the step: not set between from what its slot held */
+            continue;
         for (i = 0; i < 3; i++)
             between16(w, kept_w, was_w, o + 0x0C + 2 * i, num, den, 0);
         for (i = 0; i < 3; i++)
-            between8(w, kept_w, was_w, o + 0x14 + i, num, den);
+            rm_object_frac(k, i, between8(w, kept_w, was_w, o + 0x14 + i, num, den));
+        rm_orbit_between(w, kept_w, was_w, k, num, den);    /* a piece circling a centre: on its circle */
     }
     /* the Super FX records (the list at $2332, by +$04) and a car's parts
        (+$3E, by +$34): positions +$1E/+$20/+$22, angles +$24/+$26/+$28 */
@@ -404,7 +414,9 @@ int rm_tween_buffers(int num, int den, uint8_t *at_2c00, uint8_t *at_9400)
     memcpy(rows_kept_x, rows_x, sizeof rows_x);     /* the game's records back after the redraw's */
     memcpy(rows_kept_src, rows_src, sizeof rows_src);
     memcpy(rows_kept_ok, rows_ok, sizeof rows_ok);
+    rm_animate_between(num, den);
     drew = rm_redraw_run(two ? RmTweenDrawTwoPlayers : RmTweenDraw);
+    rm_animate_between(0, 0);
     rm_tween_start_side = 0;
     rm_tween_step = 0;  /* a redraw: no port, no wait (remaster.h) */
     nshvc_hold_interrupts(0);

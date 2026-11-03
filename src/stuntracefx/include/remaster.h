@@ -208,6 +208,29 @@ extern uint16_t rm_far_depth;
 #define RM_RECORDS (0x31 + RM_FAR_MAX)
 extern uint32_t rm_gaze[0x8000];
 extern uint16_t rm_record_object[RM_RECORDS], rm_record_gaze[RM_RECORDS];
+/* Enhanced's objects as the far view and the in-between frames show them
+   (remaster/animate.c): an object made (ObjectInit) and its turn in
+   ObjectsRunHandlers; the ones that move only themselves kept running
+   (ObjectGroupsActivate's end), and whether o is one this step (its
+   sounds left out); whether the far view leaves o out; a draw record's
+   angles' fractions and drawn-only look (draw_list.c), its height for a
+   far record's place; the in-between frame's place and an object's angle
+   fractions (tween.c); the record being drawn's fractions, 256ths of its
+   angles +$04-$06 (render/frame.c, model.c) */
+void rm_object_made(uint16_t o);
+void rm_object_turn(uint16_t o, int run);
+void rm_objects_keep_running(void);
+int rm_object_kept(uint16_t o);
+int rm_far_left_out(uint16_t o);
+void rm_record_look(uint16_t o, uint32_t rec, unsigned i, int far);
+int32_t rm_look_dy(uint16_t o);
+void rm_animate_tick_start(void);
+void rm_animate_between(int num, int den);
+void rm_object_frac(unsigned k, unsigned i, uint8_t f);
+int rm_object_made_now(unsigned k);
+void rm_orbit_between(uint8_t *to, const uint8_t *now, const uint8_t *was, unsigned k, int num, int den);
+extern uint8_t rm_record_frac[RM_RECORDS][3];
+extern const uint8_t *rm_angle_frac;
 /* the gazes kept at a tick's start (tween.c), and object o's as the state
    being drawn has it: the kept one while a picture draws from the start */
 void rm_gaze_tick_start(void);

@@ -322,6 +322,14 @@ l8660:
     R[0] = gsu_not(R[0]);
     R[0] = gsu_inc(R[0]);
     gsu_sbk(R[0]);
+    if (rm_angle_frac && (rm_angle_frac[0] | rm_angle_frac[1] | rm_angle_frac[2])) {
+        /* Remaster: an in-between frame's angles to a 256th, in the words'
+           low bytes (remaster/animate.c): the matrix from all three */
+        gsu_stw(FX_OBJECT_ANGLE_X, (uint16_t)-(uint16_t)((R[1] & 0xFF) << 8 | rm_angle_frac[0]));
+        gsu_stw(FX_OBJECT_ANGLE_Y, (uint16_t)-(uint16_t)((R[2] & 0xFF) << 8 | rm_angle_frac[1]));
+        gsu_stw(FX_OBJECT_ANGLE_Z, (uint16_t)-(uint16_t)((R[3] & 0xFF) << 8 | rm_angle_frac[2]));
+        goto l8741;
+    }
     R[0] = gsu_or(R[1], R[3]);
     t = gsu.z;
     if (t) { goto l8687; }

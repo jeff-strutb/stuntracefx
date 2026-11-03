@@ -250,6 +250,7 @@ lAB73:
     abi_FxTextNotice();
 lAB7D:
     R[0] = gsu_rpix_r(R[1], R[2]);
+    rm_angle_frac = NULL;               /* Remaster: no record's fractions past the objects */
     return;   /* the STOP: the program ends here */
     /* FxObjectsDraw */
 lAB81:
@@ -266,10 +267,16 @@ lAB8C:
     R[10] = gsu_inc(R[10]);
     R[10] = gsu_inc(R[10]);
 lAB90:
-    if (far_drawing) {                  /* Remaster: the far slot's halvings and depth */
+    {
         unsigned k = (uint16_t)(R[1] - 0x0AAA) / 0x1E % 0x31;
-        rm_far_shift = far_slot_shift[k];
-        rm_far_depth = far_slot_depth[k];
+        if (far_drawing) {              /* Remaster: the far slot's halvings and depth */
+            rm_far_shift = far_slot_shift[k];
+            rm_far_depth = far_slot_depth[k];
+        }
+        /* Remaster: its angles' fractions (remaster/animate.c, model.c):
+           only an in-between frame's redraw has them, drawing the list it
+           built; a step's program draws the list the last step left */
+        rm_angle_frac = rm_redrawing() ? rm_record_frac[far_drawing ? 0x31 + far_slot_record[k] : k] : NULL;
     }
     R[0] = gsu_sub(R[0], R[0], 0);
     gsu_romb(R[0]);

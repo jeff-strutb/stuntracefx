@@ -5575,7 +5575,7 @@ static void fan_frame(int arm, int xz, uint16_t lit, uint8_t snd)
     st16i(F(0x2004, cpu.x), lit);
     if (!bit25(0x01)) {
         or8(F(0x2025, cpu.x), 0x01);
-        if (snd)
+        if (snd && !rm_object_kept(cpu.x))  /* Remaster: not kept running far (remaster/animate.c) */
             sound0(snd);
     }
     goto step;

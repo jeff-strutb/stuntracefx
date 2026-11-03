@@ -654,6 +654,7 @@ void ObjectInit(uint16_t obj)
     ObjectBucketInsert(obj);
     wr8(0x7E2036 + obj, 0x00);
     wr8(0x7E2059 + obj, 0x69);
+    rm_object_made(obj);                /* Remaster (remaster/animate.c) */
 }
 
 void abi_ObjectInit(void)
@@ -1165,8 +1166,12 @@ static uint16_t groups_list(uint16_t *y)
 
 uint16_t ObjectGroupsActivate(uint16_t *y)
 {
+    uint16_t x;
+
     wr16(0x7E1F2B, 0x0000);
-    return groups_list(y);
+    x = groups_list(y);
+    rm_objects_keep_running();          /* Remaster: Enhanced's animations far (remaster/animate.c) */
+    return x;
 }
 
 void abi_ObjectGroupsActivate(void)
@@ -1804,6 +1809,7 @@ void ObjectsRunHandlers(void)
                 cpu.y = y;
                 cpu.p = (uint8_t)((nz8(cpu.p, v) | P_M) & ~P_X);
                 (abi_ObjectRunHandlerB());
+                rm_object_turn(x, 1);           /* Remaster (remaster/animate.c) */
             } else {
                 v = (uint8_t)(v + rm_share(b | (uint16_t)(0x2036 + x), -1));   /* Remaster */
                 wr8(b | (uint16_t)(0x2036 + x), v);
@@ -1812,6 +1818,7 @@ void ObjectsRunHandlers(void)
                 cpu.y = y;
                 cpu.p = (uint8_t)((nz8(cpu.p, v) | P_M) & ~P_X);
                 (abi_ObjectRunHandlerA());
+                rm_object_turn(x, 1);           /* Remaster (remaster/animate.c) */
             }
             b = (uint32_t)cpu.db << 16;
             v = rd8(b | 0x035C);
@@ -1826,6 +1833,7 @@ void ObjectsRunHandlers(void)
             }
             /* $035C 0: on to the next */
         } else {
+            rm_object_turn(x, 0);               /* Remaster (remaster/animate.c) */
             if (v) {
                 wr8(b | (uint16_t)(0x2022 + x), 0x00);
                 wr8(b | (uint16_t)(0x2023 + x), 0x00);
