@@ -337,14 +337,19 @@ static void draw(const Solid *s)
  * The canopy's outline is eased ring to ring and every other ring turned
  * half a side, so its facets interlock. Flat faces in the paintings'
  * colours by how far each faces the light, from where the painting is
- * lit (where its lighter colours lie): the faces seen, least lit first,
- * take the painting's colours, darkest first, each for its share of the
- * painting, by their area on the screen. A painting faces the view
+ * lit (where its lighter colours lie): each colour from a light on, set
+ * once for the painting by drawing the part from the front (its faces
+ * seen, least lit first, taking the painting's colours darkest first,
+ * each for its share of the painting by area on the screen), the same
+ * every picture after, so a face changes colour only as its light does. A painting faces the view
  * whatever the tree's angles, so a tree stands upright.
  */
 #define PAINT_ROWS 64
 typedef struct {
-    double half[PAINT_ROWS], light[3], share[16];
+    int used, kind, texels;             /* the painting it is (its bank, base, nibble), measured once */
+    uint8_t bank, nib;
+    uint16_t base;
+    double half[PAINT_ROWS], light[3], share[16], from[16];
     int top, bottom, ncolours;
     uint8_t colour[16];                 /* darkest (the higher nibble) first */
 } Paint;
@@ -479,8 +484,9 @@ static void keep_face(const double (*q)[3], int m, double ay, const Paint *pt)
    side when staggered (the band between two such rings in triangles,
    each edge of a ring to the other ring's point beside it); its faces
    seen drawn farthest first (it need not be convex) */
+static int calibrating;
 static void tree_body(const double *y, const double *r, int nr, int sides, const double (*jag)[TREE_SIDES_MAX],
-                      const double (*rise)[TREE_SIDES_MAX], int stagger, const Paint *pt)
+                      const double (*rise)[TREE_SIDES_MAX], int stagger, Paint *pt)
 {
     int k, i;
     double at;
@@ -519,15 +525,23 @@ static void tree_body(const double *y, const double *r, int nr, int sides, const
             }
         }
     }
-    for (i = 0; i < nf; i++)            /* the painting's colours by their shares, the least lit the darkest */
-        by_lit[i] = &faces[i];
-    qsort(by_lit, (size_t)nf, sizeof by_lit[0], lit_cmp);
-    for (i = 0, k = 0, at = 0; i < nf; i++) {
-        double mid = at + by_lit[i]->area / 2, edge = 0;
-        for (k = 0, edge = pt->share[0] * total_area; k + 1 < pt->ncolours && mid > edge; k++)
-            edge += pt->share[k + 1] * total_area;
-        by_lit[i]->c = pt->colour[k];
-        at += by_lit[i]->area;
+    if (calibrating) {                  /* each colour's light: where the faces, least lit first, pass its share */
+        double edge;
+        for (i = 0; i < nf; i++)
+            by_lit[i] = &faces[i];
+        qsort(by_lit, (size_t)nf, sizeof by_lit[0], lit_cmp);
+        pt->from[0] = -2;
+        for (k = 1, i = 0, at = 0, edge = pt->share[0] * total_area; k < pt->ncolours; k++, edge += pt->share[k - 1] * total_area) {
+            while (i < nf && at + by_lit[i]->area / 2 <= edge)
+                at += by_lit[i++]->area;
+            pt->from[k] = i < nf ? by_lit[i]->lit : 2;
+        }
+        return;
+    }
+    for (i = 0; i < nf; i++) {          /* each face's colour by its light */
+        for (k = pt->ncolours - 1; k > 0 && faces[i].lit < pt->from[k]; k--)
+            ;
+        faces[i].c = pt->colour[k];
     }
     qsort(faces, (size_t)nf, sizeof faces[0], face_cmp);
     for (i = 0; i < nf; i++)
@@ -539,8 +553,21 @@ static void tree(const Solid *s)
     static double jag[PAINT_ROWS / 2 + 4][TREE_SIDES_MAX], rise[PAINT_ROWS / 2 + 4][TREE_SIDES_MAX];
     double y[PAINT_ROWS / 2 + 4], r[PAINT_ROWS / 2 + 4], T = s->texels;
     int nr = 0, v, k, i, step = s->tree == 1 ? 2 : 3, sides = s->tree == 1 ? 10 : 44;
-    Paint pt;
-    paint_measure(s, &pt);
+    static Paint paints[4];
+    Paint *pp = NULL;
+    for (i = 0; i < 4 && !pp; i++)      /* the painting, measured once */
+        if (paints[i].used && paints[i].kind == s->tree && paints[i].bank == tex_bank && paints[i].base == tex_base &&
+            paints[i].nib == tex_nib)
+            pp = &paints[i];
+    if (!pp) {
+        for (i = 0; i < 4 && paints[i].used; i++)
+            ;
+        pp = &paints[i < 4 ? i : 0];
+        paint_measure(s, pp);
+        pp->used = 1, pp->kind = s->tree, pp->bank = tex_bank, pp->base = tex_base, pp->nib = tex_nib;
+        pp->texels = 0;                 /* its colours' lights: not yet */
+    }
+#define pt (*pp)
     if (!pt.ncolours || pt.top < 0)
         return;
     y[nr] = pt.top - T / 2, r[nr++] = 0;
@@ -564,7 +591,22 @@ static void tree(const Solid *s)
             jag[k][i] = s->tree == 2 ? 0.91 + 0.18 * ((hsh >> 16) & 0xFF) / 255.0 : 1.0;
             rise[k][i] = s->tree == 2 && r[k] ? 1.6 * (((hsh >> 8) & 0xFF) / 255.0 - 0.5) : 0;
         }
-    tree_body(y, r, nr, sides, (const double (*)[TREE_SIDES_MAX])jag, (const double (*)[TREE_SIDES_MAX])rise, s->tree == 2, &pt);
+    if (!pt.texels) {                   /* its colours' lights, once: the part from the front, far off */
+        double kp[3], kv[3][3], ks = scale;
+        int a, b;
+        memcpy(kp, pos, sizeof kp), memcpy(kv, view, sizeof kv);
+        for (a = 0; a < 3; a++)
+            for (b = 0; b < 3; b++)
+                view[a][b] = a == b;
+        pos[0] = pos[1] = 0, pos[2] = 1e5, scale = 1;
+        calibrating = 1;
+        tree_body(y, r, nr, sides, (const double (*)[TREE_SIDES_MAX])jag, (const double (*)[TREE_SIDES_MAX])rise, s->tree == 2, pp);
+        calibrating = 0;
+        memcpy(pos, kp, sizeof kp), memcpy(view, kv, sizeof kv), scale = ks;
+        pt.texels = s->texels;
+    }
+    tree_body(y, r, nr, sides, (const double (*)[TREE_SIDES_MAX])jag, (const double (*)[TREE_SIDES_MAX])rise, s->tree == 2, pp);
+#undef pt
 }
 
 /* FxObjectSprite returned (frame.c, 01:AD2D) */
