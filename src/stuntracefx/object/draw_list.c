@@ -6,6 +6,7 @@
 
 #include "machine.h"
 #include "remaster.h"
+#include "console_ext.h"
 
 #define DRAW_COUNT 0x7E0CEEu      /* records written (at most $31) */
 #define TRIGGER_POS 0x7E1F2Bu     /* offset into the trigger list */
@@ -89,6 +90,14 @@ static uint16_t draw_record(uint16_t o, uint16_t r)
     wr8(REC(r, 0x1C), (rd8(OBJ(o, 0x5F))));
     wr8(REC(r, 0x1D), (rd8(OBJ(o, 0x60))));
     wr16(REC(r, 0x16), (rd16(OBJ(o, 0x5D))));
+    {                                   /* Remaster: the record's object and gaze, for solids.c */
+        unsigned i = rec_far ? 0x31 + (uint16_t)(r - RM_FAR_RECORDS) / RM_FAR_SIZE % RM_FAR_MAX : (uint16_t)(r - DRAW_LIST) / 0x1E;
+        uint32_t g = rm_gaze_of(o);
+        if (i < RM_RECORDS) {
+            rm_record_object[i] = o;
+            rm_record_gaze[i] = !(g & 0x10000u) ? 0 : (uint16_t)(0x100 | (uint8_t)(nshvc_wram()[0x1F07] ? g >> 8 : g));
+        }
+    }
     if (rec_far)
         return (uint16_t)(r + RM_FAR_SIZE);
     rec_near[o & 0x7FFF] = 1;

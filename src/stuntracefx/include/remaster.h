@@ -197,7 +197,21 @@ void rm_canvas_frame_end(void);
 #define RM_FAR_MAX     0x0136u
 #define RM_FAR_KEEP    0x8000u      /* the first bank's work RAM kept while the far ones draw */
 extern int rm_far_shift;
-extern uint16_t rm_far_depth;    /* its true depth, at most $7FFF: its shade and its model by distance */
+extern uint16_t rm_far_depth;
+/* Enhanced's sprites drawn as solids (remaster/solids.c): each object's
+   gaze as ObjectPlaceOnParent picks its pictures by it (object/object.c):
+   the bytes it reads the table at $08:E8AF by for its +$18 (low) and +$19
+   (high), $10000 set (0: it set no gaze); and each draw record's object
+   and the gaze for the picture it took (+$18 or +$19, as it took that),
+   the near records by their place, the far ones after them
+   (object/draw_list.c) */
+#define RM_RECORDS (0x31 + RM_FAR_MAX)
+extern uint32_t rm_gaze[0x8000];
+extern uint16_t rm_record_object[RM_RECORDS], rm_record_gaze[RM_RECORDS];
+/* the gazes kept at a tick's start (tween.c), and object o's as the state
+   being drawn has it: the kept one while a picture draws from the start */
+void rm_gaze_tick_start(void);
+uint32_t rm_gaze_of(uint16_t o);    /* its true depth, at most $7FFF: its shade and its model by distance */
 void rm_far_draw(void);
 
 /* the menus' 3D picture to the display at once: system/vblank_updates.c */

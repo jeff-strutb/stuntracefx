@@ -9,6 +9,7 @@
 #include "cpu_ops.h"
 #include "assets.h"
 #include "remaster.h"
+#include "console_ext.h"
 
 /* A field of the object at offset `obj` in the data bank. */
 static uint32_t field(uint8_t bank, uint16_t obj, uint16_t off)
@@ -2797,6 +2798,7 @@ void abi_ObjectPlaceOnParent(void)
 
     v = (uint8_t)(rd8(b | (uint16_t)(0x2025 + cpu.y)) & 0x01);
     if (v) {
+        rm_gaze[cpu.y & 0x7FFF] = 0;
         cpu.a = (uint16_t)((cpu.a & 0xFF00) | 0x8C);
         wr8(b | (uint16_t)(0x2018 + cpu.y), 0x8C);
         wr8(b | (uint16_t)(0x2019 + cpu.y), 0x8C);
@@ -2817,6 +2819,11 @@ void abi_ObjectPlaceOnParent(void)
         cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);
         wr8(b | 0x1F4C, v);
         cpu.x = x0;
+        /* Remaster: the bytes the table is read by, whole (solids.c turns
+           an eye by them); read as the work RAM holds them */
+        rm_gaze[cpu.y & 0x7FFF] = 0x10000u
+            | (uint8_t)(nshvc_wram()[(uint16_t)(cpu.d + 0x11 + from_x[0])] + nshvc_wram()[(uint16_t)(0x2015 + x0)] + v)
+            | (uint32_t)(uint8_t)(nshvc_wram()[(uint16_t)(cpu.d + 0x11 + from_x[1])] + nshvc_wram()[(uint16_t)(0x2015 + x0)] + v) << 8;
         for (i = 0; i < 2; i++) {
             v = rd8((uint16_t)(cpu.d + 0x11 + from_x[i]));
             cpu.a = (uint16_t)((cpu.a & 0xFF00) | v);

@@ -42,6 +42,7 @@ void rm_tween_tick_start(void)
     memcpy(was_w, nshvc_wram(), sizeof was_w);
     memcpy(was_s, nshvc_sram(), sizeof was_s);
     was_gsu = gsu;
+    rm_gaze_tick_start();
     was_tick = rm_tick_count();
     was_ok = 1;
     ticked = 1;

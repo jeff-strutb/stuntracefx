@@ -459,7 +459,7 @@ void fw_label_end(void) { label_on = 0; }
 int fw_sprite_rows(void) { return fw_drawing && !fw_hud && !checking && !label_on; }
 
 /* the sprite being drawn is not put in the picture (a solid wheel is in its
-   place, tyres.c): its rows and plots run, their pixels left out */
+   place, solids.c): its rows and plots run, their pixels left out */
 static int sprite_hidden;
 void fw_sprite_hide(int on) { sprite_hidden = on; }
 
@@ -1381,7 +1381,7 @@ int fw_exact_tex_draw(void)
     return 1;
 }
 
-/* A flat convex face of the full window's own (tyres.c): its points in view
+/* A flat convex face of the full window's own (solids.c): its points in view
    space clipped at the near plane, projected as fw_exact_tex_draw's are,
    kept to a band 4096 texels past the screen (so the edges' sums stay in
    range) and filled whole in colour c, as flat_polygon's faces are: its
