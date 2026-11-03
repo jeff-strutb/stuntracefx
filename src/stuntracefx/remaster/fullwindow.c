@@ -159,6 +159,30 @@ static int anchor_shift(int x0, int x1)
     return ox;
 }
 
+/* The same for the HUD inside the view, which the original drew against
+   its bezel: a piece left of the screen's middle moves so that the view's
+   left edge (column VIEW_X) is at the box's left edge, one right of it so
+   that the view's right edge is at the box's right edge. In a window up to
+   16:9 the box's edges are the window's, so a piece the bezel cut (the
+   start lamps) is cut by the window's edge there, and what the bezel hid
+   is off the screen. */
+static int view_shift(int x0, int x1)
+{
+    int margin = W > UI_W_MAX ? (W - UI_W_MAX) / 2 : 0;
+    if (x1 < 128 - 8)
+        return (margin > safe_px[0] ? margin : safe_px[0]) - VIEW_X;
+    if (x0 > 128 + 8)
+        return W - (margin > safe_px[2] ? margin : safe_px[2]) - (VIEW_X + VIEW_W);
+    return (W - 256) / 2;
+}
+
+/* whether the original's view showed a pixel of its screen (the bezel
+   around it, its window, hid the rest) */
+static int in_view(int x, int y)
+{
+    return x >= VIEW_X && x < VIEW_X + VIEW_W && y >= VIEW_Y && y < VIEW_Y + VIEW_H;
+}
+
 /* the same down a screen taller than 224 (the original's lines its top
    rows), by the piece's middle: above the view's centre line it stays,
    below it it goes to the bottom edge, about it (the race's messages
@@ -177,20 +201,26 @@ static int anchor_shift_y(int y0, int y1)
    program's pixels go to a layer of the original's screen (hud_px, the
    colour + 1; hud_id, the program's piece) and, as the HUD ends
    (fw_hud_end), onto the texels: the pieces near each other (a message
-   one program a word) joined, each join by its columns' and rows' anchor */
+   one program a word) joined, each join by its columns' and rows' anchor
+   (view_shift). Only the pixels the original's view showed (in_view) go
+   onto the texels, and only they make a piece's place: the HUD parks
+   pieces under the bezel before they slide in. */
 #define HUD_PIECES 96
 #define HUD_GAP 24                      /* pieces this near across (on rows they share) are one: a message's words */
 static uint16_t hud_px[224][256];
 static uint8_t hud_id[224][256];
-static int hud_run, hud_x0, hud_x1, hud_y0, hud_y1;
+static int hud_run, hud_x0, hud_x1, hud_y0, hud_y1, hud_vx0, hud_vx1, hud_vy0, hud_vy1;
+/* each piece's pixels' columns and rows (hp_*), and those of its pixels in
+   the view (hv_*; hv_x1 < 0: none) */
 static int hud_n, hp_x0[HUD_PIECES], hp_x1[HUD_PIECES], hp_y0[HUD_PIECES], hp_y1[HUD_PIECES], hp_up[HUD_PIECES];
+static int hv_x0[HUD_PIECES], hv_x1[HUD_PIECES], hv_y0[HUD_PIECES], hv_y1[HUD_PIECES];
 
 void fw_gsu_program(int begin)
 {
     if (begin) {
         hud_run = fw_hud && !checking && hud_n < HUD_PIECES;
-        hud_x0 = hud_y0 = 0x7FFF;
-        hud_x1 = hud_y1 = -1;
+        hud_x0 = hud_y0 = hud_vx0 = hud_vy0 = 0x7FFF;
+        hud_x1 = hud_y1 = hud_vx1 = hud_vy1 = -1;
         return;
     }
     if (!hud_run)
@@ -202,6 +232,10 @@ void fw_gsu_program(int begin)
     hp_x1[hud_n] = hud_x1;
     hp_y0[hud_n] = hud_y0;
     hp_y1[hud_n] = hud_y1;
+    hv_x0[hud_n] = hud_vx0;
+    hv_x1[hud_n] = hud_vx1;
+    hv_y0[hud_n] = hud_vy0;
+    hv_y1[hud_n] = hud_vy1;
     hp_up[hud_n] = hud_n;
     hud_n++;
 }
@@ -220,27 +254,31 @@ static void hud_place(void)
     span_flush();                       /* the 3D first, the HUD over it */
     for (a = 0; a < hud_n; a++)
         for (b = 0; b < a; b++)
-            if (hp_y0[a] <= hp_y1[b] && hp_y0[b] <= hp_y1[a] && hp_x0[a] <= hp_x1[b] + HUD_GAP &&
-                hp_x0[b] <= hp_x1[a] + HUD_GAP)
+            if (hv_x1[a] >= 0 && hv_x1[b] >= 0 && hv_y0[a] <= hv_y1[b] && hv_y0[b] <= hv_y1[a] &&
+                hv_x0[a] <= hv_x1[b] + HUD_GAP && hv_x0[b] <= hv_x1[a] + HUD_GAP)
                 hp_up[hud_root(a)] = hud_root(b);
     for (a = 0; a < hud_n; a++)
         g0[a] = h0[a] = 0x7FFF, g1[a] = h1[a] = -1;
     for (a = 0; a < hud_n; a++) {
         int g = hud_root(a);
-        if (hp_x0[a] < g0[g]) g0[g] = hp_x0[a];
-        if (hp_x1[a] > g1[g]) g1[g] = hp_x1[a];
-        if (hp_y0[a] < h0[g]) h0[g] = hp_y0[a];
-        if (hp_y1[a] > h1[g]) h1[g] = hp_y1[a];
+        if (hv_x1[a] < 0)
+            continue;
+        if (hv_x0[a] < g0[g]) g0[g] = hv_x0[a];
+        if (hv_x1[a] > g1[g]) g1[g] = hv_x1[a];
+        if (hv_y0[a] < h0[g]) h0[g] = hv_y0[a];
+        if (hv_y1[a] > h1[g]) h1[g] = hv_y1[a];
     }
     for (a = 0; a < hud_n; a++)
-        if (hud_root(a) == a) {
-            s[a] = anchor_shift(g0[a], g1[a]);
+        if (hud_root(a) == a && g1[a] >= 0) {
+            s[a] = view_shift(g0[a], g1[a]);
             t[a] = anchor_shift_y(h0[a], h1[a]);
         }
     for (a = 0; a < hud_n; a++) {
         int g = hud_root(a);
-        for (y = hp_y0[a]; y <= hp_y1[a]; y++)
-            for (x = hp_x0[a]; x <= hp_x1[a]; x++) {
+        if (hv_x1[a] < 0)
+            continue;
+        for (y = hv_y0[a]; y <= hv_y1[a]; y++)
+            for (x = hv_x0[a]; x <= hv_x1[a]; x++) {
                 uint8_t *o;
                 if (!hud_px[y][x] || hud_id[y][x] != a)
                     continue;
@@ -476,6 +514,12 @@ void fw_plot(uint16_t x, uint16_t y)
         if (px > hud_x1) hud_x1 = px;
         if (py < hud_y0) hud_y0 = py;
         if (py > hud_y1) hud_y1 = py;
+        if (in_view(px, py)) {
+            if (px < hud_vx0) hud_vx0 = px;
+            if (px > hud_vx1) hud_vx1 = px;
+            if (py < hud_vy0) hud_vy0 = py;
+            if (py > hud_vy1) hud_vy1 = py;
+        }
         return;
     }
     if (fw_hud) {
@@ -2794,7 +2838,11 @@ static void sprites_place(void)
         shown[i] = !(((t & 0x1F8) == 0x40 && (at & 0x0E) == 0x06) || lamp_hidden(t, at) || yy + h > 256 || yy >= PANEL_END ||
                      xx + (int)h <= 0 || xx >= 256 || yy + h <= RACE_ROW0 ||
                      ((at & 0x30) != 0x30 && (xx + (int)h <= VIEW_X || xx >= VIEW_X + VIEW_W ||
-                                              (int)(yy + h) <= VIEW_Y || (int)yy >= VIEW_Y + VIEW_H)));
+                                              (int)(yy + h) <= VIEW_Y || (int)yy >= VIEW_Y + VIEW_H)) ||
+                     /* the HUD's on the view's rows under the bezel: the
+                        original's view window hid them (parked to slide in) */
+                     ((at & 0x30) == 0x30 && (int)yy >= VIEW_Y && (int)(yy + h) <= VIEW_Y + VIEW_H &&
+                      (xx + (int)h <= VIEW_X || xx >= VIEW_X + VIEW_W)));
         sx0[i] = xx;
         sy0[i] = (int)yy;
         sz[i] = (int)h;
@@ -2822,8 +2870,8 @@ static void sprites_place(void)
         int g = spr_root(up, i), s = ox, vs = oy, x, y, xp = 0, yp = 32;
         unsigned at = o[i * 4 + 3], h = (unsigned)sz[i];
         if (shown[i]) {
-            if ((at & 0x30) == 0x30) {  /* the HUD's: to the screen's edges */
-                s = anchor_shift(px0[g], px1[g]);
+            if ((at & 0x30) == 0x30) {  /* the HUD's: to the screen's edges, the view's by its own (view_shift) */
+                s = sy0[i] + (int)h > PANEL_TOP ? anchor_shift(px0[g], px1[g]) : view_shift(px0[g], px1[g]);
                 vs = anchor_shift_y(py0[g], py1[g]);
                 if (sy0[i] + (int)h > PANEL_TOP) {
                     vs = H - 224 - safe_px[3];
