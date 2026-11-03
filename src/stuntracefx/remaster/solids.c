@@ -3,7 +3,8 @@
  * objects are pictures facing the view, drawn by FxObjectSprite, the
  * picture picked for the angle they are seen at: every car's tyres
  * (shape $A1C8), the bonus course truck's wheels ($A1E4, ObjectSparksStart)
- * and the 4WD's eyes ($A190, ObjectLampStart). In the full window's
+ * the 4WD's eyes ($A190, ObjectLampStart) and the trees' trunks and
+ * canopies ($A104, $A120, ObjectLampTower; trees below). In the full window's
  * picture each is drawn in its place as a solid instead: a shape turned
  * about its axis (a profile of rings, ends capped and ringed), at the
  * object's place in view space, turned as the model drawer turns a model
@@ -58,6 +59,7 @@ typedef struct {
     int nrings;
     const Disc *front, *back;           /* the caps at the last ring (+) and the first (-) */
     int nfront, nback;
+    int tree;                           /* a tree's: 1 its trunk, 2 its canopy (shaped by its painting) */
 } Solid;
 
 /* a tyre: 28 texels of its 32 across, 18 wide, shoulders a texel; its
@@ -83,12 +85,15 @@ static const Solid solids[] = {
     { 0xA1C8, 32, 0, tyre_rings, N(tyre_rings), tyre_side, tyre_side, N(tyre_side), N(tyre_side) },
     { 0xA1E4, 32, 0, tyre_rings, N(tyre_rings), tyre_side, tyre_side, N(tyre_side), N(tyre_side) },
     { 0xA190, 16, 2, lamp_rings, N(lamp_rings), lamp_lens, lamp_back, N(lamp_lens), N(lamp_back) },
+    { 0xA104, 32, 1, NULL, 0, NULL, NULL, 0, 0, 1 },
+    { 0xA120, 64, 1, NULL, 0, NULL, NULL, 0, 0, 2 },
 };
 
 static const Solid *object, *armed;
 static unsigned record;
 static int coloured;
-static uint8_t hi;
+static uint8_t hi, tex_bank, tex_nib;
+static uint16_t tex_base;
 static double pos[3], view[3][3], scale;
 
 static uint16_t ram16(uint16_t a) { return (uint16_t)(gsu_rd8(0x700000u | a) | gsu_rd8(0x700000u | (uint16_t)(a + 1)) << 8); }
@@ -180,7 +185,12 @@ void fw_solid_begin(void)
     }
     if (rm_far_shift)                   /* a far object's place and size halved together */
         scale /= 1 << rm_far_shift;
-    if (object->shape != 0xA190)
+    if (object->tree) {                 /* upright in the world: the view's matrix alone */
+        int i, j;
+        for (i = 0; i < 3; i++)
+            for (j = 0; j < 3; j++)
+                view[i][j] = (int16_t)ram16((uint16_t)(0x00E4 + 6 * i + 2 * j)) / 32768.0;
+    } else if (object->shape != 0xA190)
         turn();
     armed = object;
     fw_sprite_hide(1);
@@ -192,6 +202,9 @@ void fw_solid_colour(uint8_t colr)
     if (!armed)
         return;
     hi = (uint8_t)(colr & 0xF0);
+    tex_bank = (uint8_t)ram16(0x00A6);  /* its painting (FxSpriteMaterial's): a tree is shaped by it */
+    tex_base = ram16(0x00A8);
+    tex_nib = gsu.por & 0x04 ? 1 : 0;   /* COLOR's: the high nibble, else the low */
     coloured = 1;
 }
 
@@ -295,13 +308,254 @@ static void draw(const Solid *s)
     cap(s, s->rings[0].a, s->back, s->nback, n);
 }
 
+/* ---- trees ------------------------------------------------------------- */
+/*
+ * A tree in the race's polygon style, of its paintings' size and shape:
+ * its trunk and its canopy each turned about the world's upright, their
+ * half widths from their paintings row by row (the trunk every two rows,
+ * the canopy every four, the widest of them), the canopy's points moved
+ * in and out a little (the same for every tree) so it reads as foliage.
+ * The canopy's outline is eased ring to ring and every other ring turned
+ * half a side, so its facets interlock. Flat faces in the paintings'
+ * colours by how far each faces the light, from where the painting is
+ * lit (where its lighter colours lie): the faces seen, least lit first,
+ * take the painting's colours, darkest first, each for its share of the
+ * painting, by their area on the screen. A painting faces the view
+ * whatever the tree's angles, so a tree stands upright.
+ */
+#define PAINT_ROWS 64
+typedef struct {
+    double half[PAINT_ROWS], light[3], share[16];
+    int top, bottom, ncolours;
+    uint8_t colour[16];                 /* darkest (the higher nibble) first */
+} Paint;
+
+static void paint_measure(const Solid *s, Paint *p)
+{
+    double count[16] = { 0 }, total = 0, mean = 0, cx = 0, cy = 0, lx = 0, ly = 0, l;
+    int u, v, k, T = s->texels;
+    uint8_t c, rank[16] = { 0 };
+#define TEXEL(u, v) ((fw_texel(tex_bank, (uint16_t)(tex_base + ((v) << 8) + (u))) >> (4 * tex_nib)) & 15)
+    memset(p, 0, sizeof *p);
+    p->top = -1;
+    for (v = 0; v < T; v++) {
+        int left = -1, right = -1;
+        for (u = 0; u < T; u++)
+            if ((c = TEXEL(u, v))) {
+                if (left < 0)
+                    left = u;
+                right = u;
+                count[c]++, total++;
+            }
+        p->half[v] = left < 0 ? 0 : (right + 1 - left) / 2.0;
+        if (left >= 0) {
+            if (p->top < 0)
+                p->top = v;
+            p->bottom = v;
+        }
+    }
+    for (c = 15; c >= 1; c--)
+        if (count[c])
+            rank[c] = (uint8_t)p->ncolours, p->colour[p->ncolours++] = c;
+    if (!total)
+        return;
+    for (k = 0; k < p->ncolours; k++)
+        p->share[k] = count[p->colour[k]] / total;
+    for (v = 0; v < T; v++)
+        for (u = 0; u < T; u++)
+            if ((c = TEXEL(u, v)))
+                mean += rank[c], cx += u + 0.5, cy += v + 0.5;
+    mean /= total, cx /= total, cy /= total;
+    for (v = 0; v < T; v++)
+        for (u = 0; u < T; u++)
+            if ((c = TEXEL(u, v)))
+                lx += (rank[c] - mean) * (u + 0.5 - cx), ly += (rank[c] - mean) * (v + 0.5 - cy);
+#undef TEXEL
+    l = sqrt(lx * lx + ly * ly);
+    p->light[0] = l ? 0.75 * lx / l : 0, p->light[1] = l ? 0.75 * ly / l : 0, p->light[2] = -0.66;
+    l = sqrt(p->light[0] * p->light[0] + p->light[1] * p->light[1] + p->light[2] * p->light[2]);
+    for (k = 0; k < 3; k++)
+        p->light[k] /= l;
+}
+
+/* a point of the tree: x and z across, y the world's down (texels from its
+   painting's middle) */
+static void tree_point(double x, double y, double z, double *out)
+{
+    int j;
+    for (j = 0; j < 3; j++)
+        out[j] = pos[j] + scale * (x * view[0][j] + y * view[1][j] + z * view[2][j]);
+}
+
+#define TREE_FACES 1024
+typedef struct { double p[4][3], key, lit, area; int n; uint8_t c; } TreeFace;
+static TreeFace faces[TREE_FACES];
+
+static int face_cmp(const void *a, const void *b)
+{
+    double x = ((const TreeFace *)a)->key, y = ((const TreeFace *)b)->key;
+    return x > y ? -1 : x < y;
+}
+
+static TreeFace *by_lit[TREE_FACES];
+static int lit_cmp(const void *a, const void *b)
+{
+    double x = (*(TreeFace *const *)a)->lit, y = (*(TreeFace *const *)b)->lit;
+    return x < y ? -1 : x > y;
+}
+
+/* a body turned about the upright: ring k at down y[k], its points at
+   radius r[k] (times jag[k][i], round it); its faces seen kept, drawn
+   farthest first (it need not be convex) */
+#define TREE_SIDES_MAX 24
+/* a face of m points kept when seen, outward away from the upright at
+   down ay; its light against the painting's and its area on the screen */
+static int nf;
+static double total_area;
+static void keep_face(const double (*q)[3], int m, double ay, const Paint *pt)
+{
+    double u[3], v[3], nv[3], c[3] = { 0 }, axis[3], d = 0, e = 0, l, f_ = fw_focal();
+    TreeFace *f;
+    int i, j;
+    if (nf >= TREE_FACES)
+        return;
+    f = &faces[nf];
+    for (j = 0; j < 3; j++) {
+        u[j] = q[1][j] - q[0][j];
+        v[j] = q[m - 1][j] - q[0][j];
+        for (i = 0; i < m; i++)
+            c[j] += q[i][j] / m;
+    }
+    nv[0] = u[1] * v[2] - u[2] * v[1];
+    nv[1] = u[2] * v[0] - u[0] * v[2];
+    nv[2] = u[0] * v[1] - u[1] * v[0];
+    tree_point(0, ay, 0, axis);
+    for (j = 0; j < 3; j++)
+        d += nv[j] * (c[j] - axis[j]);
+    if (d < 0)                          /* outward: away from the upright */
+        for (j = 0; j < 3; j++)
+            nv[j] = -nv[j];
+    for (j = 0; j < 3; j++)
+        e += nv[j] * c[j];
+    if (e >= 0)
+        return;
+    l = sqrt(nv[0] * nv[0] + nv[1] * nv[1] + nv[2] * nv[2]);
+    f->lit = l ? (nv[0] * pt->light[0] + nv[1] * pt->light[1] + nv[2] * pt->light[2]) / l : -1;
+    for (i = 0; i < m; i++)
+        memcpy(f->p[i], q[i], sizeof f->p[i]);
+    f->n = m;
+    f->key = c[0] * c[0] + c[1] * c[1] + c[2] * c[2];
+    for (f->area = 0, j = 0; j < m; j++) {      /* its area on the screen */
+        const double *a = q[j], *b = q[(j + 1) % m];
+        if (a[2] > 0 && b[2] > 0)
+            f->area += (a[0] / a[2]) * (b[1] / b[2]) - (b[0] / b[2]) * (a[1] / a[2]);
+    }
+    f->area = fabs(f->area) * f_ * f_ / 2;
+    total_area += f->area;
+    nf++;
+}
+
+/* a body turned about the upright: ring k at down y[k], its points at
+   radius r[k] (times jag[k][i], round it), every other ring turned half a
+   side when staggered (the band between two such rings in triangles,
+   each edge of a ring to the other ring's point beside it); its faces
+   seen drawn farthest first (it need not be convex) */
+static void tree_body(const double *y, const double *r, int nr, int sides, const double (*jag)[TREE_SIDES_MAX],
+                      int stagger, const Paint *pt)
+{
+    int k, i;
+    double at;
+    nf = 0, total_area = 0;
+    for (k = 0; k + 1 < nr; k++) {
+        double o0 = stagger && (k & 1) ? 0.5 : 0, o1 = stagger && ((k + 1) & 1) ? 0.5 : 0, ay = (y[k] + y[k + 1]) / 2;
+        for (i = 0; i < sides; i++) {
+            int i1 = (i + 1) % sides;
+            double a0[3], a1[3], b0[3], b1[3], q[4][3];
+            double ra0 = r[k] * jag[k][i], ra1 = r[k] * jag[k][i1], rb0 = r[k + 1] * jag[k + 1][i], rb1 = r[k + 1] * jag[k + 1][i1];
+            double ta0 = 2 * M_PI * (i + o0) / sides, ta1 = 2 * M_PI * (i + 1 + o0) / sides;
+            double tb0 = 2 * M_PI * (i + o1) / sides, tb1 = 2 * M_PI * (i + 1 + o1) / sides;
+            tree_point(ra0 * cos(ta0), y[k], ra0 * sin(ta0), a0);
+            tree_point(ra1 * cos(ta1), y[k], ra1 * sin(ta1), a1);
+            tree_point(rb0 * cos(tb0), y[k + 1], rb0 * sin(tb0), b0);
+            tree_point(rb1 * cos(tb1), y[k + 1], rb1 * sin(tb1), b1);
+            if (!r[k]) {                /* a closed end: triangles to its point */
+                memcpy(q[0], a0, sizeof a0), memcpy(q[1], b1, sizeof b1), memcpy(q[2], b0, sizeof b0);
+                keep_face((const double (*)[3])q, 3, ay, pt);
+            } else if (!r[k + 1]) {
+                memcpy(q[0], a0, sizeof a0), memcpy(q[1], a1, sizeof a1), memcpy(q[2], b0, sizeof b0);
+                keep_face((const double (*)[3])q, 3, ay, pt);
+            } else if (o0 == o1) {      /* a band of four-sided faces */
+                memcpy(q[0], a0, sizeof a0), memcpy(q[1], a1, sizeof a1), memcpy(q[2], b1, sizeof b1), memcpy(q[3], b0, sizeof b0);
+                keep_face((const double (*)[3])q, 4, ay, pt);
+            } else if (o1 > o0) {       /* the next ring's point beside this edge: b0 */
+                memcpy(q[0], a0, sizeof a0), memcpy(q[1], a1, sizeof a1), memcpy(q[2], b0, sizeof b0);
+                keep_face((const double (*)[3])q, 3, ay, pt);
+                memcpy(q[0], b0, sizeof b0), memcpy(q[1], a1, sizeof a1), memcpy(q[2], b1, sizeof b1);
+                keep_face((const double (*)[3])q, 3, ay, pt);
+            } else {                    /* this ring turned: the next ring's b1 beside this edge */
+                memcpy(q[0], a0, sizeof a0), memcpy(q[1], a1, sizeof a1), memcpy(q[2], b1, sizeof b1);
+                keep_face((const double (*)[3])q, 3, ay, pt);
+                memcpy(q[0], a0, sizeof a0), memcpy(q[1], b1, sizeof b1), memcpy(q[2], b0, sizeof b0);
+                keep_face((const double (*)[3])q, 3, ay, pt);
+            }
+        }
+    }
+    for (i = 0; i < nf; i++)            /* the painting's colours by their shares, the least lit the darkest */
+        by_lit[i] = &faces[i];
+    qsort(by_lit, (size_t)nf, sizeof by_lit[0], lit_cmp);
+    for (i = 0, k = 0, at = 0; i < nf; i++) {
+        double mid = at + by_lit[i]->area / 2, edge = 0;
+        for (k = 0, edge = pt->share[0] * total_area; k + 1 < pt->ncolours && mid > edge; k++)
+            edge += pt->share[k + 1] * total_area;
+        by_lit[i]->c = pt->colour[k];
+        at += by_lit[i]->area;
+    }
+    qsort(faces, (size_t)nf, sizeof faces[0], face_cmp);
+    for (i = 0; i < nf; i++)
+        fw_view_face((const double (*)[3])faces[i].p, faces[i].n, (uint8_t)(hi | faces[i].c));
+}
+
+static void tree(const Solid *s)
+{
+    static double jag[PAINT_ROWS / 2 + 4][TREE_SIDES_MAX];
+    double y[PAINT_ROWS / 2 + 4], r[PAINT_ROWS / 2 + 4], T = s->texels;
+    int nr = 0, v, k, i, step = s->tree == 1 ? 2 : 4, sides = s->tree == 1 ? 10 : 14;
+    Paint pt;
+    paint_measure(s, &pt);
+    if (!pt.ncolours || pt.top < 0)
+        return;
+    y[nr] = pt.top - T / 2, r[nr++] = 0;
+    for (v = pt.top; v <= pt.bottom; v += step) {
+        double h = 0;
+        for (k = v; k < v + step && k <= pt.bottom; k++)
+            if (pt.half[k] > h)
+                h = pt.half[k];
+        y[nr] = v + step / 2.0 - T / 2, r[nr++] = h;
+    }
+    if (s->tree == 2) {                 /* the canopy's outline eased: each ring with its neighbours */
+        double was[PAINT_ROWS / 2 + 4];
+        memcpy(was, r, sizeof was);
+        for (k = 1; k + 1 < nr; k++)
+            r[k] = 0.25 * was[k - 1] + 0.5 * was[k] + 0.25 * was[k + 1];
+    }
+    y[nr] = pt.bottom + 1 - T / 2, r[nr++] = 0;
+    for (k = 0; k < nr; k++)            /* the canopy's points in and out a little, the same for every tree */
+        for (i = 0; i < sides; i++) {
+            unsigned hsh = (unsigned)(k * 7919 + i * 104729) * 2654435761u;
+            jag[k][i] = s->tree == 2 ? 0.88 + 0.24 * ((hsh >> 16) & 0xFF) / 255.0 : 1.0;
+        }
+    tree_body(y, r, nr, sides, (const double (*)[TREE_SIDES_MAX])jag, s->tree == 2, &pt);
+}
+
 /* FxObjectSprite returned (frame.c, 01:AD2D) */
 void fw_solid_end(void)
 {
     if (!armed)
         return;
     fw_sprite_hide(0);
-    if (coloured)
+    if (coloured && armed->tree)
+        tree(armed);
+    else if (coloured)
         draw(armed);
     armed = NULL;
     coloured = 0;
