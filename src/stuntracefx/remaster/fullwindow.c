@@ -3066,7 +3066,8 @@ static void screen_back(void)
    window is on) and past the console's picture BG2 reads a map 128 x 64
    (nshvc_ext_layer_outside, contract 2.10), a turn across: the shown
    buffer's rows the backdrop's own columns either side of the picture,
-   whole at any width. Written each frame, held, outside the game's time,
+   whole at any width, and its rows above and below the band the
+   backdrop's own rows (bg2_backdrop), whole at any height. Written each frame, held, outside the game's time,
    as the in-between frames' rows are (tween.c). */
 #define BG2_MAP_AT 0x5800
 #define BG2_CHARS_AT 0x6000
@@ -3089,21 +3090,24 @@ static int all_colour1(const uint16_t *v, unsigned ch)
    middle,
    the game's row (from byte x, its first entry the map's column 0) run on
    either way round the turn; past the map's end ($2800) $20C0, as the
-   game fills */
-static void bg2_backdrop(uint16_t *map, unsigned cols, const uint8_t *keep, unsigned sel)
+   game fills. The map's other rows the backdrop's rows above and below
+   the band, up to 32 each way round the map's 64: the hills the
+   original's view cut at its top and bottom lines whole on a screen that
+   shows past them; above the backdrop's first row the band's sky */
+static void bg2_backdrop(uint16_t *map, unsigned cols, unsigned sel)
 {
     const uint8_t *w = nshvc_wram();
     uint16_t x, src, hofs;
-    unsigned first = sel ? 47 : 30, col, i, c;
+    unsigned first = sel ? 47 : 30, col, r, c;
     int mid;
 
     if (!rm_backdrop_view(sel, &x, &src, &hofs))
         return;
     col = (x % 0x140) / 2;
     mid = 128 + (int16_t)hofs;
-    for (i = 0; i < 17 && first + i < 64; i++) {
-        unsigned r = first + i, at = (unsigned)x + i * 0x140;
-        if (!keep[r])
+    for (r = 0; r < 64; r++) {
+        int i = (int)((r - first + 32) & 63) - 32, at = (int)x + i * 0x140;
+        if (at < 0)
             continue;
         for (c = 0; c < cols; c++) {
             int lx = (int)c * 8, e, half = (int)cols * 4;
@@ -3149,8 +3153,8 @@ static void bg2_prepare(void)
     for (r = 0; r < 64; r++)
         for (i = 0; i < 128; i++)
             out[r * 128 + i] = map[r * 64 + (i & 63)];
-    bg2_backdrop(map, 64, keep, sel);
-    bg2_backdrop(out, 128, keep, sel);
+    bg2_backdrop(map, 64, sel);
+    bg2_backdrop(out, 128, sel);
     nshvc_ext_layer_outside(1, out, 5);
     nshvc_ext_vram_direct(1);
     wr8(VMAIN, 0x80);
