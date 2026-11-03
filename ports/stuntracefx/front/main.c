@@ -67,6 +67,47 @@ static int driving_now(void)
     return controls_seen && nshvc_frames() - controls_frame <= 12 && nshvc_peek(0x7E10DA) == 0;
 }
 
+/* ---- every course opened (SRFX_ALLCOURSES=1) ----
+   The game's own code, played on controller 2 the first time the Speed
+   Trax course screen runs with its courses not all open ($0D24 not 3):
+   L held, and Select pressed with it seven times (race/course.c
+   CourseScreenStep), as tools/stuntracefx/plays/speed_all_courses.sfx
+   does. The game opens them and keeps that in the save, so it is needed
+   once. Started again if the screen goes before it is done. */
+static uint32_t course_screen_frame;
+static int course_screen_seen, code_step = -1;
+
+void port_course_screen(void)
+{
+    course_screen_frame = nshvc_frames();
+    course_screen_seen = 1;
+}
+
+static void all_courses_frame(void)
+{
+    /* the code's frames: L 10, then seven of Select+L 4 and L 6, then none */
+    int n = 10 + 7 * 10;
+    if (!getenv("SRFX_ALLCOURSES"))
+        return;
+    if (!course_screen_seen || nshvc_frames() - course_screen_frame > 2) {
+        if (code_step >= 0)             /* the screen went: from the start next time */
+            nshvc_game_buttons(1, 0);
+        code_step = -1;
+        return;
+    }
+    if (code_step < 0) {
+        if (nshvc_peek(0x7E0D24) == 3)  /* already open */
+            return;
+        code_step = 0;
+    }
+    if (code_step >= n) {
+        nshvc_game_buttons(1, 0);
+        return;
+    }
+    nshvc_game_buttons(1, (uint16_t)(NSHVC_L | (code_step >= 10 && (code_step - 10) % 10 < 4 ? NSHVC_SELECT : 0)));
+    code_step++;
+}
+
 /* ---- the mode: Original (the original's pace, by the cost profile) or
    Enhanced (independent of the processors' speed: Frame rate 60; the main
    CPU's work takes no console time, and the Super FX's none, rm_enhanced)
@@ -104,6 +145,7 @@ static void on_frame(void)
     TouchView v;
     rm_frame_end();
     rm_typing_frame();
+    all_courses_frame();
     if (!badge_made) {
         art_make_mode();
         badge_made = 1;

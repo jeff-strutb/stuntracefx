@@ -10,4 +10,10 @@
    of the game's state. */
 void port_controls_read(int player);
 
+/* The Speed Trax course screen runs its frame (race/course.c
+   CourseScreenStep, its mode 0), where player 2's code opens every course:
+   the front end may play it (SRFX_ALLCOURSES). No time and nothing of the
+   game's state. */
+void port_course_screen(void);
+
 #endif

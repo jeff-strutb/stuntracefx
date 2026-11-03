@@ -4,6 +4,7 @@
 #include "machine.h"
 #include "cpu_ops.h"
 #include "assets.h"
+#include "controls.h"
 
 static uint32_t dbw(uint8_t bank, uint16_t a)
 {
@@ -1936,6 +1937,7 @@ void abi_CourseScreenStep(void)
         screen_state(b, 0xE4A7);
         return;
     }
+    port_course_screen();               /* the front end's (controls.h) */
     op_sep(P_M);
     op_lda8(b | 0x0D24);
     if ((uint8_t)cpu.a != 0x03) {
