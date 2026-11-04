@@ -80,7 +80,7 @@ static uint32_t qfam;
 static VkPhysicalDeviceMemoryProperties memp;
 static VkDescriptorSetLayout dsl;
 static VkPipelineLayout pl;
-static VkPipeline pipe_rows, pipe_fill;
+static VkPipeline pipe_rows, pipe_fill, pipe_water;
 static VkDescriptorPool dpool;
 static VkDescriptorSet dset;
 static VkCommandPool cpool;
@@ -94,8 +94,8 @@ typedef struct {
     size_t len;
     void *at;
 } Buf;
-enum { B_OUT, B_SPANS, B_ROW_AT, B_ROW_SPANS, B_BANKS, B_SLOT, B_POLYS, B_EDGES, B_ROW_POLY, B_N };
-static const uint32_t binding_of[B_N] = {0, 1, 2, 3, 4, 5, 8, 9, 10};
+enum { B_OUT, B_SPANS, B_ROW_AT, B_ROW_SPANS, B_BANKS, B_SLOT, B_POLYS, B_EDGES, B_ROW_POLY, B_OUT32, B_JOB, B_GAP, B_N };
+static const uint32_t binding_of[B_N] = {0, 1, 2, 3, 4, 5, 8, 9, 10, 11, 12, 13};
 static Buf bufs[B_N];
 static int dset_stale = 1;
 
@@ -297,7 +297,7 @@ static int device_open(void)
     {
         VkDescriptorSetLayoutBinding b[B_N];
         VkDescriptorSetLayoutCreateInfo li = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-        VkPushConstantRange pr = {VK_SHADER_STAGE_COMPUTE_BIT, 0, 8};
+        VkPushConstantRange pr = {VK_SHADER_STAGE_COMPUTE_BIT, 0, 32};   /* w, h, 0, 0, the water's (fill.comp) */
         VkPipelineLayoutCreateInfo pi = {VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
         VkDescriptorPoolSize ps = {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, B_N};
         VkDescriptorPoolCreateInfo dpi = {VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
@@ -344,7 +344,8 @@ static int device_open(void)
     }
     pipe_rows = pipeline(k_rows_comp, sizeof k_rows_comp);
     pipe_fill = pipeline(k_fill_comp, sizeof k_fill_comp);
-    if (!pipe_rows || !pipe_fill)
+    pipe_water = pipeline(k_water_comp, sizeof k_water_comp);
+    if (!pipe_rows || !pipe_fill || !pipe_water)
         return 0;
     for (i = 0; i < B_N; i++)
         if (!buf_grow((int)i, 16))
@@ -395,7 +396,7 @@ static void fill(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
     static size_t ref_len;
     size_t i, len = (size_t)w * h;
     GpuBinSizes z;
-    uint32_t pc[2];
+    uint32_t pc[8] = {0};
     VkCommandBufferBeginInfo bi = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     VkSubmitInfo si = {VK_STRUCTURE_TYPE_SUBMIT_INFO};
     VkMemoryBarrier mb = {VK_STRUCTURE_TYPE_MEMORY_BARRIER};
@@ -461,8 +462,10 @@ static void fill(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
     }
     pc[0] = (uint32_t)w;
     pc[1] = (uint32_t)h;
+    pc[2] = pc[3] = 0;
+    memcpy(&pc[4], fw_water, 16);
     pvkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, pipe_fill);
-    pvkCmdPushConstants(cb, pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, 8, pc);
+    pvkCmdPushConstants(cb, pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, 32, pc);
     pvkCmdDispatch(cb, (uint32_t)(((w + 31) / 32 + 7) / 8), (uint32_t)((h + 7) / 8), 1);
     mb.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
     mb.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
@@ -487,6 +490,78 @@ static void fill(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
     }
 }
 
+/* ---- the water pass ---- */
+static long water_fills, water_apart;
+
+static void water_report(void)
+{
+    fprintf(stderr, "gpucheck: %ld water passes, %ld texels apart from the CPU's\n", water_fills, water_apart);
+}
+
+static uint32_t *texels32_alloc(size_t len)
+{
+    if (!buf_grow(B_OUT32, len))
+        return NULL;
+    return (uint32_t *)bufs[B_OUT32].at;
+}
+
+/* the water pass (fullwindow.h) on the GPU: the shared pictures only */
+static void water_fill(const uint8_t *in, uint32_t *out, const FwWaterJob *j, const uint32_t *gap)
+{
+    size_t len = (size_t)j->w * (size_t)j->h;
+    VkCommandBufferBeginInfo bi = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+    VkSubmitInfo si = {VK_STRUCTURE_TYPE_SUBMIT_INFO};
+    VkMemoryBarrier mb = {VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+
+    if (in != (const uint8_t *)bufs[B_OUT].at || out != (uint32_t *)bufs[B_OUT32].at || len > bufs[B_OUT].len ||
+        len * 4 > bufs[B_OUT32].len || !buf_grow(B_JOB, sizeof *j) || !buf_grow(B_GAP, (size_t)j->h * 4)) {
+        fw_water_fill_cpu(in, out, j, gap);
+        return;
+    }
+    memcpy(bufs[B_JOB].at, j, sizeof *j);
+    memcpy(bufs[B_GAP].at, gap, (size_t)j->h * 4);
+    if (dset_stale)
+        dset_update();
+    pvkResetCommandBuffer(cb, 0);
+    bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    pvkBeginCommandBuffer(cb, &bi);
+    pvkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_COMPUTE, pl, 0, 1, &dset, 0, NULL);
+    pvkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, pipe_water);
+    pvkCmdDispatch(cb, (uint32_t)((j->w + 7) / 8), (uint32_t)((j->h + 7) / 8), 1);
+    mb.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+    mb.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
+    pvkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_HOST_BIT, 0, 1, &mb, 0, NULL, 0,
+                          NULL);
+    pvkEndCommandBuffer(cb);
+    si.commandBufferCount = 1;
+    si.pCommandBuffers = &cb;
+    pvkResetFences(dev, 1, &fence);
+    if (pvkQueueSubmit(queue, 1, &si, fence) != VK_SUCCESS ||
+        pvkWaitForFences(dev, 1, &fence, VK_TRUE, 5000000000ull) != VK_SUCCESS) {
+        fw_water_fill_cpu(in, out, j, gap);
+        return;
+    }
+    if (getenv("FW_GPUCHECK")) {
+        static uint32_t *ref;
+        static size_t ref_len;
+        size_t i;
+        long apart = 0;
+        if (ref_len < len) {
+            free(ref);
+            ref = malloc(len * 4);
+            ref_len = ref ? len : 0;
+        }
+        if (ref) {
+            fw_water_fill_cpu(in, ref, j, gap);
+            for (i = 0; i < len; i++)
+                apart += out[i] != ref[i];
+            if (!water_fills++)
+                atexit(water_report);
+            water_apart += apart;
+        }
+    }
+}
+
 /* the GPU's fill in fw_span_filler's place, when there is a Vulkan GPU */
 int gpu_vulkan_init(void)
 {
@@ -501,5 +576,7 @@ int gpu_vulkan_init(void)
         return 0;
     fw_texels_alloc = texels_alloc;
     fw_span_filler = fill;
+    fw_texels32_alloc = texels32_alloc;
+    fw_water_filler = water_fill;
     return 1;
 }

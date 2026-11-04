@@ -16,7 +16,15 @@ layout(std430, binding = 2) readonly buffer RowAt { uint row_at[]; };
 layout(std430, binding = 3) readonly buffer RowSpans { uint row_spans[]; };
 layout(std430, binding = 4) readonly buffer Banks { uint banks[]; };
 layout(std430, binding = 5) readonly buffer Slot { int slot[]; };
-layout(push_constant) uniform Push { uint w; uint h; } pc;
+layout(push_constant) uniform Push { uint w; uint h; uint pad0; uint pad1; vec4 water; } pc;
+
+/* fullwindow.c's sunk: the water nearer than the span on this pixel's ray */
+bool sunk(float za, float zx, float zy, int x, int y)
+{
+    precise float z = fma(zy, float(y), fma(zx, float(x), za));
+    precise float w = fma(pc.water.z, float(y), fma(pc.water.y, float(x), pc.water.x));
+    return z > 0.0 && w > 0.0 && z < w;
+}
 
 uint persp_texel(float a, float q)
 {
@@ -69,8 +77,13 @@ void main()
             continue;
         uint textured = sp[b + 16] & 255u;
         uint colour = sp[b + 15] >> 24;
+        float za = uintBitsToFloat(sp[b + 24]), zx = uintBitsToFloat(sp[b + 25]), zy = uintBitsToFloat(sp[b + 26]);
+        bool deep = pc.water.w != 0.0 && (za != 0.0 || zx != 0.0 || zy != 0.0);
+        int sy = int(sp[b]);
         if (textured == 0u) {
             for (int x = a; x <= e; x++) {
+                if (deep && sunk(za, zx, zy, x, sy))
+                    continue;
                 uint j = uint(x - c0);
                 o[j >> 2] = (o[j >> 2] & ~(255u << ((j & 3u) * 8u))) | (colour << ((j & 3u) * 8u));
             }
@@ -89,7 +102,7 @@ void main()
                 precise float q = fma(pdq, k, pq);
                 uint iu = persp_texel(fma(pda, k, pa), q), iv = persp_texel(fma(pdb, k, pb), q);
                 int c = texel_colour(bank_byte(s, ((((iv << 8) | iu) & mask) + base) & 0xFFFFu), por, hi);
-                if (c >= 0) {
+                if (c >= 0 && !(deep && sunk(za, zx, zy, x, sy))) {
                     uint j = uint(x - c0);
                     o[j >> 2] = (o[j >> 2] & ~(255u << ((j & 3u) * 8u))) | (uint(c) << ((j & 3u) * 8u));
                 }
@@ -102,7 +115,7 @@ void main()
             int64_t k = int64_t(x) - xl;
             uint iu = uint((u + du * k) >> 32) & 255u, iv = uint((v + dv * k) >> 32) & 255u;
             int c = texel_colour(bank_byte(s, ((((iv << 8) | iu) & mask) + base) & 0xFFFFu), por, hi);
-            if (c >= 0) {
+            if (c >= 0 && !(deep && sunk(za, zx, zy, x, sy))) {
                 uint j = uint(x - c0);
                 o[j >> 2] = (o[j >> 2] & ~(255u << ((j & 3u) * 8u))) | (uint(c) << ((j & 3u) * 8u));
             }

@@ -99,6 +99,10 @@ void span_write(uint at, Span s)
     sp[b + 21] = floatBitsToUint(s.pda);
     sp[b + 22] = floatBitsToUint(s.pb);
     sp[b + 23] = floatBitsToUint(s.pdb);
+    sp[b + 24] = floatBitsToUint(s.za);
+    sp[b + 25] = floatBitsToUint(s.zx);
+    sp[b + 26] = floatBitsToUint(s.zy);
+    sp[b + 27] = 0u;
 }
 
 void main()
@@ -119,6 +123,7 @@ void main()
     s.y = row; s.x0 = 1; s.x1 = 0; s.xl = 0l; s.u = 0l; s.du = 0l; s.v = 0l; s.dv = 0l;
     s.base = 0u; s.mask = 0u; s.bank = 0u; s.por = 0u; s.hi = 0u; s.colour = colour; s.textured = 0u;
     s.pq = 0.0; s.pdq = 0.0; s.pa = 0.0; s.pda = 0.0; s.pb = 0.0; s.pdb = 0.0;
+    s.za = uintBitsToFloat(pd[pb + 12]); s.zx = uintBitsToFloat(pd[pb + 13]); s.zy = uintBitsToFloat(pd[pb + 14]);
     if (kind == 0u) {
         if (xr >= xl) {
             int64_t x0 = xl < 0l ? 0l : xl, x1 = xr >= int64_t(w) ? int64_t(w - 1) : xr;

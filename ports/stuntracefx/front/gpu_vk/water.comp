@@ -1,0 +1,126 @@
+#version 450
+/*
+ * water.comp: the water pass (fullwindow.c's water_texel, step for step,
+ * the Metal kernel's), a thread a texel: each texel nothing was drawn on
+ * made the water surface's along its ray, 32 bits a texel.
+ */
+#extension GL_GOOGLE_include_directive : require
+#include "common.glsl"
+
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(std430, binding = 0) readonly buffer In { uint px[]; };
+layout(std430, binding = 11) writeonly buffer Out32 { uint o32[]; };
+layout(std430, binding = 12) readonly buffer Job { uint jb[]; };
+layout(std430, binding = 13) readonly buffer Gap { uint gap[]; };
+
+/* FwWaterJob's words */
+#define J_W 0
+#define J_H 1
+#define J_UNDER 2
+#define J_POINT 3
+#define J_OX 4
+#define J_OY 5
+#define J_F 6
+#define J_DY 7
+#define J_WU 8
+#define J_WV 9
+#define J_E 12
+#define J_CAM 24
+#define J_DEPTH 28
+#define J_RIPPLE 108
+#define J_SAT 188
+
+float jf(uint i) { return uintBitsToFloat(jb[i]); }
+float je(uint i) { return uintBitsToFloat(jb[J_E + i]); }
+int sat(int i) { return int(jb[J_SAT + uint(i)]); }
+
+int ripples_to(int u, int v)
+{
+    int qu = u >= 0 ? u / 64 : -((63 - u) / 64), qv = v >= 0 ? v / 16 : -((15 - v) / 16);
+    int ru = u - 64 * qu, rv = v - 16 * qv;
+    return qu * qv * sat(16 * 65 + 64) + qu * sat(rv * 65 + 64) + qv * sat(16 * 65 + ru) + sat(rv * 65 + ru);
+}
+
+int ripples_in(int u0, int u1, int v0, int v1)
+{
+    return ripples_to(u1 + 1, v1 + 1) - ripples_to(u0, v1 + 1) - ripples_to(u1 + 1, v0) + ripples_to(u0, v0);
+}
+
+void main()
+{
+    int x = int(gl_GlobalInvocationID.x), y = int(gl_GlobalInvocationID.y), w = int(jb[J_W]), h = int(jb[J_H]);
+    if (x >= w || y >= h)
+        return;
+    uint at = uint(y) * uint(w) + uint(x);
+    uint c = (px[at >> 2] >> ((at & 3u) * 8u)) & 255u, g = gap[y];
+    if (c != 0u) {
+        o32[at] = c;
+        return;
+    }
+    precise float fx = float(x) + 0.5, fy = float(y) + 0.5;
+    precise float vx = div_ieee(fx - jf(J_OX), jf(J_F)), vy = div_ieee(fy - jf(J_OY), jf(J_F));
+    precise float wy = fma(je(4), vx, fma(je(5), vy, je(6)));
+    precise float t = div_ieee(jf(J_DY), wy);
+    if (!(wy != 0.0) || !(t > 0.0)) {
+        o32[at] = jb[J_UNDER] != 0u ? g : 0u;
+        return;
+    }
+    precise float u = div_ieee(fma(t, fma(je(0), vx, fma(je(1), vy, je(2))), jf(J_CAM)), jf(J_WU));
+    precise float v = div_ieee(fma(t, fma(je(8), vx, fma(je(9), vy, je(10))), jf(J_CAM + 2)), jf(J_WV));
+    precise float vx1 = div_ieee(fx + 1.0 - jf(J_OX), jf(J_F)), vy1 = div_ieee(fy + 1.0 - jf(J_OY), jf(J_F));
+    precise float t1 = div_ieee(jf(J_DY), fma(je(4), vx1, fma(je(5), vy, je(6))));
+    precise float t2 = div_ieee(jf(J_DY), fma(je(4), vx, fma(je(5), vy1, je(6))));
+    precise float du, dv;
+    if (t1 > 0.0 && t2 > 0.0) {
+        precise float ux = div_ieee(fma(t1, fma(je(0), vx1, fma(je(1), vy, je(2))), jf(J_CAM)), jf(J_WU)) - u;
+        precise float vx_ = div_ieee(fma(t1, fma(je(8), vx1, fma(je(9), vy, je(10))), jf(J_CAM + 2)), jf(J_WV)) - v;
+        precise float uy = div_ieee(fma(t2, fma(je(0), vx, fma(je(1), vy1, je(2))), jf(J_CAM)), jf(J_WU)) - u;
+        precise float vy_ = div_ieee(fma(t2, fma(je(8), vx, fma(je(9), vy1, je(10))), jf(J_CAM + 2)), jf(J_WV)) - v;
+        du = max(abs(ux), abs(uy));
+        dv = max(abs(vx_), abs(vy_));
+    } else {
+        du = 64.0;
+        dv = 16.0;
+    }
+    du = min(du, 64.0);
+    dv = min(dv, 16.0);
+    precise float fu = u - 64.0 * floor(div_ieee(u, 64.0));
+    precise float fv = v - 16.0 * floor(div_ieee(v, 16.0));
+    int u0, u1, v0, v1;
+    if (jb[J_POINT] != 0u) {
+        u0 = u1 = int(floor(fu));
+        v0 = v1 = int(floor(fv));
+    } else {
+        u0 = int(floor(fu - du * 0.5));
+        u1 = int(floor(fu + du * 0.5));
+        v0 = int(floor(fv - dv * 0.5));
+        v1 = int(floor(fv + dv * 0.5));
+    }
+    precise float cover = div_ieee(float(ripples_in(u0, u1, v0, v1)), float((u1 - u0 + 1) * (v1 - v0 + 1)));
+    int lo = 0, hi = 79;
+    while (lo < hi) {
+        int m = (lo + hi) / 2;
+        if (jf(J_DEPTH + uint(m)) >= t)
+            hi = m;
+        else
+            lo = m + 1;
+    }
+    uint rip = jb[J_RIPPLE + uint(lo)], o = 0xFF000000u;
+    if (!(cover > 0.0)) {
+        o32[at] = g;
+        return;
+    }
+    if (g == 1u) {
+        o32[at] = cover >= 0.5 ? rip : g;
+        return;
+    }
+    if (cover >= 1.0) {
+        o32[at] = rip;
+        return;
+    }
+    for (int s = 0; s < 24; s += 8) {
+        precise float a = float((g >> uint(s)) & 255u), b = float((rip >> uint(s)) & 255u);
+        o |= uint(floor(fma(b - a, cover, a) + 0.5)) << uint(s);
+    }
+    o32[at] = o;
+}

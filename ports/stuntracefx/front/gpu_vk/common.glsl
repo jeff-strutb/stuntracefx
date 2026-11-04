@@ -7,8 +7,8 @@
  */
 #extension GL_ARB_gpu_shader_int64 : require
 
-#define SPAN_WORDS 26
-#define POLY_WORDS 12
+#define SPAN_WORDS 28
+#define POLY_WORDS 16
 #define EDGE_WORDS 16
 
 int64_t i64(uint lo, uint hi) { return int64_t(uint64_t(lo) | (uint64_t(hi) << 32)); }
@@ -28,4 +28,5 @@ struct Span {
     int64_t xl, u, du, v, dv;
     uint base, mask, bank, por, hi, colour, textured;
     float pq, pdq, pa, pda, pb, pdb;
+    float za, zx, zy;
 };
