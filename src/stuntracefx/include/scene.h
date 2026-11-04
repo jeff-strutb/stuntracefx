@@ -31,4 +31,18 @@ void sc_command(unsigned index, uint8_t bank, uint16_t at);
 int sc_points(const uint8_t *bytes, int n, int mirrored, uint16_t shift, uint16_t scale, const uint16_t m[9],
               int16_t *out);
 
+/* FxModelDraw begins (model.c, 01:8561): the slot's matrix built natively
+   from its inputs for the check */
+void sc_model_begin(void);
+
+/* A slot's view matrix by the chip's integer steps (FxModelDraw's set-up,
+   01:8661 to 01:8778): the angle words at $0020, $0022, $0024 (their low
+   bytes the angles; frac, when not NULL and not all 0, their 1/256
+   fractions), the model flags ($0054: bit 13 flattens the object's y), the
+   view's matrix e ($00E4, nine words) and a far object's halvings (shift).
+   out: nine words, row i column j at out[3 i + j], as the chip leaves them
+   at $0132 */
+void sc_matrix(const uint16_t angle[3], const uint8_t *frac, uint16_t flags, const uint16_t e[9], int shift,
+               uint16_t out[9]);
+
 #endif

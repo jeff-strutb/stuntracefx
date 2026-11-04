@@ -8,6 +8,7 @@
 
 #include "gsu.h"
 #include "scene.h"
+#include "remaster.h"
 
 #define FX_POINT_OUT     0x001Eu
 #define FX_POINT_SCALE   0x0030u
@@ -54,9 +55,77 @@ int sc_points(const uint8_t *bytes, int n, int mirrored, uint16_t shift, uint16_
     return k / 3;
 }
 
+/* (a * b) >> 15, signed: FMULT then ROL */
+static uint16_t mul15(uint16_t a, uint16_t b) { return fmult_rol(a, b); }
+
+/* the sine of an angle (a turn $10000), the table at $00:983E (257 words,
+   1.15) read between its entries by the angle's low byte */
+static uint16_t sine(uint16_t angle)
+{
+    uint32_t at = 0x00983Eu + (uint32_t)(angle >> 8) * 2;
+    uint16_t a = (uint16_t)(gsu_peek8(at) | gsu_peek8(at + 1) << 8);
+    uint16_t b = (uint16_t)(gsu_peek8(at + 2) | gsu_peek8(at + 3) << 8);
+    return (uint16_t)(a + mul15((uint16_t)((angle & 0xFF) << 7), (uint16_t)(b - a)));
+}
+
+void sc_matrix(const uint16_t angle[3], const uint8_t *frac, uint16_t flags, const uint16_t e[9], int shift,
+               uint16_t out[9])
+{
+    uint16_t a[3], r[9], t;
+    int i, j;
+
+    for (i = 0; i < 3; i++)             /* the angles negated in place, a byte's turn (01:8661) */
+        a[i] = (uint16_t)-(uint16_t)((angle[i] & 0xFF) << 8);
+    if (frac && (frac[0] | frac[1] | frac[2]))
+        for (i = 0; i < 3; i++)
+            a[i] = (uint16_t)-(uint16_t)((angle[i] & 0xFF) << 8 | frac[i]);
+    else if (!(angle[0] | angle[2]) && (angle[1] == 0 || angle[1] == 0x80)) {
+        /* 01:8687 (the whole words tested): no turn, or a half turn about y
+           (01:86E4): the view's matrix, its first and last rows negated for
+           the half turn */
+        int half = angle[1] == 0x80;
+        for (i = 0; i < 9; i++)
+            out[i] = half && (i < 3 || i >= 6) ? (uint16_t)-e[i] : e[i];
+        if (flags & 0x2000)
+            out[3] = out[4] = out[5] = 0;
+        goto shifted;
+    }
+    {
+        /* FxMatrixFromAngles01 (01:832F): $0020 z, $0022 x, $0024 y */
+        uint16_t sz = sine(a[0]), cz = sine((uint16_t)(a[0] + 0x4000));
+        uint16_t sx = sine(a[1]), cx = sine((uint16_t)(a[1] + 0x4000));
+        uint16_t sy = sine(a[2]), cy = sine((uint16_t)(a[2] + 0x4000));
+        uint16_t sx_cy = mul15(sx, cy), cx_cy = mul15(cx, cy), sx_sy = mul15(sx, sy), cx_sy = mul15(cx, sy);
+        r[0] = (uint16_t)(mul15(sx_sy, sz) + cx_cy);
+        r[1] = (uint16_t)(mul15(sx_cy, sz) - cx_sy);
+        r[2] = mul15(sx, cz);
+        r[3] = mul15(sy, cz);
+        r[4] = mul15(cy, cz);
+        r[5] = (uint16_t)-sz;
+        r[6] = (uint16_t)(mul15(cx_sy, sz) - sx_cy);
+        r[7] = (uint16_t)(mul15(cx_cy, sz) + sx_sy);
+        r[8] = mul15(cx, cz);
+    }
+    t = r[1], r[1] = r[3], r[3] = t;    /* FxMatrixTranspose */
+    t = r[2], r[2] = r[6], r[6] = t;
+    t = r[5], r[5] = r[7], r[7] = t;
+    if (flags & 0x2000)                 /* 01:8751: each vector's y gone */
+        r[1] = r[4] = r[7] = 0;
+    for (i = 0; i < 3; i++)             /* FxMatrixApplyVectors: each vector times the view's matrix */
+        for (j = 0; j < 3; j++)
+            out[3 * i + j] = (uint16_t)(mul15(r[3 * i], e[j]) + mul15(r[3 * i + 1], e[3 + j]) +
+                                        mul15(r[3 * i + 2], e[6 + j]));
+shifted:
+    if (shift)                          /* a far object's matrix halved (remaster.h) */
+        for (i = 0; i < 9; i++)
+            out[i] = (uint16_t)((int16_t)out[i] >> shift);
+}
+
 /* ---- SC_CHECK=geom ---- */
 static int check = -1, brk;
-static long cmds, points, apart, packed_apart, unchecked;
+static long cmds, points, apart, packed_apart, unchecked, slots, matrix_apart;
+static uint16_t slot_m[9];
+static int slot_on;
 static int max_off;
 static struct {
     int on, mirrored;
@@ -70,8 +139,8 @@ static uint16_t ram16(uint16_t a) { return (uint16_t)(peek(0x700000u | a) | peek
 static void report(void)
 {
     fprintf(stderr, "scene geom: %ld point commands, %ld points, %ld words apart (largest %d), %ld packed words apart, "
-                    "%ld commands of kinds not checked\n",
-            cmds, points, apart, max_off, packed_apart, unchecked);
+                    "%ld commands of kinds not checked; %ld slots' matrices, %ld words apart\n",
+            cmds, points, apart, max_off, packed_apart, unchecked, slots, matrix_apart);
 }
 
 static void check_points(void)
@@ -84,6 +153,14 @@ static void check_points(void)
 
     for (i = 0; i < 9; i++)
         m[i] = ram16((uint16_t)(FX_VIEW_MATRIX + 2 * i));
+    if (slot_on) {                      /* the slot's matrix natively, against the chip's */
+        slot_on = 0;
+        slots++;
+        if (brk)
+            slot_m[4] ^= 1;
+        for (i = 0; i < 9; i++)
+            matrix_apart += slot_m[i] != m[i];
+    }
     for (i = 0; i < 3 * n; i++)
         bytes[i] = peek(bank | (uint16_t)(pend.at + 2 + i));
     k = sc_points(bytes, n, pend.mirrored, shift, scale, m, mine);
@@ -111,6 +188,21 @@ static void check_points(void)
                 packed_apart++;
         }
     }
+}
+
+void sc_model_begin(void)
+{
+    uint16_t angle[3], e[9];
+    int i;
+
+    if (check <= 0)
+        return;
+    for (i = 0; i < 3; i++)
+        angle[i] = ram16((uint16_t)(0x0020 + 2 * i));
+    for (i = 0; i < 9; i++)
+        e[i] = ram16((uint16_t)(0x00E4 + 2 * i));
+    sc_matrix(angle, rm_angle_frac, ram16(0x0054), e, rm_far_shift, slot_m);
+    slot_on = 1;
 }
 
 void sc_command(unsigned index, uint8_t bank, uint16_t at)

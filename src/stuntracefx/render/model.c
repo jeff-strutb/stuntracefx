@@ -292,6 +292,7 @@ l8647:
     R[0] = gsu_add(R[0], R[2], 0);
     gsu_stw(FX_SHADE_AT, R[0]);
 l8651:
+    sc_model_begin();                   /* the renderer's check (scene.h) */
     R[0] = 0x0001;
     R[12] = gsu_ldw(FX_POINT_SHIFT);
     R[12] = R[12];
