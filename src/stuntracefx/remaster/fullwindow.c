@@ -2594,9 +2594,7 @@ static const uint32_t water_depth[80] = {
     10912, 11653, 12503, 13485, 14635, 16000, 17645, 19668, 22214, 25518, 29976, 36321, 46074, 62987, 99520, 236952,
 };
 int16_t rm_view_place[3];
-static uint16_t water_band[256];        /* the original's colour 1 each line (fw_sky) */
-static int water_band_ok;
-static int sky_line(int h);
+static int sky_lines(uint16_t *col, int n);
 static double water_e[3][3], water_cam[3];
 static int water_seen;                  /* a picture's view kept this frame */
 static int water_due;                   /* a water picture waiting for its band (fw_sky) */
@@ -2645,35 +2643,104 @@ static unsigned bg2_pixel(const uint16_t *v, unsigned entry, unsigned x, unsigne
     return c;
 }
 
-static int sat[17][65];                  /* the cells' ripple texels in [0, x) x [0, y) */
-
-/* the ripple texels in texels u0-u1 by v0-v1 of the cells laid without end */
-static int64_t ripples_to(int64_t u, int64_t v)     /* in [0, u) x [0, v) */
-{
-    int64_t qu = u >= 0 ? u / 64 : -((63 - u) / 64), qv = v >= 0 ? v / 16 : -((15 - v) / 16);
-    int ru = (int)(u - 64 * qu), rv = (int)(v - 16 * qv);
-    return qu * qv * sat[16][64] + qu * sat[rv][64] + qv * sat[16][ru] + sat[rv][ru];
-}
-
-static int64_t ripples_in(int64_t u0, int64_t u1, int64_t v0, int64_t v1)
-{
-    return ripples_to(u1 + 1, v1 + 1) - ripples_to(u0, v1 + 1) - ripples_to(u1 + 1, v0) + ripples_to(u0, v0);
-}
-
 static uint32_t rgb8(uint16_t bgr)
 {
     unsigned r = bgr & 31, g = bgr >> 5 & 31, b = bgr >> 10 & 31;
     return 0xFF000000u | (r << 3 | r >> 2) << 16 | (g << 3 | g >> 2) << 8 | (b << 3 | b >> 2);
 }
 
-static uint32_t mix(uint32_t a, uint32_t b, double k)
+/* the ripple texels in [0, u) x [0, v) of the cells laid without end */
+static int32_t ripples_to(const FwWaterJob *j, int32_t u, int32_t v)
 {
-    uint32_t o = 0xFF000000u;
-    int s;
-    for (s = 0; s < 24; s += 8)
-        o |= (uint32_t)lround(((a >> s) & 255) * (1 - k) + ((b >> s) & 255) * k) << s;
-    return o;
+    int32_t qu = u >= 0 ? u / 64 : -((63 - u) / 64), qv = v >= 0 ? v / 16 : -((15 - v) / 16);
+    int32_t ru = u - 64 * qu, rv = v - 16 * qv;
+    return qu * qv * j->sat[16 * 65 + 64] + qu * j->sat[rv * 65 + 64] + qv * j->sat[16 * 65 + ru] + j->sat[rv * 65 + ru];
 }
+
+static int32_t ripples_in(const FwWaterJob *j, int32_t u0, int32_t u1, int32_t v0, int32_t v1)
+{
+    return ripples_to(j, u1 + 1, v1 + 1) - ripples_to(j, u0, v1 + 1) - ripples_to(j, u1 + 1, v0) + ripples_to(j, u0, v0);
+}
+
+/* one texel of the water pass, as the GPU's computes it: each float step
+   written out (fmaf, IEEE's divide, floorf) */
+static uint32_t water_texel(const uint8_t *in, const FwWaterJob *j, const uint32_t *gap, int32_t x, int32_t y)
+{
+    const float *e = j->e;
+    float fx = (float)x + 0.5f, fy = (float)y + 0.5f, vx, vy, vx1, vy1, wy, t, t1, t2, u, v, du, dv, cover, fu, fv;
+    uint32_t c = in[(size_t)y * (size_t)j->w + (size_t)x], g = gap[y], rip, out = 0xFF000000u;
+    int32_t lo, hi, u0, u1, v0, v1, s;
+
+    if (c)                              /* drawn (before the water: what is past it was left out) */
+        return c;
+    vx = (fx - j->ox) / j->f;
+    vy = (fy - j->oy) / j->f;
+    wy = fmaf(e[4], vx, fmaf(e[5], vy, e[6]));
+    t = j->dy / wy;
+    if (!(wy != 0) || !(t > 0))         /* no surface this way: under it, deeper water; over it, the sky */
+        return j->under ? g : 0;
+    u = fmaf(t, fmaf(e[0], vx, fmaf(e[1], vy, e[2])), j->cam[0]) / j->wu;
+    v = fmaf(t, fmaf(e[8], vx, fmaf(e[9], vy, e[10])), j->cam[2]) / j->wv;
+    vx1 = (fx + 1.0f - j->ox) / j->f;   /* the pixel's footprint: the next column's and line's hits */
+    vy1 = (fy + 1.0f - j->oy) / j->f;
+    t1 = j->dy / fmaf(e[4], vx1, fmaf(e[5], vy, e[6]));
+    t2 = j->dy / fmaf(e[4], vx, fmaf(e[5], vy1, e[6]));
+    if (t1 > 0 && t2 > 0) {
+        float ux = fmaf(t1, fmaf(e[0], vx1, fmaf(e[1], vy, e[2])), j->cam[0]) / j->wu - u;
+        float vx_ = fmaf(t1, fmaf(e[8], vx1, fmaf(e[9], vy, e[10])), j->cam[2]) / j->wv - v;
+        float uy = fmaf(t2, fmaf(e[0], vx, fmaf(e[1], vy1, e[2])), j->cam[0]) / j->wu - u;
+        float vy_ = fmaf(t2, fmaf(e[8], vx, fmaf(e[9], vy1, e[10])), j->cam[2]) / j->wv - v;
+        du = fmaxf(fabsf(ux), fabsf(uy));
+        dv = fmaxf(fabsf(vx_), fabsf(vy_));
+    } else {
+        du = 64.0f;
+        dv = 16.0f;
+    }
+    du = fminf(du, 64.0f);              /* a whole cell across is all of them */
+    dv = fminf(dv, 16.0f);
+    fu = u - 64.0f * floorf(u / 64.0f);
+    fv = v - 16.0f * floorf(v / 16.0f);
+    if (j->point) {
+        u0 = u1 = (int32_t)floorf(fu);
+        v0 = v1 = (int32_t)floorf(fv);
+    } else {
+        u0 = (int32_t)floorf(fu - du * 0.5f);
+        u1 = (int32_t)floorf(fu + du * 0.5f);
+        v0 = (int32_t)floorf(fv - dv * 0.5f);
+        v1 = (int32_t)floorf(fv + dv * 0.5f);
+    }
+    cover = (float)ripples_in(j, u0, u1, v0, v1) / (float)((u1 - u0 + 1) * (v1 - v0 + 1));
+    for (lo = 0, hi = 79; lo < hi;) {   /* the first strip row as deep as t (the view's depth) */
+        int32_t m = (lo + hi) / 2;
+        if (j->depth[m] >= t)
+            hi = m;
+        else
+            lo = m + 1;
+    }
+    rip = j->ripple[lo];
+    if (!(cover > 0))
+        return g;
+    if (g == 1)                         /* the check's: colour 1 left to the console */
+        return cover >= 0.5f ? rip : g;
+    if (cover >= 1)
+        return rip;
+    for (s = 0; s < 24; s += 8) {
+        float a = (float)(g >> s & 255), b = (float)(rip >> s & 255);
+        out |= (uint32_t)floorf(fmaf(b - a, cover, a) + 0.5f) << s;
+    }
+    return out;
+}
+
+void fw_water_fill_cpu(const uint8_t *in, uint32_t *out, const FwWaterJob *j, const uint32_t *gap)
+{
+    int32_t x, y;
+    for (y = 0; y < j->h; y++)
+        for (x = 0; x < j->w; x++)
+            out[(size_t)y * (size_t)j->w + (size_t)x] = water_texel(in, j, gap, x, y);
+}
+
+void (*fw_water_filler)(const uint8_t *in, uint32_t *out, const FwWaterJob *j, const uint32_t *gap) = fw_water_fill_cpu;
+uint32_t *(*fw_texels32_alloc)(size_t len);
 
 /* the texels with the water where nothing is drawn, 32 bits each
    (FW_WATERCHECK: idx, the water between the ripples left to the
@@ -2681,22 +2748,50 @@ static uint32_t mix(uint32_t a, uint32_t b, double k)
    texel by texel, for the two to be compared) */
 static const uint32_t *water_pass(void)
 {
-    static uint8_t cell[16][64];
+    static FwWaterJob job;
+    static uint32_t *gap;
+    static size_t gap_rows;
+    uint8_t cell[16][64];
     const char *chk = getenv("FW_WATERCHECK");
-    int index_gap = chk && !strcmp(chk, "idx"), point = chk != NULL;
-    static uint32_t ripple[80];
+    int index_gap = chk && !strcmp(chk, "idx");
     const uint8_t *w = nshvc_wram();
     const uint16_t *v = nshvc_vram();
     size_t need = (size_t)tw * th;
-    double f = fw_focal(), ox = tw / 2.0, oy = (double)view_cy() * K + cy_off, dy = WATER_Y - water_cam[1];
-    unsigned r, x, y;
+    unsigned r, x, y, i, k;
 
     if (need > tex32_size) {
-        free(tex32);
-        tex32 = malloc(need * sizeof *tex32);
+        if (fw_texels32_alloc) {        /* the GPU's memory, which it fills */
+            tex32 = fw_texels32_alloc(need * sizeof *tex32);
+        } else {
+            free(tex32);
+            tex32 = malloc(need * sizeof *tex32);
+        }
         tex32_size = tex32 ? need : 0;
         if (!tex32)
             return NULL;
+    }
+    if ((size_t)th > gap_rows) {
+        free(gap);
+        gap = malloc((size_t)th * sizeof *gap);
+        gap_rows = gap ? (size_t)th : 0;
+        if (!gap)
+            return NULL;
+    }
+    job.w = tw;
+    job.h = th;
+    job.ox = (float)(tw / 2.0);
+    job.oy = (float)((double)view_cy() * K + cy_off);
+    job.f = (float)fw_focal();
+    job.dy = (float)(WATER_Y - water_cam[1]);
+    job.under = job.dy < 0;
+    job.point = chk != NULL;
+    job.wu = (float)WATER_U;
+    job.wv = (float)WATER_V;
+    for (i = 0; i < 3; i++) {
+        for (k = 0; k < 3; k++)
+            job.e[4 * i + k] = (float)water_e[i][k];
+        job.e[4 * i + 3] = 0;
+        job.cam[i] = (float)water_cam[i];
     }
     for (y = 0; y < 16; y++)            /* the cells: map rows 51-52, 8 entries */
         for (x = 0; x < 64; x++) {
@@ -2714,73 +2809,20 @@ static const uint32_t *water_pass(void)
             if (n[c] > n[best])
                 best = c;
         bgr = (uint16_t)(w[0x139D7 + 2 * best] | w[0x139D8 + 2 * best] << 8);   /* the underwater palette's (HudColourStep's copy) */
-        ripple[r] = rgb8(bgr);
+        job.ripple[r] = rgb8(bgr);
+        job.depth[r] = (float)water_depth[r];
     }
     for (y = 0; y <= 16; y++)           /* the cells' ripple texels counted from the corner */
         for (x = 0; x <= 64; x++)
-            sat[y][x] = !x || !y ? 0 : sat[y - 1][x] + sat[y][x - 1] - sat[y - 1][x - 1] + (cell[y - 1][x - 1] >= 2);
-    for (y = 0; y < (unsigned)th; y++) {
-        double vy = (y + 0.5 - oy) / f, a[3], a1[3];
-        const uint8_t *in = tex + (size_t)y * tw;
-        uint32_t *out = tex32 + (size_t)y * tw, gap = 1;
-        int j;
-        if (water_band_ok && !index_gap) {      /* the line's colour 1, as the console would give it */
-            uint16_t c = water_band[sky_line((int)(y / K)) & 255];   /* row r: line r's */
-            gap = rgb8(c);
-        }
-        for (j = 0; j < 3; j++) {
-            a[j] = water_e[j][1] * vy + water_e[j][2];
-            a1[j] = water_e[j][1] * (vy + 1 / f) + water_e[j][2];
-        }
-        for (x = 0; x < (unsigned)tw; x++) {
-            double vx = (x + 0.5 - ox) / f, wy = water_e[1][0] * vx + a[1], t, u, vv, du, dv, cover;
-            unsigned lo, hi;
-            if (in[x]) {                /* drawn (before the water: what is past it was left out) */
-                out[x] = in[x];
-                continue;
-            }
-            if (!(wy != 0) || !((t = dy / wy) > 0)) {   /* no water surface this way: under it, deeper water; over it, the sky */
-                out[x] = dy < 0 ? gap : 0;
-                continue;
-            }
-            u = (water_cam[0] + t * (water_e[0][0] * vx + a[0])) / WATER_U;
-            vv = (water_cam[2] + t * (water_e[2][0] * vx + a[2])) / WATER_V;
-            {                           /* the pixel's footprint on the cells: the next column's and line's hits */
-                double vx1 = vx + 1 / f, t1 = dy / (water_e[1][0] * vx1 + a[1]), t2 = dy / (water_e[1][0] * vx + a1[1]);
-                double ux = (water_cam[0] + t1 * (water_e[0][0] * vx1 + a[0])) / WATER_U - u;
-                double vx_ = (water_cam[2] + t1 * (water_e[2][0] * vx1 + a[2])) / WATER_V - vv;
-                double uy = (water_cam[0] + t2 * (water_e[0][0] * vx + a1[0])) / WATER_U - u;
-                double vy_ = (water_cam[2] + t2 * (water_e[2][0] * vx + a1[2])) / WATER_V - vv;
-                du = t1 > 0 && t2 > 0 ? fmax(fabs(ux), fabs(uy)) : 64;
-                dv = t1 > 0 && t2 > 0 ? fmax(fabs(vx_), fabs(vy_)) : 16;
-            }
-            if (point) {
-                int64_t iu = (int64_t)floor(u), iv = (int64_t)floor(vv);
-                cover = cell[iv & 15][iu & 63] >= 2;
-            } else {
-                int64_t u0 = (int64_t)floor(u - du / 2), u1 = (int64_t)floor(u + du / 2);
-                int64_t v0 = (int64_t)floor(vv - dv / 2), v1 = (int64_t)floor(vv + dv / 2);
-                if (u1 - u0 > 4096)
-                    u0 = 0, u1 = 63;
-                if (v1 - v0 > 4096)
-                    v0 = 0, v1 = 15;
-                cover = (double)ripples_in(u0, u1, v0, v1) / (double)((u1 - u0 + 1) * (v1 - v0 + 1));
-            }
-            for (lo = 0, hi = 79; lo < hi;) {   /* the first strip row as deep as t (t: the view's depth) */
-                unsigned m = (lo + hi) / 2;
-                if (water_depth[m] >= t)
-                    hi = m;
-                else
-                    lo = m + 1;
-            }
-            if (cover <= 0)
-                out[x] = gap;
-            else if (cover >= 1 || gap == 1)
-                out[x] = cover >= 0.5 || gap != 1 ? ripple[lo] : gap;
-            else
-                out[x] = mix(gap, ripple[lo], cover);
-        }
+            job.sat[y * 65 + x] = !x || !y ? 0
+                : job.sat[(y - 1) * 65 + x] + job.sat[y * 65 + x - 1] - job.sat[(y - 1) * 65 + x - 1] + (cell[y - 1][x - 1] >= 2);
+    {                                   /* each row's water between the ripples: its line's colour 1, as the console gives it */
+        static uint16_t line[1024];
+        int have = !index_gap && sky_lines(line, (int)(th / K) < 1024 ? (int)(th / K) : 1024);
+        for (y = 0; y < (unsigned)th; y++)
+            gap[y] = have && y / K < 1024 ? rgb8(line[y / K]) : 1;
     }
+    fw_water_filler(tex, tex32, &job, gap);
     return tex32;
 }
 
@@ -3614,8 +3656,6 @@ static void sky_make(void)
     }
     for (i = line; i < 256; i++)        /* the last held past the table */
         orig[i] = orig[line - 1];
-    memcpy(water_band, orig, sizeof water_band);   /* the water's colour between its ripples */
-    water_band_ok = 1;
     memcpy(sky_kept, w + SKY_TABLE, 3 * SKY_ENTRIES + 1);
     memcpy(sky_kept + 3 * SKY_ENTRIES + 1, w + SKY_BANDS, 0x300);
     sky_in = 1;
@@ -3647,6 +3687,32 @@ static void sky_make(void)
 void fw_sky_take(void)
 {
     sky_take();
+}
+
+/* colour 1 on each of the screen's first n lines from the gradient's
+   table as sky_make left it (the HDMA's: line h from its entry's colours
+   in turn, an entry of one colour the same on all its lines, past the
+   table's end its last held); 0 when the table is not this file's */
+static int sky_lines(uint16_t *col, int n)
+{
+    const uint8_t *w = nshvc_wram();
+    int e, L = 0, k;
+    uint16_t last = 0;
+
+    if (!sky_in)
+        return 0;
+    for (e = 0; e < SKY_ENTRIES && w[SKY_TABLE + 3 * e] && L < n; e++) {
+        unsigned cnt = w[SKY_TABLE + 3 * e], addr = w[SKY_TABLE + 3 * e + 1] | w[SKY_TABLE + 3 * e + 2] << 8;
+        int lines = (cnt & 0x7F) ? (int)(cnt & 0x7F) : 0x80;
+        for (k = 0; k < lines && L < n; k++) {
+            unsigned b = 0x10000 + addr + 2 * (cnt & 0x80 ? (unsigned)k : 0);
+            last = (uint16_t)(w[b] | w[b + 1] << 8);
+            col[L++] = last;
+        }
+    }
+    while (L < n)
+        col[L++] = last;
+    return 1;
 }
 
 void fw_before_step(void)

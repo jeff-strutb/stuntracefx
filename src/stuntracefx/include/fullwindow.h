@@ -133,6 +133,29 @@ typedef struct {
    w > 0 and z < w (the water nearer on the ray), is not drawn: the water
    is put there (fw_span_fill_cpu, the GPU's the same) */
 extern float fw_water[4];
+/* The water pass (fullwindow.c): each texel nothing was drawn on (in, 0)
+   made the water surface's along its ray, into out (32 bits: 0
+   transparent, 1 CGRAM colour 1, 0xFFrrggbb a colour), w x h; gap[y] row
+   y's water between the ripples. The surface y = dy from the eye in the
+   world, E's rows e (x, y, z, 0 each), the eye at cam; the ripple cells
+   (64 x 16 texels, wu x wv in the world) as sat, their ripple texels
+   counted in [0, x) x [0, y) (65 a row); ripple[r] strip row r's colour,
+   depth[r] its view depth; under: the eye below the surface; point: the
+   cells texel by texel (a check). fw_water_fill_cpu the reference, the
+   GPU's the same step for step. */
+typedef struct {
+    int32_t w, h, under, point;
+    float ox, oy, f, dy, wu, wv, pad[2];
+    float e[12];
+    float cam[4];
+    float depth[80];
+    uint32_t ripple[80];
+    int32_t sat[17 * 65 + 3];
+} FwWaterJob;
+void fw_water_fill_cpu(const uint8_t *in, uint32_t *out, const FwWaterJob *j, const uint32_t *gap);
+extern void (*fw_water_filler)(const uint8_t *in, uint32_t *out, const FwWaterJob *j, const uint32_t *gap);
+/* the 32-bit texels' memory: malloc's, or a front end's the GPU shares (NULL: malloc) */
+extern uint32_t *(*fw_texels32_alloc)(size_t len);
 /* An edge: its ends' x (texels), its first row and its rows; u and v (the
    texture's 0-255) at its start and their change to its end (-128 to 127,
    the original's walk's); 1 / z at its ends */
