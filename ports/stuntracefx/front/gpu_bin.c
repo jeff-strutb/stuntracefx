@@ -5,7 +5,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <stdio.h>
+
 #include "gpu_bin.h"
+#include "scene.h"
 
 void gpu_bin_sizes(const FwSpan *sp, size_t n, GpuBinSizes *z)
 {
@@ -86,4 +89,126 @@ int gpu_bin_bank(const FwSpan *s)
     if (s->textured == 3)
         return fw_polys[s->x1].kind ? fw_polys[s->x1].bank : -1;
     return s->textured ? s->bank : -1;
+}
+
+void gpu_bin_faces(const FwSpan *sp, size_t n, GpuVert *tri, size_t *ntri, GpuVert *line, size_t *nline,
+                   size_t *runs, uint8_t *kind, uint32_t *len)
+{
+    size_t nf, nc, i, k, nt = 0, nl = 0, nr = 0;
+    const ScFace *fc = sc_list_faces(&nf);
+    const ScCorner *cn = sc_list_corners(&nc);
+    for (i = 0; i < n; i++) {
+        const ScFace *f;
+        const ScCorner *c;
+        float u[8], v[8];
+        uint32_t id = (uint32_t)sp[i].x1, m;
+        int isline;
+        if ((size_t)id >= nf)
+            continue;
+        f = &fc[id];
+        c = &cn[f->first];
+        m = f->n < 8 ? f->n : 8;
+        isline = m == 2;
+        if (runs && (!nr || kind[nr - 1] != isline)) {
+            kind[nr] = (uint8_t)isline;
+            len[nr++] = 0;
+        }
+        for (k = 0; k < m; k++) {
+            float du = c[k].u - c[0].u, dv = c[k].v - c[0].v;
+            u[k] = c[0].u + du - 256.0f * (du > 128.0f) + 256.0f * (du < -128.0f);
+            v[k] = c[0].v + dv - 256.0f * (dv > 128.0f) + 256.0f * (dv < -128.0f);
+        }
+        if (isline) {
+            if (line) {
+                line[nl] = (GpuVert){ c[0].point, id, u[0], v[0] };
+                line[nl + 1] = (GpuVert){ c[1].point, id, u[1], v[1] };
+            }
+            nl += 2;
+            if (runs)
+                len[nr - 1] += 2;
+            continue;
+        }
+        for (k = 1; k + 1 < m; k++) {
+            if (tri) {
+                tri[nt] = (GpuVert){ c[0].point, id, u[0], v[0] };
+                tri[nt + 1] = (GpuVert){ c[k].point, id, u[k], v[k] };
+                tri[nt + 2] = (GpuVert){ c[k + 1].point, id, u[k + 1], v[k + 1] };
+            }
+            nt += 3;
+            if (runs)
+                len[nr - 1] += 3;
+        }
+    }
+    *ntri = nt;
+    *nline = nl;
+    if (runs)
+        *runs = nr;
+}
+
+void gpu_bin_check(GpuCheck *c, const uint8_t *gpu, const uint8_t *ref, int w, int h)
+{
+    long far0 = c->at[0];
+    int x, y;
+    for (y = 0; y < h; y++)
+        for (x = 0; x < w; x++) {
+            uint8_t g = gpu[(size_t)y * w + x];
+            int dx, dy, r, found = 0;
+            if (g == ref[(size_t)y * w + x])
+                continue;
+            c->apart++;
+            for (r = 1; r <= 3 && !found; r++)
+                for (dy = -r; dy <= r && !found; dy++)
+                    for (dx = -r; dx <= r && !found; dx++) {
+                        int xx = x + dx, yy = y + dy;
+                        if (xx >= 0 && yy >= 0 && xx < w && yy < h && ref[(size_t)yy * w + xx] == g)
+                            found = r;
+                    }
+            c->at[found]++;
+            if (!found && !ref[(size_t)y * w + x])
+                c->far_empty++;
+        }
+    if (c->at[0] - far0 > c->far_most) {
+        c->far_most = c->at[0] - far0;
+        c->far_most_at = c->fills;
+    }
+    c->fills++;
+}
+
+void gpu_bin_check_report(const char *who, const GpuCheck *c, long faces)
+{
+    printf("gpucheck %s: %ld fills, %ld pixels apart from the CPU's (%ld with the CPU's value a texel away, %ld at 2, "
+                    "%ld at 3, %ld farther, %ld of them where the CPU drew nothing; the most farther in fill %ld, %ld); "
+                    "%ld display-list faces drawn\n",
+            who, c->fills, c->apart, c->at[1], c->at[2], c->at[3], c->at[0], c->far_empty, c->far_most_at, c->far_most,
+            faces);
+    fflush(stdout);
+}
+
+int gpu_bin_dump(long fill, const uint8_t *ref, const uint8_t *gpu, const uint32_t *ids, int w, int h)
+{
+    const char *e = getenv("FW_GPUDUMP"), *dir = getenv("FW_GPUDUMP_DIR") ? getenv("FW_GPUDUMP_DIR") : ".";
+    char path[1024];
+    size_t i, len = (size_t)w * h;
+    int k;
+    FILE *f;
+    if (!e || fill != atol(e))
+        return 0;
+    for (k = 0; k < 3; k++) {
+        snprintf(path, sizeof path, "%s/%s.pgm", dir, k == 0 ? "ref" : k == 1 ? "gpu" : "diff");
+        if (!(f = fopen(path, "wb")))
+            continue;
+        fprintf(f, "P5 %d %d 255\n", w, h);
+        for (i = 0; i < len; i++)
+            fputc(k == 0 ? ref[i] : k == 1 ? gpu[i] : gpu[i] != ref[i] ? 255 : 0, f);
+        fclose(f);
+    }
+    snprintf(path, sizeof path, "%s/gpufaces.txt", dir);
+    if ((f = fopen(path, "w"))) {
+        for (i = 0; i < len; i++)
+            if (gpu[i] != ref[i])
+                fprintf(f, "%zu %zu ref %d gpu %d face %d\n", i % (size_t)w, i / (size_t)w, ref[i], gpu[i],
+                        ids ? (int)ids[i] - 1 : -2);
+        fclose(f);
+    }
+    return 1;
 }

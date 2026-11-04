@@ -42,6 +42,8 @@
 
 #include "nshvc/nshvc.h"
 #include "fullwindow.h"
+#include "gpu_bin.h"
+#include "scene.h"
 
 /* the display list (written uncached: the GE reads it as it is built) */
 #define LIST_BYTES (2u * 1024u * 1024u)
@@ -203,6 +205,8 @@ static void list_state(int stride, int w, int h, unsigned off)
 
 static int s_stride, s_w, s_h;
 static unsigned s_off;
+static int s_model;                     /* the display list's matrices in force (else poly_ge's) */
+static int s_slot_now = -1;
 
 static int s_textured = -1;
 static void flats_out(void);
@@ -211,6 +215,8 @@ static void list_open(void)
 {
     sceGuStart(GU_DIRECT, (void *)((uintptr_t)s_list | 0x40000000u));
     list_state(s_stride, s_w, s_h, s_off);
+    s_model = 0;
+    s_slot_now = -1;
     s_used = 1024;
     s_textured = -1;
 }
@@ -683,10 +689,157 @@ static int poly_ge(const FwPoly *p, int w, int h)
     return 1;
 }
 
+/* ---- the display list's faces (scene.h) ----
+   The GE turns and projects them itself: each slot's matrix as GU_MODEL
+   (the chip's integer steps as floats: the packed matrix's high bytes /
+   128, the full one's words / 32768, times the point scale; its place the
+   translation), the full window's focal lengths and centre as
+   GU_PROJECTION with the near plane at z = 1 (GU_CLIP_PLANES); each face
+   a fan of its corners as the ROM holds them (a mirrored point's x
+   negated), textured through its stage and COLOR and PLOT's lookup, flat
+   in its colour; a line its two ends. A far point's depth is not held at
+   $43FE here (the GE's floats). */
+static long s_faces;
+
+static void model_mode(int on)
+{
+    static ScePspFMatrix4 pass = { { 1, 0, 0, 0 }, { 0, 1, 0, 0 }, { 0, 0, 0, 1 }, { 0, 0, 0, 0 } };
+    static ScePspFMatrix4 ident = { { 1, 0, 0, 0 }, { 0, 1, 0, 0 }, { 0, 0, 1, 0 }, { 0, 0, 0, 1 } };
+    if (on == s_model)
+        return;
+    if (on) {
+        ScePspFMatrix4 pr;
+        float cx, cy, w = (float)s_w, h = (float)s_h;
+        fw_view_centre(&cx, &cy);
+        memset(&pr, 0, sizeof pr);
+        pr.x.x = 2.0f * (float)fw_focal_x() / w;
+        pr.y.y = -2.0f * (float)fw_focal_y() / h;
+        pr.z.x = 2.0f * cx / w - 1.0f;
+        pr.z.y = 1.0f - 2.0f * cy / h;
+        pr.z.z = 1.0f;
+        pr.z.w = 1.0f;                  /* w = z */
+        pr.w.z = -2.0f;                 /* z - 2 >= -z: in front of z = 1 */
+        sceGuSetMatrix(GU_PROJECTION, &pr);
+        sceGuEnable(GU_CLIP_PLANES);
+        s_slot_now = -1;
+    } else {
+        sceGuSetMatrix(GU_PROJECTION, &pass);
+        sceGuSetMatrix(GU_MODEL, &ident);
+        sceGuDisable(GU_CLIP_PLANES);
+    }
+    s_model = on;
+}
+
+static void slot_matrix(const ScSlot *sl)
+{
+    ScePspFMatrix4 m;
+    float k = (float)(int8_t)sl->scale;
+    float c[9];
+    int i;
+    for (i = 0; i < 9; i++)
+        c[i] = sl->shift < 3 ? (float)(int8_t)(sl->m[i] >> 8) * k / 128.0f : (float)sl->m[i] * k / 32768.0f;
+    m.x.x = c[0], m.x.y = c[1], m.x.z = c[2], m.x.w = 0;
+    m.y.x = c[3], m.y.y = c[4], m.y.z = c[5], m.y.w = 0;
+    m.z.x = c[6], m.z.y = c[7], m.z.z = c[8], m.z.w = 0;
+    m.w.x = (float)sl->pos[0], m.w.y = (float)sl->pos[1], m.w.z = (float)sl->pos[2], m.w.w = 1;
+    sceGuSetMatrix(GU_MODEL, &m);
+}
+
+static void face_ge(const FwSpan *p)
+{
+    size_t ns, np, nf, nc;
+    const ScSlot *sl = sc_list_slots(&ns);
+    const ScPoint *pt = sc_list_points(&np);
+    const ScFace *fc = sc_list_faces(&nf);
+    const ScCorner *cn = sc_list_corners(&nc);
+    const ScFace *f;
+    const ScCorner *c;
+    const Stage *st = NULL;
+    uint32_t n, i, slot;
+    float tws = 1, ths = 1, ou = 0, ov = 0, u0 = 0, v0 = 0;
+
+    if ((size_t)p->x1 >= nf)
+        return;
+    f = &fc[p->x1];
+    c = &cn[f->first];
+    n = f->n < 8 ? f->n : 8;
+    if (n < 2 || (!f->textured && !f->colour))
+        return;
+    if (f->textured && !(st = stage_for(f->bank, f->base, f->mask)))
+        return;
+    room();
+    s_used += (size_t)n * sizeof(PTV) + 256;
+    model_mode(1);
+    slot = pt[c[0].point].slot;
+    if ((int)slot != s_slot_now) {
+        slot_matrix(&sl[slot]);
+        s_slot_now = (int)slot;
+    }
+    if (f->textured) {
+        PTV *t = (PTV *)sceGuGetMemory(n * sizeof(PTV));
+        textured(1);
+        use_texture(st);
+        use_rules(f->por, f->hi);
+        if (!s_wrap) {
+            sceGuTexWrap(GU_REPEAT, GU_REPEAT);
+            s_wrap = 1;
+        }
+        tws = (float)pow2_at_least(st->tw);
+        ths = (float)pow2_at_least(st->th);
+        ou = (float)f->ou / 256.0f;
+        ov = (float)f->ov / 256.0f;
+        u0 = c[0].u;
+        v0 = c[0].v;
+        for (i = 0; i < n; i++) {
+            const ScPoint *q = &pt[c[i].point];
+            float du = c[i].u - u0, dv = c[i].v - v0;
+            du += -256.0f * (du > 128.0f) + 256.0f * (du < -128.0f);
+            dv += -256.0f * (dv > 128.0f) + 256.0f * (dv < -128.0f);
+            t[i].u = (u0 + du + ou) / tws;
+            t[i].v = (v0 + dv + ov) / ths;
+            t[i].x = q->mirrored ? -(float)q->b[0] : (float)q->b[0];
+            t[i].y = (float)q->b[1];
+            t[i].z = (float)q->b[2];
+        }
+        sceGuDrawArray(n == 2 ? GU_LINES : GU_TRIANGLE_FAN, GU_TEXTURE_32BITF | GU_VERTEX_32BITF | GU_TRANSFORM_3D, (int)n, 0, t);
+    } else if (s_c32) {
+        PCV32 *v = (PCV32 *)sceGuGetMemory(n * sizeof(PCV32));
+        textured(0);
+        for (i = 0; i < n; i++) {
+            const ScPoint *q = &pt[c[i].point];
+            v[i].c = 0xFF000000u | f->colour;
+            v[i].x = q->mirrored ? -(float)q->b[0] : (float)q->b[0];
+            v[i].y = (float)q->b[1];
+            v[i].z = (float)q->b[2];
+        }
+        sceGuDrawArray(n == 2 ? GU_LINES : GU_TRIANGLE_FAN, GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D, (int)n, 0, v);
+    } else {
+        PCV *v = (PCV *)sceGuGetMemory(n * sizeof(PCV));
+        textured(0);
+        for (i = 0; i < n; i++) {
+            const ScPoint *q = &pt[c[i].point];
+            v[i].c = (uint16_t)(0xF000u | f->colour);
+            v[i].pad = 0;
+            v[i].x = q->mirrored ? -(float)q->b[0] : (float)q->b[0];
+            v[i].y = (float)q->b[1];
+            v[i].z = (float)q->b[2];
+        }
+        sceGuDrawArray(n == 2 ? GU_LINES : GU_TRIANGLE_FAN, GU_COLOR_4444 | GU_VERTEX_32BITF | GU_TRANSFORM_3D, (int)n, 0, v);
+    }
+    s_faces++;
+}
+
 static void span(const FwSpan *p, int w, int h)
 {
     int32_t x, a;
     (void)h;
+    if (gpu_bin_ref_only(p))            /* the reference's own (a check's) */
+        return;
+    if (gpu_bin_face(p)) {              /* a display-list face: the GE's whole */
+        face_ge(p);
+        return;
+    }
+    model_mode(0);
     if (p->textured == 3) {             /* a polygon: the GE's whole, else its rows, in its place */
         int32_t row;
         FwSpan r;
@@ -720,6 +873,8 @@ static void span(const FwSpan *p, int w, int h)
 
 static uint8_t *s_ref;
 static size_t s_ref_len;
+static GpuCheck s_check;
+static void check_report_ge(void) { gpu_bin_check_report("GE", &s_check, s_faces); }
 
 static void fill(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
 {
@@ -769,6 +924,9 @@ static void fill(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
             out[(size_t)y * w + x] = (uint8_t)t[(size_t)y * stride + x];
     if (getenv("FW_GPUCHECK") && s_ref) {
         size_t len = (size_t)w * (size_t)h;
+        if (!s_check.fills)
+            atexit(check_report_ge);
+        gpu_bin_check(&s_check, out, s_ref, w, h);
         for (i = 0; i < len; i++)
             if (out[i] != s_ref[i]) {
                 /* apart by a shift of at most a pixel (the GE's edges, its

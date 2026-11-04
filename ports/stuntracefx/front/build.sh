@@ -99,7 +99,8 @@ fi
 if [ -n "$GPU_GE" ]; then
   DEFS="$DEFS -DFW_GPU_GE=1"
   $CC -O2 -std=gnu11 -Wall $DEFS -I"$FRONT" -I"$OUT/include" -I"$NSHVC/include" -c "$FRONT/gpu_ge.c" -o "$OUT/obj/front_gpu_ge.o"
-  OBJS="$OBJS $OUT/obj/front_gpu_ge.o"
+  $CC -O2 -std=gnu11 -Wall $DEFS -I"$FRONT" -I"$OUT/include" -c "$FRONT/gpu_bin.c" -o "$OUT/obj/front_gpu_bin.o"
+  OBJS="$OBJS $OUT/obj/front_gpu_ge.o $OUT/obj/front_gpu_bin.o"
 fi
 for f in main cart superfx_cart touch art pause baked front_baked cost_profile; do
   $CC -O2 -std=gnu11 -Wall $DEFS -I"$FRONT" -I"$OUT/include" -I"$NSHVC/include" -Iports/common/snes -c "$FRONT/$f.c" -o "$OUT/obj/front_$f.o"
