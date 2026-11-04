@@ -582,6 +582,16 @@ int pause_key(int vk, int down)
 int pause_pointer(float x, float y, int buttons)
 {
     int pressed = buttons & ~mouse_buttons & 1, h;
+    static int log = -1;
+    if (log < 0)
+        log = getenv("SRFX_PAUSELOG") != NULL;
+    if (log) {                          /* SRFX_PAUSELOG=1 (a check): what the pointer hook hears */
+        float w, wh, l, t, r, b;
+        nshvc_window_size(&w, &wh);
+        nshvc_safe_area(&l, &t, &r, &b);
+        fprintf(stderr, "pause: pointer (%.1f, %.1f) buttons %d, over the button %d, pressed %d, paused %d; window %.0f x %.0f, safe %.0f %.0f\n",
+                x, y, buttons, over_button(x, y), pressed, paused, w, wh, l, t);
+    }
     mouse_x = x;
     mouse_y = y;
     mouse_buttons = buttons;
