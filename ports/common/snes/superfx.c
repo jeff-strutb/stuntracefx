@@ -165,14 +165,12 @@ static uint64_t master_now(void)
 static void bus_access(int bus, int op)
 {
     BusLog *b = &bus_log[bus];
-    if (!go)
+    if (!go || holding)                 /* (held: its cost and log are never read) */
         return;
     if (op < GSU_OPS) {
         cost += price.weight[op];
         ops[op]++;
     }
-    if (holding)
-        return;
     if (b->n == b->cap) {
         uint64_t *n;
         b->cap = b->cap ? b->cap * 2 : 65536;

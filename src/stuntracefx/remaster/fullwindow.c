@@ -50,6 +50,25 @@ const uint16_t *nshvc_cgram(void);
 
 int fw_drawing, fw_hud;
 
+/* getenv, each name looked up once (the environment is the process's from
+   its start; the checks' switches are asked on paths run per face and per
+   span, where a host's getenv scans the environment each time) */
+static const char *fw_env(const char *name)
+{
+    static struct { const char *name; const char *value; } kept[48];
+    static int nkept;
+    int i;
+    for (i = 0; i < nkept; i++)
+        if (kept[i].name == name || !strcmp(kept[i].name, name))
+            return kept[i].value;
+    if (nkept < 48) {
+        kept[nkept].name = name;
+        kept[nkept].value = getenv(name);
+        return kept[nkept++].value;
+    }
+    return getenv(name);
+}
+
 static int on;                          /* the full-window race this frame */
 static int seen;                        /* the race screen's stages ran this frame */
 static int unseen = 2;                  /* frames since they last did */
@@ -209,7 +228,7 @@ static int safe_px[4];
 static void safe_area_update(void)
 {
     float in[4] = {0, 0, 0, 0}, ww = 0, wh = 0, per;
-    const char *e = getenv("FW_SAFE");
+    const char *e = fw_env("FW_SAFE");
     int i;
 
     nshvc_safe_area(&in[0], &in[1], &in[2], &in[3]);
@@ -549,9 +568,9 @@ static void span_record(void)
     size_t i;
     unsigned b, nb = 0;
     if (every < 0) {
-        const char *e = getenv("FW_SPANREC");
-        every = getenv("FW_SPANREC_EVERY") ? atoi(getenv("FW_SPANREC_EVERY")) : 10;
-        most = getenv("FW_SPANREC_MAX") ? atoi(getenv("FW_SPANREC_MAX")) : 30;
+        const char *e = fw_env("FW_SPANREC");
+        every = fw_env("FW_SPANREC_EVERY") ? atoi(fw_env("FW_SPANREC_EVERY")) : 10;
+        most = fw_env("FW_SPANREC_MAX") ? atoi(fw_env("FW_SPANREC_MAX")) : 30;
         if (!e || every < 1 || !(f = fopen(e, "wb")))
             every = 0;
     }
@@ -673,9 +692,9 @@ static void water_record(const uint8_t *in, const FwWaterJob *j, const uint32_t 
     static int every = -1, most;
     uint32_t head[2];
     if (every < 0) {
-        const char *e = getenv("FW_WATERREC");
-        every = getenv("FW_SPANREC_EVERY") ? atoi(getenv("FW_SPANREC_EVERY")) : 10;
-        most = getenv("FW_SPANREC_MAX") ? atoi(getenv("FW_SPANREC_MAX")) : 30;
+        const char *e = fw_env("FW_WATERREC");
+        every = fw_env("FW_SPANREC_EVERY") ? atoi(fw_env("FW_SPANREC_EVERY")) : 10;
+        most = fw_env("FW_SPANREC_MAX") ? atoi(fw_env("FW_SPANREC_MAX")) : 30;
         if (!e || every < 1 || !(f = fopen(e, "wb")))
             every = 0;
     }
@@ -1271,7 +1290,7 @@ static void depth_plane(const float (*P)[3], int n, float z[3])
         z[2] = (float)(c[1] / (fy * d));
         z[0] = (float)((c[0] * (0.5f - ox) / fx + c[1] * (0.5f - oy) / fy + c[2]) / d);
     }
-    if (getenv("FW_DEPTHCHECK")) {      /* a check: the 1 / depth at each point's own place, by the face's size */
+    if (fw_env("FW_DEPTHCHECK")) {      /* a check: the 1 / depth at each point's own place, by the face's size */
         static long cnt[4][3];          /* by screen area < 16, < 256, < 4096, more; error < 1 %, < 10 %, more */
         static int reg;
         float worst = 0, area = best;
@@ -1430,7 +1449,7 @@ int fw_exact_clip(void)
     list = ram16(0x005A);
     if (list != ex_list)
         return 0;
-    if (getenv("FW_EXACTCHECK")) {      /* a check: the exact vertices against the projection's, where it did not hold them */
+    if (fw_env("FW_EXACTCHECK")) {      /* a check: the exact vertices against the projection's, where it did not hold them */
         static long seen, held, off;
         static int reported;
         for (i = 0; i < n; i++) {
@@ -1796,7 +1815,7 @@ static int fw_affine(void)
 {
     static int on = -1;
     if (on < 0)
-        on = getenv("FW_AFFINE") != NULL;
+        on = fw_env("FW_AFFINE") != NULL;
     return on;
 }
 static TexPlane tex_planes[0x8000];
@@ -2199,7 +2218,7 @@ static void flat_row(int32_t l, int32_t r, int32_t y)
     if (checking)
         for (x = l < 0 ? 0 : l; x <= r; x++)
             check_alias(x, y, c);
-    if (checking && getenv("FW_CHECKBREAK") && y == 64)  /* a planted break: one row left out */
+    if (checking && fw_env("FW_CHECKBREAK") && y == 64)  /* a planted break: one row left out */
         return;
     if (l < 0)
         l = 0;
@@ -2858,7 +2877,7 @@ static void water_view(void);
 static void draw_depth(uint16_t v)
 {
     int k = v && face_depth[v >> 1].gen == list_gen;
-    if (getenv("FW_DEPTHCHECK") && v) {
+    if (fw_env("FW_DEPTHCHECK") && v) {
         static long with, without;
         if (k) with++; else without++;
         if ((with + without) % 200000 == 0)
@@ -3263,7 +3282,7 @@ static const uint32_t *water_pass(void)
     static uint32_t *gap;
     static size_t gap_rows;
     uint8_t cell[16][64];
-    const char *chk = getenv("FW_WATERCHECK");
+    const char *chk = fw_env("FW_WATERCHECK");
     int index_gap = chk && !strcmp(chk, "idx");
     const uint8_t *w = nshvc_wram();
     const uint16_t *v = nshvc_vram();
@@ -3498,14 +3517,14 @@ static void kcheck_picture(int j)
     part = (double)differ / (W * H);
     kc_sum += part;
     kc_over += part > 0.10;
-    if (getenv("FW_KDUMP") && nshvc_frames() == (uint32_t)atoi(getenv("FW_KDUMP"))) {
+    if (fw_env("FW_KDUMP") && nshvc_frames() == (uint32_t)atoi(fw_env("FW_KDUMP"))) {
         /* the two as pictures, k = 1 then k's centres: FW_KDUMP's frame, to FW_KDUMPF.1.ppm and .k.ppm */
         const uint16_t *cg = nshvc_cgram();
         char path[512];
         int which;
         for (which = 0; which < 2; which++) {
             FILE *f;
-            snprintf(path, sizeof path, "%s.%s.ppm", getenv("FW_KDUMPF"), which ? "k" : "1");
+            snprintf(path, sizeof path, "%s.%s.ppm", fw_env("FW_KDUMPF"), which ? "k" : "1");
             if (!(f = fopen(path, "wb")))
                 continue;
             fprintf(f, "P6\n%d %d\n255\n", W, H);
@@ -3587,7 +3606,7 @@ static void ccheck_picture(int j)
 {
     static uint8_t *a, *b;
     static size_t a_size, b_size;
-    int mg = atoi(getenv("FW_CCHECK")) * (int)((tw + W - 1) / W), bw = tw + 2 * mg, bh = th + 2 * mg, x, y, i;
+    int mg = atoi(fw_env("FW_CCHECK")) * (int)((tw + W - 1) / W), bw = tw + 2 * mg, bh = th + 2 * mg, x, y, i;
     long differ = 0;
     double part;
 
@@ -3609,12 +3628,12 @@ static void ccheck_picture(int j)
         atexit(ccheck_report);
     for (y = 0; y < th; y++)
         for (x = 0; x < tw; x++)
-            differ += getenv("FW_CCOLOUR") ? a[(size_t)y * tw + x] != b[(size_t)(y + mg) * bw + x + mg]
+            differ += fw_env("FW_CCOLOUR") ? a[(size_t)y * tw + x] != b[(size_t)(y + mg) * bw + x + mg]
                                            : !a[(size_t)y * tw + x] != !b[(size_t)(y + mg) * bw + x + mg];
     part = (double)differ / ((double)tw * th);
     cc_sum += part;
     cc_over += part > 0.005;
-    if (getenv("FW_CDUMP") && nshvc_frames() == (uint32_t)atoi(getenv("FW_CDUMP"))) {
+    if (fw_env("FW_CDUMP") && nshvc_frames() == (uint32_t)atoi(fw_env("FW_CDUMP"))) {
         const uint16_t *cg = nshvc_cgram();
         char path[512];
         int which;
@@ -3622,7 +3641,7 @@ static void ccheck_picture(int j)
             FILE *f;
             int ww = which ? bw : tw, hh = which ? bh : th;
             const uint8_t *p = which ? b : a;
-            snprintf(path, sizeof path, "%s.%s.ppm", getenv("FW_CDUMPF"), which ? "big" : "screen");
+            snprintf(path, sizeof path, "%s.%s.ppm", fw_env("FW_CDUMPF"), which ? "big" : "screen");
             if (!(f = fopen(path, "wb")))
                 continue;
             fprintf(f, "P6\n%d %d\n255\n", ww, hh);
@@ -3663,7 +3682,7 @@ static double prof_now(void)
 static void prof_mark(int stage)
 {
     double t;
-    if (!getenv("FW_PROF"))
+    if (!fw_env("FW_PROF"))
         return;
     t = prof_now();
     if (stage >= 0)
@@ -3687,7 +3706,7 @@ void fw_prof_frame(int begin)
     static long n;
     double t;
 
-    if (!getenv("FW_PROF"))
+    if (!fw_env("FW_PROF"))
         return;
     t = prof_now();
     if (begin) {
@@ -3728,7 +3747,7 @@ int fw_picture(int j)
         nshvc_set_cpu_costs(1);
         nshvc_hold_interrupts(0);
     }
-    if (getenv("FW_CHECK"))
+    if (fw_env("FW_CHECK"))
         check_picture(j);
     prof_mark(-1);
     fw_water[3] = 0;                    /* no water until this picture's view says so (water_view) */
@@ -3742,9 +3761,9 @@ int fw_picture(int j)
     fw_hud = 0;
     if (!m)
         return 0;
-    if (getenv("FW_KCHECK"))            /* before the backdrop and panels: the 3D and HUD alone */
+    if (fw_env("FW_KCHECK"))            /* before the backdrop and panels: the 3D and HUD alone */
         kcheck_picture(j);
-    if (getenv("FW_CCHECK"))
+    if (fw_env("FW_CCHECK"))
         ccheck_picture(j);
     prof_mark(PR_REDRAW);
     panels_draw();
