@@ -589,6 +589,11 @@ static void water_fill(const uint8_t *in, uint32_t *out, const FwWaterJob *j, co
     int w = j->w, h = j->h, stride = (w + 63) & ~63, x, y, nr = 0;
     static WRun *runs;
     static int cap_runs;
+    /* each row's run of pixels that see the surface, when found exactly
+       (known): every pixel past it is the reference's no-hit texel */
+    static int32_t *hit_a, *hit_b;
+    static uint8_t *known;
+    static int cap_rows;
     volatile uint32_t *tg;
     static ScePspFMatrix4 proj = { { 1, 0, 0, 0 }, { 0, 1, 0, 0 }, { 0, 0, 0, 1 }, { 0, 0, 0, 0 } };
     static ScePspFMatrix4 ident = { { 1, 0, 0, 0 }, { 0, 1, 0, 0 }, { 0, 0, 1, 0 }, { 0, 0, 0, 1 } };
@@ -598,6 +603,20 @@ static void water_fill(const uint8_t *in, uint32_t *out, const FwWaterJob *j, co
         fw_water_fill_cpu(in, out, j, gap);
         return;
     }
+    if (cap_rows < h) {
+        free(hit_a);
+        free(hit_b);
+        free(known);
+        hit_a = malloc((size_t)h * sizeof *hit_a);
+        hit_b = malloc((size_t)h * sizeof *hit_b);
+        known = malloc((size_t)h);
+        cap_rows = hit_a && hit_b && known ? h : 0;
+        if (!cap_rows) {
+            fw_water_fill_cpu(in, out, j, gap);
+            return;
+        }
+    }
+    memset(known, 0, (size_t)h);
     if (cap_runs < 4 * h) {
         free(runs);
         cap_runs = 4 * h;
@@ -656,8 +675,13 @@ static void water_fill(const uint8_t *in, uint32_t *out, const FwWaterJob *j, co
         ha = hit_at(j, 0, y, NULL);
         hb = hit_at(j, w - 1, y, NULL);
         if (!ha && !hb) {
-            if (hit_at(j, w / 2, y, NULL))      /* (not monotone: the CPU's) */
+            if (hit_at(j, w / 2, y, NULL)) {    /* (not monotone: the CPU's) */
                 s_water_rows_cpu++;
+                continue;
+            }
+            known[y] = 1;               /* no pixel sees the surface */
+            hit_a[y] = 1;
+            hit_b[y] = 0;
             continue;
         }
         if (!ha) {                      /* a = the first hit */
@@ -682,6 +706,9 @@ static void water_fill(const uint8_t *in, uint32_t *out, const FwWaterJob *j, co
             }
             b = l;
         }
+        known[y] = 1;
+        hit_a[y] = a;
+        hit_b[y] = b;
         a++;                            /* its ends the CPU's (the horizon may cross them) */
         b--;
         while (a <= b && !corners_ok(j, y, a, a))
@@ -734,6 +761,8 @@ static void water_fill(const uint8_t *in, uint32_t *out, const FwWaterJob *j, co
                     uint32_t p = tg[(size_t)y * stride + x];
                     s_water_texels++;
                     out[i] = 0xFF000000u | (p & 0xFFu) << 16 | (p & 0xFF00u) | (p >> 16 & 0xFFu);
+                } else if (!in[i] && known[y] && (x < hit_a[y] || x > hit_b[y])) {
+                    out[i] = j->under ? gap[y] : 0;     /* the reference's no-hit texel */
                 } else {
                     out[i] = fw_water_texel(in, j, gap, x, y);
                 }

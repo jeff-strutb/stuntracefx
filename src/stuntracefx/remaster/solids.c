@@ -439,6 +439,8 @@ typedef struct {
     double half[PAINT_ROWS], light[3], share[16], from[16];
     int top, bottom, ncolours;
     uint8_t colour[16];                 /* darkest (the higher nibble) first */
+    int modelled;                       /* its tree's ring points (tree_model), made once, at this size: */
+    double model_T;
 } Paint;
 
 static void paint_measure(const Solid *s, Paint *p)
@@ -572,42 +574,65 @@ static void keep_face(const double (*q)[3], int m, double ay, const Paint *pt)
    each edge of a ring to the other ring's point beside it); its faces
    seen drawn farthest first (it need not be convex) */
 static int calibrating;
-static void tree_body(const double *y, const double *r, int nr, int sides, const double (*jag)[TREE_SIDES_MAX],
-                      const double (*rise)[TREE_SIDES_MAX], int stagger, Paint *pt)
+/* The tree's points as tree_body's faces take them: ring k's point c (0
+   to sides: point sides is point 0 turned the whole way round, its angle
+   one turn on, as the faces' last edge reaches it) at radius r[k] times
+   jag[k][c mod sides], angle 2 pi (c + o) / sides (o half a side on a
+   turned ring), down y[k] + rise[k][c mod sides]: each made once for its
+   painting, by the same steps a face's corner was (its cos and sin), and
+   each tree's corners placed once (tree_point) for all the faces on it. */
+#define RINGS_MAX (PAINT_ROWS / 2 + 4)
+static double model[4][RINGS_MAX][TREE_SIDES_MAX + 1][3];
+static double placed[RINGS_MAX][TREE_SIDES_MAX + 1][3];
+
+static void tree_model(double (*m)[TREE_SIDES_MAX + 1][3], const double *y, const double *r, int nr, int sides,
+                       const double (*jag)[TREE_SIDES_MAX], const double (*rise)[TREE_SIDES_MAX], int stagger)
+{
+    int k, c;
+    for (k = 0; k < nr; k++) {
+        double o = stagger && (k & 1) ? 0.5 : 0;
+        for (c = 0; c <= sides; c++) {
+            int w = c % sides;
+            double ra = r[k] * jag[k][w], t = 2 * M_PI * (c + o) / sides;
+            m[k][c][0] = ra * cos(t);
+            m[k][c][1] = y[k] + rise[k][w];
+            m[k][c][2] = ra * sin(t);
+        }
+    }
+}
+
+static void tree_body(const double *y, int nr, int sides, double (*m)[TREE_SIDES_MAX + 1][3], const double *r,
+                      int stagger, Paint *pt)
 {
     int k, i;
     double at;
     nf = 0, total_area = 0;
+    for (k = 0; k < nr; k++)
+        for (i = 0; i <= sides; i++)
+            tree_point(m[k][i][0], m[k][i][1], m[k][i][2], placed[k][i]);
     for (k = 0; k + 1 < nr; k++) {
         double o0 = stagger && (k & 1) ? 0.5 : 0, o1 = stagger && ((k + 1) & 1) ? 0.5 : 0, ay = (y[k] + y[k + 1]) / 2;
         for (i = 0; i < sides; i++) {
-            int i1 = (i + 1) % sides;
-            double a0[3], a1[3], b0[3], b1[3], q[4][3];
-            double ra0 = r[k] * jag[k][i], ra1 = r[k] * jag[k][i1], rb0 = r[k + 1] * jag[k + 1][i], rb1 = r[k + 1] * jag[k + 1][i1];
-            double ta0 = 2 * M_PI * (i + o0) / sides, ta1 = 2 * M_PI * (i + 1 + o0) / sides;
-            double tb0 = 2 * M_PI * (i + o1) / sides, tb1 = 2 * M_PI * (i + 1 + o1) / sides;
-            tree_point(ra0 * cos(ta0), y[k] + rise[k][i], ra0 * sin(ta0), a0);
-            tree_point(ra1 * cos(ta1), y[k] + rise[k][i1], ra1 * sin(ta1), a1);
-            tree_point(rb0 * cos(tb0), y[k + 1] + rise[k + 1][i], rb0 * sin(tb0), b0);
-            tree_point(rb1 * cos(tb1), y[k + 1] + rise[k + 1][i1], rb1 * sin(tb1), b1);
+            const double *a0 = placed[k][i], *a1 = placed[k][i + 1], *b0 = placed[k + 1][i], *b1 = placed[k + 1][i + 1];
+            double q[4][3];
             if (!r[k]) {                /* a closed end: triangles to its point */
-                memcpy(q[0], a0, sizeof a0), memcpy(q[1], b1, sizeof b1), memcpy(q[2], b0, sizeof b0);
+                memcpy(q[0], a0, sizeof q[0]), memcpy(q[1], b1, sizeof q[0]), memcpy(q[2], b0, sizeof q[0]);
                 keep_face((const double (*)[3])q, 3, ay, pt);
             } else if (!r[k + 1]) {
-                memcpy(q[0], a0, sizeof a0), memcpy(q[1], a1, sizeof a1), memcpy(q[2], b0, sizeof b0);
+                memcpy(q[0], a0, sizeof q[0]), memcpy(q[1], a1, sizeof q[0]), memcpy(q[2], b0, sizeof q[0]);
                 keep_face((const double (*)[3])q, 3, ay, pt);
             } else if (o0 == o1) {      /* a band of four-sided faces */
-                memcpy(q[0], a0, sizeof a0), memcpy(q[1], a1, sizeof a1), memcpy(q[2], b1, sizeof b1), memcpy(q[3], b0, sizeof b0);
+                memcpy(q[0], a0, sizeof q[0]), memcpy(q[1], a1, sizeof q[0]), memcpy(q[2], b1, sizeof q[0]), memcpy(q[3], b0, sizeof q[0]);
                 keep_face((const double (*)[3])q, 4, ay, pt);
             } else if (o1 > o0) {       /* the next ring's point beside this edge: b0 */
-                memcpy(q[0], a0, sizeof a0), memcpy(q[1], a1, sizeof a1), memcpy(q[2], b0, sizeof b0);
+                memcpy(q[0], a0, sizeof q[0]), memcpy(q[1], a1, sizeof q[0]), memcpy(q[2], b0, sizeof q[0]);
                 keep_face((const double (*)[3])q, 3, ay, pt);
-                memcpy(q[0], b0, sizeof b0), memcpy(q[1], a1, sizeof a1), memcpy(q[2], b1, sizeof b1);
+                memcpy(q[0], b0, sizeof q[0]), memcpy(q[1], a1, sizeof q[0]), memcpy(q[2], b1, sizeof q[0]);
                 keep_face((const double (*)[3])q, 3, ay, pt);
             } else {                    /* this ring turned: the next ring's b1 beside this edge */
-                memcpy(q[0], a0, sizeof a0), memcpy(q[1], a1, sizeof a1), memcpy(q[2], b1, sizeof b1);
+                memcpy(q[0], a0, sizeof q[0]), memcpy(q[1], a1, sizeof q[0]), memcpy(q[2], b1, sizeof q[0]);
                 keep_face((const double (*)[3])q, 3, ay, pt);
-                memcpy(q[0], a0, sizeof a0), memcpy(q[1], b1, sizeof b1), memcpy(q[2], b0, sizeof b0);
+                memcpy(q[0], a0, sizeof q[0]), memcpy(q[1], b1, sizeof q[0]), memcpy(q[2], b0, sizeof q[0]);
                 keep_face((const double (*)[3])q, 3, ay, pt);
             }
         }
@@ -678,6 +703,12 @@ static void tree(const Solid *s)
             jag[k][i] = s->tree == 2 ? 0.91 + 0.18 * ((hsh >> 16) & 0xFF) / 255.0 : 1.0;
             rise[k][i] = s->tree == 2 && r[k] ? 1.6 * (((hsh >> 8) & 0xFF) / 255.0 - 0.5) : 0;
         }
+    if (!pt.modelled || pt.model_T != T) {   /* its ring points, once (for a painting at its size) */
+        tree_model(model[pp - paints], y, r, nr, sides, (const double (*)[TREE_SIDES_MAX])jag,
+                   (const double (*)[TREE_SIDES_MAX])rise, s->tree == 2);
+        pt.modelled = 1;
+        pt.model_T = T;
+    }
     if (!pt.texels) {                   /* its colours' lights, once: the part from the front, far off */
         double kp[3], kv[3][3], ks = scale;
         int a, b;
@@ -687,12 +718,12 @@ static void tree(const Solid *s)
                 view[a][b] = a == b;
         pos[0] = pos[1] = 0, pos[2] = 1e5, scale = 1;
         calibrating = 1;
-        tree_body(y, r, nr, sides, (const double (*)[TREE_SIDES_MAX])jag, (const double (*)[TREE_SIDES_MAX])rise, s->tree == 2, pp);
+        tree_body(y, nr, sides, model[pp - paints], r, s->tree == 2, pp);
         calibrating = 0;
         memcpy(pos, kp, sizeof kp), memcpy(view, kv, sizeof kv), scale = ks;
         pt.texels = s->texels;
     }
-    tree_body(y, r, nr, sides, (const double (*)[TREE_SIDES_MAX])jag, (const double (*)[TREE_SIDES_MAX])rise, s->tree == 2, pp);
+    tree_body(y, nr, sides, model[pp - paints], r, s->tree == 2, pp);
 #undef pt
 }
 

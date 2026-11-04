@@ -106,8 +106,18 @@ static int row_at(int64_t y) { return (int)floor_div(y * SYN, SYD); }
 int fw_col_at(int x) { return col_at(x); }
 int fw_row_at(int y) { return row_at(y); }
 
-/* the view's centre line in texels */
-static int64_t centre_row(void) { return (int64_t)row_at(view_cy()) + cy_off; }
+/* the view's centre line in texels (kept: its inputs rarely change, and
+   its 64-bit division is a library call on a 32-bit host) */
+static int64_t centre_row(void)
+{
+    static int64_t at, key[4] = { -1, -1, -1, -1 };
+    int64_t vc = view_cy();
+    if (key[0] != vc || key[1] != SYN || key[2] != SYD || key[3] != cy_off) {
+        key[0] = vc, key[1] = SYN, key[2] = SYD, key[3] = cy_off;
+        at = (int64_t)row_at(vc) + cy_off;
+    }
+    return at;
+}
 
 /* a console pixel's texels set to c: its block, columns col_at(x) on and
    rows row_at(y) on */
@@ -971,8 +981,23 @@ void fw_focal_q(int down, int64_t *num, int64_t *den)
     *num = n / a;
     *den = d / a;
 }
-double fw_focal_x(void) { return 128.0 * SXN / SXD; }
-double fw_focal_y(void) { return 128.0 * SYN / SYD; }
+/* (kept, as centre_row: doubles are software on some hosts) */
+double fw_focal_x(void)
+{
+    static double f;
+    static int64_t n = -1, d = -1;
+    if (n != SXN || d != SXD)
+        n = SXN, d = SXD, f = 128.0 * SXN / SXD;
+    return f;
+}
+double fw_focal_y(void)
+{
+    static double f;
+    static int64_t n = -1, d = -1;
+    if (n != SYN || d != SYD)
+        n = SYN, d = SYD, f = 128.0 * SYN / SYD;
+    return f;
+}
 int fw_half_width(void) { return tw / 2; }
 
 int fw_view_words(const uint16_t w[6], uint16_t out[8])
