@@ -2624,9 +2624,14 @@ static void water_view(void)
     }
 }
 
+/* Aqua Tunnel (course 1), out of its sealed tunnel: the dark tunnel's
+   gates set bit 3 of $0DA5 going in ($0A) and its exit slide clears it
+   ($04); the glass tube's gate ($44) leaves it clear. Rock all round, no
+   water: none drawn and nothing of the track left out for it. */
 static int water_here(void)
 {
-    return nshvc_wram()[0x0E3D] == 0x01 && rm_enhanced();
+    const uint8_t *w = nshvc_wram();
+    return w[0x0E3D] == 0x01 && !(w[0x0DA5] & 0x08) && rm_enhanced();
 }
 
 /* a BG2 character's pixel (4 bits a pixel, its word $6000 + 16 n) */
