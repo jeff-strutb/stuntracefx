@@ -191,9 +191,15 @@ the same display list.
      every entry in the full window's pictures is a display-list face
      (FW_CENSUS: speed_expert_4wd 1,994,647, race100 51,802; 0 drawn by
      the CPU; 0 whose colour or bank is not its face's). Race100, all
-     faces the GPU's: Metal and Vulkan 102,140 pixels apart from the CPU
-     reference (91,317 a texel away, 5,167 farther), identical to each
-     other; the GE 445,504 (360,066 a texel away).
+     faces the GPU's: Metal and Vulkan 345,208 pixels apart from the CPU
+     reference (273,081 a texel away, 17,348 farther), identical to each
+     other; the GE 617,394 (474,791 a texel away, 37,113 farther), with
+     faces near the eye or far off the sides clipped first (sc_needs_clip:
+     the GE has no near clip and drops them whole). Aqua Tunnel: Metal and
+     Vulkan 9,131,853 (1,496,143 farther), the cause not yet known. Earlier
+     counts were too low: FW_GPUCHECK's polygon spans had lost their
+     reference-only flag, so the CPU's polygons were drawn over the GPU's
+     faces. Fixed.
    - Scaled sprites: one screen quad each (fullwindow.h FW_QUAD; the
      three paths of FxObjectSprite: 01:B1CB, 01:B2ED and the full window's
      own for texels not square), each pixel's texel by the chip's rule in

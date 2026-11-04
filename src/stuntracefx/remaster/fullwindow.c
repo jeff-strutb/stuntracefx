@@ -2461,6 +2461,7 @@ static int poly_put(FwPoly *p, int32_t ymin, int32_t yend)
         return 0;
     }
     memset(s, 0, sizeof *s);
+    s->pad1[0] = (uint8_t)span_ref_only;
     s->y = p->ya;
     s->x0 = p->yb;
     s->x1 = (int32_t)(p - fw_polys);
@@ -3503,6 +3504,7 @@ static uint16_t tex_polygon(uint16_t p, int n)
                     int64_t k = x1 - 1 - xl;
                     unsigned iu, iv;
                     memset(sp, 0, sizeof *sp);
+                    sp->pad1[0] = (uint8_t)span_ref_only;
                     sp->y = row;
                     sp->x0 = (int32_t)x0;
                     sp->x1 = (int32_t)(x1 - 1);

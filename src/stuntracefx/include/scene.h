@@ -107,6 +107,14 @@ typedef struct {
     uint32_t fslot;
 } ScFPoint;                             /* 16 bytes */
 #define SC_FLOAT_POINT 0x80000000u
+/* a view-space corner a GPU without clipping of its own cannot take as it
+   stands (the GE: no near clip, and coordinates to about 1800 pixels of
+   the centre at the widest focal length, 182 pixels): near the eye or
+   behind it, or far off the screen's sides. ScFace pad[1]: a corner so */
+static inline int sc_needs_clip(float x, float y, float z)
+{
+    return z < 8 || 4 * (x < 0 ? -x : x) > 30 * z || 4 * (y < 0 ? -y : y) > 30 * z;
+}
 /* a float slot for a solid (its index, or -1 when no list is being made) */
 int sc_list_fslot(const float m[9], const float pos[3]);
 /* a solid's flat face of n object-space points in fslot, colour c: its

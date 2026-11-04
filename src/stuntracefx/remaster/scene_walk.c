@@ -761,6 +761,11 @@ int sc_list_float_face(int fslot, const float (*p)[3], int n, uint8_t c)
     f->colour = c;
     for (i = 0; i < n; i++) {
         ScFPoint *q = &l_fpoints[l_nfp];
+        const ScFSlot *sl = &l_fslots[fslot];
+        if (sc_needs_clip(sl->pos[0] + p[i][0] * sl->m[0] + p[i][1] * sl->m[3] + p[i][2] * sl->m[6],
+                          sl->pos[1] + p[i][0] * sl->m[1] + p[i][1] * sl->m[4] + p[i][2] * sl->m[7],
+                          sl->pos[2] + p[i][0] * sl->m[2] + p[i][1] * sl->m[5] + p[i][2] * sl->m[8]))
+            f->pad[1] = 1;
         memcpy(q->p, p[i], sizeof q->p);
         q->fslot = (uint32_t)fslot;
         l_corners[l_nc].point = SC_FLOAT_POINT | (uint32_t)l_nfp++;
@@ -844,6 +849,8 @@ static int32_t list_face(uint16_t p, const Material *mt)
         int q = byte(&walk, (uint16_t)(p + 7 + i));
         if (q < walk.np && walk.vz[q] < 0x100)   /* a corner the chip projects as a near point (01:8C7D) */
             f->pad[0] = 1;
+        if (q >= walk.np || sc_needs_clip((float)walk.vx[q], (float)walk.vy[q], (float)walk.vz[q]))
+            f->pad[1] = 1;
         c->point = l_point_base + byte(&walk, (uint16_t)(p + 7 + i));
         c->u = c->v = 0;
         if (f->textured) {

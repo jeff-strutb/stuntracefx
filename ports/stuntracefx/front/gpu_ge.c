@@ -801,6 +801,69 @@ static void corner_xyz(const ScPoint *pt, const ScFPoint *fp, uint32_t point, fl
     *z = (float)pt[point].b[2];
 }
 
+/* A face the GE cannot take whole (scene.h sc_needs_clip): the GE has no
+   near clip and its screen coordinates end about 1800 pixels from the
+   centre, so such a face is dropped whole. Its corners here in view space
+   (gpu_corner_view), clipped to z = 1 and the four sides of a band 6
+   times the screen's half-size, drawn with no slot matrix. CPU geometry,
+   for these few faces alone: the GE has no way to do it. */
+typedef struct {
+    float x, y, z, u, v;
+} CV5;
+
+static int cv5_clip(const CV5 *in, int n, CV5 *out, float a, float b, float c, float d)
+{
+    int i, m = 0;
+    for (i = 0; i < n; i++) {
+        const CV5 *p = &in[i], *q = &in[(i + 1) % n];
+        float fp = a * p->x + b * p->y + c * p->z + d, fq = a * q->x + b * q->y + c * q->z + d;
+        if (fp >= 0)
+            out[m++] = *p;
+        if ((fp >= 0) != (fq >= 0)) {
+            float t = fp / (fp - fq);
+            out[m].x = p->x + (q->x - p->x) * t;
+            out[m].y = p->y + (q->y - p->y) * t;
+            out[m].z = p->z + (q->z - p->z) * t;
+            out[m].u = p->u + (q->u - p->u) * t;
+            out[m].v = p->v + (q->v - p->v) * t;
+            m++;
+        }
+    }
+    return m;
+}
+
+/* the clipped polygon in a, its count; n <= 8 corners, 5 planes: at most 13 */
+static int face_clipped(const ScFace *f, const ScCorner *c, uint32_t n, CV5 *a)
+{
+    CV5 b[16];
+    float fx = (float)fw_focal_x(), fy = (float)fw_focal_y(), cx, cy, G = 6.0f;
+    float ax = 2.0f * fx / (float)s_w, ay = 2.0f * fy / (float)s_h, bx, by;
+    uint32_t i;
+    int m;
+    (void)f;
+    fw_view_centre(&cx, &cy);
+    bx = 2.0f * cx / (float)s_w - 1.0f;          /* X = ax x + bx z, Y = -(ay y) + by z, W = z */
+    by = 1.0f - 2.0f * cy / (float)s_h;
+    for (i = 0; i < n; i++) {
+        float v[3];
+        gpu_corner_view(c[i].point, v);
+        b[i].x = v[0];
+        b[i].y = v[1];
+        b[i].z = v[2];
+        {                               /* u and v the nearest turn of 256 to the first corner's */
+            float du = c[i].u - c[0].u, dv = c[i].v - c[0].v;
+            b[i].u = c[0].u + du - 256.0f * (du > 128.0f) + 256.0f * (du < -128.0f);
+            b[i].v = c[0].v + dv - 256.0f * (dv > 128.0f) + 256.0f * (dv < -128.0f);
+        }
+    }
+    m = cv5_clip(b, (int)n, a, 0, 0, 1, -1.0f);  /* z >= 1 */
+    m = cv5_clip(a, m, b, -ax, 0, G - bx, 0);    /* X <= G W */
+    m = cv5_clip(b, m, a, ax, 0, G + bx, 0);     /* X >= -G W */
+    m = cv5_clip(a, m, b, 0, ay, G - by, 0);     /* Y <= G W */
+    m = cv5_clip(b, m, a, 0, -ay, G + by, 0);    /* Y >= -G W */
+    return m;
+}
+
 static void face_ge(const FwSpan *p)
 {
     size_t ns, np, nf, nc, nfs, nfp;
@@ -826,8 +889,66 @@ static void face_ge(const FwSpan *p)
     if (f->textured && !(st = stage_for(f->bank, f->base, f->mask)))
         return;
     room();
-    s_used += (size_t)n * sizeof(PTV) + 256;
+    s_used += (size_t)(n + 8) * sizeof(PTV) + 256;
     model_mode(1);
+    if (f->pad[1]) {                    /* near the eye or far off the sides: clipped first */
+        static ScePspFMatrix4 ident = { { 1, 0, 0, 0 }, { 0, 1, 0, 0 }, { 0, 0, 1, 0 }, { 0, 0, 0, 1 } };
+        CV5 a[16];
+        int m = face_clipped(f, c, n, a), k;
+        if (m < 2 || (n > 2 && m < 3))
+            return;
+        if (s_slot_now != -2) {
+            sceGuSetMatrix(GU_MODEL, &ident);
+            s_slot_now = -2;
+        }
+        if (n == 2)
+            m = 2;
+        if (f->textured) {
+            PTV *t = (PTV *)sceGuGetMemory((unsigned)m * sizeof(PTV));
+            textured(1);
+            use_texture(st);
+            use_rules(f->por, f->hi);
+            if (!s_wrap) {
+                sceGuTexWrap(GU_REPEAT, GU_REPEAT);
+                s_wrap = 1;
+            }
+            tws = (float)pow2_at_least(st->tw);
+            ths = (float)pow2_at_least(st->th);
+            ou = (float)f->ou / 256.0f;
+            ov = (float)f->ov / 256.0f;
+            for (k = 0; k < m; k++) {
+                t[k].u = (a[k].u + ou) / tws;
+                t[k].v = (a[k].v + ov) / ths;
+                t[k].x = a[k].x;
+                t[k].y = a[k].y;
+                t[k].z = a[k].z;
+            }
+            sceGuDrawArray(n == 2 ? GU_LINES : GU_TRIANGLE_FAN, GU_TEXTURE_32BITF | GU_VERTEX_32BITF | GU_TRANSFORM_3D, m, 0, t);
+        } else if (s_c32) {
+            PCV32 *v = (PCV32 *)sceGuGetMemory((unsigned)m * sizeof(PCV32));
+            textured(0);
+            for (k = 0; k < m; k++) {
+                v[k].c = 0xFF000000u | f->colour;
+                v[k].x = a[k].x;
+                v[k].y = a[k].y;
+                v[k].z = a[k].z;
+            }
+            sceGuDrawArray(n == 2 ? GU_LINES : GU_TRIANGLE_FAN, GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D, m, 0, v);
+        } else {
+            PCV *v = (PCV *)sceGuGetMemory((unsigned)m * sizeof(PCV));
+            textured(0);
+            for (k = 0; k < m; k++) {
+                v[k].c = (uint16_t)(0xF000u | f->colour);
+                v[k].pad = 0;
+                v[k].x = a[k].x;
+                v[k].y = a[k].y;
+                v[k].z = a[k].z;
+            }
+            sceGuDrawArray(n == 2 ? GU_LINES : GU_TRIANGLE_FAN, GU_COLOR_4444 | GU_VERTEX_32BITF | GU_TRANSFORM_3D, m, 0, v);
+        }
+        s_faces++;
+        return;
+    }
     /* the slot's matrix (a solid's float slots numbered after the models') */
     slot = c[0].point & SC_FLOAT_POINT ? (uint32_t)ns + fp[c[0].point & ~SC_FLOAT_POINT].fslot : pt[c[0].point].slot;
     if ((int)slot != s_slot_now) {
