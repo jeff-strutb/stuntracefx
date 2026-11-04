@@ -66,22 +66,33 @@ static int go;
    1/GSU_PRICE_ONE), and its accesses by kind (for the run log) */
 static uint64_t run_master, cost;
 static GsuPrice price;
+#ifdef SUPERFX_RUNLOG
 static uint64_t ops[GSU_OPS];
+#endif
 /* its end shown at the console's clock done_at (shown: GO still reads set);
-   for each bus (BUS_ROM, BUS_RAM) the console's clocks of its accesses (at,
-   in order) for a hold of that bus to wait on, and the clock that hold
-   began at (held_from, NO_HOLD for none) */
+   for each bus (BUS_ROM, BUS_RAM) its accesses in order, each as the whole
+   Super FX clocks of the program's cost when it was made (units), for a
+   hold of that bus to wait on; the waits holds have added (from an access
+   on, add console clocks); and the clock a hold began at (held_from,
+   NO_HOLD for none). An access's console clock is run_master + its units
+   in console clocks + the adds up to it (access_at): the clocks are
+   reckoned only when a hold asks, not at each access. */
 #define NO_HOLD UINT64_MAX
 enum { BUS_ROM, BUS_RAM };
 typedef struct {
-    uint64_t *at;
+    size_t from;
+    uint64_t add;
+} BusShift;
+typedef struct {
+    uint32_t *at;
     size_t n, cap;
     uint64_t held_from;
+    BusShift *shift;
+    size_t nshift, shift_cap;
 } BusLog;
 static int shown;
 static uint64_t done_at;
-static BusLog bus_log[2] = {{NULL, 0, 0, NO_HOLD}, {NULL, 0, 0, NO_HOLD}};
-static void master_reset(void);
+static BusLog bus_log[2] = {{NULL, 0, 0, NO_HOLD, NULL, 0, 0}, {NULL, 0, 0, NO_HOLD, NULL, 0, 0}};
 /* SCMR's bit for each bus: the Super FX has it while set */
 static const uint8_t bus_bit[2] = {0x10, 0x08};
 /* interrupts held (gsu_hold), and what of the game's program it keeps */
@@ -120,66 +131,79 @@ void gsu_reset(void)
     sfr_irq = sfr_alt = sfr_b = 0;
     go = 0;
     run_master = cost = 0;
-    master_reset();
     memset(&price, 0, sizeof price);
+#ifdef SUPERFX_RUNLOG
     memset(ops, 0, sizeof ops);
+#endif
     shown = holding = 0;
     done_at = 0;
     for (int k = 0; k < 2; k++)
-        bus_log[k].n = 0, bus_log[k].held_from = NO_HOLD;
+        bus_log[k].n = bus_log[k].nshift = 0, bus_log[k].held_from = NO_HOLD;
 }
 
 uint8_t *snes_sfx_ram(void) { return ram_store; }
 
 /* ---- time ---- */
+/* whole Super FX clocks in the console's: floor(units MASTER_HZ / GSU_HZ) */
+static uint64_t units_master(uint64_t units) { return units * MASTER_HZ / GSU_HZ; }
+
 /* the console's clock the running program has reached: its start and its
-   cost so far, priced: run_master + floor(units MASTER_HZ / GSU_HZ), units
-   the cost's whole Super FX clocks. Kept as a quotient and remainder that
-   step on as the units do (a 32-bit division where a host's 64-bit one is
-   a library call), the same value exactly. */
-static uint64_t mn_units, mn_q;
-static uint32_t mn_rem;
-static void master_reset(void) { mn_units = mn_q = 0, mn_rem = 0; }
-static uint64_t master_now(void)
-{
-    uint64_t units = cost / GSU_PRICE_ONE;
-    if (units != mn_units) {
-        uint64_t du = units - mn_units;
-        if (units > mn_units && du < 128) {     /* du MASTER_HZ + a remainder under GSU_HZ: within 32 bits */
-            uint32_t num = (uint32_t)du * MASTER_HZ + mn_rem;
-            mn_q += num / GSU_HZ;
-            mn_rem = num % GSU_HZ;
-        } else {
-            uint64_t p = units * MASTER_HZ;
-            mn_q = p / GSU_HZ;
-            mn_rem = (uint32_t)(p % GSU_HZ);
-        }
-        mn_units = units;
-    }
-    return run_master + mn_q;
-}
+   cost so far in whole Super FX clocks, priced */
+static uint64_t master_now(void) { return run_master + units_master(cost / GSU_PRICE_ONE); }
 
 /* a bus access of the running program, of kind op (GSU_OP_*; GSU_OPS: a
-   ROM-buffer fill, not priced): its cost, its time logged for a hold of
-   that bus to wait on */
+   ROM-buffer fill, not priced): its cost, and its units logged for a hold
+   of that bus to wait on */
 static void bus_access(int bus, int op)
 {
     BusLog *b = &bus_log[bus];
+    uint64_t units;
     if (!go || holding)                 /* (held: its cost and log are never read) */
         return;
     if (op < GSU_OPS) {
         cost += price.weight[op];
+#ifdef SUPERFX_RUNLOG
         ops[op]++;
+#endif
     }
     if (b->n == b->cap) {
-        uint64_t *n;
+        uint32_t *n;
         b->cap = b->cap ? b->cap * 2 : 65536;
         n = realloc(b->at, b->cap * sizeof *b->at);
         if (!n)
             gsu_host_fatal("out of memory for the Super FX's bus accesses");
         b->at = n;
     }
-    b->at[b->n++] = master_now();
+    units = cost / GSU_PRICE_ONE;
+    if (units > UINT32_MAX)
+        gsu_host_fatal("a Super FX program past 2^32 of its clocks");
+    b->at[b->n++] = (uint32_t)units;
+}
+
+/* access i's console clock */
+static uint64_t access_at(const BusLog *b, size_t i)
+{
+    uint64_t t = run_master + units_master(b->at[i]);
+    for (size_t k = 0; k < b->nshift; k++)
+        if (b->shift[k].from <= i)
+            t += b->shift[k].add;
+    return t;
+}
+
+/* a wait of add console clocks for a bus's accesses from i on */
+static void shift_from(BusLog *b, size_t i, uint64_t add)
+{
+    if (i == b->n)
+        return;
+    if (b->nshift == b->shift_cap) {
+        BusShift *n;
+        b->shift_cap = b->shift_cap ? b->shift_cap * 2 : 8;
+        n = realloc(b->shift, b->shift_cap * sizeof *b->shift);
+        if (!n)
+            gsu_host_fatal("out of memory for the Super FX's bus holds");
+        b->shift = n;
+    }
+    b->shift[b->nshift++] = (BusShift){i, add};
 }
 
 /* a program's next access to a bus at or after console clock t: its index
@@ -189,7 +213,7 @@ static size_t access_from(const BusLog *b, uint64_t t)
     size_t lo = 0, hi = b->n;
     while (lo < hi) {
         size_t m = lo + (hi - lo) / 2;
-        if (b->at[m] < t)
+        if (access_at(b, m) < t)
             lo = m + 1;
         else
             hi = m;
@@ -201,8 +225,9 @@ static size_t access_from(const BusLog *b, uint64_t t)
 static int stalled(void)
 {
     for (int k = 0; k < 2; k++)
-        if (bus_log[k].held_from != NO_HOLD && access_from(&bus_log[k], bus_log[k].held_from) < bus_log[k].n)
-            return 1;
+        if (bus_log[k].held_from != NO_HOLD && bus_log[k].n &&
+            access_at(&bus_log[k], bus_log[k].n - 1) >= bus_log[k].held_from)
+            return 1;   /* (the clocks are in order: the last access is at or after the hold's start) */
     return 0;
 }
 
@@ -266,11 +291,12 @@ static void program_starts(void)
     run_master = gsu_host_clock();
     gsu_host_price((uint8_t)(pc >> 16), (uint16_t)pc, &price);
     cost = (uint64_t)price.fixed * GSU_PRICE_ONE;
-    master_reset();
+#ifdef SUPERFX_RUNLOG
     memset(ops, 0, sizeof ops);
+#endif
     /* a bus the S-CPU has as the program starts: held from its start */
     for (int k = 0; k < 2; k++) {
-        bus_log[k].n = 0;
+        bus_log[k].n = bus_log[k].nshift = 0;
         bus_log[k].held_from = (gsu.scmr & bus_bit[k]) ? NO_HOLD : run_master;
     }
     gsu.pre_b = gsu.pre_alt1 = gsu.pre_alt2 = gsu.pre_sreg = gsu.pre_dreg = 0;
@@ -306,12 +332,14 @@ void gsu_hold(int on)
         kept.sfr_irq = sfr_irq;
         shown = 0;
         for (int k = 0; k < 2; k++)
-            bus_log[k] = (BusLog){NULL, 0, 0, NO_HOLD};
+            bus_log[k] = (BusLog){NULL, 0, 0, NO_HOLD, NULL, 0, 0};
         holding = 1;
         return;
     }
-    for (int k = 0; k < 2; k++)
+    for (int k = 0; k < 2; k++) {
         free(bus_log[k].at);
+        free(bus_log[k].shift);
+    }
     shown = kept.shown;
     done_at = kept.done_at;
     memcpy(bus_log, kept.bus_log, sizeof bus_log);
@@ -348,7 +376,7 @@ static void scmr_written(uint8_t v)
         if (b->held_from == NO_HOLD)
             continue;
         i = access_from(b, b->held_from);
-        first[k] = i < b->n ? b->at[i] : NO_HOLD;
+        first[k] = i < b->n ? access_at(b, i) : NO_HOLD;
         order[n++] = k;
     }
     /* the buses given back, by the program's first access to each in the
@@ -362,13 +390,11 @@ static void scmr_written(uint8_t v)
         size_t i = access_from(b, b->held_from);
         uint64_t a, wait;
         b->held_from = NO_HOLD;
-        if (i == b->n || b->at[i] >= now)
+        if (i == b->n || (a = access_at(b, i)) >= now)
             continue;
-        a = b->at[i];
         wait = now - a;
         for (int j = 0; j < 2; j++)
-            for (size_t m = access_from(&bus_log[j], a); m < bus_log[j].n; m++)
-                bus_log[j].at[m] += wait;
+            shift_from(&bus_log[j], access_from(&bus_log[j], a), wait);
         done_at += wait;
         if (sfr_irq) {
             gsu_host_irq_at(0, now);
