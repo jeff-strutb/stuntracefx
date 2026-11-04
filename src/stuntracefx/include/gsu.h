@@ -43,6 +43,9 @@ extern RegsGSU gsu;
 
 /* One byte on the Super FX's bus (24-bit: bank, address). */
 uint8_t gsu_rd8(uint32_t addr);
+/* The same byte read without an access of the chip's (not priced or
+   logged): for the cartridge's own walks and checks beside the chip */
+uint8_t gsu_peek8(uint32_t addr);
 /* The ROM buffer filled from addr; and a read of a buffer gsu_fetch filled
    from a byte no asset holds, which stops the port. */
 uint8_t gsu_fetch(uint32_t addr);

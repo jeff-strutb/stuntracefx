@@ -22,6 +22,7 @@
 #include "remaster.h"
 #include "widescreen.h"
 #include "fullwindow.h"
+#include "scene.h"
 
 #define R gsu.r
 
@@ -3585,6 +3586,7 @@ enter:
        with command byte cc (the bank's mirror of 01:80cc), or 01:80cc.
        Its IWT R15,#code and the NOP in its delay slot, then the code. */
     if ((at & 0x7FFF) < 4 * 26 && !(at & 3)) {
+        sc_command((at & 0x7FFF) >> 2, gsu.rombr, (uint16_t)(R[14] - 1));  /* the renderer's check (scene.h) */
         at = commands[(at & 0x7FFF) >> 2];
         goto fetched;
     }

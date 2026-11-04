@@ -501,6 +501,10 @@ static inline uint8_t bus_byte_by(uint32_t addr, int fetch, int *unheld)
 
 static inline uint8_t bus_byte(uint32_t addr) { int unheld; return bus_byte_by(addr, 0, &unheld); }
 
+/* a byte on the bus read for a check or a native walk, no access made (not
+   priced, not logged, the pixel caches left as they are) */
+uint8_t gsu_peek8(uint32_t addr) { return bus_byte(addr & 0xFFFFFF); }
+
 /* The ROM buffer's fill (an R14 write): the byte at addr, which the program
    may never read; one no asset holds (code) marks the buffer instead of
    stopping the port, and only a GETB or GETC of it does (gsu_fetch_used). */
