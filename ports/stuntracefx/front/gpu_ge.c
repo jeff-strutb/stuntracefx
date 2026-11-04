@@ -70,7 +70,7 @@ static Stage s_stage[STAGES];
 static int s_nstage;
 static const Stage *s_tex_now;
 
-static long s_fills, s_cpu_fills, s_apart, s_checked;
+static long s_fills, s_cpu_fills, s_apart, s_checked, s_water_ge, s_water_cpu, s_water_rows_cpu, s_water_texels;
 
 /* the GPU memory: nativeshvc's loan, or (FW_SPANPLAY, which starts no
    console) all of VRAM, the program's own */
@@ -92,11 +92,22 @@ typedef struct {
 
 static void report(void)
 {
-    printf("gpu_ge: %ld fills on the GE, %ld on the CPU (no GPU memory lent)", s_fills, s_cpu_fills);
+    printf("gpu_ge: %ld fills on the GE, %ld on the CPU (no GPU memory lent); %ld water passes on the GE, %ld on the CPU, "
+           "%ld water rows the CPU's, %ld water texels the GE's", s_fills, s_cpu_fills, s_water_ge, s_water_cpu,
+           s_water_rows_cpu, s_water_texels);
     if (s_checked)
         printf("; FW_GPUCHECK: %ld fills checked, %ld texels apart from the CPU's", s_checked, s_apart);
     printf("\n");
     fflush(stdout);
+}
+
+static void report_once(void)
+{
+    static int on;
+    if (!on) {
+        on = 1;
+        atexit(report);
+    }
 }
 
 /* ---- the list ---- */
@@ -393,12 +404,8 @@ static void fill(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
     void *lent = s_lend(&bytes);
     int stride = (w + 63) & ~63, x, y;
     volatile uint16_t *t;
-    static int reported;
 
-    if (!reported) {
-        reported = 1;
-        atexit(report);
-    }
+    report_once();
     if (!lent || (size_t)stride * (size_t)h * 2 > bytes || w > 1024 || h > 1024) {
         s_cpu_fills++;
         fw_span_fill_cpu(out, w, h, sp, n);
@@ -445,6 +452,295 @@ static void fill(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
     }
 }
 
+
+/* ---- the water pass ----
+   The reference (fullwindow.c water_texel) gives each texel nothing was
+   drawn on the water surface's colour along its ray: the line's colour
+   g mixed toward the ripples' colour by the share of ripple texels in
+   the pixel's footprint on the surface. Here the CPU keeps what it can
+   say exactly: the texels drawn on, which of a row's pixels see the
+   surface (one run of them: the ray's slope to it is monotone along a
+   row), the row's colours, and the pixels at the run's ends; the GE
+   draws each run as a one-row quad with the surface's true perspective
+   (each corner at its 1 / depth, its texture coordinates the surface's),
+   the ripple cells a texture whose mip levels average them (for the
+   footprint's share), mixed by the GE's blend function: g (the vertex)
+   toward the ripples' colour (the texture's environment colour) by the
+   texel's share. A row the line's colour leaves to the console (colour
+   1), or the horizon crosses, is the CPU's. */
+static uint32_t __attribute__((aligned(16))) s_cells[64 * 16 + 32 * 8 + 16 * 4 + 8 * 2];
+
+static uint32_t abgr(uint32_t argb) { return (argb & 0xFF00FF00u) | (argb >> 16 & 0xFFu) | (argb & 0xFFu) << 16; }
+
+typedef struct {
+    float s, t;
+    uint32_t c;
+    float x, y, z;
+} WV;
+
+/* the reference's ray hit at pixel (x, y)'s centre: 1 and its 1 / depth
+   rank (the strip row by depth, as water_texel finds it), or 0 */
+static int hit_at(const FwWaterJob *j, int32_t x, int32_t y, int32_t *lo_out)
+{
+    const float *e = j->e;
+    float vx = ((float)x + 0.5f - j->ox) / j->fx, vy = ((float)y + 0.5f - j->oy) / j->fy;
+    float wy = fmaf(e[4], vx, fmaf(e[5], vy, e[6])), t = j->dy / wy;
+    int32_t lo, hi;
+    if (!(wy != 0) || !(t > 0))
+        return 0;
+    if (lo_out) {
+        for (lo = 0, hi = 79; lo < hi;) {
+            int32_t m = (lo + hi) / 2;
+            if (j->depth[m] >= t)
+                hi = m;
+            else
+                lo = m + 1;
+        }
+        *lo_out = lo;
+    }
+    return 1;
+}
+
+/* the surface at the screen point (X, Y) (a pixel's corner): its 1 / depth
+   q and texture coordinates in cells, s along 64 and t along 16 */
+static void surface_at(const FwWaterJob *j, double X, double Y, double *q, double *s, double *t)
+{
+    const float *e = j->e;
+    double vx = (X - j->ox) / j->fx, vy = (Y - j->oy) / j->fy, wy = e[4] * vx + e[5] * vy + e[6], d;
+    *q = wy / j->dy;
+    d = j->dy / wy;
+    *s = (d * (e[0] * vx + e[1] * vy + e[2]) + j->cam[0]) / j->wu / 64.0;
+    *t = (d * (e[8] * vx + e[9] * vy + e[10]) + j->cam[2]) / j->wv / 16.0;
+}
+
+static void cells_make(const FwWaterJob *j)
+{
+    static const int size[4][2] = { { 64, 16 }, { 32, 8 }, { 16, 4 }, { 8, 2 } };
+    uint32_t *lv[4];
+    int l, x, y;
+    lv[0] = s_cells;
+    for (l = 1; l < 4; l++)
+        lv[l] = lv[l - 1] + size[l - 1][0] * size[l - 1][1];
+    for (y = 0; y < 16; y++)
+        for (x = 0; x < 64; x++) {
+            int32_t n = j->sat[(y + 1) * 65 + x + 1] - j->sat[y * 65 + x + 1] - j->sat[(y + 1) * 65 + x] + j->sat[y * 65 + x];
+            lv[0][y * 64 + x] = n ? 0xFFFFFFFFu : 0xFF000000u;
+        }
+    for (l = 1; l < 4; l++)              /* each level the one below's 2 x 2 averaged */
+        for (y = 0; y < size[l][1]; y++)
+            for (x = 0; x < size[l][0]; x++) {
+                const uint32_t *b = lv[l - 1];
+                int w = size[l - 1][0];
+                unsigned v = (b[(2 * y) * w + 2 * x] & 255) + (b[(2 * y) * w + 2 * x + 1] & 255) +
+                             (b[(2 * y + 1) * w + 2 * x] & 255) + (b[(2 * y + 1) * w + 2 * x + 1] & 255);
+                v = (v + 2) / 4;
+                lv[l][y * size[l][0] + x] = 0xFF000000u | v * 0x010101u;
+            }
+    sceKernelDcacheWritebackRange(s_cells, sizeof s_cells);
+    sceGuTexMode(GU_PSM_8888, 3, 0, 0);
+    for (l = 0; l < 4; l++)
+        sceGuTexImage(l, size[l][0], size[l][1], size[l][0], lv[l]);
+    sceGuTexFlush();
+}
+
+/* one run of row y, pixels xa to xb, its line colour g and ripple colour r */
+static void water_run(const FwWaterJob *j, int32_t y, int32_t xa, int32_t xb, uint32_t g, uint32_t r)
+{
+    WV *v;
+    int i;
+    room();
+    v = (WV *)sceGuGetMemory(4 * sizeof(WV));
+    for (i = 0; i < 4; i++) {
+        double X = (i & 1) ? xb + 1 : xa, Y = (i & 2) ? y + 1 : y, q, s, t, w;
+        surface_at(j, X, Y, &q, &s, &t);
+        w = 1.0 / q;
+        v[i].s = (float)s;
+        v[i].t = (float)t;
+        v[i].c = abgr(g);
+        v[i].x = (float)((2.0 * X / j->w - 1.0) * w);
+        v[i].y = (float)((1.0 - 2.0 * Y / j->h) * w);
+        v[i].z = (float)w;
+    }
+    sceGuTexEnvColor(abgr(r));
+    sceGuDrawArray(GU_TRIANGLE_STRIP, GU_TEXTURE_32BITF | GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D, 4, 0, v);
+}
+
+/* q at the run's corners all well in front of the eye */
+static int corners_ok(const FwWaterJob *j, int32_t y, int32_t xa, int32_t xb)
+{
+    int i;
+    for (i = 0; i < 4; i++) {
+        double q, s, t;
+        surface_at(j, (i & 1) ? xb + 1 : xa, (i & 2) ? y + 1 : y, &q, &s, &t);
+        if (!(q > 1e-6))
+            return 0;
+    }
+    return 1;
+}
+
+typedef struct {
+    int32_t y, xa, xb;
+} WRun;
+
+static void water_fill(const uint8_t *in, uint32_t *out, const FwWaterJob *j, const uint32_t *gap)
+{
+    size_t bytes = 0;
+    void *lent = s_lend(&bytes);
+    int w = j->w, h = j->h, stride = (w + 63) & ~63, x, y, nr = 0;
+    static WRun *runs;
+    static int cap_runs;
+    volatile uint32_t *tg;
+    static ScePspFMatrix4 proj = { { 1, 0, 0, 0 }, { 0, 1, 0, 0 }, { 0, 0, 0, 1 }, { 0, 0, 0, 0 } };
+    static ScePspFMatrix4 ident = { { 1, 0, 0, 0 }, { 0, 1, 0, 0 }, { 0, 0, 1, 0 }, { 0, 0, 0, 1 } };
+
+    if (!lent || (size_t)stride * (size_t)h * 4 > bytes || w > 1024 || h > 1024 || j->point) {
+        s_water_cpu++;
+        fw_water_fill_cpu(in, out, j, gap);
+        return;
+    }
+    if (cap_runs < 4 * h) {
+        free(runs);
+        cap_runs = 4 * h;
+        runs = malloc((size_t)cap_runs * sizeof *runs);
+        if (!runs) {
+            cap_runs = 0;
+            fw_water_fill_cpu(in, out, j, gap);
+            return;
+        }
+    }
+    report_once();
+    s_water_ge++;
+    sceGuStart(GU_DIRECT, (void *)((uintptr_t)s_list | 0x40000000u));
+    s_used = 1024;
+    sceGuDrawBufferList(GU_PSM_8888, (void *)((uintptr_t)lent - (uintptr_t)sceGeEdramGetAddr()), stride);
+    sceGuOffset(2048 - w / 2, 2048 - h / 2);
+    sceGuViewport(2048, 2048, w, h);
+    sceGuDepthRange(65535, 0);
+    sceGuScissor(0, 0, w, h);
+    sceGuEnable(GU_SCISSOR_TEST);
+    sceGuDisable(GU_BLEND);
+    sceGuDisable(GU_DEPTH_TEST);
+    sceGuDisable(GU_STENCIL_TEST);
+    sceGuDisable(GU_COLOR_TEST);
+    sceGuDisable(GU_ALPHA_TEST);
+    sceGuDisable(GU_COLOR_LOGIC_OP);
+    sceGuDisable(GU_DITHER);
+    sceGuDisable(GU_CULL_FACE);
+    sceGuDisable(GU_LIGHTING);
+    sceGuDisable(GU_FOG);
+    sceGuDisable(GU_CLIP_PLANES);
+    sceGuPixelMask(0);
+    sceGuShadeModel(GU_FLAT);
+    sceGuSetMatrix(GU_PROJECTION, &proj);
+    sceGuSetMatrix(GU_VIEW, &ident);
+    sceGuSetMatrix(GU_MODEL, &ident);
+    sceGuEnable(GU_TEXTURE_2D);
+    cells_make(j);
+    sceGuTexMapMode(GU_TEXTURE_COORDS, 0, 0);
+    sceGuTexScale(1.0f, 1.0f);
+    sceGuTexOffset(0.0f, 0.0f);
+    sceGuTexLevelMode(GU_TEXTURE_AUTO, 0.0f);
+    sceGuTexFilter(GU_LINEAR_MIPMAP_LINEAR, GU_NEAREST);
+    sceGuTexWrap(GU_REPEAT, GU_REPEAT);
+    sceGuTexFunc(GU_TFX_BLEND, GU_TCC_RGB);
+    for (y = 0; y < h; y++) {
+        uint32_t g = gap[y], r0 = j->land ? gap[h + y] : 0;
+        int32_t a = 0, b = w - 1, lo_a, lo_b;
+        int ha, hb;
+        if (g == 1 || (j->land && r0 == 1)) {   /* colour 1 left to the console: the CPU's */
+            s_water_rows_cpu++;
+            continue;
+        }
+        /* the run of pixels that see the surface: its ends by halving, the
+           hit monotone along the row */
+        ha = hit_at(j, 0, y, NULL);
+        hb = hit_at(j, w - 1, y, NULL);
+        if (!ha && !hb) {
+            if (hit_at(j, w / 2, y, NULL))      /* (not monotone: the CPU's) */
+                s_water_rows_cpu++;
+            continue;
+        }
+        if (!ha) {                      /* a = the first hit */
+            int32_t l = 0, r = w - 1;
+            while (r - l > 1) {
+                int32_t m = (l + r) / 2;
+                if (hit_at(j, m, y, NULL))
+                    r = m;
+                else
+                    l = m;
+            }
+            a = r;
+        }
+        if (!hb) {                      /* b = the last hit */
+            int32_t l = a, r = w - 1;
+            while (r - l > 1) {
+                int32_t m = (l + r) / 2;
+                if (hit_at(j, m, y, NULL))
+                    l = m;
+                else
+                    r = m;
+            }
+            b = l;
+        }
+        a++;                            /* its ends the CPU's (the horizon may cross them) */
+        b--;
+        while (a <= b && !corners_ok(j, y, a, a))
+            a++;
+        while (a <= b && !corners_ok(j, y, b, b))
+            b--;
+        if (a > b || !corners_ok(j, y, a, b))
+            continue;
+        /* split where the ripples' colour changes (Aqua Tunnel's: by depth) */
+        while (a <= b) {
+            int32_t e = b;
+            hit_at(j, a, y, &lo_a);
+            if (!j->land) {
+                hit_at(j, b, y, &lo_b);
+                if (lo_b != lo_a) {     /* the last pixel at a's colour, by halving */
+                    int32_t l = a, r = b;
+                    while (r - l > 1) {
+                        int32_t m = (l + r) / 2, lm;
+                        hit_at(j, m, y, &lm);
+                        if (lm == lo_a)
+                            l = m;
+                        else
+                            r = m;
+                    }
+                    e = l;
+                }
+            }
+            if (nr == cap_runs)
+                break;
+            water_run(j, y, a, e, g, j->land ? r0 : j->ripple[lo_a]);
+            runs[nr].y = y;
+            runs[nr].xa = a;
+            runs[nr].xb = e;
+            nr++;
+            a = e + 1;
+        }
+    }
+    sceGuFinish();
+    sceGuSync(0, 0);
+    /* the picture: the GE's runs, the rest the reference's own */
+    tg = (volatile uint32_t *)((uintptr_t)lent | 0x40000000u);
+    {
+        int k = 0;
+        for (y = 0; y < h; y++)
+            for (x = 0; x < w; x++) {
+                size_t i = (size_t)y * w + x;
+                while (k < nr && (runs[k].y < y || (runs[k].y == y && runs[k].xb < x)))
+                    k++;
+                if (!in[i] && k < nr && runs[k].y == y && x >= runs[k].xa && x <= runs[k].xb) {
+                    uint32_t p = tg[(size_t)y * stride + x];
+                    s_water_texels++;
+                    out[i] = 0xFF000000u | (p & 0xFFu) << 16 | (p & 0xFF00u) | (p >> 16 & 0xFFu);
+                } else {
+                    out[i] = fw_water_texel(in, j, gap, x, y);
+                }
+            }
+    }
+}
+
 /* FW_SPANPLAY: the GE the program's own (no console runs, so libgu is
    started here and all of VRAM is the fill's) */
 void gpu_ge_standalone(void)
@@ -464,5 +760,6 @@ int gpu_ge_init(void)
         }
     sceKernelDcacheWritebackRange(s_clut, sizeof s_clut);
     fw_span_filler = fill;
+    fw_water_filler = water_fill;
     return 1;
 }

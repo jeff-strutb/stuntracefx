@@ -626,6 +626,104 @@ int fw_span_play(const char *path)
     return apart != 0;
 }
 
+/* FW_WATERREC=FILE: every FW_SPANREC_EVERY'th water pass (10), to
+   FW_SPANREC_MAX (30): 'WATR', sizeof(FwWaterJob), the job, the texels
+   (w x h) and the rows' colours (2 h). FW_WATERPLAY=FILE
+   (fw_water_play): each by the CPU's reference and by fw_water_filler,
+   the texels apart and how far apart printed. */
+static void water_record(const uint8_t *in, const FwWaterJob *j, const uint32_t *gap)
+{
+    static FILE *f;
+    static long passes, kept;
+    static int every = -1, most;
+    uint32_t head[2];
+    if (every < 0) {
+        const char *e = getenv("FW_WATERREC");
+        every = getenv("FW_SPANREC_EVERY") ? atoi(getenv("FW_SPANREC_EVERY")) : 10;
+        most = getenv("FW_SPANREC_MAX") ? atoi(getenv("FW_SPANREC_MAX")) : 30;
+        if (!e || every < 1 || !(f = fopen(e, "wb")))
+            every = 0;
+    }
+    if (!every || kept >= most || passes++ % every)
+        return;
+    memcpy(head, "WATR", 4);
+    head[1] = sizeof *j;
+    fwrite(head, sizeof head, 1, f);
+    fwrite(j, sizeof *j, 1, f);
+    fwrite(in, 1, (size_t)j->w * j->h, f);
+    fwrite(gap, sizeof *gap, 2 * (size_t)j->h, f);
+    fflush(f);
+    kept++;
+}
+
+int fw_water_play(const char *path)
+{
+    FILE *f = fopen(path, "rb");
+    uint32_t head[2];
+    FwWaterJob j;
+    long records = 0, apart = 0, texels = 0, hist[5] = { 0 };
+    int worst = 0;
+    double sum = 0;
+    if (!f) {
+        printf("waterplay: cannot read %s\n", path);
+        return 2;
+    }
+    while (fread(head, sizeof head, 1, f) == 1) {
+        size_t n, i;
+        uint8_t *in;
+        uint32_t *gap, *a, *g;
+        long here = 0;
+        if (memcmp(head, "WATR", 4) || head[1] != sizeof j || fread(&j, sizeof j, 1, f) != 1) {
+            printf("waterplay: record %ld: not this build's layout\n", records);
+            return 2;
+        }
+        n = (size_t)j.w * j.h;
+        in = malloc(n);
+        gap = malloc(2 * (size_t)j.h * sizeof *gap);
+        a = malloc(n * 4);
+        g = malloc(n * 4);
+        if (!in || !gap || !a || !g || fread(in, 1, n, f) != n || fread(gap, sizeof *gap, 2 * (size_t)j.h, f) != 2 * (size_t)j.h) {
+            printf("waterplay: record %ld: short or no memory\n", records);
+            return 2;
+        }
+        fw_water_fill_cpu(in, a, &j, gap);
+        fw_water_filler(in, g, &j, gap);
+        for (i = 0; i < n; i++)
+            if (a[i] != g[i]) {
+                int s, d = 0;
+                here++;
+                if ((a[i] >> 24) && (g[i] >> 24))
+                    for (s = 0; s < 24; s += 8) {
+                        int e = abs((int)(a[i] >> s & 255) - (int)(g[i] >> s & 255));
+                        if (e > d)
+                            d = e;
+                    }
+                else
+                    d = 256;            /* a colour against an index or transparency */
+                hist[d <= 1 ? 0 : d <= 4 ? 1 : d <= 16 ? 2 : d <= 64 ? 3 : 4]++;
+                if (d > worst)
+                    worst = d;
+                sum += d;
+            }
+        printf("waterplay: record %ld: %dx%d: %ld texels apart\n", records, j.w, j.h, here);
+        fflush(stdout);
+        apart += here;
+        texels += (long)n;
+        records++;
+        free(in);
+        free(gap);
+        free(a);
+        free(g);
+    }
+    printf("waterplay: %ld records, %ld texels, %ld apart (%.3f%%); the most a channel apart %d (256: not both colours), "
+           "the mean %.2f; apart by 1 %ld, 2-4 %ld, 5-16 %ld, 17-64 %ld, more %ld\n",
+           records, texels, apart, texels ? 100.0 * apart / texels : 0.0, worst, apart ? sum / apart : 0.0, hist[0], hist[1],
+           hist[2], hist[3], hist[4]);
+    fflush(stdout);
+    fclose(f);
+    return 0;
+}
+
 /* the spans drawn into the texels */
 static void span_flush(void)
 {
@@ -3047,6 +3145,11 @@ static uint32_t water_texel(const uint8_t *in, const FwWaterJob *j, const uint32
     return out;
 }
 
+uint32_t fw_water_texel(const uint8_t *in, const FwWaterJob *j, const uint32_t *gap, int32_t x, int32_t y)
+{
+    return water_texel(in, j, gap, x, y);
+}
+
 void fw_water_fill_cpu(const uint8_t *in, uint32_t *out, const FwWaterJob *j, const uint32_t *gap)
 {
     int32_t x, y;
@@ -3166,6 +3269,7 @@ static const uint32_t *water_pass(void)
             gap[th + y] = have ? rgb8(line[(int)l + SHADE_LINES < n ? l + SHADE_LINES : (unsigned)n - 1]) : 1;
         }
     }
+    water_record(tex, &job, gap);
     fw_water_filler(tex, tex32, &job, gap);
     return tex32;
 }

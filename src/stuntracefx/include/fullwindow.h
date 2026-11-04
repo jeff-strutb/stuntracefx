@@ -165,6 +165,11 @@ typedef struct {
     int32_t sat[17 * 65 + 3];
 } FwWaterJob;
 void fw_water_fill_cpu(const uint8_t *in, uint32_t *out, const FwWaterJob *j, const uint32_t *gap);
+/* the reference's texel (x, y) of the water pass */
+uint32_t fw_water_texel(const uint8_t *in, const FwWaterJob *j, const uint32_t *gap, int32_t x, int32_t y);
+/* FW_WATERPLAY (a check): the passes FW_WATERREC recorded, each by the CPU
+   and by fw_water_filler, the texels apart and how far printed */
+int fw_water_play(const char *path);
 extern void (*fw_water_filler)(const uint8_t *in, uint32_t *out, const FwWaterJob *j, const uint32_t *gap);
 /* the 32-bit texels' memory: malloc's, or a front end's the GPU shares (NULL: malloc) */
 extern uint32_t *(*fw_texels32_alloc)(size_t len);

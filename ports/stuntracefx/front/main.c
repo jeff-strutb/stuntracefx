@@ -33,7 +33,8 @@ int gpu_ge_init(void);
 void gpu_ge_standalone(void);
 #endif
 #include "rm_options.h"
-int fw_span_play(const char *path);     /* fullwindow.h's: FW_SPANPLAY, a check */
+int fw_span_play(const char *path);     /* fullwindow.h's: FW_SPANPLAY and FW_WATERPLAY, checks */
+int fw_water_play(const char *path);
 
 /* ---- the console, for the touch scheme ---- */
 uint32_t front_frames(void) { return nshvc_frames(); }
@@ -276,11 +277,13 @@ NSHVC_MAIN(argc, argv)
 #elif FW_GPU_GE
     if (!getenv("FW_CPUFILL"))
         gpu_ge_init();                  /* the PSP's GE */
-    if (getenv("FW_SPANPLAY"))
+    if (getenv("FW_SPANPLAY") || getenv("FW_WATERPLAY"))
         gpu_ge_standalone();
 #endif
     if (getenv("FW_SPANPLAY"))          /* a check: recorded fills, the CPU's against the GPU's; no console */
         return fw_span_play(getenv("FW_SPANPLAY"));
+    if (getenv("FW_WATERPLAY"))         /* the same for the water pass */
+        return fw_water_play(getenv("FW_WATERPLAY"));
     cart_describe(&cart);
     cart.cost_profile = &stuntracefx_cost_profile;
     nshvc_set_hooks(&hooks);
