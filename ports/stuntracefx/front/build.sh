@@ -13,7 +13,8 @@
 #     CC=clang                    the compiler (with its target, for iOS)
 #     DEFS=                       the host's defines (-DNSHVC_HOST_IOS=1 for iOS)
 #     LIBS=                       the host's frameworks and libraries
-#   check: the touch scheme's check (touch_check.c) only
+#   check: the touch scheme's and the pause screen's checks (touch_check.c,
+#          pause_check.c; PAUSE_PICTURES=DIR writes the panel's pictures) only
 #
 # The game's machine headers are its own; its Super FX (ports/common/snes/
 # superfx.c) is the cartridge's, on nativeshvc's connector
@@ -33,6 +34,9 @@ if [ "$1" = check ]; then
   clang -std=gnu11 -Wall -Wextra -I"$FRONT" -I"$NSHVC/include" -o "$OUT/touch_check" \
     "$FRONT/touch_check.c" "$FRONT/touch.c" "$FRONT/art.c" -lm
   "$OUT/touch_check"
+  clang -std=gnu11 -Wall -Wextra -I"$FRONT" -I"$NSHVC/include" -o "$OUT/pause_check" \
+    "$FRONT/pause_check.c" "$FRONT/pause.c" -lm
+  "$OUT/pause_check" $PAUSE_PICTURES
   exit
 fi
 
@@ -78,7 +82,7 @@ if [ -n "$GPU_VULKAN" ]; then
   OBJS="$OBJS $OUT/obj/front_gpu_vulkan.o $OUT/obj/front_gpu_bin.o"
   case "$($CC -dumpmachine)" in *mingw*|*windows*) ;; *) LIBS="$LIBS -ldl";; esac
 fi
-for f in main cart superfx_cart touch art cost_profile; do
+for f in main cart superfx_cart touch art pause cost_profile; do
   $CC -O2 -std=gnu11 -Wall $DEFS -I"$FRONT" -I"$OUT/include" -I"$NSHVC/include" -Iports/common/snes -c "$FRONT/$f.c" -o "$OUT/obj/front_$f.o"
   OBJS="$OBJS $OUT/obj/front_$f.o"
 done

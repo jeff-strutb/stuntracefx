@@ -3,8 +3,10 @@
  * cartridge; this is what it adds to the console's front end: its keys
  * (Tab Original or Enhanced mode, with a badge saying which for three
  * seconds; F1 Frame rate
- * 60, F2 Widescreen), its Remaster Options taken at each frame's end, and a
- * touch screen as its controls (touch.c, art.c).
+ * 60, F2 Widescreen), its Remaster Options taken at each frame's end, the
+ * pause screen where there is a keyboard (Escape or the button in the top
+ * left corner; pause.c), and a touch screen as its controls (touch.c,
+ * art.c).
  *
  *   stuntracefx [nshvc_main's options] [--pacing FILE]
  *
@@ -119,6 +121,10 @@ static int enhanced(void) { return rm_option(RM_OPT_FRAMERATE); }
 /* ---- the hooks ---- */
 static int on_key(int vk, int down)
 {
+#ifndef NSHVC_HOST_IOS
+    if (pause_key(vk, down))                /* Escape, and every key while paused */
+        return 1;
+#endif
     if (rm_type_key(vk, down))             /* a letter for the initials (typing.c) */
         return 1;
     if (!down || (vk != 0x09 && vk != 0x70 && vk != 0x71))
@@ -141,10 +147,25 @@ static void on_touch(const nshvc_touch *t, int n)
     touch_input(t, n);
 }
 
+#ifndef NSHVC_HOST_IOS
+static int on_pointer(float x, float y, int buttons)
+{
+    return pause_pointer(x, y, buttons);
+}
+#endif
+
 static void on_frame(void)
 {
     static int made, badge_made;
     TouchView v;
+#ifndef NSHVC_HOST_IOS
+    pause_frame();
+    if (pause_active()) {
+        /* the machine is still: no frame ended, nothing of the game's to do */
+        art_hide_mode();
+        return;
+    }
+#endif
     rm_frame_end();
     rm_typing_frame();
     all_courses_frame();
@@ -152,7 +173,11 @@ static void on_frame(void)
         art_make_mode();
         badge_made = 1;
     }
+#ifndef NSHVC_HOST_IOS
+    art_place_mode(enhanced(), pause_badge_left(), front_safe_top() + 10 + 7);
+#else
     art_place_mode(enhanced(), 8, front_safe_top() + 8);
+#endif
     if (getenv("PORT_INPUTLOG")) {
         uint16_t held = (uint16_t)(nshvc_peek(0x7E0309) | nshvc_peek(0x7E030A) << 8);
         uint16_t pad = (uint16_t)(nshvc_peek(0x004218) | nshvc_peek(0x004219) << 8);
@@ -204,7 +229,11 @@ extern const nshvc_cost_profile stuntracefx_cost_profile;
 NSHVC_MAIN(argc, argv)
 {
     static nshvc_cart cart;
+#ifndef NSHVC_HOST_IOS
+    static const nshvc_hooks hooks = { .key = on_key, .touch = on_touch, .frame = on_frame, .pointer = on_pointer };
+#else
     static const nshvc_hooks hooks = { .key = on_key, .touch = on_touch, .frame = on_frame };
+#endif
     static char fps_path[1024];
     int i;
     /* FW_PROF (a check): nativeshvc's frame log too, in the temporary

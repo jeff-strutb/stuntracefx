@@ -221,6 +221,14 @@ void art_place_mode(int enhanced, float left, float top)
     front_overlay_place(id_enhanced, cx, cy, s, 0, 0.85f * a, enhanced && a > 0);
 }
 
+void art_hide_mode(void)
+{
+    if (id_original >= 0) {
+        front_overlay_place(id_original, 0, 0, 1, 0, 0, 0);
+        front_overlay_place(id_enhanced, 0, 0, 1, 0, 0, 0);
+    }
+}
+
 /* the pictures as made, for a check (touch_check.c): 0 wheel, 1 brake,
    2 boost, 3 pause, 4 the ORIGINAL badge, 5 the ENHANCED one */
 uint32_t *art_picture(int which, int *w, int *h)
