@@ -89,6 +89,9 @@ void pad_draw(uint32_t *px, int w, int h, float density, float k, float cx, floa
 
 /* ---- the cartridge (cart.c) and its Super FX (superfx_cart.c) ---- */
 void cart_describe(nshvc_cart *cart);
+/* the ROM's bytes at off to off + len - 1 as plain memory when the assets
+   hold every one, else NULL (the Super FX's direct answers, superfx_cart.c) */
+const uint8_t *cart_rom_direct(uint32_t off, uint32_t len);
 /* the Super FX on the connector (cart.h) */
 extern const struct nshvc_chip front_superfx;
 /* a ROM read for the Super FX's ROM buffer's fill (with NSHVC_ROM_CHIP): a

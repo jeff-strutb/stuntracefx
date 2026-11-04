@@ -60,6 +60,20 @@ int cart_rom_held(uint32_t off, uint8_t *v)
     return 1;
 }
 
+/* the assets' bytes at ROM offsets off to off + len - 1 as plain memory,
+   when an asset holds every one of them (the same bytes asset_read gives);
+   NULL otherwise, or past the ROM's end (the console mirrors there) */
+const uint8_t *cart_rom_direct(uint32_t off, uint32_t len)
+{
+    uint32_t i;
+    if (!held_bits || off + len > port_rom_size || off + len < off)
+        return NULL;
+    for (i = off; i < off + len; i++)
+        if (!(held_bits[i >> 3] >> (i & 7) & 1))
+            return NULL;
+    return held_bytes + off;
+}
+
 static uint8_t asset_read(uint32_t off, int who)
 {
     if (held_bits && off < port_rom_size && held_bits[off >> 3] >> (off & 7) & 1)

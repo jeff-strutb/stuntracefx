@@ -231,6 +231,39 @@ static uint8_t *ram(uint32_t *size)
     return snes_sfx_ram();
 }
 
+#if NSHVC_VERSION_MAJOR > 2 || (NSHVC_VERSION_MAJOR == 2 && NSHVC_VERSION_MINOR >= 18)
+/* Where the S-CPU's accesses are plain memory (contract 2.18): the chip's
+   RAM at $70-$71 and its first 8 KB at $6000-$7FFF of banks $00-$3F, read
+   and written; the ROM, read, where the assets hold all of an 8 KB range.
+   The same bytes cpu_read, cpu_write and the console's ROM path give, and
+   they never change under the S-CPU: a Super FX program runs to its STOP
+   at the register write that starts it (superfx.c), so its RAM is already
+   what the program leaves while GO still reads set, as cpu_read reads it;
+   nothing remaps either. So the answers stand from power on and
+   nshvc_cart_direct_changed is never needed. */
+static uint8_t *direct_ram(uint32_t addr)
+{
+    uint32_t at;
+    int reg;
+    if (!decodes(addr, &at, &reg) || reg || ram_size < 0x2000)
+        return NULL;
+    return snes_sfx_ram() + at;         /* (at is the range's first byte: addr is 8 KB aligned) */
+}
+
+static const uint8_t *direct_read(uint32_t addr)
+{
+    uint32_t off;
+    uint8_t *r = direct_ram(addr);
+    if (r)
+        return r;
+    if (!rom_at(addr, &off))
+        return NULL;
+    return cart_rom_direct(off, 0x2000);
+}
+
+static uint8_t *direct_write(uint32_t addr) { return direct_ram(addr); }
+#endif
+
 const nshvc_chip front_superfx = {
     .name = "Super FX",
     .power = power,
@@ -241,4 +274,8 @@ const nshvc_chip front_superfx = {
     .hold = hold,
     .ram = ram,
     .busy = gsu_running,
+#if NSHVC_VERSION_MAJOR > 2 || (NSHVC_VERSION_MAJOR == 2 && NSHVC_VERSION_MINOR >= 18)
+    .direct_read = direct_read,
+    .direct_write = direct_write,
+#endif
 };
