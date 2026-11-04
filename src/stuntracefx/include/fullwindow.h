@@ -5,12 +5,13 @@
  * wide as the window's aspect (nativeshvc's wider screen), BG1 is one
  * canvas (nativeshvc's character canvas) over all of it, and every picture
  * shown is the 3D drawn again (tween.c's redraw, the state kept and put
- * back) with the view over the whole screen at k times the console's
- * pixels (k the canvas's scale for the window): the view's words at W k x
- * 224 k, the focal length at k times, every PLOT into the cartridge's own
- * texels in 16-bit coordinates. The HUD's Super FX pieces are drawn there
- * too, at the console's pixel size (k x k texels a pixel), and the
- * panels' characters over the 3D. Off, everything is the original's.
+ * back) with the view over the whole screen in the canvas's texels, tw
+ * x th for the W x H screen (tw / W texels a console pixel across and th
+ * / H down, whole or not): the view's words in texels, the focal lengths
+ * 128 tw / W across and 128 th / H down, every PLOT into the cartridge's
+ * own texels in 16-bit coordinates. The HUD's Super FX pieces are drawn
+ * there too, each console pixel its texels, and the panels' characters
+ * over the 3D. Off, everything is the original's.
  */
 #ifndef SRFX_FULLWINDOW_H
 #define SRFX_FULLWINDOW_H
@@ -24,10 +25,14 @@ int fw_on(void);
 /* a full-window picture being drawn (the redraw's PLOTs go to the texels);
    fw_hud while its HUD pieces are (the original view's pixels, placed) */
 extern int fw_drawing, fw_hud;
-/* the picture's size in texels, and k */
+/* the picture's size in texels: fw_width() / W texels a console pixel
+   across and fw_height() / H down, whole or not; fw_col_at(x) the first
+   texel column of console column x across the screen, fw_row_at(y) the
+   first texel row of console row y */
 int fw_width(void);
 int fw_height(void);
-int fw_k(void);
+int fw_col_at(int x);
+int fw_row_at(int y);
 
 /* PLOT and RPIX into the texels at (x, y), with the Super FX's colour and
    plot options (gsu.colr, gsu.por) as PLOT takes them */
@@ -41,10 +46,10 @@ int fw_sprite_rows(void);
 void fw_sprite_span(uint16_t y, uint16_t x0, uint16_t x1, uint16_t bank, uint16_t at, uint16_t frac,
                     uint16_t step, int back);
 /* The nearest car's label (FxTextNotice) in the full window's 3D: its
-   string drawn with each pixel K x K texels, at the original's place on
-   the view: the label's X past the view's centre (half the car's side
-   offset, in console pixels) K times, its row ($68, the view's centre
-   line + 40) K rows a row; x and y the position FxTextNotice set. 0 when
+   string drawn with each pixel a console pixel's texels, at the original's
+   place on the view: the label's X past the view's centre (half the car's
+   side offset, in console pixels) in texels, its row ($68, the view's
+   centre line + 40) in texel rows; x and y the position FxTextNotice set. 0 when
    not in the full window's 3D. fw_label_end after the string. */
 int fw_label_begin(uint16_t x, uint16_t y);
 void fw_label_end(void);
@@ -55,9 +60,12 @@ uint8_t fw_rpix(uint16_t x, uint16_t y);
    they are the one-player race's and a full-window picture is being
    drawn (out then set) */
 int fw_view_words(const uint16_t w[6], uint16_t out[8]);
-/* the focal length (view units to texels) and half-width for the
-   full-window view (view.c's projection and cull read them) */
-int fw_focal(void);
+/* the full-window view's focal lengths, view units to texels, across
+   (down 0) and down (down 1): num / den, 128 texels a console pixel's
+   worth each way; and as doubles */
+void fw_focal_q(int down, int64_t *num, int64_t *den);
+double fw_focal_x(void);
+double fw_focal_y(void);
 /* the full-window view is in force (its words set, not the HUD's pieces) */
 int fw_view_active(void);
 int fw_half_width(void);
@@ -147,8 +155,9 @@ extern float fw_water[4];
    step. */
 typedef struct {
     int32_t w, h, under, point;
-    float ox, oy, f, dy, wu, wv;
-    int32_t land, pad;
+    float ox, oy, fx, dy, wu, wv;
+    int32_t land;
+    float fy;
     float e[12];
     float cam[4];
     float depth[80];
@@ -191,6 +200,19 @@ void fw_draw_list(void);
 void fw_clear(void);
 /* the sprite being drawn left out of the picture (1) or not (0) */
 void fw_sprite_hide(int on);
+int fw_sprite_hidden(void);
+/* the full window's texels square (tw / W the same as th / H) */
+int fw_square(void);
+/* n console rows' texel rows, rounded toward zero */
+int fw_rows(int n);
+/* a scaled sprite where the texels are not square: its rows as spans, h
+   texels down (FxObjectSprite's size, R1 at 01:B182) and as many across
+   as the console's pixels make that, about its centre ($00BA, $00BC),
+   from its texture ($00A6 bank, $00A8 base, $00D4 its size less 1 and
+   bit 15 mirrored) by the program's rule (each column's and row's texel
+   counted from 0 by the size's step), to the screen's edges ($003A,
+   $003E) */
+void fw_sprite_draw(int32_t h);
 /* a flat convex face of n points in view space, colour c, into the
    picture (near-clipped and projected exactly) */
 void fw_view_face(const double (*p)[3], int n, uint8_t c);

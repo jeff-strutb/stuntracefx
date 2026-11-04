@@ -1160,11 +1160,11 @@ l8C0E:
     R[6] = gsu_getb();
     gsu_r14(gsu_inc(R[14]));
     R[6] = gsu_getbh(R[6]);
-    R[0] = ws_scale_mult(R[1], R[6]);
+    R[0] = ws_scale_mult(R[1], R[6], 0);
     R[1] = gsu_ldw(FX_MODEL_34);
     R[0] = gsu_add(R[0], R[1], 0);
     R[1] = R[0];
-    R[0] = ws_scale_mult(R[2], R[6]);
+    R[0] = ws_scale_mult(R[2], R[6], 1);
     R[2] = gsu_ldw(FX_MODEL_36);
     R[0] = gsu_add(R[0], R[2], 0);
     R[2] = R[0];
@@ -1274,7 +1274,7 @@ l8CCA:
     R[0] = gsu_ldw(R[7]);
     R[0] = gsu_add(R[0], R[3], 0);
     R[6] = gsu_getbh(R[6]);
-    R[0] = ws_scale_mult(R[0], R[6]);
+    R[0] = ws_scale_mult(R[0], R[6], 0);
     R[0] = gsu_add(R[0], R[1], 0);
     gsu_stw(R[8], R[0]);
     gsu_r14(0x0000);
@@ -1290,7 +1290,7 @@ l8CEC:
 l8CF0:
     R[8] = gsu_inc(R[8]);
     R[8] = gsu_inc(R[8]);
-    R[0] = ws_scale_mult(R[2], R[6]);
+    R[0] = ws_scale_mult(R[2], R[6], 1);
     R[0] = gsu_add(R[0], R[9], 0);
     gsu_stw(R[8], R[0]);
     t = gsu.s;

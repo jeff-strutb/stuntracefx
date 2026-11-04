@@ -20,11 +20,12 @@ layout(std430, binding = 13) readonly buffer Gap { uint gap[]; };
 #define J_POINT 3
 #define J_OX 4
 #define J_OY 5
-#define J_F 6
+#define J_FX 6
 #define J_DY 7
 #define J_WU 8
 #define J_WV 9
 #define J_LAND 10
+#define J_FY 11
 #define J_E 12
 #define J_CAM 24
 #define J_DEPTH 28
@@ -59,7 +60,7 @@ void main()
         return;
     }
     precise float fx = float(x) + 0.5, fy = float(y) + 0.5;
-    precise float vx = div_ieee(fx - jf(J_OX), jf(J_F)), vy = div_ieee(fy - jf(J_OY), jf(J_F));
+    precise float vx = div_ieee(fx - jf(J_OX), jf(J_FX)), vy = div_ieee(fy - jf(J_OY), jf(J_FY));
     precise float wy = fma(je(4), vx, fma(je(5), vy, je(6)));
     precise float t = div_ieee(jf(J_DY), wy);
     if (!(wy != 0.0) || !(t > 0.0)) {
@@ -68,7 +69,7 @@ void main()
     }
     precise float u = div_ieee(fma(t, fma(je(0), vx, fma(je(1), vy, je(2))), jf(J_CAM)), jf(J_WU));
     precise float v = div_ieee(fma(t, fma(je(8), vx, fma(je(9), vy, je(10))), jf(J_CAM + 2)), jf(J_WV));
-    precise float vx1 = div_ieee(fx + 1.0 - jf(J_OX), jf(J_F)), vy1 = div_ieee(fy + 1.0 - jf(J_OY), jf(J_F));
+    precise float vx1 = div_ieee(fx + 1.0 - jf(J_OX), jf(J_FX)), vy1 = div_ieee(fy + 1.0 - jf(J_OY), jf(J_FY));
     precise float t1 = div_ieee(jf(J_DY), fma(je(4), vx1, fma(je(5), vy, je(6))));
     precise float t2 = div_ieee(jf(J_DY), fma(je(4), vx, fma(je(5), vy1, je(6))));
     precise float du, dv;

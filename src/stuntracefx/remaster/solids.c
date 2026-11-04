@@ -377,7 +377,8 @@ static void eye_marks(const Solid *s, double a, const Mark *mk, int nm, int n)
 
 static void draw(const Solid *s)
 {
-    double rmax = 0, pr, f = fw_focal(), p[4][3], nv[3], c[3];
+    /* the larger of the focal lengths across and down: a texel the finer way */
+    double rmax = 0, pr, f = fmax(fw_focal_x(), fw_focal_y()), p[4][3], nv[3], c[3];
     int n, i, k;
 
     /* segments enough that the rim's flats are within half a texel of
@@ -524,7 +525,7 @@ static int nf;
 static double total_area;
 static void keep_face(const double (*q)[3], int m, double ay, const Paint *pt)
 {
-    double u[3], v[3], nv[3], c[3] = { 0 }, axis[3], d = 0, e = 0, l, f_ = fw_focal();
+    double u[3], v[3], nv[3], c[3] = { 0 }, axis[3], d = 0, e = 0, l, fxy = fw_focal_x() * fw_focal_y();
     TreeFace *f;
     int i, j;
     if (nf >= TREE_FACES)
@@ -560,7 +561,7 @@ static void keep_face(const double (*q)[3], int m, double ay, const Paint *pt)
         if (a[2] > 0 && b[2] > 0)
             f->area += (a[0] / a[2]) * (b[1] / b[2]) - (b[0] / b[2]) * (a[1] / a[2]);
     }
-    f->area = fabs(f->area) * f_ * f_ / 2;
+    f->area = fabs(f->area) * fxy / 2;
     total_area += f->area;
     nf++;
 }

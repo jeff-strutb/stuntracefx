@@ -53,8 +53,12 @@ int fw_drawing, fw_hud;
 static int on;                          /* the full-window race this frame */
 static int seen;                        /* the race screen's stages ran this frame */
 static int unseen = 2;                  /* frames since they last did */
-static int W = 256, H = 224, K = 1;     /* the screen's width and height, texels a console pixel */
+static int W = 256, H = 224;            /* the screen's width and height in console pixels */
 static int tw, th;                      /* the texels' size */
+/* texels a console pixel, whole or not: SXN / SXD across and SYN / SYD
+   down (the canvas's tw / W and th / H; the checks' pictures keep them
+   while their texels' size changes) */
+static int64_t SXN = 256, SXD = 256, SYN = 224, SYD = 224;
 static uint8_t *tex;
 static size_t tex_size;
 static int handed;                      /* the canvas is the full window's */
@@ -85,7 +89,40 @@ static int cy_off;
 
 int fw_width(void) { return tw; }
 int fw_height(void) { return th; }
-int fw_k(void) { return K; }
+
+/* a / b rounded down (b > 0) */
+static int64_t floor_div(int64_t a, int64_t b)
+{
+    int64_t q = a / b;
+    return q - (a % b != 0 && a < 0);
+}
+
+/* the first texel column of console column x, and the first texel row of
+   console row y: console column x covers texel columns col_at(x) to
+   col_at(x + 1) - 1 (SXN / SXD of them, whole or not), row y rows
+   row_at(y) to row_at(y + 1) - 1 */
+static int col_at(int64_t x) { return (int)floor_div(x * SXN, SXD); }
+static int row_at(int64_t y) { return (int)floor_div(y * SYN, SYD); }
+int fw_col_at(int x) { return col_at(x); }
+int fw_row_at(int y) { return row_at(y); }
+
+/* the view's centre line in texels */
+static int64_t centre_row(void) { return (int64_t)row_at(view_cy()) + cy_off; }
+
+/* a console pixel's texels set to c: its block, columns col_at(x) on and
+   rows row_at(y) on */
+static void block_set(int x, int y, uint8_t c)
+{
+    int x0 = col_at(x), x1 = col_at(x + 1), y0 = row_at(y), y1 = row_at(y + 1), j;
+    for (j = y0; j < y1; j++)
+        memset(tex + (size_t)j * tw + x0, c, (size_t)(x1 - x0));
+}
+
+/* a console pixel's texel the console's picture takes: the one under its centre */
+static uint8_t block_get(int x, int y)
+{
+    return tex[(size_t)floor_div((2 * (int64_t)y + 1) * SYN, 2 * SYD) * tw + floor_div((2 * (int64_t)x + 1) * SXN, 2 * SXD)];
+}
 
 int fw_on(void) { return on; }
 
@@ -249,7 +286,7 @@ static int hud_root(int i)
 
 static void hud_place(void)
 {
-    int a, b, x, y, i, j, g0[HUD_PIECES], g1[HUD_PIECES], h0[HUD_PIECES], h1[HUD_PIECES], s[HUD_PIECES], t[HUD_PIECES];
+    int a, b, x, y, g0[HUD_PIECES], g1[HUD_PIECES], h0[HUD_PIECES], h1[HUD_PIECES], s[HUD_PIECES], t[HUD_PIECES];
 
     span_flush();                       /* the 3D first, the HUD over it */
     for (a = 0; a < hud_n; a++)
@@ -279,13 +316,9 @@ static void hud_place(void)
             continue;
         for (y = hv_y0[a]; y <= hv_y1[a]; y++)
             for (x = hv_x0[a]; x <= hv_x1[a]; x++) {
-                uint8_t *o;
                 if (!hud_px[y][x] || hud_id[y][x] != a)
                     continue;
-                o = tex + (size_t)(y + t[g]) * K * tw + (size_t)(x + s[g]) * K;
-                for (j = 0; j < K; j++, o += tw)
-                    for (i = 0; i < K; i++)
-                        o[i] = (uint8_t)(hud_px[y][x] - 1);
+                block_set(x + s[g], y + t[g], (uint8_t)(hud_px[y][x] - 1));
             }
     }
     for (a = 0; a < hud_n; a++)
@@ -470,7 +503,7 @@ static int label_x, label_y, label_tx, label_ty;
 
 int fw_label_begin(uint16_t x, uint16_t y)
 {
-    int lw = 0x11 * K;                  /* the original's room for it: $3A - $11 */
+    int lw = col_at(0x11);              /* the original's room for it: $3A - $11 */
     if (!fw_view_active())
         return 0;
     label_x = x;
@@ -478,12 +511,12 @@ int fw_label_begin(uint16_t x, uint16_t y)
     /* x is half the side offset past the centre (tw / 2, the full
        window's $34), in console pixels; y the original's row on its
        128-row view, centre line 64 */
-    label_tx = tw / 2 + ((int)(int16_t)x - tw / 2) * K;
+    label_tx = tw / 2 + (int)floor_div(((int)(int16_t)x - tw / 2) * SXN, SXD);
     if (label_tx < 0)
         label_tx = 0;
     if (label_tx > tw - 1 - lw)
         label_tx = tw - 1 - lw;
-    label_ty = view_cy() * K + cy_off + ((int)(int16_t)y - 64) * K;
+    label_ty = row_at(view_cy() + (int)(int16_t)y - 64) + cy_off;
     label_on = 1;
     return 1;
 }
@@ -496,6 +529,70 @@ int fw_sprite_rows(void) { return fw_drawing && !fw_hud && !checking && !label_o
    place, solids.c): its rows and plots run, their pixels left out */
 static int sprite_hidden;
 void fw_sprite_hide(int on) { sprite_hidden = on; }
+int fw_sprite_hidden(void) { return sprite_hidden; }
+
+/* the texels square: as many a console pixel across as down */
+int fw_square(void) { return SXN * SYD == SYN * SXD; }
+
+/* n console rows' texel rows, rounded toward zero */
+int fw_rows(int n) { return (int)(n * SYN / SYD); }
+
+static uint16_t ram16(uint16_t a);
+
+void fw_sprite_draw(int32_t h)
+{
+    int32_t cx = (int16_t)ram16(0x00BA), cy = (int16_t)ram16(0x00BC), right = (int16_t)ram16(0x003A);
+    int32_t bottom = (int16_t)ram16(0x003E), x0, y0, a, b, j, w;
+    uint16_t mask = ram16(0x00D4), base = ram16(0x00A8), bank = ram16(0x00A6);
+    int c8 = (mask & 0xFF) + 1, back = (mask & 0x8000) != 0;
+    int64_t du;
+
+    /* across: the size down times the texels a console pixel across over down, rounded */
+    w = (int32_t)((h * SXN * SYD * 2 + SXD * SYN) / (2 * SXD * SYN));
+    if (w < 1 || h < 1)
+        return;
+    x0 = cx - (w + 1) / 2;              /* the program's: the centre less half, rounded up */
+    y0 = cy - (h + 1) / 2;
+    a = x0 < 0 ? 0 : x0;
+    b = x0 + w - 1 > right ? right : x0 + w - 1;
+    if (b >= tw)
+        b = tw - 1;
+    if (a > b)
+        return;
+    du = ((int64_t)c8 << 32) / w;       /* a column's texels, from 0 */
+    for (j = 0; j < h; j++) {
+        int32_t y = y0 + j;
+        unsigned v;
+        FwSpan *p;
+        if (y < 0)
+            continue;
+        if (y > bottom - 1 || y >= th)
+            break;
+        v = (unsigned)((int64_t)j * c8 / h);   /* a row's texel row, from 0 */
+        if (!(p = span_new()))
+            return;
+        memset(p, 0, sizeof *p);
+        p->za = sprite_z[0];
+        p->y = y;
+        p->x0 = a;
+        p->x1 = b;
+        p->xl = x0;
+        p->bank = (uint8_t)bank;
+        p->mask = 0x00FF;
+        p->por = gsu.por;
+        p->hi = (uint8_t)(gsu.colr & 0xF0);
+        p->textured = 1;
+        p->base = (uint16_t)(base + (v << 8));
+        if (!back) {                    /* column k's texel floor(k du) */
+            p->u = 0;
+            p->du = du;
+        } else {                        /* c8 - 1 less it, as fw_sprite_span's mirrored rows */
+            p->base = (uint16_t)(p->base + c8 - 1 - 0xFF);
+            p->u = ((int64_t)0xFF << 32) + (((int64_t)1 << 32) - 1);
+            p->du = -du;
+        }
+    }
+}
 
 void fw_sprite_span(uint16_t y, uint16_t x0, uint16_t x1, uint16_t bank, uint16_t at, uint16_t frac,
                     uint16_t step, int back)
@@ -534,13 +631,15 @@ void fw_sprite_span(uint16_t y, uint16_t x0, uint16_t x1, uint16_t bank, uint16_
 
 void fw_plot(uint16_t x, uint16_t y)
 {
-    int c = plot_colour(), i, j;
+    int c = plot_colour(), j;
 
     if (label_on && c >= 0 && !checking) {
-        int px = label_tx + ((int)(int16_t)x - label_x) * K, py = label_ty + ((int)(int16_t)y - label_y) * K;
-        for (j = 0; j < K; j++)
-            if (px >= 0 && px + K - 1 < tw)
-                span_flat(py + j, px, px + K - 1, (uint8_t)c);
+        int64_t dx = (int)(int16_t)x - label_x, dy = (int)(int16_t)y - label_y;
+        int px0 = label_tx + (int)floor_div(dx * SXN, SXD), px1 = label_tx + (int)floor_div((dx + 1) * SXN, SXD) - 1;
+        int py0 = label_ty + (int)floor_div(dy * SYN, SYD), py1 = label_ty + (int)floor_div((dy + 1) * SYN, SYD);
+        for (j = py0; j < py1; j++)
+            if (px0 >= 0 && px1 < tw)
+                span_flat(j, px0, px1, (uint8_t)c);
         return;
     }
 
@@ -566,13 +665,9 @@ void fw_plot(uint16_t x, uint16_t y)
     }
     if (fw_hud) {
         int px = hud_x((uint8_t)x), py = hud_y((uint8_t)y);
-        uint8_t *o;
         if (px < 0 || px >= W || py < 0 || py >= H)
             return;
-        o = tex + (size_t)py * K * tw + (size_t)px * K;
-        for (j = 0; j < K; j++, o += tw)
-            for (i = 0; i < K; i++)
-                o[i] = (uint8_t)c;
+        block_set(px, py, (uint8_t)c);
         return;
     }
     if (checking) {
@@ -596,7 +691,7 @@ uint8_t fw_rpix(uint16_t x, uint16_t y)
         int px = hud_x((uint8_t)x), py = hud_y((uint8_t)y);
         if (px < 0 || px >= W || py < 0 || py >= H)
             return 0;
-        return tex[(size_t)py * K * tw + (size_t)px * K];
+        return tex[(size_t)row_at(py) * tw + col_at(px)];
     }
     span_flush();                       /* a read of the 3D: what is drawn so far */
     return x < tw && y < th ? tex[(size_t)y * tw + x] : 0;
@@ -626,12 +721,26 @@ void fw_clear(void)
 /* the one-player race's centre and edges, as ViewParamsByPlayers sets them */
 static const uint16_t k_race1p[6] = {0x0068, 0x0040, 0x0000, 0x00CF, 0x0000, 0x0080};
 
-int fw_focal(void) { return 128 * K; }
+/* the focal length across and down in texels, 128 console pixels each:
+   num / den in lowest terms, 128 SXN / SXD and 128 SYN / SYD */
+void fw_focal_q(int down, int64_t *num, int64_t *den)
+{
+    int64_t n = 128 * (down ? SYN : SXN), d = down ? SYD : SXD, a = n, b = d;
+    while (b) {
+        int64_t r = a % b;
+        a = b;
+        b = r;
+    }
+    *num = n / a;
+    *den = d / a;
+}
+double fw_focal_x(void) { return 128.0 * SXN / SXD; }
+double fw_focal_y(void) { return 128.0 * SYN / SYD; }
 int fw_half_width(void) { return tw / 2; }
 
 int fw_view_words(const uint16_t w[6], uint16_t out[8])
 {
-    int i, f = fw_focal(), cy = view_cy() * K + cy_off, below = th - cy;
+    int i, cy = (int)centre_row(), below = th - cy;
 
     if (!fw_drawing || fw_hud)
         return 0;
@@ -647,8 +756,8 @@ int fw_view_words(const uint16_t w[6], uint16_t out[8])
     out[5] = (uint16_t)th;
     /* the frustum planes (view.c's rule) for the half-width and the larger
        of the parts above and below the centre */
-    out[6] = (uint16_t)(((uint32_t)f << 14) / (uint32_t)(tw / 2));
-    out[7] = (uint16_t)(((uint32_t)f << 13) / (uint32_t)(below > cy ? below : cy));
+    out[6] = (uint16_t)(((uint64_t)128 * SXN << 14) / ((uint64_t)SXD * (uint64_t)(tw / 2)));
+    out[7] = (uint16_t)(((uint64_t)128 * SYN << 13) / ((uint64_t)SYD * (uint64_t)(below > cy ? below : cy)));
     return 1;
 }
 
@@ -774,19 +883,27 @@ void fw_exact_begin(uint16_t list)
    draws the same picture, k times as fine. */
 static void project_exact(int64_t x, int64_t y, int64_t z, int64_t *sx, int64_t *sy)
 {
-    int64_t f = fw_focal(), rx, ry, m, lim = 0x3FFFLL * K;
+    int64_t rx, ry, a, b;
 
     if (!z)
         z = 1;
-    rx = x * f / z;
-    ry = y * f / z;
-    m = llabs(rx) > llabs(ry) ? llabs(rx) : llabs(ry);
-    if (m > lim) {
-        rx = rx * lim / m;
-        ry = ry * lim / m;
+    rx = x * 128 * SXN / (z * SXD);
+    ry = y * 128 * SYN / (z * SYD);
+    /* the larger in console pixels, |rx| SXD / SXN or |ry| SYD / SYN, held
+       to $3FFF: compared over the common SXN SYN */
+    a = llabs(rx) * SXD * SYN;
+    b = llabs(ry) * SYD * SXN;
+    if (a > b && a > 0x3FFFLL * SXN * SYN) {
+        int64_t d = llabs(rx) * SXD;
+        rx = rx * 0x3FFF * SXN / d;
+        ry = ry * 0x3FFF * SXN / d;
+    } else if (a <= b && b > 0x3FFFLL * SXN * SYN) {
+        int64_t d = llabs(ry) * SYD;
+        rx = rx * 0x3FFF * SYN / d;
+        ry = ry * 0x3FFF * SYN / d;
     }
     *sx = tw / 2 + rx;
-    *sy = (int64_t)view_cy() * K + cy_off + ry;
+    *sy = centre_row() + ry;
 }
 
 /* the 1 / depth across the screen of a face through n view-space points,
@@ -808,15 +925,15 @@ static void depth_report(void)
 
 static void depth_plane(const double (*P)[3], int n, float z[3])
 {
-    double f = fw_focal(), ox = tw / 2.0, oy = (double)view_cy() * K + cy_off, sc = (double)(1 << rm_far_shift);
+    double fx = fw_focal_x(), fy = fw_focal_y(), ox = tw / 2.0, oy = (double)centre_row(), sc = (double)(1 << rm_far_shift);
     double X[EXACT_MAX + 8], Y[EXACT_MAX + 8], Q[EXACT_MAX + 8], best = 0, c[3] = { 0 }, d;
     int i, j, k, m = 0, a = 0, b = 1, e = 2;
 
     z[0] = z[1] = z[2] = 0;
     for (i = 0; i < n && m < EXACT_MAX + 8; i++)
         if (P[i][2] >= NEAR_Z) {
-            X[m] = ox + f * P[i][0] / P[i][2] - 0.5;
-            Y[m] = oy + f * P[i][1] / P[i][2] - 0.5;
+            X[m] = ox + fx * P[i][0] / P[i][2] - 0.5;
+            Y[m] = oy + fy * P[i][1] / P[i][2] - 0.5;
             Q[m++] = 1.0 / (P[i][2] * sc);
         }
     for (i = 0; i < m; i++)
@@ -856,9 +973,9 @@ static void depth_plane(const double (*P)[3], int n, float z[3])
         d = (c[0] * P[a][0] + c[1] * P[a][1] + c[2] * P[a][2]) * sc;
         if (d == 0)
             return;
-        z[1] = (float)(c[0] / (f * d));
-        z[2] = (float)(c[1] / (f * d));
-        z[0] = (float)((c[0] * (0.5 - ox) / f + c[1] * (0.5 - oy) / f + c[2]) / d);
+        z[1] = (float)(c[0] / (fx * d));
+        z[2] = (float)(c[1] / (fy * d));
+        z[0] = (float)((c[0] * (0.5 - ox) / fx + c[1] * (0.5 - oy) / fy + c[2]) / d);
     }
     if (getenv("FW_DEPTHCHECK")) {      /* a check: the 1 / depth at each point's own place, by the face's size */
         static long cnt[4][3];          /* by screen area < 16, < 256, < 4096, more; error < 1 %, < 10 %, more */
@@ -1024,7 +1141,7 @@ int fw_exact_clip(void)
         static int reported;
         for (i = 0; i < n; i++) {
             int64_t x = (int16_t)ram16((uint16_t)(list + 4 * i)), y = (int16_t)ram16((uint16_t)(list + 4 * i + 2));
-            int64_t rx = x - tw / 2, ry = y - (int64_t)view_cy() * K - cy_off;
+            int64_t rx = x - tw / 2, ry = y - centre_row();
             seen++;
             if (rx >= 0x3FF0 || rx <= -0x3FF0 || ry >= 0x3FF0 || ry <= -0x3FF0) {
                 held++;
@@ -1465,7 +1582,7 @@ int fw_exact_tex_draw(void)
         cv[2][EXACT_MAX + 2];
     uint16_t list, n;
     int i, m = 0, left = 1, right = 1, above = 1, below = 1;
-    double f = fw_focal(), ox = tw / 2, oy = (double)view_cy() * K + cy_off;
+    double fx = fw_focal_x(), fy = fw_focal_y(), ox = tw / 2, oy = (double)centre_row();
 
     /* nothing read unless in the full window: the Super FX's accesses are
        timed in Original */
@@ -1502,7 +1619,7 @@ int fw_exact_tex_draw(void)
     if (m < 3 || m > EXACT_MAX)
         m = 0;
     for (i = 0; i < m; i++) {
-        double sx = ox + cx[1][i] * f / cz[1][i], sy = oy + cy[1][i] * f / cz[1][i];
+        double sx = ox + cx[1][i] * fx / cz[1][i], sy = oy + cy[1][i] * fy / cz[1][i];
         int64_t X = (int64_t)floor(sx), Y = (int64_t)floor(sy);
         uint16_t at = (uint16_t)(list + 8 * i);
         if (X > 0x3FFFFFFF) X = 0x3FFFFFFF;
@@ -1561,7 +1678,7 @@ void fw_view_face(const double (*p)[3], int n, uint8_t c)
 {
     static double v[FACE_MAX][3], s[2][FACE_MAX][2];
     int64_t X[FACE_MAX], Y[FACE_MAX];
-    double f = fw_focal(), ox = tw / 2, oy = (double)view_cy() * K + cy_off, area = 0;
+    double fx = fw_focal_x(), fy = fw_focal_y(), ox = tw / 2, oy = (double)centre_row(), area = 0;
     int i, m = 0, k, top = 0, at, next;
     int32_t lend, rend;
     FwPoly *pg;
@@ -1587,8 +1704,8 @@ void fw_view_face(const double (*p)[3], int n, uint8_t c)
         }
     }
     for (i = 0; i < m; i++) {
-        s[0][i][0] = ox + v[i][0] * f / v[i][2];
-        s[0][i][1] = oy + v[i][1] * f / v[i][2];
+        s[0][i][0] = ox + v[i][0] * fx / v[i][2];
+        s[0][i][1] = oy + v[i][1] * fy / v[i][2];
     }
     m = face_clip(s[0], m, s[1], 0, -FACE_BAND, 0);
     m = face_clip(s[1], m, s[0], 0, tw + FACE_BAND, 1);
@@ -1695,7 +1812,7 @@ int fw_exact_gather_begin(uint16_t count, uint16_t r14)
 void fw_exact_gather_end(void)
 {
     double cx[EXACT_MAX + 2], cy[EXACT_MAX + 2], cz[EXACT_MAX + 2];
-    double f = fw_focal(), ox = tw / 2, oy = (double)view_cy() * K + cy_off;
+    double fx = fw_focal_x(), fy = fw_focal_y(), ox = tw / 2, oy = (double)centre_row();
     uint16_t list = ram16(0x005A);
     int i, m = 0, n = ga_n, lines = n == 2, in[4] = {0, 0, 0, 0};
 
@@ -1735,7 +1852,7 @@ void fw_exact_gather_end(void)
     if (!lines && m < 3)
         m = 0;
     for (i = 0; i < m; i++) {
-        double sx = ox + cx[i] * f / cz[i], sy = oy + cy[i] * f / cz[i];
+        double sx = ox + cx[i] * fx / cz[i], sy = oy + cy[i] * fy / cz[i];
         int64_t X = (int64_t)floor(sx), Y = (int64_t)floor(sy);
         uint16_t at = (uint16_t)(list + 4 * i);
         if (X > 0x3FFFFFFF) X = 0x3FFFFFFF;
@@ -2092,7 +2209,7 @@ static const TexPlane *tex_persp;
 
 static double plane_q(double sx, double sy)
 {
-    double f = fw_focal(), rx = (sx - tw / 2) / f, ry = (sy - ((double)view_cy() * K + cy_off)) / f;
+    double rx = (sx - tw / 2) / fw_focal_x(), ry = (sy - (double)centre_row()) / fw_focal_y();
     return tex_persp->q[0] * rx + tex_persp->q[1] * ry + tex_persp->q[2];
 }
 
@@ -2532,18 +2649,24 @@ static void size_of_window(int *w, int *h)
 
 static int size_for_window(void)
 {
-    int k = nshvc_ext_canvas_scale(), w, h;
+    int w, h, pw = 0, ph = 0;
     size_t need;
 
+    /* a texel a window pixel: the window pixels the screen is presented
+       over (contract 2.15, handed at k 0) */
     size_of_window(&w, &h);
-    if (k < 1)
+    nshvc_ext_canvas_presented(&pw, &ph);
+    if (pw < 1 || ph < 1)
         return 0;
-    if (k != K || w != W || h != H || !tex) {
-        K = k;
+    if (pw != tw || ph != th || w != W || h != H || !tex) {
         W = w;
         H = h;
-        tw = W * K;
-        th = H * K;
+        tw = pw;
+        th = ph;
+        SXN = tw;
+        SXD = W;
+        SYN = th;
+        SYD = H;
         need = (size_t)tw * th;
         if (need > tex_size) {
             if (fw_texels_alloc) {          /* the GPU's memory, which it fills */
@@ -2661,11 +2784,11 @@ static void water_view(void)
     }
     water_seen = 1;
     {                                   /* the water's 1 / depth along each pixel's ray: (E's row 1 . ray) / dy */
-        double f = fw_focal(), ox = tw / 2.0, oy = (double)view_cy() * K + cy_off, dy = surf_y() - water_cam[1];
+        double fx = fw_focal_x(), fy = fw_focal_y(), ox = tw / 2.0, oy = (double)centre_row(), dy = surf_y() - water_cam[1];
         int here = water_here() && dy != 0 && surf_kind() == SURF_AQUA;   /* the track cut only by Aqua Tunnel's */
-        fw_water[0] = here ? (float)((water_e[1][0] * (0.5 - ox) / f + water_e[1][1] * (0.5 - oy) / f + water_e[1][2]) / dy) : 0;
-        fw_water[1] = here ? (float)(water_e[1][0] / (f * dy)) : 0;
-        fw_water[2] = here ? (float)(water_e[1][1] / (f * dy)) : 0;
+        fw_water[0] = here ? (float)((water_e[1][0] * (0.5 - ox) / fx + water_e[1][1] * (0.5 - oy) / fy + water_e[1][2]) / dy) : 0;
+        fw_water[1] = here ? (float)(water_e[1][0] / (fx * dy)) : 0;
+        fw_water[2] = here ? (float)(water_e[1][1] / (fy * dy)) : 0;
         fw_water[3] = (float)here;
     }
 }
@@ -2727,16 +2850,16 @@ static uint32_t water_texel(const uint8_t *in, const FwWaterJob *j, const uint32
 
     if (c)                              /* drawn (before the water: what is past it was left out) */
         return c;
-    vx = (fx - j->ox) / j->f;
-    vy = (fy - j->oy) / j->f;
+    vx = (fx - j->ox) / j->fx;
+    vy = (fy - j->oy) / j->fy;
     wy = fmaf(e[4], vx, fmaf(e[5], vy, e[6]));
     t = j->dy / wy;
     if (!(wy != 0) || !(t > 0))         /* no surface this way: under it, deeper water; over it, the sky */
         return j->under ? g : 0;
     u = fmaf(t, fmaf(e[0], vx, fmaf(e[1], vy, e[2])), j->cam[0]) / j->wu;
     v = fmaf(t, fmaf(e[8], vx, fmaf(e[9], vy, e[10])), j->cam[2]) / j->wv;
-    vx1 = (fx + 1.0f - j->ox) / j->f;   /* the pixel's footprint: the next column's and line's hits */
-    vy1 = (fy + 1.0f - j->oy) / j->f;
+    vx1 = (fx + 1.0f - j->ox) / j->fx;  /* the pixel's footprint: the next column's and line's hits */
+    vy1 = (fy + 1.0f - j->oy) / j->fy;
     t1 = j->dy / fmaf(e[4], vx1, fmaf(e[5], vy, e[6]));
     t2 = j->dy / fmaf(e[4], vx, fmaf(e[5], vy1, e[6]));
     if (t1 > 0 && t2 > 0) {
@@ -2855,8 +2978,9 @@ static const uint32_t *water_pass(void)
     job.w = tw;
     job.h = th;
     job.ox = (float)(tw / 2.0);
-    job.oy = (float)((double)view_cy() * K + cy_off);
-    job.f = (float)fw_focal();
+    job.oy = (float)(double)centre_row();
+    job.fx = (float)fw_focal_x();
+    job.fy = (float)fw_focal_y();
     job.dy = (float)(surf_y() - water_cam[1]);
     job.land = surf_kind() != SURF_AQUA;
     job.under = job.dy < 0;
@@ -2895,11 +3019,12 @@ static const uint32_t *water_pass(void)
                 : job.sat[(y - 1) * 65 + x] + job.sat[y * 65 + x - 1] - job.sat[(y - 1) * 65 + x - 1] + (cell[y - 1][x - 1] >= 2);
     {                                   /* each row's water between the ripples: its line's colour 1, as the console gives it */
         static uint16_t line[1024];
-        int n = (int)(th / K) + SHADE_LINES < 1024 ? (int)(th / K) + SHADE_LINES : 1024;
+        int n = H + SHADE_LINES < 1024 ? H + SHADE_LINES : 1024;
         int have = !index_gap && sky_lines(line, n);
         for (y = 0; y < (unsigned)th; y++) {
-            gap[y] = have && y / K < 1024 ? rgb8(line[y / K]) : 1;
-            gap[th + y] = have ? rgb8(line[(int)(y / K) + SHADE_LINES < n ? y / K + SHADE_LINES : (unsigned)n - 1]) : 1;
+            unsigned l = (unsigned)floor_div((int64_t)y * SYD, SYN);   /* the console line texel row y is on */
+            gap[y] = have && l < 1024 ? rgb8(line[l]) : 1;
+            gap[th + y] = have ? rgb8(line[(int)l + SHADE_LINES < n ? l + SHADE_LINES : (unsigned)n - 1]) : 1;
         }
     }
     fw_water_filler(tex, tex32, &job, gap);
@@ -2922,9 +3047,9 @@ static void hand(void)
     water_seen = 0;
     rm_canvas_taken();
     if (t32)
-        nshvc_ext_canvas_screen32(0, t32, tw, th, K, 1, 0);
+        nshvc_ext_canvas_screen32(0, t32, tw, th, 0, 1, 0);
     else
-        nshvc_ext_canvas_screen(0, tex, tw, th, K, 1, 0);
+        nshvc_ext_canvas_screen(0, tex, tw, th, 0, 1, 0);
     if (!handed) {                      /* the first picture: the screen taken over with it, in the same blank */
         nshvc_hold_interrupts(1);
         takeover();
@@ -2961,7 +3086,7 @@ static void check_picture(int j)
     unsigned x, y;
 
     static uint8_t bank71[0x10000];
-    if (K != 1)
+    if (tw != W || th != H)
         return;
     /* each pass from the same state: the HUD redraw's own, and the Super
        FX's RAM's second bank (the far records, which the far pass uses up),
@@ -3010,7 +3135,7 @@ static uint32_t kc_worst_frame[5];
 static void kcheck_report(void)
 {
     int i;
-    fprintf(stderr, "fwkcheck: k %d, %ld pictures, %.2f%% of pixels differ on average, %ld past 10%%; worst:", K,
+    fprintf(stderr, "fwkcheck: %dx%d texels, %ld pictures, %.2f%% of pixels differ on average, %ld past 10%%; worst:", tw, th,
             kc_pictures, kc_pictures ? 100.0 * kc_sum / kc_pictures : 0.0, kc_over);
     for (i = 0; i < 5; i++)
         fprintf(stderr, " %.2f%% (frame %u)", 100.0 * kc_worst[i], kc_worst_frame[i]);
@@ -3021,17 +3146,17 @@ static void kcheck_picture(int j)
 {
     static uint8_t scratch[2][RM_TWEEN_BYTES], *one, bank71[0x10000];
     uint8_t *tex_k = tex;
-    int k = K, tw_k = tw, th_k = th, x, y, i, m;
+    int tw_k = tw, th_k = th, x, y, i, m;
     long differ = 0;
     double part;
 
-    if (K < 2)
+    if (tw == W && th == H)
         return;
     if (!one && !(one = malloc((size_t)W_MAX * H_MAX)))
         return;
     tex = one;
-    K = 1;
-    tw = W;
+    SXN = SXD = tw = W;
+    SYN = SYD = H;
     th = H;
     fw_drawing = 1;
     rm_hud_state(0);
@@ -3046,8 +3171,8 @@ static void kcheck_picture(int j)
         hud_place();
     fw_hud = 0;
     tex = tex_k;
-    K = k;
-    tw = tw_k;
+    SXN = tw = tw_k;
+    SYN = th_k;
     th = th_k;
     if (!m)
         return;
@@ -3055,7 +3180,7 @@ static void kcheck_picture(int j)
         atexit(kcheck_report);
     for (y = 0; y < H; y++)
         for (x = 0; x < W; x++)
-            differ += one[y * W + x] != tex[(size_t)(y * K + K / 2) * tw + x * K + K / 2];
+            differ += one[y * W + x] != block_get(x, y);
     part = (double)differ / (W * H);
     kc_sum += part;
     kc_over += part > 0.10;
@@ -3072,7 +3197,7 @@ static void kcheck_picture(int j)
             fprintf(f, "P6\n%d %d\n255\n", W, H);
             for (y = 0; y < H; y++)
                 for (x = 0; x < W; x++) {
-                    uint16_t c = cg[which ? tex[(size_t)(y * K + K / 2) * tw + x * K + K / 2] : one[y * W + x]];
+                    uint16_t c = cg[which ? block_get(x, y) : one[y * W + x]];
                     fputc((c & 31) << 3, f);
                     fputc((c >> 5 & 31) << 3, f);
                     fputc((c >> 10 & 31) << 3, f);
@@ -3148,7 +3273,7 @@ static void ccheck_picture(int j)
 {
     static uint8_t *a, *b;
     static size_t a_size, b_size;
-    int mg = atoi(getenv("FW_CCHECK")) * K, bw = tw + 2 * mg, bh = th + 2 * mg, x, y, i;
+    int mg = atoi(getenv("FW_CCHECK")) * (int)((tw + W - 1) / W), bw = tw + 2 * mg, bh = th + 2 * mg, x, y, i;
     long differ = 0;
     double part;
 
@@ -3231,8 +3356,8 @@ static void prof_mark(int stage)
         prof_ms[stage] += t - prof_t;
     prof_t = t;
     if (stage == PR_HAND && ++prof_pics == 120) {
-        fprintf(stderr, "fwprof %dx%d k%d ms a picture: redraw %.2f panels %.2f sprites %.2f hand %.2f\n",
-                W, H, K, prof_ms[0] / 120, prof_ms[1] / 120, prof_ms[2] / 120, prof_ms[3] / 120);
+        fprintf(stderr, "fwprof %dx%d texels ms a picture: redraw %.2f panels %.2f sprites %.2f hand %.2f\n",
+                tw, th, prof_ms[0] / 120, prof_ms[1] / 120, prof_ms[2] / 120, prof_ms[3] / 120);
         memset(prof_ms, 0, sizeof prof_ms);
         prof_pics = 0;
     }
@@ -3367,7 +3492,7 @@ static void panels_draw(void)
 {
     static uint8_t px[PANEL_ROWS][256], keep[PANEL_ROWS][256];
     static int16_t stack[PANEL_ROWS * 256][2];
-    int x, y, n = 0, i, j;
+    int x, y, n = 0;
     uint8_t bg;
 
     for (y = 0; y < PANEL_ROWS; y++)
@@ -3443,11 +3568,8 @@ static void panels_draw(void)
             }
             for (q = 0; q < m; q++) {
                 int a = part[q][0], b = part[q][1];
-                size_t at = (size_t)(PANEL_TOP + b + H - 224 - safe_px[3]) * K * tw + (size_t)(a + s) * K;
-                uint8_t *o = tex + at;   /* at: the band moved up by the safe area's bottom */
-                for (j = 0; j < K; j++, o += tw)
-                    for (i = 0; i < K; i++)
-                        o[i] = px[b][a];
+                /* the band moved up by the safe area's bottom */
+                block_set(a + s, PANEL_TOP + b + H - 224 - safe_px[3], px[b][a]);
             }
         }
 }
@@ -3678,8 +3800,8 @@ static void sky_take(void)
    held to the view's lines */
 static int sky_line(int h)
 {
-    double f = (double)fw_focal() / K, y = origin_row() + (double)h - 1.0 + 0.5;
-    int l = (int)floor(VIEW_CY + (y - view_cy()) * 128.0 / f);
+    double y = origin_row() + (double)h - 1.0 + 0.5;
+    int l = (int)floor(VIEW_CY + (y - view_cy()));
     if (l < VIEW_Y)
         l = VIEW_Y;
     if (l > VIEW_Y + VIEW_H - 1)
@@ -3701,7 +3823,7 @@ void fw_sky(void)
     water_due = 0;
     if ((t32 = water_pass())) {
         rm_canvas_taken();
-        nshvc_ext_canvas_screen32(0, t32, tw, th, K, 1, 0);
+        nshvc_ext_canvas_screen32(0, t32, tw, th, 0, 1, 0);
     }
 }
 

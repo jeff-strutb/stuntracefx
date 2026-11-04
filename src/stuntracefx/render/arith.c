@@ -278,13 +278,45 @@ static void ratio_at_focal(uint16_t a, uint16_t b, uint16_t d, int f, uint16_t *
     *x = 0x3FFF;
 }
 
+/* The pair at focal lengths an / ad (the first) and bn / bd (the second)
+   not one whole number (Enhanced's full window, its texels not square or
+   not whole): a * 2 an / (ad d) and b * 2 bn / (bd d), the larger held to
+   $3FFF and the other kept to its direction from the centre. */
+static void ratio_at_focals(uint16_t a, uint16_t b, uint16_t d, int64_t an, int64_t ad, int64_t bn, int64_t bd,
+                            uint16_t *x, uint16_t *y)
+{
+    uint64_t qa = (uint64_t)a * 2u * (uint64_t)an / ((uint64_t)ad * d);
+    uint64_t qb = (uint64_t)b * 2u * (uint64_t)bn / ((uint64_t)bd * d);
+
+    if (qa <= 0x3FFF && qb <= 0x3FFF) {
+        *x = (uint16_t)qa;
+        *y = (uint16_t)qb;
+    } else if (qa >= qb) {
+        *x = 0x3FFF;
+        *y = (uint16_t)(qb * 0x3FFF / qa);
+    } else {
+        *x = (uint16_t)(qa * 0x3FFF / qb);
+        *y = 0x3FFF;
+    }
+}
+
 /* After the original's results: at another focal length they are replaced;
-   under PORT_FOCALCHECK the focal arithmetic at 128 is held against them. */
+   under PORT_FOCALCHECK the focal arithmetic at 128 is held against them.
+   The pair is X then Y, or Y then X (ws_ratio_swapped), each at its axis's
+   focal length. */
 static void ratio_focal(uint16_t a, uint16_t b, uint16_t d, uint16_t *x, uint16_t *y)
 {
     uint16_t fx, fy;
-    int f = ws_focal();
+    int64_t an, ad, bn, bd;
+    int f;
 
+    ws_focal_q(ws_ratio_swapped, &an, &ad);
+    ws_focal_q(!ws_ratio_swapped, &bn, &bd);
+    if (ad != 1 || bd != 1 || an != bn) {
+        ratio_at_focals(a, b, d, an, ad, bn, bd, x, y);
+        return;
+    }
+    f = (int)an;
     if (f != 128) {
         uint16_t ox = *x, oy = *y;
 

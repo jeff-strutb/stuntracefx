@@ -58,9 +58,17 @@ int ws_focal(void)
 {
     if (!ready)
         setup();
-    if (fw_view_active())               /* Enhanced's full-window picture */
-        return fw_focal();
     return active ? focal : 128;
+}
+
+void ws_focal_q(int down, int64_t *num, int64_t *den)
+{
+    if (fw_view_active()) {             /* Enhanced's full-window picture */
+        fw_focal_q(down, num, den);
+        return;
+    }
+    *num = ws_focal();
+    *den = 1;
 }
 
 int ws_view_planes(const uint16_t w[6], uint16_t planes[2])

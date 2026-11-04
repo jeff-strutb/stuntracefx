@@ -31,6 +31,9 @@
    fraction (R11) plus the column's steps (R9) over 65536, counted from
    the row's first texel (R14, back for a mirrored sprite) */
 static int sprite_row;
+/* a scaled sprite drawn by fw_sprite_draw (the texels not square): the
+   program's rows and plots run with their pixels left out */
+static int sprite_own;
 static uint16_t sprite_x0, sprite_y, sprite_frac, sprite_step, sprite_at;
 static int sprite_back;
 
@@ -523,6 +526,10 @@ lACC0:
     R[11] = 0xAD2D;
     goto lB0D9;
 lAD2D:
+    if (sprite_own) {
+        fw_sprite_hide(0);
+        sprite_own = 0;
+    }
     fw_solid_end();
     fw_depth_sprite(0);
     goto lAD53;
@@ -622,8 +629,8 @@ lB123:
 lB128:
     if (rm_far_shift)
         R[1] = (uint16_t)((int16_t)R[1] >> rm_far_shift);
-    if (fw_view_active())               /* Enhanced's full window: a fixed size (the rank sign's) in its texels */
-        R[1] = (uint16_t)((int16_t)R[1] * fw_k());
+    if (fw_view_active())               /* Enhanced's full window: a fixed size (the rank sign's) in its texel rows */
+        R[1] = (uint16_t)fw_rows((int16_t)R[1]);
     gsu_stw(R[10], R[1]);
     R[10] = gsu_inc(R[10]);
     R[10] = gsu_inc(R[10]);
@@ -648,7 +655,7 @@ lB147:
     at = nx;
     goto dispatch;
 lB14C:
-    R[0] = fw_view_active() ? (uint16_t)(0x00F0 * fw_k()) : 0x00F0;    /* Enhanced's full window: the cap in its texels */
+    R[0] = fw_view_active() ? (uint16_t)fw_rows(0x00F0) : 0x00F0;    /* Enhanced's full window: the cap in its texel rows */
     R[0] = gsu_sub(R[0], R[1], 0);
     t = !gsu.s;
     R[0] = gsu_add(R[0], R[1], 0);
@@ -683,6 +690,11 @@ lB17D:
     R[10] = gsu_inc(R[10]);
     R[10] = gsu_inc(R[10]);
 lB182:
+    if (fw_sprite_rows() && !fw_square() && !fw_sprite_hidden()) {
+        fw_sprite_draw((int16_t)R[1]);  /* Enhanced's full window, its texels not square */
+        fw_sprite_hide(1);
+        sprite_own = 1;
+    }
     R[3] = gsu_not(R[1]);
     R[3] = gsu_inc(R[3]);
     gsu_stw(FX_SPRITE_CLIP_X, R[3]);
@@ -1886,7 +1898,7 @@ lBE31:
     R[6] = gsu_getb();
     gsu_r14(gsu_inc(R[14]));
     R[6] = gsu_getbh(R[6]);
-    R[9] = ws_scale_mult(R[9], R[6]);
+    R[9] = ws_scale_mult(R[9], R[6], 0);
     R[9] = gsu_rol(R[9]);
     R[1] = gsu_ldw(FX_MODEL_34);
     R[1] = gsu_add(R[1], R[9], 0);
@@ -1903,7 +1915,7 @@ lBE5B:
     if (t) { goto lBE69; }
     goto lBF4D;
 lBE69:
-    R[5] = ws_scale_mult(R[5], R[6]);
+    R[5] = ws_scale_mult(R[5], R[6], 1);
     R[5] = gsu_rol(R[5]);
     R[2] = gsu_ldw(FX_MODEL_36);
     R[0] = 0x0014;

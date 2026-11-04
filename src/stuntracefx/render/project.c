@@ -50,8 +50,11 @@ one:
    code): the pair swapped around FxRatioClamp when |X| is below |Y|, then
    the signs back, each reversed behind the view. */
 
+int ws_ratio_swapped;
+
 static void project_case(int behind, int xneg, int yneg, int swap)
 {
+    ws_ratio_swapped = swap;
     if (swap) {
         gsu.r[0] = gsu.r[1];
         gsu.r[1] = gsu.r[2];
@@ -162,14 +165,22 @@ void abi_FxProjectPoint(void)
 /* FMULT by the depth's scale (2^23 / depth, so focal length 128), at the
    view's focal length f (Widescreen): v * scale * f >> 23, which at f = 128
    is FMULT's own high word. */
-uint16_t ws_scale_mult(uint16_t v, uint16_t scale)
+/* v * scale * num / den >> 23, rounded down as the shift is */
+static uint16_t scaled(uint16_t v, uint16_t scale, int64_t num, int64_t den)
 {
-    int f = ws_focal();
+    int64_t p = (int64_t)(int16_t)v * (int16_t)scale * num, q = den << 23;
+    return (uint16_t)(int16_t)(p / q - (p % q != 0 && p < 0));
+}
 
-    if (f == 128)
+uint16_t ws_scale_mult(uint16_t v, uint16_t scale, int down)
+{
+    int64_t n, d;
+
+    ws_focal_q(down, &n, &d);
+    if (n == 128 && d == 1)
         return gsu_fmult(v, scale);
     gsu_fmult(v, scale);                    /* its flags and time */
-    return (uint16_t)(int16_t)(((int64_t)(int16_t)v * (int16_t)scale * f) >> 23);
+    return scaled(v, scale, n, d);
 }
 
 /*
@@ -216,13 +227,13 @@ void FxProjectScaled(void)
     gsu.r[6] = (gsu_getb());
     gsu_r14(gsu_inc(gsu.r[14]));
     gsu.r[6] = gsu_getbh(gsu.r[6]);
-    gsu.r[0] = ws_scale_mult(gsu.r[1], gsu.r[6]);
+    gsu.r[0] = ws_scale_mult(gsu.r[1], gsu.r[6], 0);
     gsu.r[1] = gsu_ldw(FX_CENTRE);
     gsu.r[1] = gsu_add(gsu.r[1], gsu.r[0], 0);
-    gsu.r[0] = ws_scale_mult(gsu.r[2], gsu.r[6]);
+    gsu.r[0] = ws_scale_mult(gsu.r[2], gsu.r[6], 1);
     gsu.r[2] = gsu_ldw(FX_CENTRE + 2);
     gsu.r[2] = gsu_add(gsu.r[2], gsu.r[0], 0);
-    gsu.r[0] = ws_scale_mult(gsu.r[5], gsu.r[6]);
+    gsu.r[0] = ws_scale_mult(gsu.r[5], gsu.r[6], 1);
     gsu.r[5] = gsu.r[0];
 }
 
@@ -293,11 +304,11 @@ void abi_FxProjectVertex(void)
     gsu.r[6] = (gsu_getb());
     gsu_r14(gsu_inc(gsu.r[14]));
     gsu.r[6] = gsu_getbh(gsu.r[6]);
-    gsu.r[0] = ws_scale_mult(gsu.r[1], gsu.r[6]);
+    gsu.r[0] = ws_scale_mult(gsu.r[1], gsu.r[6], 0);
     gsu.r[1] = gsu_ldw(FX_CENTRE);
     gsu.r[0] = gsu_add(gsu.r[0], gsu.r[1], 0);
     gsu.r[1] = gsu.r[0];
-    gsu.r[0] = ws_scale_mult(gsu.r[2], gsu.r[6]);
+    gsu.r[0] = ws_scale_mult(gsu.r[2], gsu.r[6], 1);
     gsu.r[2] = gsu_ldw(FX_CENTRE + 2);
     gsu.r[0] = gsu_add(gsu.r[0], gsu.r[2], 0);
     gsu.r[2] = gsu.r[0];

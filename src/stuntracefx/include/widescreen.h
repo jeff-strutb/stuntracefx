@@ -17,8 +17,17 @@
 #include <stdint.h>
 
 /* The projection's focal length, view units to pixels (128 the
-   original's). */
+   original's): PORT_FOCAL's or 128, outside Enhanced's full window. */
 int ws_focal(void);
+
+/* The projection's focal length across (down 0) or down (down 1), as num /
+   den in lowest terms: 128 / 1 the original's, PORT_FOCAL's, or Enhanced's
+   full window's in its texels (fullwindow.h fw_focal_q). */
+void ws_focal_q(int down, int64_t *num, int64_t *den);
+
+/* FxRatioClamp's pair is X then Y, or Y then X when FxProjectPoint
+   swapped them (its |X| below |Y|): set by the caller before each call. */
+extern int ws_ratio_swapped;
 
 /* The view words GsuParamsFromDp copies to the Super FX: given the first
    six as the game set them (the centre and the edges, $0034-$003E), the
@@ -28,11 +37,12 @@ int ws_focal(void);
 int ws_view_planes(const uint16_t w[6], uint16_t planes[2]);
 
 /* FMULT of v by a scale from the table at $14:896C (2^23 / depth: focal
-   length 128) at the view's focal length: v * scale * f >> 23, FMULT's own
-   high word at 128 (its flags FMULT's either way). Every projection by the
-   table goes through it (render/project.c, the copies in model.c, frame.c
-   and object/fx_record.c). */
-uint16_t ws_scale_mult(uint16_t v, uint16_t scale);
+   length 128) at the view's focal length across (down 0: an X) or down
+   (down 1: a Y, or a sprite's size, which is its height): v * scale * f
+   >> 23, FMULT's own high word at 128 (its flags FMULT's either way). Every
+   projection by the table goes through it (render/project.c, the copies in
+   model.c, frame.c and object/fx_record.c). */
+uint16_t ws_scale_mult(uint16_t v, uint16_t scale, int down);
 
 /* The sort's cull: 1 when an object the original's 45 degree test drops
    (|X| - radius not below |Z|) is inside the wide view after all. */

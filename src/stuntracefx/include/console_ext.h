@@ -36,6 +36,11 @@ void nshvc_ext_canvas_screen(int layer, const uint8_t *texels, int w, int h, int
 /* the same with 32-bit texels (contract 2.14): 0 transparent, 0x000000ii
    CGRAM index ii (each line's palette), 0xFFrrggbb a colour of its own */
 void nshvc_ext_canvas_screen32(int layer, const uint32_t *texels, int w, int h, int k, int priority, int palette);
+/* k 0 (contract 2.15): the w x h texels over the whole screen, a point x
+   console pixels across texel floor(x w / W) (and down); the window pixels
+   the screen was last presented over, the size of a canvas at a texel a
+   window pixel */
+void nshvc_ext_canvas_presented(int *w, int *h);
 /* The screen past the console's 256 x 224, VRAM past its 64 KB and a
    layer's page of it, the data port's writes landing in a page at once,
    sprites past X 255 (contract 2.3); the window's size in points */
