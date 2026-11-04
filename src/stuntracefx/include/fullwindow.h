@@ -103,13 +103,15 @@ void fw_facing_cross(uint16_t *hi, uint16_t *lo);
    through COLOR's and PLOT's rules (por, the colour's high nibble hi);
    textured 2, perspective-correct: u = (pa + pda k) / (pq + pdq k) and v =
    (pb + pdb k) / (pq + pdq k) at k = x - xl, each a multiply-add and a
-   divide in float as written (fw_span_fill_cpu, the GPU's the same) */
+   divide in float as written (fw_span_fill_cpu, the GPU's the same);
+   its 1 / depth along each pixel's ray z(x) = fma(zy, y, fma(zx, x, za))
+   (0: none, never under the water), for fw_water */
 typedef struct {
     int32_t y, x0, x1, pad0;
     int64_t xl, u, du, v, dv;
     uint16_t base, mask;
     uint8_t bank, por, hi, colour, textured, pad1[7];
-    float pq, pdq, pa, pda, pb, pdb, pad2[2];
+    float pq, pdq, pa, pda, pb, pdb, za, zx, zy, pad2;
 } FwSpan;
 /* A polygon of the draw list's whole, in the spans' order in place of its
    rows: a span with textured 3, y its first row, x0 past its last, x1 its
@@ -123,7 +125,14 @@ typedef struct {
     int32_t ya, yb, le, ln, re, rn, ou, ov;
     uint16_t base, mask;
     uint8_t bank, por, hi, colour, kind, persp, pad[6];
+    float za, zx, zy, zpad;             /* its rows' 1 / depth (FwSpan's) */
 } FwPoly;
+/* The water (Enhanced, fullwindow.c): its 1 / depth along each pixel's ray
+   w(x, y) = fma(fw_water[2], y, fma(fw_water[1], x, fw_water[0])), with
+   fw_water[3] not 0 while there is water. A span's pixel past it, z > 0,
+   w > 0 and z < w (the water nearer on the ray), is not drawn: the water
+   is put there (fw_span_fill_cpu, the GPU's the same) */
+extern float fw_water[4];
 /* An edge: its ends' x (texels), its first row and its rows; u and v (the
    texture's 0-255) at its start and their change to its end (-128 to 127,
    the original's walk's); 1 / z at its ends */
@@ -165,6 +174,9 @@ void fw_view_face(const double (*p)[3], int n, uint8_t c);
    material is read, and end as it returns */
 void fw_solid_object(uint16_t shape, unsigned record);
 void fw_solid_begin(void);
+/* FxObjectSprite past its depth test (1) and at its end (0): the sprite's
+   depth for the water's (fullwindow.c) */
+void fw_depth_sprite(int on);
 void fw_solid_colour(uint8_t colr);
 void fw_solid_end(void);
 /* FxPolygonDraw's, while the full window's picture draws: 1 when done here */

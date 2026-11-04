@@ -524,6 +524,7 @@ lACC0:
     goto lB0D9;
 lAD2D:
     fw_solid_end();
+    fw_depth_sprite(0);
     goto lAD53;
 lAD31:
     R[0] = gsu_ldb(R[1]);
@@ -571,6 +572,7 @@ lB0D9:
     R[0] = gsu_sub(R[0], R[3], 0);
     t = !gsu.s;
     if (t) { goto lB123; }
+    fw_depth_sprite(1);                 /* Enhanced's full window: the sprite's depth, for the water */
     fw_solid_begin();
     R[0] = gsu_ldw(FX_MODEL_CE);
     R[1] = R[0];

@@ -214,6 +214,9 @@ void rm_record_reset(void);
 #define RM_RECORDS (0x31 + RM_FAR_MAX)
 extern uint32_t rm_gaze[0x8000];
 extern uint16_t rm_record_object[RM_RECORDS], rm_record_gaze[RM_RECORDS];
+/* the view's place in the world ($C5, $C7, $C9) the draw list's records
+   were made from (object/draw_list.c), for Enhanced's water (fullwindow.c) */
+extern int16_t rm_view_place[3];
 /* Enhanced's objects as the far view and the in-between frames show them
    (remaster/animate.c): an object made (ObjectInit) and its turn in
    ObjectsRunHandlers; the ones that move only themselves kept running

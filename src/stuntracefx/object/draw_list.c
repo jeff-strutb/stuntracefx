@@ -245,6 +245,10 @@ static void draw_bucket(uint16_t o, uint16_t r, int next)
 static void draw_triggers(void)
 {
     uint16_t pos, a;
+    int i;
+
+    for (i = 0; i < 3; i++)             /* Remaster: the view's place the records are from */
+        rm_view_place[i] = (int16_t)(nshvc_wram()[0xC5 + 2 * i] | nshvc_wram()[0xC6 + 2 * i] << 8);
 
     for (;;) {
         pos = rd16(TRIGGER_POS);

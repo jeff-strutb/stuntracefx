@@ -316,6 +316,26 @@ FwPoly *fw_polys;
 FwEdge *fw_edges;
 static size_t npolys, cap_polys, nedges, cap_edges;
 
+/* ---- depth, for the water ------------------------------------------------- */
+/* What is drawn now's 1 / depth across the screen (FwSpan's za, zx, zy):
+   a face's (face_depth, by its draw-list place, made with its vertices),
+   a sprite's (one depth, fw_depth_sprite), or none (0: the HUD, labels,
+   lines). */
+float fw_water[4];
+static float cur_z[3], sprite_z[3];
+static int label_on;               /* the label being drawn (fw_label_begin) */
+static struct { float z[3]; uint32_t gen; } face_depth[0x8000];
+
+static int sunk(float za, float zx, float zy, int32_t x, int32_t y)
+{
+    float z, w;
+    if (fw_water[3] == 0 || (za == 0 && zx == 0 && zy == 0))
+        return 0;
+    z = fmaf(zy, (float)y, fmaf(zx, (float)x, za));
+    w = fmaf(fw_water[2], (float)y, fmaf(fw_water[1], (float)x, fw_water[0]));
+    return z > 0 && w > 0 && z < w;
+}
+
 static FwSpan *span_new(void)
 {
     if (nspans == cap_spans) {
@@ -326,7 +346,14 @@ static FwSpan *span_new(void)
         spans = n;
         cap_spans = c;
     }
-    return &spans[nspans++];
+    {
+        FwSpan *p = &spans[nspans++];
+        int none = fw_hud || label_on;
+        p->za = none ? 0 : cur_z[0];
+        p->zx = none ? 0 : cur_z[1];
+        p->zy = none ? 0 : cur_z[2];
+        return p;
+    }
 }
 
 static void span_flat(int32_t y, int32_t x0, int32_t x1, uint8_t c)
@@ -336,7 +363,8 @@ static void span_flat(int32_t y, int32_t x0, int32_t x1, uint8_t c)
         return;
     if (nspans) {                       /* the last one's run on: the same pixels as two */
         p = &spans[nspans - 1];
-        if (!p->textured && p->y == y && p->colour == c && p->x1 + 1 == x0) {
+        if (!p->textured && p->y == y && p->colour == c && p->x1 + 1 == x0 && p->za == cur_z[0] && p->zx == cur_z[1] &&
+            p->zy == cur_z[2] && !fw_hud && !label_on) {
             p->x1 = x1;
             return;
         }
@@ -387,8 +415,14 @@ void fw_span_fill_cpu(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
         const FwSpan *p = &sp[i];
         uint8_t *o = out + (size_t)p->y * w;
         int32_t x;
+        int deep = fw_water[3] != 0 && (p->za != 0 || p->zx != 0 || p->zy != 0);
         if (!p->textured) {
-            memset(o + p->x0, p->colour, (size_t)(p->x1 - p->x0 + 1));
+            if (!deep)
+                memset(o + p->x0, p->colour, (size_t)(p->x1 - p->x0 + 1));
+            else
+                for (x = p->x0; x <= p->x1; x++)
+                    if (!sunk(p->za, p->zx, p->zy, x, p->y))
+                        o[x] = p->colour;
             continue;
         }
         if (p->textured == 3) {         /* a polygon's rows, in its place */
@@ -404,7 +438,7 @@ void fw_span_fill_cpu(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
                 float k = (float)(x - p->xl), q = fmaf(p->pdq, k, p->pq);
                 unsigned iu = persp_texel(fmaf(p->pda, k, p->pa), q), iv = persp_texel(fmaf(p->pdb, k, p->pb), q);
                 int c = texel_colour(fw_texel(p->bank, (uint16_t)(((iv << 8 | iu) & p->mask) + p->base)), p->por, p->hi);
-                if (c >= 0)
+                if (c >= 0 && !(deep && sunk(p->za, p->zx, p->zy, x, p->y)))
                     o[x] = (uint8_t)c;
             }
             continue;
@@ -413,7 +447,7 @@ void fw_span_fill_cpu(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
             int64_t k = x - p->xl;
             unsigned iu = (unsigned)((p->u + p->du * k) >> 32) & 0xFF, iv = (unsigned)((p->v + p->dv * k) >> 32) & 0xFF;
             int c = texel_colour(fw_texel(p->bank, (uint16_t)(((iv << 8 | iu) & p->mask) + p->base)), p->por, p->hi);
-            if (c >= 0)
+            if (c >= 0 && !(deep && sunk(p->za, p->zx, p->zy, x, p->y)))
                 o[x] = (uint8_t)c;
         }
     }
@@ -432,7 +466,7 @@ static void span_flush(void)
 
 /* the label being drawn (fw_label_begin): its position as FxTextNotice
    set it, and where that is in the texels */
-static int label_on, label_x, label_y, label_tx, label_ty;
+static int label_x, label_y, label_tx, label_ty;
 
 int fw_label_begin(uint16_t x, uint16_t y)
 {
@@ -477,6 +511,7 @@ void fw_sprite_span(uint16_t y, uint16_t x0, uint16_t x1, uint16_t bank, uint16_
     if (!(p = span_new()))
         return;
     memset(p, 0, sizeof *p);
+    p->za = sprite_z[0];                /* the sprite's one depth */
     p->y = y;
     p->x0 = a;
     p->x1 = b;
@@ -754,6 +789,110 @@ static void project_exact(int64_t x, int64_t y, int64_t z, int64_t *sx, int64_t 
     *sy = (int64_t)view_cy() * K + cy_off + ry;
 }
 
+/* the 1 / depth across the screen of a face through n view-space points,
+   at each pixel's centre: z[0] + z[1] x + z[2] y; a far object's (its
+   place halved rm_far_shift times) its own depth's. 1 / depth is linear
+   on the screen across a flat face, as a GPU interpolates it: through the
+   points' own places and depths, the three in front of the eye farthest
+   apart on the screen (the points are whole units, so a small face's
+   plane in space can tilt far from them); with fewer than three in front,
+   the plane through them in space. 0s when neither can be had. */
+static long *depth_counts;
+static void depth_report(void)
+{
+    int i;
+    for (i = 0; i < 4; i++)
+        fprintf(stderr, "fwdepth: faces of screen area class %d: %ld within 1%%, %ld within 10%%, %ld more\n", i,
+                depth_counts[3 * i], depth_counts[3 * i + 1], depth_counts[3 * i + 2]);
+}
+
+static void depth_plane(const double (*P)[3], int n, float z[3])
+{
+    double f = fw_focal(), ox = tw / 2.0, oy = (double)view_cy() * K + cy_off, sc = (double)(1 << rm_far_shift);
+    double X[EXACT_MAX + 8], Y[EXACT_MAX + 8], Q[EXACT_MAX + 8], best = 0, c[3] = { 0 }, d;
+    int i, j, k, m = 0, a = 0, b = 1, e = 2;
+
+    z[0] = z[1] = z[2] = 0;
+    for (i = 0; i < n && m < EXACT_MAX + 8; i++)
+        if (P[i][2] >= NEAR_Z) {
+            X[m] = ox + f * P[i][0] / P[i][2] - 0.5;
+            Y[m] = oy + f * P[i][1] / P[i][2] - 0.5;
+            Q[m++] = 1.0 / (P[i][2] * sc);
+        }
+    for (i = 0; i < m; i++)
+        for (j = i + 1; j < m; j++)
+            for (k = j + 1; k < m; k++) {
+                double ar = fabs((X[j] - X[i]) * (Y[k] - Y[i]) - (X[k] - X[i]) * (Y[j] - Y[i]));
+                if (ar > best)
+                    best = ar, a = i, b = j, e = k;
+            }
+    if (best > 1e-6) {                  /* through three on the screen */
+        double x1 = X[b] - X[a], y1 = Y[b] - Y[a], q1 = Q[b] - Q[a], x2 = X[e] - X[a], y2 = Y[e] - Y[a], q2 = Q[e] - Q[a];
+        double det = x1 * y2 - x2 * y1, gx = (q1 * y2 - q2 * y1) / det, gy = (x1 * q2 - x2 * q1) / det;
+        z[1] = (float)gx;
+        z[2] = (float)gy;
+        z[0] = (float)(Q[a] - gx * X[a] - gy * Y[a]);
+    } else if (m >= 1 && m == n) {      /* edge-on on the screen: its nearest point's */
+        for (i = 1, d = Q[0]; i < m; i++)
+            d = Q[i] > d ? Q[i] : d;
+        z[0] = (float)d;
+    } else {                            /* in space */
+        for (i = 0, best = 0; i < n; i++)
+            for (j = i + 1; j < n; j++)
+                for (k = j + 1; k < n; k++) {
+                    double u[3], v[3], w[3], mm;
+                    int q;
+                    for (q = 0; q < 3; q++)
+                        u[q] = P[j][q] - P[i][q], v[q] = P[k][q] - P[i][q];
+                    w[0] = u[1] * v[2] - u[2] * v[1];
+                    w[1] = u[2] * v[0] - u[0] * v[2];
+                    w[2] = u[0] * v[1] - u[1] * v[0];
+                    mm = w[0] * w[0] + w[1] * w[1] + w[2] * w[2];
+                    if (mm > best)
+                        best = mm, a = i, c[0] = w[0], c[1] = w[1], c[2] = w[2];
+                }
+        if (best <= 0)
+            return;
+        d = (c[0] * P[a][0] + c[1] * P[a][1] + c[2] * P[a][2]) * sc;
+        if (d == 0)
+            return;
+        z[1] = (float)(c[0] / (f * d));
+        z[2] = (float)(c[1] / (f * d));
+        z[0] = (float)((c[0] * (0.5 - ox) / f + c[1] * (0.5 - oy) / f + c[2]) / d);
+    }
+    if (getenv("FW_DEPTHCHECK")) {      /* a check: the 1 / depth at each point's own place, by the face's size */
+        static long cnt[4][3];          /* by screen area < 16, < 256, < 4096, more; error < 1 %, < 10 %, more */
+        static int reg;
+        double worst = 0, area = best;
+        int sz;
+        for (i = 0; i < m; i++) {
+            double got = z[0] + z[1] * X[i] + z[2] * Y[i], e = fabs(got - Q[i]) / Q[i];
+            worst = e > worst ? e : worst;
+        }
+        sz = area < 32 ? 0 : area < 512 ? 1 : area < 8192 ? 2 : 3;
+        cnt[sz][worst < 0.01 ? 0 : worst < 0.1 ? 1 : 2]++;
+        if (!reg) {
+            reg = 1;
+            atexit(depth_report);
+        }
+        depth_counts = &cnt[0][0];
+    }
+}
+
+/* the face whose vertices are being kept (ex_list): its depth from those
+   in view space so far */
+static void face_depth_kept(void)
+{
+    double P[EXACT_MAX][3];
+    int i;
+    if (ex_n < 3)
+        return;
+    for (i = 0; i < ex_n; i++)
+        P[i][0] = ex_vx[i], P[i][1] = ex_vy[i], P[i][2] = ex_vz[i];
+    depth_plane((const double (*)[3])P, ex_n, face_depth[ex_list >> 1].z);
+    face_depth[ex_list >> 1].gen = list_gen;
+}
+
 void fw_exact_unmark(uint16_t list)
 {
     unsigned i;
@@ -769,7 +908,11 @@ void fw_exact_point(int16_t x, int16_t y, int16_t z)
         return;
     }
     project_exact(x, y, z, &ex_x[ex_n], &ex_y[ex_n]);
+    ex_vx[ex_n] = x;
+    ex_vy[ex_n] = y;
+    ex_vz[ex_n] = z;
     ex_n++;
+    face_depth_kept();
 }
 
 /* the model drawer's point by index, exact */
@@ -801,6 +944,7 @@ void fw_exact_model_point(uint16_t index)
     model_point(index, &ex_x[ex_n], &ex_y[ex_n]);
     model_view(index, &ex_vx[ex_n], &ex_vy[ex_n], &ex_vz[ex_n]);
     ex_n++;
+    face_depth_kept();
 }
 
 /* FxModelFacing's cross product of three projected points ($04E4 + 6 i),
@@ -1068,6 +1212,9 @@ int fw_poly_row(const FwPoly *p, const FwEdge *edges, int32_t row, int32_t w, Fw
 
     memset(s, 0, sizeof *s);
     s->y = row;
+    s->za = p->za;
+    s->zx = p->zx;
+    s->zy = p->zy;
     if (!p->kind) {                     /* flat: left to right, kept to the screen */
         if (xr < xl)
             return 0;
@@ -1136,6 +1283,9 @@ static FwPoly *poly_new(void)
         cap_polys = c;
     }
     memset(&fw_polys[npolys], 0, sizeof *fw_polys);
+    fw_polys[npolys].za = cur_z[0];
+    fw_polys[npolys].zx = cur_z[1];
+    fw_polys[npolys].zy = cur_z[2];
     return &fw_polys[npolys++];
 }
 
@@ -1418,6 +1568,11 @@ void fw_view_face(const double (*p)[3], int n, uint8_t c)
 
     if (!fw_view_active() || checking || n < 3 || n > FACE_MAX - 8)
         return;
+    {                                   /* its own depth while it is put in (a sprite's back after) */
+        float z[3];
+        depth_plane(p, n, z);
+        cur_z[0] = z[0], cur_z[1] = z[1], cur_z[2] = z[2];
+    }
     for (i = 0; i < n; i++) {           /* the near plane */
         const double *a = p[i], *b = p[(i + 1) % n];
         int ain = a[2] >= NEAR_Z, bin = b[2] >= NEAR_Z;
@@ -1547,6 +1702,13 @@ void fw_exact_gather_end(void)
     if (n < 0)
         return;
     ga_n = -1;
+    if (n >= 3) {                       /* its depth, from its points in view space */
+        double P[EXACT_MAX][3];
+        for (i = 0; i < n; i++)
+            P[i][0] = ga_x[i], P[i][1] = ga_y[i], P[i][2] = ga_z[i];
+        depth_plane((const double (*)[3])P, n, face_depth[list >> 1].z);
+        face_depth[list >> 1].gen = list_gen;
+    }
     for (i = 0; i < (lines ? 1 : n); i++) {
         int j = (i + 1) % n, ain = ga_z[i] >= NEAR_Z, bin = ga_z[j] >= NEAR_Z;
         double t = ain != bin ? (double)(NEAR_Z - ga_z[i]) / (ga_z[j] - ga_z[i]) : 0;
@@ -2269,9 +2431,42 @@ static uint16_t tex_polygon(uint16_t p, int n)
     return (uint16_t)(v + size);
 }
 
+static void water_view(void);
+
+/* the draw list's polygon whose vertices start at v: its depth, if its
+   vertices were kept this list (0: a line, or none) */
+static void draw_depth(uint16_t v)
+{
+    int k = v && face_depth[v >> 1].gen == list_gen;
+    if (getenv("FW_DEPTHCHECK") && v) {
+        static long with, without;
+        if (k) with++; else without++;
+        if ((with + without) % 200000 == 0)
+            fprintf(stderr, "fwdepth: polygons drawn with a depth %ld, without %ld\n", with, without);
+    }
+    cur_z[0] = k ? face_depth[v >> 1].z[0] : 0;
+    cur_z[1] = k ? face_depth[v >> 1].z[1] : 0;
+    cur_z[2] = k ? face_depth[v >> 1].z[2] : 0;
+}
+
+/* FxObjectSprite past its depth test (1, render/frame.c) and its end (0):
+   the sprite's one depth, its place's ($002A, a far one's halved
+   rm_far_shift times) */
+void fw_depth_sprite(int on)
+{
+    int32_t z = on ? (int32_t)(int16_t)ram16(0x002A) * (1 << rm_far_shift) : 0;
+    sprite_z[0] = z > 0 ? (float)(1.0 / z) : 0;
+    sprite_z[1] = sprite_z[2] = 0;
+    cur_z[0] = sprite_z[0];
+    cur_z[1] = cur_z[2] = 0;
+}
+
 void fw_draw_list(void)
 {
     uint16_t at, end = ram16(LIST_END);
+
+    if (fw_drawing)
+        water_view();
 
     if (end == DRAW_LIST)
         return;
@@ -2281,6 +2476,7 @@ void fw_draw_list(void)
     for (;;) {
         int8_t type = (int8_t)ram8(at);
         at++;
+        draw_depth(type >= 3 ? (uint16_t)(at + 1) : type < 0 ? (uint16_t)(at + 7) : 0);
         if (type >= 3)
             at = flat_polygon(at, type);
         else if (type == 2)
@@ -2290,6 +2486,7 @@ void fw_draw_list(void)
         else
             at = tex_polygon(at, (uint8_t)~type);
     }
+    cur_z[0] = cur_z[1] = cur_z[2] = 0;
     list_gen++;                         /* the list drawn: its exact vertices gone */
 }
 
@@ -2368,11 +2565,244 @@ static int size_for_window(void)
    across 0): the picture's row y is the map's row y - 16 */
 #define RACE_ROW0 16
 
+/* ---- the water -------------------------------------------------------------- */
+
+/* Aqua Tunnel's water (course 1) in the Enhanced picture: a plane at world
+   height WATER_Y (y down) under the road and over the glass tube, wherever
+   nothing else is drawn, seen from either side. The original has no water
+   height: the road outside never goes below -1807, the car in the tube
+   stays between -49 and -146 (the player's record over the replayed race),
+   and -1280 is where the track's records settle. Its art is the
+   underwater backdrop's (BG2's map at $7F:93D7, characters from VRAM word
+   $6000, palette 0): the nearest row of ripple cells, map rows 51-52, 64 x
+   16 texels, laid on the plane at the size the original shows it, read
+   off its most level underwater frame (the replay's 4724: the cells' top
+   row on lines 1-17, 64 pixels across, meets the plane over 2148 across
+   and 859 deep: 33.6 and 53.7 a texel). Its ripples take the strip's
+   colours by distance, as its rows shade from near to the horizon
+   (rows 51-60 over lines 1 to the horizon, line 59, on that frame: a
+   pixel row's depth from the view there, WATER_DEPTH); the water between
+   them is CGRAM colour 1, the line's band colour, as the strip's own. */
+#define WATER_Y (-1280.0)
+#define WATER_U 33.6
+#define WATER_V 53.7
+static const uint32_t water_depth[80] = {
+    2152, 2180, 2208, 2236, 2266, 2296, 2327, 2359, 2392, 2426, 2461, 2497, 2534, 2572, 2611, 2651,
+    2693, 2736, 2780, 2826, 2873, 2922, 2973, 3025, 3079, 3135, 3194, 3254, 3317, 3383, 3451, 3522,
+    3595, 3672, 3753, 3837, 3924, 4016, 4112, 4213, 4319, 4431, 4548, 4672, 4803, 4941, 5088, 5243,
+    5409, 5585, 5773, 5974, 6189, 6421, 6670, 6940, 7233, 7551, 7898, 8280, 8699, 9164, 9681, 10260,
+    10912, 11653, 12503, 13485, 14635, 16000, 17645, 19668, 22214, 25518, 29976, 36321, 46074, 62987, 99520, 236952,
+};
+int16_t rm_view_place[3];
+static uint16_t water_band[256];        /* the original's colour 1 each line (fw_sky) */
+static int water_band_ok;
+static int sky_line(int h);
+static double water_e[3][3], water_cam[3];
+static int water_seen;                  /* a picture's view kept this frame */
+static int water_due;                   /* a water picture waiting for its band (fw_sky) */
+static uint32_t *tex32;
+static size_t tex32_size;
+
+/* the view the picture is drawn from (fw_draw_list, while drawing): $00E4's
+   turn and the place the records are from */
+static int water_here(void);
+
+static void water_view(void)
+{
+    int i, j;
+    for (i = 0; i < 3; i++) {
+        for (j = 0; j < 3; j++)
+            water_e[i][j] = (int16_t)ram16((uint16_t)(0x00E4 + 6 * i + 2 * j)) / 32768.0;
+        water_cam[i] = rm_view_place[i];
+    }
+    water_seen = 1;
+    {                                   /* the water's 1 / depth along each pixel's ray: (E's row 1 . ray) / dy */
+        double f = fw_focal(), ox = tw / 2.0, oy = (double)view_cy() * K + cy_off, dy = WATER_Y - water_cam[1];
+        int here = water_here() && dy != 0;
+        fw_water[0] = here ? (float)((water_e[1][0] * (0.5 - ox) / f + water_e[1][1] * (0.5 - oy) / f + water_e[1][2]) / dy) : 0;
+        fw_water[1] = here ? (float)(water_e[1][0] / (f * dy)) : 0;
+        fw_water[2] = here ? (float)(water_e[1][1] / (f * dy)) : 0;
+        fw_water[3] = (float)here;
+    }
+}
+
+static int water_here(void)
+{
+    return nshvc_wram()[0x0E3D] == 0x01 && rm_enhanced();
+}
+
+/* a BG2 character's pixel (4 bits a pixel, its word $6000 + 16 n) */
+static unsigned bg2_pixel(const uint16_t *v, unsigned entry, unsigned x, unsigned y)
+{
+    const uint16_t *t = v + 0x6000 + (entry & 0x3FF) * 16;
+    unsigned c = 0, b;
+    if (entry & 0x4000)
+        x = 7 - x;
+    if (entry & 0x8000)
+        y = 7 - y;
+    for (b = 0; b < 2; b++)
+        c |= ((t[y] >> (7 - x + 8 * b)) & 1) << b | ((t[8 + y] >> (7 - x + 8 * b)) & 1) << (b + 2);
+    return c;
+}
+
+static int sat[17][65];                  /* the cells' ripple texels in [0, x) x [0, y) */
+
+/* the ripple texels in texels u0-u1 by v0-v1 of the cells laid without end */
+static int64_t ripples_to(int64_t u, int64_t v)     /* in [0, u) x [0, v) */
+{
+    int64_t qu = u >= 0 ? u / 64 : -((63 - u) / 64), qv = v >= 0 ? v / 16 : -((15 - v) / 16);
+    int ru = (int)(u - 64 * qu), rv = (int)(v - 16 * qv);
+    return qu * qv * sat[16][64] + qu * sat[rv][64] + qv * sat[16][ru] + sat[rv][ru];
+}
+
+static int64_t ripples_in(int64_t u0, int64_t u1, int64_t v0, int64_t v1)
+{
+    return ripples_to(u1 + 1, v1 + 1) - ripples_to(u0, v1 + 1) - ripples_to(u1 + 1, v0) + ripples_to(u0, v0);
+}
+
+static uint32_t rgb8(uint16_t bgr)
+{
+    unsigned r = bgr & 31, g = bgr >> 5 & 31, b = bgr >> 10 & 31;
+    return 0xFF000000u | (r << 3 | r >> 2) << 16 | (g << 3 | g >> 2) << 8 | (b << 3 | b >> 2);
+}
+
+static uint32_t mix(uint32_t a, uint32_t b, double k)
+{
+    uint32_t o = 0xFF000000u;
+    int s;
+    for (s = 0; s < 24; s += 8)
+        o |= (uint32_t)lround(((a >> s) & 255) * (1 - k) + ((b >> s) & 255) * k) << s;
+    return o;
+}
+
+/* the texels with the water where nothing is drawn, 32 bits each
+   (FW_WATERCHECK: idx, the water between the ripples left to the
+   console's colour 1, or band, this file's; either with the cells read
+   texel by texel, for the two to be compared) */
+static const uint32_t *water_pass(void)
+{
+    static uint8_t cell[16][64];
+    const char *chk = getenv("FW_WATERCHECK");
+    int index_gap = chk && !strcmp(chk, "idx"), point = chk != NULL;
+    static uint32_t ripple[80];
+    const uint8_t *w = nshvc_wram();
+    const uint16_t *v = nshvc_vram();
+    size_t need = (size_t)tw * th;
+    double f = fw_focal(), ox = tw / 2.0, oy = (double)view_cy() * K + cy_off, dy = WATER_Y - water_cam[1];
+    unsigned r, x, y;
+
+    if (need > tex32_size) {
+        free(tex32);
+        tex32 = malloc(need * sizeof *tex32);
+        tex32_size = tex32 ? need : 0;
+        if (!tex32)
+            return NULL;
+    }
+    for (y = 0; y < 16; y++)            /* the cells: map rows 51-52, 8 entries */
+        for (x = 0; x < 64; x++) {
+            unsigned at = 0x193D7 + (51 + y / 8) * 0x140 + 2 * (x / 8);
+            cell[y][x] = (uint8_t)bg2_pixel(v, w[at] | w[at + 1] << 8, x & 7, y & 7);
+        }
+    for (r = 0; r < 80; r++) {          /* each strip pixel row's ripple colour: its commonest of 2-15 */
+        unsigned n[16] = { 0 }, best = 2, c, at;
+        uint16_t bgr;
+        for (x = 0; x < 64; x++) {
+            at = 0x193D7 + (51 + r / 8) * 0x140 + 2 * (x / 8);
+            n[bg2_pixel(v, w[at] | w[at + 1] << 8, x & 7, r & 7)]++;
+        }
+        for (c = 2; c < 16; c++)
+            if (n[c] > n[best])
+                best = c;
+        bgr = (uint16_t)(w[0x139D7 + 2 * best] | w[0x139D8 + 2 * best] << 8);   /* the underwater palette's (HudColourStep's copy) */
+        ripple[r] = rgb8(bgr);
+    }
+    for (y = 0; y <= 16; y++)           /* the cells' ripple texels counted from the corner */
+        for (x = 0; x <= 64; x++)
+            sat[y][x] = !x || !y ? 0 : sat[y - 1][x] + sat[y][x - 1] - sat[y - 1][x - 1] + (cell[y - 1][x - 1] >= 2);
+    for (y = 0; y < (unsigned)th; y++) {
+        double vy = (y + 0.5 - oy) / f, a[3], a1[3];
+        const uint8_t *in = tex + (size_t)y * tw;
+        uint32_t *out = tex32 + (size_t)y * tw, gap = 1;
+        int j;
+        if (water_band_ok && !index_gap) {      /* the line's colour 1, as the console would give it */
+            uint16_t c = water_band[sky_line((int)(y / K)) & 255];   /* row r: line r's */
+            gap = rgb8(c);
+        }
+        for (j = 0; j < 3; j++) {
+            a[j] = water_e[j][1] * vy + water_e[j][2];
+            a1[j] = water_e[j][1] * (vy + 1 / f) + water_e[j][2];
+        }
+        for (x = 0; x < (unsigned)tw; x++) {
+            double vx = (x + 0.5 - ox) / f, wy = water_e[1][0] * vx + a[1], t, u, vv, du, dv, cover;
+            unsigned lo, hi;
+            if (in[x]) {                /* drawn (before the water: what is past it was left out) */
+                out[x] = in[x];
+                continue;
+            }
+            if (!(wy != 0) || !((t = dy / wy) > 0)) {   /* no water surface this way: under it, deeper water; over it, the sky */
+                out[x] = dy < 0 ? gap : 0;
+                continue;
+            }
+            u = (water_cam[0] + t * (water_e[0][0] * vx + a[0])) / WATER_U;
+            vv = (water_cam[2] + t * (water_e[2][0] * vx + a[2])) / WATER_V;
+            {                           /* the pixel's footprint on the cells: the next column's and line's hits */
+                double vx1 = vx + 1 / f, t1 = dy / (water_e[1][0] * vx1 + a[1]), t2 = dy / (water_e[1][0] * vx + a1[1]);
+                double ux = (water_cam[0] + t1 * (water_e[0][0] * vx1 + a[0])) / WATER_U - u;
+                double vx_ = (water_cam[2] + t1 * (water_e[2][0] * vx1 + a[2])) / WATER_V - vv;
+                double uy = (water_cam[0] + t2 * (water_e[0][0] * vx + a1[0])) / WATER_U - u;
+                double vy_ = (water_cam[2] + t2 * (water_e[2][0] * vx + a1[2])) / WATER_V - vv;
+                du = t1 > 0 && t2 > 0 ? fmax(fabs(ux), fabs(uy)) : 64;
+                dv = t1 > 0 && t2 > 0 ? fmax(fabs(vx_), fabs(vy_)) : 16;
+            }
+            if (point) {
+                int64_t iu = (int64_t)floor(u), iv = (int64_t)floor(vv);
+                cover = cell[iv & 15][iu & 63] >= 2;
+            } else {
+                int64_t u0 = (int64_t)floor(u - du / 2), u1 = (int64_t)floor(u + du / 2);
+                int64_t v0 = (int64_t)floor(vv - dv / 2), v1 = (int64_t)floor(vv + dv / 2);
+                if (u1 - u0 > 4096)
+                    u0 = 0, u1 = 63;
+                if (v1 - v0 > 4096)
+                    v0 = 0, v1 = 15;
+                cover = (double)ripples_in(u0, u1, v0, v1) / (double)((u1 - u0 + 1) * (v1 - v0 + 1));
+            }
+            for (lo = 0, hi = 79; lo < hi;) {   /* the first strip row as deep as t (t: the view's depth) */
+                unsigned m = (lo + hi) / 2;
+                if (water_depth[m] >= t)
+                    hi = m;
+                else
+                    lo = m + 1;
+            }
+            if (cover <= 0)
+                out[x] = gap;
+            else if (cover >= 1 || gap == 1)
+                out[x] = cover >= 0.5 || gap != 1 ? ripple[lo] : gap;
+            else
+                out[x] = mix(gap, ripple[lo], cover);
+        }
+    }
+    return tex32;
+}
+
 /* the texels to the canvas, the screen's picture */
 static void hand(void)
 {
+    const uint32_t *t32 = NULL;
+
+    if (water_seen && water_here()) {   /* the water's colours from the band this picture is shown with: fw_sky's, after it */
+        water_seen = 0;
+        if (handed) {
+            water_due = 1;
+            return;
+        }
+        t32 = water_pass();
+    }
+    water_seen = 0;
     rm_canvas_taken();
-    nshvc_ext_canvas_screen(0, tex, tw, th, K, 1, 0);
+    if (t32)
+        nshvc_ext_canvas_screen32(0, t32, tw, th, K, 1, 0);
+    else
+        nshvc_ext_canvas_screen(0, tex, tw, th, K, 1, 0);
     if (!handed) {                      /* the first picture: the screen taken over with it, in the same blank */
         nshvc_hold_interrupts(1);
         takeover();
@@ -2740,6 +3170,7 @@ int fw_picture(int j)
     if (getenv("FW_CHECK"))
         check_picture(j);
     prof_mark(-1);
+    fw_water[3] = 0;                    /* no water until this picture's view says so (water_view) */
     fw_drawing = 1;
     list_gen++;
     m = rm_tween_buffers(j, RM_TICKS, scratch[0], scratch[1]);
@@ -3134,7 +3565,25 @@ static int sky_line(int h)
     return l;
 }
 
+static void sky_make(void);
+
+/* the band for the picture just drawn, then a water picture handed with
+   its colours from it */
 void fw_sky(void)
+{
+    const uint32_t *t32;
+
+    sky_make();
+    if (!water_due)
+        return;
+    water_due = 0;
+    if ((t32 = water_pass())) {
+        rm_canvas_taken();
+        nshvc_ext_canvas_screen32(0, t32, tw, th, K, 1, 0);
+    }
+}
+
+static void sky_make(void)
 {
     uint8_t *w = nshvc_wram();
     unsigned n, e, i, line = 0, band = 0, room = 0;
@@ -3165,6 +3614,8 @@ void fw_sky(void)
     }
     for (i = line; i < 256; i++)        /* the last held past the table */
         orig[i] = orig[line - 1];
+    memcpy(water_band, orig, sizeof water_band);   /* the water's colour between its ripples */
+    water_band_ok = 1;
     memcpy(sky_kept, w + SKY_TABLE, 3 * SKY_ENTRIES + 1);
     memcpy(sky_kept + 3 * SKY_ENTRIES + 1, w + SKY_BANDS, 0x300);
     sky_in = 1;
