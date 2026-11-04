@@ -26,7 +26,7 @@ static NSString *const kernel_source = @
 "#include <metal_stdlib>\n"
 "using namespace metal;\n"
 "struct Span { int y, x0, x1, pad0; long xl, u, du, v, dv; ushort base, mask; uchar bank, por, hi, colour, textured, pad1[7];\n"
-"              float pq, pdq, pa, pda, pb, pdb, pad2[2]; };\n"
+"              float pq, pdq, pa, pda, pb, pdb, za, zx, zy, pad2; };\n"
 "static uint persp_texel(float a, float q) {\n"
 "    float t = precise::divide(a, q);\n"
 "    if (!(t > -1.0e9f && t < 1.0e9f)) t = 0.0f;\n"
@@ -37,7 +37,8 @@ static NSString *const kernel_source = @
 "    if (!(por & 1)) { if (por & 8) { if (!(c & 15)) return -1; } else if (!c) return -1; }\n"
 "    return c;\n"
 "}\n"
-"struct Poly { int ya, yb, le, ln, re, rn, ou, ov; ushort base, mask; uchar bank, por, hi, colour, kind, persp, pad[6]; };\n"
+"struct Poly { int ya, yb, le, ln, re, rn, ou, ov; ushort base, mask; uchar bank, por, hi, colour, kind, persp, pad[6];\n"
+"              float za, zx, zy, zpad; };\n"
 "struct Edge { long from, to; int y0, n, ua, va, dua, dva; float qa, qb; int pad[4]; };\n"
 "static long edge_x(long from, long to, int y0, int rows, int row) {\n"
 "    long num = (to - from) * 256 * (long)(row - y0), q = num / rows;\n"
@@ -63,7 +64,7 @@ static NSString *const kernel_source = @
 "static bool poly_row(Poly p, device const Edge *edges, int row, int w, thread Span &s) {\n"
 "    Edge l = edges[edge_at(edges, p.le, p.ln, row)], r = edges[edge_at(edges, p.re, p.rn, row)];\n"
 "    long xl = edge_x(l.from, l.to, l.y0, l.n, row) >> 8, xr = edge_x(r.from, r.to, r.y0, r.n, row) >> 8;\n"
-"    s.y = row; s.x0 = 1; s.x1 = 0; s.textured = 0; s.colour = p.colour;\n"
+"    s.y = row; s.x0 = 1; s.x1 = 0; s.textured = 0; s.colour = p.colour; s.za = p.za; s.zx = p.zx; s.zy = p.zy;\n"
 "    if (p.kind == 0) {\n"
 "        if (xr < xl) return false;\n"
 "        long x0 = xl < 0 ? 0 : xl, x1 = xr >= w ? w - 1 : xr;\n"
@@ -106,10 +107,17 @@ static NSString *const kernel_source = @
 "    poly_row(p, edges, sp[at].y, (int)w, s);\n"
 "    sp[at] = s;\n"
 "}\n"
+"/* fullwindow.c's sunk: the water nearer than the span on this pixel's ray */\n"
+"static bool sunk(Span s, int x, float4 water) {\n"
+"    float z = precise::fma(s.zy, (float)s.y, precise::fma(s.zx, (float)x, s.za));\n"
+"    float w = precise::fma(water.z, (float)s.y, precise::fma(water.y, (float)x, water.x));\n"
+"    return z > 0 && w > 0 && z < w;\n"
+"}\n"
 "kernel void fill(device uchar *out [[buffer(0)]], device const Span *sp [[buffer(1)]],\n"
 "                 device const uint *row_at [[buffer(2)]], device const uint *row_spans [[buffer(3)]],\n"
 "                 device const uchar *banks [[buffer(4)]], device const short *slot [[buffer(5)]],\n"
-"                 constant uint &w [[buffer(6)]], constant uint &h [[buffer(7)]], uint2 g [[thread_position_in_grid]]) {\n"
+"                 constant uint &w [[buffer(6)]], constant uint &h [[buffer(7)]], constant float4 &water [[buffer(11)]],\n"
+"                 uint2 g [[thread_position_in_grid]]) {\n"
 "    if (g.y >= h) return;\n"
 "    int c0 = (int)g.x * 32, c1 = c0 + 31;\n"
 "    if (c0 >= (int)w) return;\n"
@@ -118,14 +126,15 @@ static NSString *const kernel_source = @
 "        Span s = sp[row_spans[i]];\n"
 "        int a = max(s.x0, c0), b = min(s.x1, c1);\n"
 "        if (a > b) continue;\n"
-"        if (!s.textured) { for (int x = a; x <= b; x++) o[x] = s.colour; continue; }\n"
+"        bool deep = water.w != 0 && (s.za != 0 || s.zx != 0 || s.zy != 0);\n"
+"        if (!s.textured) { for (int x = a; x <= b; x++) if (!(deep && sunk(s, x, water))) o[x] = s.colour; continue; }\n"
 "        device const uchar *bank = banks + (ulong)slot[s.bank] * 65536;\n"
 "        if (s.textured == 2) {\n"
 "            for (int x = a; x <= b; x++) {\n"
 "                float k = (float)(x - (int)s.xl), q = precise::fma(s.pdq, k, s.pq);\n"
 "                uint iu = persp_texel(precise::fma(s.pda, k, s.pa), q), iv = persp_texel(precise::fma(s.pdb, k, s.pb), q);\n"
 "                int c = texel_colour(bank[(ushort)((((iv << 8) | iu) & s.mask) + s.base)], s.por, s.hi);\n"
-"                if (c >= 0) o[x] = (uchar)c;\n"
+"                if (c >= 0 && !(deep && sunk(s, x, water))) o[x] = (uchar)c;\n"
 "            }\n"
 "            continue;\n"
 "        }\n"
@@ -133,14 +142,77 @@ static NSString *const kernel_source = @
 "            long k = (long)x - s.xl;\n"
 "            uint iu = (uint)((s.u + s.du * k) >> 32) & 255, iv = (uint)((s.v + s.dv * k) >> 32) & 255;\n"
 "            int c = texel_colour(bank[(ushort)((((iv << 8) | iu) & s.mask) + s.base)], s.por, s.hi);\n"
-"            if (c >= 0) o[x] = (uchar)c;\n"
+"            if (c >= 0 && !(deep && sunk(s, x, water))) o[x] = (uchar)c;\n"
 "        }\n"
 "    }\n"
+"}\n"
+"/* fullwindow.c's water_texel, step for step */\n"
+"struct Job { int w, h, under, point; float ox, oy, f, dy, wu, wv, pad0, pad1; float e[12]; float cam[4];\n"
+"             float depth[80]; uint ripple[80]; int sat[17 * 65 + 3]; };\n"
+"static int ripples_to(constant Job &j, int u, int v) {\n"
+"    int qu = u >= 0 ? u / 64 : -((63 - u) / 64), qv = v >= 0 ? v / 16 : -((15 - v) / 16);\n"
+"    int ru = u - 64 * qu, rv = v - 16 * qv;\n"
+"    return qu * qv * j.sat[16 * 65 + 64] + qu * j.sat[rv * 65 + 64] + qv * j.sat[16 * 65 + ru] + j.sat[rv * 65 + ru];\n"
+"}\n"
+"static int ripples_in(constant Job &j, int u0, int u1, int v0, int v1) {\n"
+"    return ripples_to(j, u1 + 1, v1 + 1) - ripples_to(j, u0, v1 + 1) - ripples_to(j, u1 + 1, v0) + ripples_to(j, u0, v0);\n"
+"}\n"
+"kernel void water(device const uchar *in [[buffer(0)]], device uint *out [[buffer(1)]], constant Job &j [[buffer(2)]],\n"
+"                  device const uint *gap [[buffer(3)]], uint2 gid [[thread_position_in_grid]]) {\n"
+"    if ((int)gid.x >= j.w || (int)gid.y >= j.h) return;\n"
+"    int x = (int)gid.x, y = (int)gid.y;\n"
+"    ulong at = (ulong)y * (ulong)j.w + (ulong)x;\n"
+"    uint c = in[at], g = gap[y];\n"
+"    if (c) { out[at] = c; return; }\n"
+"    float fx = (float)x + 0.5f, fy = (float)y + 0.5f;\n"
+"    float vx = precise::divide(fx - j.ox, j.f), vy = precise::divide(fy - j.oy, j.f);\n"
+"    float wy = precise::fma(j.e[4], vx, precise::fma(j.e[5], vy, j.e[6]));\n"
+"    float t = precise::divide(j.dy, wy);\n"
+"    if (!(wy != 0) || !(t > 0)) { out[at] = j.under ? g : 0u; return; }\n"
+"    float u = precise::divide(precise::fma(t, precise::fma(j.e[0], vx, precise::fma(j.e[1], vy, j.e[2])), j.cam[0]), j.wu);\n"
+"    float v = precise::divide(precise::fma(t, precise::fma(j.e[8], vx, precise::fma(j.e[9], vy, j.e[10])), j.cam[2]), j.wv);\n"
+"    float vx1 = precise::divide(fx + 1.0f - j.ox, j.f), vy1 = precise::divide(fy + 1.0f - j.oy, j.f);\n"
+"    float t1 = precise::divide(j.dy, precise::fma(j.e[4], vx1, precise::fma(j.e[5], vy, j.e[6])));\n"
+"    float t2 = precise::divide(j.dy, precise::fma(j.e[4], vx, precise::fma(j.e[5], vy1, j.e[6])));\n"
+"    float du, dv;\n"
+"    if (t1 > 0 && t2 > 0) {\n"
+"        float ux = precise::divide(precise::fma(t1, precise::fma(j.e[0], vx1, precise::fma(j.e[1], vy, j.e[2])), j.cam[0]), j.wu) - u;\n"
+"        float vx_ = precise::divide(precise::fma(t1, precise::fma(j.e[8], vx1, precise::fma(j.e[9], vy, j.e[10])), j.cam[2]), j.wv) - v;\n"
+"        float uy = precise::divide(precise::fma(t2, precise::fma(j.e[0], vx, precise::fma(j.e[1], vy1, j.e[2])), j.cam[0]), j.wu) - u;\n"
+"        float vy_ = precise::divide(precise::fma(t2, precise::fma(j.e[8], vx, precise::fma(j.e[9], vy1, j.e[10])), j.cam[2]), j.wv) - v;\n"
+"        du = precise::max(precise::abs(ux), precise::abs(uy));\n"
+"        dv = precise::max(precise::abs(vx_), precise::abs(vy_));\n"
+"    } else { du = 64.0f; dv = 16.0f; }\n"
+"    du = precise::min(du, 64.0f);\n"
+"    dv = precise::min(dv, 16.0f);\n"
+"    float fu = u - 64.0f * precise::floor(precise::divide(u, 64.0f));\n"
+"    float fv = v - 16.0f * precise::floor(precise::divide(v, 16.0f));\n"
+"    int u0, u1, v0, v1;\n"
+"    if (j.point) { u0 = u1 = (int)precise::floor(fu); v0 = v1 = (int)precise::floor(fv); }\n"
+"    else {\n"
+"        u0 = (int)precise::floor(fu - du * 0.5f); u1 = (int)precise::floor(fu + du * 0.5f);\n"
+"        v0 = (int)precise::floor(fv - dv * 0.5f); v1 = (int)precise::floor(fv + dv * 0.5f);\n"
+"    }\n"
+"    float cover = precise::divide((float)ripples_in(j, u0, u1, v0, v1), (float)((u1 - u0 + 1) * (v1 - v0 + 1)));\n"
+"    int lo = 0, hi = 79;\n"
+"    while (lo < hi) { int m = (lo + hi) / 2; if (j.depth[m] >= t) hi = m; else lo = m + 1; }\n"
+"    uint rip = j.ripple[lo], o = 0xFF000000u;\n"
+"    if (!(cover > 0)) { out[at] = g; return; }\n"
+"    if (g == 1u) { out[at] = cover >= 0.5f ? rip : g; return; }\n"
+"    if (cover >= 1) { out[at] = rip; return; }\n"
+"    for (int s = 0; s < 24; s += 8) {\n"
+"        float a = (float)(g >> s & 255u), b = (float)(rip >> s & 255u);\n"
+"        o |= (uint)precise::floor(precise::fma(b - a, cover, a) + 0.5f) << s;\n"
+"    }\n"
+"    out[at] = o;\n"
 "}\n";
 
 static id<MTLDevice> dev;
 static id<MTLCommandQueue> queue;
-static id<MTLComputePipelineState> pipe_fill, pipe_rows;
+static id<MTLComputePipelineState> pipe_fill, pipe_rows, pipe_water;
+static id<MTLBuffer> buf_out32, buf_job, buf_gap;
+static size_t out32_len;
+static long water_fills, water_apart;
 static id<MTLBuffer> buf_out, buf_spans, buf_row_at, buf_row_spans, buf_banks, buf_slot, buf_polys, buf_edges, buf_row_poly;
 static size_t out_len;
 static uint8_t bank_ok[256];            /* a ROM bank's bytes in buf_banks */
@@ -275,6 +347,7 @@ static void fill(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
         [e setBuffer:buf_slot offset:0 atIndex:5];
         [e setBytes:&wu length:4 atIndex:6];
         [e setBytes:&hu length:4 atIndex:7];
+        [e setBytes:fw_water length:16 atIndex:11];
         [e dispatchThreads:MTLSizeMake(((NSUInteger)w + 31) / 32, (NSUInteger)h, 1)
          threadsPerThreadgroup:MTLSizeMake(8, 8, 1)];
         [e endEncoding];
@@ -288,6 +361,70 @@ static void fill(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
         if (!check_fills++)
             atexit(check_report);
         check_apart += apart;
+    }
+}
+
+/* the water's 32-bit picture's memory, shared with the GPU */
+static uint32_t *texels32_alloc(size_t len)
+{
+    buf_out32 = [dev newBufferWithLength:len options:MTLResourceStorageModeShared];
+    out32_len = buf_out32 ? len : 0;
+    return buf_out32 ? (uint32_t *)buf_out32.contents : NULL;
+}
+
+static void water_report(void)
+{
+    fprintf(stderr, "gpucheck: %ld water passes, %ld texels apart from the CPU's\n", water_fills, water_apart);
+}
+
+/* the water pass (fullwindow.h) on the GPU: the shared pictures only */
+static void water_fill(const uint8_t *in, uint32_t *out, const FwWaterJob *j, const uint32_t *gap)
+{
+    size_t len = (size_t)j->w * (size_t)j->h;
+    if (in != (const uint8_t *)buf_out.contents || out != (uint32_t *)buf_out32.contents || len > out_len ||
+        len * 4 > out32_len) {
+        fw_water_fill_cpu(in, out, j, gap);
+        return;
+    }
+    buf_job = grow(buf_job, sizeof *j);
+    buf_gap = grow(buf_gap, (size_t)j->h * 4);
+    if (!buf_job || !buf_gap) {
+        fw_water_fill_cpu(in, out, j, gap);
+        return;
+    }
+    memcpy(buf_job.contents, j, sizeof *j);
+    memcpy(buf_gap.contents, gap, (size_t)j->h * 4);
+    @autoreleasepool {
+        id<MTLCommandBuffer> cb = [queue commandBuffer];
+        id<MTLComputeCommandEncoder> e = [cb computeCommandEncoder];
+        [e setComputePipelineState:pipe_water];
+        [e setBuffer:buf_out offset:0 atIndex:0];
+        [e setBuffer:buf_out32 offset:0 atIndex:1];
+        [e setBuffer:buf_job offset:0 atIndex:2];
+        [e setBuffer:buf_gap offset:0 atIndex:3];
+        [e dispatchThreads:MTLSizeMake((NSUInteger)j->w, (NSUInteger)j->h, 1) threadsPerThreadgroup:MTLSizeMake(16, 16, 1)];
+        [e endEncoding];
+        [cb commit];
+        [cb waitUntilCompleted];
+    }
+    if (getenv("FW_GPUCHECK")) {
+        static uint32_t *ref;
+        static size_t ref_len;
+        size_t i;
+        long apart = 0;
+        if (ref_len < len) {
+            free(ref);
+            ref = malloc(len * 4);
+            ref_len = ref ? len : 0;
+        }
+        if (ref) {
+            fw_water_fill_cpu(in, ref, j, gap);
+            for (i = 0; i < len; i++)
+                apart += out[i] != ref[i];
+            if (!water_fills++)
+                atexit(water_report);
+            water_apart += apart;
+        }
     }
 }
 
@@ -314,7 +451,9 @@ int gpu_metal_init(void)
     pipe_fill = [dev newComputePipelineStateWithFunction:[lib newFunctionWithName:@"fill"] error:&err];
     if (pipe_fill)
         pipe_rows = [dev newComputePipelineStateWithFunction:[lib newFunctionWithName:@"rows"] error:&err];
-    if (!pipe_fill || !pipe_rows) {
+    if (pipe_rows)
+        pipe_water = [dev newComputePipelineStateWithFunction:[lib newFunctionWithName:@"water"] error:&err];
+    if (!pipe_fill || !pipe_rows || !pipe_water) {
         fprintf(stderr, "gpu_metal: the pipeline: %s\n", err.localizedDescription.UTF8String);
         return 0;
     }
@@ -326,5 +465,7 @@ int gpu_metal_init(void)
         return 0;
     fw_texels_alloc = texels_alloc;
     fw_span_filler = fill;
+    fw_texels32_alloc = texels32_alloc;
+    fw_water_filler = water_fill;
     return 1;
 }
