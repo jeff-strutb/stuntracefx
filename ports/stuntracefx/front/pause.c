@@ -223,8 +223,8 @@ static void tag_box(int i, float *x, float *y)
 /* the panel's own buttons: RESUME and DEFAULT KEYS */
 enum { HIT_NONE = -1, HIT_RESUME = 100, HIT_DEFAULTS = 101 };
 static const struct { int id; const char *name; float x, y, w, h; } k_btn[] = {
-    { HIT_RESUME, "RESUME", 196, 352, 112, 30 },
-    { HIT_DEFAULTS, "DEFAULT KEYS", 320, 352, 136, 30 },
+    { HIT_RESUME, "RESUME", 196, 356, 112, 30 },
+    { HIT_DEFAULTS, "DEFAULT KEYS", 320, 356, 136, 30 },
 };
 
 /* what is at (x, y), the panel's points: a control's index, a panel
@@ -393,14 +393,15 @@ static void key_label(char *out, size_t n, int vk)
 /* The controller, the Super Famicom's as photographed: its shapes laid
    out in the photograph's pixels (1600 x 1200, the body 1,355 across) and
    brought to the panel's points by RX and RY (0.2214 a pixel, its middle
-   at the panel's (320, 190)); a length by RS. The body is its top half, a
-   bar across the whole width (x 160 to 1515, its top at 318, corners of
-   radius 230: the top runs flat and turns square-ish into the grips), the
-   grips' circles under it (r 310 about (470, 650) and (1205, 650)) and the
-   middle down to its underside at 905, joined smoothly so the underside
-   curves up between the grips; each shoulder button is the body's outline
-   56 pixels further out, cut to its end of the top down to where it meets
-   the body. The photograph's logo is left out. */
+   at the panel's (320, 190)); a length by RS. The body is the two grips'
+   circles (r 320 about (480, 640) and (1195, 640)) and the middle between
+   their centres, its top the line along the circles' tops (y 320) and its
+   underside at 905, joined to the grips by a fillet below their centres
+   only, so the top runs straight into them and the underside curves up
+   between them. Each shoulder button is a band 56 pixels deep along the
+   outline, from 40 degrees above the grip's centre line (cut across the
+   outline) to x 550 on the top (and its mirror), its ends rounded. The
+   photograph's logo is left out. */
 #define RSC 0.2214f
 #define RX(x) (320 + ((x) - 837.5f) * RSC)
 #define RY(y) (190 + ((y) - 650) * RSC)
@@ -415,17 +416,26 @@ static float smin(float a, float b, float k)
 /* the body's distance at panel point (px, py), in points */
 static float d_body(float px, float py)
 {
-    float l = d_circle(px, py, RX(470), RY(650), RS(310)), r = d_circle(px, py, RX(1205), RY(650), RS(310));
-    float top = d_roundrect(px, py, RX(160), RY(318), RS(1355), RS(482), RS(230));
-    float mid = d_roundrect(px, py, RX(470), RY(318), RS(735), RS(587), RS(20));
-    return smin(fminf(fminf(l, r), top), mid, RS(150));
+    float l = d_circle(px, py, RX(480), RY(640), RS(320)), r = d_circle(px, py, RX(1195), RY(640), RS(320));
+    float mid = d_roundrect(px, py, RX(480), RY(320), RS(715), RS(585), RS(1));
+    float lobes = fminf(l, r);
+    return py > RY(640) ? smin(lobes, mid, RS(150)) : fminf(lobes, mid);
 }
 
-/* a shoulder button: the outline grown, cut to x0..x1 of the top, down to
-   where it meets the grip (y 345) */
-static float d_shoulder(float px, float py, float x0, float x1)
+/* a shoulder button's distance: side -1 the left (L), 1 the right (R) */
+static float d_shoulder(float px, float py, int side)
 {
-    return fmaxf(d_body(px, py) - RS(56), d_roundrect(px, py, RX(x0), RY(240), RS(x1 - x0), RS(105), RS(30)));
+    const float r = RS(14);
+    float cx = side < 0 ? RX(480) : RX(1195), cy = RY(640);
+    /* the outline 56 pixels out */
+    float band = d_body(px, py) - RS(56);
+    /* the cut across the outline: the line from the grip's centre at 40
+       degrees above its centre line, outward; and the one at x 550 */
+    float ux = side * cosf(40 * 3.14159265f / 180), uy = -sinf(40 * 3.14159265f / 180);
+    float across = side * (ux * (py - cy) - uy * (px - cx));     /* > 0 below the cut */
+    float inner = side < 0 ? px - RX(550) : RX(1125) - px;
+    float cut = fmaxf(across, inner);
+    return hypotf(fmaxf(band + r, 0), fmaxf(cut + r, 0)) + fminf(fmaxf(band + r, cut + r), 0) - r;
 }
 
 /* a triangle (an arrow on the D-pad) by its three corners, in points */
@@ -462,7 +472,7 @@ static void text_plain(Img *m, const char *s, float cx, float top, float dot, ui
 static void draw_controller(Img *m)
 {
     const uint32_t body = 0xDCDCE0, edge = 0xA9A9B1, shoulder = 0xC9C9CF, dpad = 0x77777D, plate = 0x9D9DA3;
-    const float bx0 = RX(150), by0 = RY(240), bx1 = RX(1525), by1 = RY(990);
+    const float bx0 = RX(150), by0 = RY(240), bx1 = RX(1525), by1 = RY(975);
     static const float arrows[4][6] = {      /* the D-pad's arrows, photograph pixels */
         { 392, 588, 378, 612, 406, 612 }, { 392, 772, 378, 748, 406, 748 },
         { 300, 680, 324, 666, 324, 694 }, { 484, 680, 460, 666, 460, 694 } };
@@ -483,10 +493,10 @@ static void draw_controller(Img *m)
     }
     /* the shadow under it, the shoulders, the body */
     SHAPE(m, bx0, by0, bx1, by1 + 8, 0x000000, 0.35f, d_body(px - 1.5f, py - 6));
-    SHAPE(m, RX(225), RY(240), RX(560), RY(360), shoulder, 1, d_shoulder(px, py, 235, 550));
-    SHAPE(m, RX(1115), RY(240), RX(1450), RY(360), shoulder, 1, d_shoulder(px, py, 1125, 1440));
-    SHAPE(m, RX(225), RY(240), RX(560), RY(360), edge, 1, fabsf(d_shoulder(px, py, 235, 550)) - 0.5f);
-    SHAPE(m, RX(1115), RY(240), RX(1450), RY(360), edge, 1, fabsf(d_shoulder(px, py, 1125, 1440)) - 0.5f);
+    SHAPE(m, RX(90), RY(250), RX(560), RY(560), shoulder, 1, d_shoulder(px, py, -1));
+    SHAPE(m, RX(1115), RY(250), RX(1585), RY(560), shoulder, 1, d_shoulder(px, py, 1));
+    SHAPE(m, RX(90), RY(250), RX(560), RY(560), edge, 1, fabsf(d_shoulder(px, py, -1)) - 0.5f);
+    SHAPE(m, RX(1115), RY(250), RX(1585), RY(560), edge, 1, fabsf(d_shoulder(px, py, 1)) - 0.5f);
     SHAPE(m, bx0, by0, bx1, by1, body, 1, d_body(px, py));
     SHAPE(m, bx0, by0, bx1, by1, edge, 1, fabsf(d_body(px, py)) - 0.6f);
     /* the cable's notch */
@@ -591,11 +601,11 @@ static void draw_panel(Img *m)
     if (asking >= 0) {
         char s[64];
         snprintf(s, sizeof s, "PRESS A KEY FOR %s", k_ctl[asking].name);
-        text_centre(m, s, PW / 2.0f, 302, 2, GOLD);
-        text_centre(m, "ESCAPE TO CANCEL", PW / 2.0f, 326, 1.25f, 0xA0A0AA);
+        text_centre(m, s, PW / 2.0f, 312, 2, GOLD);
+        text_centre(m, "ESCAPE TO CANCEL", PW / 2.0f, 334, 1.25f, 0xA0A0AA);
     } else {
-        text_centre(m, "CLICK A BUTTON TO CHANGE ITS KEY", PW / 2.0f, 302, 2, WHITE);
-        text_centre(m, "ESCAPE TO RESUME", PW / 2.0f, 326, 1.25f, 0xA0A0AA);
+        text_centre(m, "CLICK A BUTTON TO CHANGE ITS KEY", PW / 2.0f, 312, 2, WHITE);
+        text_centre(m, "ESCAPE TO RESUME", PW / 2.0f, 334, 1.25f, 0xA0A0AA);
     }
     for (k = 0; k < sizeof k_btn / sizeof k_btn[0]; k++) {
         int lit = hover == k_btn[k].id;
