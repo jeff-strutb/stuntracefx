@@ -2257,6 +2257,7 @@ l922C:
     R[6] = gsu_sub(R[6], 2, 0);
     gsu_stb(R[6], (uint8_t)R[2]);
 l9237:
+    sc_walk_listed(R[6]);               /* the renderer's display list (scene.h): this entry's face */
     R[0] = gsu_ldw(FX_ROM_BANK);
     gsu_romb(R[0]);
 l923C:

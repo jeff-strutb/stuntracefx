@@ -39,6 +39,7 @@
 #include "console_ext.h"
 #include "remaster.h"
 #include "fullwindow.h"
+#include "scene.h"
 #include "menuwindow.h"
 #include "rm_options.h"
 
@@ -438,6 +439,12 @@ static int sunk(float za, float zx, float zy, int32_t x, int32_t y)
     return z > 0 && w > 0 && z < w;
 }
 
+/* the spans being made are the CPU reference's alone (a model face the
+   GPU draws from the display list, FW_GPUCHECK's reference): FwSpan's
+   pad1[0] 1; a span with textured 6 is such a face for the GPU, x1 its
+   place in the display list (fullwindow.h) */
+static int span_ref_only;
+
 static FwSpan *span_new(void)
 {
     if (nspans == cap_spans) {
@@ -451,6 +458,7 @@ static FwSpan *span_new(void)
     {
         FwSpan *p = &spans[nspans++];
         int none = fw_hud || label_on;
+        p->pad1[0] = (uint8_t)span_ref_only;
         p->za = none ? 0 : cur_z[0];
         p->zx = none ? 0 : cur_z[1];
         p->zy = none ? 0 : cur_z[2];
@@ -466,7 +474,7 @@ static void span_flat(int32_t y, int32_t x0, int32_t x1, uint8_t c)
     if (nspans) {                       /* the last one's run on: the same pixels as two */
         p = &spans[nspans - 1];
         if (!p->textured && p->y == y && p->colour == c && p->x1 + 1 == x0 && p->za == cur_z[0] && p->zx == cur_z[1] &&
-            p->zy == cur_z[2] && !fw_hud && !label_on) {
+            p->zy == cur_z[2] && !fw_hud && !label_on && p->pad1[0] == span_ref_only) {
             p->x1 = x1;
             return;
         }
@@ -524,6 +532,8 @@ void fw_span_fill_cpu(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
         uint8_t *o = out + (size_t)p->y * w;
         int32_t x;
         int deep = fw_water[3] != 0 && (p->za != 0 || p->zx != 0 || p->zy != 0);
+        if (p->textured == 6)           /* a face the GPU draws (the reference's own spans are beside it) */
+            continue;
         if (!p->textured) {
             if (!deep)
                 memset(o + p->x0, p->colour, (size_t)(p->x1 - p->x0 + 1));
@@ -1090,6 +1100,11 @@ double fw_focal_y(void)
 static float fw_focal_xf(void) { fw_focal_x(); return focal_xf; }
 static float fw_focal_yf(void) { fw_focal_y(); return focal_yf; }
 int fw_half_width(void) { return tw / 2; }
+void fw_view_centre(float *cx, float *cy)
+{
+    *cx = (float)(tw / 2);
+    *cy = centre_rowf();
+}
 
 int fw_view_words(const uint16_t w[6], uint16_t out[8])
 {
@@ -2960,8 +2975,29 @@ void fw_draw_list(void)
     at = DRAW_LIST;
     for (;;) {
         int8_t type = (int8_t)ram8(at);
+        int face = fw_drawing && sc_gpu_on() ? sc_face_for_entry(at) : -1;
+        if (face >= 0 && getenv("SC_NEARREF")) {    /* (a check) a face with a near corner left to the reference */
+            size_t nf;
+            const ScFace *fc = sc_list_faces(&nf);
+            if ((size_t)face < nf && fc[face].pad[0])
+                face = -1;
+        }
         at++;
         draw_depth(type >= 3 ? (uint16_t)(at + 1) : type < 0 ? (uint16_t)(at + 7) : 0);
+        if (type && face >= 0) {        /* a model face the GPU draws from the display list (scene.h) */
+            FwSpan *m = span_new();
+            if (m) {
+                m->textured = 6;
+                m->y = m->x0 = 0;
+                m->x1 = face;
+                m->pad1[0] = 0;
+            }
+            if (!fw_env("FW_GPUCHECK")) {   /* (with the check, the reference's spans too, the CPU's alone) */
+                at = (uint16_t)(type >= 3 ? at + 1 + 4 * type : type == 2 ? at + 9 : at + 7 + 8 * (uint8_t)~type);
+                continue;
+            }
+            span_ref_only = 1;
+        }
         if (type >= 3)
             at = flat_polygon(at, type);
         else if (type == 2)
@@ -2970,9 +3006,12 @@ void fw_draw_list(void)
             break;
         else
             at = tex_polygon(at, (uint8_t)~type);
+        span_ref_only = 0;
     }
+    span_ref_only = 0;
     cur_z[0] = cur_z[1] = cur_z[2] = 0;
     list_gen++;                         /* the list drawn: its exact vertices gone */
+    sc_entries_drawn();
 }
 
 /* ---- the picture to the console ------------------------------------------ */
@@ -3820,6 +3859,7 @@ int fw_picture(int j)
     gpu_open = gpu_cleared = 0;
     fw_drawing = 1;
     list_gen++;
+    sc_picture_begin();                 /* the GPU's display list (scene.h) */
     m = rm_tween_buffers(j, RM_TICKS, scratch[0], scratch[1]);
     fw_drawing = 0;
     span_flush();

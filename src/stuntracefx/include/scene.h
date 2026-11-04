@@ -60,4 +60,53 @@ void sc_walk_chip_material(uint16_t r0);
 void sc_walk_face(uint16_t at);
 void sc_walk_facing(uint16_t at, uint16_t n);
 
+/* ---- the display list (stage 4): a picture's models for the GPU ----
+   SC_GPU=1: the full window's model faces drawn by the cartridge's GPU from
+   this list, in the walk's order (the chip still runs beside it: the
+   walk's inputs and its face order are taken in step, scene_walk.c). Each
+   slot: its matrix (row i column j at m[3 i + j], the chip's after a far
+   object's halving), its place, its point scale and shift (below 3 the
+   packed matrix's path, sc_points); each point: its three bytes as the ROM
+   holds them, mirrored (the x term subtracted), its slot; each face: its
+   corners (first, n: 2 a line), flat (its colour) or textured (bank, base,
+   mask, the plot options and the colour's high nibble, the texture's
+   offsets in 8.8); each corner: its point and its u, v. The GPU
+   transforms each point by the chip's integer steps, projects, clips at
+   the near plane and fills; the CPU touches no vertex's place. */
+typedef struct {
+    int16_t m[9], pos[3];
+    uint16_t scale, shift, pad[2];
+} ScSlot;                               /* 32 bytes */
+typedef struct {
+    int8_t b[3];
+    uint8_t mirrored;
+    uint32_t slot;
+} ScPoint;                              /* 8 bytes */
+typedef struct {
+    uint32_t first, n;
+    uint8_t textured, colour, bank, por, hi, pad[3];
+    uint16_t base, mask;
+    int16_t ou, ov;
+} ScFace;                               /* 24 bytes */
+typedef struct {
+    uint32_t point;
+    float u, v;
+} ScCorner;                             /* 12 bytes */
+
+/* SC_GPU set */
+int sc_gpu_on(void);
+/* a full-window picture begins: the list emptied */
+void sc_picture_begin(void);
+/* the list as it stands */
+const ScSlot *sc_list_slots(size_t *n);
+const ScPoint *sc_list_points(size_t *n);
+const ScFace *sc_list_faces(size_t *n);
+const ScCorner *sc_list_corners(size_t *n);
+/* the chip queued a face in its draw list (01:9237, the entry's type byte
+   at `entry`); fw_draw_list asks which list face an entry is (-1: none),
+   and when the list is drawn its entries are forgotten */
+void sc_walk_listed(uint16_t entry);
+int sc_face_for_entry(uint16_t entry);
+void sc_entries_drawn(void);
+
 #endif

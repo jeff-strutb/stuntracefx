@@ -85,6 +85,9 @@ double fw_focal_y(void);
 /* the full-window view is in force (its words set, not the HUD's pieces) */
 int fw_view_active(void);
 int fw_half_width(void);
+/* the projection's centre in texels (project_exact's): x tw / 2, y the
+   centre row; with fw_focal_x and fw_focal_y the GPU's projection */
+void fw_view_centre(float *cx, float *cy);
 
 /* the redraw's start (race_frame.c RmTweenDraw): the full-window view's
    words in the Super FX's RAM (the redraw puts the RAM back after) */

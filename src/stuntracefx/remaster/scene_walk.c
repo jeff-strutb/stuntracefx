@@ -61,6 +61,12 @@ typedef struct {
     uint16_t face_colour, base, mask, uv_at;
 } Material;
 
+/* the display list's (below) */
+static void list_slot_begin(const uint16_t angle[3], const uint16_t e[9]);
+static void list_points(const uint8_t *bytes, int n, int mirrored);
+static int32_t list_face(uint16_t p, const Material *mt);
+
+
 static uint8_t byte(const Walk *w, uint16_t a) { return gsu_peek8((uint32_t)w->bank << 16 | a); }
 static uint16_t word(const Walk *w, uint16_t a) { return (uint16_t)(byte(w, a) | byte(w, (uint16_t)(a + 1)) << 8); }
 static void push(Walk *w, int kind, uint16_t v)
@@ -92,6 +98,7 @@ static void walk_points(Walk *w, uint16_t at, int n, int mirrored)
     for (i = 0; i < 3 * n; i++)
         bytes[i] = byte(w, (uint16_t)(at + i));
     k = sc_points(bytes, n, mirrored, ram16(0x0032), ram16(0x0030), m, out);
+    list_points(bytes, n, mirrored);
     for (i = 0; i < k && w->np < 128; i++, w->np++) {
         w->vx[w->np] = (int16_t)(out[3 * i] + ram16(0x0026));
         w->vy[w->np] = (int16_t)(out[3 * i + 1] + ram16(0x0028));
@@ -222,7 +229,7 @@ static Material walk_material(const Walk *w, uint16_t p)
 /* ---- the check ---- */
 extern int64_t fw_facing_log[64];     /* the full window's crosses as fw_facing_cross makes them */
 extern int fw_facing_log_n;
-static int check = -1, brk;
+static int check = -1, brk, reporting, gpu;
 static long brk_face;
 static long mats, mat_apart, mat_kind[4], light_apart, shade_apart, light_checked;
 static long projected_out, fw_facings, fw_same, fw_zero_det, fw_flat, fw_held, fw_small;
@@ -441,9 +448,9 @@ static long next_command(Walk *w) { return run_command(w, (uint16_t)(w->r14 - 1)
 static long want = -1;                  /* the walk's next command */
 static int want_project;                /* the last command the projection: the chip may have rejected it */
 static uint16_t want_project_at, last_chip;
-static int face_q[256], face_qn, face_qat;
 static uint16_t face_mine[1024];
 static Material mat_mine[1024];
+static int32_t face_gid[1024];          /* each face's place in the display list (-1: none) */
 static int light_due;
 static int face_mn, face_mat;
 
@@ -455,6 +462,7 @@ void sc_walk_face(uint16_t at)
         fprintf(stderr, "  mine face $%04X\n", at);
     if (face_mn < 1024) {
         mat_mine[face_mn] = walk_material(&walk, at);
+        face_gid[face_mn] = list_face(at, &mat_mine[face_mn]);
         if (brk && (brk_face % 997) == 5)   /* SC_BREAK: a colour changed now and then */
             mat_mine[face_mn].colour ^= 1;
         face_mine[face_mn++] = at;
@@ -473,9 +481,11 @@ void sc_walk_begin(void)
 {
     if (check < 0) {
         const char *c = getenv("SC_CHECK");
-        check = c && c[0] == 'w';
+        reporting = c && c[0] == 'w';
+        gpu = getenv("SC_GPU") != NULL;
+        check = reporting || gpu;
         brk = getenv("SC_BREAK") != NULL;
-        if (check)
+        if (reporting)
             atexit(report);
     }
     if (!check)
@@ -508,6 +518,7 @@ void sc_walk_begin(void)
         for (i = 0; i < 9; i++)
             e[i] = ram16((uint16_t)(0x00E4 + 2 * i));
         sc_matrix(angle, rm_angle_frac, walk.flags, e, 0, m);
+        list_slot_begin(angle, e);
         walk_materials(&walk, m, rm_far_shift ? rm_far_depth : ram16(0x002A), ram16(0x108C) & 0xFF);
         if (walk.shade_table != ram16(0x004C) || walk.shade_at != ram16(0x0052))   /* the chip made them already */
             shade_apart++;
@@ -684,4 +695,144 @@ void sc_walk_chip_face(uint16_t at)
     }
     else
         face_mat++;
+}
+
+/* ---- the display list (scene.h) ---- */
+static ScSlot *l_slots;
+static ScPoint *l_points;
+static ScFace *l_faces;
+static ScCorner *l_corners;
+static size_t l_ns, l_np, l_nf, l_nc, cap_s, cap_p, cap_f, cap_c;
+static int l_slot = -1;                 /* this model's slot, or -1 (not a full-window picture) */
+static uint32_t l_point_base;
+
+static int grow_to(void **a, size_t *cap, size_t want, size_t size)
+{
+    if (want <= *cap)
+        return 1;
+    {
+        size_t c = *cap ? *cap : 1024;
+        void *n;
+        while (c < want)
+            c *= 2;
+        n = realloc(*a, c * size);
+        if (!n)
+            return 0;
+        *a = n;
+        *cap = c;
+    }
+    return 1;
+}
+
+int sc_gpu_on(void) { return check > 0 && gpu; }
+void sc_picture_begin(void) { l_ns = l_np = l_nf = l_nc = 0; }
+const ScSlot *sc_list_slots(size_t *n) { *n = l_ns; return l_slots; }
+const ScPoint *sc_list_points(size_t *n) { *n = l_np; return l_points; }
+const ScFace *sc_list_faces(size_t *n) { *n = l_nf; return l_faces; }
+const ScCorner *sc_list_corners(size_t *n) { *n = l_nc; return l_corners; }
+
+/* a model in a full-window picture: its slot (the matrix by the chip's
+   steps, a far object's halving in it; its place; its points' scale) */
+static void list_slot_begin(const uint16_t angle[3], const uint16_t e[9])
+{
+    ScSlot *sl;
+    uint16_t m[9], shift = ram16(0x0032);
+    int i;
+
+    l_slot = -1;
+    if (!sc_gpu_on() || !fw_view_active() || !grow_to((void **)&l_slots, &cap_s, l_ns + 1, sizeof *l_slots))
+        return;
+    sc_matrix(angle, rm_angle_frac, ram16(0x0054), e, rm_far_shift, m);
+    sl = &l_slots[l_ns];
+    for (i = 0; i < 9; i++)
+        sl->m[i] = (int16_t)m[i];
+    for (i = 0; i < 3; i++)
+        sl->pos[i] = (int16_t)ram16((uint16_t)(0x0026 + 2 * i));
+    sl->shift = shift;
+    sl->scale = (uint16_t)(shift < 16 ? 1u << shift : 0);   /* 01:8651: 1 doubled $0032 times */
+    sl->pad[0] = sl->pad[1] = 0;
+    l_slot = (int)l_ns++;
+    l_point_base = (uint32_t)l_np;
+}
+
+static void list_points(const uint8_t *bytes, int n, int mirrored)
+{
+    int e, k;
+    if (l_slot < 0 || !grow_to((void **)&l_points, &cap_p, l_np + 2 * (size_t)n, sizeof *l_points))
+        return;
+    for (e = 0; e < n; e++)
+        for (k = 0; k < (mirrored ? 2 : 1); k++) {
+            ScPoint *p = &l_points[l_np++];
+            p->b[0] = (int8_t)bytes[3 * e];
+            p->b[1] = (int8_t)bytes[3 * e + 1];
+            p->b[2] = (int8_t)bytes[3 * e + 2];
+            p->mirrored = (uint8_t)k;
+            p->slot = (uint32_t)l_slot;
+        }
+}
+
+/* a face of the record at p with its material: its corners (the record's
+   point indices, p + 7 on), a textured face's u, v (bank $03 from the
+   material's list, a byte each) */
+static int32_t list_face(uint16_t p, const Material *mt)
+{
+    ScFace *f;
+    int n = byte(&walk, p), i;
+    if (l_slot < 0 || mt->kind > 1 || n < 2 || !grow_to((void **)&l_faces, &cap_f, l_nf + 1, sizeof *l_faces) ||
+        !grow_to((void **)&l_corners, &cap_c, l_nc + (size_t)n, sizeof *l_corners))
+        return -1;
+    f = &l_faces[l_nf];
+    memset(f, 0, sizeof *f);
+    f->first = (uint32_t)l_nc;
+    f->n = (uint32_t)n;
+    f->textured = (uint8_t)(mt->kind == 1);
+    f->colour = mt->colour;
+    if (f->textured) {
+        f->bank = mt->bank;
+        f->base = mt->base;
+        f->mask = mt->mask;
+        f->por = (uint8_t)(mt->face_colour >> 8 & 0x1F);
+        f->hi = (uint8_t)(mt->face_colour & 0xF0);
+        f->ou = (int16_t)ram16(0x00C0);
+        f->ov = (int16_t)ram16(0x00C2);
+    }
+    for (i = 0; i < n; i++) {
+        ScCorner *c = &l_corners[l_nc++];
+        int q = byte(&walk, (uint16_t)(p + 7 + i));
+        if (q < walk.np && walk.vz[q] < 0x100)   /* a corner the chip projects as a near point (01:8C7D) */
+            f->pad[0] = 1;
+        c->point = l_point_base + byte(&walk, (uint16_t)(p + 7 + i));
+        c->u = c->v = 0;
+        if (f->textured) {
+            c->u = (float)rom3((uint16_t)(mt->uv_at + 2 * i));
+            c->v = (float)rom3((uint16_t)(mt->uv_at + 2 * i + 1));
+        }
+    }
+    return (int32_t)l_nf++;
+}
+
+/* the chip's queued entries and the faces they are, until the list is drawn */
+static int32_t entry_face[0x400];
+static uint16_t entry_used[0x400];
+static int entries;
+
+void sc_walk_listed(uint16_t entry)
+{
+    int32_t gid;
+    if (!sc_gpu_on() || !walking || !face_mat || l_slot < 0)
+        return;
+    gid = face_gid[face_mat - 1];
+    if (gid < 0)
+        return;
+    entry_face[entry & 0x3FF] = gid + 1;
+    if (entries < 0x400)
+        entry_used[entries++] = entry & 0x3FF;
+}
+
+int sc_face_for_entry(uint16_t entry) { return entry_face[entry & 0x3FF] - 1; }
+
+void sc_entries_drawn(void)
+{
+    while (entries)
+        entry_face[entry_used[--entries]] = 0;
 }

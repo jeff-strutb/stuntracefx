@@ -21,6 +21,7 @@
 
 #include "fullwindow.h"
 #include "gpu_bin.h"
+#include "scene.h"
 
 static NSString *const kernel_source = @
 "#include <metal_stdlib>\n"
@@ -205,11 +206,66 @@ static NSString *const kernel_source = @
 "        o |= (uint)precise::floor(precise::fma(b - a, cover, a) + 0.5f) << s;\n"
 "    }\n"
 "    out[at] = o;\n"
+"}\n"
+"/* ---- the models from the display list (scene.h): the chip's point steps,\n"
+"   the projection, the near plane, the fill's colour and texel rules ---- */\n"
+"struct Slot { short m[9]; short pos[3]; ushort scale, shift, pad0, pad1; };\n"
+"struct Point { char b0, b1, b2; uchar mirrored; uint slot; };\n"
+"struct Face { uint first, n; uchar textured, colour, bank, por, hi, p0, p1, p2; ushort base, mask; short ou, ov; };\n"
+"struct Vert { uint point, face; float u, v; };\n"
+"struct View { float fx, fy, cx, cy, tw, th, p0, p1; };\n"
+"struct VOut { float4 pos [[position]]; float u; float v; uint face [[flat]]; };\n"
+"static ushort mult8(int a, int b) { return (ushort)((int)(char)a * (int)(char)b); }\n"
+"static ushort fmult_rol(ushort a, ushort b) { return (ushort)(((int)(short)a * (int)(short)b) >> 15); }\n"
+"static ushort packed_out(ushort s, ushort scale) { return mult8((int)((ushort)(s + s) >> 8), (int)scale); }\n"
+"/* sc_points (scene.c), step for step: one coordinate j of the point */\n"
+"static short point_coord(Slot sl, Point p, int j) {\n"
+"    int b0 = (int)(uchar)p.b0, b1 = (int)(uchar)p.b1, b2 = (int)(uchar)p.b2;\n"
+"    ushort xt, rest, r;\n"
+"    if (sl.shift < 3) {\n"
+"        xt = mult8((int)((ushort)sl.m[j] >> 8), b0);\n"
+"        rest = (ushort)(mult8((int)((ushort)sl.m[3 + j] >> 8), b1) + mult8((int)((ushort)sl.m[6 + j] >> 8), b2));\n"
+"        r = packed_out((ushort)(p.mirrored ? rest - xt : rest + xt), sl.scale);\n"
+"    } else {\n"
+"        xt = fmult_rol(mult8(b0, (int)sl.scale), (ushort)sl.m[j]);\n"
+"        rest = (ushort)(fmult_rol(mult8(b1, (int)sl.scale), (ushort)sl.m[3 + j]) + fmult_rol(mult8(b2, (int)sl.scale), (ushort)sl.m[6 + j]));\n"
+"        r = (ushort)(p.mirrored ? rest - xt : rest + xt);\n"
+"    }\n"
+"    return (short)(ushort)(r + (ushort)sl.pos[j]);\n"
+"}\n"
+"vertex VOut model_vertex(uint vid [[vertex_id]], device const Vert *vs [[buffer(0)]], device const Point *pts [[buffer(1)]],\n"
+"                         device const Slot *slots [[buffer(2)]], constant View &w [[buffer(3)]]) {\n"
+"    Vert vt = vs[vid];\n"
+"    Point p = pts[vt.point];\n"
+"    Slot sl = slots[p.slot];\n"
+"    float x = (float)point_coord(sl, p, 0), y = (float)point_coord(sl, p, 1);\n"
+"    short zi = point_coord(sl, p, 2);\n"
+"    if (zi >= 0x100 && zi > 0x43FE) zi = 0x43FE;   /* a far point's depth held, as the projection holds it */\n"
+"    float z = (float)zi;\n"
+"    VOut o;\n"
+"    o.pos = float4(2.0f * (w.cx * z + w.fx * x) / w.tw - z, z - 2.0f * (w.cy * z + w.fy * y) / w.th, z - 1.0f, z);\n"
+"    o.u = vt.u; o.v = vt.v; o.face = vt.face;\n"
+"    return o;\n"
+"}\n"
+"fragment uint model_fragment(VOut in [[stage_in]], device const Face *faces [[buffer(0)]],\n"
+"                             device const uchar *banks [[buffer(1)]], device const short *slot [[buffer(2)]]) {\n"
+"    Face f = faces[in.face];\n"
+"    if (!f.textured) { if (!f.colour) discard_fragment(); return f.colour; }\n"
+"    uint iu = (uint)(int)precise::floor(in.u + (float)f.ou / 256.0f) & 255u;\n"
+"    uint iv = (uint)(int)precise::floor(in.v + (float)f.ov / 256.0f) & 255u;\n"
+"    device const uchar *bank = banks + (ulong)slot[f.bank] * 65536;\n"
+"    int c = texel_colour(bank[(ushort)((((iv << 8) | iu) & f.mask) + f.base)], f.por, f.hi);\n"
+"    if (c < 0) discard_fragment();\n"
+"    return (uint)c;\n"
 "}\n";
 
 static id<MTLDevice> dev;
 static id<MTLCommandQueue> queue;
 static id<MTLComputePipelineState> pipe_fill, pipe_rows, pipe_water;
+static id<MTLRenderPipelineState> pipe_tri, pipe_line;
+static id<MTLTexture> tex_pic;           /* the picture as the render pass draws it (R8Uint) */
+static id<MTLBuffer> buf_verts, buf_lverts, buf_lpoints, buf_lslots, buf_lfaces;
+static long faces_drawn;
 static id<MTLBuffer> buf_out32, buf_job, buf_gap;
 static size_t out32_len;
 static long water_fills, water_apart;
@@ -218,11 +274,15 @@ static size_t out_len;
 static uint8_t bank_ok[256];            /* a ROM bank's bytes in buf_banks */
 static short bank_slot[256];
 static int banks_used;
-static long check_fills, check_apart;
+static long check_fills, check_apart, check_edge, check_other, check_far[4], far_most, far_most_at, check_far_empty;
 
 static void check_report(void)
 {
-    fprintf(stderr, "gpucheck: %ld fills, %ld pixels apart from the CPU's\n", check_fills, check_apart);
+    fprintf(stderr, "gpucheck: %ld fills, %ld pixels apart from the CPU's (%ld with the CPU's value a texel away, %ld "
+                    "not: %ld at 2, %ld at 3, %ld farther, %ld of them where the CPU drew nothing); %ld display-list faces drawn\n",
+            check_fills, check_apart, check_edge, check_other, check_far[2], check_far[3], check_far[0], check_far_empty,
+            faces_drawn);
+    fprintf(stderr, "gpucheck: the most far apart in fill %ld (%ld)\n", far_most_at, far_most);
 }
 
 static id<MTLBuffer> grow(id<MTLBuffer> b, size_t len)
@@ -260,29 +320,16 @@ static int bank_put(uint8_t bank)
     return 1;
 }
 
-static void fill(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
+/* spans (none a GPU face or the reference's alone) into the shared
+   picture by the compute fill; 0 when it could not (the caller's CPU fill) */
+static int fill_spans(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
 {
-    static uint8_t *ref;
-    static size_t ref_len;
     uint32_t wu = (uint32_t)w, hu = (uint32_t)h, nrows_now = 0;
-    size_t i, len = (size_t)w * h;
+    size_t i;
     int b;
 
-    if (out != (uint8_t *)buf_out.contents || len > out_len) {   /* not the shared picture: the CPU's */
-        fw_span_fill_cpu(out, w, h, sp, n);
-        return;
-    }
-    if (getenv("FW_GPUCHECK")) {
-        if (ref_len < len) {
-            free(ref);
-            ref = malloc(len);
-            ref_len = ref ? len : 0;
-        }
-        if (ref) {
-            memcpy(ref, out, len);
-            fw_span_fill_cpu(ref, w, h, sp, n);
-        }
-    }
+    if (!n)
+        return 1;
     /* every row's spans in their order (gpu_bin.h), the polygons and
        their edges with them */
     {
@@ -297,8 +344,7 @@ static void fill(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
         if (!buf_row_at || !buf_row_spans || !buf_spans || !buf_row_poly || !buf_polys || !buf_edges ||
             !gpu_bin_fill(sp, n, h, (FwSpan *)buf_spans.contents, (uint32_t *)buf_row_at.contents,
                           (uint32_t *)buf_row_spans.contents, (uint32_t *)buf_row_poly.contents)) {
-            fw_span_fill_cpu(out, w, h, sp, n);
-            return;
+            return 0;
         }
         if (z.polys)
             memcpy(buf_polys.contents, fw_polys, z.polys * sizeof(FwPoly));
@@ -317,10 +363,8 @@ static void fill(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
                     continue;
                 if (fresh[b] || (bank_ok[b] && b != 0x70 && b != 0x71))
                     continue;
-                if (!bank_put((uint8_t)b)) {        /* no slot: the CPU's */
-                    fw_span_fill_cpu(out, w, h, sp, n);
-                    return;
-                }
+                if (!bank_put((uint8_t)b))          /* no slot: the CPU's */
+                    return 0;
                 fresh[b] = 1;
             }
     }
@@ -354,10 +398,328 @@ static void fill(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
         [cb commit];
         [cb waitUntilCompleted];
     }
+    return 1;
+}
+
+/* a texel's bank in its slot, for the models' fragments */
+static int face_banks(const ScFace *f, size_t nf, const FwSpan *sp, size_t n)
+{
+    size_t i;
+    for (i = 0; i < n; i++) {
+        const ScFace *q;
+        if (sp[i].textured != 6 || (size_t)sp[i].x1 >= nf)
+            continue;
+        q = &f[sp[i].x1];
+        if (q->textured && !bank_ok[q->bank] && !bank_put(q->bank))
+            return 0;
+    }
+    memcpy(buf_slot.contents, bank_slot, sizeof bank_slot);
+    return 1;
+}
+
+/* a run of GPU faces (spans with textured 6) drawn over the picture in
+   their order: each face a fan of triangles (a line its two ends), its
+   corners' u, v made nearest the first's (the texture repeats every 256) */
+static int draw_faces(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
+{
+    size_t ns, np, nf, nc, i, k, nv = 0, nl = 0;
+    const ScSlot *sl = sc_list_slots(&ns);
+    const ScPoint *pt = sc_list_points(&np);
+    const ScFace *fc = sc_list_faces(&nf);
+    const ScCorner *cn = sc_list_corners(&nc);
+    typedef struct { uint32_t point, face; float u, v; } Vert;
+    Vert *tv, *lv;
+    float view[8], cx, cy;
+
+    if (!nf || !ns || !np)
+        return 1;
+    if (!face_banks(fc, nf, sp, n))
+        return 0;
+    for (i = 0; i < n; i++) {           /* the vertices' room */
+        const ScFace *f = &fc[sp[i].x1];
+        if (f->n == 2)
+            nl += 2;
+        else
+            nv += 3 * (f->n - 2);
+    }
+    buf_verts = grow(buf_verts, nv * sizeof(Vert));
+    buf_lverts = grow(buf_lverts, nl * sizeof(Vert));
+    buf_lpoints = grow(buf_lpoints, np * sizeof *pt);
+    buf_lslots = grow(buf_lslots, ns * sizeof *sl);
+    buf_lfaces = grow(buf_lfaces, nf * sizeof *fc);
+    if (!buf_verts || !buf_lverts || !buf_lpoints || !buf_lslots || !buf_lfaces)
+        return 0;
+    memcpy(buf_lpoints.contents, pt, np * sizeof *pt);
+    memcpy(buf_lslots.contents, sl, ns * sizeof *sl);
+    memcpy(buf_lfaces.contents, fc, nf * sizeof *fc);
+    tv = (Vert *)buf_verts.contents;
+    lv = (Vert *)buf_lverts.contents;
+    nv = nl = 0;
+    for (i = 0; i < n; i++) {
+        uint32_t id = (uint32_t)sp[i].x1;
+        const ScFace *f = &fc[id];
+        const ScCorner *c = &cn[f->first];
+        float u[8], v[8];
+        for (k = 0; k < f->n && k < 8; k++) {
+            float du = c[k].u - c[0].u, dv = c[k].v - c[0].v;
+            u[k] = c[0].u + du - 256.0f * (du > 128.0f) + 256.0f * (du < -128.0f);
+            v[k] = c[0].v + dv - 256.0f * (dv > 128.0f) + 256.0f * (dv < -128.0f);
+        }
+        if (f->n == 2) {
+            lv[nl++] = (Vert){ c[0].point, id, u[0], v[0] };
+            lv[nl++] = (Vert){ c[1].point, id, u[1], v[1] };
+            continue;
+        }
+        for (k = 1; k + 1 < f->n && k + 1 < 8; k++) {
+            tv[nv++] = (Vert){ c[0].point, id, u[0], v[0] };
+            tv[nv++] = (Vert){ c[k].point, id, u[k], v[k] };
+            tv[nv++] = (Vert){ c[k + 1].point, id, u[k + 1], v[k + 1] };
+        }
+    }
+    fw_view_centre(&cx, &cy);
+    view[0] = (float)fw_focal_x();
+    view[1] = (float)fw_focal_y();
+    view[2] = cx;
+    view[3] = cy;
+    view[4] = (float)w;
+    view[5] = (float)h;
+    view[6] = view[7] = 0;
+    if (!tex_pic || tex_pic.width != (NSUInteger)w || tex_pic.height != (NSUInteger)h) {
+        MTLTextureDescriptor *d = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatR8Uint
+                                                                                     width:(NSUInteger)w
+                                                                                    height:(NSUInteger)h
+                                                                                 mipmapped:NO];
+        d.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
+        d.storageMode = MTLStorageModePrivate;
+        tex_pic = [dev newTextureWithDescriptor:d];
+        if (!tex_pic)
+            return 0;
+    }
+    @autoreleasepool {
+        id<MTLCommandBuffer> cb = [queue commandBuffer];
+        id<MTLBlitCommandEncoder> bl = [cb blitCommandEncoder];
+        MTLRenderPassDescriptor *rp = [MTLRenderPassDescriptor renderPassDescriptor];
+        id<MTLRenderCommandEncoder> re;
+        [bl copyFromBuffer:buf_out sourceOffset:0 sourceBytesPerRow:(NSUInteger)w sourceBytesPerImage:(NSUInteger)w * h
+                sourceSize:MTLSizeMake((NSUInteger)w, (NSUInteger)h, 1) toTexture:tex_pic destinationSlice:0
+          destinationLevel:0 destinationOrigin:MTLOriginMake(0, 0, 0)];
+        [bl endEncoding];
+        rp.colorAttachments[0].texture = tex_pic;
+        rp.colorAttachments[0].loadAction = MTLLoadActionLoad;
+        rp.colorAttachments[0].storeAction = MTLStoreActionStore;
+        re = [cb renderCommandEncoderWithDescriptor:rp];
+        [re setVertexBuffer:buf_lpoints offset:0 atIndex:1];
+        [re setVertexBuffer:buf_lslots offset:0 atIndex:2];
+        [re setVertexBytes:view length:sizeof view atIndex:3];
+        [re setFragmentBuffer:buf_lfaces offset:0 atIndex:0];
+        [re setFragmentBuffer:buf_banks offset:0 atIndex:1];
+        [re setFragmentBuffer:buf_slot offset:0 atIndex:2];
+        /* in their order: the faces in runs of triangles and of lines */
+        {
+            size_t ti = 0, li = 0, j = 0;
+            while (j < n) {
+                int line = fc[sp[j].x1].n == 2;
+                size_t t0 = ti, l0 = li;
+                while (j < n && (fc[sp[j].x1].n == 2) == line) {
+                    if (line)
+                        li += 2;
+                    else
+                        ti += 3 * (fc[sp[j].x1].n - 2);
+                    j++;
+                }
+                if (line) {
+                    [re setRenderPipelineState:pipe_line];
+                    [re setVertexBuffer:buf_lverts offset:0 atIndex:0];
+                    [re drawPrimitives:MTLPrimitiveTypeLine vertexStart:l0 vertexCount:li - l0];
+                } else if (ti > t0) {
+                    [re setRenderPipelineState:pipe_tri];
+                    [re setVertexBuffer:buf_verts offset:0 atIndex:0];
+                    [re drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:t0 vertexCount:ti - t0];
+                }
+            }
+        }
+        [re endEncoding];
+        bl = [cb blitCommandEncoder];
+        [bl copyFromTexture:tex_pic sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0, 0, 0)
+                 sourceSize:MTLSizeMake((NSUInteger)w, (NSUInteger)h, 1) toBuffer:buf_out destinationOffset:0
+        destinationBytesPerRow:(NSUInteger)w destinationBytesPerImage:(NSUInteger)w * h];
+        [bl endEncoding];
+        [cb commit];
+        [cb waitUntilCompleted];
+    }
+    faces_drawn += (long)n;
+    return 1;
+}
+
+static void fill(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
+{
+    static uint8_t *ref;
+    static size_t ref_len;
+    static FwSpan *run;
+    static size_t run_cap;
+    size_t i, len = (size_t)w * h, j;
+
+    if (out != (uint8_t *)buf_out.contents || len > out_len) {   /* not the shared picture: the CPU's */
+        fw_span_fill_cpu(out, w, h, sp, n);
+        return;
+    }
+    if (getenv("FW_GPUCHECK")) {
+        if (ref_len < len) {
+            free(ref);
+            ref = malloc(len);
+            ref_len = ref ? len : 0;
+        }
+        if (ref) {
+            memcpy(ref, out, len);
+            fw_span_fill_cpu(ref, w, h, sp, n);
+        }
+    }
+    if (run_cap < n) {
+        free(run);
+        run = malloc(n * sizeof *run);
+        run_cap = run ? n : 0;
+        if (!run) {
+            fw_span_fill_cpu(out, w, h, sp, n);
+            return;
+        }
+    }
+    /* in their order: runs of spans (the reference's alone left out) by
+       the compute fill, runs of the display list's faces by the render
+       pass */
+    for (i = 0; i < n;) {
+        size_t m = 0;
+        if (sp[i].textured == 6) {
+            for (j = i; j < n && sp[j].textured == 6; j++)
+                ;
+            if (!draw_faces(out, w, h, sp + i, j - i))
+                fprintf(stderr, "gpu_metal: faces not drawn\n");
+            i = j;
+            continue;
+        }
+        for (j = i; j < n && sp[j].textured != 6; j++)
+            if (sp[j].pad1[0] != 1)
+                run[m++] = sp[j];
+        if (!fill_spans(out, w, h, run, m))
+            fw_span_fill_cpu(out, w, h, run, m);
+        i = j;
+    }
     if (getenv("FW_GPUCHECK") && ref) {
-        long apart = 0;
-        for (i = 0; i < len; i++)
-            apart += out[i] != ref[i];
+        long apart = 0, far_before = check_far[0];
+        int x, y;
+        for (y = 0; y < h; y++)
+            for (x = 0; x < w; x++) {
+                uint8_t g = out[(size_t)y * w + x];
+                int dx, dy, r, found = 0;
+                if (g == ref[(size_t)y * w + x])
+                    continue;
+                apart++;
+                for (r = 1; r <= 3 && !found; r++)          /* the nearest texel where the reference has this value */
+                    for (dy = -r; dy <= r && !found; dy++)
+                        for (dx = -r; dx <= r && !found; dx++) {
+                            int xx = x + dx, yy = y + dy;
+                            if (xx >= 0 && yy >= 0 && xx < w && yy < h && ref[(size_t)yy * w + xx] == g)
+                                found = r;
+                        }
+                check_far[found]++;
+                if (!found && !ref[(size_t)y * w + x])
+                    check_far_empty++;          /* the reference drew nothing there */
+                if (found == 1)
+                    check_edge++;
+                else
+                    check_other++;
+            }
+        if (getenv("FW_GPUDUMP") && (check_fills == atol(getenv("FW_GPUDUMP")) ||
+                                     (!strcmp(getenv("FW_GPUDUMP"), "max") && check_far[0] - far_before > far_most))) {   /* a check: the reference, the GPU's, the difference */
+            char path[1024];
+            const char *dir = getenv("FW_GPUDUMP_DIR") ? getenv("FW_GPUDUMP_DIR") : ".";
+            int k;
+            {   /* each far pixel's face: the reference's spans of each face filled alone */
+                static uint8_t *t;
+                size_t at, m;
+                long cur = -1;
+                FILE *f;
+                snprintf(path, sizeof path, "%s/faces.txt", dir);
+                f = fopen(path, "w");
+                t = realloc(t, len);
+                {   /* every span: which last wrote each far pixel in the reference */
+                    static long *last;
+                    last = realloc(last, len * sizeof *last);
+                    for (m = 0; last && m < len; m++)
+                        last[m] = -1;
+                    for (at = 0; f && t && last && at < n; at++) {
+                        if (sp[at].textured == 6)
+                            continue;
+                        memset(t, 0, len);
+                        fw_span_fill_cpu(t, w, h, &sp[at], 1);
+                        for (m = 0; m < len; m++)
+                            if (t[m])
+                                last[m] = (long)at;
+                    }
+                    for (m = 0; f && last && m < len; m++)
+                        if (out[m] != ref[m]) {
+                            long q = last[m];
+                            fprintf(f, "P %zu %zu ref %d gpu %d span %ld", m % (size_t)w, m / (size_t)w, ref[m], out[m], q);
+                            if (q >= 0)
+                                fprintf(f, " kind %d only %d y %d x %d-%d colour %d z %g %g %g", sp[q].textured, sp[q].pad1[0],
+                                        sp[q].y, sp[q].x0, sp[q].x1, sp[q].colour, sp[q].za, sp[q].zx, sp[q].zy);
+                            fprintf(f, "\n");
+                        }
+                    if (f)
+                        fprintf(f, "water %g %g %g %g\n", fw_water[0], fw_water[1], fw_water[2], fw_water[3]);
+                }
+                for (at = 0; f && t && at < n; at++) {
+                    if (sp[at].textured == 6) {
+                        cur = sp[at].x1;
+                        continue;
+                    }
+                    if (sp[at].pad1[0] != 1 || cur < 0)
+                        continue;
+                    memset(t, 0, len);
+                    fw_span_fill_cpu(t, w, h, &sp[at], 1);
+                    for (m = 0; m < len; m++)
+                        if (t[m] && out[m] != ref[m])
+                            fprintf(f, "%zu %zu face %ld ref %d gpu %d\n", m % (size_t)w, m / (size_t)w, cur, ref[m], out[m]);
+                }
+                if (f) {
+                    size_t ns, np, nf, nc, q;
+                    const ScSlot *sl = sc_list_slots(&ns);
+                    const ScPoint *pt = sc_list_points(&np);
+                    const ScFace *fc = sc_list_faces(&nf);
+                    const ScCorner *cn = sc_list_corners(&nc);
+                    for (q = 0; q < nf; q++) {
+                        uint32_t c;
+                        fprintf(f, "F %zu n %u tex %d colour %d:", q, fc[q].n, fc[q].textured, fc[q].colour);
+                        for (c = 0; c < fc[q].n; c++) {
+                            const ScPoint *pp = &pt[cn[fc[q].first + c].point];
+                            const ScSlot *ss = &sl[pp->slot];
+                            fprintf(f, " [slot %u pt %u b %d %d %d mir %d]", pp->slot, cn[fc[q].first + c].point, pp->b[0],
+                                    pp->b[1], pp->b[2], pp->mirrored);
+                            (void)ss;
+                        }
+                        fprintf(f, "\n");
+                    }
+                    for (q = 0; q < ns; q++)
+                        fprintf(f, "S %zu m %d %d %d %d %d %d %d %d %d pos %d %d %d scale %u shift %u\n", q, sl[q].m[0], sl[q].m[1],
+                                sl[q].m[2], sl[q].m[3], sl[q].m[4], sl[q].m[5], sl[q].m[6], sl[q].m[7], sl[q].m[8], sl[q].pos[0],
+                                sl[q].pos[1], sl[q].pos[2], sl[q].scale, sl[q].shift);
+                    fclose(f);
+                }
+            }
+            for (k = 0; k < 3; k++) {
+                FILE *f;
+                snprintf(path, sizeof path, "%s/%s.pgm", dir, k == 0 ? "ref" : k == 1 ? "gpu" : "diff");
+                if (!(f = fopen(path, "wb")))
+                    continue;
+                fprintf(f, "P5 %d %d 255\n", w, h);
+                for (i = 0; i < len; i++)
+                    fputc(k == 0 ? ref[i] : k == 1 ? out[i] : out[i] != ref[i] ? 255 : 0, f);
+                fclose(f);
+            }
+        }
+        if (check_far[0] - far_before > far_most) {
+            far_most = check_far[0] - far_before;
+            far_most_at = check_fills;
+        }
         if (!check_fills++)
             atexit(check_report);
         check_apart += apart;
@@ -453,7 +815,18 @@ int gpu_metal_init(void)
         pipe_rows = [dev newComputePipelineStateWithFunction:[lib newFunctionWithName:@"rows"] error:&err];
     if (pipe_rows)
         pipe_water = [dev newComputePipelineStateWithFunction:[lib newFunctionWithName:@"water"] error:&err];
-    if (!pipe_fill || !pipe_rows || !pipe_water) {
+    if (pipe_water) {
+        MTLRenderPipelineDescriptor *d = [MTLRenderPipelineDescriptor new];
+        d.vertexFunction = [lib newFunctionWithName:@"model_vertex"];
+        d.fragmentFunction = [lib newFunctionWithName:@"model_fragment"];
+        d.colorAttachments[0].pixelFormat = MTLPixelFormatR8Uint;
+        d.inputPrimitiveTopology = MTLPrimitiveTopologyClassTriangle;
+        pipe_tri = [dev newRenderPipelineStateWithDescriptor:d error:&err];
+        d.inputPrimitiveTopology = MTLPrimitiveTopologyClassLine;
+        if (pipe_tri)
+            pipe_line = [dev newRenderPipelineStateWithDescriptor:d error:&err];
+    }
+    if (!pipe_fill || !pipe_rows || !pipe_water || !pipe_tri || !pipe_line) {
         fprintf(stderr, "gpu_metal: the pipeline: %s\n", err.localizedDescription.UTF8String);
         return 0;
     }
