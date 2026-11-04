@@ -37,15 +37,17 @@ typedef struct {
 } GpuVert;
 /* a span the GPU leaves to the reference (a check's, FW_GPUCHECK) */
 static inline int gpu_bin_ref_only(const FwSpan *s) { return s->pad1[0] == 1; }
-/* a span that is a display-list face (textured 6, x1 its index) */
-static inline int gpu_bin_face(const FwSpan *s) { return s->textured == 6; }
-/* the vertices of a run of face spans (each a face, in order): ntri
-   triangles' corners (3 each, each face a fan) and nline lines' ends (2
-   each) counted, then written when tri and line are not NULL; *runs the
-   runs of the same kind in order, kind[i] 1 for lines, len[i] its vertices
-   (when not NULL, room for n) */
-void gpu_bin_faces(const FwSpan *sp, size_t n, GpuVert *tri, size_t *ntri, GpuVert *line, size_t *nline,
-                   size_t *runs, uint8_t *kind, uint32_t *len);
+/* a span the GPU draws whole by its rasterizer: a display-list face
+   (textured 6, x1 its index) or a screen quad (FW_QUAD, fullwindow.h) */
+static inline int gpu_bin_face(const FwSpan *s) { return s->textured == 6 || s->textured == FW_QUAD; }
+/* the vertices of a run of such spans (in order): ntri triangles' corners
+   (3 each, each face a fan), nline lines' ends (2 each) and nquad quads
+   counted, then written when tri, line and quad are not NULL (a quad its
+   span, drawn as 6 corners by the vertex's number); *runs the runs of the
+   same kind in order, kind[i] 0 triangles, 1 lines, 2 quads, len[i] its
+   vertices (a quad's 6) (when not NULL, room for n) */
+void gpu_bin_faces(const FwSpan *sp, size_t n, GpuVert *tri, size_t *ntri, GpuVert *line, size_t *nline, FwSpan *quad,
+                   size_t *nquad, size_t *runs, uint8_t *kind, uint32_t *len);
 
 /* The check (FW_GPUCHECK): a GPU's picture against the reference's, each
    pixel apart counted by how far the nearest texel with the GPU's value is

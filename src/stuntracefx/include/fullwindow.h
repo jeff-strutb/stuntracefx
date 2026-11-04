@@ -133,6 +133,16 @@ void fw_facing_cross(uint16_t *hi, uint16_t *lo);
    divide in float as written (fw_span_fill_cpu, the GPU's the same);
    its 1 / depth along each pixel's ray z(x) = fma(zy, y, fma(zx, x, za))
    (0: none, never under the water), for fw_water */
+/* A screen quad (textured 7), a whole primitive the GPU draws by its own
+   rasterizer: rows y to y + pad0 - 1, columns x0 to x1 (on the texels);
+   at row r = y' - y and column k = x - xl its texel row t = (v + dv r)
+   >> 32 (mask 0) or (v + dv r) / mask (mask not 0, both not negative),
+   its texel column s = (u + du k) >> 32, the texel at (base + (t & 255)
+   * 256 + (s & 255)) & 0xFFFF in bank, through COLOR's and PLOT's rules;
+   pad1[1] bit 1: flat, the colour instead. A scaled sprite is one
+   (fw_sprite_small, fw_sprite_large, fw_sprite_draw). pad1[0] 2: the
+   GPU's alone (a check's, the reference's own spans beside it). */
+#define FW_QUAD 7
 typedef struct {
     int32_t y, x0, x1, pad0;
     int64_t xl, u, du, v, dv;
@@ -257,6 +267,20 @@ int fw_rows(int n);
    counted from 0 by the size's step), to the screen's edges ($003A,
    $003E) */
 void fw_sprite_draw(int32_t h);
+/* FxObjectSprite's own rows as one screen quad for the GPU (SC_GPU), from
+   the registers as its row loop begins: 1 when the quad stands for them
+   (the loop's pixels then left out: skip it), 0 to run it as ever.
+   fw_sprite_small, the size below the texture's (01:B1CB): first row y
+   (R2), column x (R3, past the left edge's clip), cols columns (R6), rows
+   (R4), base (R5), the step (R9, 8.8), mirrored; fw_sprite_large, the
+   rows' loop (01:B2ED): first row y (R2), column x (R3), cols texels (R6),
+   the column fraction frac (R11), the step (R9, 0.16), base (R5),
+   mirrored (the texture's rows $00C8 read only when the quads are on: in
+   Original no access of the chip's is added). fw_sprite_rows_done as the
+   loop ends. */
+int fw_sprite_small(uint16_t y, uint16_t x, uint16_t cols, uint16_t rows, uint16_t base, uint16_t step, int back);
+int fw_sprite_large(uint16_t y, uint16_t x, uint16_t cols, uint16_t frac, uint16_t step, uint16_t base, int back);
+void fw_sprite_rows_done(void);
 /* a flat convex face of n points in view space, colour c, into the
    picture (near-clipped and projected exactly) */
 void fw_view_face(const float (*p)[3], int n, uint8_t c);

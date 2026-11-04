@@ -2151,6 +2151,10 @@ l918B:
     R[0] = gsu_lob(R[5]);
     t = !gsu.z;
     if (t) { goto l9199; }
+    /* the renderer's display list (scene.h): this entry's face, the entry
+       wholly on the screen (its header 8 bytes before the vertices
+       textured, 2 flat, as l920F's) */
+    sc_walk_listed((uint16_t)(R[7] - ((int16_t)R[3] < 0 ? 8 : 2)));
     gsu_stw(FX_LIST_END, R[6]);
     goto l90CD;
 l9199:

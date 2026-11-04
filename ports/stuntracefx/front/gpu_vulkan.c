@@ -89,7 +89,7 @@ static VkPipeline pipe_rows, pipe_fill, pipe_water;
    indices) and each pixel's face (R32), their pipelines (triangles,
    lines), the images and the framebuffer at the picture's size */
 static VkRenderPass rpass;
-static VkPipeline pipe_tri, pipe_line;
+static VkPipeline pipe_tri, pipe_line, pipe_quad;
 static VkImage img_pic, img_id;
 static VkDeviceMemory mem_pic, mem_id;
 static VkImageView view_pic, view_id;
@@ -110,8 +110,8 @@ typedef struct {
     void *at;
 } Buf;
 enum { B_OUT, B_SPANS, B_ROW_AT, B_ROW_SPANS, B_BANKS, B_SLOT, B_POLYS, B_EDGES, B_ROW_POLY, B_OUT32, B_JOB, B_GAP,
-       B_VERTS, B_LPOINTS, B_LSLOTS, B_LFACES, B_ID, B_FSLOTS, B_FPOINTS, B_N };
-static const uint32_t binding_of[B_N] = {0, 1, 2, 3, 4, 5, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20};
+       B_VERTS, B_LPOINTS, B_LSLOTS, B_LFACES, B_ID, B_FSLOTS, B_FPOINTS, B_QUADS, B_N };
+static const uint32_t binding_of[B_N] = {0, 1, 2, 3, 4, 5, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21};
 /* the stages that see the descriptors and the push constants: the fill's
    kernels and the models' shaders */
 #define STAGES (VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
@@ -298,6 +298,14 @@ static int models_open(void)
     ia.topology = VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
     if (pvkCreateGraphicsPipelines(dev, VK_NULL_HANDLE, 1, &gi, NULL, &pipe_line) != VK_SUCCESS)
         return 0;
+    /* the screen quads' (fullwindow.h FW_QUAD) */
+    st[0].module = shader(k_quad_vert, sizeof k_quad_vert);
+    st[1].module = shader(k_quad_frag, sizeof k_quad_frag);
+    if (!st[0].module || !st[1].module)
+        return 0;
+    ia.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    if (pvkCreateGraphicsPipelines(dev, VK_NULL_HANDLE, 1, &gi, NULL, &pipe_quad) != VK_SUCCESS)
+        return 0;
     return 1;
 }
 
@@ -409,7 +417,7 @@ static int device_open(void)
     {
         VkDescriptorSetLayoutBinding b[B_N];
         VkDescriptorSetLayoutCreateInfo li = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-        VkPushConstantRange pr = {STAGES, 0, 32};   /* w, h, 0, 0, the water's (fill.comp); the view (model.vert) */
+        VkPushConstantRange pr = {STAGES, 0, 48};   /* w, h, 0, 0, the water's (fill.comp); the view, the water's (model.vert, quad.frag) */
         VkPipelineLayoutCreateInfo pi = {VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
         VkDescriptorPoolSize ps = {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, B_N};
         VkDescriptorPoolCreateInfo dpi = {VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
@@ -699,7 +707,7 @@ typedef struct {
     size_t nr, nt;
     const uint8_t *kind;
     const uint32_t *len;
-    float view[8];
+    float view[12];
 } FaceJob;
 
 static void faces_record(void *arg)
@@ -709,7 +717,7 @@ static void faces_record(void *arg)
     VkRenderPassBeginInfo rb = {VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
     VkViewport vp = {0, 0, 0, 0, 0, 1};
     VkRect2D sc = {{0, 0}, {0, 0}};
-    size_t r, t0 = 0, l0 = j->nt;
+    size_t r, t0 = 0, l0 = j->nt, q0 = 0;
     bc.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     bc.imageSubresource.layerCount = 1;
     bc.bufferRowLength = (uint32_t)j->w;
@@ -734,7 +742,7 @@ static void faces_record(void *arg)
     rb.renderArea.extent.height = (uint32_t)j->h;
     pvkCmdBeginRenderPass(cb, &rb, VK_SUBPASS_CONTENTS_INLINE);
     pvkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pl, 0, 1, &dset, 0, NULL);
-    pvkCmdPushConstants(cb, pl, STAGES, 0, 32, j->view);
+    pvkCmdPushConstants(cb, pl, STAGES, 0, 48, j->view);
     vp.width = (float)j->w;
     vp.height = (float)j->h;
     sc.extent.width = (uint32_t)j->w;
@@ -742,7 +750,11 @@ static void faces_record(void *arg)
     pvkCmdSetViewport(cb, 0, 1, &vp);
     pvkCmdSetScissor(cb, 0, 1, &sc);
     for (r = 0; r < j->nr; r++) {
-        if (j->kind[r]) {
+        if (j->kind[r] == 2) {
+            pvkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe_quad);
+            pvkCmdDraw(cb, j->len[r], 1, (uint32_t)q0, 0);
+            q0 += j->len[r];
+        } else if (j->kind[r]) {
             pvkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe_line);
             pvkCmdDraw(cb, j->len[r], 1, (uint32_t)l0, 0);
             l0 += j->len[r];
@@ -764,7 +776,7 @@ static void faces_record(void *arg)
    their order (gpu_metal.m's draw_faces, the same display list) */
 static int draw_faces(int w, int h, const FwSpan *sp, size_t n)
 {
-    size_t ns, np, nf, nt, nl, i, nfs, nfp;
+    size_t ns, np, nf, nt, nl, nq, i, nfs, nfp;
     const ScSlot *sl = sc_list_slots(&ns);
     const ScPoint *pt = sc_list_points(&np);
     const ScFace *fc = sc_list_faces(&nf);
@@ -776,8 +788,6 @@ static int draw_faces(int w, int h, const FwSpan *sp, size_t n)
     FaceJob j;
     float cx, cy;
 
-    if (!nf || (!np && !nfp))
-        return 1;
     if (cap < n) {
         free(kind);
         free(len);
@@ -787,8 +797,13 @@ static int draw_faces(int w, int h, const FwSpan *sp, size_t n)
         if (!cap)
             return 0;
     }
-    for (i = 0; i < n; i++) {           /* the faces' banks in their slots */
+    for (i = 0; i < n; i++) {           /* the faces' and quads' banks in their slots */
         const ScFace *q;
+        if (sp[i].textured == FW_QUAD) {
+            if (!(sp[i].pad1[1] & 2) && !gpu_bin_ref_only(&sp[i]) && (!bank_ok[sp[i].bank] || sp[i].bank == 0x70 || sp[i].bank == 0x71) && !bank_put(sp[i].bank))
+                return 0;
+            continue;
+        }
         if ((size_t)sp[i].x1 >= nf)
             continue;
         q = &fc[sp[i].x1];
@@ -796,17 +811,20 @@ static int draw_faces(int w, int h, const FwSpan *sp, size_t n)
             return 0;
     }
     memcpy(bufs[B_SLOT].at, bank_slot, sizeof bank_slot);
-    gpu_bin_faces(sp, n, NULL, &nt, NULL, &nl, NULL, NULL, NULL);
+    gpu_bin_faces(sp, n, NULL, &nt, NULL, &nl, NULL, &nq, NULL, NULL, NULL);
     if (!images_at(w, h) || !buf_grow(B_VERTS, (nt + nl) * sizeof(GpuVert)) || !buf_grow(B_LPOINTS, np * sizeof *pt) ||
+        !buf_grow(B_QUADS, nq * sizeof(FwSpan)) ||
         !buf_grow(B_LSLOTS, ns * sizeof *sl) || !buf_grow(B_LFACES, nf * sizeof *fc) ||
         !buf_grow(B_FSLOTS, nfs * sizeof *fs) || !buf_grow(B_FPOINTS, nfp * sizeof *fp))
         return 0;
-    gpu_bin_faces(sp, n, (GpuVert *)bufs[B_VERTS].at, &nt, (GpuVert *)bufs[B_VERTS].at + nt, &nl, &j.nr, kind, len);
+    gpu_bin_faces(sp, n, (GpuVert *)bufs[B_VERTS].at, &nt, (GpuVert *)bufs[B_VERTS].at + nt, &nl, (FwSpan *)bufs[B_QUADS].at,
+                  &nq, &j.nr, kind, len);
     if (np)
         memcpy(bufs[B_LPOINTS].at, pt, np * sizeof *pt);
     if (ns)
         memcpy(bufs[B_LSLOTS].at, sl, ns * sizeof *sl);
-    memcpy(bufs[B_LFACES].at, fc, nf * sizeof *fc);
+    if (nf)
+        memcpy(bufs[B_LFACES].at, fc, nf * sizeof *fc);
     if (nfs)
         memcpy(bufs[B_FSLOTS].at, fs, nfs * sizeof *fs);
     if (nfp)
@@ -826,6 +844,7 @@ static int draw_faces(int w, int h, const FwSpan *sp, size_t n)
     j.view[4] = (float)w;
     j.view[5] = (float)h;
     j.view[6] = j.view[7] = 0;
+    memcpy(j.view + 8, fw_water, sizeof fw_water);
     if (!run_commands(faces_record, &j))
         return 0;
     faces_drawn += (long)n;

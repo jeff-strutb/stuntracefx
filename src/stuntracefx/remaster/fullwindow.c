@@ -31,6 +31,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#if defined(__APPLE__)
+#include <execinfo.h>
+#include <mach-o/dyld.h>
+#define FW_CENSUS_BT 1
+#endif
 
 #include "machine.h"
 #include "hw.h"
@@ -440,10 +445,15 @@ static int sunk(float za, float zx, float zy, int32_t x, int32_t y)
 }
 
 static int span_ref_only;
+static long cen_plots[4], cen_entries[3], cen_entries_gpu, cen_quads, cen_map_apart;  /* (FW_CENSUS's) */
 /* a display-list face the GPU draws in its place (scene.h): its marker
    span; 1 when the CPU's spans of it are wanted beside it (the check's
    reference, the reference's alone until fw_gpu_face_done) */
 static FwSpan *span_new(void);
+static void quad_fill(uint8_t *out, int w, const FwSpan *p);
+static FwSpan *quad_new(int32_t y0, int32_t rows, int32_t a, int32_t b, int64_t v, int64_t dv);
+static int quads_on(void);
+static int quad_made(void);
 int fw_gpu_face(int id)
 {
     FwSpan *m = span_new();
@@ -554,6 +564,11 @@ void fw_span_fill_cpu(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
         int deep = fw_water[3] != 0 && (p->za != 0 || p->zx != 0 || p->zy != 0);
         if (p->textured == 6)           /* a face the GPU draws (the reference's own spans are beside it) */
             continue;
+        if (p->textured == FW_QUAD) {
+            if (p->pad1[0] != 2)        /* (2: the GPU's alone, the reference's spans beside it) */
+                quad_fill(out, w, p);
+            continue;
+        }
         if (!p->textured) {
             if (!deep)
                 memset(o + p->x0, p->colour, (size_t)(p->x1 - p->x0 + 1));
@@ -823,6 +838,60 @@ int fw_water_play(const char *path)
     return 0;
 }
 
+/* FW_QUADCHECK (with SC_GPU): each fill with quads made twice on the CPU,
+   with the quads (the reference's own spans left out) and with the
+   reference's spans (the quads left out), the texels apart counted: the
+   quads' rule against the chip's loops, which must be 0 */
+static long qc_fills, qc_apart, quads_made, quads_left, quads_kind[3];
+static void quad_report(void)
+{
+    printf("quadcheck: %ld fills with quads, %ld quads (%ld small, %ld large, %ld not square), %ld texels apart, %ld loops "
+           "not made quads\n", qc_fills, quads_made, quads_kind[0], quads_kind[1], quads_kind[2], qc_apart, quads_left);
+    fflush(stdout);
+}
+
+static void quad_check(void)
+{
+    static uint8_t *a, *b;
+    static FwSpan *q;
+    static size_t len, qcap;
+    size_t i, m = 0, n = (size_t)tw * th;
+    int any = 0;
+    for (i = 0; i < nspans && !any; i++)
+        any = spans[i].textured == FW_QUAD;
+    if (!any)
+        return;
+    if (len < n) {
+        free(a);
+        free(b);
+        a = malloc(n);
+        b = malloc(n);
+        len = a && b ? n : 0;
+    }
+    if (qcap < nspans) {
+        free(q);
+        q = malloc(nspans * sizeof *q);
+        qcap = q ? nspans : 0;
+    }
+    if (!len || !qcap)
+        return;
+    for (i = 0; i < nspans; i++)
+        if (spans[i].pad1[0] != 1) {
+            q[m] = spans[i];
+            if (q[m].textured == FW_QUAD)
+                q[m].pad1[0] = 0;
+            m++;
+        }
+    memcpy(a, tex, n);
+    memcpy(b, tex, n);
+    fw_span_fill_cpu(a, tw, th, spans, nspans);
+    fw_span_fill_cpu(b, tw, th, q, m);
+    if (!qc_fills++)
+        atexit(quad_report);
+    for (i = 0; i < n; i++)
+        qc_apart += a[i] != b[i];
+}
+
 /* the spans drawn into the texels */
 static void span_flush(void)
 {
@@ -834,6 +903,8 @@ static void span_flush(void)
     }
     if (nspans) {
         span_record();
+        if (fw_env("FW_QUADCHECK"))
+            quad_check();
         if (gpu_pic)
             fw_canvas_gpu->spans(spans, nspans);
         else
@@ -905,6 +976,30 @@ void fw_sprite_draw(int32_t h)
     if (a > b)
         return;
     du = ((int64_t)c8 << 32) / w;       /* a column's texels, from 0 */
+    if (quads_on()) {                   /* one quad for the GPU: row j's texel row j c8 / h */
+        int32_t last = y0 + h - 1;
+        FwSpan *q;
+        if (last > bottom - 1)
+            last = bottom - 1;
+        q = quad_new(y0, last - y0 + 1, a, b, 0, c8);
+        if (q) {
+            q->mask = (uint16_t)h;
+            q->xl = x0;
+            q->bank = (uint8_t)bank;
+            q->hi = (uint8_t)(gsu.colr & 0xF0);
+            if (!back) {
+                q->base = base;
+                q->du = du;
+            } else {
+                q->base = (uint16_t)(base + c8 - 1 - 0xFF);
+                q->u = ((int64_t)0xFF << 32) + (((int64_t)1 << 32) - 1);
+                q->du = -du;
+            }
+            quads_kind[2]++;
+        }
+        if (quad_made())
+            return;
+    }
     for (j = 0; j < h; j++) {
         int32_t y = y0 + j;
         unsigned v;
@@ -915,8 +1010,9 @@ void fw_sprite_draw(int32_t h)
             break;
         v = (unsigned)((int64_t)j * c8 / h);   /* a row's texel row, from 0 */
         if (!(p = span_new()))
-            return;
+            break;
         memset(p, 0, sizeof *p);
+        p->pad1[0] = (uint8_t)span_ref_only;
         p->za = sprite_z[0];
         p->y = y;
         p->x0 = a;
@@ -937,6 +1033,7 @@ void fw_sprite_draw(int32_t h)
             p->du = -du;
         }
     }
+    fw_sprite_rows_done();
 }
 
 void fw_sprite_span(uint16_t y, uint16_t x0, uint16_t x1, uint16_t bank, uint16_t at, uint16_t frac,
@@ -953,6 +1050,7 @@ void fw_sprite_span(uint16_t y, uint16_t x0, uint16_t x1, uint16_t bank, uint16_
     if (!(p = span_new()))
         return;
     memset(p, 0, sizeof *p);
+    p->pad1[0] = (uint8_t)span_ref_only;
     p->za = sprite_z[0];                /* the sprite's one depth */
     p->y = y;
     p->x0 = a;
@@ -974,9 +1072,233 @@ void fw_sprite_span(uint16_t y, uint16_t x0, uint16_t x1, uint16_t bank, uint16_
     }
 }
 
+/* ---- screen quads (textured 7, fullwindow.h) ------------------------------ */
+
+/* the quads drawn by the GPU: its display list's (SC_GPU), the 3D's sprites */
+/* (FW_NOQUADS, a check: the sprites by the chip's loops, the GPU's faces kept) */
+static int quads_on(void) { return fw_drawing && sc_gpu_on() && !checking && !fw_hud && !label_on && !fw_env("FW_NOQUADS"); }
+/* the reference's own spans kept beside them (FW_GPUCHECK, FW_QUADCHECK) */
+static int quads_both(void) { return fw_env("FW_GPUCHECK") || fw_env("FW_QUADCHECK"); }
+
+/* a quad on rows y0 to y0 + rows - 1 (r from y0), columns a to b, put on
+   the texels: rows and columns past them left out, its rows' accumulator
+   moved on by the rows above */
+static FwSpan *quad_new(int32_t y0, int32_t rows, int32_t a, int32_t b, int64_t v, int64_t dv)
+{
+    FwSpan *p;
+    int32_t y1 = y0 + rows - 1;
+    if (y0 < 0) {
+        v += dv * -y0;
+        y0 = 0;
+    }
+    if (y1 >= th)
+        y1 = th - 1;
+    if (a < 0)
+        a = 0;
+    if (b >= tw)
+        b = tw - 1;
+    if (y1 < y0 || b < a || !(p = span_new()))
+        return NULL;
+    memset(p, 0, sizeof *p);
+    p->y = y0;
+    p->pad0 = y1 - y0 + 1;
+    p->x0 = a;
+    p->x1 = b;
+    p->v = v;
+    p->dv = dv;
+    p->za = cur_z[0];
+    p->zx = cur_z[1];
+    p->zy = cur_z[2];
+    p->textured = FW_QUAD;
+    p->pad1[0] = quads_both() ? 2 : 0;
+    p->por = gsu.por;
+    p->hi = (uint8_t)(gsu.colr & 0xF0);
+    quads_made++;
+    cen_quads++;
+    if (fw_env("SC_BREAK"))             /* (a planted break: the check must see it) */
+        p->x1 += p->x1 > p->x0;
+    return p;
+}
+
+/* the quad stands for the loop's pixels: the loop skipped, or its spans the
+   reference's alone (a check) */
+static int quad_made(void)
+{
+    if (!quads_both())
+        return 1;
+    span_ref_only = 1;
+    return 0;
+}
+
+void fw_sprite_rows_done(void) { span_ref_only = 0; }
+
+/* 01:B1CB's rows: rows rows from y (those at or past the screen's bottom,
+   $003E, or above row 0 left out: the loop's unsigned compare), each from
+   column x, cols columns; column k's texel (k R9 & $FFFF) >> 8 (mirrored:
+   (-k R9 & $FFFF) >> 8), row r's (r R9 & $FFFF) >> 8, added to R5 */
+int fw_sprite_small(uint16_t y, uint16_t x, uint16_t cols, uint16_t rows, uint16_t base, uint16_t step, int back)
+{
+    int32_t bottom, last;
+    int64_t s = (int64_t)step << 24;
+    FwSpan *p;
+    if (!quads_on())
+        return 0;
+    bottom = (int32_t)ram16(0x003E) - 1;
+    if (sprite_hidden)                  /* (its pixels left out: none) */
+        return 1;
+    if (!cols || !rows) {               /* (the loop's count from 0: 65536) */
+        quads_left++;
+        return 0;
+    }
+    last = (int32_t)(int16_t)y + rows - 1;
+    if (last > bottom)
+        last = bottom;
+    p = quad_new((int16_t)y, last - (int16_t)y + 1, x, (int32_t)x + cols - 1, 0, s);
+    if (p) {
+        p->xl = x;
+        p->du = back ? -s : s;
+        p->bank = (uint8_t)ram16(0x00A6);
+        p->base = base;
+        quads_kind[0]++;
+    }
+    return quad_made();
+}
+
+/* 01:B2ED's rows: row r (from y) on texel row ceil(r R9 / 65536) while it
+   is below c8, to the screen's bottom; column k's texel (R11 + k R9) >>
+   16, the first cols - 1 texels whole, the last to the screen's right
+   ($003A); R5 on (mirrored: back) by each */
+int fw_sprite_large(uint16_t y, uint16_t x, uint16_t cols, uint16_t frac, uint16_t step, uint16_t base, int back)
+{
+    int32_t bottom, right, last, kmax;
+    int64_t M = 65536, kin, kall;
+    uint16_t c8;
+    FwSpan *p;
+    if (!quads_on())
+        return 0;
+    bottom = (int32_t)(int16_t)ram16(0x003E) - 1;
+    right = (int16_t)ram16(0x003A);
+    c8 = ram16(0x00C8);
+    if (sprite_hidden)
+        return 1;
+    if (!cols || !step || !c8) {
+        quads_left++;
+        return 0;
+    }
+    /* the rows: those whose texel row is below c8, to the bottom */
+    last = (int32_t)(int16_t)y + (int32_t)(((int64_t)(c8 - 1) * M) / step);
+    if (last > bottom)
+        last = bottom;
+    /* the columns: the first cols - 1 texels' (kin), then the last's to
+       the carry (kall) or the right edge */
+    kin = cols > 1 ? ((int64_t)(cols - 1) * M - frac + step - 1) / step : 0;
+    kall = ((int64_t)cols * M - frac + step - 1) / step;
+    kmax = (int32_t)(kall - 1 < right - (int32_t)x ? kall - 1 : right - (int32_t)x);
+    if (kmax < kin - 1)
+        kmax = (int32_t)(kin - 1);
+    p = kmax >= 0 ? quad_new((int16_t)y, last - (int16_t)y + 1, x, (int32_t)x + kmax, M - 1, (int64_t)step) : NULL;
+    if (p) {
+        p->v <<= 16;                    /* (65535 + r R9) << 16: ceil(r R9 / 65536) at >> 32 */
+        p->dv <<= 16;
+        p->xl = x;
+        p->bank = (uint8_t)ram16(0x00A6);
+        if (!back) {
+            p->base = base;
+            p->u = (int64_t)frac << 16;
+            p->du = (int64_t)step << 16;
+        } else {                        /* R5 less the texel: 255 less it from R5 - 255 */
+            p->base = (uint16_t)(base - 0xFF);
+            p->u = ((int64_t)0xFF << 32) + (((int64_t)1 << 32) - 1) - ((int64_t)frac << 16);
+            p->du = -((int64_t)step << 16);
+        }
+        quads_kind[1]++;
+    }
+    return quad_made();
+}
+
+/* a quad's texels into out (the reference's rule, fullwindow.h) */
+static void quad_fill(uint8_t *out, int w, const FwSpan *p)
+{
+    int deep = fw_water[3] != 0 && (p->za != 0 || p->zx != 0 || p->zy != 0);
+    int32_t r, x;
+    for (r = 0; r < p->pad0; r++) {
+        int32_t y = p->y + r;
+        int64_t a = p->v + p->dv * r;
+        unsigned t = (unsigned)(p->mask ? a / p->mask : a >> 32) & 0xFF;
+        uint8_t *o = out + (size_t)y * w;
+        for (x = p->x0; x <= p->x1; x++) {
+            unsigned s = (unsigned)((p->u + p->du * (x - p->xl)) >> 32) & 0xFF;
+            int c = p->pad1[1] & 2 ? p->colour
+                                   : texel_colour(fw_texel(p->bank, (uint16_t)(p->base + (t << 8) + s)), p->por, p->hi);
+            if (c >= 0 && !(deep && sunk(p->za, p->zx, p->zy, x, y)))
+                o[x] = (uint8_t)c;
+        }
+    }
+}
+
+/* FW_CENSUS (a measure, macOS): what the CPU still draws in the full
+   window's pictures: each PLOT counted by where it comes from (its
+   callers' addresses, less the image's slide: atos names them), by kind
+   (the HUD's, a label's, the 3D's), and the draw list's entries the GPU
+   does not draw from the display list, by type; printed at exit */
+#define CEN_SITES 256
+static struct { void *a[6]; long n[4]; } cen_site[CEN_SITES];
+static void census_report(void)
+{
+    int i;
+#ifdef FW_CENSUS_BT
+    intptr_t slide = _dyld_get_image_vmaddr_slide(0);
+#else
+    intptr_t slide = 0;
+#endif
+    printf("census: plots: HUD %ld, label %ld, 3D %ld, left out %ld; draw-list entries the CPU's: flat %ld, line %ld, "
+           "textured %ld; the GPU's (display list) %ld, of them not their face's %ld; quads %ld\n", cen_plots[0], cen_plots[1],
+           cen_plots[2], cen_plots[3], cen_entries[0], cen_entries[1], cen_entries[2], cen_entries_gpu, cen_map_apart, cen_quads);
+    for (i = 0; i < CEN_SITES && cen_site[i].a[0]; i++) {
+        int k;
+        printf("census site");
+        for (k = 0; k < 6; k++)
+            printf(" 0x%lx", (unsigned long)((intptr_t)cen_site[i].a[k] - slide));
+        printf(": HUD %ld label %ld 3D %ld out %ld\n", cen_site[i].n[0], cen_site[i].n[1], cen_site[i].n[2], cen_site[i].n[3]);
+    }
+    fflush(stdout);
+}
+static void census_plot(int kind)
+{
+    static int on = -1;
+    if (on < 0) {
+        on = fw_env("FW_CENSUS") != NULL;
+        if (on)
+            atexit(census_report);
+    }
+    if (!on)
+        return;
+    cen_plots[kind]++;
+#ifdef FW_CENSUS_BT
+    {
+        void *bt[9] = { 0 };
+        int n = backtrace(bt, 9), i, k;
+        for (i = 0; i < CEN_SITES; i++) {
+            if (!cen_site[i].a[0])
+                for (k = 0; k < 6; k++)
+                    cen_site[i].a[k] = k + 3 < n ? bt[k + 3] : (void *)1;
+            for (k = 0; k < 6; k++)
+                if (cen_site[i].a[k] != (k + 3 < n ? bt[k + 3] : (void *)1))
+                    break;
+            if (k == 6) {
+                cen_site[i].n[kind]++;
+                break;
+            }
+        }
+    }
+#endif
+}
+
 void fw_plot(uint16_t x, uint16_t y)
 {
     int c = plot_colour(), j;
+
+    census_plot(c < 0 ? 3 : fw_hud ? 0 : label_on ? 1 : sprite_hidden && !checking ? 3 : 2);
 
     if (label_on && c >= 0 && !checking) {
         int64_t dx = (int)(int16_t)x - label_x, dy = (int)(int16_t)y - label_y;
@@ -3004,6 +3326,20 @@ void fw_draw_list(void)
         }
         at++;
         draw_depth(type >= 3 ? (uint16_t)(at + 1) : type < 0 ? (uint16_t)(at + 7) : 0);
+        if (type && fw_env("FW_CENSUS")) {
+            if (face >= 0) {
+                /* the entry and its display-list face the same: a flat
+                   one's colour (its second byte), a textured one's bank */
+                size_t nf;
+                const ScFace *fc = sc_list_faces(&nf);
+                cen_entries_gpu++;
+                if ((size_t)face < nf && type != 2 &&
+                    (type >= 3 ? fc[face].textured || fc[face].colour != ram8(at)
+                               : !fc[face].textured || fc[face].bank != ram8(at)))
+                    cen_map_apart++;
+            } else
+                cen_entries[type >= 3 ? 0 : type == 2 ? 1 : 2]++;
+        }
         if (type && face >= 0) {        /* a model face the GPU draws from the display list (scene.h) */
             FwSpan *m = span_new();
             if (m) {

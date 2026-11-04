@@ -272,17 +272,42 @@ static NSString *const kernel_source = @
 "    if (c < 0) discard_fragment();\n"
 "    o.c = (uint)c;\n"
 "    return o;\n"
+"}\n"
+"/* the screen quads (fullwindow.h FW_QUAD): the rectangle's pixels by the\n"
+"   rasterizer, each its texel by the quad's integer rule (fullwindow.c quad_fill) */\n"
+"struct QOut { float4 pos [[position]]; uint q [[flat]]; };\n"
+"vertex QOut quad_vertex(uint vid [[vertex_id]], device const Span *qs [[buffer(0)]], constant View &w [[buffer(3)]]) {\n"
+"    Span s = qs[vid / 6]; uint c = vid % 6;\n"
+"    float px = (c == 1 || c == 2 || c == 4) ? (float)(s.x1 + 1) : (float)s.x0;\n"
+"    float py = (c == 2 || c == 4 || c == 5) ? (float)(s.y + s.pad0) : (float)s.y;\n"
+"    QOut o; o.pos = float4(2.0f * px / w.tw - 1.0f, 1.0f - 2.0f * py / w.th, 0.0f, 1.0f); o.q = vid / 6;\n"
+"    return o;\n"
+"}\n"
+"fragment FOut quad_fragment(QOut in [[stage_in]], device const Span *qs [[buffer(0)]], device const uchar *banks [[buffer(1)]],\n"
+"                            device const short *slot [[buffer(2)]], constant float4 &water [[buffer(3)]]) {\n"
+"    Span s = qs[in.q];\n"
+"    int x = (int)in.pos.x, y = (int)in.pos.y, c;\n"
+"    long a = s.v + s.dv * (long)(y - s.y);\n"
+"    uint t = (uint)(s.mask ? a / (long)s.mask : a >> 32) & 255u;\n"
+"    uint k = (uint)((s.u + s.du * ((long)x - s.xl)) >> 32) & 255u;\n"
+"    if (s.pad1[1] & 2) c = s.colour;\n"
+"    else c = texel_colour(banks[(ulong)slot[s.bank] * 65536 + (ushort)(s.base + (t << 8) + k)], s.por, s.hi);\n"
+"    if (c < 0) discard_fragment();\n"
+"    s.y = y;\n"
+"    if (water.w != 0 && (s.za != 0 || s.zx != 0 || s.zy != 0) && sunk(s, x, water)) discard_fragment();\n"
+"    FOut o; o.c = (uint)c; o.id = 0;\n"
+"    return o;\n"
 "}\n";
 
 static id<MTLDevice> dev;
 static id<MTLCommandQueue> queue;
 static id<MTLComputePipelineState> pipe_fill, pipe_rows, pipe_water;
-static id<MTLRenderPipelineState> pipe_tri, pipe_line;
+static id<MTLRenderPipelineState> pipe_tri, pipe_line, pipe_quad;
 static id<MTLTexture> tex_pic;           /* the picture as the render pass draws it (R8Uint) */
 static id<MTLTexture> tex_id;            /* (FW_GPUCHECK) each pixel's last display-list face + 1 (R32Uint) */
 static id<MTLBuffer> buf_id;
 static int id_clear;                     /* tex_id to clear at the fill's first faces */
-static id<MTLBuffer> buf_verts, buf_lverts, buf_lpoints, buf_lslots, buf_lfaces, buf_fslots, buf_fpoints;
+static id<MTLBuffer> buf_quads, buf_verts, buf_lverts, buf_lpoints, buf_lslots, buf_lfaces, buf_fslots, buf_fpoints;
 static long faces_drawn;
 static id<MTLBuffer> buf_out32, buf_job, buf_gap;
 static size_t out32_len;
@@ -418,6 +443,9 @@ static int face_banks(const ScFace *f, size_t nf, const FwSpan *sp, size_t n)
     size_t i;
     for (i = 0; i < n; i++) {
         const ScFace *q;
+        if (sp[i].textured == FW_QUAD && !(sp[i].pad1[1] & 2) && !gpu_bin_ref_only(&sp[i]) && (!bank_ok[sp[i].bank] || sp[i].bank == 0x70 || sp[i].bank == 0x71) &&
+            !bank_put(sp[i].bank))
+            return 0;
         if (sp[i].textured != 6 || (size_t)sp[i].x1 >= nf)
             continue;
         q = &f[sp[i].x1];
@@ -434,7 +462,7 @@ static int face_banks(const ScFace *f, size_t nf, const FwSpan *sp, size_t n)
    kept beside it (tex_id) for the check */
 static int draw_faces(int w, int h, const FwSpan *sp, size_t n)
 {
-    size_t ns, np, nf, nt, nl, nr, r, t0 = 0, l0 = 0, nfs, nfp;
+    size_t ns, np, nf, nt, nl, nq, nr, r, t0 = 0, l0 = 0, q0 = 0, nfs, nfp;
     const ScSlot *sl = sc_list_slots(&ns);
     const ScPoint *pt = sc_list_points(&np);
     const ScFace *fc = sc_list_faces(&nf);
@@ -445,8 +473,6 @@ static int draw_faces(int w, int h, const FwSpan *sp, size_t n)
     static size_t cap;
     float view[8], cx, cy;
 
-    if (!nf || (!np && !nfp))
-        return 1;
     if (!face_banks(fc, nf, sp, n))
         return 0;
     if (cap < n) {
@@ -458,7 +484,8 @@ static int draw_faces(int w, int h, const FwSpan *sp, size_t n)
         if (!cap)
             return 0;
     }
-    gpu_bin_faces(sp, n, NULL, &nt, NULL, &nl, NULL, NULL, NULL);
+    gpu_bin_faces(sp, n, NULL, &nt, NULL, &nl, NULL, &nq, NULL, NULL, NULL);
+    buf_quads = grow(buf_quads, nq * sizeof(FwSpan));
     buf_verts = grow(buf_verts, nt * sizeof(GpuVert));
     buf_lverts = grow(buf_lverts, nl * sizeof(GpuVert));
     buf_lpoints = grow(buf_lpoints, np * sizeof *pt);
@@ -466,14 +493,16 @@ static int draw_faces(int w, int h, const FwSpan *sp, size_t n)
     buf_lfaces = grow(buf_lfaces, nf * sizeof *fc);
     buf_fslots = grow(buf_fslots, nfs * sizeof *fs);
     buf_fpoints = grow(buf_fpoints, nfp * sizeof *fp);
-    if (!buf_verts || !buf_lverts || !buf_lpoints || !buf_lslots || !buf_lfaces || !buf_fslots || !buf_fpoints)
+    if (!buf_quads || !buf_verts || !buf_lverts || !buf_lpoints || !buf_lslots || !buf_lfaces || !buf_fslots || !buf_fpoints)
         return 0;
-    gpu_bin_faces(sp, n, (GpuVert *)buf_verts.contents, &nt, (GpuVert *)buf_lverts.contents, &nl, &nr, kind, len);
+    gpu_bin_faces(sp, n, (GpuVert *)buf_verts.contents, &nt, (GpuVert *)buf_lverts.contents, &nl, (FwSpan *)buf_quads.contents,
+                  &nq, &nr, kind, len);
     if (np)
         memcpy(buf_lpoints.contents, pt, np * sizeof *pt);
     if (ns)
         memcpy(buf_lslots.contents, sl, ns * sizeof *sl);
-    memcpy(buf_lfaces.contents, fc, nf * sizeof *fc);
+    if (nf)
+        memcpy(buf_lfaces.contents, fc, nf * sizeof *fc);
     if (nfs)
         memcpy(buf_fslots.contents, fs, nfs * sizeof *fs);
     if (nfp)
@@ -527,7 +556,15 @@ static int draw_faces(int w, int h, const FwSpan *sp, size_t n)
         [re setFragmentBuffer:buf_banks offset:0 atIndex:1];
         [re setFragmentBuffer:buf_slot offset:0 atIndex:2];
         for (r = 0; r < nr; r++) {
-            if (kind[r]) {
+            if (kind[r] == 2) {
+                [re setRenderPipelineState:pipe_quad];
+                [re setVertexBuffer:buf_quads offset:0 atIndex:0];
+                [re setFragmentBuffer:buf_quads offset:0 atIndex:0];
+                [re setFragmentBytes:fw_water length:16 atIndex:3];
+                [re drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:q0 vertexCount:len[r]];
+                [re setFragmentBuffer:buf_lfaces offset:0 atIndex:0];
+                q0 += len[r];
+            } else if (kind[r]) {
                 [re setRenderPipelineState:pipe_line];
                 [re setVertexBuffer:buf_lverts offset:0 atIndex:0];
                 [re drawPrimitives:MTLPrimitiveTypeLine vertexStart:l0 vertexCount:len[r]];
@@ -735,8 +772,13 @@ int gpu_metal_init(void)
         d.inputPrimitiveTopology = MTLPrimitiveTopologyClassLine;
         if (pipe_tri)
             pipe_line = [dev newRenderPipelineStateWithDescriptor:d error:&err];
+        d.vertexFunction = [lib newFunctionWithName:@"quad_vertex"];
+        d.fragmentFunction = [lib newFunctionWithName:@"quad_fragment"];
+        d.inputPrimitiveTopology = MTLPrimitiveTopologyClassTriangle;
+        if (pipe_line)
+            pipe_quad = [dev newRenderPipelineStateWithDescriptor:d error:&err];
     }
-    if (!pipe_fill || !pipe_rows || !pipe_water || !pipe_tri || !pipe_line) {
+    if (!pipe_fill || !pipe_rows || !pipe_water || !pipe_tri || !pipe_line || !pipe_quad) {
         fprintf(stderr, "gpu_metal: the pipeline: %s\n", err.localizedDescription.UTF8String);
         return 0;
     }

@@ -115,6 +115,7 @@ static SceInt64 x_kt[4];
 static int16_t s_hash[STAGE_HASH];      /* a stage's index + 1, 0 none */
 static int s_ram_stages;
 static long s_stage_made, s_stage_resets;
+static long s_quads, s_quads_cut;
 static void report(void)
 {
     printf("gpu_ge: %ld fills on the GE, %ld on the CPU (no GPU memory lent); %ld polygons the GE's whole, %ld by rows; "
@@ -123,7 +124,8 @@ static void report(void)
     printf("; spans by kind (flat, textured, perspective, polygon): %ld %ld %ld %ld, ms %.1f %.1f %.1f %.1f, sync %.1f",
            x_kind[0], x_kind[1], x_kind[2], x_kind[3], x_kt[0] / 1000.0, x_kt[1] / 1000.0, x_kt[2] / 1000.0,
            x_kt[3] / 1000.0, x_sync / 1000.0);
-    printf("; textures staged %ld, all made again %ld times", s_stage_made, s_stage_resets);
+    printf("; textures staged %ld, all made again %ld times; screen quads %ld (%ld cut by the water)", s_stage_made,
+           s_stage_resets, s_quads, s_quads_cut);
     printf("; canvas ms in all: open %.1f spans %.1f ground %.1f close %.1f", s_cvt[0] / 1000.0, s_cvt[1] / 1000.0,
            s_cvt[2] / 1000.0, s_cvt[3] / 1000.0);
     printf("; canvas: %ld opened, %ld over the last; ground rows %ld, %ld of one colour", s_cv_opens, s_cv_kept,
@@ -851,12 +853,149 @@ static void face_ge(const FwSpan *p)
     s_faces++;
 }
 
+/* ---- the screen quads (fullwindow.h FW_QUAD) ----
+   A quad the GE's raster over its rectangle of pixels: its texture a stage
+   of its bank from its base, 256 across and as many rows as its rule
+   reaches (the texel at base + row * 256 + column, as the rule reads it,
+   repeating every 256 across); u and v at its corners from its rule at
+   their pixels' centres (affine across and down, the rows' divide taken
+   as its line: the GE's interpolation, which the check measures). The
+   water's cut is the half-plane the reference's test leaves (the quad's
+   1 / depth against the water's plane, both planes in x and y): the
+   rectangle clipped by its line. */
+/* the polygon in (x, y) kept where a x + b y + c <= 0 (pixel coordinates) */
+static int half_clip(const PV *in, int n, PV *out, float a, float b, float c)
+{
+    int i, m = 0;
+    for (i = 0; i < n; i++) {
+        const PV *p = &in[i], *q = &in[(i + 1) % n];
+        float fp = a * p->x + b * p->y + c, fq = a * q->x + b * q->y + c;
+        if (fp <= 0)
+            out[m++] = *p;
+        if ((fp <= 0) != (fq <= 0)) {
+            float t = fp / (fp - fq);
+            out[m].x = p->x + (q->x - p->x) * t;
+            out[m].y = p->y + (q->y - p->y) * t;
+            out[m].uq = out[m].vq = out[m].q = 0;
+            m++;
+        }
+    }
+    return m;
+}
+
+/* The bias that keeps the GE's interpolated coordinate on the texel the
+   rule gives: the rule's value at each pixel centre a / den (den 2^32, or
+   the rows' divide), its texel floor(a / den); half the least distance
+   from any such value up to its next texel, so a value the GE lands just
+   below a whole texel (its interpolation's rounding) is lifted onto it and
+   none is lifted past the next. Over the quad's columns (or rows), not
+   its pixels. */
+static double quad_bias(int64_t a, int64_t d, int32_t n, int64_t den)
+{
+    int64_t least = den;
+    int32_t k;
+    for (k = 0; k < n; k++, a += d) {
+        int64_t r = a % den;
+        if (r < 0)
+            r += den;
+        if (r && den - r < least)
+            least = den - r;
+    }
+    return (double)least / (2.0 * (double)den);
+}
+
+static void quad_ge(const FwSpan *p, int w, int h)
+{
+    PV a[8], b[8];
+    int n = 4, i, vm = 0xFF;
+    const Stage *s = NULL;
+    double k32 = 1.0 / 4294967296.0, dn = p->mask ? 1.0 / (double)p->mask : k32;
+    int64_t tl = p->v + p->dv * (p->pad0 - 1);
+    float X0 = (float)p->x0, X1 = (float)(p->x1 + 1), Y0 = (float)p->y, Y1 = (float)(p->y + p->pad0);
+
+    memset(a, 0, sizeof a);
+    a[0].x = a[3].x = X0;
+    a[1].x = a[2].x = X1;
+    a[0].y = a[1].y = Y0;
+    a[2].y = a[3].y = Y1;
+    if (fw_water[3] != 0 && (p->za != 0 || p->zx != 0 || p->zy != 0)) {
+        /* kept where the water's 1 / depth is not above the quad's at the
+           pixel's centre (x - 0.5, y - 0.5 in pixel numbers) */
+        float ca = fw_water[1] - p->zx, cb = fw_water[2] - p->zy, cc = fw_water[0] - p->za;
+        n = half_clip(a, 4, b, ca, cb, cc - 0.5f * ca - 0.5f * cb);
+        memcpy(a, b, sizeof a);
+        s_quads_cut++;
+        if (n < 3)
+            return;
+    }
+    if (!(p->pad1[1] & 2)) {
+        tl = p->mask ? tl / p->mask : tl >> 32;
+        if (tl >= 0 && tl < 256)
+            vm = pow2_at_least((int)tl + 1) - 1;
+        if (!(s = stage_for(p->bank, p->base, (uint16_t)(vm << 8 | 0xFF))))
+            return;
+    }
+    room();
+    s_used += (size_t)n * sizeof(PTV) + 256;
+    model_mode(0);
+    if (s) {
+        PTV *t = (PTV *)sceGuGetMemory((unsigned)n * sizeof(PTV));
+        float tws = (float)pow2_at_least(s->tw), ths = (float)pow2_at_least(s->th);
+        int64_t one = (int64_t)1 << 32;
+        double bu = quad_bias(p->u + p->du * (p->x0 - p->xl), p->du, p->x1 - p->x0 + 1, one);
+        double bv = quad_bias(p->v, p->dv, p->pad0, p->mask ? (int64_t)p->mask : one);
+        textured(1);
+        use_texture(s);
+        use_rules(p->por, p->hi);
+        if (!s_wrap) {
+            sceGuTexWrap(GU_REPEAT, GU_REPEAT);
+            s_wrap = 1;
+        }
+        for (i = 0; i < n; i++) {
+            double cu = ((double)p->u + (double)p->du * ((double)a[i].x - 0.5 - (double)p->xl)) * k32;
+            double cv = ((double)p->v + (double)p->dv * ((double)a[i].y - 0.5 - (double)p->y)) * dn;
+            t[i].u = (float)(cu + bu) / tws;
+            t[i].v = (float)(cv + bv) / ths;
+            t[i].x = 2.0f * a[i].x / (float)w - 1.0f;
+            t[i].y = 1.0f - 2.0f * a[i].y / (float)h;
+            t[i].z = 1.0f;
+        }
+        sceGuDrawArray(GU_TRIANGLE_FAN, GU_TEXTURE_32BITF | GU_VERTEX_32BITF | GU_TRANSFORM_3D, n, 0, t);
+    } else if (s_c32) {
+        PCV32 *c = (PCV32 *)sceGuGetMemory((unsigned)n * sizeof(PCV32));
+        textured(0);
+        for (i = 0; i < n; i++) {
+            c[i].c = 0xFF000000u | p->colour;
+            c[i].x = 2.0f * a[i].x / (float)w - 1.0f;
+            c[i].y = 1.0f - 2.0f * a[i].y / (float)h;
+            c[i].z = 1.0f;
+        }
+        sceGuDrawArray(GU_TRIANGLE_FAN, GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D, n, 0, c);
+    } else {
+        PCV *c = (PCV *)sceGuGetMemory((unsigned)n * sizeof(PCV));
+        textured(0);
+        for (i = 0; i < n; i++) {
+            c[i].c = (uint16_t)(0xF000u | p->colour);
+            c[i].pad = 0;
+            c[i].x = 2.0f * a[i].x / (float)w - 1.0f;
+            c[i].y = 1.0f - 2.0f * a[i].y / (float)h;
+            c[i].z = 1.0f;
+        }
+        sceGuDrawArray(GU_TRIANGLE_FAN, GU_COLOR_4444 | GU_VERTEX_32BITF | GU_TRANSFORM_3D, n, 0, c);
+    }
+    s_quads++;
+}
+
 static void span(const FwSpan *p, int w, int h)
 {
     int32_t x, a;
     (void)h;
     if (gpu_bin_ref_only(p))            /* the reference's own (a check's) */
         return;
+    if (p->textured == FW_QUAD) {       /* a screen quad: the GE's whole */
+        quad_ge(p, w, h);
+        return;
+    }
     if (gpu_bin_face(p)) {              /* a display-list face: the GE's whole */
         face_ge(p);
         return;
@@ -963,7 +1102,32 @@ static void fill(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
                 s_apart_far += !near;
             }
         s_checked++;
-        if (getenv("FW_GPUDUMP") && s_checked == atol(getenv("FW_GPUDUMP"))) {
+        if (getenv("FW_GPUDUMP") && !strcmp(getenv("FW_GPUDUMP"), "q")) {
+            /* (a check) the first fill with 5 quads or more: its texels and its quads */
+            static int done;
+            size_t nq = 0;
+            for (i = 0; i < n; i++)
+                nq += sp[i].textured == FW_QUAD && !gpu_bin_ref_only(&sp[i]);
+            if (!done && nq >= 5) {
+                FILE *f = fopen("host0:/gdump.bin", "wb");
+                done = 1;
+                if (f) {
+                    int32_t wh[2] = { w, h };
+                    fwrite(wh, sizeof wh, 1, f);
+                    fwrite(out, 1, len, f);
+                    fwrite(s_ref, 1, len, f);
+                    fclose(f);
+                }
+                f = fopen("host0:/gquads.bin", "wb");
+                if (f) {
+                    fwrite(fw_water, sizeof fw_water, 1, f);
+                    for (i = 0; i < n; i++)
+                        if (sp[i].textured == FW_QUAD && !gpu_bin_ref_only(&sp[i]))
+                            fwrite(&sp[i], sizeof sp[i], 1, f);
+                    fclose(f);
+                }
+            }
+        } else if (getenv("FW_GPUDUMP") && s_checked == atol(getenv("FW_GPUDUMP"))) {
             /* (a check) this fill's texels, the GE's and the reference's, as two 8-bit images */
             FILE *f = fopen("host0:/gdump.bin", "wb");
             if (f) {

@@ -91,10 +91,10 @@ int gpu_bin_bank(const FwSpan *s)
     return s->textured ? s->bank : -1;
 }
 
-void gpu_bin_faces(const FwSpan *sp, size_t n, GpuVert *tri, size_t *ntri, GpuVert *line, size_t *nline,
-                   size_t *runs, uint8_t *kind, uint32_t *len)
+void gpu_bin_faces(const FwSpan *sp, size_t n, GpuVert *tri, size_t *ntri, GpuVert *line, size_t *nline, FwSpan *quad,
+                   size_t *nquad, size_t *runs, uint8_t *kind, uint32_t *len)
 {
-    size_t nf, nc, i, k, nt = 0, nl = 0, nr = 0;
+    size_t nf, nc, i, k, nt = 0, nl = 0, nq = 0, nr = 0;
     const ScFace *fc = sc_list_faces(&nf);
     const ScCorner *cn = sc_list_corners(&nc);
     for (i = 0; i < n; i++) {
@@ -103,6 +103,20 @@ void gpu_bin_faces(const FwSpan *sp, size_t n, GpuVert *tri, size_t *ntri, GpuVe
         float u[8], v[8];
         uint32_t id = (uint32_t)sp[i].x1, m;
         int isline;
+        if (sp[i].textured == FW_QUAD) {
+            if (sp[i].pad1[0] == 1)
+                continue;
+            if (runs && (!nr || kind[nr - 1] != 2)) {
+                kind[nr] = 2;
+                len[nr++] = 0;
+            }
+            if (quad)
+                quad[nq] = sp[i];
+            nq++;
+            if (runs)
+                len[nr - 1] += 6;
+            continue;
+        }
         if ((size_t)id >= nf)
             continue;
         f = &fc[id];
@@ -141,6 +155,7 @@ void gpu_bin_faces(const FwSpan *sp, size_t n, GpuVert *tri, size_t *ntri, GpuVe
     }
     *ntri = nt;
     *nline = nl;
+    *nquad = nq;
     if (runs)
         *runs = nr;
 }

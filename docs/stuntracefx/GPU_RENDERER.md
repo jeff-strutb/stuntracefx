@@ -181,7 +181,33 @@ the same display list.
    slot's shade tier 0 apart; SC_BREAK shows it fails. Kind 2 met by none.
 4. Pixels: the GPU's picture against the CPU reference, pixels apart and
    how far. Original shots and dumps unchanged.
-5. The other passes, the menus' 3D and two players.
+5. The other passes, the menus' 3D and two players. In progress:
+   - Correction (2026-11-04): until the fix below, the display list held
+     only the model faces the chip clips at the screen's edges (the
+     tag at l9237); the faces wholly on the screen are listed at 01:9199's
+     other branch, which had no tag, so the CPU edge-walked them (race100:
+     4,001 of 51,802 entries were the GPU's). The pixel counts for stage 4
+     and the solids were measured with that share. Now tagged there too:
+     every entry in the full window's pictures is a display-list face
+     (FW_CENSUS: speed_expert_4wd 1,994,647, race100 51,802; 0 drawn by
+     the CPU; 0 whose colour or bank is not its face's). Race100, all
+     faces the GPU's: Metal and Vulkan 102,140 pixels apart from the CPU
+     reference (91,317 a texel away, 5,167 farther), identical to each
+     other; the GE 445,504 (360,066 a texel away).
+   - Scaled sprites: one screen quad each (fullwindow.h FW_QUAD; the
+     three paths of FxObjectSprite: 01:B1CB, 01:B2ED and the full window's
+     own for texels not square), each pixel's texel by the chip's rule in
+     integers on the GPU, the chip's row loops skipped. FW_QUADCHECK
+     (each quad against the chip's loops, on the CPU): 0 texels apart over
+     4,059 small, 1,989 large and 30,359 not-square quads; SC_BREAK 30,805
+     apart. Metal and Vulkan: every shot identical to the chip's loops on
+     the GPU's fill (541 shots, two plays; SC_BREAK: 42 differ). The GE:
+     its interpolation (speed_expert_4wd: 16,607 more pixels apart over
+     458 quads than the loops' rows).
+   - FW_CENSUS (macOS): what the CPU still draws, by kind and routine.
+     speed_expert_4wd: the HUD's programs 9.4 million plots (07:F121,
+     F15B, F6DF glyphs, FA88 and FAF2 scaled sprites), labels 144,204
+     (FxTextNotice), the frame program's other plots 24,052 (weather).
 6. Vulkan, then the GE.
 7. Original's bitmap on the GPU, read back at STOP; the job-duration model
    refitted.

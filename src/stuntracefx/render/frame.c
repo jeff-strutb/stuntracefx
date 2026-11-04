@@ -793,6 +793,8 @@ lB220:
     R[6] = gsu_add(R[6], R[0], 0);
     R[6] = gsu_inc(R[6]);
 lB22A:
+    if (fw_sprite_small(R[2], R[3], R[6], R[4], R[5], R[9], 0))   /* Enhanced, SC_GPU: one quad for the GPU */
+        goto lB24B;
     R[13] = 0xB23E;
 lB22D:
     R[0] = gsu_ldw(FX_SCREEN_BOTTOM);
@@ -819,6 +821,8 @@ lB246:
     t = !gsu.z;
     R[2] = gsu_inc(R[2]);
     if (t) { goto lB22D; }
+lB24B:
+    fw_sprite_rows_done();
     R[10] = gsu_dec(R[10]);
     R[10] = gsu_dec(R[10]);
     nx = (uint16_t)(gsu_ldw(R[10]));
@@ -859,6 +863,8 @@ lB271:
     R[6] = gsu_add(R[6], R[0], 0);
     R[6] = gsu_inc(R[6]);
 lB27D:
+    if (fw_sprite_small(R[2], R[3], R[6], R[4], R[5], R[9], 1))
+        goto lB29F;
     R[13] = 0xB291;
 lB280:
     R[0] = gsu_ldw(FX_SCREEN_BOTTOM);
@@ -885,6 +891,8 @@ lB299:
     t = !gsu.z;
     R[2] = gsu_inc(R[2]);
     if (t) { goto lB280; }
+lB29F:
+    fw_sprite_rows_done();
     R[10] = gsu_dec(R[10]);
     R[10] = gsu_dec(R[10]);
     nx = (uint16_t)(gsu_ldw(R[10]));
@@ -958,6 +966,8 @@ lB35E:
     t = gsu.z;
     if (t) { goto lB3A6; }
     R[4] = 0x0000;
+    if (fw_sprite_large(R[2], R[3], R[6], R[11], R[9], R[5], 0))
+        goto lB3A6;
 lB365:
     R[2] = R[2];
     gsu_moves(R[2]);
@@ -1020,6 +1030,7 @@ lB398:
     t = !gsu.z;
     if (t) { goto lB365; }
 lB3A6:
+    fw_sprite_rows_done();
     R[10] = gsu_dec(R[10]);
     R[10] = gsu_dec(R[10]);
     nx = (uint16_t)(gsu_ldw(R[10]));
@@ -1064,6 +1075,8 @@ lB3E2:
     t = gsu.z;
     if (t) { goto lB42A; }
     R[4] = 0x0000;
+    if (fw_sprite_large(R[2], R[3], R[6], R[11], R[9], R[5], 1))
+        goto lB42A;
 lB3E9:
     R[2] = R[2];
     gsu_moves(R[2]);
@@ -1126,6 +1139,7 @@ lB41C:
     t = !gsu.z;
     if (t) { goto lB3E9; }
 lB42A:
+    fw_sprite_rows_done();
     R[10] = gsu_dec(R[10]);
     R[10] = gsu_dec(R[10]);
     nx = (uint16_t)(gsu_ldw(R[10]));

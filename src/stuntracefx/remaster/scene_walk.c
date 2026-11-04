@@ -859,14 +859,39 @@ static int32_t entry_face[0x400];
 static uint16_t entry_used[0x400];
 static int entries;
 
+/* (FW_CENSUS) the chip's listed faces the display list misses, by why:
+   no walk (lost or none), no face matched, no slot, no face of the list's */
+static long miss_why[4], listed_ok;
+static void miss_report(void)
+{
+    printf("census: model entries listed %ld; missed: no walk %ld, no face %ld, no slot %ld, not the list's (kind) %ld\n",
+           listed_ok, miss_why[0], miss_why[1], miss_why[2], miss_why[3]);
+    fflush(stdout);
+}
+static void miss(int why)
+{
+    static int on = -1;
+    if (on < 0 && (on = getenv("FW_CENSUS") != NULL))
+        atexit(miss_report);
+    if (on)
+        miss_why[why]++;
+}
+
 void sc_walk_listed(uint16_t entry)
 {
     int32_t gid;
-    if (!sc_gpu_on() || !walking || !face_mat || l_slot < 0)
+    if (!sc_gpu_on())
         return;
+    if (!walking || !face_mat || l_slot < 0) {
+        miss(!walking ? 0 : !face_mat ? 1 : 2);
+        return;
+    }
     gid = face_gid[face_mat - 1];
-    if (gid < 0)
+    if (gid < 0) {
+        miss(3);
         return;
+    }
+    listed_ok++;
     entry_face[entry & 0x3FF] = gid + 1;
     if (entries < 0x400)
         entry_used[entries++] = entry & 0x3FF;
