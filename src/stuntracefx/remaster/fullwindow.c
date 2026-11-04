@@ -3049,6 +3049,7 @@ static int size_for_window(void)
                 return 0;
         }
         handed = 0;
+        page1_known = 0;                /* the screen anew: page 1 written whole again */
     }
     return 1;
 }
@@ -4421,7 +4422,8 @@ static void bg2_backdrop(uint16_t *map, unsigned cols, unsigned sel)
 static int bg2sc_kept = -1;             /* the game's BG2SC while the full window has its own */
 /* page 1's hills as bg2_prepare last wrote them (only it writes there):
    a word written again only when it changes; not known (page1_known 0)
-   until the full window has written it all since it took the screen */
+   until it has written it all since the full window's screen was made
+   (its size, size_for_window) or came back (fw_frame_end) */
 static uint16_t page1_map[64 * 64], page1_chars[0x2000];
 static int page1_known;
 
@@ -4488,7 +4490,21 @@ static void bg2_prepare(void)
         }
         page1_write(BG2_WIDE_AT, page, page1_map, 64 * 64);
     }
-    page1_write(BG2_CHARS_AT, v + BG2_CHARS_AT, page1_chars, 0x2000);  /* the characters as page 0 has them */
+    {                                   /* the characters as page 0 has them: those the two maps name (none
+                                           other is shown) */
+        static uint8_t used[0x2000 / 16];
+        unsigned c, k;
+        memset(used, 0, sizeof used);
+        for (k = 0; k < 64 * 64; k++)
+            if ((c = map[k] & 0x3FF) < 0x2000 / 16)
+                used[c] = 1;
+        for (k = 0; k < 128 * 64; k++)
+            if ((c = out[k] & 0x3FF) < 0x2000 / 16)
+                used[c] = 1;
+        for (c = 0; c < 0x2000 / 16; c++)
+            if (used[c] || !page1_known)
+                page1_write(BG2_CHARS_AT + c * 16, v + BG2_CHARS_AT + c * 16, page1_chars + c * 16, 16);
+    }
     page1_known = 1;
     wr8(VMADDL, (uint8_t)(BG2_CHARS_AT + 0x2000));  /* the address as writing it all leaves it */
     wr8(VMADDH, (uint8_t)((BG2_CHARS_AT + 0x2000) >> 8));
@@ -4584,7 +4600,6 @@ static void takeover(void)
     wr8(CGWSEL, cgwsel_full((uint8_t)cgwsel_game));
     screen_set();
     nshvc_ext_sprite_wrap(0);           /* Y page 0's sprites nowhere above line 1 (those above it on page -1) */
-    page1_known = 0;                    /* page 1 written whole again from here */
     nshvc_ext_layer_page(1, 1);         /* BG2 on page 1: its map at $4800, 64 x 64, characters from $6000 (bg2_prepare) */
     if (bg2sc_kept < 0)
         bg2sc_kept = mw_ppu_last(0x2108);
@@ -4662,6 +4677,7 @@ void fw_frame_end(void)
             rm_canvas_show(b ? 0x2200 : 0x0000, b ? 0x9400 : 0x2C00, 416);
         }
         handed = 0;
+        page1_known = 0;                /* the original's screen again: page 1 written whole when it comes back */
         nshvc_set_cpu_costs(1);
     }
     nshvc_hold_interrupts(0);
