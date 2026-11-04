@@ -2060,6 +2060,7 @@ l910D:
     R[11] = 0x9112;
     goto l8F7D;
 l9112:
+    sc_walk_chip_material(R[0]);        /* the renderer's check (scene.h) */
     R[6] = gsu_ldw(FX_LIST_END);
     R[3] = R[0];
     gsu_r14(gsu_add(R[14], 4, 0));

@@ -55,6 +55,8 @@ void sc_walk_command(uint8_t bank, uint16_t at);
 void sc_walk_chip_face(uint16_t at);
 /* the projection found every point past one edge (01:924D): the model ends */
 void sc_walk_rejected(void);
+/* the chip's material for the face it just took (01:9112, R0 its result) */
+void sc_walk_chip_material(uint16_t r0);
 void sc_walk_face(uint16_t at);
 void sc_walk_facing(uint16_t at, uint16_t n);
 

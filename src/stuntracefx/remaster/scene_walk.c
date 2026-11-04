@@ -43,7 +43,23 @@ typedef struct {
     int np;                             /* the points made so far, in view space as FxModelProject takes them */
     int32_t vx[128], vy[128], vz[128];
     uint8_t flag[64];                   /* the walk's own facing flags (bit 7: the face turned to the eye) */
+    /* the slot's material inputs: the material table ($004A, bank $03),
+       the animated materials' mask ($0046), the model flags ($0054); made
+       here: the light turned into the object, the depth-shade tier's table
+       and colours */
+    uint16_t mat_table, mat_mask, flags, shade_table, shade_at;
+    int16_t light[3];
 } Walk;
+
+/* A face's material as FxModelMaterial (01:8F7D) resolves it: flat, its
+   colour byte (the draw list's); textured, its bank, colour word, texture
+   base and mask and where its u, v pairs start; kind 2 (material bits 15
+   and 14) not met in any play */
+typedef struct {
+    int kind;
+    uint8_t colour, bank;
+    uint16_t face_colour, base, mask, uv_at;
+} Material;
 
 static uint8_t byte(const Walk *w, uint16_t a) { return gsu_peek8((uint32_t)w->bank << 16 | a); }
 static uint16_t word(const Walk *w, uint16_t a) { return (uint16_t)(byte(w, a) | byte(w, (uint16_t)(a + 1)) << 8); }
@@ -105,11 +121,110 @@ static void walk_facing(Walk *w, uint16_t at, int n)
     }
 }
 
+static uint8_t rom3(uint16_t a) { return gsu_peek8(0x030000u | a); }
+static uint16_t rom3w(uint16_t a) { return (uint16_t)(rom3(a) | rom3((uint16_t)(a + 1)) << 8); }
+static uint16_t fmult_rol(uint16_t a, uint16_t b) { return (uint16_t)(((int32_t)(int16_t)a * (int16_t)b) >> 15); }
+static uint16_t mult8(unsigned a, unsigned b) { return (uint16_t)((int8_t)a * (int8_t)b); }
+
+/* the slot's material set-up: the light ($0000, $393E, $727C) turned by
+   the slot's matrix before a far object's halving (01:8778: each word the
+   high byte of its sum, sign-extended), and the depth-shade tier
+   (01:85B6): the first of three bytes at the model's list ($0050, or $AE45
+   + 4 ($01B6 - 1)) whose depth word (the byte << 8) and the object's depth
+   ($002A, a far object's own) sum to less than 0, its table and colours
+   ($004E + $88 a tier) */
+static void walk_materials(Walk *w, const uint16_t m[9], uint16_t depth, int car)
+{
+    static const uint16_t light[3] = { 0x0000, 0x393E, 0x727C };
+    static const uint16_t tables[2][4] = { { 0xA1C5, 0xA1F1, 0xA21D, 0xA249 }, { 0xA275, 0xA2A1, 0xA2CD, 0xA2F9 } };
+    uint16_t at = ram16(0x0050), b6 = ram16(0x01B6) & 0xFF;
+    int j, tier;
+
+    for (j = 0; j < 3; j++) {
+        uint16_t sum = (uint16_t)(fmult_rol(light[0], m[3 * j]) + fmult_rol(light[1], m[3 * j + 1]) +
+                                  fmult_rol(light[2], m[3 * j + 2]));
+        w->light[j] = (int8_t)(sum >> 8);
+    }
+    if (b6)
+        at = (uint16_t)((b6 - 1) * 4 + 0xAE45);
+    for (tier = 0; tier < 3; tier++)
+        if ((int16_t)(uint16_t)((rom3((uint16_t)(at + tier)) << 8) + depth) < 0)
+            break;
+    w->shade_table = tables[car ? 1 : 0][tier];
+    w->shade_at = (uint16_t)(ram16(0x004E) + 0x88 * tier);
+}
+
+/* a face's material (its record at p: the material byte at p + 3, the
+   normal's three bytes after it) */
+static Material walk_material(const Walk *w, uint16_t p)
+{
+    Material r = { 0, 0, 0, 0, 0, 0, 0 };
+    uint16_t at, word;
+    int guard = 0;
+
+    if (w->flags & 0x2000) {            /* 01:8F7D: a shadow, colour 9 */
+        r.colour = 9;
+        return r;
+    }
+    at = (uint16_t)(byte(w, (uint16_t)(p + 3)) * 2 + w->mat_table);
+    for (;;) {
+        word = rom3w(at);
+        if (!(word & 0x8000))
+            break;
+        if (word & 0x4000) {            /* kind 2: its colour word $08n0, the texture as it stands */
+            r.kind = 2;
+            r.face_colour = (uint16_t)(0x0800 | (word >> 8 & 15) << 4);
+            return r;
+        }
+        {                               /* 01:8FCF: animated, the mask's entry of a list of n */
+            uint16_t list = word & 0x1FFF;
+            uint8_t n = rom3(list);
+            at = (uint16_t)(list + ((w->mat_mask & (uint16_t)(n - 1)) * 2 + 1));
+        }
+        if (++guard > 16)
+            return (Material){ 3, 0, 0, 0, 0, 0, 0 };
+    }
+    if (word & 0x4000) {                /* 01:900B: textured */
+        uint8_t c = rom3((uint16_t)(0x9FB1 + (word & 0xFF)));
+        uint16_t t = (uint16_t)((word & 0xFF) * 3 + 0x9D59), uv;
+        r.kind = 1;
+        r.face_colour = (uint16_t)((word & 0x2000 ? 0x0C00 : 0x0800) + c);
+        r.base = rom3w(t);
+        r.bank = rom3((uint16_t)(t + 2));
+        uv = rom3w((uint16_t)(0xA079 + (word >> 8 & 0x1F) * 2));
+        r.mask = rom3w(uv);
+        r.uv_at = (uint16_t)(uv + 2);
+        return r;
+    }
+    {
+        uint8_t h = (uint8_t)(word >> 8) & 0x3F;
+        if (h == 0x3F)                  /* 01:90B3: the colour itself */
+            r.colour = (uint8_t)word;
+        else if (h == 0x3E)             /* depth-shaded: the tier's colours */
+            r.colour = rom3((uint16_t)((word & 0xFF) + w->shade_at));
+        else {                          /* 01:905E: lit, the normal against the light, 6 to 15 */
+            uint16_t tab = rom3w((uint16_t)(w->shade_table + 2 * h)), sum;
+            int l;
+            sum = (uint16_t)(mult8(byte(w, (uint16_t)(p + 4)), (uint16_t)w->light[0]) +
+                             mult8(byte(w, (uint16_t)(p + 5)), (uint16_t)w->light[1]) +
+                             mult8(byte(w, (uint16_t)(p + 6)), (uint16_t)w->light[2]));
+            l = (int8_t)(uint8_t)((uint16_t)((int16_t)sum >> 2) >> 8);
+            if (l < 6)
+                l = 6;
+            else if (l >= 16)
+                l = 15;
+            r.colour = rom3((uint16_t)(tab + l - 6));
+        }
+    }
+    return r;
+}
+
 /* ---- the check ---- */
 extern int64_t fw_facing_log[64];     /* the full window's crosses as fw_facing_cross makes them */
 extern int fw_facing_log_n;
 static int check = -1, brk;
 static long brk_face;
+static long mats, mat_apart, mat_kind[4], light_apart, shade_apart, light_checked;
 static long projected_out, fw_facings, fw_same, fw_zero_det, fw_flat, fw_held, fw_small;
 static int64_t fw_max_cross, fw_max_round;
 static long fw_rounding;
@@ -135,6 +250,9 @@ static void report(void)
                     "within the projection's rounding (largest area %lld), %ld others (largest area %lld)\n",
             fw_facings, fw_same, fw_zero_det, fw_flat, fw_held, fw_rounding, (long long)fw_max_round, fw_small,
             (long long)fw_max_cross);
+    fprintf(stderr, "scene walk materials: %ld faces (flat %ld, textured %ld, kind 2 %ld, unwalked %ld), %ld apart; "
+                    "%ld slots' shade tiers apart; %ld lights, %ld apart\n",
+            mats, mat_kind[0], mat_kind[1], mat_kind[2], mat_kind[3], mat_apart, shade_apart, light_checked, light_apart);
 }
 
 /* the walk's next command: the continuations pulled until a command byte
@@ -325,6 +443,8 @@ static int want_project;                /* the last command the projection: the 
 static uint16_t want_project_at, last_chip;
 static int face_q[256], face_qn, face_qat;
 static uint16_t face_mine[1024];
+static Material mat_mine[1024];
+static int light_due;
 static int face_mn, face_mat;
 
 void sc_walk_face(uint16_t at)
@@ -333,8 +453,12 @@ void sc_walk_face(uint16_t at)
         return;
     if (getenv("SC_TRACE") && slots <= 400)
         fprintf(stderr, "  mine face $%04X\n", at);
-    if (face_mn < 1024)
+    if (face_mn < 1024) {
+        mat_mine[face_mn] = walk_material(&walk, at);
+        if (brk && (brk_face % 997) == 5)   /* SC_BREAK: a colour changed now and then */
+            mat_mine[face_mn].colour ^= 1;
         face_mine[face_mn++] = at;
+    }
 }
 
 void sc_walk_facing(uint16_t at, uint16_t n)
@@ -373,6 +497,22 @@ void sc_walk_begin(void)
     walk.bank = (uint8_t)ram16(0x001C);
     walk.faces_at = ram16(0x0018);
     walk.frame = ram16(0x0044);
+    walk.mat_table = ram16(0x004A);
+    walk.mat_mask = ram16(0x0046);
+    walk.flags = ram16(0x0054);
+    {
+        uint16_t angle[3], e[9], m[9];
+        int i;
+        for (i = 0; i < 3; i++)
+            angle[i] = ram16((uint16_t)(0x0020 + 2 * i));
+        for (i = 0; i < 9; i++)
+            e[i] = ram16((uint16_t)(0x00E4 + 2 * i));
+        sc_matrix(angle, rm_angle_frac, walk.flags, e, 0, m);
+        walk_materials(&walk, m, rm_far_shift ? rm_far_depth : ram16(0x002A), ram16(0x108C) & 0xFF);
+        if (walk.shade_table != ram16(0x004C) || walk.shade_at != ram16(0x0052))   /* the chip made them already */
+            shade_apart++;
+        light_due = 1;
+    }
     push(&walk, K_END, 0);              /* 01:8848: 9243 pushed before the list */
     want = dispatch(&walk, ram16(0x0016));
     walking = 1;
@@ -482,6 +622,39 @@ void sc_walk_rejected(void)
     walk.rejected = 1;
     want = run_command(&walk, want_project_at);
     want_project = 0;
+}
+
+/* the chip's material for the face it just matched (01:9112, R0 its
+   result), against the walk's */
+void sc_walk_chip_material(uint16_t r0)
+{
+    const Material *m;
+    int apart;
+    if (check <= 0 || !walking || !face_mat)
+        return;
+    if (light_due) {                    /* the light the chip turned into the object (01:8778) */
+        light_due = 0;
+        light_checked++;
+        if (walk.light[0] != (int16_t)ram16(0x0106) || walk.light[1] != (int16_t)ram16(0x0108) ||
+            walk.light[2] != (int16_t)ram16(0x010A))
+            light_apart++;
+    }
+    m = &mat_mine[face_mat - 1];
+    mats++;
+    mat_kind[m->kind & 3]++;
+    if (m->kind == 0)
+        apart = !(r0 < 0x8000 && (uint8_t)r0 == m->colour);
+    else if (m->kind == 1)
+        apart = r0 != 0xFFFF || (uint8_t)ram16(0x00A6) != m->bank || ram16(0x0058) != m->face_colour ||
+                ram16(0x00A8) != m->base || ram16(0x00D4) != m->mask || ram16(0x0088) != m->uv_at;
+    else
+        apart = r0 != 0xFFFE || ram16(0x0058) != m->face_colour;
+    if (apart) {
+        mat_apart++;
+        if (getenv("SC_DEBUG") && mat_apart < 10)
+            fprintf(stderr, "material apart: face $%04X kind %d mine colour %02X chip R0 %04X\n", face_mine[face_mat - 1], m->kind,
+                    m->colour, r0);
+    }
 }
 
 void sc_walk_chip_face(uint16_t at)

@@ -171,7 +171,14 @@ the same display list.
    pixels 89%, within a whole pixel's rounding of the projected points
    11%, held at the projection's limit or behind 23 tests), 0 otherwise. The renderer
    keeps the determinant; stage 4 measures the pixels it costs.
-3. Materials: each face's colour or texture. Expected: 0 apart.
+3. Materials: each face's colour or texture. Expected: 0 apart. Done
+   (scene_walk.c, in SC_CHECK=walk): FxModelMaterial's rules natively
+   (a shadow's colour 9, animated lists by the mask, flat, depth-shaded by
+   the slot's tier, lit by the normal against the light turned into the
+   object, textured: bank, colour word, base, mask, u, v list). Over the
+   nine dense scripts and race100 in Enhanced, 14.0 million faces (510
+   thousand textured) 0 apart, 1.82 million slots' lights and every
+   slot's shade tier 0 apart; SC_BREAK shows it fails. Kind 2 met by none.
 4. Pixels: the GPU's picture against the CPU reference, pixels apart and
    how far. Original shots and dumps unchanged.
 5. The other passes, the menus' 3D and two players.
