@@ -439,8 +439,6 @@ typedef struct {
     double half[PAINT_ROWS], light[3], share[16], from[16];
     int top, bottom, ncolours;
     uint8_t colour[16];                 /* darkest (the higher nibble) first */
-    int modelled;                       /* its tree's ring points (tree_model), made once, at this size: */
-    double model_T;
 } Paint;
 
 static void paint_measure(const Solid *s, Paint *p)
@@ -582,7 +580,6 @@ static int calibrating;
    painting, by the same steps a face's corner was (its cos and sin), and
    each tree's corners placed once (tree_point) for all the faces on it. */
 #define RINGS_MAX (PAINT_ROWS / 2 + 4)
-static double model[4][RINGS_MAX][TREE_SIDES_MAX + 1][3];
 static double placed[RINGS_MAX][TREE_SIDES_MAX + 1][3];
 
 static void tree_model(double (*m)[TREE_SIDES_MAX + 1][3], const double *y, const double *r, int nr, int sides,
@@ -660,13 +657,70 @@ static void tree_body(const double *y, int nr, int sides, double (*m)[TREE_SIDES
         fw_view_face((const double (*)[3])faces[i].p, faces[i].n, (uint8_t)(hi | faces[i].c));
 }
 
+/* A tree drawn at the detail its size on the screen asks: the wheels'
+   rule (draw) for its sides, enough that its flats are within half a
+   texel of round at its widest, on four levels (the full count, a half,
+   a quarter, an eighth, at least 5); its rings merged two, four or eight
+   painting rows at a time while they would come closer than 1.5 texels
+   apart. Each level's rings and ring points are made once for its
+   painting (TreeLevel); the colours' lights are set from the full
+   detail, so a face's colour means the same light at every level. */
+typedef struct {
+    int ok, nr, sides;
+    double T, y[RINGS_MAX], r[RINGS_MAX];
+    double (*m)[TREE_SIDES_MAX + 1][3];
+} TreeLevel;
+static TreeLevel levels[4][4][4];       /* painting, sides level, rings level */
+
+static TreeLevel *tree_level(const Solid *s, Paint *pp, int paint, int sl, int rl)
+{
+    static double jag[RINGS_MAX][TREE_SIDES_MAX], rise[RINGS_MAX][TREE_SIDES_MAX];
+    TreeLevel *L = &levels[paint][sl][rl];
+    double T = s->texels, *y = L->y, *r = L->r;
+    int full = s->tree == 1 ? 10 : 44, sides = full >> sl, step = (s->tree == 1 ? 2 : 3) << rl, nr = 0, v, k, i;
+    if (L->ok && L->T == T)
+        return L;
+    if (sides < 5)
+        sides = 5;
+    y[nr] = pp->top - T / 2, r[nr++] = 0;
+    for (v = pp->top; v <= pp->bottom; v += step) {
+        double h = 0;
+        for (k = v; k < v + step && k <= pp->bottom; k++)
+            if (pp->half[k] > h)
+                h = pp->half[k];
+        y[nr] = v + step / 2.0 - T / 2, r[nr++] = h;
+    }
+    if (s->tree == 2) {                 /* the canopy's outline eased: each ring with its neighbours */
+        double was[RINGS_MAX];
+        memcpy(was, r, sizeof was);
+        for (k = 1; k + 1 < nr; k++)
+            r[k] = 0.25 * was[k - 1] + 0.5 * was[k] + 0.25 * was[k + 1];
+    }
+    y[nr] = pp->bottom + 1 - T / 2, r[nr++] = 0;
+    for (k = 0; k < nr; k++)            /* the canopy's points in and out and up and down a little, the same for every tree */
+        for (i = 0; i < sides; i++) {
+            unsigned hsh = (unsigned)(k * 7919 + i * 104729) * 2654435761u;
+            jag[k][i] = s->tree == 2 ? 0.91 + 0.18 * ((hsh >> 16) & 0xFF) / 255.0 : 1.0;
+            rise[k][i] = s->tree == 2 && r[k] ? 1.6 * (((hsh >> 8) & 0xFF) / 255.0 - 0.5) : 0;
+        }
+    if (!L->m && !(L->m = malloc(sizeof *L->m * RINGS_MAX)))
+        return NULL;
+    tree_model(L->m, y, r, nr, sides, (const double (*)[TREE_SIDES_MAX])jag, (const double (*)[TREE_SIDES_MAX])rise,
+               s->tree == 2);
+    L->nr = nr;
+    L->sides = sides;
+    L->T = T;
+    L->ok = 1;
+    return L;
+}
+
 static void tree(const Solid *s)
 {
-    static double jag[PAINT_ROWS / 2 + 4][TREE_SIDES_MAX], rise[PAINT_ROWS / 2 + 4][TREE_SIDES_MAX];
-    double y[PAINT_ROWS / 2 + 4], r[PAINT_ROWS / 2 + 4], T = s->texels;
-    int nr = 0, v, k, i, step = s->tree == 1 ? 2 : 3, sides = s->tree == 1 ? 10 : 44;
+    int i, sl, rl, paint, full = s->tree == 1 ? 10 : 44, step = s->tree == 1 ? 2 : 3;
     static Paint paints[4];
     Paint *pp = NULL;
+    TreeLevel *L;
+    double px, rmax = 0, f = fmax(fw_focal_x(), fw_focal_y());
     for (i = 0; i < 4 && !pp; i++)      /* the painting, measured once */
         if (paints[i].used && paints[i].kind == s->tree && paints[i].bank == tex_bank && paints[i].base == tex_base &&
             paints[i].nib == tex_nib)
@@ -678,53 +732,45 @@ static void tree(const Solid *s)
         paint_measure(s, pp);
         pp->used = 1, pp->kind = s->tree, pp->bank = tex_bank, pp->base = tex_base, pp->nib = tex_nib;
         pp->texels = 0;                 /* its colours' lights: not yet */
+        for (sl = 0; sl < 4; sl++)      /* its levels: not yet */
+            for (rl = 0; rl < 4; rl++)
+                levels[pp - paints][sl][rl].ok = 0;
     }
-#define pt (*pp)
-    if (!pt.ncolours || pt.top < 0)
+    paint = (int)(pp - paints);
+    if (!pp->ncolours || pp->top < 0)
         return;
-    y[nr] = pt.top - T / 2, r[nr++] = 0;
-    for (v = pt.top; v <= pt.bottom; v += step) {
-        double h = 0;
-        for (k = v; k < v + step && k <= pt.bottom; k++)
-            if (pt.half[k] > h)
-                h = pt.half[k];
-        y[nr] = v + step / 2.0 - T / 2, r[nr++] = h;
-    }
-    if (s->tree == 2) {                 /* the canopy's outline eased: each ring with its neighbours */
-        double was[PAINT_ROWS / 2 + 4];
-        memcpy(was, r, sizeof was);
-        for (k = 1; k + 1 < nr; k++)
-            r[k] = 0.25 * was[k - 1] + 0.5 * was[k] + 0.25 * was[k + 1];
-    }
-    y[nr] = pt.bottom + 1 - T / 2, r[nr++] = 0;
-    for (k = 0; k < nr; k++)            /* the canopy's points in and out and up and down a little, the same for every tree */
-        for (i = 0; i < sides; i++) {
-            unsigned hsh = (unsigned)(k * 7919 + i * 104729) * 2654435761u;
-            jag[k][i] = s->tree == 2 ? 0.91 + 0.18 * ((hsh >> 16) & 0xFF) / 255.0 : 1.0;
-            rise[k][i] = s->tree == 2 && r[k] ? 1.6 * (((hsh >> 8) & 0xFF) / 255.0 - 0.5) : 0;
-        }
-    if (!pt.modelled || pt.model_T != T) {   /* its ring points, once (for a painting at its size) */
-        tree_model(model[pp - paints], y, r, nr, sides, (const double (*)[TREE_SIDES_MAX])jag,
-                   (const double (*)[TREE_SIDES_MAX])rise, s->tree == 2);
-        pt.modelled = 1;
-        pt.model_T = T;
-    }
-    if (!pt.texels) {                   /* its colours' lights, once: the part from the front, far off */
+    if (!pp->texels) {                  /* its colours' lights, once, at the full detail: the part from the front, far off */
         double kp[3], kv[3][3], ks = scale;
         int a, b;
+        if (!(L = tree_level(s, pp, paint, 0, 0)))
+            return;
         memcpy(kp, pos, sizeof kp), memcpy(kv, view, sizeof kv);
         for (a = 0; a < 3; a++)
             for (b = 0; b < 3; b++)
                 view[a][b] = a == b;
         pos[0] = pos[1] = 0, pos[2] = 1e5, scale = 1;
         calibrating = 1;
-        tree_body(y, nr, sides, model[pp - paints], r, s->tree == 2, pp);
+        tree_body(L->y, L->nr, L->sides, L->m, L->r, s->tree == 2, pp);
         calibrating = 0;
         memcpy(pos, kp, sizeof kp), memcpy(view, kv, sizeof kv), scale = ks;
-        pt.texels = s->texels;
+        pp->texels = s->texels;
     }
-    tree_body(y, nr, sides, model[pp - paints], r, s->tree == 2, pp);
-#undef pt
+    /* its detail: texels on the screen a painting texel, at its depth */
+    for (i = pp->top; i <= pp->bottom; i++)
+        if (pp->half[i] > rmax)
+            rmax = pp->half[i];
+    px = pos[2] > 0 ? scale * f / pos[2] : 1e9;
+    {
+        double pr = rmax * px;
+        int n = pr > 0.5 ? (int)ceil(M_PI / acos(1 - 0.5 / pr)) : 5;
+        for (sl = 3; sl > 0 && (full >> sl < 5 ? 5 : full >> sl) < n; sl--)
+            ;
+    }
+    for (rl = 0; rl < 3 && step * (1 << rl) * px < 1.5; rl++)
+        ;
+    if (!(L = tree_level(s, pp, paint, sl, rl)))
+        return;
+    tree_body(L->y, L->nr, L->sides, L->m, L->r, s->tree == 2, pp);
 }
 
 /* FxObjectSprite returned (frame.c, 01:AD2D) */
