@@ -2586,6 +2586,52 @@ static int size_for_window(void)
 #define WATER_Y (-1280.0)
 #define WATER_U 33.6
 #define WATER_V 53.7
+
+/* Each course's surface ($0E3D): none (Sky Ramp: its band is sky all the
+   way down, the track meant to float), land or water by the ground colours
+   of its band, at the height its scenery is planted at (the commonest
+   height of its scenery's records over the courses' plays). Aqua Tunnel's
+   water is the one the track is cut by and that is seen from under; the
+   others are drawn only where nothing else is, so a road that dips below
+   them is never left out (the track occludes the ground), and not while
+   the eye is below them. */
+enum { SURF_NONE, SURF_LAND, SURF_WATER, SURF_AQUA };
+static const struct { uint8_t kind; int16_t y; } surface[0x20] = {
+    [0x00] = { SURF_LAND, -1280 },      /* Easy Ride */
+    [0x01] = { SURF_AQUA, -1280 },      /* Aqua Tunnel */
+    [0x02] = { SURF_LAND, 0 },          /* Sunset Valley */
+    [0x03] = { SURF_LAND, 0 },          /* Night Owl */
+    [0x04] = { SURF_LAND, 0 },          /* King's Forest */
+    [0x05] = { SURF_WATER, -1536 },     /* Sea Breeze */
+    [0x06] = { SURF_LAND, 0 },          /* White Land */
+    [0x07] = { SURF_LAND, -3840 },      /* Night Cruise */
+    [0x08] = { SURF_WATER, 0 },         /* Lake Side */
+    [0x09] = { SURF_LAND, 0 },          /* Big Ravine */
+    [0x0A] = { SURF_NONE, 0 },          /* Sky Ramp */
+    [0x0B] = { SURF_WATER, 3840 },      /* Harbor City */
+    [0x0C] = { SURF_LAND, 0 },          /* Rock Field */
+    [0x0D] = { SURF_LAND, 0 },          /* Up'n Down */
+    [0x0E] = { SURF_LAND, 0 },          /* Ice Dance */
+    [0x0F] = { SURF_WATER, 0 },         /* Blue Lake */
+    [0x10] = { SURF_LAND, 0 },          /* Battle */
+    [0x12] = { SURF_LAND, 0 },
+    [0x13] = { SURF_LAND, 0 },
+    [0x14] = { SURF_LAND, 0 },          /* the bonus courses */
+    [0x15] = { SURF_LAND, 0 },
+    [0x16] = { SURF_LAND, 0 },
+};
+
+static int surf_kind(void)
+{
+    unsigned c = nshvc_wram()[0x0E3D];
+    return c < 0x20 ? surface[c].kind : SURF_NONE;
+}
+
+static double surf_y(void)
+{
+    unsigned c = nshvc_wram()[0x0E3D];
+    return c < 0x20 ? surface[c].y : 0;
+}
 static const uint32_t water_depth[80] = {
     2152, 2180, 2208, 2236, 2266, 2296, 2327, 2359, 2392, 2426, 2461, 2497, 2534, 2572, 2611, 2651,
     2693, 2736, 2780, 2826, 2873, 2922, 2973, 3025, 3079, 3135, 3194, 3254, 3317, 3383, 3451, 3522,
@@ -2615,8 +2661,8 @@ static void water_view(void)
     }
     water_seen = 1;
     {                                   /* the water's 1 / depth along each pixel's ray: (E's row 1 . ray) / dy */
-        double f = fw_focal(), ox = tw / 2.0, oy = (double)view_cy() * K + cy_off, dy = WATER_Y - water_cam[1];
-        int here = water_here() && dy != 0;
+        double f = fw_focal(), ox = tw / 2.0, oy = (double)view_cy() * K + cy_off, dy = surf_y() - water_cam[1];
+        int here = water_here() && dy != 0 && surf_kind() == SURF_AQUA;   /* the track cut only by Aqua Tunnel's */
         fw_water[0] = here ? (float)((water_e[1][0] * (0.5 - ox) / f + water_e[1][1] * (0.5 - oy) / f + water_e[1][2]) / dy) : 0;
         fw_water[1] = here ? (float)(water_e[1][0] / (f * dy)) : 0;
         fw_water[2] = here ? (float)(water_e[1][1] / (f * dy)) : 0;
@@ -2624,14 +2670,17 @@ static void water_view(void)
     }
 }
 
-/* Aqua Tunnel (course 1), out of its sealed tunnel: the dark tunnel's
+/* A course's surface, out of a sealed tunnel (Aqua Tunnel's: the dark tunnel's
    gates set bit 3 of $0DA5 going in ($0A) and its exit slide clears it
    ($04); the glass tube's gate ($44) leaves it clear. Rock all round, no
    water: none drawn and nothing of the track left out for it. */
 static int water_here(void)
 {
     const uint8_t *w = nshvc_wram();
-    return w[0x0E3D] == 0x01 && !(w[0x0DA5] & 0x08) && rm_enhanced();
+    int k = surf_kind();
+    if (k == SURF_NONE || (w[0x0DA5] & 0x08) || !rm_enhanced())
+        return 0;
+    return k == SURF_AQUA || water_cam[1] < surf_y();   /* the others only from above */
 }
 
 /* a BG2 character's pixel (4 bits a pixel, its word $6000 + 16 n) */
@@ -2722,7 +2771,7 @@ static uint32_t water_texel(const uint8_t *in, const FwWaterJob *j, const uint32
         else
             lo = m + 1;
     }
-    rip = j->ripple[lo];
+    rip = j->land ? gap[j->h + y] : j->ripple[lo];
     if (!(cover > 0))
         return g;
     if (g == 1)                         /* the check's: colour 1 left to the console */
@@ -2746,6 +2795,27 @@ void fw_water_fill_cpu(const uint8_t *in, uint32_t *out, const FwWaterJob *j, co
 
 void (*fw_water_filler)(const uint8_t *in, uint32_t *out, const FwWaterJob *j, const uint32_t *gap) = fw_water_fill_cpu;
 uint32_t *(*fw_texels32_alloc)(size_t len);
+
+/* The other courses' surface: no art of the game's is ground, so its
+   marks are drawn in its own band's shades (a nearer line's, SHADE_LINES
+   on), on cells the size of Aqua Tunnel's: land a tuft (a 3-wide V) in
+   two of each three 8 x 4 spots, at a place hashed from the spot; water a
+   glint (a 4-wide dash) in one of each two. */
+#define SHADE_LINES 24
+
+static int tuft(unsigned x, unsigned y)
+{
+    unsigned cx = x / 8, cy = y / 4, h = (cx * 2654435761u) ^ (cy * 40503u), ox = h % 5, oy = (h >> 8) % 2;
+    unsigned lx = x % 8, ly = y % 4;
+    int on = (ly == oy + 1 && (lx == ox || lx == ox + 2)) || (ly == oy && lx == ox + 1);
+    return on && (h >> 16) % 3 != 0 ? 2 : 0;
+}
+
+static int glint(unsigned x, unsigned y)
+{
+    unsigned cx = x / 8, cy = y / 4, h = (cx * 2654435761u) ^ (cy * 40503u), ox = h % 4, oy = (h >> 8) % 4;
+    return y % 4 == oy && x % 8 >= ox && x % 8 < ox + 4 && (h >> 16) % 2 ? 2 : 0;
+}
 
 /* the texels with the water where nothing is drawn, 32 bits each
    (FW_WATERCHECK: idx, the water between the ripples left to the
@@ -2777,7 +2847,7 @@ static const uint32_t *water_pass(void)
     }
     if ((size_t)th > gap_rows) {
         free(gap);
-        gap = malloc((size_t)th * sizeof *gap);
+        gap = malloc(2 * (size_t)th * sizeof *gap);
         gap_rows = gap ? (size_t)th : 0;
         if (!gap)
             return NULL;
@@ -2787,7 +2857,8 @@ static const uint32_t *water_pass(void)
     job.ox = (float)(tw / 2.0);
     job.oy = (float)((double)view_cy() * K + cy_off);
     job.f = (float)fw_focal();
-    job.dy = (float)(WATER_Y - water_cam[1]);
+    job.dy = (float)(surf_y() - water_cam[1]);
+    job.land = surf_kind() != SURF_AQUA;
     job.under = job.dy < 0;
     job.point = chk != NULL;
     job.wu = (float)WATER_U;
@@ -2798,10 +2869,11 @@ static const uint32_t *water_pass(void)
         job.e[4 * i + 3] = 0;
         job.cam[i] = (float)water_cam[i];
     }
-    for (y = 0; y < 16; y++)            /* the cells: map rows 51-52, 8 entries */
+    for (y = 0; y < 16; y++)            /* the cells: Aqua Tunnel's its backdrop's map rows 51-52, 8 entries */
         for (x = 0; x < 64; x++) {
             unsigned at = 0x193D7 + (51 + y / 8) * 0x140 + 2 * (x / 8);
-            cell[y][x] = (uint8_t)bg2_pixel(v, w[at] | w[at + 1] << 8, x & 7, y & 7);
+            cell[y][x] = job.land ? (uint8_t)(surf_kind() == SURF_WATER ? glint(x, y) : tuft(x, y))
+                                  : (uint8_t)bg2_pixel(v, w[at] | w[at + 1] << 8, x & 7, y & 7);
         }
     for (r = 0; r < 80; r++) {          /* each strip pixel row's ripple colour: its commonest of 2-15 */
         unsigned n[16] = { 0 }, best = 2, c, at;
@@ -2823,9 +2895,12 @@ static const uint32_t *water_pass(void)
                 : job.sat[(y - 1) * 65 + x] + job.sat[y * 65 + x - 1] - job.sat[(y - 1) * 65 + x - 1] + (cell[y - 1][x - 1] >= 2);
     {                                   /* each row's water between the ripples: its line's colour 1, as the console gives it */
         static uint16_t line[1024];
-        int have = !index_gap && sky_lines(line, (int)(th / K) < 1024 ? (int)(th / K) : 1024);
-        for (y = 0; y < (unsigned)th; y++)
+        int n = (int)(th / K) + SHADE_LINES < 1024 ? (int)(th / K) + SHADE_LINES : 1024;
+        int have = !index_gap && sky_lines(line, n);
+        for (y = 0; y < (unsigned)th; y++) {
             gap[y] = have && y / K < 1024 ? rgb8(line[y / K]) : 1;
+            gap[th + y] = have ? rgb8(line[(int)(y / K) + SHADE_LINES < n ? y / K + SHADE_LINES : (unsigned)n - 1]) : 1;
+        }
     }
     fw_water_filler(tex, tex32, &job, gap);
     return tex32;

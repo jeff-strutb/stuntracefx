@@ -514,12 +514,12 @@ static void water_fill(const uint8_t *in, uint32_t *out, const FwWaterJob *j, co
     VkMemoryBarrier mb = {VK_STRUCTURE_TYPE_MEMORY_BARRIER};
 
     if (in != (const uint8_t *)bufs[B_OUT].at || out != (uint32_t *)bufs[B_OUT32].at || len > bufs[B_OUT].len ||
-        len * 4 > bufs[B_OUT32].len || !buf_grow(B_JOB, sizeof *j) || !buf_grow(B_GAP, (size_t)j->h * 4)) {
+        len * 4 > bufs[B_OUT32].len || !buf_grow(B_JOB, sizeof *j) || !buf_grow(B_GAP, (size_t)j->h * 8)) {
         fw_water_fill_cpu(in, out, j, gap);
         return;
     }
     memcpy(bufs[B_JOB].at, j, sizeof *j);
-    memcpy(bufs[B_GAP].at, gap, (size_t)j->h * 4);
+    memcpy(bufs[B_GAP].at, gap, (size_t)j->h * 8);
     if (dset_stale)
         dset_update();
     pvkResetCommandBuffer(cb, 0);

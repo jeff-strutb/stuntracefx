@@ -24,6 +24,7 @@ layout(std430, binding = 13) readonly buffer Gap { uint gap[]; };
 #define J_DY 7
 #define J_WU 8
 #define J_WV 9
+#define J_LAND 10
 #define J_E 12
 #define J_CAM 24
 #define J_DEPTH 28
@@ -105,7 +106,7 @@ void main()
         else
             lo = m + 1;
     }
-    uint rip = jb[J_RIPPLE + uint(lo)], o = 0xFF000000u;
+    uint rip = jb[J_LAND] != 0u ? gap[uint(h) + uint(y)] : jb[J_RIPPLE + uint(lo)], o = 0xFF000000u;
     if (!(cover > 0.0)) {
         o32[at] = g;
         return;

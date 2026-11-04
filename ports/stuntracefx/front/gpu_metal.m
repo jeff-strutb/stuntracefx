@@ -147,7 +147,7 @@ static NSString *const kernel_source = @
 "    }\n"
 "}\n"
 "/* fullwindow.c's water_texel, step for step */\n"
-"struct Job { int w, h, under, point; float ox, oy, f, dy, wu, wv, pad0, pad1; float e[12]; float cam[4];\n"
+"struct Job { int w, h, under, point; float ox, oy, f, dy, wu, wv; int land, pad1; float e[12]; float cam[4];\n"
 "             float depth[80]; uint ripple[80]; int sat[17 * 65 + 3]; };\n"
 "static int ripples_to(constant Job &j, int u, int v) {\n"
 "    int qu = u >= 0 ? u / 64 : -((63 - u) / 64), qv = v >= 0 ? v / 16 : -((15 - v) / 16);\n"
@@ -196,7 +196,7 @@ static NSString *const kernel_source = @
 "    float cover = precise::divide((float)ripples_in(j, u0, u1, v0, v1), (float)((u1 - u0 + 1) * (v1 - v0 + 1)));\n"
 "    int lo = 0, hi = 79;\n"
 "    while (lo < hi) { int m = (lo + hi) / 2; if (j.depth[m] >= t) hi = m; else lo = m + 1; }\n"
-"    uint rip = j.ripple[lo], o = 0xFF000000u;\n"
+"    uint rip = j.land ? gap[j.h + y] : j.ripple[lo], o = 0xFF000000u;\n"
 "    if (!(cover > 0)) { out[at] = g; return; }\n"
 "    if (g == 1u) { out[at] = cover >= 0.5f ? rip : g; return; }\n"
 "    if (cover >= 1) { out[at] = rip; return; }\n"
@@ -387,13 +387,13 @@ static void water_fill(const uint8_t *in, uint32_t *out, const FwWaterJob *j, co
         return;
     }
     buf_job = grow(buf_job, sizeof *j);
-    buf_gap = grow(buf_gap, (size_t)j->h * 4);
+    buf_gap = grow(buf_gap, (size_t)j->h * 8);
     if (!buf_job || !buf_gap) {
         fw_water_fill_cpu(in, out, j, gap);
         return;
     }
     memcpy(buf_job.contents, j, sizeof *j);
-    memcpy(buf_gap.contents, gap, (size_t)j->h * 4);
+    memcpy(buf_gap.contents, gap, (size_t)j->h * 8);
     @autoreleasepool {
         id<MTLCommandBuffer> cb = [queue commandBuffer];
         id<MTLComputeCommandEncoder> e = [cb computeCommandEncoder];

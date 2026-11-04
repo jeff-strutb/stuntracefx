@@ -141,11 +141,14 @@ extern float fw_water[4];
    (64 x 16 texels, wu x wv in the world) as sat, their ripple texels
    counted in [0, x) x [0, y) (65 a row); ripple[r] strip row r's colour,
    depth[r] its view depth; under: the eye below the surface; point: the
-   cells texel by texel (a check). fw_water_fill_cpu the reference, the
-   GPU's the same step for step. */
+   cells texel by texel (a check); land: a course's other than Aqua
+   Tunnel's, its ripples gap[h + y] (a nearer line's shade) whatever their
+   distance. fw_water_fill_cpu the reference, the GPU's the same step for
+   step. */
 typedef struct {
     int32_t w, h, under, point;
-    float ox, oy, f, dy, wu, wv, pad[2];
+    float ox, oy, f, dy, wu, wv;
+    int32_t land, pad;
     float e[12];
     float cam[4];
     float depth[80];
