@@ -260,6 +260,11 @@ void fw_sprite_draw(int32_t h);
 /* a flat convex face of n points in view space, colour c, into the
    picture (near-clipped and projected exactly) */
 void fw_view_face(const float (*p)[3], int n, uint8_t c);
+/* a display-list face (scene.h) the GPU draws in its place: 1 when the
+   CPU's own spans of it are wanted too (the check's reference, which are
+   the reference's alone until fw_gpu_face_done) */
+int fw_gpu_face(int id);
+void fw_gpu_face_done(void);
 /* Enhanced's sprites drawn as solid shapes (solids.c), from
    FxObjectsDraw (frame.c): the object's shape and its draw record's index
    (rm_record_object), then for a sprite past its depth test begin, its colour once its

@@ -439,11 +439,31 @@ static int sunk(float za, float zx, float zy, int32_t x, int32_t y)
     return z > 0 && w > 0 && z < w;
 }
 
+static int span_ref_only;
+/* a display-list face the GPU draws in its place (scene.h): its marker
+   span; 1 when the CPU's spans of it are wanted beside it (the check's
+   reference, the reference's alone until fw_gpu_face_done) */
+static FwSpan *span_new(void);
+int fw_gpu_face(int id)
+{
+    FwSpan *m = span_new();
+    if (m) {
+        m->textured = 6;
+        m->y = m->x0 = 0;
+        m->x1 = id;
+        m->pad1[0] = 0;
+    }
+    if (!fw_env("FW_GPUCHECK"))
+        return 0;
+    span_ref_only = 1;
+    return 1;
+}
+void fw_gpu_face_done(void) { span_ref_only = 0; }
+
 /* the spans being made are the CPU reference's alone (a model face the
    GPU draws from the display list, FW_GPUCHECK's reference): FwSpan's
    pad1[0] 1; a span with textured 6 is such a face for the GPU, x1 its
    place in the display list (fullwindow.h) */
-static int span_ref_only;
 
 static FwSpan *span_new(void)
 {

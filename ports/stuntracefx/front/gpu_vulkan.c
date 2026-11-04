@@ -110,8 +110,8 @@ typedef struct {
     void *at;
 } Buf;
 enum { B_OUT, B_SPANS, B_ROW_AT, B_ROW_SPANS, B_BANKS, B_SLOT, B_POLYS, B_EDGES, B_ROW_POLY, B_OUT32, B_JOB, B_GAP,
-       B_VERTS, B_LPOINTS, B_LSLOTS, B_LFACES, B_ID, B_N };
-static const uint32_t binding_of[B_N] = {0, 1, 2, 3, 4, 5, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18};
+       B_VERTS, B_LPOINTS, B_LSLOTS, B_LFACES, B_ID, B_FSLOTS, B_FPOINTS, B_N };
+static const uint32_t binding_of[B_N] = {0, 1, 2, 3, 4, 5, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20};
 /* the stages that see the descriptors and the push constants: the fill's
    kernels and the models' shaders */
 #define STAGES (VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
@@ -764,17 +764,19 @@ static void faces_record(void *arg)
    their order (gpu_metal.m's draw_faces, the same display list) */
 static int draw_faces(int w, int h, const FwSpan *sp, size_t n)
 {
-    size_t ns, np, nf, nt, nl, i;
+    size_t ns, np, nf, nt, nl, i, nfs, nfp;
     const ScSlot *sl = sc_list_slots(&ns);
     const ScPoint *pt = sc_list_points(&np);
     const ScFace *fc = sc_list_faces(&nf);
+    const ScFSlot *fs = sc_list_fslots(&nfs);
+    const ScFPoint *fp = sc_list_fpoints(&nfp);
     static uint8_t *kind;
     static uint32_t *len;
     static size_t cap;
     FaceJob j;
     float cx, cy;
 
-    if (!nf || !ns || !np)
+    if (!nf || (!np && !nfp))
         return 1;
     if (cap < n) {
         free(kind);
@@ -796,12 +798,19 @@ static int draw_faces(int w, int h, const FwSpan *sp, size_t n)
     memcpy(bufs[B_SLOT].at, bank_slot, sizeof bank_slot);
     gpu_bin_faces(sp, n, NULL, &nt, NULL, &nl, NULL, NULL, NULL);
     if (!images_at(w, h) || !buf_grow(B_VERTS, (nt + nl) * sizeof(GpuVert)) || !buf_grow(B_LPOINTS, np * sizeof *pt) ||
-        !buf_grow(B_LSLOTS, ns * sizeof *sl) || !buf_grow(B_LFACES, nf * sizeof *fc))
+        !buf_grow(B_LSLOTS, ns * sizeof *sl) || !buf_grow(B_LFACES, nf * sizeof *fc) ||
+        !buf_grow(B_FSLOTS, nfs * sizeof *fs) || !buf_grow(B_FPOINTS, nfp * sizeof *fp))
         return 0;
     gpu_bin_faces(sp, n, (GpuVert *)bufs[B_VERTS].at, &nt, (GpuVert *)bufs[B_VERTS].at + nt, &nl, &j.nr, kind, len);
-    memcpy(bufs[B_LPOINTS].at, pt, np * sizeof *pt);
-    memcpy(bufs[B_LSLOTS].at, sl, ns * sizeof *sl);
+    if (np)
+        memcpy(bufs[B_LPOINTS].at, pt, np * sizeof *pt);
+    if (ns)
+        memcpy(bufs[B_LSLOTS].at, sl, ns * sizeof *sl);
     memcpy(bufs[B_LFACES].at, fc, nf * sizeof *fc);
+    if (nfs)
+        memcpy(bufs[B_FSLOTS].at, fs, nfs * sizeof *fs);
+    if (nfp)
+        memcpy(bufs[B_FPOINTS].at, fp, nfp * sizeof *fp);
     if (dset_stale)
         dset_update();
     fw_view_centre(&cx, &cy);

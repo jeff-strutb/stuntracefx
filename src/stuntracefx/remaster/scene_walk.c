@@ -479,15 +479,7 @@ void sc_walk_facing(uint16_t at, uint16_t n)
 
 void sc_walk_begin(void)
 {
-    if (check < 0) {
-        const char *c = getenv("SC_CHECK");
-        reporting = c && c[0] == 'w';
-        gpu = getenv("SC_GPU") != NULL;
-        check = reporting || gpu;
-        brk = getenv("SC_BREAK") != NULL;
-        if (reporting)
-            atexit(report);
-    }
+    (void)sc_gpu_on();                  /* (its settings read) */
     if (!check)
         return;
     if (walking && !walk.done) {
@@ -724,8 +716,59 @@ static int grow_to(void **a, size_t *cap, size_t want, size_t size)
     return 1;
 }
 
-int sc_gpu_on(void) { return check > 0 && gpu; }
-void sc_picture_begin(void) { l_ns = l_np = l_nf = l_nc = 0; }
+static ScFSlot *l_fslots;
+static ScFPoint *l_fpoints;
+static size_t l_nfs, l_nfp, cap_fs, cap_fp;
+
+int sc_gpu_on(void)
+{
+    if (check < 0) {                    /* (before the first model: SC_GPU read here too) */
+        const char *c = getenv("SC_CHECK");
+        reporting = c && c[0] == 'w';
+        gpu = getenv("SC_GPU") != NULL;
+        check = reporting || gpu;
+        brk = getenv("SC_BREAK") != NULL;
+        if (reporting)
+            atexit(report);
+    }
+    return check > 0 && gpu;
+}
+void sc_picture_begin(void) { l_ns = l_np = l_nf = l_nc = l_nfs = l_nfp = 0; }
+const ScFSlot *sc_list_fslots(size_t *n) { *n = l_nfs; return l_fslots; }
+const ScFPoint *sc_list_fpoints(size_t *n) { *n = l_nfp; return l_fpoints; }
+
+int sc_list_fslot(const float m[9], const float pos[3])
+{
+    if (!sc_gpu_on() || !fw_view_active() || !grow_to((void **)&l_fslots, &cap_fs, l_nfs + 1, sizeof *l_fslots))
+        return -1;
+    memcpy(l_fslots[l_nfs].m, m, sizeof l_fslots[l_nfs].m);
+    memcpy(l_fslots[l_nfs].pos, pos, sizeof l_fslots[l_nfs].pos);
+    return (int)l_nfs++;
+}
+
+int sc_list_float_face(int fslot, const float (*p)[3], int n, uint8_t c)
+{
+    ScFace *f;
+    int i;
+    if (fslot < 0 || n < 3 || !grow_to((void **)&l_faces, &cap_f, l_nf + 1, sizeof *l_faces) ||
+        !grow_to((void **)&l_corners, &cap_c, l_nc + (size_t)n, sizeof *l_corners) ||
+        !grow_to((void **)&l_fpoints, &cap_fp, l_nfp + (size_t)n, sizeof *l_fpoints))
+        return -1;
+    f = &l_faces[l_nf];
+    memset(f, 0, sizeof *f);
+    f->first = (uint32_t)l_nc;
+    f->n = (uint32_t)n;
+    f->colour = c;
+    for (i = 0; i < n; i++) {
+        ScFPoint *q = &l_fpoints[l_nfp];
+        memcpy(q->p, p[i], sizeof q->p);
+        q->fslot = (uint32_t)fslot;
+        l_corners[l_nc].point = SC_FLOAT_POINT | (uint32_t)l_nfp++;
+        l_corners[l_nc].u = l_corners[l_nc].v = 0;
+        l_nc++;
+    }
+    return (int)l_nf++;
+}
 const ScSlot *sc_list_slots(size_t *n) { *n = l_ns; return l_slots; }
 const ScPoint *sc_list_points(size_t *n) { *n = l_np; return l_points; }
 const ScFace *sc_list_faces(size_t *n) { *n = l_nf; return l_faces; }

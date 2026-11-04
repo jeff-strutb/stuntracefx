@@ -745,11 +745,38 @@ static void slot_matrix(const ScSlot *sl)
     sceGuSetMatrix(GU_MODEL, &m);
 }
 
+/* a solid's float slot as GU_MODEL (scene.h ScFSlot) */
+static void fslot_matrix(const ScFSlot *f)
+{
+    ScePspFMatrix4 m;
+    m.x.x = f->m[0], m.x.y = f->m[1], m.x.z = f->m[2], m.x.w = 0;
+    m.y.x = f->m[3], m.y.y = f->m[4], m.y.z = f->m[5], m.y.w = 0;
+    m.z.x = f->m[6], m.z.y = f->m[7], m.z.z = f->m[8], m.z.w = 0;
+    m.w.x = f->pos[0], m.w.y = f->pos[1], m.w.z = f->pos[2], m.w.w = 1;
+    sceGuSetMatrix(GU_MODEL, &m);
+}
+
+/* a corner's point in its slot's own coordinates (a model's bytes, a
+   mirrored one's x negated; a solid's floats) */
+static void corner_xyz(const ScPoint *pt, const ScFPoint *fp, uint32_t point, float *x, float *y, float *z)
+{
+    if (point & SC_FLOAT_POINT) {
+        const ScFPoint *q = &fp[point & ~SC_FLOAT_POINT];
+        *x = q->p[0], *y = q->p[1], *z = q->p[2];
+        return;
+    }
+    *x = pt[point].mirrored ? -(float)pt[point].b[0] : (float)pt[point].b[0];
+    *y = (float)pt[point].b[1];
+    *z = (float)pt[point].b[2];
+}
+
 static void face_ge(const FwSpan *p)
 {
-    size_t ns, np, nf, nc;
+    size_t ns, np, nf, nc, nfs, nfp;
     const ScSlot *sl = sc_list_slots(&ns);
     const ScPoint *pt = sc_list_points(&np);
+    const ScFSlot *fs = sc_list_fslots(&nfs);
+    const ScFPoint *fp = sc_list_fpoints(&nfp);
     const ScFace *fc = sc_list_faces(&nf);
     const ScCorner *cn = sc_list_corners(&nc);
     const ScFace *f;
@@ -770,9 +797,13 @@ static void face_ge(const FwSpan *p)
     room();
     s_used += (size_t)n * sizeof(PTV) + 256;
     model_mode(1);
-    slot = pt[c[0].point].slot;
+    /* the slot's matrix (a solid's float slots numbered after the models') */
+    slot = c[0].point & SC_FLOAT_POINT ? (uint32_t)ns + fp[c[0].point & ~SC_FLOAT_POINT].fslot : pt[c[0].point].slot;
     if ((int)slot != s_slot_now) {
-        slot_matrix(&sl[slot]);
+        if (slot >= ns)
+            fslot_matrix(&fs[slot - ns]);
+        else
+            slot_matrix(&sl[slot]);
         s_slot_now = (int)slot;
     }
     if (f->textured) {
@@ -791,38 +822,29 @@ static void face_ge(const FwSpan *p)
         u0 = c[0].u;
         v0 = c[0].v;
         for (i = 0; i < n; i++) {
-            const ScPoint *q = &pt[c[i].point];
             float du = c[i].u - u0, dv = c[i].v - v0;
             du += -256.0f * (du > 128.0f) + 256.0f * (du < -128.0f);
             dv += -256.0f * (dv > 128.0f) + 256.0f * (dv < -128.0f);
             t[i].u = (u0 + du + ou) / tws;
             t[i].v = (v0 + dv + ov) / ths;
-            t[i].x = q->mirrored ? -(float)q->b[0] : (float)q->b[0];
-            t[i].y = (float)q->b[1];
-            t[i].z = (float)q->b[2];
+            corner_xyz(pt, fp, c[i].point, &t[i].x, &t[i].y, &t[i].z);
         }
         sceGuDrawArray(n == 2 ? GU_LINES : GU_TRIANGLE_FAN, GU_TEXTURE_32BITF | GU_VERTEX_32BITF | GU_TRANSFORM_3D, (int)n, 0, t);
     } else if (s_c32) {
         PCV32 *v = (PCV32 *)sceGuGetMemory(n * sizeof(PCV32));
         textured(0);
         for (i = 0; i < n; i++) {
-            const ScPoint *q = &pt[c[i].point];
             v[i].c = 0xFF000000u | f->colour;
-            v[i].x = q->mirrored ? -(float)q->b[0] : (float)q->b[0];
-            v[i].y = (float)q->b[1];
-            v[i].z = (float)q->b[2];
+            corner_xyz(pt, fp, c[i].point, &v[i].x, &v[i].y, &v[i].z);
         }
         sceGuDrawArray(n == 2 ? GU_LINES : GU_TRIANGLE_FAN, GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D, (int)n, 0, v);
     } else {
         PCV *v = (PCV *)sceGuGetMemory(n * sizeof(PCV));
         textured(0);
         for (i = 0; i < n; i++) {
-            const ScPoint *q = &pt[c[i].point];
             v[i].c = (uint16_t)(0xF000u | f->colour);
             v[i].pad = 0;
-            v[i].x = q->mirrored ? -(float)q->b[0] : (float)q->b[0];
-            v[i].y = (float)q->b[1];
-            v[i].z = (float)q->b[2];
+            corner_xyz(pt, fp, c[i].point, &v[i].x, &v[i].y, &v[i].z);
         }
         sceGuDrawArray(n == 2 ? GU_LINES : GU_TRIANGLE_FAN, GU_COLOR_4444 | GU_VERTEX_32BITF | GU_TRANSFORM_3D, (int)n, 0, v);
     }

@@ -8,6 +8,8 @@
 layout(std430, binding = 14) readonly buffer Verts { uint vs[]; };      /* GpuVert: point, face, u, v */
 layout(std430, binding = 15) readonly buffer Points { uint pts[]; };    /* ScPoint: bytes, mirrored; slot */
 layout(std430, binding = 16) readonly buffer Slots { uint sls[]; };     /* ScSlot: 16 shorts */
+layout(std430, binding = 19) readonly buffer FSlots { float fsl[]; };    /* ScFSlot: m[9], pos[3] */
+layout(std430, binding = 20) readonly buffer FPoints { uint fpts[]; };   /* ScFPoint: p[3] (float bits), fslot */
 layout(push_constant) uniform Push { float fx, fy, cx, cy, tw, th, p0, p1; } pc;
 layout(location = 0) out float out_u;
 layout(location = 1) out float out_v;
@@ -43,12 +45,23 @@ int point_coord(uint sl, uint word, int j)
 
 void main()
 {
-    uint at = uint(gl_VertexIndex) * 4u, p = vs[at], word = pts[p * 2u], sl = pts[p * 2u + 1u];
-    float x = float(point_coord(sl, word, 0)), y = float(point_coord(sl, word, 1));
-    int zi = point_coord(sl, word, 2);
-    if (zi >= 0x100 && zi > 0x43FE)
-        zi = 0x43FE;
-    float z = float(zi);
+    uint at = uint(gl_VertexIndex) * 4u, p = vs[at];
+    float x, y, z;
+    if ((p & 0x80000000u) != 0u) {      /* a solid's point (solids.c): its slot's float matrix and place */
+        uint q = (p & 0x7FFFFFFFu) * 4u, f = fpts[q + 3u] * 12u;
+        float px = uintBitsToFloat(fpts[q]), py = uintBitsToFloat(fpts[q + 1u]), pz = uintBitsToFloat(fpts[q + 2u]);
+        x = fsl[f + 9u] + px * fsl[f + 0u] + py * fsl[f + 3u] + pz * fsl[f + 6u];
+        y = fsl[f + 10u] + px * fsl[f + 1u] + py * fsl[f + 4u] + pz * fsl[f + 7u];
+        z = fsl[f + 11u] + px * fsl[f + 2u] + py * fsl[f + 5u] + pz * fsl[f + 8u];
+    } else {
+        uint word = pts[p * 2u], sl = pts[p * 2u + 1u];
+        x = float(point_coord(sl, word, 0));
+        y = float(point_coord(sl, word, 1));
+        int zi = point_coord(sl, word, 2);
+        if (zi >= 0x100 && zi > 0x43FE)
+            zi = 0x43FE;
+        z = float(zi);
+    }
     gl_Position = vec4(2.0 * (pc.cx * z + pc.fx * x) / pc.tw - z, 2.0 * (pc.cy * z + pc.fy * y) / pc.th - z, z - 1.0, z);
     out_u = uintBitsToFloat(vs[at + 2u]);
     out_v = uintBitsToFloat(vs[at + 3u]);

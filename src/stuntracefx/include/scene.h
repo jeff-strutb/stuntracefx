@@ -93,6 +93,28 @@ typedef struct {
     float u, v;
 } ScCorner;                             /* 12 bytes */
 
+/* The full window's own solids (solids.c: tyres, eyes, wheels, trees),
+   in the same list: a float slot (view = pos + p's object coordinates
+   through m, row i column j at m[3 i + j], the solid's scale in it) and
+   its points in object space; a corner whose point has SC_FLOAT_POINT set
+   names a float point (the rest of the index), a flat face as the
+   models' are */
+typedef struct {
+    float m[9], pos[3];
+} ScFSlot;                              /* 48 bytes */
+typedef struct {
+    float p[3];
+    uint32_t fslot;
+} ScFPoint;                             /* 16 bytes */
+#define SC_FLOAT_POINT 0x80000000u
+/* a float slot for a solid (its index, or -1 when no list is being made) */
+int sc_list_fslot(const float m[9], const float pos[3]);
+/* a solid's flat face of n object-space points in fslot, colour c: its
+   place in the list, or -1 */
+int sc_list_float_face(int fslot, const float (*p)[3], int n, uint8_t c);
+const ScFSlot *sc_list_fslots(size_t *n);
+const ScFPoint *sc_list_fpoints(size_t *n);
+
 /* SC_GPU set */
 int sc_gpu_on(void);
 /* a full-window picture begins: the list emptied */

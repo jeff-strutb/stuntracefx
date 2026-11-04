@@ -204,10 +204,22 @@ int gpu_bin_dump(long fill, const uint8_t *ref, const uint8_t *gpu, const uint32
     }
     snprintf(path, sizeof path, "%s/gpufaces.txt", dir);
     if ((f = fopen(path, "w"))) {
+        size_t nf, nc;
+        const ScFace *fc = sc_list_faces(&nf);
+        (void)sc_list_corners(&nc);
         for (i = 0; i < len; i++)
-            if (gpu[i] != ref[i])
-                fprintf(f, "%zu %zu ref %d gpu %d face %d\n", i % (size_t)w, i / (size_t)w, ref[i], gpu[i],
-                        ids ? (int)ids[i] - 1 : -2);
+            if (gpu[i] != ref[i]) {
+                int id = ids ? (int)ids[i] - 1 : -2, x = (int)(i % (size_t)w), y = (int)(i / (size_t)w), r, dx, dy, near = 0;
+                for (r = 1; r <= 3 && !near; r++)       /* the distance class, as gpu_bin_check counts it */
+                    for (dy = -r; dy <= r && !near; dy++)
+                        for (dx = -r; dx <= r && !near; dx++)
+                            if (x + dx >= 0 && y + dy >= 0 && x + dx < w && y + dy < h && ref[(size_t)(y + dy) * w + x + dx] == gpu[i])
+                                near = r;
+                fprintf(f, "%d %d ref %d gpu %d face %d dist %d", x, y, ref[i], gpu[i], id, near);
+                if (id >= 0 && (size_t)id < nf)
+                    fprintf(f, " n %u tex %d colour %d nearpt %d", fc[id].n, fc[id].textured, fc[id].colour, fc[id].pad[0]);
+                fprintf(f, "\n");
+            }
         fclose(f);
     }
     return 1;

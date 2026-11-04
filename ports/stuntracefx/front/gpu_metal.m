@@ -214,6 +214,8 @@ static NSString *const kernel_source = @
 "struct Face { uint first, n; uchar textured, colour, bank, por, hi, p0, p1, p2; ushort base, mask; short ou, ov; };\n"
 "struct Vert { uint point, face; float u, v; };\n"
 "struct View { float fx, fy, cx, cy, tw, th, p0, p1; };\n"
+"struct FSlot { float m[9]; float pos[3]; };\n"
+"struct FPoint { float p[3]; uint fslot; };\n"
 "struct VOut { float4 pos [[position]]; float u; float v; uint face [[flat]]; };\n"
 "static ushort mult8(int a, int b) { return (ushort)((int)(char)a * (int)(char)b); }\n"
 "static ushort fmult_rol(ushort a, ushort b) { return (ushort)(((int)(short)a * (int)(short)b) >> 15); }\n"
@@ -234,14 +236,24 @@ static NSString *const kernel_source = @
 "    return (short)(ushort)(r + (ushort)sl.pos[j]);\n"
 "}\n"
 "vertex VOut model_vertex(uint vid [[vertex_id]], device const Vert *vs [[buffer(0)]], device const Point *pts [[buffer(1)]],\n"
-"                         device const Slot *slots [[buffer(2)]], constant View &w [[buffer(3)]]) {\n"
+"                         device const Slot *slots [[buffer(2)]], constant View &w [[buffer(3)]],\n"
+"                         device const FSlot *fslots [[buffer(4)]], device const FPoint *fpts [[buffer(5)]]) {\n"
 "    Vert vt = vs[vid];\n"
-"    Point p = pts[vt.point];\n"
-"    Slot sl = slots[p.slot];\n"
-"    float x = (float)point_coord(sl, p, 0), y = (float)point_coord(sl, p, 1);\n"
-"    short zi = point_coord(sl, p, 2);\n"
-"    if (zi >= 0x100 && zi > 0x43FE) zi = 0x43FE;   /* a far point's depth held, as the projection holds it */\n"
-"    float z = (float)zi;\n"
+"    float x, y, z;\n"
+"    if (vt.point & 0x80000000u) {   /* a solid's point (solids.c): its slot's float matrix and place */\n"
+"        FPoint q = fpts[vt.point & 0x7FFFFFFFu];\n"
+"        FSlot f = fslots[q.fslot];\n"
+"        x = f.pos[0] + q.p[0] * f.m[0] + q.p[1] * f.m[3] + q.p[2] * f.m[6];\n"
+"        y = f.pos[1] + q.p[0] * f.m[1] + q.p[1] * f.m[4] + q.p[2] * f.m[7];\n"
+"        z = f.pos[2] + q.p[0] * f.m[2] + q.p[1] * f.m[5] + q.p[2] * f.m[8];\n"
+"    } else {\n"
+"        Point p = pts[vt.point];\n"
+"        Slot sl = slots[p.slot];\n"
+"        x = (float)point_coord(sl, p, 0); y = (float)point_coord(sl, p, 1);\n"
+"        short zi = point_coord(sl, p, 2);\n"
+"        if (zi >= 0x100 && zi > 0x43FE) zi = 0x43FE;   /* a far point's depth held, as the projection holds it */\n"
+"        z = (float)zi;\n"
+"    }\n"
 "    VOut o;\n"
 "    o.pos = float4(2.0f * (w.cx * z + w.fx * x) / w.tw - z, z - 2.0f * (w.cy * z + w.fy * y) / w.th, z - 1.0f, z);\n"
 "    o.u = vt.u; o.v = vt.v; o.face = vt.face;\n"
@@ -270,7 +282,7 @@ static id<MTLTexture> tex_pic;           /* the picture as the render pass draws
 static id<MTLTexture> tex_id;            /* (FW_GPUCHECK) each pixel's last display-list face + 1 (R32Uint) */
 static id<MTLBuffer> buf_id;
 static int id_clear;                     /* tex_id to clear at the fill's first faces */
-static id<MTLBuffer> buf_verts, buf_lverts, buf_lpoints, buf_lslots, buf_lfaces;
+static id<MTLBuffer> buf_verts, buf_lverts, buf_lpoints, buf_lslots, buf_lfaces, buf_fslots, buf_fpoints;
 static long faces_drawn;
 static id<MTLBuffer> buf_out32, buf_job, buf_gap;
 static size_t out32_len;
@@ -422,16 +434,18 @@ static int face_banks(const ScFace *f, size_t nf, const FwSpan *sp, size_t n)
    kept beside it (tex_id) for the check */
 static int draw_faces(int w, int h, const FwSpan *sp, size_t n)
 {
-    size_t ns, np, nf, nt, nl, nr, r, t0 = 0, l0 = 0;
+    size_t ns, np, nf, nt, nl, nr, r, t0 = 0, l0 = 0, nfs, nfp;
     const ScSlot *sl = sc_list_slots(&ns);
     const ScPoint *pt = sc_list_points(&np);
     const ScFace *fc = sc_list_faces(&nf);
+    const ScFSlot *fs = sc_list_fslots(&nfs);
+    const ScFPoint *fp = sc_list_fpoints(&nfp);
     static uint8_t *kind;
     static uint32_t *len;
     static size_t cap;
     float view[8], cx, cy;
 
-    if (!nf || !ns || !np)
+    if (!nf || (!np && !nfp))
         return 1;
     if (!face_banks(fc, nf, sp, n))
         return 0;
@@ -450,12 +464,20 @@ static int draw_faces(int w, int h, const FwSpan *sp, size_t n)
     buf_lpoints = grow(buf_lpoints, np * sizeof *pt);
     buf_lslots = grow(buf_lslots, ns * sizeof *sl);
     buf_lfaces = grow(buf_lfaces, nf * sizeof *fc);
-    if (!buf_verts || !buf_lverts || !buf_lpoints || !buf_lslots || !buf_lfaces)
+    buf_fslots = grow(buf_fslots, nfs * sizeof *fs);
+    buf_fpoints = grow(buf_fpoints, nfp * sizeof *fp);
+    if (!buf_verts || !buf_lverts || !buf_lpoints || !buf_lslots || !buf_lfaces || !buf_fslots || !buf_fpoints)
         return 0;
     gpu_bin_faces(sp, n, (GpuVert *)buf_verts.contents, &nt, (GpuVert *)buf_lverts.contents, &nl, &nr, kind, len);
-    memcpy(buf_lpoints.contents, pt, np * sizeof *pt);
-    memcpy(buf_lslots.contents, sl, ns * sizeof *sl);
+    if (np)
+        memcpy(buf_lpoints.contents, pt, np * sizeof *pt);
+    if (ns)
+        memcpy(buf_lslots.contents, sl, ns * sizeof *sl);
     memcpy(buf_lfaces.contents, fc, nf * sizeof *fc);
+    if (nfs)
+        memcpy(buf_fslots.contents, fs, nfs * sizeof *fs);
+    if (nfp)
+        memcpy(buf_fpoints.contents, fp, nfp * sizeof *fp);
     fw_view_centre(&cx, &cy);
     view[0] = (float)fw_focal_x();
     view[1] = (float)fw_focal_y();
@@ -499,6 +521,8 @@ static int draw_faces(int w, int h, const FwSpan *sp, size_t n)
         [re setVertexBuffer:buf_lpoints offset:0 atIndex:1];
         [re setVertexBuffer:buf_lslots offset:0 atIndex:2];
         [re setVertexBytes:view length:sizeof view atIndex:3];
+        [re setVertexBuffer:buf_fslots offset:0 atIndex:4];
+        [re setVertexBuffer:buf_fpoints offset:0 atIndex:5];
         [re setFragmentBuffer:buf_lfaces offset:0 atIndex:0];
         [re setFragmentBuffer:buf_banks offset:0 atIndex:1];
         [re setFragmentBuffer:buf_slot offset:0 atIndex:2];

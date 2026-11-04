@@ -53,6 +53,7 @@
 #include "console_ext.h"
 #include "remaster.h"
 #include "fullwindow.h"
+#include "scene.h"
 
 #define SEGMENTS_MAX 60
 
@@ -145,6 +146,67 @@ static int coloured;
 static uint8_t hi, tex_bank, tex_nib;
 static uint16_t tex_base;
 static float pos[3], view[3][3], scale;
+/* The solid in the GPU's display list (scene.h): its float slot (scale
+   times view, its place), and where the eye is in the solid's own
+   coordinates (eye_obj: -view^T pos / scale), for its faces' facing,
+   shading, lighting and order, decided here without turning a point */
+static int fslot = -1;
+static float eye_obj[3];
+
+static void object_begin(void)
+{
+    float m[9];
+    int i, j;
+    for (i = 0; i < 3; i++)
+        for (j = 0; j < 3; j++)
+            m[3 * i + j] = scale * view[i][j];
+    fslot = sc_list_fslot(m, pos);
+    for (i = 0; i < 3; i++) {
+        float d = 0;
+        for (j = 0; j < 3; j++)
+            d += view[i][j] * pos[j];
+        eye_obj[i] = -d / scale;
+    }
+}
+
+/* a point of the solid's own coordinates in view space (for the CPU's
+   reference only) */
+static void to_view(const float *o, float *out)
+{
+    int j;
+    for (j = 0; j < 3; j++)
+        out[j] = pos[j] + scale * (o[0] * view[0][j] + o[1] * view[1][j] + o[2] * view[2][j]);
+}
+
+/* a face of n points in the solid's own coordinates, colour c: the GPU's
+   from the display list, and the CPU's from its view-space points when
+   there is no list or the check wants the reference */
+#define EMIT_MAX 72
+static void emit(const float (*o)[3], int n, uint8_t c)
+{
+    static float v[EMIT_MAX][3];
+    int id, i;
+    if (fslot < 0) {                    /* no list: the points are view space already */
+        fw_view_face(o, n, c);
+        return;
+    }
+    id = sc_list_float_face(fslot, o, n, c);
+    if (id >= 0 && !fw_gpu_face(id))
+        return;
+    for (i = 0; i < n && i < EMIT_MAX; i++)
+        to_view(o[i], v[i]);
+    fw_view_face((const float (*)[3])v, n < EMIT_MAX ? n : EMIT_MAX, c);
+    if (id >= 0)
+        fw_gpu_face_done();
+}
+
+/* a normal in the solid's coordinates turned into view space */
+static void normal_view(const float *n, float *out)
+{
+    int j;
+    for (j = 0; j < 3; j++)
+        out[j] = n[0] * view[0][j] + n[1] * view[1][j] + n[2] * view[2][j];
+}
 
 static uint16_t ram16(uint16_t a) { return (uint16_t)(gsu_rd8(0x700000u | a) | gsu_rd8(0x700000u | (uint16_t)(a + 1)) << 8); }
 
@@ -268,8 +330,8 @@ void fw_solid_colour(uint8_t colr)
     coloured = 1;
 }
 
-/* a point of the solid, along its axis a, round it at turn t, radius r, to
-   view space */
+/* a point of the solid, along its axis a, round it at turn t, radius r,
+   in the solid's own coordinates */
 static void place(const Solid *s, float a, float t, float r, float *out)
 {
     float m[3];
@@ -277,13 +339,17 @@ static void place(const Solid *s, float a, float t, float r, float *out)
     m[s->axis] = a;
     m[s->axis ? 0 : 1] = r * cosf(t);
     m[s->axis ? 1 : 2] = r * sinf(t);
-    for (j = 0; j < 3; j++)
+    if (fslot >= 0) {                   /* the display list's: its own coordinates */
+        memcpy(out, m, sizeof m);
+        return;
+    }
+    for (j = 0; j < 3; j++)             /* the CPU's alone: view space, as ever */
         out[j] = pos[j] + scale * (m[0] * view[0][j] + m[1] * view[1][j] + m[2] * view[2][j]);
 }
 
 /* a face's outward normal (from its first three points, turned away from
-   the solid's centre) and whether it is seen: it faces the eye from its
-   centre */
+   the solid's centre), in the solid's coordinates, and whether it is
+   seen: it faces the eye from its centre */
 static int face_seen(const float (*p)[3], int n, float *nv, float *centre)
 {
     float u[3], v[3], d = 0, e = 0;
@@ -298,19 +364,24 @@ static int face_seen(const float (*p)[3], int n, float *nv, float *centre)
     nv[0] = u[1] * v[2] - u[2] * v[1];
     nv[1] = u[2] * v[0] - u[0] * v[2];
     nv[2] = u[0] * v[1] - u[1] * v[0];
-    for (j = 0; j < 3; j++)
-        d += nv[j] * (centre[j] - pos[j]);
+    for (j = 0; j < 3; j++)             /* outward: from the solid's centre (its origin, or pos in view space) */
+        d += nv[j] * (centre[j] - (fslot >= 0 ? 0 : pos[j]));
     if (d < 0)
         for (j = 0; j < 3; j++)
             nv[j] = -nv[j];
-    for (j = 0; j < 3; j++)
-        e += nv[j] * centre[j];
+    for (j = 0; j < 3; j++)             /* towards the eye (at eye_obj, or the view's origin) */
+        e += nv[j] * (centre[j] - (fslot >= 0 ? eye_obj[j] : 0));
     return e < 0;
 }
 
-static uint8_t shade(const Ring *g, const float *nv)
+static uint8_t shade(const Ring *g, const float *n)
 {
-    float up = -nv[1] / sqrtf(nv[0] * nv[0] + nv[1] * nv[1] + nv[2] * nv[2]);   /* view y is down */
+    float nv[3], up;
+    if (fslot >= 0)
+        normal_view(n, nv);
+    else
+        memcpy(nv, n, sizeof nv);
+    up = -nv[1] / sqrtf(nv[0] * nv[0] + nv[1] * nv[1] + nv[2] * nv[2]);   /* view y is down */
     if (!g->up)
         return g->nib;
     if (g->top && up > 0.8f)
@@ -332,7 +403,7 @@ static void cap(const Solid *s, float a, const Disc *d, int nd, int n)
             place(s, a, 2 * (float)M_PI * i / m, d[k].r, p[i]);
         if (!k && !(cap_seen = face_seen((const float (*)[3])p, m, nv, c)))
             return;
-        fw_view_face((const float (*)[3])p, m, (uint8_t)(hi | d[k].nib));
+        emit((const float (*)[3])p, m, (uint8_t)(hi | d[k].nib));
     }
 }
 
@@ -350,7 +421,7 @@ static void eye_marks(const Solid *s, float a, const Mark *mk, int nm, int n)
                 float t = 2 * (float)M_PI * i / sides, x = m->cx + m->r1 * cosf(t), y = m->cy + m->r1 * sinf(t);
                 place(s, a, atan2f(y, x), hypotf(x, y), p[i]);
             }
-            fw_view_face((const float (*)[3])p, sides, (uint8_t)(hi | m->nib));
+            emit((const float (*)[3])p, sides, (uint8_t)(hi | m->nib));
             continue;
         }
         {                               /* a band of a ring */
@@ -369,7 +440,7 @@ static void eye_marks(const Solid *s, float a, const Mark *mk, int nm, int n)
                     int jj = m->r0 > 0 ? j : j + 1;
                     place(s, a, atan2f(xy[jj][1], xy[jj][0]), hypotf(xy[jj][0], xy[jj][1]), q[j]);
                 }
-                fw_view_face((const float (*)[3])q, np, (uint8_t)(hi | m->nib));
+                emit((const float (*)[3])q, np, (uint8_t)(hi | m->nib));
             }
         }
     }
@@ -381,6 +452,7 @@ static void draw(const Solid *s)
     float rmax = 0, pr, f = fmaxf(fw_focal_x(), fw_focal_y()), p[4][3], nv[3], c[3];
     int n, i, k;
 
+    object_begin();
     /* segments enough that the rim's flats are within half a texel of
        the circle: n >= pi / acos(1 - 0.5 / r), r its radius on the screen */
     for (k = 0; k < s->nrings; k++)
@@ -403,7 +475,7 @@ static void draw(const Solid *s)
             place(s, h->a, t1, h->r, p[2]);
             place(s, h->a, t0, h->r, p[3]);
             if (face_seen((const float (*)[3])p, 4, nv, c))
-                fw_view_face((const float (*)[3])p, 4, (uint8_t)(hi | shade(g, nv)));
+                emit((const float (*)[3])p, 4, (uint8_t)(hi | shade(g, nv)));
         }
     }
     cap(s, s->rings[s->nrings - 1].a, s->front, s->nfront, n);
@@ -491,9 +563,16 @@ static void paint_measure(const Solid *s, Paint *p)
 
 /* a point of the tree: x and z across, y the world's down (texels from its
    painting's middle) */
+/* a tree's point in its own coordinates (its slot turns it) */
 static void tree_point(float x, float y, float z, float *out)
 {
     int j;
+    if (fslot >= 0) {                   /* the display list's: its own coordinates */
+        out[0] = x;
+        out[1] = y;
+        out[2] = z;
+        return;
+    }
     for (j = 0; j < 3; j++)
         out[j] = pos[j] + scale * (x * view[0][j] + y * view[1][j] + z * view[2][j]);
 }
@@ -523,9 +602,10 @@ static int lit_cmp(const void *a, const void *b)
    down ay; its light against the painting's and its area on the screen */
 static int nf;
 static float total_area;
+static int calibrating;                  /* the painting's colours being set (tree_body) */
 static void keep_face(const float (*q)[3], int m, float ay, const Paint *pt)
 {
-    float u[3], v[3], nv[3], c[3] = { 0 }, axis[3], d = 0, e = 0, l, fxy = fw_focal_x() * fw_focal_y();
+    float u[3], v[3], nv[3], c[3] = { 0 }, axis[3], d = 0, e = 0, l, fxy = fw_focal_x() * fw_focal_y(), cv[3], nvv[3];
     TreeFace *f;
     int i, j;
     if (nf >= TREE_FACES)
@@ -543,25 +623,41 @@ static void keep_face(const float (*q)[3], int m, float ay, const Paint *pt)
     tree_point(0, ay, 0, axis);
     for (j = 0; j < 3; j++)
         d += nv[j] * (c[j] - axis[j]);
+    (void)cv;
     if (d < 0)                          /* outward: away from the upright */
         for (j = 0; j < 3; j++)
             nv[j] = -nv[j];
     for (j = 0; j < 3; j++)
-        e += nv[j] * c[j];
+        e += nv[j] * (c[j] - (fslot >= 0 ? eye_obj[j] : 0));
     if (e >= 0)
         return;
     l = sqrtf(nv[0] * nv[0] + nv[1] * nv[1] + nv[2] * nv[2]);
-    f->lit = l ? (nv[0] * pt->light[0] + nv[1] * pt->light[1] + nv[2] * pt->light[2]) / l : -1;
+    if (fslot >= 0)
+        normal_view(nv, nvv);
+    else
+        memcpy(nvv, nv, sizeof nvv);
+    f->lit = l ? (nvv[0] * pt->light[0] + nvv[1] * pt->light[1] + nvv[2] * pt->light[2]) / l : -1;
     for (i = 0; i < m; i++)
         memcpy(f->p[i], q[i], sizeof f->p[i]);
     f->n = m;
-    f->key = c[0] * c[0] + c[1] * c[1] + c[2] * c[2];
-    for (f->area = 0, j = 0; j < m; j++) {      /* its area on the screen */
-        const float *a = q[j], *b = q[(j + 1) % m];
-        if (a[2] > 0 && b[2] > 0)
-            f->area += (a[0] / a[2]) * (b[1] / b[2]) - (b[0] / b[2]) * (a[1] / a[2]);
+    if (fslot >= 0)                     /* its order: its centre's distance from the eye */
+        to_view(c, cv);
+    else
+        memcpy(cv, c, sizeof cv);
+    f->key = cv[0] * cv[0] + cv[1] * cv[1] + cv[2] * cv[2];
+    f->area = 0;
+    if (calibrating || fslot < 0) {     /* its area on the screen, for the painting's colours (a fixed view) */
+        float a[3], b[3];
+        for (j = 0; j < m; j++) {
+            if (fslot >= 0)
+                to_view(q[j], a), to_view(q[(j + 1) % m], b);
+            else
+                memcpy(a, q[j], sizeof a), memcpy(b, q[(j + 1) % m], sizeof b);
+            if (a[2] > 0 && b[2] > 0)
+                f->area += (a[0] / a[2]) * (b[1] / b[2]) - (b[0] / b[2]) * (a[1] / a[2]);
+        }
+        f->area = fabsf(f->area) * fxy / 2;
     }
-    f->area = fabsf(f->area) * fxy / 2;
     total_area += f->area;
     nf++;
 }
@@ -571,7 +667,6 @@ static void keep_face(const float (*q)[3], int m, float ay, const Paint *pt)
    side when staggered (the band between two such rings in triangles,
    each edge of a ring to the other ring's point beside it); its faces
    seen drawn farthest first (it need not be convex) */
-static int calibrating;
 /* The tree's points as tree_body's faces take them: ring k's point c (0
    to sides: point sides is point 0 turned the whole way round, its angle
    one turn on, as the faces' last edge reaches it) at radius r[k] times
@@ -604,6 +699,7 @@ static void tree_body(const float *y, int nr, int sides, float (*m)[TREE_SIDES_M
     int k, i;
     float at;
     nf = 0, total_area = 0;
+    object_begin();                     /* its slot and the eye in its coordinates (calibration's own view too) */
     for (k = 0; k < nr; k++)
         for (i = 0; i <= sides; i++)
             tree_point(m[k][i][0], m[k][i][1], m[k][i][2], placed[k][i]);
@@ -654,7 +750,7 @@ static void tree_body(const float *y, int nr, int sides, float (*m)[TREE_SIDES_M
     }
     qsort(faces, (size_t)nf, sizeof faces[0], face_cmp);
     for (i = 0; i < nf; i++)
-        fw_view_face((const float (*)[3])faces[i].p, faces[i].n, (uint8_t)(hi | faces[i].c));
+        emit((const float (*)[3])faces[i].p, faces[i].n, (uint8_t)(hi | faces[i].c));
 }
 
 /* A tree drawn at the detail its size on the screen asks: the wheels'
