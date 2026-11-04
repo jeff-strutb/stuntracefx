@@ -14,7 +14,9 @@
  * goes over to the one whose key was taken, so every button keeps one.
  * The keys are kept in the console's save folder (keys.cfg) and laid out
  * again at each start. RESUME, the pause button again or Escape goes on;
- * DEFAULT KEYS puts the console's keys back.
+ * DEFAULT KEYS puts the console's keys back; the mode's button (ORIGINAL or
+ * ENHANCED, as the corner's badge shows it) changes the mode as Tab does,
+ * and Tab does too while paused.
  *
  * The panel is one picture redrawn when what it shows changes (a key, the
  * button under the mouse, the one asked for); its shapes are drawn by each
@@ -35,6 +37,7 @@
 #define MARGIN 10                   /* its distance from the window's corner */
 
 #define GOLD 0xF5D34A
+#define MODE_BLUE 0x4AA8F5           /* the ENHANCED badge's (art.c) */
 #define PLATE 0x141414
 #define WHITE 0xF2F2F2
 
@@ -222,10 +225,11 @@ static void tag_box(int i, float *x, float *y)
 }
 
 /* the panel's own buttons: RESUME and DEFAULT KEYS */
-enum { HIT_NONE = -1, HIT_RESUME = 100, HIT_DEFAULTS = 101 };
+enum { HIT_NONE = -1, HIT_RESUME = 100, HIT_DEFAULTS = 101, HIT_MODE = 102 };
 static const struct { int id; const char *name; float x, y, w, h; } k_btn[] = {
-    { HIT_RESUME, "RESUME", 196, 356, 112, 30 },
-    { HIT_DEFAULTS, "DEFAULT KEYS", 320, 356, 136, 30 },
+    { HIT_RESUME, "RESUME", 128, 356, 112, 30 },
+    { HIT_DEFAULTS, "DEFAULT KEYS", 252, 356, 136, 30 },
+    { HIT_MODE, NULL, 400, 356, 112, 30 },       /* ORIGINAL or ENHANCED: the mode now */
 };
 
 /* what is at (x, y), the panel's points: a control's index, a panel
@@ -323,7 +327,7 @@ static void keys_default(void)
 }
 
 /* ---- the state ---- */
-static int paused, asking = -1, hover = HIT_NONE, button_hover, loaded;
+static int paused, asking = -1, hover = HIT_NONE, button_hover, loaded, drawn_mode = -1;
 static int id_pause = -1, id_play = -1, id_panel = -1, panel_dirty = 1;
 static Img panel;
 static float mouse_x, mouse_y;
@@ -480,13 +484,18 @@ static void draw_panel(Img *m)
         text_centre(m, "CLICK A BUTTON TO CHANGE ITS KEY", PW / 2.0f, 312, 2, WHITE);
         text_centre(m, "ESCAPE TO RESUME", PW / 2.0f, 334, 1.25f, 0xA0A0AA);
     }
+    drawn_mode = front_enhanced();
     for (k = 0; k < sizeof k_btn / sizeof k_btn[0]; k++) {
-        int lit = hover == k_btn[k].id;
-        rrect(m, k_btn[k].x, k_btn[k].y, k_btn[k].w, k_btn[k].h, 8, lit ? 0x3A2E08 : PLATE, 0.85f);
+        int lit = hover == k_btn[k].id, mode = k_btn[k].id == HIT_MODE;
+        /* the mode's: its name in its colour, as the corner's badge (art.c) */
+        uint32_t edge = mode ? (drawn_mode ? MODE_BLUE : GOLD) : GOLD;
+        const char *name = mode ? (drawn_mode ? "ENHANCED" : "ORIGINAL") : k_btn[k].name;
+        rrect(m, k_btn[k].x, k_btn[k].y, k_btn[k].w, k_btn[k].h, 8,
+              lit ? (edge == GOLD ? 0x3A2E08 : 0x0C2A44) : PLATE, 0.85f);
         rrect_edge(m, k_btn[k].x + 0.75f, k_btn[k].y + 0.75f, k_btn[k].w - 1.5f, k_btn[k].h - 1.5f, 7.5f,
-                   lit ? 1.75f : 1, GOLD, 1);
-        text_centre(m, k_btn[k].name, k_btn[k].x + k_btn[k].w / 2, k_btn[k].y + (k_btn[k].h - 7 * 1.75f) / 2,
-                    1.75f, lit ? GOLD : WHITE);
+                   lit ? 1.75f : 1, edge, 1);
+        text_centre(m, name, k_btn[k].x + k_btn[k].w / 2, k_btn[k].y + (k_btn[k].h - 7 * 1.75f) / 2, 1.75f,
+                    mode || lit ? edge : WHITE);
     }
 }
 
@@ -539,6 +548,9 @@ static void choose(int hit)
 {
     if (hit == HIT_RESUME) {
         set_paused(0);
+    } else if (hit == HIT_MODE) {
+        front_set_enhanced(!front_enhanced());
+        panel_dirty = 1;
     } else if (hit == HIT_DEFAULTS) {
         keys_default();
         pause_keys_save();
@@ -576,7 +588,8 @@ int pause_key(int vk, int down)
     }
     if (vk == 0x1B)
         set_paused(0);
-    return 1;
+    /* Tab: the mode, as when not paused (main.c on_key) */
+    return vk != 0x09;
 }
 
 int pause_pointer(float x, float y, int buttons)
@@ -652,6 +665,8 @@ void pause_frame(void)
         free(a.px);
         free(b.px);
     }
+    if (drawn_mode != front_enhanced())
+        panel_dirty = 1;                /* the mode changed (the button, or Tab) */
     if (paused && panel_dirty && panel.px) {
         draw_panel(&panel);
         nshvc_overlay_update(id_panel, panel.px);

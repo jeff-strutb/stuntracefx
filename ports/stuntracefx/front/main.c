@@ -117,6 +117,12 @@ static void all_courses_frame(void)
    CPU's work takes no console time, and the Super FX's none, rm_enhanced)
    ---- */
 static int enhanced(void) { return rm_option(RM_OPT_FRAMERATE); }
+int front_enhanced(void) { return enhanced(); }
+void front_set_enhanced(int on)
+{
+    rm_option_set(RM_OPT_FRAMERATE, on != 0);
+    fprintf(stderr, "mode: %s\n", enhanced() ? "enhanced" : "original");
+}
 
 /* ---- the hooks ---- */
 static int on_key(int vk, int down)
@@ -130,8 +136,7 @@ static int on_key(int vk, int down)
     if (!down || (vk != 0x09 && vk != 0x70 && vk != 0x71))
         return 0;
     if (vk == 0x09) {                       /* Tab */
-        rm_option_set(RM_OPT_FRAMERATE, !enhanced());
-        fprintf(stderr, "mode: %s\n", enhanced() ? "enhanced" : "original");
+        front_set_enhanced(!enhanced());
     } else if (vk == 0x70) {                /* F1 */
         rm_option_set(RM_OPT_FRAMERATE, !rm_option(RM_OPT_FRAMERATE));
         fprintf(stderr, "remaster: frame rate %s\n", rm_option(RM_OPT_FRAMERATE) ? "60" : "original");

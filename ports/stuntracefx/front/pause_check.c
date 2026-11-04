@@ -122,6 +122,9 @@ void nshvc_window_size(float *w, float *h)
 void nshvc_safe_area(float *l, float *t, float *r, float *b) { *l = *t = *r = *b = 0; }
 const char *nshvc_save_dir(void) { return save_dir; }
 uint32_t front_frames(void) { return 0; }
+static int mode_on = 1;
+int front_enhanced(void) { return mode_on; }
+void front_set_enhanced(int on) { mode_on = on; }
 
 /* ---- the checks ---- */
 static void defaults(void)
@@ -209,7 +212,8 @@ int main(int argc, char **argv)
             ok = 0, printf("     control %d: spot %d, tag %d\n", i, pause_hit(k_spot[i][0], k_spot[i][1]), pause_hit(tx, ty));
     }
     check(ok, "every button's spot and tag hit that button");
-    check(pause_hit(252, 367) == 100 && pause_hit(388, 367) == 101, "RESUME and DEFAULT KEYS hit");
+    check(pause_hit(184, 371) == 100 && pause_hit(320, 371) == 101 && pause_hit(456, 371) == 102,
+          "RESUME, DEFAULT KEYS and the mode's button hit");
     check(pause_hit(320, 60) == -1 && pause_hit(320, 150) == -1 && pause_hit(5, 5) == -1 && pause_hit(320, 300) == -1,
           "the title, the controller's middle, a corner, the hint: nothing");
 
@@ -279,7 +283,13 @@ int main(int argc, char **argv)
     check(pause_asking() == 10, "a click on B's tag asks for B's key");
     pause_key(0x1B, 1);
     check(pause_asking() == -1 && pause_active() && key_of[bit(NSHVC_B)] == 'Z', "Escape cancels, still paused, B Z");
-    to_window(388, 367, &x, &y);                       /* DEFAULT KEYS */
+    to_window(456, 371, &x, &y);                       /* the mode */
+    pause_pointer(x, y, 1);
+    pause_pointer(x, y, 0);
+    check(!mode_on && pause_active(), "the mode's button: Enhanced to Original, still paused");
+    check(!pause_key(0x09, 1), "Tab while paused goes on to the mode's key (main.c)");
+    mode_on = 1;
+    to_window(320, 371, &x, &y);                       /* DEFAULT KEYS */
     pause_pointer(x, y, 1);
     pause_pointer(x, y, 0);
     check(key_of[bit(NSHVC_A)] == 'X' && one_key_each(), "DEFAULT KEYS: A is X again");
@@ -287,7 +297,7 @@ int main(int argc, char **argv)
     check(!pause_active() && !pause_on, "Escape goes on");
     check(pause_pointer(30, 30, 1) && pause_active(), "the pause button clicked pauses");
     pause_pointer(30, 30, 0);
-    to_window(252, 367, &x, &y);                       /* RESUME */
+    to_window(184, 371, &x, &y);                       /* RESUME */
     pause_pointer(x, y, 1);
     check(!pause_active(), "RESUME goes on");
     pause_pointer(x, y, 0);

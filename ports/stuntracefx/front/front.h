@@ -18,6 +18,9 @@ void front_window(float *w, float *h);          /* nshvc_window_size, points */
 float front_safe_top(void);                     /* nshvc_safe_area's top */
 void front_buttons(uint16_t buttons);           /* nshvc_game_buttons(0, ...) */
 int front_auto_accelerate(void);                /* the Remaster option */
+/* the mode: 1 Enhanced, 0 Original (Tab, and the pause screen's button) */
+int front_enhanced(void);
+void front_set_enhanced(int on);
 int front_overlay_image(const uint32_t *argb, int w, int h);       /* nshvc_overlay_image */
 void front_overlay_place(int id, float cx, float cy, float scale, float angle, float alpha,
                          int visible);                             /* nshvc_overlay_place */
