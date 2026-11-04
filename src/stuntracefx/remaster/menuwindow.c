@@ -334,25 +334,44 @@ static int char_shows(int layer, uint16_t e)
    most of its cells are their class's most common one, the classes the
    cells at the same place in the repeat; the texture those most common
    cells, each of which must have pixels (a layer mostly empty is no
-   background). Returns the share of the screen that matches (0 none). */
-static double screen_texture(int layer, const uint16_t *cells, int x0, int y0, uint16_t *tile, int *px, int *py)
-{
-    int x, y, i, j;
-    double share;
+   background). Returns the share of the screen that matches (0 none).
 
-    for (*py = 1; *py <= 32; *py *= 2)
-        for (*px = 1; *px <= 32; *px *= 2) {
+   The votes depend on the screen's cells alone, so they are kept for
+   each layer's screens (Cands: every repeat whose share reaches 60%, in
+   the order tried, with its texture) and made again only when the cells
+   change; whether a texture's cells have pixels reads the characters,
+   which can change under the same map, so it is asked each time. */
+#define CAND_WORDS 3969                 /* (1 + 2 + ... + 32)^2: every repeat's texture */
+typedef struct {
+    int ok;                             /* made for these cells */
+    uint16_t cells[32 * 32];
+    int n, px[36], py[36], at[36];
+    double share[36];
+    uint16_t tile[CAND_WORDS];
+} Cands;
+static Cands cands[3][4];
+
+static void cands_make(Cands *cd, const uint16_t *cells, int x0, int y0)
+{
+    int x, y, i, j, px, py, used = 0;
+
+    for (y = 0; y < 32; y++)
+        memcpy(cd->cells + y * 32, cells + (y0 + y) * 64 + x0, 32 * sizeof *cells);
+    cd->n = 0;
+    for (py = 1; py <= 32; py *= 2)
+        for (px = 1; px <= 32; px *= 2) {
             long match = 0;
-            int shows = 1;
-            for (j = 0; j < *py; j++)
-                for (i = 0; i < *px; i++) {
+            double share;
+            uint16_t *tile = cd->tile + used;
+            for (j = 0; j < py; j++)
+                for (i = 0; i < px; i++) {
                     /* the class's most common cell: a vote over its cells */
                     static uint16_t seen[32 * 32];
                     static int count[32 * 32];
                     int n = 0, k, top = 0;
-                    for (y = j; y < 32; y += *py)
-                        for (x = i; x < 32; x += *px) {
-                            uint16_t e = cells[(y0 + y) * 64 + x0 + x];
+                    for (y = j; y < 32; y += py)
+                        for (x = i; x < 32; x += px) {
+                            uint16_t e = cd->cells[y * 32 + x];
                             for (k = 0; k < n && seen[k] != e; k++)
                                 ;
                             if (k == n)
@@ -362,14 +381,46 @@ static double screen_texture(int layer, const uint16_t *cells, int x0, int y0, u
                     for (k = 1; k < n; k++)
                         if (count[k] > count[top])
                             top = k;
-                    tile[j * 32 + i] = seen[top];
+                    tile[j * px + i] = seen[top];
                     match += count[top];
-                    shows &= char_shows(layer, seen[top]);
                 }
             share = (double)match / (32 * 32);
-            if (share >= 0.6 && shows)
-                return share;
+            if (share >= 0.6) {
+                cd->px[cd->n] = px;
+                cd->py[cd->n] = py;
+                cd->at[cd->n] = used;
+                cd->share[cd->n++] = share;
+                used += px * py;
+            }
         }
+    cd->ok = 1;
+}
+
+static double screen_texture(int layer, int screen, const uint16_t *cells, int x0, int y0, uint16_t *tile, int *px, int *py)
+{
+    Cands *cd = &cands[layer][screen];
+    int c, y, i, j;
+
+    for (y = 0; y < 32 && cd->ok; y++)
+        if (memcmp(cd->cells + y * 32, cells + (y0 + y) * 64 + x0, 32 * sizeof *cells))
+            cd->ok = 0;
+    if (!cd->ok)
+        cands_make(cd, cells, x0, y0);
+    for (c = 0; c < cd->n; c++) {
+        const uint16_t *t = cd->tile + cd->at[c];
+        int shows = 1;
+        for (j = 0; j < cd->py[c] && shows; j++)
+            for (i = 0; i < cd->px[c] && shows; i++)
+                shows = char_shows(layer, t[j * cd->px[c] + i]);
+        if (shows) {
+            *px = cd->px[c];
+            *py = cd->py[c];
+            for (j = 0; j < *py; j++)
+                for (i = 0; i < *px; i++)
+                    tile[j * 32 + i] = t[j * *px + i];
+            return cd->share[c];
+        }
+    }
     return 0;
 }
 
@@ -388,7 +439,7 @@ static double texture_of(int layer, uint16_t *tile, int *px, int *py)
     map_cells(layer, cells, &mw, &mh);
     for (sy = 0; sy < mh; sy += 32)
         for (sx = 0; sx < mw; sx += 32)
-            if ((s = screen_texture(layer, cells, sx, sy, t, &tx, &ty)) > best) {
+            if ((s = screen_texture(layer, (sy / 32) * 2 + sx / 32, cells, sx, sy, t, &tx, &ty)) > best) {
                 best = s;
                 memcpy(tile, t, sizeof t);
                 *px = tx;
