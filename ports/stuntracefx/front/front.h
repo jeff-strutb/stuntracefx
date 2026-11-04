@@ -49,8 +49,12 @@ void art_place(const TouchView *v);
    seconds at launch and after each change of mode, then faded out */
 void art_make_mode(void);
 void art_place_mode(int enhanced, float left, float top);
-/* the badge hidden (while paused) */
-void art_hide_mode(void);
+/* the badge held in view (while paused: it is the mode's switch there),
+   at full when lit (under the mouse); its fade starts again once let go */
+void art_hold_mode(int enhanced, float left, float top, int lit);
+/* its size, points */
+#define ART_BADGE_W 112
+#define ART_BADGE_H 26
 
 /* ---- the pause screen (pause.c): the hosts with a keyboard ---- */
 /* the key hook's and the pointer hook's share: 1 taken */
@@ -60,8 +64,12 @@ int pause_pointer(float x, float y, int buttons);
 void pause_frame(void);
 /* 1 while paused (the console's machine still) */
 int pause_active(void);
-/* where the mode's badge goes: right of the pause button, window points */
+/* where the mode's badge goes: right of the pause button, window points
+   (its top: the button's middle less half the badge's height) */
 float pause_badge_left(void);
+float pause_badge_top(void);
+/* 1 while the mouse is over the badge (paused: it is lit) */
+int pause_badge_lit(void);
 /* for a check (pause_check.c): what is at a panel point (a control's
    index in the panel's order, 100 RESUME, 101 DEFAULT KEYS, -1 none), the
    control asked for (-1 none), keys the front end keeps, a button's key

@@ -138,8 +138,8 @@ static Img pedal(float w, float h, uint32_t c, const char *name)
 }
 
 /* the mode's badge: its name on a dark rounded plate, edged in its colour */
-#define BADGE_W 112
-#define BADGE_H 26
+#define BADGE_W ART_BADGE_W
+#define BADGE_H ART_BADGE_H
 static Img badge(const char *name, uint32_t c)
 {
     Img m = img_new(BADGE_W, BADGE_H);
@@ -201,10 +201,11 @@ void art_make_mode(void)
 #define BADGE_SHOW 180
 #define BADGE_FADE 30
 
+static int shown_mode = -1;
+static uint32_t since;
+
 void art_place_mode(int enhanced, float left, float top)
 {
-    static int shown_mode = -1;
-    static uint32_t since;
     const float s = 1.0f / DENSITY, cx = left + BADGE_W / 2.0f, cy = top + BADGE_H / 2.0f;
     uint32_t age;
     float a;
@@ -221,12 +222,16 @@ void art_place_mode(int enhanced, float left, float top)
     front_overlay_place(id_enhanced, cx, cy, s, 0, 0.85f * a, enhanced && a > 0);
 }
 
-void art_hide_mode(void)
+void art_hold_mode(int enhanced, float left, float top, int lit)
 {
-    if (id_original >= 0) {
-        front_overlay_place(id_original, 0, 0, 1, 0, 0, 0);
-        front_overlay_place(id_enhanced, 0, 0, 1, 0, 0, 0);
-    }
+    const float s = 1.0f / DENSITY, cx = left + BADGE_W / 2.0f, cy = top + BADGE_H / 2.0f;
+    if (id_original < 0)
+        return;
+    /* from the moment let go, its three seconds again */
+    shown_mode = enhanced;
+    since = front_frames();
+    front_overlay_place(id_original, cx, cy, s, 0, lit ? 1 : 0.85f, !enhanced);
+    front_overlay_place(id_enhanced, cx, cy, s, 0, lit ? 1 : 0.85f, enhanced);
 }
 
 /* the pictures as made, for a check (touch_check.c): 0 wheel, 1 brake,

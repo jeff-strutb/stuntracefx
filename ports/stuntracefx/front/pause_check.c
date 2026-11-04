@@ -212,8 +212,8 @@ int main(int argc, char **argv)
             ok = 0, printf("     control %d: spot %d, tag %d\n", i, pause_hit(k_spot[i][0], k_spot[i][1]), pause_hit(tx, ty));
     }
     check(ok, "every button's spot and tag hit that button");
-    check(pause_hit(184, 371) == 100 && pause_hit(320, 371) == 101 && pause_hit(456, 371) == 102,
-          "RESUME, DEFAULT KEYS and the mode's button hit");
+    check(pause_hit(252, 371) == 100 && pause_hit(388, 371) == 101 && pause_hit(500, 371) == -1,
+          "RESUME and DEFAULT KEYS hit, nothing right of them");
     check(pause_hit(320, 60) == -1 && pause_hit(320, 150) == -1 && pause_hit(5, 5) == -1 && pause_hit(320, 300) == -1,
           "the title, the controller's middle, a corner, the hint: nothing");
 
@@ -283,13 +283,20 @@ int main(int argc, char **argv)
     check(pause_asking() == 10, "a click on B's tag asks for B's key");
     pause_key(0x1B, 1);
     check(pause_asking() == -1 && pause_active() && key_of[bit(NSHVC_B)] == 'Z', "Escape cancels, still paused, B Z");
-    to_window(456, 371, &x, &y);                       /* the mode */
-    pause_pointer(x, y, 1);
-    pause_pointer(x, y, 0);
-    check(!mode_on && pause_active(), "the mode's button: Enhanced to Original, still paused");
+    /* the badge beside the play button: (58, 17) to (170, 43) */
+    pause_pointer(100, 30, 0);
+    check(pause_badge_lit() && pause_badge_top() == 17 && pause_badge_left() == 58, "the mouse on the badge lights it");
+    pause_pointer(100, 30, 1);
+    pause_pointer(100, 30, 0);
+    check(!mode_on && pause_active(), "the badge clicked: Enhanced to Original, still paused");
+    pause_pointer(100, 30, 1);
+    pause_pointer(100, 30, 0);
+    check(mode_on, "clicked again: Enhanced");
+    pause_pointer(175, 30, 1);
+    pause_pointer(175, 30, 0);
+    check(mode_on && !pause_badge_lit(), "past its right edge: nothing");
     check(!pause_key(0x09, 1), "Tab while paused goes on to the mode's key (main.c)");
-    mode_on = 1;
-    to_window(320, 371, &x, &y);                       /* DEFAULT KEYS */
+    to_window(388, 371, &x, &y);                       /* DEFAULT KEYS */
     pause_pointer(x, y, 1);
     pause_pointer(x, y, 0);
     check(key_of[bit(NSHVC_A)] == 'X' && one_key_each(), "DEFAULT KEYS: A is X again");
@@ -297,7 +304,7 @@ int main(int argc, char **argv)
     check(!pause_active() && !pause_on, "Escape goes on");
     check(pause_pointer(30, 30, 1) && pause_active(), "the pause button clicked pauses");
     pause_pointer(30, 30, 0);
-    to_window(184, 371, &x, &y);                       /* RESUME */
+    to_window(252, 371, &x, &y);                       /* RESUME */
     pause_pointer(x, y, 1);
     check(!pause_active(), "RESUME goes on");
     pause_pointer(x, y, 0);

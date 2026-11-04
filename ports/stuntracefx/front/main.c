@@ -166,8 +166,9 @@ static void on_frame(void)
 #ifndef NSHVC_HOST_IOS
     pause_frame();
     if (pause_active()) {
-        /* the machine is still: no frame ended, nothing of the game's to do */
-        art_hide_mode();
+        /* the machine is still: no frame ended, nothing of the game's to do;
+           the mode's badge stays in view, its switch */
+        art_hold_mode(enhanced(), pause_badge_left(), pause_badge_top(), pause_badge_lit());
         return;
     }
 #endif
@@ -179,7 +180,7 @@ static void on_frame(void)
         badge_made = 1;
     }
 #ifndef NSHVC_HOST_IOS
-    art_place_mode(enhanced(), pause_badge_left(), front_safe_top() + 10 + 7);
+    art_place_mode(enhanced(), pause_badge_left(), pause_badge_top());
 #else
     art_place_mode(enhanced(), 8, front_safe_top() + 8);
 #endif
