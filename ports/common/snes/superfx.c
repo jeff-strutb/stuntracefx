@@ -81,6 +81,7 @@ typedef struct {
 static int shown;
 static uint64_t done_at;
 static BusLog bus_log[2] = {{NULL, 0, 0, NO_HOLD}, {NULL, 0, 0, NO_HOLD}};
+static void master_reset(void);
 /* SCMR's bit for each bus: the Super FX has it while set */
 static const uint8_t bus_bit[2] = {0x10, 0x08};
 /* interrupts held (gsu_hold), and what of the game's program it keeps */
@@ -119,6 +120,7 @@ void gsu_reset(void)
     sfr_irq = sfr_alt = sfr_b = 0;
     go = 0;
     run_master = cost = 0;
+    master_reset();
     memset(&price, 0, sizeof price);
     memset(ops, 0, sizeof ops);
     shown = holding = 0;
@@ -131,10 +133,30 @@ uint8_t *snes_sfx_ram(void) { return ram_store; }
 
 /* ---- time ---- */
 /* the console's clock the running program has reached: its start and its
-   cost so far, priced */
+   cost so far, priced: run_master + floor(units MASTER_HZ / GSU_HZ), units
+   the cost's whole Super FX clocks. Kept as a quotient and remainder that
+   step on as the units do (a 32-bit division where a host's 64-bit one is
+   a library call), the same value exactly. */
+static uint64_t mn_units, mn_q;
+static uint32_t mn_rem;
+static void master_reset(void) { mn_units = mn_q = 0, mn_rem = 0; }
 static uint64_t master_now(void)
 {
-    return run_master + (cost / GSU_PRICE_ONE) * MASTER_HZ / GSU_HZ;
+    uint64_t units = cost / GSU_PRICE_ONE;
+    if (units != mn_units) {
+        uint64_t du = units - mn_units;
+        if (units > mn_units && du < 128) {     /* du MASTER_HZ + a remainder under GSU_HZ: within 32 bits */
+            uint32_t num = (uint32_t)du * MASTER_HZ + mn_rem;
+            mn_q += num / GSU_HZ;
+            mn_rem = num % GSU_HZ;
+        } else {
+            uint64_t p = units * MASTER_HZ;
+            mn_q = p / GSU_HZ;
+            mn_rem = (uint32_t)(p % GSU_HZ);
+        }
+        mn_units = units;
+    }
+    return run_master + mn_q;
 }
 
 /* a bus access of the running program, of kind op (GSU_OP_*; GSU_OPS: a
@@ -246,6 +268,7 @@ static void program_starts(void)
     run_master = gsu_host_clock();
     gsu_host_price((uint8_t)(pc >> 16), (uint16_t)pc, &price);
     cost = (uint64_t)price.fixed * GSU_PRICE_ONE;
+    master_reset();
     memset(ops, 0, sizeof ops);
     /* a bus the S-CPU has as the program starts: held from its start */
     for (int k = 0; k < 2; k++) {

@@ -101,8 +101,33 @@ static int64_t floor_div(int64_t a, int64_t b)
    console row y: console column x covers texel columns col_at(x) to
    col_at(x + 1) - 1 (SXN / SXD of them, whole or not), row y rows
    row_at(y) to row_at(y + 1) - 1 */
-static int col_at(int64_t x) { return (int)floor_div(x * SXN, SXD); }
-static int row_at(int64_t y) { return (int)floor_div(y * SYN, SYD); }
+static int col_at_(int64_t x) { return (int)floor_div(x * SXN, SXD); }
+static int row_at_(int64_t y) { return (int)floor_div(y * SYN, SYD); }
+/* the same from tables over the screen's own columns and rows (0 to W and
+   0 to H; 64-bit division is a library call on a 32-bit host), made again
+   when the scale changes */
+#define AT_MAX 1025
+static int col_tab[AT_MAX], row_tab[AT_MAX];
+static int64_t tab_key[4] = { -1, -1, -1, -1 };
+static void at_tables(void)
+{
+    int i;
+    if (tab_key[0] == SXN && tab_key[1] == SXD && tab_key[2] == SYN && tab_key[3] == SYD)
+        return;
+    tab_key[0] = SXN, tab_key[1] = SXD, tab_key[2] = SYN, tab_key[3] = SYD;
+    for (i = 0; i < AT_MAX; i++)
+        col_tab[i] = col_at_(i), row_tab[i] = row_at_(i);
+}
+static int col_at(int64_t x)
+{
+    at_tables();
+    return x >= 0 && x < AT_MAX ? col_tab[x] : col_at_(x);
+}
+static int row_at(int64_t y)
+{
+    at_tables();
+    return y >= 0 && y < AT_MAX ? row_tab[y] : row_at_(y);
+}
 int fw_col_at(int x) { return col_at(x); }
 int fw_row_at(int y) { return row_at(y); }
 
@@ -972,14 +997,21 @@ static const uint16_t k_race1p[6] = {0x0068, 0x0040, 0x0000, 0x00CF, 0x0000, 0x0
    num / den in lowest terms, 128 SXN / SXD and 128 SYN / SYD */
 void fw_focal_q(int down, int64_t *num, int64_t *den)
 {
+    static int64_t key[2][2] = { { -1, -1 }, { -1, -1 } }, kn[2], kd[2];
     int64_t n = 128 * (down ? SYN : SXN), d = down ? SYD : SXD, a = n, b = d;
-    while (b) {
-        int64_t r = a % b;
-        a = b;
-        b = r;
+    down = down != 0;
+    if (key[down][0] != n || key[down][1] != d) {   /* (kept: its divisions are library calls on a 32-bit host) */
+        key[down][0] = n, key[down][1] = d;
+        while (b) {
+            int64_t r = a % b;
+            a = b;
+            b = r;
+        }
+        kn[down] = n / a;
+        kd[down] = d / a;
     }
-    *num = n / a;
-    *den = d / a;
+    *num = kn[down];
+    *den = kd[down];
 }
 /* (kept, as centre_row: doubles are software on some hosts) */
 double fw_focal_x(void)
@@ -1530,9 +1562,17 @@ static int64_t slope(int64_t dx, uint32_t rows)
    original's view) keeps the original's. */
 static int64_t edge_x(int64_t from, int64_t to, int32_t y0, int32_t rows, int32_t row)
 {
-    int64_t num = (to - from) * 256 * (int64_t)(row - y0), q = num / rows;
-    if (num % rows && num < 0)
-        q--;
+    int64_t num = (to - from) * 256 * (int64_t)(row - y0), q;
+    if (num > -0x7FFFFFFF && num < 0x7FFFFFFF) {   /* within 32 bits: the same quotient by a 32-bit division */
+        int32_t n32 = (int32_t)num;
+        q = n32 / rows;
+        if (n32 % rows && n32 < 0)
+            q--;
+    } else {
+        q = num / rows;
+        if (num % rows && num < 0)
+            q--;
+    }
     return from * 256 + q;
 }
 
