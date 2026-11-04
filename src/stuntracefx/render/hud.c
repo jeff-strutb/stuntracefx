@@ -28,6 +28,7 @@
  */
 #include "gsu_ops.h"
 #include "draw_list.h"
+#include "fullwindow.h"
 
 #define HUD_COLOURS     0x0200u  /* four colour bytes */
 #define HUD_X           0x020Au
@@ -168,6 +169,18 @@ static int bitmap_row_end(uint16_t skip)
 
 static void glyph_rows(uint16_t row_start, unsigned bytes, int rpix_each)
 {
+    if (fw_bitmap(R[8], R[2], gsu.rombr, R[14], R[12], (int)bytes, R[11])) {
+        /* Enhanced's full window, SC_GPU: one quad for the GPU; the
+           registers as the rows leave them */
+        R[13] = row_start;
+        R[2] = (uint16_t)(R[2] + R[12]);
+        R[1] = R[8];
+        R[0] = (uint16_t)(32 - bytes);
+        gsu_r14((uint16_t)(R[14] + R[12] * 32));
+        R[12] = 0;
+        fw_sprite_rows_done();
+        return;
+    }
     R[13] = row_start;
     do {
         for (unsigned b = 0; b < bytes; b++) {
@@ -176,6 +189,7 @@ static void glyph_rows(uint16_t row_start, unsigned bytes, int rpix_each)
                 R[0] = rpix();
         }
     } while ((bitmap_row_end((uint16_t)(32 - bytes))));
+    fw_sprite_rows_done();
 }
 
 /* The glyph programs' x: from $020A, with the advance added back to $020A
@@ -391,6 +405,7 @@ static void picture_rows(uint16_t src, uint16_t row_start, uint16_t bytes)
         R[2] = gsu_inc(R[2]);
     } while ((more));
     R[0] = rpix();
+    fw_sprite_rows_done();
 }
 
 /* A rising picture in two pieces: picture bytes 14-27 at x = left, then
@@ -742,6 +757,18 @@ static void scaled_sprite(void)
     R[10] = R[1];
     R[3] = gsu_ldw(HUD_STEP_X);
     R[4] = gsu_ldw(HUD_STEP_Y);
+    if (fw_bitmap_scaled(R[8], R[9], R[1], R[2], (int)(int16_t)R[5], (int)(int16_t)R[7], gsu.rombr, R[14], R[3], R[4],
+                         R[11])) {
+        /* Enhanced's full window, SC_GPU: one quad for the GPU; the
+           registers as the rows leave them */
+        R[2] = (uint16_t)(R[2] + R[7]);
+        R[7] = 0;
+        R[12] = 0;
+        R[13] = 0xFB7D;
+        R[0] = rpix();
+        fw_sprite_rows_done();
+        return;
+    }
     do {
         R[12] = R[5];
         R[13] = 0xFB7D;
@@ -784,6 +811,7 @@ static void scaled_sprite(void)
         R[2] = gsu_inc(R[2]);
     } while ((more));
     R[0] = rpix();
+    fw_sprite_rows_done();
 }
 
 /* The scaled-sprite programs' setup after their size is worked out. */

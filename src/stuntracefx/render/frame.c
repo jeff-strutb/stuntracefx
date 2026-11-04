@@ -1957,9 +1957,18 @@ lBE92:
     gsu_sub(R[0], R[4], 0);   /* CMP */
     t = !gsu.s;
     if (t) { goto lBEA8; }
-    gsu_plot_r1();
+    if (fw_plot_dots(R[1], R[2], 1))   /* Enhanced, SC_GPU: a quad for the GPU */
+        R[1] = (uint16_t)(R[1] + 1);
+    else
+        gsu_plot_r1();
+    fw_sprite_rows_done();
     goto lBF2A;
 lBEA8:
+    if (fw_plot_dots(R[1], R[2], 2)) {     /* Enhanced, SC_GPU: a quad for the GPU */
+        R[1] = (uint16_t)(R[1] + 2);
+        R[2] = (uint16_t)(R[2] + 1);
+        goto lBF2A;
+    }
     gsu_plot_r1();
     gsu_plot_r1();
     R[2] = gsu_inc(R[2]);
@@ -1967,6 +1976,7 @@ lBEA8:
     R[1] = gsu_dec(R[1]);
     gsu_plot_r1();
     gsu_plot_r1();
+    fw_sprite_rows_done();
     t = 1;
     if (t) goto lBF2A;
 lBEB2:
@@ -2009,6 +2019,15 @@ lBEE0:
     R[9] = gsu_not(R[9]);
     R[9] = gsu_inc(R[9]);
 lBEEC:
+    {                                   /* Enhanced, SC_GPU: the streak a quad for the GPU */
+        uint16_t xe, ye;
+        if (fw_plot_line(R[1], R[2], R[3], R[9], R[5], R[6], &xe, &ye)) {
+            R[1] = xe;
+            R[2] = ye;
+            R[12] = 0;
+            goto lBF1A;
+        }
+    }
     R[0] = gsu_sub(R[3], R[9], 0);
     t = gsu.s;
     if (t) { goto lBF06; }
@@ -2052,6 +2071,7 @@ lBF15:
     R[0] = gsu_sub(R[0], R[3], 0);
     if (t) { goto lBF0F; }
 lBF1A:
+    fw_sprite_rows_done();
     R[10] = gsu_dec(R[10]);
     R[10] = gsu_dec(R[10]);
     R[7] = gsu_ldw(R[10]);

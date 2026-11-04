@@ -70,6 +70,8 @@ static size_t s_arena_used;
 typedef struct {
     uint8_t bank;
     uint16_t base, mask;
+    uint32_t pal;                       /* a 2-bit bitmap's palette (its four bytes) */
+    uint8_t bitmap;                     /* a 2-bit bitmap's (1), an 8-bit texture's (0) */
     uint8_t *at;
     int tw, th;                         /* its size, powers of two */
     int um, vm;                         /* u and v's masks in it */
@@ -277,21 +279,42 @@ static void stages_reset(void)
 /* at a picture's or a fill's start: the RAM's textures made again */
 static void stages_begin(void)
 {
-    if (s_ram_stages)
+    static uint32_t ver[4];
+    int k, moved = 0;
+    for (k = 0; k < 4; k++)             /* the panels' textures (fw_bank_version) */
+        if (fw_bank_version((uint8_t)(0xF0 + k)) != ver[k]) {
+            ver[k] = fw_bank_version((uint8_t)(0xF0 + k));
+            moved = 1;
+        }
+    if (s_ram_stages || moved)
         stages_reset();
 }
 
-static const Stage *stage_for(uint8_t bank, uint16_t base, uint16_t mask)
+static const Stage *stage_make(uint8_t bank, uint16_t base, uint16_t mask, uint32_t pal, int bitmap);
+static const Stage *stage_for(uint8_t bank, uint16_t base, uint16_t mask) { return stage_make(bank, base, mask, 0, 0); }
+
+/* a 2-bit bitmap's texture (fullwindow.h FW_QUAD bit 2): w by h of its
+   pixels from at, 32 bytes a row, each its palette byte (pal's bytes, low
+   first) */
+static const Stage *stage_bitmap(uint8_t bank, uint16_t at, int w, int h, uint32_t pal)
+{
+    int um = pow2_at_least(w) - 1, vm = pow2_at_least(h) - 1;
+    if (um > 0x7F || vm > 0xFF)
+        return NULL;
+    return stage_make(bank, at, (uint16_t)(vm << 8 | um), pal, 1);
+}
+
+static const Stage *stage_make(uint8_t bank, uint16_t base, uint16_t mask, uint32_t pal, int bitmap)
 {
     int i, u, v, um = mask & 0xFF, vm = mask >> 8, tw, th, stride;
-    unsigned h = stage_key(bank, base, mask);
+    unsigned h = (stage_key(bank, base, mask) ^ (pal * 2246822519u + (unsigned)bitmap)) % STAGE_HASH;
     Stage *s;
     for (i = 0; i < STAGE_HASH && s_hash[h]; i++, h = (h + 1) % STAGE_HASH) {
         s = &s_stage[s_hash[h] - 1];
-        if (s->bank == bank && s->base == base && s->mask == mask)
+        if (s->bank == bank && s->base == base && s->mask == mask && s->pal == pal && s->bitmap == bitmap)
             return s;
     }
-    if (((um + 1) & um) || ((vm + 1) & vm))
+    if (!bitmap && (((um + 1) & um) || ((vm + 1) & vm)))
         um = vm = 0xFF;
     tw = um + 1;
     th = vm + 1;
@@ -300,7 +323,7 @@ static const Stage *stage_for(uint8_t bank, uint16_t base, uint16_t mask)
         list_close();                   /* the GE done with the arena: all made again */
         stages_reset();
         list_open();
-        h = stage_key(bank, base, mask);
+        h = (stage_key(bank, base, mask) ^ (pal * 2246822519u + (unsigned)bitmap)) % STAGE_HASH;
     }
     s_hash[h] = (int16_t)(s_nstage + 1);
     s_stage_made++;
@@ -309,6 +332,8 @@ static const Stage *stage_for(uint8_t bank, uint16_t base, uint16_t mask)
     s->bank = bank;
     s->base = base;
     s->mask = mask;
+    s->pal = pal;
+    s->bitmap = (uint8_t)bitmap;
     s->at = s_arena + s_arena_used;
     s->tw = tw;
     s->th = th;
@@ -317,7 +342,11 @@ static const Stage *stage_for(uint8_t bank, uint16_t base, uint16_t mask)
     s_arena_used += ((size_t)stride * th + 63) & ~(size_t)63;
     for (v = 0; v < th; v++)
         for (u = 0; u < tw; u++)
-            s->at[(size_t)v * stride + u] = fw_texel(bank, (uint16_t)(((v << 8 | u) & mask) + base));
+            if (bitmap)                 /* a 2-bit bitmap's pixel: its palette byte */
+                s->at[(size_t)v * stride + u] =
+                    (uint8_t)(pal >> 8 * ((fw_texel(bank, (uint16_t)(base + v * 32 + (u >> 2))) >> 2 * (u & 3)) & 3));
+            else
+                s->at[(size_t)v * stride + u] = fw_texel(bank, (uint16_t)(((v << 8 | u) & mask) + base));
     sceKernelDcacheWritebackRange(s->at, (unsigned)((size_t)stride * th));
     return s;
 }
@@ -904,12 +933,49 @@ static double quad_bias(int64_t a, int64_t d, int32_t n, int64_t den)
     return (double)least / (2.0 * (double)den);
 }
 
+/* a line quad (the weather's streaks): the GE's line from its first
+   pixel's centre to its last's */
+static void line_ge(const FwSpan *p, int w, int h)
+{
+    int ymaj = p->mask & 1, sx = p->mask & 2 ? -1 : 1, sy = p->mask & 4 ? -1 : 1;
+    int64_t n = p->du * p->dv - p->u, st = n <= 0 ? 0 : (n + p->du - 1) / p->du;
+    float x0 = (float)p->xl + 0.5f, y0 = (float)p->v + 0.5f;
+    float x1 = (float)(p->xl + (ymaj ? sx * st : sx * p->du)) + 0.5f, y1 = (float)(p->v + (ymaj ? sy * p->du : sy * st)) + 0.5f;
+    room();
+    s_used += 2 * sizeof(PCV32) + 256;
+    model_mode(0);
+    textured(0);
+    if (s_c32) {
+        PCV32 *c = (PCV32 *)sceGuGetMemory(2 * sizeof(PCV32));
+        c[0].c = c[1].c = 0xFF000000u | p->colour;
+        c[0].x = 2.0f * x0 / (float)w - 1.0f;
+        c[0].y = 1.0f - 2.0f * y0 / (float)h;
+        c[1].x = 2.0f * x1 / (float)w - 1.0f;
+        c[1].y = 1.0f - 2.0f * y1 / (float)h;
+        c[0].z = c[1].z = 1.0f;
+        sceGuDrawArray(GU_LINES, GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D, 2, 0, c);
+    } else {
+        PCV *c = (PCV *)sceGuGetMemory(2 * sizeof(PCV));
+        c[0].c = c[1].c = (uint16_t)(0xF000u | p->colour);
+        c[0].pad = c[1].pad = 0;
+        c[0].x = 2.0f * x0 / (float)w - 1.0f;
+        c[0].y = 1.0f - 2.0f * y0 / (float)h;
+        c[1].x = 2.0f * x1 / (float)w - 1.0f;
+        c[1].y = 1.0f - 2.0f * y1 / (float)h;
+        c[0].z = c[1].z = 1.0f;
+        sceGuDrawArray(GU_LINES, GU_COLOR_4444 | GU_VERTEX_32BITF | GU_TRANSFORM_3D, 2, 0, c);
+    }
+    s_quads++;
+}
+
 static void quad_ge(const FwSpan *p, int w, int h)
 {
     PV a[8], b[8];
     int n = 4, i, vm = 0xFF;
     const Stage *s = NULL;
     double k32 = 1.0 / 4294967296.0, dn = p->mask ? 1.0 / (double)p->mask : k32;
+    uint32_t cden = p->pad1[1] & 8 ? fw_quad_word(&p->pq) : 0, mx = fw_quad_word(&p->pdq), my = fw_quad_word(&p->pda);
+    double dc = cden ? 1.0 / (double)cden : k32;
     int64_t tl = p->v + p->dv * (p->pad0 - 1);
     float X0 = (float)p->x0, X1 = (float)(p->x1 + 1), Y0 = (float)p->y, Y1 = (float)(p->y + p->pad0);
 
@@ -928,7 +994,19 @@ static void quad_ge(const FwSpan *p, int w, int h)
         if (n < 3)
             return;
     }
-    if (!(p->pad1[1] & 2)) {
+    if (p->pad1[1] & 4) {               /* a 2-bit bitmap: its pixels the rule reaches */
+        int64_t sl = p->u + p->du * (p->x1 - p->xl), tb;
+        uint32_t pal;
+        sl = cden ? sl / cden : sl >> 32;
+        tb = p->mask ? tl / p->mask : tl >> 32;
+        if (mx)
+            sl = (sl * mx) >> 8;
+        if (my)
+            tb = (tb * my) >> 8;
+        memcpy(&pal, p->pad1 + 3, 4);
+        if (sl < 0 || tb < 0 || !(s = stage_bitmap(p->bank, p->base, (int)sl + 1, (int)tb + 1, pal)))
+            return;
+    } else if (!(p->pad1[1] & 2)) {
         tl = p->mask ? tl / p->mask : tl >> 32;
         if (tl >= 0 && tl < 256)
             vm = pow2_at_least((int)tl + 1) - 1;
@@ -942,8 +1020,8 @@ static void quad_ge(const FwSpan *p, int w, int h)
         PTV *t = (PTV *)sceGuGetMemory((unsigned)n * sizeof(PTV));
         float tws = (float)pow2_at_least(s->tw), ths = (float)pow2_at_least(s->th);
         int64_t one = (int64_t)1 << 32;
-        double bu = quad_bias(p->u + p->du * (p->x0 - p->xl), p->du, p->x1 - p->x0 + 1, one);
-        double bv = quad_bias(p->v, p->dv, p->pad0, p->mask ? (int64_t)p->mask : one);
+        double bu = mx ? 0 : quad_bias(p->u + p->du * (p->x0 - p->xl), p->du, p->x1 - p->x0 + 1, cden ? (int64_t)cden : one);
+        double bv = my ? 0 : quad_bias(p->v, p->dv, p->pad0, p->mask ? (int64_t)p->mask : one);
         textured(1);
         use_texture(s);
         use_rules(p->por, p->hi);
@@ -952,8 +1030,12 @@ static void quad_ge(const FwSpan *p, int w, int h)
             s_wrap = 1;
         }
         for (i = 0; i < n; i++) {
-            double cu = ((double)p->u + (double)p->du * ((double)a[i].x - 0.5 - (double)p->xl)) * k32;
+            double cu = ((double)p->u + (double)p->du * ((double)a[i].x - 0.5 - (double)p->xl)) * dc;
             double cv = ((double)p->v + (double)p->dv * ((double)a[i].y - 0.5 - (double)p->y)) * dn;
+            if (mx)                     /* the 8.8 steps (the GE's line through them) */
+                cu = cu * mx / 256.0;
+            if (my)
+                cv = cv * my / 256.0;
             t[i].u = (float)(cu + bu) / tws;
             t[i].v = (float)(cv + bv) / ths;
             t[i].x = 2.0f * a[i].x / (float)w - 1.0f;
@@ -993,7 +1075,10 @@ static void span(const FwSpan *p, int w, int h)
     if (gpu_bin_ref_only(p))            /* the reference's own (a check's) */
         return;
     if (p->textured == FW_QUAD) {       /* a screen quad: the GE's whole */
-        quad_ge(p, w, h);
+        if (p->pad1[1] & 32)
+            line_ge(p, w, h);
+        else
+            quad_ge(p, w, h);
         return;
     }
     if (gpu_bin_face(p)) {              /* a display-list face: the GE's whole */

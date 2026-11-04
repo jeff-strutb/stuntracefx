@@ -18,6 +18,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 #include <math.h>
 
 /* a multiply-add as the reference writes it, a * b + c rounded once
@@ -139,9 +140,21 @@ void fw_facing_cross(uint16_t *hi, uint16_t *lo);
    >> 32 (mask 0) or (v + dv r) / mask (mask not 0, both not negative),
    its texel column s = (u + du k) >> 32, the texel at (base + (t & 255)
    * 256 + (s & 255)) & 0xFFFF in bank, through COLOR's and PLOT's rules;
-   pad1[1] bit 1: flat, the colour instead. A scaled sprite is one
-   (fw_sprite_small, fw_sprite_large, fw_sprite_draw). pad1[0] 2: the
-   GPU's alone (a check's, the reference's own spans beside it). */
+   pad1[1] bit 1: flat, the colour instead; bit 2: a 2-bit bitmap (the
+   Super FX's in ROM, 32 bytes a row, a byte's low bits its leftmost
+   pixel), the texel palette byte ((the byte at base + t * 32 + (s >> 2))
+   >> 2 (s & 3)) & 3 of pad1[3..6], s and t not wrapped; bit 3: the column
+   divided, s = (u + du k) / d with d the 32 bits pq holds; then, where
+   the 32 bits pdq (columns) or pda (rows) hold m not 0, s = (s m) >> 8,
+   t = (t m) >> 8 (a bitmap's 8.8 source steps) (fw_quad_word); bit 5: a
+   line (flat): the pixels (xl + sx i, v + sy S(i)) for i 0 to du, S(i) =
+   ceil((i dv - u) / du) (0 while not above 0), x and y swapped where mask
+   bit 0 (y the major), sx -1 where mask bit 1, sy -1 where bit 2 (the
+   weather's streaks, 01:BEEC: its Bresenham steps). A scaled
+   sprite is one (fw_sprite_small, fw_sprite_large, fw_sprite_draw), a
+   glyph of a label or the HUD another (fw_bitmap, fw_bitmap_scaled).
+   pad1[0] 2: the GPU's alone (a check's, the reference's own spans
+   beside it). */
 #define FW_QUAD 7
 typedef struct {
     int32_t y, x0, x1, pad0;
@@ -246,6 +259,9 @@ typedef struct {
 } FwCanvasGpu;
 extern const FwCanvasGpu *fw_canvas_gpu;
 uint8_t fw_texel(uint8_t bank, uint16_t at);
+/* a bank's version: the panels' textures ($F0 to $F3, fullwindow.c) move
+   on as they change (a GPU's copy made again then); 0 for the rest */
+uint32_t fw_bank_version(uint8_t bank);
 /* the texels' memory: malloc's, or a front end's the GPU shares (NULL: malloc) */
 extern uint8_t *(*fw_texels_alloc)(size_t len);
 /* FxDrawList's fill into the texels (raster.c, while fw_drawing) */
@@ -281,6 +297,34 @@ void fw_sprite_draw(int32_t h);
 int fw_sprite_small(uint16_t y, uint16_t x, uint16_t cols, uint16_t rows, uint16_t base, uint16_t step, int back);
 int fw_sprite_large(uint16_t y, uint16_t x, uint16_t cols, uint16_t frac, uint16_t step, uint16_t base, int back);
 void fw_sprite_rows_done(void);
+/* the 32 bits a quad's float field holds (pq, pdq, pda: FW_QUAD) */
+static inline uint32_t fw_quad_word(const float *f)
+{
+    uint32_t d;
+    memcpy(&d, f, 4);
+    return d;
+}
+/* the 2-bit bitmap blit (render/bitmap.c fx_blit, render/hud.c
+   glyph_rows) as one quad for the GPU (SC_GPU): rows rows of bytes bytes
+   (4 pixels each) from ROM bank bank at at, 32 bytes a row, its top left
+   at (x, y) on the Super FX's screen, the palette's four bytes at pal
+   (RAM bank 0): 1 when the quad stands for its pixels (the blit's loop
+   then skipped), 0 to run it. fw_bitmap_scaled, the HUD's scaled sprite
+   (render/hud.c scaled_sprite): its origin (ox, oy), the pixels drawn
+   from (x, y), cols by rows, the source pixel ((x - ox) stepx) >> 8 across
+   and ((y - oy) stepy) >> 8 down. fw_sprite_rows_done after either. */
+int fw_bitmap(uint16_t x, uint16_t y, uint8_t bank, uint16_t at, int rows, int bytes, uint16_t pal);
+/* the weather's and the particles' PLOTs (FxWeatherDraw, render/frame.c;
+   FxParticlesDraw, object/fx_record.c) as quads for the GPU: a dot n by n
+   pixels at (x, y); a streak from (x, y), dx and dy its lengths (R3, R9:
+   not negative), sx and sy its steps (R5, R6: 1 or $FFFF), its loop's
+   end (R1, R2) into *xe, *ye (the two loops' Bresenham steps are the
+   same). 1 when the quad stands for the plots (skip them), 0 to run them;
+   fw_sprite_rows_done after. */
+int fw_plot_dots(uint16_t x, uint16_t y, int n);
+int fw_plot_line(uint16_t x, uint16_t y, uint16_t dx, uint16_t dy, uint16_t sx, uint16_t sy, uint16_t *xe, uint16_t *ye);
+int fw_bitmap_scaled(uint16_t ox, uint16_t oy, uint16_t x, uint16_t y, int cols, int rows, uint8_t bank, uint16_t at,
+                     uint16_t stepx, uint16_t stepy, uint16_t pal);
 /* a flat convex face of n points in view space, colour c, into the
    picture (near-clipped and projected exactly) */
 void fw_view_face(const float (*p)[3], int n, uint8_t c);

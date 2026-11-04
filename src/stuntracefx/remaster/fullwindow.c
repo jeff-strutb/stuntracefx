@@ -359,9 +359,34 @@ static int hud_root(int i)
     return i;
 }
 
+/* The HUD's bitmaps (fw_hud, its pieces being made): each kept with its
+   piece, in the HUD's layer (the original's screen, the view's offset
+   added: hud_px's), and drawn by hud_place with its piece's join's shift */
+typedef struct {
+    int lx, ly;                         /* the bitmap's origin on the layer (source pixel 0, 0) */
+    int x0, y0, x1, y1;                 /* the pixels drawn, on the layer (inclusive) */
+    uint16_t at, stepx, stepy;
+    uint8_t bank, por, hi, pal[4];
+    int piece;
+} HudQuad;
+static HudQuad *hq;
+static size_t nhq, cap_hq;
+static uint8_t hud_qd[224][256];        /* (a check) hud_px's pixel is a quad's too: the reference's alone */
+static int span_ref_only;               /* (the spans' below) */
+static uint8_t ram8(uint16_t a);
+static int blit_quad;                   /* (a check) the blit being run has its quad */
+
+/* a HUD bitmap with its join's shift (s, t: the layer's pixels to the
+   screen's): its pixels in the view (on the layer), at the screen's pixel
+   x + s, y + t, the texels block_set's: texel column c the screen's
+   column ((c + 1) SXD - 1) / SXN, its source column that less s and the
+   origin (then the 8.8 step), the rows the same (hud_quad, below) */
+static void hud_quad(const HudQuad *h, int s, int t);
+
 static void hud_place(void)
 {
     int a, b, x, y, g0[HUD_PIECES], g1[HUD_PIECES], h0[HUD_PIECES], h1[HUD_PIECES], s[HUD_PIECES], t[HUD_PIECES];
+    size_t q;
 
     span_flush();                       /* the 3D first, the HUD over it */
     for (a = 0; a < hud_n; a++)
@@ -385,21 +410,30 @@ static void hud_place(void)
             s[a] = view_shift(g0[a], g1[a]);
             t[a] = anchor_shift_y(h0[a], h1[a]);
         }
-    for (a = 0; a < hud_n; a++) {
+    for (a = 0, q = 0; a < hud_n; a++) {
         int g = hud_root(a);
-        if (hv_x1[a] < 0)
+        if (hv_x1[a] < 0) {
+            while (q < nhq && hq[q].piece <= a)
+                q++;
             continue;
+        }
         for (y = hv_y0[a]; y <= hv_y1[a]; y++)
             for (x = hv_x0[a]; x <= hv_x1[a]; x++) {
                 if (!hud_px[y][x] || hud_id[y][x] != a)
                     continue;
+                span_ref_only = hud_qd[y][x];   /* (a check) a quad's pixel: the reference's alone */
                 block_set(x + s[g], y + t[g], (uint8_t)(hud_px[y][x] - 1));
             }
+        span_ref_only = 0;
+        for (; q < nhq && hq[q].piece <= a; q++)    /* its bitmaps, each a quad */
+            if (hq[q].piece == a)
+                hud_quad(&hq[q], s[g], t[g]);
     }
+    nhq = 0;
     for (a = 0; a < hud_n; a++)
         for (y = hp_y0[a]; y <= hp_y1[a]; y++)
             for (x = hp_x0[a]; x <= hp_x1[a]; x++)
-                hud_px[y][x] = 0;
+                hud_px[y][x] = 0, hud_qd[y][x] = 0;
     hud_n = 0;
 }
 
@@ -444,7 +478,6 @@ static int sunk(float za, float zx, float zy, int32_t x, int32_t y)
     return z > 0 && w > 0 && z < w;
 }
 
-static int span_ref_only;
 static long cen_plots[4], cen_entries[3], cen_entries_gpu, cen_quads, cen_map_apart;  /* (FW_CENSUS's) */
 /* a display-list face the GPU draws in its place (scene.h): its marker
    span; 1 when the CPU's spans of it are wanted beside it (the check's
@@ -521,10 +554,18 @@ static void span_flat(int32_t y, int32_t x0, int32_t x1, uint8_t c)
 /* the texel fetch, as the Super FX reads it (fw_span_filler's need the
    banks' bytes: fw_span_bank) */
 static uint8_t *play_bank[256];         /* FW_SPANPLAY's recorded banks */
+/* the panels' boxes as textures (panels_draw): banks $F0 to $F3, no
+   bank of the Super FX's; their version moved on as they change */
+static uint8_t panel_bank[4][0x10000];
+static uint32_t panel_version[4];
+uint32_t fw_bank_version(uint8_t bank) { return bank >= 0xF0 && bank <= 0xF3 ? panel_version[bank & 3] : 0; }
+
 uint8_t fw_texel(uint8_t bank, uint16_t at)
 {
     if (play_bank[bank])
         return play_bank[bank][at];
+    if (bank >= 0xF0 && bank <= 0xF3)
+        return panel_bank[bank & 3][at];
     return gsu_rd8((uint32_t)bank << 16 | at);
 }
 
@@ -1130,7 +1171,7 @@ static int quad_made(void)
     return 0;
 }
 
-void fw_sprite_rows_done(void) { span_ref_only = 0; }
+void fw_sprite_rows_done(void) { span_ref_only = 0; blit_quad = 0; }
 
 /* 01:B1CB's rows: rows rows from y (those at or past the screen's bottom,
    $003E, or above row 0 left out: the loop's unsigned compare), each from
@@ -1216,6 +1257,43 @@ int fw_sprite_large(uint16_t y, uint16_t x, uint16_t cols, uint16_t frac, uint16
     return quad_made();
 }
 
+/* a quad's texel column at x and row at r (fullwindow.h's rule) */
+static int64_t quad_col(const FwSpan *p, int32_t x)
+{
+    int64_t a = p->u + p->du * (x - p->xl), s = p->pad1[1] & 8 ? a / (int64_t)fw_quad_word(&p->pq) : a >> 32;
+    uint32_t m = fw_quad_word(&p->pdq);
+    return m ? (s * m) >> 8 : s;
+}
+static int64_t quad_row(const FwSpan *p, int32_t r)
+{
+    int64_t a = p->v + p->dv * r, t = p->mask ? a / p->mask : a >> 32;
+    uint32_t m = fw_quad_word(&p->pda);
+    return m ? (t * m) >> 8 : t;
+}
+/* a quad's colour at column s, row t, or -1 (transparent) */
+static int quad_colour(const FwSpan *p, int64_t s, int64_t t)
+{
+    if (p->pad1[1] & 2)
+        return p->colour;
+    if (p->pad1[1] & 4) {
+        uint8_t b = fw_texel(p->bank, (uint16_t)(p->base + t * 32 + (s >> 2)));
+        return texel_colour(p->pad1[3 + ((b >> 2 * (s & 3)) & 3)], p->por, p->hi);
+    }
+    return texel_colour(fw_texel(p->bank, (uint16_t)(p->base + ((t & 255) << 8) + (s & 255))), p->por, p->hi);
+}
+
+/* a line quad's pixel (x, y) on its line (fullwindow.h, bit 5) */
+static int quad_on_line(const FwSpan *p, int32_t x, int32_t y)
+{
+    int ymaj = p->mask & 1, sx = p->mask & 2 ? -1 : 1, sy = p->mask & 4 ? -1 : 1;
+    int64_t i = ymaj ? (int64_t)sy * (y - p->v) : (int64_t)sx * (x - p->xl), n, st;
+    if (i < 0 || i > p->du)
+        return 0;
+    n = i * p->dv - p->u;
+    st = n <= 0 ? 0 : (n + p->du - 1) / p->du;
+    return ymaj ? x == p->xl + sx * st : y == p->v + sy * st;
+}
+
 /* a quad's texels into out (the reference's rule, fullwindow.h) */
 static void quad_fill(uint8_t *out, int w, const FwSpan *p)
 {
@@ -1223,17 +1301,245 @@ static void quad_fill(uint8_t *out, int w, const FwSpan *p)
     int32_t r, x;
     for (r = 0; r < p->pad0; r++) {
         int32_t y = p->y + r;
-        int64_t a = p->v + p->dv * r;
-        unsigned t = (unsigned)(p->mask ? a / p->mask : a >> 32) & 0xFF;
+        int64_t t = quad_row(p, r);
         uint8_t *o = out + (size_t)y * w;
         for (x = p->x0; x <= p->x1; x++) {
-            unsigned s = (unsigned)((p->u + p->du * (x - p->xl)) >> 32) & 0xFF;
-            int c = p->pad1[1] & 2 ? p->colour
-                                   : texel_colour(fw_texel(p->bank, (uint16_t)(p->base + (t << 8) + s)), p->por, p->hi);
+            int c;
+            if (p->pad1[1] & 32) {
+                if (!quad_on_line(p, x, y))
+                    continue;
+                c = p->colour;
+            } else
+                c = quad_colour(p, quad_col(p, x), t);
             if (c >= 0 && !(deep && sunk(p->za, p->zx, p->zy, x, y)))
                 o[x] = (uint8_t)c;
         }
     }
+}
+
+/* ---- 2-bit bitmaps as quads (labels, the HUD) ----------------------------- */
+
+/* a bitmap quad's fields: ROM bank and address, the palette's bytes, the
+   plot options and colour, 8.8 steps (0: 1:1) */
+static void bitmap_fields(FwSpan *p, uint8_t bank, uint16_t at, const uint8_t pal[4], uint16_t stepx, uint16_t stepy,
+                          uint32_t cden)
+{
+    uint32_t mx = stepx, my = stepy;
+    p->bank = bank;
+    p->base = at;
+    memcpy(p->pad1 + 3, pal, 4);
+    p->pad1[1] = 4 | 8;
+    memcpy(&p->pq, &cden, 4);
+    memcpy(&p->pdq, &mx, 4);
+    memcpy(&p->pda, &my, 4);
+    p->por = gsu.por;
+    p->hi = (uint8_t)(gsu.colr & 0xF0);
+    p->za = p->zx = p->zy = 0;          /* no depth: the HUD's and labels' (span_new's) */
+}
+
+/* a bitmap's source pixel's colour (sx, sy: its column and row, the 8.8
+   steps applied), or -1 */
+static int bitmap_colour(uint8_t bank, uint16_t at, int64_t sx, int64_t sy, const uint8_t pal[4])
+{
+    uint8_t b = fw_texel(bank, (uint16_t)(at + sy * 32 + (sx >> 2)));
+    uint8_t c = pal[(b >> 2 * (sx & 3)) & 3];
+    return texel_colour(c, gsu.por, (uint8_t)(gsu.colr & 0xF0));
+}
+
+static int bitmaps_on(void)
+{
+    return fw_drawing && sc_gpu_on() && !checking && !cropping && !fw_env("FW_NOQUADS") && (label_on || (fw_hud && hud_run));
+}
+
+/* the bitmap's pixels (dx, dy from the origin ox, oy; cols by rows from
+   dx0, dy0) as a quad: a label's straight into the picture, the HUD's
+   kept with its piece (its extents made as fw_plot's would be) */
+static int bitmap_quad(int32_t ox, int32_t oy, int32_t dx0, int32_t dy0, int cols, int rows, uint8_t bank, uint16_t at,
+                       uint16_t stepx, uint16_t stepy, uint16_t pal_at)
+{
+    uint8_t pal[4];
+    int i, j;
+    if (!bitmaps_on() || cols < 1 || rows < 1)
+        return 0;
+    for (i = 0; i < 4; i++)
+        pal[i] = ram8((uint16_t)(pal_at + i));
+    if (label_on) {
+        /* a label's pixel (dx, dy from the label's place) covers the
+           texels col_at's way from (label_tx, label_ty) */
+        int64_t DXo = ox - label_x, DYo = oy - label_y, DX0 = DXo + dx0, DY0 = DYo + dy0, last;
+        int32_t c0, c1, r0, r1;
+        FwSpan *p;
+        if (DX0 < 0 || DY0 < 0 || DXo < 0 || DYo < 0)
+            return 0;
+        last = DX0 + cols - 1;          /* the blocks wholly on the texels (fw_plot's) */
+        while (last >= DX0 && label_tx + floor_div((last + 1) * SXN, SXD) - 1 >= tw)
+            last--;
+        if (last < DX0)
+            return quad_made();
+        c0 = label_tx + (int32_t)floor_div(DX0 * SXN, SXD);
+        c1 = label_tx + (int32_t)floor_div((last + 1) * SXN, SXD) - 1;
+        r0 = label_ty + (int32_t)floor_div(DY0 * SYN, SYD);
+        r1 = label_ty + (int32_t)floor_div((DY0 + rows) * SYN, SYD) - 1;
+        p = quad_new(r0, r1 - r0 + 1, c0, c1, (int64_t)(r0 - label_ty + 1) * SYD - 1 - DYo * SYN, SYD);
+        if (p) {
+            p->xl = label_tx;
+            p->u = SXD - 1 - DXo * SXN;
+            p->du = SXD;
+            p->mask = (uint16_t)SYN;
+            bitmap_fields(p, bank, at, pal, stepx, stepy, (uint32_t)SXN);
+        }
+        return quad_made();
+    }
+    {
+        /* the HUD: on the layer as fw_plot puts it (the low bytes, the
+           view's offset); a bitmap across the layer's wrap is run */
+        int lx0 = (uint8_t)(ox + dx0) + VIEW_X, ly0 = (uint8_t)(oy + dy0) + VIEW_Y;
+        HudQuad *h;
+        if ((uint8_t)(ox + dx0) + cols > 256 || (uint8_t)(oy + dy0) + rows > 256)
+            return 0;
+        if (nhq == cap_hq) {
+            size_t c = cap_hq ? 2 * cap_hq : 256;
+            HudQuad *n = realloc(hq, c * sizeof *n);
+            if (!n)
+                return 0;
+            hq = n;
+            cap_hq = c;
+        }
+        h = &hq[nhq++];
+        h->lx = lx0 - dx0;
+        h->ly = ly0 - dy0;
+        h->x0 = lx0;
+        h->y0 = ly0;
+        h->x1 = lx0 + cols - 1;
+        h->y1 = ly0 + rows - 1 < 223 ? ly0 + rows - 1 : 223;
+        h->at = at;
+        h->stepx = stepx;
+        h->stepy = stepy;
+        h->bank = bank;
+        h->por = gsu.por;
+        h->hi = (uint8_t)(gsu.colr & 0xF0);
+        memcpy(h->pal, pal, 4);
+        h->piece = hud_n;
+        quads_made++;
+        cen_quads++;
+        /* the piece's extents, as its pixels would make them (fw_plot) */
+        for (j = h->y0; j <= h->y1; j++)
+            for (i = h->x0; i <= h->x1; i++) {
+                int64_t sx = i - h->lx, sy = j - h->ly;
+                if (stepx)
+                    sx = (sx * stepx) >> 8;
+                if (stepy)
+                    sy = (sy * stepy) >> 8;
+                if (bitmap_colour(bank, at, sx, sy, pal) < 0)
+                    continue;
+                if (i < hud_x0) hud_x0 = i;
+                if (i > hud_x1) hud_x1 = i;
+                if (j < hud_y0) hud_y0 = j;
+                if (j > hud_y1) hud_y1 = j;
+                if (in_view(i, j)) {
+                    if (i < hud_vx0) hud_vx0 = i;
+                    if (i > hud_vx1) hud_vx1 = i;
+                    if (j < hud_vy0) hud_vy0 = j;
+                    if (j > hud_vy1) hud_vy1 = j;
+                }
+            }
+        if (!quads_both())
+            return 1;
+        blit_quad = 1;                  /* (a check) its pixels plotted too, the reference's */
+        return 0;
+    }
+}
+
+static void hud_quad(const HudQuad *h, int s, int t)
+{
+    int x0 = h->x0 > VIEW_X ? h->x0 : VIEW_X, x1 = h->x1 < VIEW_X + VIEW_W - 1 ? h->x1 : VIEW_X + VIEW_W - 1;
+    int y0 = h->y0 > VIEW_Y ? h->y0 : VIEW_Y, y1 = h->y1 < VIEW_Y + VIEW_H - 1 ? h->y1 : VIEW_Y + VIEW_H - 1;
+    int32_t c0, c1, r0, r1;
+    FwSpan *p;
+    if (x1 < x0 || y1 < y0)
+        return;
+    c0 = col_at(x0 + s);
+    c1 = col_at(x1 + 1 + s) - 1;
+    r0 = row_at(y0 + t);
+    r1 = row_at(y1 + 1 + t) - 1;
+    p = quad_new(r0, r1 - r0 + 1, c0, c1, (int64_t)(r0 + 1) * SYD - 1 - (int64_t)(t + h->ly) * SYN, SYD);
+    if (!p)
+        return;
+    p->xl = 0;
+    p->u = SXD - 1 - (int64_t)(s + h->lx) * SXN;
+    p->du = SXD;
+    p->mask = (uint16_t)SYN;
+    bitmap_fields(p, h->bank, h->at, h->pal, h->stepx, h->stepy, (uint32_t)SXN);
+    p->por = h->por;
+    p->hi = h->hi;
+}
+
+int fw_bitmap(uint16_t x, uint16_t y, uint8_t bank, uint16_t at, int rows, int bytes, uint16_t pal)
+{
+    return bitmap_quad((int16_t)x, (int16_t)y, 0, 0, 4 * bytes, rows, bank, at, 0, 0, pal);
+}
+
+/* ---- the weather (FxWeatherDraw) as quads ---- */
+int fw_plot_dots(uint16_t x, uint16_t y, int n)
+{
+    int c;
+    FwSpan *p;
+    if (!quads_on())
+        return 0;
+    if (sprite_hidden)                  /* (fw_plot's: none drawn) */
+        return 1;
+    c = plot_colour();
+    if (c >= 0 && (p = quad_new((int16_t)y, n, (int16_t)x, (int16_t)x + n - 1, 0, 0))) {
+        p->pad1[1] = 2;
+        p->colour = (uint8_t)c;
+        p->xl = (int16_t)x;
+    }
+    return quad_made();
+}
+
+int fw_plot_line(uint16_t x, uint16_t y, uint16_t dx, uint16_t dy, uint16_t sx, uint16_t sy, uint16_t *xe, uint16_t *ye)
+{
+    int ymaj = dx < dy, c, isx = sx == 0xFFFF ? -1 : 1, isy = sy == 0xFFFF ? -1 : 1;
+    int64_t dmaj = ymaj ? dy : dx, dmin = ymaj ? dx : dy, a0 = (dmaj - dmin) >> 1, n, st, x1, y1;
+    FwSpan *p;
+    if (!quads_on())
+        return 0;
+    /* its last pixel's place and the loop's end (one step past it) */
+    n = dmaj * dmin - a0;
+    st = n <= 0 ? 0 : (n + dmaj - 1) / dmaj;
+    x1 = (int16_t)x + (ymaj ? isx * st : isx * dmaj);
+    y1 = (int16_t)y + (ymaj ? isy * dmaj : isy * st);
+    n = (dmaj + 1) * dmin - a0;
+    st = n <= 0 ? 0 : (n + dmaj - 1) / dmaj;
+    *xe = (uint16_t)((int16_t)x + (ymaj ? isx * st : isx * (dmaj + 1)));
+    *ye = (uint16_t)((int16_t)y + (ymaj ? isy * (dmaj + 1) : isy * st));
+    if (sprite_hidden)
+        return 1;
+    c = plot_colour();
+    if (c >= 0) {
+        int32_t xa = (int16_t)x < x1 ? (int16_t)x : (int32_t)x1, xb = (int16_t)x < x1 ? (int32_t)x1 : (int16_t)x;
+        int32_t ya = (int16_t)y < y1 ? (int16_t)y : (int32_t)y1, yb = (int16_t)y < y1 ? (int32_t)y1 : (int16_t)y;
+        if ((p = quad_new(ya, yb - ya + 1, xa, xb, 0, 0))) {
+            p->pad1[1] = 2 | 32;
+            p->colour = (uint8_t)c;
+            p->xl = (int16_t)x;
+            p->v = (int16_t)y;
+            p->u = a0;
+            p->du = dmaj;
+            p->dv = dmin;
+            p->mask = (uint16_t)(ymaj | (isx < 0 ? 2 : 0) | (isy < 0 ? 4 : 0));
+        }
+    }
+    return quad_made();
+}
+
+int fw_bitmap_scaled(uint16_t ox, uint16_t oy, uint16_t x, uint16_t y, int cols, int rows, uint8_t bank, uint16_t at,
+                     uint16_t stepx, uint16_t stepy, uint16_t pal)
+{
+    if (!stepx || !stepy)               /* (a step of 0: every pixel the source's first, run as ever) */
+        return 0;
+    return bitmap_quad((int16_t)ox, (int16_t)oy, (int16_t)x - (int16_t)ox, (int16_t)y - (int16_t)oy, cols, rows, bank, at,
+                       stepx, stepy, pal);
 }
 
 /* FW_CENSUS (a measure, macOS): what the CPU still draws in the full
@@ -1281,9 +1587,9 @@ static void census_plot(int kind)
         for (i = 0; i < CEN_SITES; i++) {
             if (!cen_site[i].a[0])
                 for (k = 0; k < 6; k++)
-                    cen_site[i].a[k] = k + 3 < n ? bt[k + 3] : (void *)1;
+                    cen_site[i].a[k] = k + 1 < n ? bt[k + 1] : (void *)1;
             for (k = 0; k < 6; k++)
-                if (cen_site[i].a[k] != (k + 3 < n ? bt[k + 3] : (void *)1))
+                if (cen_site[i].a[k] != (k + 1 < n ? bt[k + 1] : (void *)1))
                     break;
             if (k == 6) {
                 cen_site[i].n[kind]++;
@@ -1318,6 +1624,7 @@ void fw_plot(uint16_t x, uint16_t y)
             return;
         hud_px[py][px] = (uint16_t)(c + 1);
         hud_id[py][px] = (uint8_t)hud_n;
+        hud_qd[py][px] = (uint8_t)blit_quad;
         if (px < hud_x0) hud_x0 = px;
         if (px > hud_x1) hud_x1 = px;
         if (py < hud_y0) hud_y0 = py;
@@ -4283,14 +4590,84 @@ static uint8_t panel_pixel(unsigned x, unsigned line)
 /* the boxes found, their columns and shift, for the sprites in them */
 #define MAX_BOXES 16
 static int nboxes, box_x0[MAX_BOXES], box_x1[MAX_BOXES], box_shift[MAX_BOXES];
+/* each box's rows, and whether its pixels are in its texture (panel_bank:
+   box k in bank $F0 + k / 5 from (k % 5) * PANEL_ROWS rows, 256 bytes a
+   row, its pixels' colours, 0 elsewhere) */
+static int box_y0[MAX_BOXES], box_y1[MAX_BOXES], box_tex[MAX_BOXES];
+
+/* the panels' quads for the GPU (SC_GPU), the picture's own (not a
+   check's second pass) */
+static int fw_drawing_quads(void) { return sc_gpu_on() && !checking && !cropping && !fw_env("FW_NOQUADS"); }
+
+/* what the band's pixels are made from: each line's map entries and their
+   characters in the buffer the flip shows (a hash of them); the boxes
+   made again only when it changes */
+static uint64_t panel_key(void)
+{
+    const uint16_t *v = nshvc_vram();
+    const uint8_t *w = nshvc_wram();
+    int b = (w[0x0D81] | w[0x0D82] << 8) == 0x0001;
+    unsigned map = b ? 0x7C00 : 0x7800, base = b ? 0x2000 : 0x0000, r, x, k;
+    uint64_t h = 1469598103934665603ull;   /* (the content, whichever buffer holds it) */
+    for (r = ((PANEL_TOP - RACE_ROW0) & 0xFF) >> 3; r <= ((PANEL_END - 1 - RACE_ROW0) & 0xFF) >> 3; r++)
+        for (x = 0; x < 32; x++) {
+            uint16_t e = v[map + r * 32 + x];
+            const uint16_t *ch = v + ((base + (e & 0x3FF) * 32) & 0x7FFF);
+            h = (h ^ e) * 1099511628211ull;
+            for (k = 0; k < 32; k++)
+                h = (h ^ ch[k]) * 1099511628211ull;
+        }
+    return h;
+}
+
+/* a box as a quad for the GPU (SC_GPU): its texture at the screen's
+   place block_set's (a + s, the band's line + top) */
+static void box_quad(int k, int top)
+{
+    int s = box_shift[k];
+    int32_t c0 = col_at(box_x0[k] + s), c1 = col_at(box_x1[k] + 1 + s) - 1;
+    int32_t r0 = row_at(top + box_y0[k]), r1 = row_at(top + box_y1[k] + 1) - 1;
+    FwSpan *p = quad_new(r0, r1 - r0 + 1, c0, c1, (int64_t)(r0 + 1) * SYD - 1 - (int64_t)top * SYN, SYD);
+    uint32_t den = (uint32_t)SXN, zero = 0;
+    if (!p)
+        return;
+    p->xl = 0;
+    p->u = SXD - 1 - (int64_t)s * SXN;
+    p->du = SXD;
+    p->mask = (uint16_t)SYN;
+    p->bank = (uint8_t)(0xF0 + k / 5);
+    p->base = (uint16_t)((k % 5) * PANEL_ROWS * 256);
+    p->pad1[1] = 8;
+    memcpy(&p->pq, &den, 4);
+    memcpy(&p->pdq, &zero, 4);
+    memcpy(&p->pda, &zero, 4);
+    p->por = 0;                         /* colour 0 not drawn: a box's own pixels alone */
+    p->hi = 0;
+}
 
 static void panels_draw(void)
 {
     static uint8_t px[PANEL_ROWS][256], keep[PANEL_ROWS][256];
     static int16_t stack[PANEL_ROWS * 256][2];
-    int x, y, n = 0;
+    static uint64_t key_was;
+    static int known;
+    int x, y, n = 0, top = PANEL_TOP + H - 224 - safe_px[3], k, quads = fw_drawing_quads(), both = quads && quads_both();
+    uint64_t key;
     uint8_t bg;
 
+    /* the boxes as before while the band is (the GPU's: their textures and
+       quads; the reference's, a check's, its rows again) */
+    key = quads ? panel_key() : 0;
+    if (quads && known && key == key_was && !both) {
+        for (k = 0; k < nboxes; k++) {
+            box_shift[k] = anchor_shift(box_x0[k], box_x1[k]);
+            if (box_tex[k])
+                box_quad(k, top);
+        }
+        return;
+    }
+    known = quads;
+    key_was = key;
     for (y = 0; y < PANEL_ROWS; y++)
         for (x = 0; x < 256; x++) {
             px[y][x] = panel_pixel((unsigned)x, (unsigned)(PANEL_TOP + y));
@@ -4323,9 +4700,14 @@ static void panels_draw(void)
        reaches the band's sides is the bezel's (its outline under the view),
        not a box */
     nboxes = 0;
+    if (quads)
+        for (k = 0; k < 4; k++) {
+            memset(panel_bank[k], 0, sizeof panel_bank[k]);
+            panel_version[k]++;
+        }
     for (y = 0; y < PANEL_ROWS; y++)
         for (x = 0; x < 256; x++) {
-            int x0 = x, x1 = x, edge = 0, s, m = 0, q;
+            int x0 = x, x1 = x, y0 = y, y1 = y, edge = 0, s, m = 0, q;
             static int16_t part[PANEL_ROWS * 256][2];
             if (keep[y][x] != 1)
                 continue;
@@ -4343,6 +4725,8 @@ static void panels_draw(void)
                 part[m++][1] = (int16_t)b0;
                 if (a0 < x0) x0 = a0;
                 if (a0 > x1) x1 = a0;
+                if (b0 < y0) y0 = b0;
+                if (b0 > y1) y1 = b0;
                 if (a0 == 0 || a0 == 255)
                     edge = 1;
                 for (k = 0; k < 4; k++) {
@@ -4357,16 +4741,33 @@ static void panels_draw(void)
             if (edge)
                 continue;
             s = anchor_shift(x0, x1);
+            k = -1;
             if (nboxes < MAX_BOXES) {
-                box_x0[nboxes] = x0;
-                box_x1[nboxes] = x1;
-                box_shift[nboxes++] = s;
+                k = nboxes++;
+                box_x0[k] = x0;
+                box_x1[k] = x1;
+                box_y0[k] = y0;
+                box_y1[k] = y1;
+                box_shift[k] = s;
+                box_tex[k] = quads;
+                if (quads) {            /* its pixels into its texture, a quad for the GPU */
+                    uint8_t *t = panel_bank[k / 5] + (k % 5) * PANEL_ROWS * 256;
+                    for (q = 0; q < m; q++)
+                        t[part[q][1] * 256 + part[q][0]] = px[part[q][1]][part[q][0]];
+                    box_quad(k, top);
+                    if (!both)
+                        continue;
+                }
             }
+            /* the box's rows: the CPU's (a check's reference beside its
+               quad; a box past MAX_BOXES, no quad, its own) */
+            span_ref_only = both && k >= 0;
             for (q = 0; q < m; q++) {
                 int a = part[q][0], b = part[q][1];
                 /* the band moved up by the safe area's bottom */
-                block_set(a + s, PANEL_TOP + b + H - 224 - safe_px[3], px[b][a]);
+                block_set(a + s, top + b, px[b][a]);
             }
+            span_ref_only = 0;
         }
 }
 

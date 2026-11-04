@@ -475,7 +475,10 @@ static int device_open(void)
 
 /* ---- the banks the texels come from ---- */
 #define SLOTS 128
-static uint8_t bank_ok[256];
+static uint8_t bank_ok[256];            /* a bank's bytes in the banks' buffer */
+static uint32_t bank_ver[256];        /* the version each bank's copy is of (fw_bank_version) */
+/* a bank's copy as it is now: ROM's once, the RAM's and the panels' made again */
+static int bank_fresh(int b) { return bank_ok[b] && b != 0x70 && b != 0x71 && bank_ver[b] == fw_bank_version((uint8_t)b); }
 static int32_t bank_slot[256];
 static int banks_used;
 
@@ -492,6 +495,7 @@ static int bank_put(uint8_t bank)
     for (i = 0; i < 65536; i++)
         at[i] = fw_texel(bank, (uint16_t)i);
     bank_ok[bank] = 1;
+    bank_ver[bank] = fw_bank_version(bank);
     return 1;
 }
 
@@ -536,7 +540,7 @@ static int fill_spans(int w, int h, const FwSpan *sp, size_t n)
     {                                   /* ROM's banks once, RAM's ($70, $71) as they are now */
         uint8_t fresh[256] = {0};
         for (i = 0; i < n; i++) {
-            if ((b = gpu_bin_bank(&sp[i])) < 0 || fresh[b] || (bank_ok[b] && b != 0x70 && b != 0x71))
+            if ((b = gpu_bin_bank(&sp[i])) < 0 || fresh[b] || bank_fresh(b))
                 continue;
             if (!bank_put((uint8_t)b))
                 return 0;
@@ -797,18 +801,21 @@ static int draw_faces(int w, int h, const FwSpan *sp, size_t n)
         if (!cap)
             return 0;
     }
-    for (i = 0; i < n; i++) {           /* the faces' and quads' banks in their slots */
-        const ScFace *q;
-        if (sp[i].textured == FW_QUAD) {
-            if (!(sp[i].pad1[1] & 2) && !gpu_bin_ref_only(&sp[i]) && (!bank_ok[sp[i].bank] || sp[i].bank == 0x70 || sp[i].bank == 0x71) && !bank_put(sp[i].bank))
+    {
+        uint8_t put[256] = {0};         /* the faces' and quads' banks in their slots, each copied once a run */
+        for (i = 0; i < n; i++) {
+            const ScFace *q;
+            int b = -1;
+            if (sp[i].textured == FW_QUAD && !(sp[i].pad1[1] & 2) && !gpu_bin_ref_only(&sp[i]))
+                b = sp[i].bank;
+            else if (sp[i].textured == 6 && (size_t)sp[i].x1 < nf && (q = &fc[sp[i].x1])->textured)
+                b = q->bank;
+            if (b < 0 || put[b] || bank_fresh(b))
+                continue;
+            if (!bank_put((uint8_t)b))
                 return 0;
-            continue;
+            put[b] = 1;
         }
-        if ((size_t)sp[i].x1 >= nf)
-            continue;
-        q = &fc[sp[i].x1];
-        if (q->textured && !bank_ok[q->bank] && !bank_put(q->bank))
-            return 0;
     }
     memcpy(bufs[B_SLOT].at, bank_slot, sizeof bank_slot);
     gpu_bin_faces(sp, n, NULL, &nt, NULL, &nl, NULL, &nq, NULL, NULL, NULL);

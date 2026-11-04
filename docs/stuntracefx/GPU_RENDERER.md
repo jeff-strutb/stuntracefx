@@ -204,6 +204,21 @@ the same display list.
      the GPU's fill (541 shots, two plays; SC_BREAK: 42 differ). The GE:
      its interpolation (speed_expert_4wd: 16,607 more pixels apart over
      458 quads than the loops' rows).
+   - The 2D on the GPU too, each a screen quad drawn by the GPU's own
+     raster with the chip's rule per pixel: the HUD's glyphs and scaled
+     sprites (07:F121, F15B, F6DF, FA88, FAF2 and every 2-bit blit: 2-bit
+     bitmap quads, each kept with its piece and drawn with its join's
+     shift, block-scaled by a column and row divide), the labels
+     (FxTextNotice's glyphs), the panels' boxes (each box a quad from a
+     texture of its pixels, made again only when the band's tiles change),
+     the weather's and particles' dots and streaks (a line quad: the
+     chip's Bresenham steps in closed form, 0 apart from its loop for
+     every length to 300). FW_QUADCHECK: 0 texels apart over 94,846 quads
+     at square texels and 106,805 not square; SC_BREAK 228,933. Metal and
+     Vulkan: every shot identical to the CPU's rows on the GPU's fill.
+     FW_CENSUS after: no PLOT reaches the CPU's raster in the full window.
+   - The water's cut (fullwindow.c sunk) in the face shaders too (Metal,
+     Vulkan), from the pixel's view depth.
    - FW_CENSUS (macOS): what the CPU still draws, by kind and routine.
      speed_expert_4wd: the HUD's programs 9.4 million plots (07:F121,
      F15B, F6DF glyphs, FA88 and FAF2 scaled sprites), labels 144,204

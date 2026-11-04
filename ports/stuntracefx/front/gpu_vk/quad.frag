@@ -1,9 +1,11 @@
 #version 450
 /*
  * quad.frag: a screen quad's pixel (fullwindow.h FW_QUAD), its texel by the
- * quad's integer rule (fullwindow.c quad_fill): row r's texel row (v + dv
- * r) >> 32, or (v + dv r) / mask; column k's (u + du k) >> 32; the texel
- * at base + row * 256 + column through COLOR's and PLOT's rules (flat: the
+ * quad's integer rule (fullwindow.c quad_col, quad_row, quad_colour): row
+ * r's texel row (v + dv r) >> 32, or (v + dv r) / mask; column k's (u + du
+ * k) >> 32, or divided by the word pq holds; each then times its 8.8 step
+ * where one is set; the texel at base + row * 256 + column, or a 2-bit
+ * bitmap's palette byte, through COLOR's and PLOT's rules (flat: the
  * colour); left out where the water is nearer on the pixel's ray.
  */
 #extension GL_GOOGLE_include_directive : require
@@ -40,13 +42,37 @@ void main()
     int64_t v = i64(qs[b + 10u], qs[b + 11u]), dv = i64(qs[b + 12u], qs[b + 13u]);
     uint base = qs[b + 14u] & 0xFFFFu, mask = qs[b + 14u] >> 16, w15 = qs[b + 15u];
     uint bank = w15 & 255u, por = (w15 >> 8) & 255u, hi = (w15 >> 16) & 255u, colour = w15 >> 24;
-    int64_t a = v + dv * int64_t(y - int(qs[b]));
-    uint t = uint(mask != 0u ? a / int64_t(mask) : a >> 32) & 255u;
-    uint k = uint((u + du * (int64_t(x) - xl)) >> 32) & 255u;
-    if (((qs[b + 16u] >> 16) & 2u) != 0u) {
+    uint flags = (qs[b + 16u] >> 16) & 255u;
+    int64_t a = v + dv * int64_t(y - int(qs[b])), e = u + du * (int64_t(x) - xl);
+    int64_t t = mask != 0u && (flags & 32u) == 0u ? a / int64_t(mask) : a >> 32;
+    int64_t k = (flags & 8u) != 0u ? e / int64_t(qs[b + 18u]) : e >> 32;
+    uint mx = qs[b + 19u], my = qs[b + 21u];
+    if (mx != 0u)
+        k = (k * int64_t(mx)) >> 8;
+    if (my != 0u)
+        t = (t * int64_t(my)) >> 8;
+    if ((flags & 32u) != 0u) {
+        /* a line: its Bresenham steps (fullwindow.c quad_on_line) */
+        bool ymaj = (mask & 1u) != 0u;
+        int64_t sx = (mask & 2u) != 0u ? -1l : 1l, sy = (mask & 4u) != 0u ? -1l : 1l;
+        int64_t i = ymaj ? sy * (int64_t(y) - v) : sx * (int64_t(x) - xl), n, st;
+        if (i < 0l || i > du)
+            discard;
+        n = i * dv - u;
+        st = n <= 0l ? 0l : (n + du - 1l) / du;
+        if (ymaj ? int64_t(x) != xl + sx * st : int64_t(y) != v + sy * st)
+            discard;
         c = int(colour);
+    } else if ((flags & 2u) != 0u) {
+        c = int(colour);
+    } else if ((flags & 4u) != 0u) {
+        /* a 2-bit bitmap: the byte's pixel picks a palette byte (pad1[3..6]) */
+        uint at = uint(slot[bank]) * 65536u + (uint(int64_t(base) + t * 32l + (k >> 2)) & 0xFFFFu);
+        uint px = ((banks[at >> 2] >> ((at & 3u) * 8u)) >> (2u * uint(k & 3l))) & 3u;
+        uint pal = qs[b + 17u];                     /* pad1[3..6]: the fourth word's bytes 0 to 3 */
+        c = texel_colour((pal >> (8u * px)) & 255u, por, hi);
     } else {
-        uint at = uint(slot[bank]) * 65536u + ((base + (t << 8) + k) & 0xFFFFu);
+        uint at = uint(slot[bank]) * 65536u + ((base + (uint(t & 255l) << 8) + uint(k & 255l)) & 0xFFFFu);
         c = texel_colour((banks[at >> 2] >> ((at & 3u) * 8u)) & 255u, por, hi);
     }
     if (c < 0)

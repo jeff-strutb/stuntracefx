@@ -6,6 +6,7 @@
  * amount, and a vector.
  */
 #include <string.h>
+#include "fullwindow.h"
 #include "gsu_ops.h"
 #include "draw_list.h"
 #include "fx_calls.h"
@@ -482,6 +483,15 @@ static void fx_line(void)
         gsu.r[6] = 0xFFFF;
         gsu.r[9] = gsu_inc(gsu_not(gsu.r[9]));
     }
+    {                                   /* Enhanced, SC_GPU: the line a quad for the GPU */
+        uint16_t xe, ye;
+        if (fw_plot_line(gsu.r[1], gsu.r[2], gsu.r[3], gsu.r[9], gsu.r[5], gsu.r[6], &xe, &ye)) {
+            gsu.r[1] = xe;
+            gsu.r[2] = ye;
+            gsu.r[12] = gsu_ldw(0x0040);
+            return;
+        }
+    }
     gsu.r[0] = gsu_sub(gsu.r[3], gsu.r[9], 0);
     if (!gsu.s) {
         gsu.r[12] = gsu_inc(gsu.r[3]);
@@ -523,6 +533,7 @@ static void fx_line(void)
         } while (((gsu.r[12] != 0)));
         gsu.r[12] = gsu_ldw(0x0040);
     }
+    fw_sprite_rows_done();
 }
 
 /* Particle R11 (its record): moved by its deltas, projected and drawn. */
@@ -582,6 +593,11 @@ static void fx_particle(void)
     gsu.r[0] = gsu_and(gsu.r[0], 0x0004);
     big = !gsu.z;
     if (!big) {
+        if (fw_plot_dots(gsu.r[1], gsu.r[2], 2)) {     /* Enhanced, SC_GPU: a quad for the GPU */
+            gsu.r[1] = (uint16_t)(gsu.r[1] + 2);
+            gsu.r[2] = (uint16_t)(gsu.r[2] + 1);
+            return;
+        }
         gsu_plot_r1();
         gsu_plot_r1();
         gsu.r[2] = gsu_inc(gsu.r[2]);
@@ -589,6 +605,7 @@ static void fx_particle(void)
         gsu.r[1] = gsu_dec(gsu.r[1]);
         gsu_plot_r1();
         gsu_plot_r1();
+        fw_sprite_rows_done();
         return;
     }
     for (i = 0; i < 3; i++) {

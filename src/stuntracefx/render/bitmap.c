@@ -6,6 +6,7 @@
 #include "gsu.h"
 #include "gsu_ops.h"
 #include "draw_list.h"
+#include "fullwindow.h"
 
 /* COLOR: the plot colour from a byte, as the plot options shape it (high
    nibble from the source's high nibble, or the high nibble kept). */
@@ -32,6 +33,18 @@ static void fx_blit(uint16_t rows, int bytes, uint16_t skip, uint16_t loop)
 {
     int more;
 
+    if (fw_bitmap(gsu.r[4], gsu.r[2], gsu.rombr, gsu.r[14], rows, bytes, gsu.r[9])) {
+        /* Enhanced's full window, SC_GPU: one quad for the GPU; the
+           registers as the loop leaves them that the code after reads */
+        gsu.r[12] = 0;
+        gsu.r[13] = loop;
+        gsu.r[1] = (uint16_t)(gsu.r[4] + 4 * bytes);
+        gsu.r[2] = (uint16_t)(gsu.r[2] + rows);
+        gsu.r[0] = skip;
+        gsu_r14((uint16_t)(gsu.r[14] + rows * (bytes + skip)));
+        fw_sprite_rows_done();
+        return;
+    }
     gsu.r[12] = rows;
     gsu.r[13] = loop;
     do {
@@ -55,6 +68,7 @@ static void fx_blit(uint16_t rows, int bytes, uint16_t skip, uint16_t loop)
         more = gsu_count_down(&gsu.r[12]);
         gsu.r[2] = gsu_inc(gsu.r[2]);       /* LOOP's delay slot */
     } while ((more));
+    fw_sprite_rows_done();
 }
 
 /*

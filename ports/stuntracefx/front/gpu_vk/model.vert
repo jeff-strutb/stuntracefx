@@ -10,10 +10,11 @@ layout(std430, binding = 15) readonly buffer Points { uint pts[]; };    /* ScPoi
 layout(std430, binding = 16) readonly buffer Slots { uint sls[]; };     /* ScSlot: 16 shorts */
 layout(std430, binding = 19) readonly buffer FSlots { float fsl[]; };    /* ScFSlot: m[9], pos[3] */
 layout(std430, binding = 20) readonly buffer FPoints { uint fpts[]; };   /* ScFPoint: p[3] (float bits), fslot */
-layout(push_constant) uniform Push { float fx, fy, cx, cy, tw, th, p0, p1; } pc;
+layout(push_constant) uniform Push { float fx, fy, cx, cy, tw, th, p0, p1; vec4 water; } pc;
 layout(location = 0) out float out_u;
 layout(location = 1) out float out_v;
 layout(location = 2) flat out uint out_face;
+layout(location = 3) out float out_z;      /* the view's z, perspective-correct: exact on a face */
 
 int s8(uint v) { return int(v << 24) >> 24; }
 int s16(uint v) { return int(v << 16) >> 16; }
@@ -66,4 +67,5 @@ void main()
     out_u = uintBitsToFloat(vs[at + 2u]);
     out_v = uintBitsToFloat(vs[at + 3u]);
     out_face = vs[at + 1u];
+    out_z = z;
 }

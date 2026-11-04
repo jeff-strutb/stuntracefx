@@ -216,7 +216,7 @@ static NSString *const kernel_source = @
 "struct View { float fx, fy, cx, cy, tw, th, p0, p1; };\n"
 "struct FSlot { float m[9]; float pos[3]; };\n"
 "struct FPoint { float p[3]; uint fslot; };\n"
-"struct VOut { float4 pos [[position]]; float u; float v; uint face [[flat]]; };\n"
+"struct VOut { float4 pos [[position]]; float u; float v; float z; uint face [[flat]]; };\n"
 "static ushort mult8(int a, int b) { return (ushort)((int)(char)a * (int)(char)b); }\n"
 "static ushort fmult_rol(ushort a, ushort b) { return (ushort)(((int)(short)a * (int)(short)b) >> 15); }\n"
 "static ushort packed_out(ushort s, ushort scale) { return mult8((int)((ushort)(s + s) >> 8), (int)scale); }\n"
@@ -256,14 +256,20 @@ static NSString *const kernel_source = @
 "    }\n"
 "    VOut o;\n"
 "    o.pos = float4(2.0f * (w.cx * z + w.fx * x) / w.tw - z, z - 2.0f * (w.cy * z + w.fy * y) / w.th, z - 1.0f, z);\n"
-"    o.u = vt.u; o.v = vt.v; o.face = vt.face;\n"
+"    o.u = vt.u; o.v = vt.v; o.z = z; o.face = vt.face;\n"
 "    return o;\n"
 "}\n"
 "struct FOut { uint c [[color(0)]]; uint id [[color(1)]]; };\n"
 "fragment FOut model_fragment(VOut in [[stage_in]], device const Face *faces [[buffer(0)]],\n"
-"                             device const uchar *banks [[buffer(1)]], device const short *slot [[buffer(2)]]) {\n"
+"                             device const uchar *banks [[buffer(1)]], device const short *slot [[buffer(2)]],\n"
+"                             constant float4 &water [[buffer(3)]]) {\n"
 "    Face f = faces[in.face];\n"
 "    FOut o; o.id = in.face + 1;\n"
+"    if (water.w != 0) {   /* the water nearer on the pixel's ray (fullwindow.c sunk): 1 / depth, the view's z exact */\n"
+"        float x = in.pos.x - 0.5f, y = in.pos.y - 0.5f, iz = 1.0f / in.z;\n"
+"        float w = precise::fma(water.z, y, precise::fma(water.y, x, water.x));\n"
+"        if (iz > 0 && w > 0 && iz < w) discard_fragment();\n"
+"    }\n"
 "    if (!f.textured) { if (!f.colour) discard_fragment(); o.c = f.colour; return o; }\n"
 "    uint iu = (uint)(int)precise::floor(in.u + (float)f.ou / 256.0f) & 255u;\n"
 "    uint iv = (uint)(int)precise::floor(in.v + (float)f.ov / 256.0f) & 255u;\n"
@@ -287,11 +293,25 @@ static NSString *const kernel_source = @
 "                            device const short *slot [[buffer(2)]], constant float4 &water [[buffer(3)]]) {\n"
 "    Span s = qs[in.q];\n"
 "    int x = (int)in.pos.x, y = (int)in.pos.y, c;\n"
-"    long a = s.v + s.dv * (long)(y - s.y);\n"
-"    uint t = (uint)(s.mask ? a / (long)s.mask : a >> 32) & 255u;\n"
-"    uint k = (uint)((s.u + s.du * ((long)x - s.xl)) >> 32) & 255u;\n"
-"    if (s.pad1[1] & 2) c = s.colour;\n"
-"    else c = texel_colour(banks[(ulong)slot[s.bank] * 65536 + (ushort)(s.base + (t << 8) + k)], s.por, s.hi);\n"
+"    long a = s.v + s.dv * (long)(y - s.y), b = s.u + s.du * ((long)x - s.xl);\n"
+"    long t = s.mask ? a / (long)s.mask : a >> 32;\n"
+"    long k = (s.pad1[1] & 8) ? b / (long)as_type<uint>(s.pq) : b >> 32;\n"
+"    uint mx = as_type<uint>(s.pdq), my = as_type<uint>(s.pda);\n"
+"    if (mx) k = (k * (long)mx) >> 8;\n"
+"    if (my) t = (t * (long)my) >> 8;\n"
+"    device const uchar *bank = banks + (ulong)slot[s.bank] * 65536;\n"
+"    if (s.pad1[1] & 32) {   /* a line: its Bresenham steps (fullwindow.c quad_on_line) */\n"
+"        int ymaj = s.mask & 1; long sx = (s.mask & 2) ? -1 : 1, sy = (s.mask & 4) ? -1 : 1;\n"
+"        long i = ymaj ? sy * ((long)y - s.v) : sx * ((long)x - s.xl), n, st;\n"
+"        if (i < 0 || i > s.du) discard_fragment();\n"
+"        n = i * s.dv - s.u; st = n <= 0 ? 0 : (n + s.du - 1) / s.du;\n"
+"        if (ymaj ? (long)x != s.xl + sx * st : (long)y != s.v + sy * st) discard_fragment();\n"
+"        c = s.colour;\n"
+"    } else if (s.pad1[1] & 2) c = s.colour;\n"
+"    else if (s.pad1[1] & 4) {\n"
+"        uchar v = bank[(ushort)(s.base + t * 32 + (k >> 2))];\n"
+"        c = texel_colour(s.pad1[3 + ((v >> (2 * (k & 3))) & 3)], s.por, s.hi);\n"
+"    } else c = texel_colour(bank[(ushort)(s.base + ((t & 255) << 8) + (k & 255))], s.por, s.hi);\n"
 "    if (c < 0) discard_fragment();\n"
 "    s.y = y;\n"
 "    if (water.w != 0 && (s.za != 0 || s.zx != 0 || s.zy != 0) && sunk(s, x, water)) discard_fragment();\n"
@@ -314,7 +334,10 @@ static size_t out32_len;
 static long water_fills, water_apart;
 static id<MTLBuffer> buf_out, buf_spans, buf_row_at, buf_row_spans, buf_banks, buf_slot, buf_polys, buf_edges, buf_row_poly;
 static size_t out_len;
-static uint8_t bank_ok[256];            /* a ROM bank's bytes in buf_banks */
+static uint8_t bank_ok[256];            /* a bank's bytes in the banks' buffer */
+static uint32_t bank_ver[256];        /* the version each bank's copy is of (fw_bank_version) */
+/* a bank's copy as it is now: ROM's once, the RAM's and the panels' made again */
+static int bank_fresh(int b) { return bank_ok[b] && b != 0x70 && b != 0x71 && bank_ver[b] == fw_bank_version((uint8_t)b); }
 static short bank_slot[256];
 static int banks_used;
 static GpuCheck check;
@@ -353,6 +376,7 @@ static int bank_put(uint8_t bank)
     for (i = 0; i < 65536; i++)
         at[i] = fw_texel(bank, (uint16_t)i);
     bank_ok[bank] = 1;
+    bank_ver[bank] = fw_bank_version(bank);
     return 1;
 }
 
@@ -397,7 +421,7 @@ static int fill_spans(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
                 b = gpu_bin_bank(&sp[i]);
                 if (b < 0)
                     continue;
-                if (fresh[b] || (bank_ok[b] && b != 0x70 && b != 0x71))
+                if (fresh[b] || bank_fresh(b))
                     continue;
                 if (!bank_put((uint8_t)b))          /* no slot: the CPU's */
                     return 0;
@@ -440,17 +464,20 @@ static int fill_spans(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
 /* a texel's bank in its slot, for the models' fragments */
 static int face_banks(const ScFace *f, size_t nf, const FwSpan *sp, size_t n)
 {
+    uint8_t put[256] = {0};             /* copied this run */
     size_t i;
     for (i = 0; i < n; i++) {
         const ScFace *q;
-        if (sp[i].textured == FW_QUAD && !(sp[i].pad1[1] & 2) && !gpu_bin_ref_only(&sp[i]) && (!bank_ok[sp[i].bank] || sp[i].bank == 0x70 || sp[i].bank == 0x71) &&
-            !bank_put(sp[i].bank))
-            return 0;
-        if (sp[i].textured != 6 || (size_t)sp[i].x1 >= nf)
+        int b = -1;
+        if (sp[i].textured == FW_QUAD && !(sp[i].pad1[1] & 2) && !gpu_bin_ref_only(&sp[i]))
+            b = sp[i].bank;
+        else if (sp[i].textured == 6 && (size_t)sp[i].x1 < nf && (q = &f[sp[i].x1])->textured)
+            b = q->bank;
+        if (b < 0 || put[b] || bank_fresh(b))
             continue;
-        q = &f[sp[i].x1];
-        if (q->textured && !bank_ok[q->bank] && !bank_put(q->bank))
+        if (!bank_put((uint8_t)b))
             return 0;
+        put[b] = 1;
     }
     memcpy(buf_slot.contents, bank_slot, sizeof bank_slot);
     return 1;
@@ -555,6 +582,7 @@ static int draw_faces(int w, int h, const FwSpan *sp, size_t n)
         [re setFragmentBuffer:buf_lfaces offset:0 atIndex:0];
         [re setFragmentBuffer:buf_banks offset:0 atIndex:1];
         [re setFragmentBuffer:buf_slot offset:0 atIndex:2];
+        [re setFragmentBytes:fw_water length:16 atIndex:3];
         for (r = 0; r < nr; r++) {
             if (kind[r] == 2) {
                 [re setRenderPipelineState:pipe_quad];
