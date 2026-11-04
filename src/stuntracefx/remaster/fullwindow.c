@@ -81,11 +81,16 @@ static int64_t SXN = 256, SXD = 256, SYN = 224, SYD = 224;
 static uint8_t *tex;
 static size_t tex_size;
 static int handed;                      /* the canvas is the full window's */
+/* the picture in the GPU's memory (fw_canvas_gpu): this picture's
+   (gpu_pic), opened there (gpu_open), from a cleared screen (gpu_cleared) */
+const FwCanvasGpu *fw_canvas_gpu;
+static int gpu_pic, gpu_open, gpu_cleared;
 static int staged;                      /* this frame's upload stage ran in the full window */
 
 static void panels_draw(void);
 static void sprites_write(void);
 static void span_flush(void);
+static void span_flat(int32_t y, int32_t x0, int32_t x1, uint8_t c);
 static void sprites_place(void);
 static void screen_set(void);
 static void takeover(void);
@@ -152,6 +157,7 @@ int fw_row_at(int y) { return row_at(y); }
 
 /* the view's centre line in texels (kept: its inputs rarely change, and
    its 64-bit division is a library call on a 32-bit host) */
+static float centre_f;                  /* (float)centre_row(), kept with it */
 static int64_t centre_row(void)
 {
     static int64_t at, key[4] = { -1, -1, -1, -1 };
@@ -159,15 +165,23 @@ static int64_t centre_row(void)
     if (key[0] != vc || key[1] != SYN || key[2] != SYD || key[3] != cy_off) {
         key[0] = vc, key[1] = SYN, key[2] = SYD, key[3] = cy_off;
         at = (int64_t)row_at(vc) + cy_off;
+        centre_f = (float)at;
     }
     return at;
 }
+static float centre_rowf(void) { centre_row(); return centre_f; }
 
 /* a console pixel's texels set to c: its block, columns col_at(x) on and
    rows row_at(y) on */
 static void block_set(int x, int y, uint8_t c)
 {
     int x0 = col_at(x), x1 = col_at(x + 1), y0 = row_at(y), y1 = row_at(y + 1), j;
+    if (gpu_pic) {                      /* drawn in its order with the rest, as spans */
+        for (j = y0; j < y1; j++)
+            if (x1 > x0)
+                span_flat(j, x0, x1 - 1, c);
+        return;
+    }
     for (j = y0; j < y1; j++)
         memset(tex + (size_t)j * tw + x0, c, (size_t)(x1 - x0));
 }
@@ -781,9 +795,18 @@ int fw_water_play(const char *path)
 /* the spans drawn into the texels */
 static void span_flush(void)
 {
+    if (gpu_pic && !gpu_open) {         /* the GPU's picture opened: cleared, or the last one's to draw over */
+        if (fw_canvas_gpu->open(tw, th, gpu_cleared ? NULL : tex))
+            gpu_open = 1;
+        else
+            gpu_pic = 0;                /* no GPU memory: the CPU's texels */
+    }
     if (nspans) {
         span_record();
-        fw_span_filler(tex, tw, th, spans, nspans);
+        if (gpu_pic)
+            fw_canvas_gpu->spans(spans, nspans);
+        else
+            fw_span_filler(tex, tw, th, spans, nspans);
     }
     nspans = npolys = nedges = 0;
 }
@@ -982,9 +1005,16 @@ uint8_t fw_rpix(uint16_t x, uint16_t y)
         int px = hud_x((uint8_t)x), py = hud_y((uint8_t)y);
         if (px < 0 || px >= W || py < 0 || py >= H)
             return 0;
+        if (gpu_pic) {
+            span_flush();
+            if (gpu_pic)
+                return fw_canvas_gpu->read(col_at(px), row_at(py));
+        }
         return tex[(size_t)row_at(py) * tw + col_at(px)];
     }
     span_flush();                       /* a read of the 3D: what is drawn so far */
+    if (gpu_pic)
+        return x < tw && y < th ? fw_canvas_gpu->read(x, y) : 0;
     return x < tw && y < th ? tex[(size_t)y * tw + x] : 0;
 }
 
@@ -1005,6 +1035,10 @@ void fw_clear(void)
 {
     nspans = npolys = nedges = 0;       /* drawn over: none of them shows */
     memset(tex, 0, (size_t)tw * th);
+    if (gpu_pic) {                      /* the GPU's picture opened again, cleared */
+        gpu_cleared = 1;
+        gpu_open = 0;
+    }
 }
 
 /* ---- the view ------------------------------------------------------------ */
@@ -1033,12 +1067,13 @@ void fw_focal_q(int down, int64_t *num, int64_t *den)
     *den = kd[down];
 }
 /* (kept, as centre_row: doubles are software on some hosts) */
+static float focal_xf, focal_yf;        /* the same as floats (fw_focal_x's last, fw_focal_xf) */
 double fw_focal_x(void)
 {
     static double f;
     static int64_t n = -1, d = -1;
     if (n != SXN || d != SXD)
-        n = SXN, d = SXD, f = 128.0 * SXN / SXD;
+        n = SXN, d = SXD, f = 128.0 * SXN / SXD, focal_xf = (float)f;
     return f;
 }
 double fw_focal_y(void)
@@ -1046,9 +1081,13 @@ double fw_focal_y(void)
     static double f;
     static int64_t n = -1, d = -1;
     if (n != SYN || d != SYD)
-        n = SYN, d = SYD, f = 128.0 * SYN / SYD;
+        n = SYN, d = SYD, f = 128.0 * SYN / SYD, focal_yf = (float)f;
     return f;
 }
+/* (float)fw_focal_x() and (float)fw_focal_y(), with no conversion each
+   time (a double's is software on some hosts) */
+static float fw_focal_xf(void) { fw_focal_x(); return focal_xf; }
+static float fw_focal_yf(void) { fw_focal_y(); return focal_yf; }
 int fw_half_width(void) { return tw / 2; }
 
 int fw_view_words(const uint16_t w[6], uint16_t out[8])
@@ -1238,7 +1277,7 @@ static void depth_report(void)
 
 static void depth_plane(const float (*P)[3], int n, float z[3])
 {
-    float fx = fw_focal_x(), fy = fw_focal_y(), ox = tw / 2.0f, oy = (float)centre_row(), sc = (float)(1 << rm_far_shift);
+    float fx = fw_focal_xf(), fy = fw_focal_yf(), ox = tw / 2.0f, oy = centre_rowf(), sc = (float)(1 << rm_far_shift);
     float X[EXACT_MAX + 8], Y[EXACT_MAX + 8], Q[EXACT_MAX + 8], best = 0, c[3] = { 0 }, d;
     int i, j, k, m = 0, a = 0, b = 1, e = 2;
 
@@ -1999,7 +2038,7 @@ void fw_view_face(const float (*p)[3], int n, uint8_t c)
 {
     static float v[FACE_MAX][3], s[2][FACE_MAX][2];
     int64_t X[FACE_MAX], Y[FACE_MAX];
-    float fx = (float)fw_focal_x(), fy = (float)fw_focal_y(), ox = (float)(tw / 2), oy = (float)centre_row();
+    float fx = fw_focal_xf(), fy = fw_focal_yf(), ox = (float)(tw / 2), oy = centre_rowf();
     int64_t area = 0;
     int i, m = 0, k, top = 0, at, next;
     int32_t lend, rend;
@@ -2029,12 +2068,14 @@ void fw_view_face(const float (*p)[3], int n, uint8_t c)
         s[0][i][0] = ox + v[i][0] * fx / v[i][2];
         s[0][i][1] = oy + v[i][1] * fy / v[i][2];
     }
-    m = face_clip(s[0], m, s[1], 0, -FACE_BAND, 0);
-    m = face_clip(s[1], m, s[0], 0, tw + FACE_BAND, 1);
-    m = face_clip(s[0], m, s[1], 1, -FACE_BAND, 0);
-    m = face_clip(s[1], m, s[0], 1, th + FACE_BAND, 1);
+    /* (the band's edges summed in float: exact, and no software double) */
+    m = face_clip(s[0], m, s[1], 0, -(float)FACE_BAND, 0);
+    m = face_clip(s[1], m, s[0], 0, (float)tw + (float)FACE_BAND, 1);
+    m = face_clip(s[0], m, s[1], 1, -(float)FACE_BAND, 0);
+    m = face_clip(s[1], m, s[0], 1, (float)th + (float)FACE_BAND, 1);
     for (i = k = 0; i < m; i++) {       /* to texels, a point the same as the one before dropped */
-        int64_t x = (int64_t)floorf(s[0][i][0]), y = (int64_t)floorf(s[0][i][1]);
+        /* (within the band: 32-bit conversions, not a library's 64-bit ones) */
+        int64_t x = (int32_t)floorf(s[0][i][0]), y = (int32_t)floorf(s[0][i][1]);
         if (k && x == X[k - 1] && y == Y[k - 1])
             continue;
         X[k] = x;
@@ -3359,6 +3400,17 @@ static const uint32_t *water_pass(void)
             gap[th + y] = have ? rgb8(line[(int)l + SHADE_LINES < n ? l + SHADE_LINES : (unsigned)n - 1]) : 1;
         }
     }
+    if (gpu_pic) {                      /* the GPU's picture: its ground drawn there, then out */
+        if (!gpu_open)
+            span_flush();
+    }
+    if (gpu_pic) {
+        fw_canvas_gpu->ground(&job, gap);
+        fw_canvas_gpu->close(tex32, tex);
+        gpu_pic = gpu_open = 0;
+        water_record(tex, &job, gap);
+        return tex32;
+    }
     water_record(tex, &job, gap);
     fw_water_filler(tex, tex32, &job, gap);
     return tex32;
@@ -3369,6 +3421,7 @@ static void hand(void)
 {
     const uint32_t *t32 = NULL;
 
+    span_flush();                       /* the panels' and the HUD's pieces (block_set) */
     if (water_seen && water_here()) {   /* the water's colours from the band this picture is shown with: fw_sky's, after it */
         water_seen = 0;
         if (handed) {
@@ -3378,6 +3431,10 @@ static void hand(void)
         t32 = water_pass();
     }
     water_seen = 0;
+    if (gpu_pic && !t32) {              /* the GPU's picture out: its indices */
+        fw_canvas_gpu->close(NULL, tex);
+        gpu_pic = gpu_open = 0;
+    }
     rm_canvas_taken();
     if (t32)
         nshvc_ext_canvas_screen32(0, t32, tw, th, 0, 1, 0);
@@ -3751,6 +3808,10 @@ int fw_picture(int j)
         check_picture(j);
     prof_mark(-1);
     fw_water[3] = 0;                    /* no water until this picture's view says so (water_view) */
+    if (gpu_pic && gpu_open)            /* (a last picture never handed: its texels kept) */
+        fw_canvas_gpu->close(NULL, tex);
+    gpu_pic = fw_canvas_gpu && !fw_env("FW_CHECK") && !fw_env("FW_KCHECK") && !fw_env("FW_CCHECK") && !fw_env("FW_WATERCHECK");
+    gpu_open = gpu_cleared = 0;
     fw_drawing = 1;
     list_gen++;
     m = rm_tween_buffers(j, RM_TICKS, scratch[0], scratch[1]);

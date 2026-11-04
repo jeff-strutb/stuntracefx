@@ -54,6 +54,12 @@ static size_t s_used;                   /* the list's bytes, counted generously 
 static uint16_t __attribute__((aligned(64))) s_clut[3][256];
 static int s_clut_now = -1, s_cmode_now = -1;
 static int s_wrap;                      /* the texture repeats (a polygon's) or is clamped (a run's) */
+/* the picture's canvas (fw_canvas_gpu) being drawn: 32 bits a pixel, a
+   colour index i as 0xFF0000ii, the ground surface's colour 0x01rrggbb (its
+   alpha the stencil's, which keeps it from what is drawn), nothing 0; its
+   lookups the same with 32-bit entries */
+static int s_c32;
+static uint32_t __attribute__((aligned(64))) s_clut32[3][256];
 
 /* the staging textures this fill, in an arena reset each fill */
 #define ARENA_BYTES (1024u * 1024u)
@@ -72,6 +78,8 @@ static int s_nstage;
 static const Stage *s_tex_now;
 
 static long s_polys_ge, s_polys_cpu, s_apart_far, s_wt_cpu[2];
+static long s_cv_opens, s_cv_kept, s_ground_rows, s_ground_flat_rows, s_ground_apart, s_ground_far, s_ground_checked;
+
 static SceInt64 s_wt_t[4];   /* (a measure) the water fill's parts: the runs found and listed, the GE, the picture made */
 static long s_fills, s_cpu_fills, s_apart, s_checked, s_water_ge, s_water_cpu, s_water_rows_cpu, s_water_texels;
 
@@ -92,12 +100,35 @@ typedef struct {
     uint16_t c;
     int16_t x, y, z;
 } CV;
+typedef struct {
+    uint32_t c;
+    int16_t x, y, z, pad;
+} CV32;
 
+static SceInt64 s_cvt[4];               /* (a measure) the canvas's open, spans, ground and close, in all */
+static long x_kind[4];
+static SceInt64 x_sync;
+static SceInt64 x_kt[4];
+#define STAGE_HASH 1024
+static int16_t s_hash[STAGE_HASH];      /* a stage's index + 1, 0 none */
+static int s_ram_stages;
+static long s_stage_made, s_stage_resets;
 static void report(void)
 {
     printf("gpu_ge: %ld fills on the GE, %ld on the CPU (no GPU memory lent); %ld polygons the GE's whole, %ld by rows; "
            "%ld water passes on the GE, %ld on the CPU, %ld water rows the CPU's, %ld water texels the GE's", s_fills,
            s_cpu_fills, s_polys_ge, s_polys_cpu, s_water_ge, s_water_cpu, s_water_rows_cpu, s_water_texels);
+    printf("; spans by kind (flat, textured, perspective, polygon): %ld %ld %ld %ld, ms %.1f %.1f %.1f %.1f, sync %.1f",
+           x_kind[0], x_kind[1], x_kind[2], x_kind[3], x_kt[0] / 1000.0, x_kt[1] / 1000.0, x_kt[2] / 1000.0,
+           x_kt[3] / 1000.0, x_sync / 1000.0);
+    printf("; textures staged %ld, all made again %ld times", s_stage_made, s_stage_resets);
+    printf("; canvas ms in all: open %.1f spans %.1f ground %.1f close %.1f", s_cvt[0] / 1000.0, s_cvt[1] / 1000.0,
+           s_cvt[2] / 1000.0, s_cvt[3] / 1000.0);
+    printf("; canvas: %ld opened, %ld over the last; ground rows %ld, %ld of one colour", s_cv_opens, s_cv_kept,
+           s_ground_rows, s_ground_flat_rows);
+    if (s_ground_checked)
+        printf("; FW_GPUCHECK ground: %ld passes, %ld texels apart, %ld by more than 16 a channel or of another kind",
+               s_ground_checked, s_ground_apart, s_ground_far);
     printf("; water texels the CPU's: %ld in rows not found, %ld in rows found; water fill ms: list %.1f GE %.1f picture %.1f",
            s_wt_cpu[0], s_wt_cpu[1], s_wt_t[0] / 1000.0, s_wt_t[1] / 1000.0, s_wt_t[2] / 1000.0);
     if (s_checked)
@@ -120,14 +151,21 @@ static void report_once(void)
 
 static void list_state(int stride, int w, int h, unsigned off)
 {
-    sceGuDrawBufferList(GU_PSM_4444, (void *)off, stride);
+    sceGuDrawBufferList(s_c32 ? GU_PSM_8888 : GU_PSM_4444, (void *)off, stride);
     sceGuOffset(2048 - w / 2, 2048 - h / 2);
     sceGuViewport(2048, 2048, w, h);
     sceGuScissor(0, 0, w, h);
     sceGuEnable(GU_SCISSOR_TEST);
     sceGuDisable(GU_BLEND);
     sceGuDisable(GU_DEPTH_TEST);
-    sceGuDisable(GU_STENCIL_TEST);
+    if (s_c32) {                        /* the canvas: what is drawn marked in alpha, the stencil (the GE writes it
+                                           only through the stencil's operation) */
+        sceGuEnable(GU_STENCIL_TEST);
+        sceGuStencilFunc(GU_ALWAYS, 0xFF, 0xFF);
+        sceGuStencilOp(GU_REPLACE, GU_REPLACE, GU_REPLACE);
+    } else {
+        sceGuDisable(GU_STENCIL_TEST);
+    }
     sceGuDisable(GU_COLOR_TEST);
     sceGuDisable(GU_COLOR_LOGIC_OP);
     sceGuDisable(GU_DITHER);
@@ -166,22 +204,29 @@ static void list_state(int stride, int w, int h, unsigned off)
 static int s_stride, s_w, s_h;
 static unsigned s_off;
 
+static int s_textured = -1;
+static void flats_out(void);
+
 static void list_open(void)
 {
     sceGuStart(GU_DIRECT, (void *)((uintptr_t)s_list | 0x40000000u));
     list_state(s_stride, s_w, s_h, s_off);
     s_used = 1024;
+    s_textured = -1;
 }
 
 static void list_close(void)
 {
+    flats_out();
     sceGuFinish();
     sceGuSync(0, 0);
 }
 
-/* room for a primitive and its state: a list near full run and begun again */
+/* room for a primitive and its state: the flat spans waiting drawn first
+   (the order kept); a list near full run and begun again */
 static void room(void)
 {
+    flats_out();
     s_used += 128;
     if (s_used > LIST_ROOM) {
         list_close();
@@ -201,20 +246,57 @@ static int pow2_at_least(int n)
 
 /* the texture for bank, base and mask: u and v's own masks when the mask
    is one in each byte (low bits set), else the whole 256 x 256 */
+/* The stages kept from fill to fill: the ROM's bytes never change, so
+   its textures are made once and kept until the arena is full (all then
+   made again: stages_reset, at a list's end, the GE done with them); the
+   Super FX RAM's ($70, $71) may, so a picture's are made in it */
+
+static unsigned stage_key(uint8_t bank, uint16_t base, uint16_t mask)
+{
+    return ((unsigned)bank * 2654435761u ^ (unsigned)base * 40503u ^ (unsigned)mask * 97u) % STAGE_HASH;
+}
+
+static void stages_reset(void)
+{
+    s_nstage = 0;
+    s_arena_used = 0;
+    s_ram_stages = 0;
+    memset(s_hash, 0, sizeof s_hash);
+    s_tex_now = NULL;
+    s_stage_resets++;
+}
+
+/* at a picture's or a fill's start: the RAM's textures made again */
+static void stages_begin(void)
+{
+    if (s_ram_stages)
+        stages_reset();
+}
+
 static const Stage *stage_for(uint8_t bank, uint16_t base, uint16_t mask)
 {
     int i, u, v, um = mask & 0xFF, vm = mask >> 8, tw, th, stride;
+    unsigned h = stage_key(bank, base, mask);
     Stage *s;
-    for (i = 0; i < s_nstage; i++)
-        if (s_stage[i].bank == bank && s_stage[i].base == base && s_stage[i].mask == mask)
-            return &s_stage[i];
+    for (i = 0; i < STAGE_HASH && s_hash[h]; i++, h = (h + 1) % STAGE_HASH) {
+        s = &s_stage[s_hash[h] - 1];
+        if (s->bank == bank && s->base == base && s->mask == mask)
+            return s;
+    }
     if (((um + 1) & um) || ((vm + 1) & vm))
         um = vm = 0xFF;
     tw = um + 1;
     th = vm + 1;
     stride = tw < 16 ? 16 : tw;
-    if (s_nstage == STAGES || s_arena_used + (size_t)stride * th > ARENA_BYTES)
-        return NULL;
+    if (s_nstage == STAGES || s_arena_used + (size_t)stride * th > ARENA_BYTES) {
+        list_close();                   /* the GE done with the arena: all made again */
+        stages_reset();
+        list_open();
+        h = stage_key(bank, base, mask);
+    }
+    s_hash[h] = (int16_t)(s_nstage + 1);
+    s_stage_made++;
+    s_ram_stages += bank == 0x70 || bank == 0x71;
     s = &s_stage[s_nstage++];
     s->bank = bank;
     s->base = base;
@@ -247,18 +329,20 @@ static void use_rules(uint8_t por, uint8_t hi)
     int cls = (por & 0x01) ? 0 : (por & 0x08) ? 2 : 1;
     int mode = (por & 0x04) ? (4 | 0x0F << 8 | (hi >> 4) << 16) : (por & 0x08) ? (0x0F << 8 | (hi >> 4) << 16) : (0xFF << 8);
     if (cls != s_clut_now) {
-        sceGuClutLoad(32, s_clut[cls]);
+        if (s_c32)
+            sceGuClutLoad(32, s_clut32[cls]);
+        else
+            sceGuClutLoad(32, s_clut[cls]);
         s_clut_now = cls;
     }
     if (mode != s_cmode_now) {
-        sceGuClutMode(GU_PSM_4444, (unsigned)(mode & 0x1F), (unsigned)(mode >> 8 & 0xFF), (unsigned)(mode >> 16 & 0x1F));
+        sceGuClutMode(s_c32 ? GU_PSM_8888 : GU_PSM_4444, (unsigned)(mode & 0x1F), (unsigned)(mode >> 8 & 0xFF),
+                      (unsigned)(mode >> 16 & 0x1F));
         s_cmode_now = mode;
     }
 }
 
 /* ---- the primitives ---- */
-
-static int s_textured = -1;
 
 static void textured(int on)
 {
@@ -277,23 +361,64 @@ static void textured(int on)
 static int s_rows;                      /* FW_GEROWS=1: every polygon by its rows, the reference's pixels */
 static int s_break;                     /* FW_GEBREAK=1 (a check that can fail): each fill's first flat span left out */
 
+/* the flat spans in a row of them, one draw (flats_out: before any other
+   primitive, and at a list's end) */
+#define FLATS_MAX 1024
+static CV32 s_fb32[2 * FLATS_MAX];
+static CV s_fb16[2 * FLATS_MAX];
+static int s_fbn;
+
+static void flats_out(void)
+{
+    int n = s_fbn;
+    void *m;
+    if (!n)
+        return;
+    s_fbn = 0;
+    textured(0);
+    if (s_c32) {
+        m = sceGuGetMemory((unsigned)(2 * n) * sizeof(CV32));
+        memcpy(m, s_fb32, (size_t)(2 * n) * sizeof(CV32));
+        sceGuDrawArray(GU_SPRITES, GU_COLOR_8888 | GU_VERTEX_16BIT | GU_TRANSFORM_2D, 2 * n, 0, m);
+    } else {
+        m = sceGuGetMemory((unsigned)(2 * n) * sizeof(CV));
+        memcpy(m, s_fb16, (size_t)(2 * n) * sizeof(CV));
+        sceGuDrawArray(GU_SPRITES, GU_COLOR_4444 | GU_VERTEX_16BIT | GU_TRANSFORM_2D, 2 * n, 0, m);
+    }
+    s_used += (size_t)(2 * n) * sizeof(CV32) + 64;
+}
+
 static void flat(int32_t y, int32_t x0, int32_t x1, uint8_t c)
 {
-    CV *v;
     if (s_break == 1) {
         s_break = 2;
         return;
     }
-    room();
-    textured(0);
-    v = (CV *)sceGuGetMemory(2 * sizeof(CV));
-    v[0].c = v[1].c = (uint16_t)(0xF000u | c);
-    v[0].x = (int16_t)x0;
-    v[0].y = (int16_t)y;
-    v[1].x = (int16_t)(x1 + 1);
-    v[1].y = (int16_t)(y + 1);
-    v[0].z = v[1].z = 0;
-    sceGuDrawArray(GU_SPRITES, GU_COLOR_4444 | GU_VERTEX_16BIT | GU_TRANSFORM_2D, 2, 0, v);
+    if (s_fbn == FLATS_MAX || s_used + (size_t)(2 * s_fbn + 2) * sizeof(CV32) + 256 > LIST_ROOM) {
+        flats_out();
+        if (s_used + 256 > LIST_ROOM) {
+            list_close();
+            list_open();
+        }
+    }
+    if (s_c32) {
+        CV32 *w = &s_fb32[2 * s_fbn];
+        w[0].c = w[1].c = 0xFF000000u | c;
+        w[0].x = (int16_t)x0;
+        w[0].y = (int16_t)y;
+        w[1].x = (int16_t)(x1 + 1);
+        w[1].y = (int16_t)(y + 1);
+        w[0].z = w[1].z = w[0].pad = w[1].pad = 0;
+    } else {
+        CV *v = &s_fb16[2 * s_fbn];
+        v[0].c = v[1].c = (uint16_t)(0xF000u | c);
+        v[0].x = (int16_t)x0;
+        v[0].y = (int16_t)y;
+        v[1].x = (int16_t)(x1 + 1);
+        v[1].y = (int16_t)(y + 1);
+        v[0].z = v[1].z = 0;
+    }
+    s_fbn++;
 }
 
 /* n pixels from x on row y: texels (u, v) on, u stepping one a pixel
@@ -363,7 +488,7 @@ static void span_textured(const FwSpan *p)
         if (x <= p->x1 && !(deep && sunk(p, x))) {
             unsigned iu, iv;
             if (p->textured == 2) {
-                float k = (float)(x - p->xl), q = fw_fmaf(p->pdq, k, p->pq);
+                float k = (float)(int32_t)(x - p->xl), q = fw_fmaf(p->pdq, k, p->pq);
                 iu = persp_texel(fw_fmaf(p->pda, k, p->pa), q);
                 iv = persp_texel(fw_fmaf(p->pdb, k, p->pb), q);
             } else {
@@ -420,6 +545,10 @@ typedef struct {
     uint16_t c, pad;
     float x, y, z;
 } PCV;
+typedef struct {
+    uint32_t c;
+    float x, y, z;
+} PCV32;
 
 static int pv_clip(const PV *in, int n, PV *out, int axis, float lim, int keep_below)
 {
@@ -456,7 +585,7 @@ static int chain(const FwEdge *e, int n, int persp, float dx, PV *o, int k)
     for (i = 0; i <= n && k < PV_MAX; i++) {
         const FwEdge *f = &e[i < n ? i : n - 1];
         float q = persp ? (i < n ? f->qa : f->qb) : 1.0f;
-        o[k].x = (float)(i < n ? f->from : f->to) + dx;
+        o[k].x = (float)(int32_t)(i < n ? f->from : f->to) + dx;   /* (within 2^30: a 32-bit conversion, not a library's 64-bit one) */
         o[k].y = (float)(i < n ? f->y0 : f->y0 + f->n) + 0.5f;
         o[k].q = q;
         o[k].uq = u * q;
@@ -527,6 +656,17 @@ static int poly_ge(const FwPoly *p, int w, int h)
             t[i].z = W;
         }
         sceGuDrawArray(GU_TRIANGLE_FAN, GU_TEXTURE_32BITF | GU_VERTEX_32BITF | GU_TRANSFORM_3D, n, 0, t);
+    } else if (s_c32) {
+        PCV32 *c;
+        textured(0);
+        c = (PCV32 *)sceGuGetMemory((unsigned)n * sizeof(PCV32));
+        for (i = 0; i < n; i++) {
+            c[i].c = 0xFF000000u | p->colour;
+            c[i].x = 2.0f * a[i].x / (float)w - 1.0f;
+            c[i].y = 1.0f - 2.0f * a[i].y / (float)h;
+            c[i].z = 1.0f;
+        }
+        sceGuDrawArray(GU_TRIANGLE_FAN, GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D, n, 0, c);
     } else {
         PCV *c;
         textured(0);
@@ -616,8 +756,7 @@ static void fill(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
     s_w = w;
     s_h = h;
     s_off = (unsigned)((uintptr_t)lent - (uintptr_t)sceGeEdramGetAddr());
-    s_nstage = 0;
-    s_arena_used = 0;
+    stages_begin();
     s_textured = -1;
     s_break = getenv("FW_GEBREAK") ? 1 : 0;
     s_rows = getenv("FW_GEROWS") != NULL;
@@ -1009,6 +1148,318 @@ static void water_fill(const uint8_t *in, uint32_t *out, const FwWaterJob *j, co
     s_wt_t[2] += t3 - t2;
 }
 
+/* ---- the picture's canvas (fw_canvas_gpu) ----
+   The whole picture kept in the lent GPU memory (480 x 272 at 32 bits, a
+   512 stride: the loan's 557,056 bytes) from its first span to its
+   hand-off: the spans drawn into it as they come, the ground surface put
+   in after where nothing is drawn, read out once. */
+static volatile uint32_t *s_cv;         /* the canvas, uncached */
+
+static int cv_open(int w, int h, const uint8_t *keep)
+{
+    size_t bytes = 0;
+    void *lent = s_lend(&bytes);
+    int stride = (w + 63) & ~63, x, y;
+    report_once();
+    if (!lent || (size_t)stride * (size_t)h * 4 > bytes || w > 512 || h > 512)
+        return 0;
+    s_cv_opens++;
+    s_c32 = 1;
+    s_stride = stride;
+    s_w = w;
+    s_h = h;
+    s_off = (unsigned)((uintptr_t)lent - (uintptr_t)sceGeEdramGetAddr());
+    s_cv = (volatile uint32_t *)((uintptr_t)lent | 0x40000000u);
+    s_textured = -1;
+    if (keep) {                         /* the last picture's, to draw over */
+        s_cv_kept++;
+        for (y = 0; y < h; y++)
+            for (x = 0; x < w; x++) {
+                uint8_t c = keep[(size_t)y * w + x];
+                s_cv[(size_t)y * stride + x] = c ? 0xFF000000u | c : 0;
+            }
+        return 1;
+    }
+    list_open();                        /* cleared: nothing drawn, alpha (the stencil) 0 */
+    sceGuStencilFunc(GU_ALWAYS, 0, 0xFF);
+    {
+        CV32 *v = (CV32 *)sceGuGetMemory(2 * sizeof(CV32));
+        textured(0);
+        v[0].c = v[1].c = 0;
+        v[0].x = v[0].y = 0;
+        v[1].x = (int16_t)w;
+        v[1].y = (int16_t)h;
+        v[0].z = v[1].z = v[0].pad = v[1].pad = 0;
+        sceGuDrawArray(GU_SPRITES, GU_COLOR_8888 | GU_VERTEX_16BIT | GU_TRANSFORM_2D, 2, 0, v);
+    }
+    list_close();
+    return 1;
+}
+
+static void cv_spans(const FwSpan *sp, size_t n)
+{
+    size_t i;
+    stages_begin();
+    s_textured = -1;
+    s_break = getenv("FW_GEBREAK") ? 1 : 0;
+    s_rows = getenv("FW_GEROWS") != NULL;
+    list_open();
+    for (i = 0; i < n; i++) {
+        x_kind[sp[i].textured > 3 ? 0 : sp[i].textured]++;
+        span(&sp[i], s_w, s_h);
+    }
+    {
+        SceInt64 t = sceKernelGetSystemTimeWide();
+        list_close();
+        x_kt[0] -= 0;
+        s_cvt[3] += 0;
+        x_sync += sceKernelGetSystemTimeWide() - t;
+    }
+}
+
+static uint8_t cv_read(int x, int y)
+{
+    uint32_t v = s_cv[(size_t)y * s_stride + x];
+    return (v >> 24) == 0xFF ? (uint8_t)v : 0;
+}
+
+/* the canvas's pixel as nshvc_ext_canvas_screen32 takes it */
+static uint32_t cv_word(uint32_t v)
+{
+    uint32_t a = v >> 24, rgb = v & 0xFFFFFFu;
+    if (a == 0xFF)
+        return v & 0xFFu;
+    if (a == 0x01)
+        return rgb == 1 ? 1 : 0xFF000000u | rgb;
+    return 0;
+}
+
+static void cv_close(uint32_t *out32, uint8_t *out8)
+{
+    int x, y;
+    for (y = 0; y < s_h; y++) {
+        volatile const uint32_t *r = s_cv + (size_t)y * s_stride;
+        for (x = 0; x < s_w; x++) {
+            uint32_t v = r[x];
+            size_t i = (size_t)y * s_w + x;
+            if (out32)
+                out32[i] = cv_word(v);
+            out8[i] = (v >> 24) == 0xFF ? (uint8_t)v : 0;
+        }
+    }
+    s_c32 = 0;
+}
+
+/* The ground surface on the GE. Row y's pixels whose centres' rays meet
+   the surface are one run, the ray's 1 / depth there linear along the
+   row (wy = A + B x), so its ends are a division; its pixels whose
+   corners all meet it (each corner's linear the same way) drawn as one
+   quad with the surface's perspective (water_run's), split where Aqua
+   Tunnel's ripples change colour with depth (each split a division too).
+   Its few pixels at the horizon, a corner past it, take the row's colour
+   between the ripples; a row whose colour is the console's (1), the
+   same. The pixels past the run: under the surface, the row's colour;
+   above it nothing. Where the 3D is drawn the stencil keeps it. */
+static void gflat(int32_t y, int32_t x0, int32_t x1, uint32_t c)
+{
+    CV32 *v;
+    if (x1 < x0)
+        return;
+    room();
+    textured(0);
+    v = (CV32 *)sceGuGetMemory(2 * sizeof(CV32));
+    v[0].c = v[1].c = c;
+    v[0].x = (int16_t)x0;
+    v[0].y = (int16_t)y;
+    v[1].x = (int16_t)(x1 + 1);
+    v[1].y = (int16_t)(y + 1);
+    v[0].z = v[1].z = v[0].pad = v[1].pad = 0;
+    sceGuDrawArray(GU_SPRITES, GU_COLOR_8888 | GU_VERTEX_16BIT | GU_TRANSFORM_2D, 2, 0, v);
+}
+
+static void grun(const FwWaterJob *j, int32_t y, int32_t xa, int32_t xb, uint32_t g, uint32_t r)
+{
+    WV *v;
+    int i;
+    room();
+    textured(1);
+    v = (WV *)sceGuGetMemory(4 * sizeof(WV));
+    for (i = 0; i < 4; i++) {
+        float X = (float)((i & 1) ? xb + 1 : xa), Y = (float)((i & 2) ? y + 1 : y), q, s, t, w;
+        surface_at(j, X, Y, &q, &s, &t);
+        w = 1.0f / q;
+        v[i].s = s;
+        v[i].t = t;
+        v[i].c = g;
+        v[i].x = (2.0f * X / (float)j->w - 1.0f) * w;
+        v[i].y = (1.0f - 2.0f * Y / (float)j->h) * w;
+        v[i].z = w;
+    }
+    sceGuTexEnvColor(r);
+    sceGuDrawArray(GU_TRIANGLE_STRIP, GU_TEXTURE_32BITF | GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D, 4, 0, v);
+}
+
+/* the strip row (Aqua Tunnel's ripple colour) at depth t: the first as deep */
+static int32_t band_of(const FwWaterJob *j, float t)
+{
+    int32_t lo = 0, hi = 79;
+    while (lo < hi) {
+        int32_t m = (lo + hi) / 2;
+        if (j->depth[m] >= t)
+            hi = m;
+        else
+            lo = m + 1;
+    }
+    return lo;
+}
+
+/* x's with lin(x) = a + b x of the sign s (> 0 after scaling) in [lo, hi]:
+   the range, as whole pixels, kept to where the test holds at its ends */
+static int sign_range(float a, float b, float sgn, float eps, int32_t lo, int32_t hi, int32_t *from, int32_t *to)
+{
+    int32_t f = lo, t = hi;
+    if (b * sgn != 0) {
+        float x = -a / b;
+        if (b * sgn > 0) {
+            if (x >= (float)hi + 1)
+                return 0;
+            if (x > (float)lo)
+                f = (int32_t)floorf(x);
+        } else {
+            if (x <= (float)lo - 1)
+                return 0;
+            if (x < (float)hi)
+                t = (int32_t)ceilf(x);
+        }
+    } else if (!(a * sgn > eps)) {
+        return 0;
+    }
+    while (f <= t && !((a + b * (float)f) * sgn > eps))
+        f++;
+    while (t >= f && !((a + b * (float)t) * sgn > eps))
+        t--;
+    *from = f;
+    *to = t;
+    return f <= t;
+}
+
+static void cv_ground(const FwWaterJob *j, const uint32_t *gap)
+{
+    const float *e = j->e;
+    int w = j->w, h = j->h, y;
+    float sg = j->dy > 0 ? 1.0f : -1.0f;
+    uint32_t *ref = NULL;
+    uint8_t *in = NULL;
+    int check = getenv("FW_GPUCHECK") != NULL;
+
+    if (check && (ref = malloc((size_t)w * h * 4)) && (in = malloc((size_t)w * h))) {
+        for (y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+                in[(size_t)y * w + x] = cv_read(x, y);
+        fw_water_fill_cpu(in, ref, j, gap);
+    }
+    list_open();
+    sceGuEnable(GU_STENCIL_TEST);       /* where nothing is drawn (alpha, the stencil, 0); its alpha made 1 */
+    sceGuStencilFunc(GU_EQUAL, 0, 0xFF);
+    sceGuStencilOp(GU_KEEP, GU_KEEP, GU_INCR);
+    sceGuEnable(GU_TEXTURE_2D);
+    cells_make(j);
+    sceGuTexMapMode(GU_TEXTURE_COORDS, 0, 0);
+    sceGuTexScale(1.0f, 1.0f);
+    sceGuTexOffset(0.0f, 0.0f);
+    sceGuTexLevelMode(GU_TEXTURE_AUTO, 0.0f);
+    sceGuTexFilter(GU_LINEAR_MIPMAP_LINEAR, GU_NEAREST);
+    sceGuTexWrap(GU_REPEAT, GU_REPEAT);
+    sceGuTexFunc(GU_TFX_BLEND, GU_TCC_RGB);
+    sceGuDisable(GU_ALPHA_TEST);
+    s_textured = 1;
+    for (y = 0; y < h; y++) {
+        uint32_t g = gap[y], r0 = j->land ? gap[h + y] : 0, none = j->under ? g : 0;
+        float vy = ((float)y + 0.5f - j->oy) / j->fy, A = e[4] * (0.5f - j->ox) / j->fx + e[5] * vy + e[6],
+              B = e[4] / j->fx;
+        int32_t a, b, a2, b2, c0, c1, d0, d1;
+        float yt = ((float)y - j->oy) / j->fy, yb = ((float)y + 1.0f - j->oy) / j->fy;
+        float At = -e[4] * j->ox / j->fx + e[5] * yt + e[6], Ab = -e[4] * j->ox / j->fx + e[5] * yb + e[6];
+        s_ground_rows++;
+        if (!sign_range(A, B, sg, 0.0f, 0, w - 1, &a, &b)) {
+            if (none)
+                gflat(y, 0, w - 1, none);
+            continue;
+        }
+        if (none) {
+            gflat(y, 0, a - 1, none);
+            gflat(y, b + 1, w - 1, none);
+        }
+        if (g == 1 || (j->land && r0 == 1)) {     /* the console's colour: its row's own */
+            s_ground_flat_rows++;
+            gflat(y, a, b, g);
+            continue;
+        }
+        /* the quad's pixels: both corner rows meet the surface at x and x + 1 */
+        a2 = a;
+        b2 = b;
+        if (!sign_range(At, B, sg, 1e-6f * fabsf(j->dy), a, b + 1, &c0, &c1) ||
+            !sign_range(Ab, B, sg, 1e-6f * fabsf(j->dy), a, b + 1, &d0, &d1)) {
+            gflat(y, a, b, g);
+            continue;
+        }
+        a2 = c0 > d0 ? c0 : d0;
+        b2 = (c1 < d1 ? c1 : d1) - 1;
+        if (a2 > b2) {
+            gflat(y, a, b, g);
+            continue;
+        }
+        gflat(y, a, a2 - 1, g);
+        gflat(y, b2 + 1, b, g);
+        if (j->land) {
+            grun(j, y, a2, b2, g, r0);
+            continue;
+        }
+        while (a2 <= b2) {              /* Aqua Tunnel's: a run each strip colour */
+            int32_t lo = band_of(j, j->dy / (A + B * (float)a2)), end = b2;
+            int32_t lb = band_of(j, j->dy / (A + B * (float)b2));
+            if (lb != lo) {             /* the last pixel at lo: where t crosses the next band's depth */
+                int32_t l = a2, r = b2;
+                while (r - l > 1) {
+                    int32_t m = (l + r) / 2;
+                    if (band_of(j, j->dy / (A + B * (float)m)) == lo)
+                        l = m;
+                    else
+                        r = m;
+                }
+                end = l;
+            }
+            grun(j, y, a2, end, g, j->ripple[lo]);
+            a2 = end + 1;
+        }
+    }
+    list_close();
+    if (ref && in) {                    /* FW_GPUCHECK: the reference's texels against the GE's */
+        for (y = 0; y < h; y++)
+            for (int x = 0; x < w; x++) {
+                uint32_t got = cv_word(s_cv[(size_t)y * s_stride + x]), want = ref[(size_t)y * w + x];
+                if (got != want) {
+                    int far = (got >> 24) != (want >> 24) || got < 256 || want < 256;
+                    for (int k = 0; !far && k < 24; k += 8) {
+                        int d = (int)(got >> k & 255) - (int)(want >> k & 255);
+                        far = d > 16 || d < -16;
+                    }
+                    s_ground_apart++;
+                    s_ground_far += far;
+                }
+            }
+        s_ground_checked++;
+    }
+    free(ref);
+    free(in);
+}
+
+static int t_open(int w, int h, const uint8_t *keep) { SceInt64 t = sceKernelGetSystemTimeWide(); int r = cv_open(w, h, keep); s_cvt[0] += sceKernelGetSystemTimeWide() - t; return r; }
+static void t_spans(const FwSpan *sp, size_t n) { SceInt64 t = sceKernelGetSystemTimeWide(); cv_spans(sp, n); s_cvt[1] += sceKernelGetSystemTimeWide() - t; }
+static void t_ground(const FwWaterJob *j, const uint32_t *gap) { SceInt64 t = sceKernelGetSystemTimeWide(); cv_ground(j, gap); s_cvt[2] += sceKernelGetSystemTimeWide() - t; }
+static void t_close(uint32_t *o32, uint8_t *o8) { SceInt64 t = sceKernelGetSystemTimeWide(); cv_close(o32, o8); s_cvt[3] += sceKernelGetSystemTimeWide() - t; }
+static const FwCanvasGpu s_canvas_ops = { t_open, t_spans, cv_read, t_ground, t_close };
+
 /* FW_SPANPLAY: the GE the program's own (no console runs, so libgu is
    started here and all of VRAM is the fill's) */
 void gpu_ge_standalone(void)
@@ -1027,6 +1478,14 @@ int gpu_ge_init(void)
             s_clut[c][i] = (uint16_t)(i | (clear ? 0 : 0xF000));
         }
     sceKernelDcacheWritebackRange(s_clut, sizeof s_clut);
+    for (c = 0; c < 3; c++)
+        for (i = 0; i < 256; i++) {
+            int clear = (c == 1 && i == 0) || (c == 2 && (i & 0x0F) == 0);
+            s_clut32[c][i] = clear ? 0 : 0xFF000000u | (uint32_t)i;
+        }
+    sceKernelDcacheWritebackRange(s_clut32, sizeof s_clut32);
+    if (!getenv("FW_GECANVAS_OFF"))
+        fw_canvas_gpu = &s_canvas_ops;
     fw_span_filler = fill;
     fw_water_filler = water_fill;
     return 1;

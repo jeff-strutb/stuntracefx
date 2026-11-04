@@ -215,6 +215,23 @@ void fw_span_fill_cpu(uint8_t *out, int w, int h, const FwSpan *sp, size_t n);
    and by fw_span_filler, the texels apart printed; 0 when none */
 int fw_span_play(const char *path);
 extern void (*fw_span_filler)(uint8_t *out, int w, int h, const FwSpan *sp, size_t n);
+/* A picture kept in the GPU's memory from its first span to its hand-off
+   (a front end's, which sets fw_canvas_gpu; NULL: the texels the CPU's,
+   fw_span_filler filling them): open (w x h; keep the picture to draw
+   over, NULL for a cleared one; 0 when no GPU memory, the CPU's then),
+   its spans drawn in order, a texel read (the 3D's colour, 0 where
+   nothing is drawn), the ground surface (FwWaterJob) put where nothing is
+   drawn, and close: the picture out, out32 the canvas's 32 bits
+   (nshvc_ext_canvas_screen32's: a colour index, 0xFFrrggbb, 1, 0) when
+   not NULL, out8 the indices (0 where the ground or nothing is) */
+typedef struct {
+    int (*open)(int w, int h, const uint8_t *keep);
+    void (*spans)(const FwSpan *sp, size_t n);
+    uint8_t (*read)(int x, int y);
+    void (*ground)(const FwWaterJob *j, const uint32_t *gap);
+    void (*close)(uint32_t *out32, uint8_t *out8);
+} FwCanvasGpu;
+extern const FwCanvasGpu *fw_canvas_gpu;
 uint8_t fw_texel(uint8_t bank, uint16_t at);
 /* the texels' memory: malloc's, or a front end's the GPU shares (NULL: malloc) */
 extern uint8_t *(*fw_texels_alloc)(size_t len);
