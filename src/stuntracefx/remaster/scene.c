@@ -207,6 +207,7 @@ void sc_model_begin(void)
 
 void sc_command(unsigned index, uint8_t bank, uint16_t at)
 {
+    sc_walk_command(bank, at);
     if (check < 0) {
         const char *c = getenv("SC_CHECK");
         check = c && c[0] == 'g';

@@ -60,9 +60,15 @@ Model commands reached ($cc the command byte):
   each), the model frame $0044 and its own bytes. No other RAM.
 - Faces: 3 to 8 vertices; lines (n = 2) are common (1.5M in pictures),
   their second byte always 0.
-- A face is skipped only when its facing byte is positive: the high byte
-  of the 32-bit screen cross product (2^24 and up). Small back faces reach
-  the fill; stage 2 settles what the fill does with them.
+- A face is drawn only when its facing byte is negative (turned to the
+  eye). The BEQ after the BMI tests the INC R14 in the BMI's delay slot,
+  not the byte, so a byte of 0 is skipped too (stage 2 found it; the
+  census's flag counts read the wrong byte of the face record and are
+  withdrawn). Face record: count, a byte not yet known, the facing-flag
+  index, the material, a normal of three bytes, the vertex indices.
+- $5C runs both its lists, the flag's sign choosing their order: the
+  painter's switch. $28 runs the list after it then the one in line, or the
+  one in line with a target deferred.
 - Materials: plain 8.4M, masked (animated, bit 14) 0.30M, textured
   (bit 15) 34K, kind -2 (bits 15 and 14) none.
 - Points: shift below 3 uses the packed 8-bit matrix ($0128-$0130, MULT);
@@ -139,7 +145,9 @@ approved by Jeff.
 | PSP, 2.17 (023f51a) | 24.234 + 17.712 = 42.187 | 136.301 + 501.515 = 638.118 |
 | macOS null host, 2.17 | 0.330 + 1.488 | 1.999 + 2.722 |
 
-PSP in PPSSPPHeadless with GPU_GE=1; macOS with GPU_METAL=1. Shots
+PSP in PPSSPPHeadless with GPU_GE=1; macOS with GPU_METAL=1. Frames
+1401-1500 of race100 are not all race: 1401-1430 are forced blank and the
+full window's takeover, and 1431-1460 fade in (INIDISP $00 to $0F). Shots
 byte-identical across the two nativeshvc versions. nativeshvc has the 2.17
 slowdown's cause (its inline-access path) and is fixing it.
 
@@ -153,7 +161,16 @@ the same display list.
    slot's points against the chip's ($0340 + 6i plus the object's place).
    Expected: 0 apart in the integer form.
 2. Faces and order: the walk's faces and order against the draw list the
-   frame program builds. Expected: 0 apart.
+   frame program builds. Expected: 0 apart. Done (scene_walk.c,
+   SC_CHECK=walk): over the nine dense scripts and race100 in Enhanced,
+   29.1 million commands at the chip's own addresses and 17.9 million
+   faces in its order, 0 apart; SC_BREAK shows both fail. Facing by the
+   walk's own 3D determinant (no projection): the same as the chip's on
+   81.5% of 19.0 million full-window tests; every one apart is the
+   chip's projection failing it (points of no area at the original's
+   pixels 89%, within a whole pixel's rounding of the projected points
+   11%, held at the projection's limit or behind 23 tests), 0 otherwise. The renderer
+   keeps the determinant; stage 4 measures the pixels it costs.
 3. Materials: each face's colour or texture. Expected: 0 apart.
 4. Pixels: the GPU's picture against the CPU reference, pixels apart and
    how far. Original shots and dumps unchanged.

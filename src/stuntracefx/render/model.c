@@ -293,6 +293,7 @@ l8647:
     gsu_stw(FX_SHADE_AT, R[0]);
 l8651:
     sc_model_begin();                   /* the renderer's check (scene.h) */
+    sc_walk_begin();
     R[0] = 0x0001;
     R[12] = gsu_ldw(FX_POINT_SHIFT);
     R[12] = R[12];
@@ -2038,6 +2039,7 @@ l90CD:
 l90EF:
     gsu_r14(gsu_inc(R[14]));
 l90F0:
+    sc_walk_chip_face((uint16_t)(R[14] - 3));   /* the renderer's check (scene.h) */
     gsu_stw(FX_POINT_COUNT, R[2]);
     R[0] = 0x09AA;
     R[6] = gsu_ldw(FX_LIST_END);
@@ -2271,6 +2273,7 @@ l9248:
     at = nx;
     goto dispatch;
 l924D:
+    sc_walk_rejected();                 /* the renderer's check (scene.h) */
     t = 1;
     if (t) goto l9248;
     /* FxModelSpriteColour */

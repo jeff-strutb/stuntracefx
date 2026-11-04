@@ -45,4 +45,17 @@ void sc_model_begin(void);
 void sc_matrix(const uint16_t angle[3], const uint8_t *frac, uint16_t flags, const uint16_t e[9], int shift,
                uint16_t out[9]);
 
+/* The walk of a model's command lists (scene_walk.c): FxModelDraw begins
+   (the list at $0016, bank $001C, the projection going on to $0018, the
+   frame $0044), a command dispatched, and a face the chip goes on to draw
+   (01:90F0, its record's address); and the walk's own faces and facing
+   commands as it meets them */
+void sc_walk_begin(void);
+void sc_walk_command(uint8_t bank, uint16_t at);
+void sc_walk_chip_face(uint16_t at);
+/* the projection found every point past one edge (01:924D): the model ends */
+void sc_walk_rejected(void);
+void sc_walk_face(uint16_t at);
+void sc_walk_facing(uint16_t at, uint16_t n);
+
 #endif

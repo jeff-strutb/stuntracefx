@@ -1421,6 +1421,8 @@ void fw_exact_model_point(uint16_t index)
    from the exact points: the facing of a face with a point the projection
    held would turn with it */
 static uint16_t facing_at[3];
+int64_t fw_facing_log[64];
+int fw_facing_log_n;
 
 void fw_facing_point(int slot, uint16_t addr)
 {
@@ -1453,6 +1455,8 @@ void fw_facing_cross(uint16_t *hi, uint16_t *lo)
         int odd = (vz[0] < 0) ^ (vz[1] < 0) ^ (vz[2] < 0);
         c = d == 0 ? 0 : (d > 0) != odd ? 0x10000 : -0x10000;
     }
+    if (fw_facing_log_n < 64)               /* the renderer's check (scene.h): each triple's cross as made */
+        fw_facing_log[fw_facing_log_n++] = c;
     if (c > 0x7FFFFFFF)
         c = 0x7FFFFFFF;
     if (c < -0x7FFFFFFFLL - 1)
