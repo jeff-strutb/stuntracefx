@@ -503,14 +503,14 @@ static int hit_at(const FwWaterJob *j, int32_t x, int32_t y, int32_t *lo_out)
 
 /* the surface at the screen point (X, Y) (a pixel's corner): its 1 / depth
    q and texture coordinates in cells, s along 64 and t along 16 */
-static void surface_at(const FwWaterJob *j, double X, double Y, double *q, double *s, double *t)
+static void surface_at(const FwWaterJob *j, float X, float Y, float *q, float *s, float *t)
 {
     const float *e = j->e;
-    double vx = (X - j->ox) / j->fx, vy = (Y - j->oy) / j->fy, wy = e[4] * vx + e[5] * vy + e[6], d;
+    float vx = (X - j->ox) / j->fx, vy = (Y - j->oy) / j->fy, wy = e[4] * vx + e[5] * vy + e[6], d;
     *q = wy / j->dy;
     d = j->dy / wy;
-    *s = (d * (e[0] * vx + e[1] * vy + e[2]) + j->cam[0]) / j->wu / 64.0;
-    *t = (d * (e[8] * vx + e[9] * vy + e[10]) + j->cam[2]) / j->wv / 16.0;
+    *s = (d * (e[0] * vx + e[1] * vy + e[2]) + j->cam[0]) / j->wu / 64.0f;
+    *t = (d * (e[8] * vx + e[9] * vy + e[10]) + j->cam[2]) / j->wv / 16.0f;
 }
 
 static void cells_make(const FwWaterJob *j)
@@ -551,15 +551,15 @@ static void water_run(const FwWaterJob *j, int32_t y, int32_t xa, int32_t xb, ui
     room();
     v = (WV *)sceGuGetMemory(4 * sizeof(WV));
     for (i = 0; i < 4; i++) {
-        double X = (i & 1) ? xb + 1 : xa, Y = (i & 2) ? y + 1 : y, q, s, t, w;
+        float X = (float)((i & 1) ? xb + 1 : xa), Y = (float)((i & 2) ? y + 1 : y), q, s, t, w;
         surface_at(j, X, Y, &q, &s, &t);
-        w = 1.0 / q;
-        v[i].s = (float)s;
-        v[i].t = (float)t;
+        w = 1.0f / q;
+        v[i].s = s;
+        v[i].t = t;
         v[i].c = abgr(g);
-        v[i].x = (float)((2.0 * X / j->w - 1.0) * w);
-        v[i].y = (float)((1.0 - 2.0 * Y / j->h) * w);
-        v[i].z = (float)w;
+        v[i].x = (2.0f * X / (float)j->w - 1.0f) * w;
+        v[i].y = (1.0f - 2.0f * Y / (float)j->h) * w;
+        v[i].z = w;
     }
     sceGuTexEnvColor(abgr(r));
     sceGuDrawArray(GU_TRIANGLE_STRIP, GU_TEXTURE_32BITF | GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D, 4, 0, v);
@@ -570,9 +570,9 @@ static int corners_ok(const FwWaterJob *j, int32_t y, int32_t xa, int32_t xb)
 {
     int i;
     for (i = 0; i < 4; i++) {
-        double q, s, t;
-        surface_at(j, (i & 1) ? xb + 1 : xa, (i & 2) ? y + 1 : y, &q, &s, &t);
-        if (!(q > 1e-6))
+        float q, s, t;
+        surface_at(j, (float)((i & 1) ? xb + 1 : xa), (float)((i & 2) ? y + 1 : y), &q, &s, &t);
+        if (!(q > 1e-6f))
             return 0;
     }
     return 1;
@@ -757,11 +757,13 @@ static void water_fill(const uint8_t *in, uint32_t *out, const FwWaterJob *j, co
                 size_t i = (size_t)y * w + x;
                 while (k < nr && (runs[k].y < y || (runs[k].y == y && runs[k].xb < x)))
                     k++;
-                if (!in[i] && k < nr && runs[k].y == y && x >= runs[k].xa && x <= runs[k].xb) {
+                if (in[i]) {
+                    out[i] = in[i];     /* drawn on: the reference's own first rule */
+                } else if (k < nr && runs[k].y == y && x >= runs[k].xa && x <= runs[k].xb) {
                     uint32_t p = tg[(size_t)y * stride + x];
                     s_water_texels++;
                     out[i] = 0xFF000000u | (p & 0xFFu) << 16 | (p & 0xFF00u) | (p >> 16 & 0xFFu);
-                } else if (!in[i] && known[y] && (x < hit_a[y] || x > hit_b[y])) {
+                } else if (known[y] && (x < hit_a[y] || x > hit_b[y])) {
                     out[i] = j->under ? gap[y] : 0;     /* the reference's no-hit texel */
                 } else {
                     out[i] = fw_water_texel(in, j, gap, x, y);
