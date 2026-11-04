@@ -276,7 +276,17 @@ NSHVC_MAIN(argc, argv)
             }
             setvbuf(pacing_f, NULL, _IOLBF, 0);
         }
+#if NSHVC_VERSION_MAJOR > 2 || (NSHVC_VERSION_MAJOR == 2 && NSHVC_VERSION_MINOR >= 19)
+    /* the menus' PPU shadow sees the console's registers alone (contract
+       2.19), so the S-CPU's other accesses stay inline; the pacing check
+       watches work RAM too, and takes every write */
+    if (pacing_f)
+        nshvc_set_write_hook(pacing_write);
+    else
+        nshvc_set_register_write_hook(mw_ppu_write);
+#else
     nshvc_set_write_hook(pacing_write);
+#endif
 #if FW_GPU_METAL
     if (!getenv("FW_CPUFILL"))          /* FW_CPUFILL=1 (a check): the CPU's fill, to compare */
         gpu_metal_init();               /* the full window's picture on the cartridge's GPU */
