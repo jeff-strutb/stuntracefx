@@ -4,16 +4,24 @@
  * steering wheel under the finger (a gold rim, a hub and three spokes), the
  * two pedals (a ribbed pad with its name) and the pause button (two bars);
  * and on every host the mode's badge (ORIGINAL or ENHANCED, Tab).
- * Shapes are by their distance from each pixel's centre, a pixel's edge
- * blended across one pixel.
+ *
+ * The pictures are rasterized ahead (baked.h, front_baked.c): a host only
+ * unpacks them. The drawing below makes them, for `build.sh bake` and the
+ * checks (ART_DRAW): shapes by their distance from each pixel's centre, a
+ * pixel's edge blended across one pixel.
  */
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "front.h"
+#include "baked.h"
 
 #define DENSITY 2                   /* pixels a point */
+#define BADGE_W ART_BADGE_W
+#define BADGE_H ART_BADGE_H
+
+#if ART_DRAW
 
 typedef struct {
     uint32_t *px;
@@ -138,8 +146,6 @@ static Img pedal(float w, float h, uint32_t c, const char *name)
 }
 
 /* the mode's badge: its name on a dark rounded plate, edged in its colour */
-#define BADGE_W ART_BADGE_W
-#define BADGE_H ART_BADGE_H
 static Img badge(const char *name, uint32_t c)
 {
     Img m = img_new(BADGE_W, BADGE_H);
@@ -159,22 +165,29 @@ static Img pause_bars(void)
     return m;
 }
 
+#endif
+
 static int id_wheel = -1, id_brake = -1, id_boost = -1, id_pause = -1;
 static int id_original = -1, id_enhanced = -1;
 
-static int hand_over(Img m)
+/* a picture rasterized ahead, to the console's overlay */
+static int hand_over(int which)
 {
-    int id = front_overlay_image(m.px, m.w, m.h);
-    free(m.px);
+    int w = 0, h = 0, id;
+    uint32_t *px = baked_unpack(which, &w, &h);
+    if (!px)
+        return -1;
+    id = front_overlay_image(px, w, h);
+    free(px);
     return id;
 }
 
 void art_make(void)
 {
-    id_wheel = hand_over(wheel());
-    id_brake = hand_over(pedal(84, 128, 0xE84A3C, "BRAKE"));
-    id_boost = hand_over(pedal(84, 112, 0x4AA8F5, "BOOST"));
-    id_pause = hand_over(pause_bars());
+    id_wheel = hand_over(BAKED_WHEEL);
+    id_brake = hand_over(BAKED_BRAKE);
+    id_boost = hand_over(BAKED_BOOST);
+    id_pause = hand_over(BAKED_PAUSE_BARS);
 }
 
 void art_place(const TouchView *v)
@@ -192,8 +205,8 @@ void art_place(const TouchView *v)
 
 void art_make_mode(void)
 {
-    id_original = hand_over(badge("ORIGINAL", 0xF5D34A));
-    id_enhanced = hand_over(badge("ENHANCED", 0x4AA8F5));
+    id_original = hand_over(BAKED_ORIGINAL);
+    id_enhanced = hand_over(BAKED_ENHANCED);
 }
 
 /* the badge shows at launch and on each change of mode: BADGE_SHOW frames
@@ -234,8 +247,10 @@ void art_hold_mode(int enhanced, float left, float top, int lit)
     front_overlay_place(id_enhanced, cx, cy, s, 0, lit ? 1 : 0.85f, enhanced);
 }
 
-/* the pictures as made, for a check (touch_check.c): 0 wheel, 1 brake,
-   2 boost, 3 pause, 4 the ORIGINAL badge, 5 the ENHANCED one */
+#if ART_DRAW
+/* the pictures as drawn, for the bake and the checks (touch_check.c): 0
+   wheel, 1 brake, 2 boost, 3 pause, 4 the ORIGINAL badge, 5 the ENHANCED
+   one (baked.h's order) */
 uint32_t *art_picture(int which, int *w, int *h)
 {
     Img m = which == 0 ? wheel() : which == 1 ? pedal(84, 128, 0xE84A3C, "BRAKE")
@@ -245,3 +260,4 @@ uint32_t *art_picture(int which, int *w, int *h)
     *h = m.h;
     return m.px;
 }
+#endif

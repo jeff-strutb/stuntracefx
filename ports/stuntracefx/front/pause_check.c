@@ -26,6 +26,7 @@
 #include <unistd.h>
 
 #include "front.h"
+#include "baked.h"
 
 static int fails;
 
@@ -196,12 +197,77 @@ static void write_ppm(const char *dir, const char *name, const uint32_t *px, int
 
 static uint32_t at(const uint32_t *px, int w, float x, float y) { return px[(int)(y * 2) * w + (int)(x * 2)]; }
 
+/* the front end's fixed pictures as drawn, in baked.h's order */
+uint32_t *art_picture(int which, int *w, int *h);
+static uint32_t *drawn(int which, int *w, int *h)
+{
+    if (which <= BAKED_ENHANCED)
+        return art_picture(which, w, h);
+    return pause_picture(which == BAKED_BTN_PAUSE ? 0 : which == BAKED_BTN_PLAY ? 1 : 3, w, h);
+}
+
+/* pause_check bake FILE: every one drawn, written as front_baked.c's runs */
+static int bake(const char *path)
+{
+    static const char *const name[BAKED_COUNT] = { "wheel", "brake", "boost", "pause bars", "ORIGINAL badge",
+                                                    "ENHANCED badge", "pause button", "play button", "controller" };
+    FILE *f = fopen(path, "w");
+    int i;
+    if (!f)
+        return 2;
+    fprintf(f, "/* front_baked.c: the front end's fixed pictures (baked.h) rasterized from their\n"
+               "   drawing code (art.c, pause.c, pad_art.c), written by `build.sh bake`: do not\n"
+               "   edit. Runs of one ARGB value (value, count), row after row. */\n#include \"baked.h\"\n");
+    for (i = 0; i < BAKED_COUNT; i++) {
+        int w, h;
+        uint32_t *p = drawn(i, &w, &h), c = 0;
+        size_t n = (size_t)w * h, j;
+        unsigned long runs = 0, k = 0;
+        fprintf(f, "\n/* %s, %d x %d */\nstatic const uint32_t r%d[] = {", name[i], w, h, i);
+        for (j = 0; j <= n; j++) {
+            if (j < n && k && p[j] == c) {
+                k++;
+                continue;
+            }
+            if (k)
+                fprintf(f, "%s0x%08x,%lu,", runs++ % 6 ? "" : "\n    ", c, k);
+            if (j < n) {
+                c = p[j];
+                k = 1;
+            }
+        }
+        fprintf(f, "\n};\n#define N%d %luu\n#define W%d %d\n#define H%d %d\n", i, runs, i, w, i, h);
+        printf("pause_check bake: %s %d x %d, %lu runs\n", name[i], w, h, runs);
+        free(p);
+    }
+    fprintf(f, "\nconst BakedPic baked_pics[BAKED_COUNT] = {\n");
+    for (i = 0; i < BAKED_COUNT; i++)
+        fprintf(f, "    { W%d, H%d, N%d, r%d },\n", i, i, i, i);
+    fprintf(f, "};\n");
+    fclose(f);
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     int i, ok, w, h;
     float x, y;
     uint32_t *pic;
     char tmpl[1024];
+
+    if (argc > 2 && !strcmp(argv[1], "bake"))
+        return bake(argv[2]);
+    {                                   /* the pictures the hosts show: their drawing's pixels exactly */
+        int ok_all = 1, gw, gh;
+        for (i = 0; i < BAKED_COUNT; i++) {
+            uint32_t *want = drawn(i, &w, &h), *got = baked_unpack(i, &gw, &gh);
+            if (!got || gw != w || gh != h || memcmp(got, want, (size_t)w * h * 4))
+                ok_all = 0, printf("     picture %d: not its drawing's\n", i);
+            free(want);
+            free(got);
+        }
+        check(ok_all, "every picture rasterized ahead (front_baked.c) is its drawing's, pixel for pixel");
+    }
 
     /* the panel's hit areas */
     ok = 1;

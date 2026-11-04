@@ -2,7 +2,7 @@
 # Stunt Race FX on nativeshvc: the game (src/stuntracefx), its
 # generated tables and assets, and this front end, linked with libnshvc.
 #
-#   sh ports/stuntracefx/front/build.sh [check]
+#   sh ports/stuntracefx/front/build.sh [check | bake]
 #     NSHVC=../nativeshvc         the console's checkout
 #     NSHVC_BUILD=build/null      its build (cmake -B ... -DNSHVC_HOST=...)
 #     OUT=build/stuntracefx/front/null
@@ -15,6 +15,8 @@
 #     LIBS=                       the host's frameworks and libraries
 #   check: the touch scheme's and the pause screen's checks (touch_check.c,
 #          pause_check.c; PAUSE_PICTURES=DIR writes the panel's pictures) only
+#   bake:  the front end's fixed pictures rasterized again into
+#          front_baked.c (baked.h) from their drawing code, then check
 #
 # The game's machine headers are its own; its Super FX (ports/common/snes/
 # superfx.c) is the cartridge's, on nativeshvc's connector
@@ -31,13 +33,23 @@ ROM="reference/stuntracefx/Stunt Race FX (USA) (Rev 1).sfc"
 mkdir -p "$OUT/gen" "$OUT/obj" "$OUT/include"
 
 if [ "$1" = check ]; then
-  clang -std=gnu11 -Wall -Wextra -I"$FRONT" -I"$NSHVC/include" -o "$OUT/touch_check" \
-    "$FRONT/touch_check.c" "$FRONT/touch.c" "$FRONT/art.c" -lm
+  clang -std=gnu11 -Wall -Wextra -DART_DRAW=1 -I"$FRONT" -I"$NSHVC/include" -o "$OUT/touch_check" \
+    "$FRONT/touch_check.c" "$FRONT/touch.c" "$FRONT/art.c" "$FRONT/baked.c" "$FRONT/front_baked.c" -lm
   "$OUT/touch_check"
-  clang -std=gnu11 -Wall -Wextra -I"$FRONT" -I"$NSHVC/include" -o "$OUT/pause_check" \
-    "$FRONT/pause_check.c" "$FRONT/pause.c" "$FRONT/pad_art.c" -lm
+  clang -std=gnu11 -Wall -Wextra -DPAUSE_CHECK=1 -DART_DRAW=1 -I"$FRONT" -I"$NSHVC/include" -o "$OUT/pause_check" \
+    "$FRONT/pause_check.c" "$FRONT/pause.c" "$FRONT/pad_art.c" "$FRONT/art.c" "$FRONT/baked.c" "$FRONT/front_baked.c" -lm
   "$OUT/pause_check" $PAUSE_PICTURES
   exit
+fi
+# bake: the front end's fixed pictures (baked.h) rasterized from their
+# drawing code (art.c, pause.c, pad_art.c) into front_baked.c, which the
+# game unpacks (no host draws them); then the checks, which hold each equal
+# to its drawing
+if [ "$1" = bake ]; then
+  clang -std=gnu11 -O2 -DPAUSE_CHECK=1 -DART_DRAW=1 -I"$FRONT" -I"$NSHVC/include" -o "$OUT/pause_bake" \
+    "$FRONT/pause_check.c" "$FRONT/pause.c" "$FRONT/pad_art.c" "$FRONT/art.c" "$FRONT/baked.c" "$FRONT/front_baked.c" -lm
+  "$OUT/pause_bake" bake "$FRONT/front_baked.c"
+  exec sh "$0" check
 fi
 
 cp "$GAME"/include/*.h "$OUT/include/"
@@ -89,7 +101,7 @@ if [ -n "$GPU_GE" ]; then
   $CC -O2 -std=gnu11 -Wall $DEFS -I"$FRONT" -I"$OUT/include" -I"$NSHVC/include" -c "$FRONT/gpu_ge.c" -o "$OUT/obj/front_gpu_ge.o"
   OBJS="$OBJS $OUT/obj/front_gpu_ge.o"
 fi
-for f in main cart superfx_cart touch art pause pad_art cost_profile; do
+for f in main cart superfx_cart touch art pause baked front_baked cost_profile; do
   $CC -O2 -std=gnu11 -Wall $DEFS -I"$FRONT" -I"$OUT/include" -I"$NSHVC/include" -Iports/common/snes -c "$FRONT/$f.c" -o "$OUT/obj/front_$f.o"
   OBJS="$OBJS $OUT/obj/front_$f.o"
 done

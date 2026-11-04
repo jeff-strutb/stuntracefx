@@ -29,6 +29,7 @@
 #include <string.h>
 
 #include "front.h"
+#include "baked.h"
 
 #define DENSITY 2                   /* pixels a point */
 #define PW 640                      /* the panel, in its own points */
@@ -353,6 +354,9 @@ static Img img_new(float wpt, float hpt)
     return m;
 }
 
+#if PAUSE_CHECK
+/* the pause and play buttons as drawn: the bake's and the checks' (a host
+   unpacks BAKED_BTN_PAUSE and BAKED_BTN_PLAY) */
 static Img button_img(int play)
 {
     Img m = img_new(BTN, BTN);
@@ -370,6 +374,7 @@ static Img button_img(int play)
     }
     return m;
 }
+#endif
 
 /* a racing flag's checks, cols x 2 squares of `sq` points from (x, y) */
 static void checks(Img *m, float x, float y, int cols, float sq)
@@ -394,7 +399,8 @@ static void key_label(char *out, size_t n, int vk)
 }
 
 /* The controller (pad_art.c): the vector drawing's pixels at PADK points
-   each, its (500, 300) at the panel's (320, 190); drawn once and kept */
+   each, its (500, 300) at the panel's (320, 190), rasterized ahead
+   (baked.h BAKED_PAD, from pad_draw) and unpacked once */
 #define PADK 0.3645f
 static uint32_t *pad_px;
 
@@ -404,9 +410,12 @@ static void draw_controller(Img *m)
 {
     int i, n = m->w * m->h;
     if (!pad_px) {
-        pad_px = (uint32_t *)calloc((size_t)n, 4);
-        if (pad_px)
-            pad_draw(pad_px, m->w, m->h, DENSITY, PADK, PW / 2.0f, 190);
+        int w = 0, h = 0;
+        pad_px = baked_unpack(BAKED_PAD, &w, &h);
+        if (pad_px && (w != m->w || h != m->h)) {
+            free(pad_px);               /* (not the panel's size the table was made at: none) */
+            pad_px = NULL;
+        }
     }
     if (pad_px)
         for (i = 0; i < n; i++)
@@ -660,7 +669,9 @@ void pause_frame(void)
     float bx, by, k, cx, cy;
     pause_at_check();
     if (!loaded) {
-        Img a = button_img(0), b = button_img(1);
+        Img a, b;
+        a.px = baked_unpack(BAKED_BTN_PAUSE, &a.w, &a.h);
+        b.px = baked_unpack(BAKED_BTN_PLAY, &b.w, &b.h);
         loaded = 1;
         pause_keys_load();
         /* the panel first: the overlays are drawn in the order made, and
@@ -670,8 +681,8 @@ void pause_frame(void)
         draw_panel(&panel);
         id_panel = front_overlay_image(panel.px, panel.w, panel.h);
         panel_dirty = 0;
-        id_pause = front_overlay_image(a.px, a.w, a.h);
-        id_play = front_overlay_image(b.px, b.w, b.h);
+        id_pause = a.px ? front_overlay_image(a.px, a.w, a.h) : -1;
+        id_play = b.px ? front_overlay_image(b.px, b.w, b.h) : -1;
         free(a.px);
         free(b.px);
     }
@@ -689,14 +700,16 @@ void pause_frame(void)
 
 /* the pictures as made, for a check (pause_check.c): 0 the pause button,
    1 the play button, 2 the panel as it is now, 3 the controller alone */
+#if PAUSE_CHECK
 uint32_t *pause_picture(int which, int *w, int *h)
 {
     Img m = which == 0 ? button_img(0) : which == 1 ? button_img(1) : img_new(PW, PH);
     if (which == 2)
         draw_panel(&m);
-    else if (which == 3)
+    else if (which == 3)                /* the vector drawing itself: the bake's and the check's only */
         pad_draw(m.px, m.w, m.h, DENSITY, PADK, PW / 2.0f, 190);
     *w = m.w;
     *h = m.h;
     return m.px;
 }
+#endif

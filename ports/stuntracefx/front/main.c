@@ -36,6 +36,15 @@ void gpu_ge_standalone(void);
 int fw_span_play(const char *path);     /* fullwindow.h's: FW_SPANPLAY and FW_WATERPLAY, checks */
 int fw_water_play(const char *path);
 
+/* the pause screen and its key map (pause.c): the hosts with a keyboard
+   and a pointer, not iOS (its touch scheme's own) and not the PSP (its
+   buttons fixed, no keys to lay out) */
+#if !defined(NSHVC_HOST_IOS) && !defined(__PSP__)
+#define FRONT_PAUSE 1
+#else
+#define FRONT_PAUSE 0
+#endif
+
 /* ---- the console, for the touch scheme ---- */
 uint32_t front_frames(void) { return nshvc_frames(); }
 void front_window(float *w, float *h) { nshvc_window_size(w, h); }
@@ -133,7 +142,7 @@ void front_set_enhanced(int on)
 /* ---- the hooks ---- */
 static int on_key(int vk, int down)
 {
-#ifndef NSHVC_HOST_IOS
+#if FRONT_PAUSE
     if (pause_key(vk, down))                /* Escape, and every key while paused */
         return 1;
 #endif
@@ -158,7 +167,7 @@ static void on_touch(const nshvc_touch *t, int n)
     touch_input(t, n);
 }
 
-#ifndef NSHVC_HOST_IOS
+#if FRONT_PAUSE
 static int on_pointer(float x, float y, int buttons)
 {
     return pause_pointer(x, y, buttons);
@@ -169,7 +178,7 @@ static void on_frame(void)
 {
     static int made, badge_made;
     TouchView v;
-#ifndef NSHVC_HOST_IOS
+#if FRONT_PAUSE
     pause_frame();
     if (pause_active()) {
         /* the machine is still: no frame ended, nothing of the game's to do;
@@ -185,7 +194,7 @@ static void on_frame(void)
         art_make_mode();
         badge_made = 1;
     }
-#ifndef NSHVC_HOST_IOS
+#if FRONT_PAUSE
     art_place_mode(enhanced(), pause_badge_left(), pause_badge_top());
 #else
     art_place_mode(enhanced(), 8, front_safe_top() + 8);
@@ -241,7 +250,7 @@ extern const nshvc_cost_profile stuntracefx_cost_profile;
 NSHVC_MAIN(argc, argv)
 {
     static nshvc_cart cart;
-#ifndef NSHVC_HOST_IOS
+#if FRONT_PAUSE
     static const nshvc_hooks hooks = { .key = on_key, .touch = on_touch, .frame = on_frame, .pointer = on_pointer };
 #else
     static const nshvc_hooks hooks = { .key = on_key, .touch = on_touch, .frame = on_frame };
