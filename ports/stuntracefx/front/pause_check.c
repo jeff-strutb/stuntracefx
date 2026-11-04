@@ -149,9 +149,9 @@ static int one_key_each(void)
 
 /* the panel's order (pause.c k_ctl: L UP LEFT RIGHT DOWN SELECT, R X Y A
    B START): its buttons' spots and tags' centres in panel points */
-static const float k_spot[12][2] = { { 221, 109 }, { 221.4f, 180 }, { 203.2f, 196.6f }, { 239.5f, 196.6f },
-                                     { 221.4f, 213.2f }, { 282.5f, 207.5f }, { 419, 109 }, { 403.6f, 171.8f },
-                                     { 373.7f, 198.4f }, { 433.5f, 197.5f }, { 403.6f, 218.8f }, { 317.4f, 207.5f } };
+static const float k_spot[12][2] = { { 228.9f, 124.8f }, { 227.9f, 173.1f }, { 211.1f, 189.8f }, { 244.4f, 189.8f },
+                                     { 227.9f, 206.4f }, { 297.6f, 201.0f }, { 411.3f, 124.8f }, { 407.7f, 163.6f },
+                                     { 383.3f, 188.2f }, { 437.2f, 191.1f }, { 412.6f, 215.9f }, { 332.3f, 201.0f } };
 
 static void tag_centre(int i, float *x, float *y)
 {
@@ -309,9 +309,12 @@ int main(int argc, char **argv)
     pause_key(0x1B, 1);
     pic = pause_picture(2, &w, &h);
     check(w == 1280 && h == 800, "the panel is 1280 x 800 pixels");
-    check(at(pic, w, 433.5f, 201.5f) == 0xFFDC1423 && at(pic, w, 403.6f, 222.8f) == 0xFFE8BE08 &&
-              at(pic, w, 403.6f, 175.8f) == 0xFF0B4FC4 && at(pic, w, 373.7f, 202.4f) == 0xFF2A8A52,
-          "A red, B yellow, X blue, Y green at their spots");
+    {
+        uint32_t y = at(pic, w, 383.3f, 188.2f);
+        check(at(pic, w, 437.2f, 191.1f) == 0xFFFF4856 && at(pic, w, 412.6f, 215.9f) == 0xFFFFBB58 &&
+                  at(pic, w, 407.7f, 163.6f) == 0xFF0075FA && (y >> 16 & 0xFF) == 0 && (y >> 8 & 0xFF) >= 0xDE,
+              "the drawing's colours at the buttons' centres: A FF4856, B FFBB58, X 0075FA, Y its green");
+    }
     check(at(pic, w, 0.2f, 0.2f) >> 24 == 0 && at(pic, w, 639.6f, 399.6f) >> 24 == 0, "clear outside its plate");
     if (argc > 1)
         write_ppm(argv[1], "panel", pic, w, h);
@@ -332,6 +335,17 @@ int main(int argc, char **argv)
     pic = pause_picture(0, &w, &h);
     if (argc > 1)
         write_ppm(argv[1], "pause", pic, w, h);
+    free(pic);
+    pic = pause_picture(3, &w, &h);
+    if (argc > 1) {                     /* the controller alone, ARGB as is: for pad_check.py */
+        char path[1024];
+        FILE *f;
+        snprintf(path, sizeof path, "%s/pad.argb", argv[1]);
+        if ((f = fopen(path, "wb"))) {
+            fwrite(pic, 4, (size_t)w * h, f);
+            fclose(f);
+        }
+    }
     free(pic);
     rmdir(save_dir);
 

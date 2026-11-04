@@ -197,18 +197,19 @@ typedef struct {
 } Ctl;
 
 static const Ctl k_ctl[] = {
-    { NSHVC_L, "L", WHITE, 221, 109, 13, 0, 0 },
-    { NSHVC_UP, "UP", WHITE, 221.4f, 180, 8, 0, 1 },
-    { NSHVC_LEFT, "LEFT", WHITE, 203.2f, 196.6f, 8, 0, 2 },
-    { NSHVC_RIGHT, "RIGHT", WHITE, 239.5f, 196.6f, 8, 0, 3 },
-    { NSHVC_DOWN, "DOWN", WHITE, 221.4f, 213.2f, 8, 0, 4 },
-    { NSHVC_SELECT, "SELECT", WHITE, 282.5f, 207.5f, 10, 0, 5 },
-    { NSHVC_R, "R", WHITE, 419, 109, 13, 1, 0 },
-    { NSHVC_X, "X", 0x5A8CF5, 403.6f, 171.8f, 12.6f, 1, 1 },
-    { NSHVC_Y, "Y", 0x3CC070, 373.7f, 198.4f, 12.6f, 1, 2 },
-    { NSHVC_A, "A", 0xF0504A, 433.5f, 197.5f, 12.6f, 1, 3 },
-    { NSHVC_B, "B", 0xF5D34A, 403.6f, 218.8f, 12.6f, 1, 4 },
-    { NSHVC_START, "START", WHITE, 317.4f, 207.5f, 10, 1, 5 },
+    /* the spots: the drawing's (pad_art.c) through PADX, PADY */
+    { NSHVC_L, "L", WHITE, 228.9f, 124.8f, 10, 0, 0 },
+    { NSHVC_UP, "UP", WHITE, 227.9f, 173.1f, 7, 0, 1 },
+    { NSHVC_LEFT, "LEFT", WHITE, 211.1f, 189.8f, 7, 0, 2 },
+    { NSHVC_RIGHT, "RIGHT", WHITE, 244.4f, 189.8f, 7, 0, 3 },
+    { NSHVC_DOWN, "DOWN", WHITE, 227.9f, 206.4f, 7, 0, 4 },
+    { NSHVC_SELECT, "SELECT", WHITE, 297.6f, 201.0f, 8, 0, 5 },
+    { NSHVC_R, "R", WHITE, 411.3f, 124.8f, 10, 1, 0 },
+    { NSHVC_X, "X", 0x5A8CF5, 407.7f, 163.6f, 10.5f, 1, 1 },
+    { NSHVC_Y, "Y", 0x3CC070, 383.3f, 188.2f, 10.5f, 1, 2 },
+    { NSHVC_A, "A", 0xF0504A, 437.2f, 191.1f, 10.5f, 1, 3 },
+    { NSHVC_B, "B", 0xF5D34A, 412.6f, 215.9f, 10.5f, 1, 4 },
+    { NSHVC_START, "START", WHITE, 332.3f, 201.0f, 8, 1, 5 },
 };
 #define CTLS ((int)(sizeof k_ctl / sizeof k_ctl[0]))
 
@@ -390,176 +391,48 @@ static void key_label(char *out, size_t n, int vk)
     out[i] = 0;
 }
 
-/* The controller, the Super Famicom's as photographed: its shapes laid
-   out in the photograph's pixels (1600 x 1200, the body 1,355 across) and
-   brought to the panel's points by RX and RY (0.2214 a pixel, its middle
-   at the panel's (320, 190)); a length by RS. The body is the two grips'
-   circles (r 320 about (480, 640) and (1195, 640)) and the middle between
-   their centres, its top the line along the circles' tops (y 320) and its
-   underside at 905, joined to the grips by a fillet below their centres
-   only, so the top runs straight into them and the underside curves up
-   between them. Each shoulder button is a band 56 pixels deep along the
-   outline, from 40 degrees above the grip's centre line (cut across the
-   outline) to x 550 on the top (and its mirror), its ends rounded. The
-   photograph's logo is left out. */
-#define RSC 0.2214f
-#define RX(x) (320 + ((x) - 837.5f) * RSC)
-#define RY(y) (190 + ((y) - 650) * RSC)
-#define RS(v) ((v) * RSC)
+/* The controller (pad_art.c): the vector drawing's pixels at PADK points
+   each, its (500, 300) at the panel's (320, 190); drawn once and kept */
+#define PADK 0.3645f
+static uint32_t *pad_px;
 
-static float smin(float a, float b, float k)
-{
-    float h = fmaxf(k - fabsf(a - b), 0) / k;
-    return fminf(a, b) - h * h * k / 4;
-}
-
-/* the body's distance at panel point (px, py), in points */
-static float d_body(float px, float py)
-{
-    float l = d_circle(px, py, RX(480), RY(640), RS(320)), r = d_circle(px, py, RX(1195), RY(640), RS(320));
-    float mid = d_roundrect(px, py, RX(480), RY(320), RS(715), RS(585), RS(1));
-    float lobes = fminf(l, r);
-    return py > RY(640) ? smin(lobes, mid, RS(150)) : fminf(lobes, mid);
-}
-
-/* a shoulder button's distance: side -1 the left (L), 1 the right (R) */
-static float d_shoulder(float px, float py, int side)
-{
-    const float r = RS(14);
-    float cx = side < 0 ? RX(480) : RX(1195), cy = RY(640);
-    /* the outline 56 pixels out */
-    float band = d_body(px, py) - RS(56);
-    /* the cut across the outline: the line from the grip's centre at 40
-       degrees above its centre line, outward; and the one at x 550 */
-    float ux = side * cosf(40 * 3.14159265f / 180), uy = -sinf(40 * 3.14159265f / 180);
-    float across = side * (ux * (py - cy) - uy * (px - cx));     /* > 0 below the cut */
-    float inner = side < 0 ? px - RX(550) : RX(1125) - px;
-    float cut = fmaxf(across, inner);
-    return hypotf(fmaxf(band + r, 0), fmaxf(cut + r, 0)) + fminf(fmaxf(band + r, cut + r), 0) - r;
-}
-
-/* a triangle (an arrow on the D-pad) by its three corners, in points */
-static float d_tri(float px, float py, const float *c)
-{
-    float d = -1e9f;
-    int i;
-    for (i = 0; i < 3; i++) {
-        const float *a = c + 2 * i, *b = c + 2 * ((i + 1) % 3), *o = c + 2 * ((i + 2) % 3);
-        float nx = b[1] - a[1], ny = a[0] - b[0], n = hypotf(nx, ny), e;
-        if ((o[0] - a[0]) * nx + (o[1] - a[1]) * ny > 0)
-            nx = -nx, ny = -ny;
-        e = ((px - a[0]) * nx + (py - a[1]) * ny) / n;
-        d = fmaxf(d, e);
-    }
-    return d;
-}
-
-static void text_plain(Img *m, const char *s, float cx, float top, float dot, uint32_t c)
-{
-    const char *p;
-    float x = cx - text_width(s, dot) / 2;
-    for (p = s; *p; p++, x += 6 * dot) {
-        const uint8_t *g = glyph(*p);
-        int r, b;
-        if (g)
-            for (r = 0; r < 7; r++)
-                for (b = 0; b < 5; b++)
-                    if (g[r] >> (4 - b) & 1)
-                        rrect(m, x + b * dot, top + r * dot, dot, dot, 0, c, 1);
-    }
-}
+const uint8_t *pause_glyph(char c) { return glyph(c); }
 
 static void draw_controller(Img *m)
 {
-    const uint32_t body = 0xDCDCE0, edge = 0xA9A9B1, shoulder = 0xC9C9CF, dpad = 0x77777D, plate = 0x9D9DA3;
-    const float bx0 = RX(150), by0 = RY(240), bx1 = RX(1525), by1 = RY(975);
-    static const float arrows[4][6] = {      /* the D-pad's arrows, photograph pixels */
-        { 392, 588, 378, 612, 406, 612 }, { 392, 772, 378, 748, 406, 748 },
-        { 300, 680, 324, 666, 324, 694 }, { 484, 680, 460, 666, 460, 694 } };
-    int i, k;
-    /* the cable: up from the notch in an arc over to the left shoulder,
-       behind it (a cubic through the photograph's (790, 305) and (300,
-       330), pulled by (770, 40) and (360, 50)) */
-    {
-        float lx = RX(790), ly = RY(305);
-        for (i = 1; i <= 32; i++) {
-            float t = i / 32.0f, u = 1 - t;
-            float x = u * u * u * 790 + 3 * u * u * t * 770 + 3 * u * t * t * 360 + t * t * t * 300;
-            float y = u * u * u * 305 + 3 * u * u * t * 40 + 3 * u * t * t * 50 + t * t * t * 330;
-            line(m, lx, ly, RX(x), RY(y), RS(22), 0x3C3C42, 1);
-            lx = RX(x);
-            ly = RY(y);
-        }
+    int i, n = m->w * m->h;
+    if (!pad_px) {
+        pad_px = (uint32_t *)calloc((size_t)n, 4);
+        if (pad_px)
+            pad_draw(pad_px, m->w, m->h, DENSITY, PADK, PW / 2.0f, 190);
     }
-    /* the shadow under it, the shoulders, the body */
-    SHAPE(m, bx0, by0, bx1, by1 + 8, 0x000000, 0.35f, d_body(px - 1.5f, py - 6));
-    SHAPE(m, RX(90), RY(250), RX(560), RY(560), shoulder, 1, d_shoulder(px, py, -1));
-    SHAPE(m, RX(1115), RY(250), RX(1585), RY(560), shoulder, 1, d_shoulder(px, py, 1));
-    SHAPE(m, RX(90), RY(250), RX(560), RY(560), edge, 1, fabsf(d_shoulder(px, py, -1)) - 0.5f);
-    SHAPE(m, RX(1115), RY(250), RX(1585), RY(560), edge, 1, fabsf(d_shoulder(px, py, 1)) - 0.5f);
-    SHAPE(m, bx0, by0, bx1, by1, body, 1, d_body(px, py));
-    SHAPE(m, bx0, by0, bx1, by1, edge, 1, fabsf(d_body(px, py)) - 0.6f);
-    /* the cable's notch */
-    rrect(m, RX(775), RY(316), RS(30), RS(14), RS(4), 0x8E8E96, 1);
-    /* the lines from each tag to its button, under the buttons */
+    if (pad_px)
+        for (i = 0; i < n; i++)
+            if (pad_px[i] >> 24) {
+                uint32_t c = pad_px[i];
+                blend(m, i % m->w, i / m->w, c & 0xFFFFFF, (float)(c >> 24) / 255.0f);
+            }
+    /* the lines from each tag to its button, over it to the button's edge
+       (a dot at the end), and a ring on the one under the mouse or asked
+       for */
     for (i = 0; i < CTLS; i++) {
-        float tx, ty, ex;
+        float tx, ty, ex, ey, dx, dy, l, end;
         int lit = hover == i || asking == i;
+        uint32_t c = lit ? GOLD : 0x8A8A94;
         tag_box(i, &tx, &ty);
         ex = k_ctl[i].right ? tx : tx + TAG_W;
-        line(m, ex, ty + TAG_H / 2.0f, k_ctl[i].bx, k_ctl[i].by, lit ? 1.75f : 1.1f, lit ? GOLD : 0x7A7A84, 1);
-    }
-    /* the D-pad: its dish, the cross with its edge, the arrows, the dimple */
-    disc(m, RX(400), RY(680), RS(172), 0xE9E9EC, 1);
-    SHAPE(m, RX(220), RY(500), RX(580), RY(860), 0xBDBDC4, 1, fabsf(d_circle(px, py, RX(400), RY(680), RS(172))) - 0.5f);
-    rrect(m, RX(348), RY(555), RS(88), RS(250), RS(10), 0x4C4C52, 1);
-    rrect(m, RX(267), RY(636), RS(250), RS(88), RS(10), 0x4C4C52, 1);
-    rrect(m, RX(352), RY(559), RS(80), RS(242), RS(8), dpad, 1);
-    rrect(m, RX(271), RY(640), RS(242), RS(80), RS(8), dpad, 1);
-    for (i = 0; i < 4; i++) {
-        float t[6];
-        for (k = 0; k < 3; k++) {
-            t[2 * k] = RX(arrows[i][2 * k]);
-            t[2 * k + 1] = RY(arrows[i][2 * k + 1]);
-        }
-        SHAPE(m, fminf(t[0], fminf(t[2], t[4])), fminf(t[1], fminf(t[3], t[5])), fmaxf(t[0], fmaxf(t[2], t[4])),
-              fmaxf(t[1], fmaxf(t[3], t[5])), 0x96969C, 1, d_tri(px, py, t));
-    }
-    disc(m, RX(392), RY(680), RS(16), 0x5E5E64, 1);
-    /* SELECT and START: pills sloping up to the right, their names under */
-    for (i = 0; i < 2; i++) {
-        float cx = i ? 826 : 668;
-        line(m, RX(cx - 36), RY(758), RX(cx + 36), RY(700), RS(46), 0x5A5A60, 1);
-        line(m, RX(cx - 34), RY(755), RX(cx + 34), RY(701), RS(36), 0x8A8A90, 1);
-    }
-    text_plain(m, "SELECT", RX(668), RY(800), 0.9f, 0x8A8A92);
-    text_plain(m, "START", RX(826), RY(800), 0.9f, 0x8A8A92);
-    /* the face buttons' dish (inside the body), its two lighter troughs,
-       the buttons' letters printed by them */
-    SHAPE(m, RX(940), RY(390), RX(1520), RY(970), plate, 1,
-          fmaxf(d_circle(px, py, RX(1228), RY(680), RS(287)), d_body(px, py) + RS(4)));
-    line(m, RX(1080), RY(688), RX(1215), RY(568), RS(170), 0xBEBEC4, 1);
-    line(m, RX(1215), RY(780), RX(1350), RY(684), RS(170), 0xBEBEC4, 1);
-    text_plain(m, "X", RX(1315), RY(490), 1.5f, 0xE2E2E6);
-    text_plain(m, "A", RX(1437), RY(605), 1.5f, 0xE2E2E6);
-    text_plain(m, "Y", RX(990), RY(745), 1.5f, 0xE2E2E6);
-    text_plain(m, "B", RX(1110), RY(855), 1.5f, 0xE2E2E6);
-    for (i = 0; i < CTLS; i++)
-        if (k_ctl[i].control & (NSHVC_A | NSHVC_B | NSHVC_X | NSHVC_Y)) {
-            static const uint32_t face[4] = { 0x0B4FC4, 0x2A8A52, 0xDC1423, 0xE8BE08 };   /* X Y A B */
-            uint32_t c = face[k_ctl[i].control == NSHVC_X ? 0 : k_ctl[i].control == NSHVC_Y ? 1
-                              : k_ctl[i].control == NSHVC_A ? 2 : 3];
-            float r = k_ctl[i].br;
-            disc(m, k_ctl[i].bx + 0.6f, k_ctl[i].by + 1.2f, r + 1.2f, 0x000000, 0.3f);
-            disc(m, k_ctl[i].bx, k_ctl[i].by, r + 1, 0xD2D2D8, 1);
-            disc(m, k_ctl[i].bx, k_ctl[i].by, r, c, 1);
-            disc(m, k_ctl[i].bx - 3.5f, k_ctl[i].by - 4, 3.5f, WHITE, 0.22f);
-        }
-    /* a ring on the button under the mouse or asked for */
-    for (i = 0; i < CTLS; i++)
-        if (hover == i || asking == i)
+        ey = ty + TAG_H / 2.0f;
+        dx = k_ctl[i].bx - ex;
+        dy = k_ctl[i].by - ey;
+        l = hypotf(dx, dy);
+        end = k_ctl[i].control & (NSHVC_A | NSHVC_B | NSHVC_X | NSHVC_Y) ? k_ctl[i].br : 0;
+        line(m, ex, ey, k_ctl[i].bx - dx / l * end, k_ctl[i].by - dy / l * end, lit ? 1.75f : 1.1f, c, 1);
+        if (!end)
+            disc(m, k_ctl[i].bx, k_ctl[i].by, lit ? 2.2f : 1.6f, c, 1);
+        if (lit)
             SHAPE(m, k_ctl[i].bx - 20, k_ctl[i].by - 20, k_ctl[i].bx + 20, k_ctl[i].by + 20, GOLD, 1,
-                  fabsf(d_circle(px, py, k_ctl[i].bx, k_ctl[i].by, k_ctl[i].br + 3)) - 1);
+                  fabsf(d_circle(px, py, k_ctl[i].bx, k_ctl[i].by, k_ctl[i].br + 2.5f)) - 1);
+    }
 }
 
 static void draw_tags(Img *m)
@@ -782,12 +655,14 @@ void pause_frame(void)
 }
 
 /* the pictures as made, for a check (pause_check.c): 0 the pause button,
-   1 the play button, 2 the panel as it is now */
+   1 the play button, 2 the panel as it is now, 3 the controller alone */
 uint32_t *pause_picture(int which, int *w, int *h)
 {
     Img m = which == 0 ? button_img(0) : which == 1 ? button_img(1) : img_new(PW, PH);
     if (which == 2)
         draw_panel(&m);
+    else if (which == 3)
+        pad_draw(m.px, m.w, m.h, DENSITY, PADK, PW / 2.0f, 190);
     *w = m.w;
     *h = m.h;
     return m.px;

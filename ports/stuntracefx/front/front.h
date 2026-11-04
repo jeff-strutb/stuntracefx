@@ -71,6 +71,10 @@ void pause_rebind(int i, int vk);
 void pause_keys_save(void);
 void pause_keys_load(void);
 uint32_t *pause_picture(int which, int *w, int *h);
+/* the controller (pad_art.c), drawn from its vector drawing into px (w x h,
+   ARGB straight alpha) at `density` pixels a point, k points a drawing
+   pixel, the drawing's (500, 300) at (cx, cy) points */
+void pad_draw(uint32_t *px, int w, int h, float density, float k, float cx, float cy);
 
 /* ---- the cartridge (cart.c) and its Super FX (superfx_cart.c) ---- */
 void cart_describe(nshvc_cart *cart);

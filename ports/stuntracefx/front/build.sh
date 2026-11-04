@@ -35,7 +35,7 @@ if [ "$1" = check ]; then
     "$FRONT/touch_check.c" "$FRONT/touch.c" "$FRONT/art.c" -lm
   "$OUT/touch_check"
   clang -std=gnu11 -Wall -Wextra -I"$FRONT" -I"$NSHVC/include" -o "$OUT/pause_check" \
-    "$FRONT/pause_check.c" "$FRONT/pause.c" -lm
+    "$FRONT/pause_check.c" "$FRONT/pause.c" "$FRONT/pad_art.c" -lm
   "$OUT/pause_check" $PAUSE_PICTURES
   exit
 fi
@@ -82,7 +82,7 @@ if [ -n "$GPU_VULKAN" ]; then
   OBJS="$OBJS $OUT/obj/front_gpu_vulkan.o $OUT/obj/front_gpu_bin.o"
   case "$($CC -dumpmachine)" in *mingw*|*windows*) ;; *) LIBS="$LIBS -ldl";; esac
 fi
-for f in main cart superfx_cart touch art pause cost_profile; do
+for f in main cart superfx_cart touch art pause pad_art cost_profile; do
   $CC -O2 -std=gnu11 -Wall $DEFS -I"$FRONT" -I"$OUT/include" -I"$NSHVC/include" -Iports/common/snes -c "$FRONT/$f.c" -o "$OUT/obj/front_$f.o"
   OBJS="$OBJS $OUT/obj/front_$f.o"
 done
