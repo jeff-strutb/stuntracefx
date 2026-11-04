@@ -413,7 +413,13 @@ static void span_flat(int32_t y, int32_t x0, int32_t x1, uint8_t c)
 
 /* the texel fetch, as the Super FX reads it (fw_span_filler's need the
    banks' bytes: fw_span_bank) */
-uint8_t fw_texel(uint8_t bank, uint16_t at) { return gsu_rd8((uint32_t)bank << 16 | at); }
+static uint8_t *play_bank[256];         /* FW_SPANPLAY's recorded banks */
+uint8_t fw_texel(uint8_t bank, uint16_t at)
+{
+    if (play_bank[bank])
+        return play_bank[bank][at];
+    return gsu_rd8((uint32_t)bank << 16 | at);
+}
 
 /* COLOR from a texel byte, then PLOT's rule: the colour written, or -1 */
 static int texel_colour(uint8_t v, uint8_t por, uint8_t hi)
@@ -489,11 +495,144 @@ void fw_span_fill_cpu(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
 void (*fw_span_filler)(uint8_t *out, int w, int h, const FwSpan *sp, size_t n) = fw_span_fill_cpu;
 uint8_t *(*fw_texels_alloc)(size_t len);
 
+/* ---- FW_SPANREC and FW_SPANPLAY (a check of a GPU's fill) ----
+   FW_SPANREC=FILE: every FW_SPANREC_EVERY'th fill (10), to FW_SPANREC_MAX
+   of them (30), written as it stands before the fill: the texels'
+   size, the spans, polygons and edges, the water's plane, the texels,
+   and every bank a textured span or polygon reads (64 KB each).
+   FW_SPANPLAY=FILE (fw_span_play): each one filled by the CPU's
+   reference and by fw_span_filler from those texels, the texels apart
+   counted. A record's header: 'SPAN', the sizes of FwSpan, FwPoly and
+   FwEdge, w, h, the spans', polygons', edges' and banks' counts. */
+static void span_record(void)
+{
+    static FILE *f;
+    static long fills, kept;
+    static int every = -1, most;
+    uint8_t used[256] = { 0 };
+    uint32_t head[10];
+    size_t i;
+    unsigned b, nb = 0;
+    if (every < 0) {
+        const char *e = getenv("FW_SPANREC");
+        every = getenv("FW_SPANREC_EVERY") ? atoi(getenv("FW_SPANREC_EVERY")) : 10;
+        most = getenv("FW_SPANREC_MAX") ? atoi(getenv("FW_SPANREC_MAX")) : 30;
+        if (!e || every < 1 || !(f = fopen(e, "wb")))
+            every = 0;
+    }
+    if (!every || kept >= most || fills++ % every)
+        return;
+    for (i = 0; i < nspans; i++)
+        if (spans[i].textured == 1 || spans[i].textured == 2)
+            used[spans[i].bank] = 1;
+        else if (spans[i].textured == 3 && fw_polys[spans[i].x1].kind)
+            used[fw_polys[spans[i].x1].bank] = 1;
+    for (b = 0; b < 256; b++)
+        nb += used[b];
+    memcpy(head, "SPAN", 4);
+    head[1] = sizeof(FwSpan);
+    head[2] = sizeof(FwPoly);
+    head[3] = sizeof(FwEdge);
+    head[4] = (uint32_t)tw;
+    head[5] = (uint32_t)th;
+    head[6] = (uint32_t)nspans;
+    head[7] = (uint32_t)npolys;
+    head[8] = (uint32_t)nedges;
+    head[9] = nb;
+    fwrite(head, sizeof head, 1, f);
+    fwrite(fw_water, sizeof fw_water, 1, f);
+    fwrite(spans, sizeof *spans, nspans, f);
+    fwrite(fw_polys, sizeof *fw_polys, npolys, f);
+    fwrite(fw_edges, sizeof *fw_edges, nedges, f);
+    fwrite(tex, 1, (size_t)tw * th, f);
+    for (b = 0; b < 256; b++)
+        if (used[b]) {
+            static uint8_t bank[0x10000];
+            unsigned a;
+            for (a = 0; a < 0x10000; a++)
+                bank[a] = fw_texel((uint8_t)b, (uint16_t)a);
+            fputc((int)b, f);
+            fwrite(bank, 1, sizeof bank, f);
+        }
+    fflush(f);
+    kept++;
+}
+
+int fw_span_play(const char *path)
+{
+    FILE *f = fopen(path, "rb");
+    uint32_t head[10];
+    long records = 0, apart = 0, texels = 0;
+    unsigned b;
+    if (!f) {
+        printf("spanplay: cannot read %s\n", path);
+        return 2;
+    }
+    for (b = 0; b < 256; b++)
+        play_bank[b] = NULL;
+    while (fread(head, sizeof head, 1, f) == 1) {
+        size_t w = head[4], h = head[5], n = head[6], np = head[7], ne = head[8], i;
+        FwSpan *sp;
+        uint8_t *a, *g;
+        long here = 0;
+        if (memcmp(head, "SPAN", 4) || head[1] != sizeof(FwSpan) || head[2] != sizeof(FwPoly) ||
+            head[3] != sizeof(FwEdge)) {
+            printf("spanplay: record %ld: not this build's layout\n", records);
+            return 2;
+        }
+        sp = malloc(n * sizeof *sp + 1);
+        fw_polys = malloc(np * sizeof *fw_polys + 1);
+        fw_edges = malloc(ne * sizeof *fw_edges + 1);
+        a = malloc(w * h);
+        g = malloc(w * h);
+        if (!sp || !fw_polys || !fw_edges || !a || !g || fread(fw_water, sizeof fw_water, 1, f) != 1 ||
+            fread(sp, sizeof *sp, n, f) != n || fread(fw_polys, sizeof *fw_polys, np, f) != np ||
+            fread(fw_edges, sizeof *fw_edges, ne, f) != ne || fread(a, 1, w * h, f) != w * h) {
+            printf("spanplay: record %ld: short or no memory\n", records);
+            return 2;
+        }
+        for (i = 0; i < head[9]; i++) {
+            int k = fgetc(f);
+            if (k < 0 || (!play_bank[k] && !(play_bank[k] = malloc(0x10000))) ||
+                fread(play_bank[k], 1, 0x10000, f) != 0x10000) {
+                printf("spanplay: record %ld: a bank short\n", records);
+                return 2;
+            }
+        }
+        memcpy(g, a, w * h);
+        fw_span_fill_cpu(a, (int)w, (int)h, sp, n);
+        fw_span_filler(g, (int)w, (int)h, sp, n);
+        for (i = 0; i < w * h; i++)
+            here += a[i] != g[i];
+        printf("spanplay: record %ld: %dx%d, %d spans, %d polygons: %ld texels apart\n", records, (int)w, (int)h, (int)n,
+               (int)np, here);
+        fflush(stdout);
+        apart += here;
+        texels += (long)(w * h);
+        records++;
+        free(sp);
+        free(fw_polys);
+        free(fw_edges);
+        free(a);
+        free(g);
+        for (b = 0; b < 256; b++) {
+            free(play_bank[b]);
+            play_bank[b] = NULL;
+        }
+    }
+    printf("spanplay: %ld records, %ld texels, %ld apart\n", records, texels, apart);
+    fflush(stdout);
+    fclose(f);
+    return apart != 0;
+}
+
 /* the spans drawn into the texels */
 static void span_flush(void)
 {
-    if (nspans)
+    if (nspans) {
+        span_record();
         fw_span_filler(tex, tw, th, spans, nspans);
+    }
     nspans = npolys = nedges = 0;
 }
 

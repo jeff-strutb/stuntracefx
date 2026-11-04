@@ -28,7 +28,12 @@ int gpu_metal_init(void);
 #if FW_GPU_VULKAN
 int gpu_vulkan_init(void);
 #endif
+#if FW_GPU_GE
+int gpu_ge_init(void);
+void gpu_ge_standalone(void);
+#endif
 #include "rm_options.h"
+int fw_span_play(const char *path);     /* fullwindow.h's: FW_SPANPLAY, a check */
 
 /* ---- the console, for the touch scheme ---- */
 uint32_t front_frames(void) { return nshvc_frames(); }
@@ -268,7 +273,14 @@ NSHVC_MAIN(argc, argv)
 #elif FW_GPU_VULKAN
     if (!getenv("FW_CPUFILL"))
         gpu_vulkan_init();
+#elif FW_GPU_GE
+    if (!getenv("FW_CPUFILL"))
+        gpu_ge_init();                  /* the PSP's GE */
+    if (getenv("FW_SPANPLAY"))
+        gpu_ge_standalone();
 #endif
+    if (getenv("FW_SPANPLAY"))          /* a check: recorded fills, the CPU's against the GPU's; no console */
+        return fw_span_play(getenv("FW_SPANPLAY"));
     cart_describe(&cart);
     cart.cost_profile = &stuntracefx_cost_profile;
     nshvc_set_hooks(&hooks);

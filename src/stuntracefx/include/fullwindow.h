@@ -190,6 +190,9 @@ void fw_tex_plane(uint16_t list, uint16_t r3);
    one in use, which a front end with a GPU sets; fw_texel the bytes it
    reads, the Super FX's memory */
 void fw_span_fill_cpu(uint8_t *out, int w, int h, const FwSpan *sp, size_t n);
+/* FW_SPANPLAY (a check): the fills FW_SPANREC recorded, each by the CPU
+   and by fw_span_filler, the texels apart printed; 0 when none */
+int fw_span_play(const char *path);
 extern void (*fw_span_filler)(uint8_t *out, int w, int h, const FwSpan *sp, size_t n);
 uint8_t fw_texel(uint8_t bank, uint16_t at);
 /* the texels' memory: malloc's, or a front end's the GPU shares (NULL: malloc) */

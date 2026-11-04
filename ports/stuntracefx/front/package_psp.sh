@@ -2,7 +2,8 @@
 # Stunt Race FX for the PSP on nativeshvc, as build/stuntracefx/front/psp/
 # PSP/GAME/STUNTRACEFX/EBOOT.PBP (the folder for a memory stick's root): the
 # front end (front/build.sh) built with pspdev on nativeshvc's PSP host and
-# GE renderer, the game's data built in.
+# GE renderer, the game's data built in, its Enhanced 3D filled on the GE
+# (gpu_ge.c).
 #   PSPDEV   pspdev's install (psp-gcc in $PSPDEV/bin)
 #   NSHVC    the console's checkout (../nativeshvc); its library for the PSP
 #            is built at NSHVC/build/psp if it is not there
@@ -35,7 +36,7 @@ if [ -n "$PSP_CHECK" ]; then
   $CC -O2 -c "$NSHVC/tests/psp/args.c" -o "$OUT/obj/args.o"
   CHECK_DEFS=-Dmain=nshvc_test_main CHECK_O="$OUT/obj/args.o"
 fi
-NSHVC="$NSHVC" NSHVC_BUILD=$NB OUT=$OUT CC="$CC" DEFS="$CHECK_DEFS" \
+GPU_GE=1 NSHVC="$NSHVC" NSHVC_BUILD=$NB OUT=$OUT CC="$CC" DEFS="$CHECK_DEFS" \
   LIBS="$CHECK_O -L$P/lib -L$P/psp/lib -L$P/psp/sdk/lib -Wl,-zmax-page-size=128 -lpspgu -lpspdebug -lpspdisplay -lpspge -lpspctrl -lpspaudio -lpsppower -lm" \
   sh ports/stuntracefx/front/build.sh
 ELF=$OUT/stuntracefx.elf
