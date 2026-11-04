@@ -34,10 +34,14 @@
  * ($9AAF) or, while its car's +$25 bit 6 spins it round (ObjectLampDrop:
  * its own turn +$48 up a sixteenth a step, its size +$5F stepped), the
  * startled one ($9AB1, the same pictures but the five facing the view:
- * more of the eye white, its pupil small); the solid eye's face is that
- * look's, and it turns and sizes by the same bytes. An eye with any
- * other look (the demo script's, $7E:1A5B) or the fixed picture of +$25
- * bit 0 is drawn as its sprite.
+ * more of the eye white, its pupil small); the demo script's blinks
+ * ($7E:1A5B, ObjectLampAnimate's tables at $08:E57F-E609) step through
+ * three more, the same pictures but those facing the view lidded: $9AB3
+ * (the plain pupil under a lid down to the middle), $9AB7 (the startled
+ * one's) and $9AB5 (shut). The solid eye turns and sizes by the same
+ * bytes, and its face is its look's picture facing the view as marks
+ * (Mark), each placed as the picture's texels have it. An eye with the
+ * fixed picture of +$25 bit 0 is drawn as its sprite.
  *
  * FW_SPRITE_SOLIDS=1 (a check) keeps the sprites.
  */
@@ -86,8 +90,42 @@ static const Ring lamp_rings[] = {      /* round the dome from its back: 15, 30,
     { -3.261, 1.812, LAMP_SHADE }, { -2.562, 3.5, LAMP_SHADE }, { -1.450, 4.950, LAMP_SHADE },
     { 0.0, 6.062, LAMP_SHADE }, { 1.688, 6.761, LAMP_SHADE }, { 3.5, 7.0 },
 };
-static const Disc lamp_lens[] = { { 7, 0xC }, { 6.2, 0xB }, { 5.2, 0xE }, { 3.2, 0xB }, { 2.2, 0xF } };
-static const Disc lamp_startled[] = { { 7, 0xF }, { 6.2, 0xB }, { 5.6, 0xE }, { 2.6, 0xB }, { 2.0, 0xC }, { 1.4, 0xF }, { 0.7, 0xC } };
+static const Disc lamp_lens[] = { { 7, 0x7 } };   /* the face's ground, the body colour: its marks go over it (eye_marks) */
+/* An eye's face, as its look's picture facing the view has it (16 x 16
+   texels, read texel by texel): marks in order, each a disc (r0 and t0,
+   t1 0) or a band of a ring (r0 to r1, over turns t0 to t1 in degrees
+   from across, down +), round (cx, cy) in texels from the face's middle,
+   down +. The rim: the body colour (7) a texel wide, dark (F) round its
+   bottom and lower left; inside it a ring of B, grey (C) round its upper
+   left when plain. The white (E) a little left of the middle. Plain, the
+   pupil black in a ring of B three texels out: a dark arch round its top,
+   inside it a grey fleck and a white glint, a grey crescent along its
+   bottom. Startled, the ring of B round a grey one: inside, a dark arch
+   round a grey middle, white below. The lids: the body colour (7) above
+   the middle, its crease a dark arc five texels out round its top with a
+   light shine (8, B) inside it, the lash dark along its edge (a band of a ring 50 texels round, nearly straight); shut, the
+   whole face 7, lighter (8) inside, the crease and the shine as the
+   lid's, the rim dark round its lower left. */
+typedef struct { double cx, cy, r0, r1, t0, t1; uint8_t nib; } Mark;
+#define DISC(x, y, r, c) { x, y, 0, r, 0, 0, c }
+#define BAND(x, y, r0, r1, t0, t1, c) { x, y, r0, r1, t0, t1, c }
+#define RIM BAND(0, 0, 6.0, 7.0, 45, 200, 0xF), DISC(0, 0, 6.0, 0xB)
+#define RIM_PLAIN RIM, BAND(0, 0, 5.0, 6.0, 200, 300, 0xC)
+#define PUPIL_PLAIN \
+    DISC(-0.4, 0.5, 4.6, 0xE), DISC(0, 0, 3.0, 0xB), DISC(0, 0, 2.2, 0xF), \
+    BAND(0, 0.3, 1.4, 2.3, 40, 140, 0xC), DISC(0, -1.0, 1.0, 0xC), DISC(0.5, -1.4, 0.5, 0xE)
+#define PUPIL_STARTLED \
+    DISC(-0.1, 0.2, 5.0, 0xE), DISC(0, 0.5, 2.9, 0xB), DISC(0, 0.5, 2.3, 0xC), DISC(0, 2.0, 1.0, 0xE), \
+    BAND(0, 0.5, 0.9, 1.6, 180, 360, 0xF), DISC(0, 0.5, 0.8, 0xC)
+#define LID \
+    BAND(0, 0, 0, 7.0, 180, 360, 0x7), BAND(0, 0, 4.7, 5.6, 200, 340, 0xF), \
+    DISC(0, -3.0, 1.5, 0x8), DISC(0, -3.0, 0.8, 0xB), BAND(0, 49.2, 49.2, 50.0, 262, 278, 0xF)
+static const Mark eye_plain[] = { RIM_PLAIN, PUPIL_PLAIN };
+static const Mark eye_startled[] = { RIM, PUPIL_STARTLED };
+static const Mark eye_half[] = { RIM_PLAIN, PUPIL_PLAIN, LID };
+static const Mark eye_half_startled[] = { RIM, PUPIL_STARTLED, LID };
+static const Mark eye_shut[] = { DISC(0, 0, 7.0, 0x7), DISC(0, 0.5, 5.0, 0x8), BAND(0, 0, 4.7, 5.6, 200, 340, 0xF),
+                                 BAND(0, 0, 2.2, 3.0, 210, 330, 0xB), BAND(0, 0, 6.0, 7.0, 90, 200, 0xF) };
 static const Disc lamp_back[] = { { 1.812, 0x7 } };
 
 #define N(a) (int)(sizeof a / sizeof a[0])
@@ -100,7 +138,8 @@ static const Solid solids[] = {
 };
 
 static const Solid *object, *armed;
-static const Disc *face;                /* an eye's face for its look (else the solid's front) */
+static const Mark *face;                /* an eye's face for its look (else the solid's front) */
+static int nface;
 static unsigned record;
 static int coloured;
 static uint8_t hi, tex_bank, tex_nib;
@@ -179,9 +218,16 @@ void fw_solid_begin(void)
         uint16_t o = record < RM_RECORDS ? rm_record_object[record] : 0, g = record < RM_RECORDS ? rm_record_gaze[record] : 0;
         uint16_t look = (uint16_t)(w[(uint16_t)(0x205D + o)] | w[(uint16_t)(0x205E + o)] << 8);
         double phi, d[3];
-        if (w[0x1A5B] || !(g & 0x100) || (look != 0x9AAF && look != 0x9AB1))
+        switch (look) {
+        case 0x9AAF: face = eye_plain, nface = N(eye_plain); break;
+        case 0x9AB1: face = eye_startled, nface = N(eye_startled); break;
+        case 0x9AB3: face = eye_half, nface = N(eye_half); break;
+        case 0x9AB5: face = eye_shut, nface = N(eye_shut); break;
+        case 0x9AB7: face = eye_half_startled, nface = N(eye_half_startled); break;
+        default: face = NULL;
+        }
+        if (!(g & 0x100) || !face)
             return;
-        face = look == 0x9AB1 ? lamp_startled : NULL;
         phi = (119.5 - (g & 0xFF)) * 2 * M_PI / 256;
         d[0] = -sin(phi), d[1] = 0, d[2] = -cos(phi);
         view[0][0] = d[2], view[0][1] = 0, view[0][2] = -d[0];      /* across: down x ahead */
@@ -273,6 +319,8 @@ static uint8_t shade(const Ring *g, const double *nv)
 }
 
 /* a cap at a, its rings over it outward in, when it faces the eye */
+static int cap_seen;                    /* the last cap's face is towards the eye */
+
 static void cap(const Solid *s, double a, const Disc *d, int nd, int n)
 {
     static double p[SEGMENTS_MAX][3];
@@ -282,9 +330,48 @@ static void cap(const Solid *s, double a, const Disc *d, int nd, int n)
         int m = k ? (n / 2 < 8 ? 8 : n / 2) : n;
         for (i = 0; i < m; i++)
             place(s, a, 2 * M_PI * i / m, d[k].r, p[i]);
-        if (!k && !face_seen((const double (*)[3])p, m, nv, c))
+        if (!k && !(cap_seen = face_seen((const double (*)[3])p, m, nv, c)))
             return;
         fw_view_face((const double (*)[3])p, m, (uint8_t)(hi | d[k].nib));
+    }
+}
+
+/* an eye's face's marks (Mark) on its face plane at a, in order */
+static void eye_marks(const Solid *s, double a, const Mark *mk, int nm, int n)
+{
+    static double p[SEGMENTS_MAX][3];
+    double q[4][3];
+    int k, i;
+    for (k = 0; k < nm; k++) {
+        const Mark *m = &mk[k];
+        if (m->t0 == m->t1) {           /* a disc */
+            int sides = m->r1 < 1.5 ? 12 : n;
+            for (i = 0; i < sides; i++) {
+                double t = 2 * M_PI * i / sides, x = m->cx + m->r1 * cos(t), y = m->cy + m->r1 * sin(t);
+                place(s, a, atan2(y, x), hypot(x, y), p[i]);
+            }
+            fw_view_face((const double (*)[3])p, sides, (uint8_t)(hi | m->nib));
+            continue;
+        }
+        {                               /* a band of a ring */
+            double t0 = m->t0 * M_PI / 180, t1 = m->t1 * M_PI / 180;
+            int steps = (int)ceil(n * (t1 - t0) / (2 * M_PI));
+            if (steps < 2)
+                steps = 2;
+            for (i = 0; i < steps; i++) {
+                double u0 = t0 + (t1 - t0) * i / steps, u1 = t0 + (t1 - t0) * (i + 1) / steps;
+                double xy[4][2] = { { m->cx + m->r0 * cos(u0), m->cy + m->r0 * sin(u0) },
+                                    { m->cx + m->r0 * cos(u1), m->cy + m->r0 * sin(u1) },
+                                    { m->cx + m->r1 * cos(u1), m->cy + m->r1 * sin(u1) },
+                                    { m->cx + m->r1 * cos(u0), m->cy + m->r1 * sin(u0) } };
+                int j, np = m->r0 > 0 ? 4 : 3;  /* from the middle: a wedge, its first two corners one */
+                for (j = 0; j < np; j++) {
+                    int jj = m->r0 > 0 ? j : j + 1;
+                    place(s, a, atan2(xy[jj][1], xy[jj][0]), hypot(xy[jj][0], xy[jj][1]), q[j]);
+                }
+                fw_view_face((const double (*)[3])q, np, (uint8_t)(hi | m->nib));
+            }
+        }
     }
 }
 
@@ -318,10 +405,9 @@ static void draw(const Solid *s)
                 fw_view_face((const double (*)[3])p, 4, (uint8_t)(hi | shade(g, nv)));
         }
     }
-    if (face == lamp_startled)
-        cap(s, s->rings[s->nrings - 1].a, lamp_startled, N(lamp_startled), n);
-    else
-        cap(s, s->rings[s->nrings - 1].a, s->front, s->nfront, n);
+    cap(s, s->rings[s->nrings - 1].a, s->front, s->nfront, n);
+    if (face && cap_seen)
+        eye_marks(s, s->rings[s->nrings - 1].a, face, nface, n);
     cap(s, s->rings[0].a, s->back, s->nback, n);
 }
 
