@@ -418,8 +418,8 @@ static int sunk(float za, float zx, float zy, int32_t x, int32_t y)
     float z, w;
     if (fw_water[3] == 0 || (za == 0 && zx == 0 && zy == 0))
         return 0;
-    z = fmaf(zy, (float)y, fmaf(zx, (float)x, za));
-    w = fmaf(fw_water[2], (float)y, fmaf(fw_water[1], (float)x, fw_water[0]));
+    z = fw_fmaf(zy, (float)y, fw_fmaf(zx, (float)x, za));
+    w = fw_fmaf(fw_water[2], (float)y, fw_fmaf(fw_water[1], (float)x, fw_water[0]));
     return z > 0 && w > 0 && z < w;
 }
 
@@ -528,8 +528,8 @@ void fw_span_fill_cpu(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
         }
         if (p->textured == 2) {
             for (x = p->x0; x <= p->x1; x++) {
-                float k = (float)(x - p->xl), q = fmaf(p->pdq, k, p->pq);
-                unsigned iu = persp_texel(fmaf(p->pda, k, p->pa), q), iv = persp_texel(fmaf(p->pdb, k, p->pb), q);
+                float k = (float)(x - p->xl), q = fw_fmaf(p->pdq, k, p->pq);
+                unsigned iu = persp_texel(fw_fmaf(p->pda, k, p->pa), q), iv = persp_texel(fw_fmaf(p->pdb, k, p->pb), q);
                 int c = texel_colour(fw_texel(p->bank, (uint16_t)(((iv << 8 | iu) & p->mask) + p->base)), p->por, p->hi);
                 if (c >= 0 && !(deep && sunk(p->za, p->zx, p->zy, x, p->y)))
                     o[x] = (uint8_t)c;
@@ -1637,9 +1637,9 @@ static const FwEdge *edge_at(const FwEdge *e, int32_t n, int32_t row)
 static float fwedge_persp(const FwEdge *e, int32_t a, int32_t d, int32_t row, float *q)
 {
     float t = (float)(row - e->y0) / (float)e->n, a0 = e->qa * (float)a;
-    float da = fmaf(e->qb, (float)(a + d), -a0);
-    *q = fmaf(t, e->qb - e->qa, e->qa);
-    return fmaf(t, da, a0) / *q;
+    float da = fw_fmaf(e->qb, (float)(a + d), -a0);
+    *q = fw_fmaf(t, e->qb - e->qa, e->qa);
+    return fw_fmaf(t, da, a0) / *q;
 }
 
 int fw_poly_row(const FwPoly *p, const FwEdge *edges, int32_t row, int32_t w, FwSpan *s)
@@ -1696,15 +1696,15 @@ int fw_poly_row(const FwPoly *p, const FwEdge *edges, int32_t row, int32_t w, Fw
         float fvL = fwedge_persp(l, l->va, l->dva, row, &qL), fvR = fwedge_persp(r, r->va, r->dva, row, &qR);
         float steps = width > 1 ? (float)(width - 1) : 1.0f, ou = (float)p->ou / 256.0f, ov = (float)p->ov / 256.0f;
         if (qL > 0 && qR > 0) {
-            fuR = fmaf(-256.0f, floorf((fuR - fuL + 128.0f) / 256.0f), fuR);   /* the nearer turn */
-            fvR = fmaf(-256.0f, floorf((fvR - fvL + 128.0f) / 256.0f), fvR);
+            fuR = fw_fmaf(-256.0f, floorf((fuR - fuL + 128.0f) / 256.0f), fuR);   /* the nearer turn */
+            fvR = fw_fmaf(-256.0f, floorf((fvR - fvL + 128.0f) / 256.0f), fvR);
             s->textured = 2;
             s->pq = qL;
             s->pdq = (qR - qL) / steps;
             s->pa = (fuL + ou) * qL;
-            s->pda = fmaf(fuR + ou, qR, -s->pa) / steps;
+            s->pda = fw_fmaf(fuR + ou, qR, -s->pa) / steps;
             s->pb = (fvL + ov) * qL;
-            s->pdb = fmaf(fvR + ov, qR, -s->pb) / steps;
+            s->pdb = fw_fmaf(fvR + ov, qR, -s->pb) / steps;
         }
     }
     return 1;
@@ -2716,9 +2716,9 @@ static uint16_t tex_polygon(uint16_t p, int n)
                     int64_t k = last.x1 - last.xl;
                     unsigned iu, iv;
                     if (last.textured == 2) {
-                        float kf = (float)k, qk = fmaf(last.pdq, kf, last.pq);
-                        iu = persp_texel(fmaf(last.pda, kf, last.pa), qk);
-                        iv = persp_texel(fmaf(last.pdb, kf, last.pb), qk);
+                        float kf = (float)k, qk = fw_fmaf(last.pdq, kf, last.pq);
+                        iu = persp_texel(fw_fmaf(last.pda, kf, last.pa), qk);
+                        iv = persp_texel(fw_fmaf(last.pdb, kf, last.pb), qk);
                     } else {
                         iu = (unsigned)((last.u + last.du * k) >> 32) & 0xFF;
                         iv = (unsigned)((last.v + last.dv * k) >> 32) & 0xFF;
@@ -2826,9 +2826,9 @@ static uint16_t tex_polygon(uint16_t p, int n)
                     }
                     /* COLOR's register as the span's last pixel leaves it */
                     if (sp->textured == 2) {
-                        float kf = (float)k, qk = fmaf(sp->pdq, kf, sp->pq);
-                        iu = persp_texel(fmaf(sp->pda, kf, sp->pa), qk);
-                        iv = persp_texel(fmaf(sp->pdb, kf, sp->pb), qk);
+                        float kf = (float)k, qk = fw_fmaf(sp->pdq, kf, sp->pq);
+                        iu = persp_texel(fw_fmaf(sp->pda, kf, sp->pa), qk);
+                        iv = persp_texel(fw_fmaf(sp->pdb, kf, sp->pb), qk);
                     } else {
                         iu = (unsigned)((sp->u + sp->du * k) >> 32) & 0xFF;
                         iv = (unsigned)((sp->v + sp->dv * k) >> 32) & 0xFF;
@@ -3179,21 +3179,21 @@ static uint32_t water_texel(const uint8_t *in, const FwWaterJob *j, const uint32
         return c;
     vx = (fx - j->ox) / j->fx;
     vy = (fy - j->oy) / j->fy;
-    wy = fmaf(e[4], vx, fmaf(e[5], vy, e[6]));
+    wy = fw_fmaf(e[4], vx, fw_fmaf(e[5], vy, e[6]));
     t = j->dy / wy;
     if (!(wy != 0) || !(t > 0))         /* no surface this way: under it, deeper water; over it, the sky */
         return j->under ? g : 0;
-    u = fmaf(t, fmaf(e[0], vx, fmaf(e[1], vy, e[2])), j->cam[0]) / j->wu;
-    v = fmaf(t, fmaf(e[8], vx, fmaf(e[9], vy, e[10])), j->cam[2]) / j->wv;
+    u = fw_fmaf(t, fw_fmaf(e[0], vx, fw_fmaf(e[1], vy, e[2])), j->cam[0]) / j->wu;
+    v = fw_fmaf(t, fw_fmaf(e[8], vx, fw_fmaf(e[9], vy, e[10])), j->cam[2]) / j->wv;
     vx1 = (fx + 1.0f - j->ox) / j->fx;  /* the pixel's footprint: the next column's and line's hits */
     vy1 = (fy + 1.0f - j->oy) / j->fy;
-    t1 = j->dy / fmaf(e[4], vx1, fmaf(e[5], vy, e[6]));
-    t2 = j->dy / fmaf(e[4], vx, fmaf(e[5], vy1, e[6]));
+    t1 = j->dy / fw_fmaf(e[4], vx1, fw_fmaf(e[5], vy, e[6]));
+    t2 = j->dy / fw_fmaf(e[4], vx, fw_fmaf(e[5], vy1, e[6]));
     if (t1 > 0 && t2 > 0) {
-        float ux = fmaf(t1, fmaf(e[0], vx1, fmaf(e[1], vy, e[2])), j->cam[0]) / j->wu - u;
-        float vx_ = fmaf(t1, fmaf(e[8], vx1, fmaf(e[9], vy, e[10])), j->cam[2]) / j->wv - v;
-        float uy = fmaf(t2, fmaf(e[0], vx, fmaf(e[1], vy1, e[2])), j->cam[0]) / j->wu - u;
-        float vy_ = fmaf(t2, fmaf(e[8], vx, fmaf(e[9], vy1, e[10])), j->cam[2]) / j->wv - v;
+        float ux = fw_fmaf(t1, fw_fmaf(e[0], vx1, fw_fmaf(e[1], vy, e[2])), j->cam[0]) / j->wu - u;
+        float vx_ = fw_fmaf(t1, fw_fmaf(e[8], vx1, fw_fmaf(e[9], vy, e[10])), j->cam[2]) / j->wv - v;
+        float uy = fw_fmaf(t2, fw_fmaf(e[0], vx, fw_fmaf(e[1], vy1, e[2])), j->cam[0]) / j->wu - u;
+        float vy_ = fw_fmaf(t2, fw_fmaf(e[8], vx, fw_fmaf(e[9], vy1, e[10])), j->cam[2]) / j->wv - v;
         du = fmaxf(fabsf(ux), fabsf(uy));
         dv = fmaxf(fabsf(vx_), fabsf(vy_));
     } else {
@@ -3230,7 +3230,7 @@ static uint32_t water_texel(const uint8_t *in, const FwWaterJob *j, const uint32
         return rip;
     for (s = 0; s < 24; s += 8) {
         float a = (float)(g >> s & 255), b = (float)(rip >> s & 255);
-        out |= (uint32_t)floorf(fmaf(b - a, cover, a) + 0.5f) << s;
+        out |= (uint32_t)floorf(fw_fmaf(b - a, cover, a) + 0.5f) << s;
     }
     return out;
 }

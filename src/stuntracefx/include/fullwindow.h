@@ -18,6 +18,22 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <math.h>
+
+/* a multiply-add as the reference writes it, a * b + c rounded once
+   (fmaf), so every host's fill and the GPUs' (fma) agree texel for texel;
+   on the PSP, whose FPU has none and whose library's is double precision
+   in software (hundreds of instructions), a multiply and an add, each
+   rounded: its pictures the GE's own there, within a float's rounding of
+   the reference */
+static inline float fw_fmaf(float a, float b, float c)
+{
+#ifdef __PSP__
+    return a * b + c;
+#else
+    return fmaf(a, b, c);
+#endif
+}
 
 /* the full-window race this frame (Enhanced, one player's race screen,
    the console's canvas) */

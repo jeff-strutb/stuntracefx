@@ -53,6 +53,7 @@ static size_t s_used;                   /* the list's bytes, counted generously 
    one opaque, 1 colour 0 transparent, 2 a low nibble of 0 transparent */
 static uint16_t __attribute__((aligned(64))) s_clut[3][256];
 static int s_clut_now = -1, s_cmode_now = -1;
+static int s_wrap;                      /* the texture repeats (a polygon's) or is clamped (a run's) */
 
 /* the staging textures this fill, in an arena reset each fill */
 #define ARENA_BYTES (1024u * 1024u)
@@ -70,6 +71,8 @@ static Stage s_stage[STAGES];
 static int s_nstage;
 static const Stage *s_tex_now;
 
+static long s_polys_ge, s_polys_cpu, s_apart_far, s_wt_cpu[2];
+static SceInt64 s_wt_t[4];   /* (a measure) the water fill's parts: the runs found and listed, the GE, the picture made */
 static long s_fills, s_cpu_fills, s_apart, s_checked, s_water_ge, s_water_cpu, s_water_rows_cpu, s_water_texels;
 
 /* the GPU memory: nativeshvc's loan, or (FW_SPANPLAY, which starts no
@@ -92,11 +95,14 @@ typedef struct {
 
 static void report(void)
 {
-    printf("gpu_ge: %ld fills on the GE, %ld on the CPU (no GPU memory lent); %ld water passes on the GE, %ld on the CPU, "
-           "%ld water rows the CPU's, %ld water texels the GE's", s_fills, s_cpu_fills, s_water_ge, s_water_cpu,
-           s_water_rows_cpu, s_water_texels);
+    printf("gpu_ge: %ld fills on the GE, %ld on the CPU (no GPU memory lent); %ld polygons the GE's whole, %ld by rows; "
+           "%ld water passes on the GE, %ld on the CPU, %ld water rows the CPU's, %ld water texels the GE's", s_fills,
+           s_cpu_fills, s_polys_ge, s_polys_cpu, s_water_ge, s_water_cpu, s_water_rows_cpu, s_water_texels);
+    printf("; water texels the CPU's: %ld in rows not found, %ld in rows found; water fill ms: list %.1f GE %.1f picture %.1f",
+           s_wt_cpu[0], s_wt_cpu[1], s_wt_t[0] / 1000.0, s_wt_t[1] / 1000.0, s_wt_t[2] / 1000.0);
     if (s_checked)
-        printf("; FW_GPUCHECK: %ld fills checked, %ld texels apart from the CPU's", s_checked, s_apart);
+        printf("; FW_GPUCHECK: %ld fills checked, %ld texels apart from the CPU's, %ld of them not the CPU's within a pixel",
+               s_checked, s_apart, s_apart_far);
     printf("\n");
     fflush(stdout);
 }
@@ -134,8 +140,27 @@ static void list_state(int stride, int w, int h, unsigned off)
     sceGuTexFunc(GU_TFX_REPLACE, GU_TCC_RGBA);
     sceGuTexFilter(GU_NEAREST, GU_NEAREST);
     sceGuTexWrap(GU_CLAMP, GU_CLAMP);
+    /* the polygons' (poly_ge): clip-space vertices, the matrices passing
+       them on (x, y, w from the vertex's x, y, z), no clipping by the GE
+       (the CPU keeps them to its screen), coordinates in whole textures */
+    {
+        static ScePspFMatrix4 proj = { { 1, 0, 0, 0 }, { 0, 1, 0, 0 }, { 0, 0, 0, 1 }, { 0, 0, 0, 0 } };
+        static ScePspFMatrix4 ident = { { 1, 0, 0, 0 }, { 0, 1, 0, 0 }, { 0, 0, 1, 0 }, { 0, 0, 0, 1 } };
+        sceGuSetMatrix(GU_PROJECTION, &proj);
+        sceGuSetMatrix(GU_VIEW, &ident);
+        sceGuSetMatrix(GU_MODEL, &ident);
+        sceGuDepthRange(65535, 0);
+        sceGuDisable(GU_CULL_FACE);
+        sceGuDisable(GU_LIGHTING);
+        sceGuDisable(GU_FOG);
+        sceGuDisable(GU_CLIP_PLANES);
+        sceGuTexMapMode(GU_TEXTURE_COORDS, 0, 0);
+        sceGuTexScale(1.0f, 1.0f);
+        sceGuTexOffset(0.0f, 0.0f);
+    }
     s_clut_now = s_cmode_now = -1;
     s_tex_now = NULL;
+    s_wrap = 0;
 }
 
 static int s_stride, s_w, s_h;
@@ -249,6 +274,7 @@ static void textured(int on)
     s_textured = on;
 }
 
+static int s_rows;                      /* FW_GEROWS=1: every polygon by its rows, the reference's pixels */
 static int s_break;                     /* FW_GEBREAK=1 (a check that can fail): each fill's first flat span left out */
 
 static void flat(int32_t y, int32_t x0, int32_t x1, uint8_t c)
@@ -277,6 +303,10 @@ static void run(int32_t y, int32_t x, int32_t n, int u, int v, int step)
     TV *t;
     room();
     textured(1);
+    if (s_wrap) {
+        sceGuTexWrap(GU_CLAMP, GU_CLAMP);
+        s_wrap = 0;
+    }
     t = (TV *)sceGuGetMemory(2 * sizeof(TV));
     t[0].x = (int16_t)x;
     t[0].y = (int16_t)y;
@@ -301,8 +331,8 @@ static int sunk(const FwSpan *p, int32_t x)
     float z, w;
     if (fw_water[3] == 0 || (p->za == 0 && p->zx == 0 && p->zy == 0))
         return 0;
-    z = fmaf(p->zy, (float)p->y, fmaf(p->zx, (float)x, p->za));
-    w = fmaf(fw_water[2], (float)p->y, fmaf(fw_water[1], (float)x, fw_water[0]));
+    z = fw_fmaf(p->zy, (float)p->y, fw_fmaf(p->zx, (float)x, p->za));
+    w = fw_fmaf(fw_water[2], (float)p->y, fw_fmaf(fw_water[1], (float)x, fw_water[0]));
     return z > 0 && w > 0 && z < w;
 }
 
@@ -333,9 +363,9 @@ static void span_textured(const FwSpan *p)
         if (x <= p->x1 && !(deep && sunk(p, x))) {
             unsigned iu, iv;
             if (p->textured == 2) {
-                float k = (float)(x - p->xl), q = fmaf(p->pdq, k, p->pq);
-                iu = persp_texel(fmaf(p->pda, k, p->pa), q);
-                iv = persp_texel(fmaf(p->pdb, k, p->pb), q);
+                float k = (float)(x - p->xl), q = fw_fmaf(p->pdq, k, p->pq);
+                iu = persp_texel(fw_fmaf(p->pda, k, p->pa), q);
+                iv = persp_texel(fw_fmaf(p->pdb, k, p->pb), q);
             } else {
                 int64_t k = x - p->xl;
                 iu = (unsigned)((p->u + p->du * k) >> 32) & 0xFF;
@@ -365,13 +395,166 @@ static void span_textured(const FwSpan *p)
     }
 }
 
+/* ---- a polygon whole: the GE's raster ----
+   The polygon's outline from its chains of edges (FwPoly): the left chain
+   down from the top, the right chain back up. Each vertex at its edge's
+   end, u and v there (each edge's change carried on, so the texture runs
+   on across a turn of 256 as the reference's nearer turn does), 1 / z
+   there (perspective), the rest affine. Placed so the GE's pixel-centre
+   rule fills the reference's pixels to within one at an edge: rows from
+   the vertex row (y + 0.5), the left chain half a pixel left, the right
+   half right (the reference's rows take both ends' columns). Kept on the
+   CPU to a band about the screen (the GE drops a primitive past its 4096
+   square), then drawn as a fan of clip-space vertices, w = z: the GE
+   interpolates u and v perspective-correct. */
+#define PV_MAX 96
+#define PV_BAND 1024.0f
+typedef struct {
+    float x, y, uq, vq, q;
+} PV;
+typedef struct {
+    float u, v;
+    float x, y, z;
+} PTV;
+typedef struct {
+    uint16_t c, pad;
+    float x, y, z;
+} PCV;
+
+static int pv_clip(const PV *in, int n, PV *out, int axis, float lim, int keep_below)
+{
+    int i, m = 0;
+    for (i = 0; i < n && m < PV_MAX; i++) {
+        const PV *a = &in[i], *b = &in[(i + 1) % n];
+        float pa = axis ? a->y : a->x, pb = axis ? b->y : b->x;
+        int ain = keep_below ? pa <= lim : pa >= lim, bin = keep_below ? pb <= lim : pb >= lim;
+        if (ain)
+            out[m++] = *a;
+        if (ain != bin && m < PV_MAX) {
+            float t = (lim - pa) / (pb - pa);
+            out[m].x = a->x + t * (b->x - a->x);
+            out[m].y = a->y + t * (b->y - a->y);
+            out[m].uq = a->uq + t * (b->uq - a->uq);
+            out[m].vq = a->vq + t * (b->vq - a->vq);
+            out[m].q = a->q + t * (b->q - a->q);
+            if (axis)
+                out[m].y = lim;
+            else
+                out[m].x = lim;
+            m++;
+        }
+    }
+    return m;
+}
+
+/* the chain's vertices (first, count edges) into o from k on: x shifted by
+   dx; u and v carried along it */
+static int chain(const FwEdge *e, int n, int persp, float dx, PV *o, int k)
+{
+    float u = (float)e[0].ua, v = (float)e[0].va;
+    int i;
+    for (i = 0; i <= n && k < PV_MAX; i++) {
+        const FwEdge *f = &e[i < n ? i : n - 1];
+        float q = persp ? (i < n ? f->qa : f->qb) : 1.0f;
+        o[k].x = (float)(i < n ? f->from : f->to) + dx;
+        o[k].y = (float)(i < n ? f->y0 : f->y0 + f->n) + 0.5f;
+        o[k].q = q;
+        o[k].uq = u * q;
+        o[k].vq = v * q;
+        k++;
+        if (i < n) {
+            u += (float)f->dua;
+            v += (float)f->dva;
+        }
+    }
+    return k;
+}
+
+/* 1 drawn on the GE, 0 left to the reference's rows */
+static int poly_ge(const FwPoly *p, int w, int h)
+{
+    static PV a[PV_MAX], b[PV_MAX];
+    PV r[PV_MAX / 2 + 2];
+    const FwEdge *L = fw_edges + p->le, *R = fw_edges + p->re;
+    int persp = p->kind && p->persp, n, nr, i;
+    const Stage *s = NULL;
+    float tws = 1.0f, ths = 1.0f, ou = 0, ov = 0;
+
+    if (fw_water[3] != 0 && (p->za != 0 || p->zx != 0 || p->zy != 0))
+        return 0;                       /* the water's cut: a pixel's test, the reference's rows */
+    if (p->ln < 1 || p->rn < 1 || p->ln + p->rn + 2 > PV_MAX / 2)
+        return 0;
+    for (i = 0; persp && i < p->ln; i++)
+        if (!(L[i].qa > 0 && L[i].qb > 0))
+            return 0;
+    for (i = 0; persp && i < p->rn; i++)
+        if (!(R[i].qa > 0 && R[i].qb > 0))
+            return 0;
+    if (p->kind && !(s = stage_for(p->bank, p->base, p->mask)))
+        return 0;
+    n = chain(L, p->ln, persp, -0.5f, a, 0);
+    nr = chain(R, p->rn, persp, 0.5f, r, 0);
+    for (i = nr - 1; i >= 0 && n < PV_MAX; i--)
+        a[n++] = r[i];
+    n = pv_clip(a, n, b, 0, -PV_BAND, 0);
+    n = pv_clip(b, n, a, 0, (float)w + PV_BAND, 1);
+    n = pv_clip(a, n, b, 1, -PV_BAND, 0);
+    n = pv_clip(b, n, a, 1, (float)h + PV_BAND, 1);
+    if (n < 3)
+        return 1;
+    room();
+    s_used += (size_t)n * sizeof(PTV);
+    if (p->kind) {
+        PTV *t;
+        textured(1);
+        use_texture(s);
+        use_rules(p->por, p->hi);
+        if (!s_wrap) {
+            sceGuTexWrap(GU_REPEAT, GU_REPEAT);
+            s_wrap = 1;
+        }
+        tws = (float)pow2_at_least(s->tw);
+        ths = (float)pow2_at_least(s->th);
+        ou = (float)p->ou / 256.0f;
+        ov = (float)p->ov / 256.0f;
+        t = (PTV *)sceGuGetMemory((unsigned)n * sizeof(PTV));
+        for (i = 0; i < n; i++) {
+            float W = 1.0f / a[i].q;
+            t[i].u = (a[i].uq * W + ou) / tws;
+            t[i].v = (a[i].vq * W + ov) / ths;
+            t[i].x = (2.0f * a[i].x / (float)w - 1.0f) * W;
+            t[i].y = (1.0f - 2.0f * a[i].y / (float)h) * W;
+            t[i].z = W;
+        }
+        sceGuDrawArray(GU_TRIANGLE_FAN, GU_TEXTURE_32BITF | GU_VERTEX_32BITF | GU_TRANSFORM_3D, n, 0, t);
+    } else {
+        PCV *c;
+        textured(0);
+        c = (PCV *)sceGuGetMemory((unsigned)n * sizeof(PCV));
+        for (i = 0; i < n; i++) {
+            c[i].c = (uint16_t)(0xF000u | p->colour);
+            c[i].pad = 0;
+            c[i].x = 2.0f * a[i].x / (float)w - 1.0f;
+            c[i].y = 1.0f - 2.0f * a[i].y / (float)h;
+            c[i].z = 1.0f;
+        }
+        sceGuDrawArray(GU_TRIANGLE_FAN, GU_COLOR_4444 | GU_VERTEX_32BITF | GU_TRANSFORM_3D, n, 0, c);
+    }
+    return 1;
+}
+
 static void span(const FwSpan *p, int w, int h)
 {
     int32_t x, a;
     (void)h;
-    if (p->textured == 3) {             /* a polygon's rows, in its place */
+    if (p->textured == 3) {             /* a polygon: the GE's whole, else its rows, in its place */
         int32_t row;
         FwSpan r;
+        if (!s_rows && poly_ge(&fw_polys[p->x1], w, h)) {
+            s_polys_ge++;
+            return;
+        }
+        s_polys_cpu++;
         for (row = p->y; row < p->x0; row++)
             if (fw_poly_row(&fw_polys[p->x1], fw_edges, row, w, &r))
                 span(&r, w, h);
@@ -437,6 +620,7 @@ static void fill(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
     s_arena_used = 0;
     s_textured = -1;
     s_break = getenv("FW_GEBREAK") ? 1 : 0;
+    s_rows = getenv("FW_GEROWS") != NULL;
     list_open();
     for (i = 0; i < n; i++)
         span(&sp[i], w, h);
@@ -447,8 +631,30 @@ static void fill(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
     if (getenv("FW_GPUCHECK") && s_ref) {
         size_t len = (size_t)w * (size_t)h;
         for (i = 0; i < len; i++)
-            s_apart += out[i] != s_ref[i];
+            if (out[i] != s_ref[i]) {
+                /* apart by a shift of at most a pixel (the GE's edges, its
+                   texel centres) when the reference has the GE's texel
+                   within a pixel of it; else a texel nowhere near */
+                int px = (int)(i % (size_t)w), py = (int)(i / (size_t)w), dx, dy, near = 0;
+                for (dy = -1; dy <= 1 && !near; dy++)
+                    for (dx = -1; dx <= 1 && !near; dx++)
+                        if (px + dx >= 0 && px + dx < w && py + dy >= 0 && py + dy < h)
+                            near = s_ref[(size_t)(py + dy) * w + px + dx] == out[i];
+                s_apart++;
+                s_apart_far += !near;
+            }
         s_checked++;
+        if (getenv("FW_GPUDUMP") && s_checked == atol(getenv("FW_GPUDUMP"))) {
+            /* (a check) this fill's texels, the GE's and the reference's, as two 8-bit images */
+            FILE *f = fopen("host0:/gdump.bin", "wb");
+            if (f) {
+                int32_t wh[2] = { w, h };
+                fwrite(wh, sizeof wh, 1, f);
+                fwrite(out, 1, len, f);
+                fwrite(s_ref, 1, len, f);
+                fclose(f);
+            }
+        }
     }
 }
 
@@ -484,7 +690,7 @@ static int hit_at(const FwWaterJob *j, int32_t x, int32_t y, int32_t *lo_out)
 {
     const float *e = j->e;
     float vx = ((float)x + 0.5f - j->ox) / j->fx, vy = ((float)y + 0.5f - j->oy) / j->fy;
-    float wy = fmaf(e[4], vx, fmaf(e[5], vy, e[6])), t = j->dy / wy;
+    float wy = fw_fmaf(e[4], vx, fw_fmaf(e[5], vy, e[6])), t = j->dy / wy;
     int32_t lo, hi;
     if (!(wy != 0) || !(t > 0))
         return 0;
@@ -629,6 +835,7 @@ static void water_fill(const uint8_t *in, uint32_t *out, const FwWaterJob *j, co
     }
     report_once();
     s_water_ge++;
+    SceInt64 t0 = sceKernelGetSystemTimeWide();
     sceGuStart(GU_DIRECT, (void *)((uintptr_t)s_list | 0x40000000u));
     s_used = 1024;
     sceGuDrawBufferList(GU_PSM_8888, (void *)((uintptr_t)lent - (uintptr_t)sceGeEdramGetAddr()), stride);
@@ -746,30 +953,60 @@ static void water_fill(const uint8_t *in, uint32_t *out, const FwWaterJob *j, co
             a = e + 1;
         }
     }
+    SceInt64 t1 = sceKernelGetSystemTimeWide();
     sceGuFinish();
     sceGuSync(0, 0);
+    SceInt64 t2 = sceKernelGetSystemTimeWide();
     /* the picture: the GE's runs, the rest the reference's own */
     tg = (volatile uint32_t *)((uintptr_t)lent | 0x40000000u);
     {
+        /* a row at a time: drawn texels kept (the reference's first rule);
+           left and right of the row's hits its no-hit texel; in its runs
+           the GE's; elsewhere the reference's own */
         int k = 0;
-        for (y = 0; y < h; y++)
-            for (x = 0; x < w; x++) {
-                size_t i = (size_t)y * w + x;
-                while (k < nr && (runs[k].y < y || (runs[k].y == y && runs[k].xb < x)))
-                    k++;
-                if (in[i]) {
-                    out[i] = in[i];     /* drawn on: the reference's own first rule */
-                } else if (k < nr && runs[k].y == y && x >= runs[k].xa && x <= runs[k].xb) {
-                    uint32_t p = tg[(size_t)y * stride + x];
-                    s_water_texels++;
-                    out[i] = 0xFF000000u | (p & 0xFFu) << 16 | (p & 0xFF00u) | (p >> 16 & 0xFFu);
-                } else if (known[y] && (x < hit_a[y] || x > hit_b[y])) {
-                    out[i] = j->under ? gap[y] : 0;     /* the reference's no-hit texel */
-                } else {
-                    out[i] = fw_water_texel(in, j, gap, x, y);
-                }
+        for (y = 0; y < h; y++) {
+            const uint8_t *ri = in + (size_t)y * w;
+            uint32_t *ro = out + (size_t)y * w, none = j->under ? gap[y] : 0;
+            volatile const uint32_t *rg = tg + (size_t)y * stride;
+            int32_t a = 0, b = w - 1;
+            if (known[y]) {
+                a = hit_a[y];
+                b = hit_b[y];
+                for (x = 0; x < w && x < a; x++)
+                    ro[x] = ri[x] ? ri[x] : none;
+                for (x = b + 1 < 0 ? 0 : b + 1; x < w; x++)
+                    ro[x] = ri[x] ? ri[x] : none;
             }
+            while (k < nr && runs[k].y < y)
+                k++;
+            for (x = a; x <= b;) {
+                int32_t end = b;
+                int in_run = k < nr && runs[k].y == y && x >= runs[k].xa;
+                if (in_run)
+                    end = runs[k].xb;
+                else if (k < nr && runs[k].y == y && runs[k].xa - 1 < end)
+                    end = runs[k].xa - 1;
+                for (; x <= end; x++) {
+                    if (ri[x]) {
+                        ro[x] = ri[x];
+                    } else if (in_run) {
+                        uint32_t p = rg[x];
+                        s_water_texels++;
+                        ro[x] = 0xFF000000u | (p & 0xFFu) << 16 | (p & 0xFF00u) | (p >> 16 & 0xFFu);
+                    } else {
+                        s_wt_cpu[known[y] ? 1 : 0]++;
+                        ro[x] = fw_water_texel(in, j, gap, x, y);
+                    }
+                }
+                if (in_run)
+                    k++;
+            }
+        }
     }
+    SceInt64 t3 = sceKernelGetSystemTimeWide();
+    s_wt_t[0] += t1 - t0;
+    s_wt_t[1] += t2 - t1;
+    s_wt_t[2] += t3 - t2;
 }
 
 /* FW_SPANPLAY: the GE the program's own (no console runs, so libgu is
