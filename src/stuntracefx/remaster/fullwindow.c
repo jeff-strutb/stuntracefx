@@ -91,6 +91,7 @@ static void panels_draw(void);
 static void sprites_write(void);
 static void span_flush(void);
 static void span_flat(int32_t y, int32_t x0, int32_t x1, uint8_t c);
+static int page1_known;                 /* (bg2_prepare's) */
 static void sprites_place(void);
 static void screen_set(void);
 static void takeover(void);
@@ -4151,7 +4152,7 @@ void fw_vblank_uploads(void)
 
 static int screen_w = 256, screen_h = 224;
 
-void fw_screen_lost(void) { screen_w = screen_h = 0; }
+void fw_screen_lost(void) { screen_w = screen_h = 0; page1_known = 0; }
 
 /* The sky: colour 1 a line, by HDMA channels 2 (CGADD from the table at
    $7F:3497) and 3 (CGDATA, indirect, from the table at $7F:3489: entries
@@ -4418,6 +4419,33 @@ static void bg2_backdrop(uint16_t *map, unsigned cols, unsigned sel)
 }
 
 static int bg2sc_kept = -1;             /* the game's BG2SC while the full window has its own */
+/* page 1's hills as bg2_prepare last wrote them (only it writes there):
+   a word written again only when it changes; not known (page1_known 0)
+   until the full window has written it all since it took the screen */
+static uint16_t page1_map[64 * 64], page1_chars[0x2000];
+static int page1_known;
+
+/* words n of page 1 from word address at, from want, through the data
+   port: only the runs that differ from have (all when !page1_known) */
+static void page1_write(unsigned at, const uint16_t *want, uint16_t *have, unsigned n)
+{
+    unsigned i = 0, j;
+    while (i < n) {
+        if (page1_known && want[i] == have[i]) {
+            i++;
+            continue;
+        }
+        for (j = i; j < n && !(page1_known && want[j] == have[j]); j++)
+            ;
+        wr8(VMADDL, (uint8_t)(at + i));
+        wr8(VMADDH, (uint8_t)((at + i) >> 8));
+        for (; i < j; i++) {
+            wr8(VMDATAL, (uint8_t)want[i]);
+            wr8(VMDATAH, (uint8_t)(want[i] >> 8));
+            have[i] = want[i];
+        }
+    }
+}
 
 static void bg2_prepare(void)
 {
@@ -4452,19 +4480,18 @@ static void bg2_prepare(void)
     nshvc_ext_layer_outside(1, out, 5);
     nshvc_ext_vram_direct(1);
     wr8(VMAIN, 0x80);
-    wr8(VMADDL, (uint8_t)BG2_WIDE_AT);
-    wr8(VMADDH, (uint8_t)(BG2_WIDE_AT >> 8));
-    for (i = 0; i < 64 * 64; i++) {     /* the map: the screens 32 x 32, left then right, top then bottom */
-        unsigned at = (i >> 10 & 1) * 32 + (i >> 11) * 32 * 64 + (i >> 5 & 31) * 64 + (i & 31);
-        wr8(VMDATAL, (uint8_t)map[at]);
-        wr8(VMDATAH, (uint8_t)(map[at] >> 8));
+    {
+        static uint16_t page[64 * 64];
+        for (i = 0; i < 64 * 64; i++) { /* the map: the screens 32 x 32, left then right, top then bottom */
+            unsigned at = (i >> 10 & 1) * 32 + (i >> 11) * 32 * 64 + (i >> 5 & 31) * 64 + (i & 31);
+            page[i] = map[at];
+        }
+        page1_write(BG2_WIDE_AT, page, page1_map, 64 * 64);
     }
-    wr8(VMADDL, (uint8_t)BG2_CHARS_AT);
-    wr8(VMADDH, (uint8_t)(BG2_CHARS_AT >> 8));
-    for (i = 0; i < 0x2000; i++) {      /* the characters as page 0 has them */
-        wr8(VMDATAL, (uint8_t)v[BG2_CHARS_AT + i]);
-        wr8(VMDATAH, (uint8_t)(v[BG2_CHARS_AT + i] >> 8));
-    }
+    page1_write(BG2_CHARS_AT, v + BG2_CHARS_AT, page1_chars, 0x2000);  /* the characters as page 0 has them */
+    page1_known = 1;
+    wr8(VMADDL, (uint8_t)(BG2_CHARS_AT + 0x2000));  /* the address as writing it all leaves it */
+    wr8(VMADDH, (uint8_t)((BG2_CHARS_AT + 0x2000) >> 8));
     nshvc_ext_vram_direct(-1);
 }
 
@@ -4557,6 +4584,7 @@ static void takeover(void)
     wr8(CGWSEL, cgwsel_full((uint8_t)cgwsel_game));
     screen_set();
     nshvc_ext_sprite_wrap(0);           /* Y page 0's sprites nowhere above line 1 (those above it on page -1) */
+    page1_known = 0;                    /* page 1 written whole again from here */
     nshvc_ext_layer_page(1, 1);         /* BG2 on page 1: its map at $4800, 64 x 64, characters from $6000 (bg2_prepare) */
     if (bg2sc_kept < 0)
         bg2sc_kept = mw_ppu_last(0x2108);
