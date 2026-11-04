@@ -2880,11 +2880,16 @@ void fw_draw_list(void)
 static int tall(void) { return H > 224; }
 static int origin_row(void) { return (H - 224) / 2; }
 
-/* the screen's size for the window: its aspect at 224 lines (256 at 4:3,
-   the console's pixels 8:7), whole pairs of cells across (the console's
-   picture at its centre then starts on a cell); narrower than 4:3, 256
-   across and taller, in whole pairs of cells (the console's lines then
-   start on a cell); to 1024 each way */
+/* the screen's size for the window: its aspect at 224 lines (256 across
+   at 4:3, the console's pixels 7:6 as nativeshvc presents them), the
+   nearest even width (the original's 256 columns then centred on a whole
+   column), the menus' rule (menuwindow.c), so the race and the menus share
+   one screen; narrower than 4:3, 256 across and taller, the nearest even
+   height; to 1024 each way. The console's pixels keep their shape: the
+   screen is presented at its exact aspect, so a window whose shape no
+   whole even width meets shows a gap of up to a column or a line or so at
+   its edges, never a stretched picture (the PSP's 480 x 272: 338 columns,
+   presented 479 x 272, one column of the screen's pixels unlit). */
 #define W_MAX 1024
 #define H_MAX 1024
 
@@ -2899,11 +2904,11 @@ static void size_of_window(int *w, int *h)
         return;
     a = (ww / wh) / (4.0f / 3.0f);
     if (a >= 1.0f) {
-        *w = (int)(256.0f * a / 16.0f + 0.5f) * 16;
+        *w = (int)(256.0f * a / 2.0f + 0.5f) * 2;
         if (*w > W_MAX)
             *w = W_MAX;
     } else {
-        *h = (int)(224.0f / a / 16.0f + 0.5f) * 16;
+        *h = (int)(224.0f / a / 2.0f + 0.5f) * 2;
         if (*h > H_MAX)
             *h = H_MAX;
     }
