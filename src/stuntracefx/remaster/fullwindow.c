@@ -1185,29 +1185,29 @@ static void depth_report(void)
                 depth_counts[3 * i], depth_counts[3 * i + 1], depth_counts[3 * i + 2]);
 }
 
-static void depth_plane(const double (*P)[3], int n, float z[3])
+static void depth_plane(const float (*P)[3], int n, float z[3])
 {
-    double fx = fw_focal_x(), fy = fw_focal_y(), ox = tw / 2.0, oy = (double)centre_row(), sc = (double)(1 << rm_far_shift);
-    double X[EXACT_MAX + 8], Y[EXACT_MAX + 8], Q[EXACT_MAX + 8], best = 0, c[3] = { 0 }, d;
+    float fx = fw_focal_x(), fy = fw_focal_y(), ox = tw / 2.0f, oy = (float)centre_row(), sc = (float)(1 << rm_far_shift);
+    float X[EXACT_MAX + 8], Y[EXACT_MAX + 8], Q[EXACT_MAX + 8], best = 0, c[3] = { 0 }, d;
     int i, j, k, m = 0, a = 0, b = 1, e = 2;
 
     z[0] = z[1] = z[2] = 0;
     for (i = 0; i < n && m < EXACT_MAX + 8; i++)
         if (P[i][2] >= NEAR_Z) {
-            X[m] = ox + fx * P[i][0] / P[i][2] - 0.5;
-            Y[m] = oy + fy * P[i][1] / P[i][2] - 0.5;
-            Q[m++] = 1.0 / (P[i][2] * sc);
+            X[m] = ox + fx * P[i][0] / P[i][2] - 0.5f;
+            Y[m] = oy + fy * P[i][1] / P[i][2] - 0.5f;
+            Q[m++] = 1.0f / (P[i][2] * sc);
         }
     for (i = 0; i < m; i++)
         for (j = i + 1; j < m; j++)
             for (k = j + 1; k < m; k++) {
-                double ar = fabs((X[j] - X[i]) * (Y[k] - Y[i]) - (X[k] - X[i]) * (Y[j] - Y[i]));
+                float ar = fabsf((X[j] - X[i]) * (Y[k] - Y[i]) - (X[k] - X[i]) * (Y[j] - Y[i]));
                 if (ar > best)
                     best = ar, a = i, b = j, e = k;
             }
-    if (best > 1e-6) {                  /* through three on the screen */
-        double x1 = X[b] - X[a], y1 = Y[b] - Y[a], q1 = Q[b] - Q[a], x2 = X[e] - X[a], y2 = Y[e] - Y[a], q2 = Q[e] - Q[a];
-        double det = x1 * y2 - x2 * y1, gx = (q1 * y2 - q2 * y1) / det, gy = (x1 * q2 - x2 * q1) / det;
+    if (best > 1e-6f) {                  /* through three on the screen */
+        float x1 = X[b] - X[a], y1 = Y[b] - Y[a], q1 = Q[b] - Q[a], x2 = X[e] - X[a], y2 = Y[e] - Y[a], q2 = Q[e] - Q[a];
+        float det = x1 * y2 - x2 * y1, gx = (q1 * y2 - q2 * y1) / det, gy = (x1 * q2 - x2 * q1) / det;
         z[1] = (float)gx;
         z[2] = (float)gy;
         z[0] = (float)(Q[a] - gx * X[a] - gy * Y[a]);
@@ -1219,7 +1219,7 @@ static void depth_plane(const double (*P)[3], int n, float z[3])
         for (i = 0, best = 0; i < n; i++)
             for (j = i + 1; j < n; j++)
                 for (k = j + 1; k < n; k++) {
-                    double u[3], v[3], w[3], mm;
+                    float u[3], v[3], w[3], mm;
                     int q;
                     for (q = 0; q < 3; q++)
                         u[q] = P[j][q] - P[i][q], v[q] = P[k][q] - P[i][q];
@@ -1237,19 +1237,19 @@ static void depth_plane(const double (*P)[3], int n, float z[3])
             return;
         z[1] = (float)(c[0] / (fx * d));
         z[2] = (float)(c[1] / (fy * d));
-        z[0] = (float)((c[0] * (0.5 - ox) / fx + c[1] * (0.5 - oy) / fy + c[2]) / d);
+        z[0] = (float)((c[0] * (0.5f - ox) / fx + c[1] * (0.5f - oy) / fy + c[2]) / d);
     }
     if (getenv("FW_DEPTHCHECK")) {      /* a check: the 1 / depth at each point's own place, by the face's size */
         static long cnt[4][3];          /* by screen area < 16, < 256, < 4096, more; error < 1 %, < 10 %, more */
         static int reg;
-        double worst = 0, area = best;
+        float worst = 0, area = best;
         int sz;
         for (i = 0; i < m; i++) {
-            double got = z[0] + z[1] * X[i] + z[2] * Y[i], e = fabs(got - Q[i]) / Q[i];
+            float got = z[0] + z[1] * X[i] + z[2] * Y[i], e = fabsf(got - Q[i]) / Q[i];
             worst = e > worst ? e : worst;
         }
         sz = area < 32 ? 0 : area < 512 ? 1 : area < 8192 ? 2 : 3;
-        cnt[sz][worst < 0.01 ? 0 : worst < 0.1 ? 1 : 2]++;
+        cnt[sz][worst < 0.01f ? 0 : worst < 0.1f ? 1 : 2]++;
         if (!reg) {
             reg = 1;
             atexit(depth_report);
@@ -1262,13 +1262,13 @@ static void depth_plane(const double (*P)[3], int n, float z[3])
    in view space so far */
 static void face_depth_kept(void)
 {
-    double P[EXACT_MAX][3];
+    float P[EXACT_MAX][3];
     int i;
     if (ex_n < 3)
         return;
     for (i = 0; i < ex_n; i++)
         P[i][0] = ex_vx[i], P[i][1] = ex_vy[i], P[i][2] = ex_vz[i];
-    depth_plane((const double (*)[3])P, ex_n, face_depth[ex_list >> 1].z);
+    depth_plane((const float (*)[3])P, ex_n, face_depth[ex_list >> 1].z);
     face_depth[ex_list >> 1].gen = list_gen;
 }
 
@@ -1917,16 +1917,16 @@ int fw_exact_tex_draw(void)
    top vertex, the chain forward from it the left, back from it the right */
 #define FACE_MAX 72
 #define FACE_BAND 4096.0
-static int face_clip(double (*in)[2], int n, double (*out)[2], int axis, double lim, int keep_below)
+static int face_clip(float (*in)[2], int n, float (*out)[2], int axis, float lim, int keep_below)
 {
     int i, m = 0;
     for (i = 0; i < n && m < FACE_MAX; i++) {
-        const double *a = in[i], *b = in[(i + 1) % n];
+        const float *a = in[i], *b = in[(i + 1) % n];
         int ain = keep_below ? a[axis] <= lim : a[axis] >= lim, bin = keep_below ? b[axis] <= lim : b[axis] >= lim;
         if (ain)
             out[m][0] = a[0], out[m][1] = a[1], m++;
         if (ain != bin && m < FACE_MAX) {
-            double t = (lim - a[axis]) / (b[axis] - a[axis]);
+            float t = (lim - a[axis]) / (b[axis] - a[axis]);
             out[m][0] = a[0] + t * (b[0] - a[0]);
             out[m][1] = a[1] + t * (b[1] - a[1]);
             out[m][axis] = lim;
@@ -1936,11 +1936,12 @@ static int face_clip(double (*in)[2], int n, double (*out)[2], int axis, double 
     return m;
 }
 
-void fw_view_face(const double (*p)[3], int n, uint8_t c)
+void fw_view_face(const float (*p)[3], int n, uint8_t c)
 {
-    static double v[FACE_MAX][3], s[2][FACE_MAX][2];
+    static float v[FACE_MAX][3], s[2][FACE_MAX][2];
     int64_t X[FACE_MAX], Y[FACE_MAX];
-    double fx = fw_focal_x(), fy = fw_focal_y(), ox = tw / 2, oy = (double)centre_row(), area = 0;
+    float fx = (float)fw_focal_x(), fy = (float)fw_focal_y(), ox = (float)(tw / 2), oy = (float)centre_row();
+    int64_t area = 0;
     int i, m = 0, k, top = 0, at, next;
     int32_t lend, rend;
     FwPoly *pg;
@@ -1953,12 +1954,12 @@ void fw_view_face(const double (*p)[3], int n, uint8_t c)
         cur_z[0] = z[0], cur_z[1] = z[1], cur_z[2] = z[2];
     }
     for (i = 0; i < n; i++) {           /* the near plane */
-        const double *a = p[i], *b = p[(i + 1) % n];
+        const float *a = p[i], *b = p[(i + 1) % n];
         int ain = a[2] >= NEAR_Z, bin = b[2] >= NEAR_Z;
         if (ain)
             v[m][0] = a[0], v[m][1] = a[1], v[m][2] = a[2], m++;
         if (ain != bin) {
-            double t = (NEAR_Z - a[2]) / (b[2] - a[2]);
+            float t = (NEAR_Z - a[2]) / (b[2] - a[2]);
             v[m][0] = a[0] + t * (b[0] - a[0]);
             v[m][1] = a[1] + t * (b[1] - a[1]);
             v[m][2] = NEAR_Z;
@@ -1974,7 +1975,7 @@ void fw_view_face(const double (*p)[3], int n, uint8_t c)
     m = face_clip(s[0], m, s[1], 1, -FACE_BAND, 0);
     m = face_clip(s[1], m, s[0], 1, th + FACE_BAND, 1);
     for (i = k = 0; i < m; i++) {       /* to texels, a point the same as the one before dropped */
-        int64_t x = (int64_t)floor(s[0][i][0]), y = (int64_t)floor(s[0][i][1]);
+        int64_t x = (int64_t)floorf(s[0][i][0]), y = (int64_t)floorf(s[0][i][1]);
         if (k && x == X[k - 1] && y == Y[k - 1])
             continue;
         X[k] = x;
@@ -1986,7 +1987,7 @@ void fw_view_face(const double (*p)[3], int n, uint8_t c)
     if (k < 3)
         return;
     for (i = 0; i < k; i++)
-        area += (double)X[i] * Y[(i + 1) % k] - (double)X[(i + 1) % k] * Y[i];
+        area += X[i] * Y[(i + 1) % k] - X[(i + 1) % k] * Y[i];
     if (area == 0)
         return;
     if (area > 0)                       /* the forward chain the left: the points turned the other way */
@@ -2082,10 +2083,10 @@ void fw_exact_gather_end(void)
         return;
     ga_n = -1;
     if (n >= 3) {                       /* its depth, from its points in view space */
-        double P[EXACT_MAX][3];
+        float P[EXACT_MAX][3];
         for (i = 0; i < n; i++)
-            P[i][0] = ga_x[i], P[i][1] = ga_y[i], P[i][2] = ga_z[i];
-        depth_plane((const double (*)[3])P, n, face_depth[list >> 1].z);
+            P[i][0] = (float)ga_x[i], P[i][1] = (float)ga_y[i], P[i][2] = (float)ga_z[i];
+        depth_plane((const float (*)[3])P, n, face_depth[list >> 1].z);
         face_depth[list >> 1].gen = list_gen;
     }
     for (i = 0; i < (lines ? 1 : n); i++) {

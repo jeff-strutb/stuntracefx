@@ -59,9 +59,9 @@
 /* a profile's ring: its place along the axis and radius (texels); a band
    from it to the next ring in one colour (nib) or shaded by how far it
    faces up: top (nearly straight up, when nonzero), up, across, down */
-typedef struct { double a, r; uint8_t nib, top, up, across, down; } Ring;
+typedef struct { float a, r; uint8_t nib, top, up, across, down; } Ring;
 /* a cap's ring, drawn over the cap outward in: radius, colour */
-typedef struct { double r; uint8_t nib; } Disc;
+typedef struct { float r; uint8_t nib; } Disc;
 typedef struct {
     uint16_t shape;
     int texels, axis;                   /* the picture's width; the axis (0 x, 2 z) */
@@ -87,8 +87,8 @@ static const Disc tyre_side[] = { { 13, 0x9 }, { 6, 0x4 }, { 4, 0xB }, { 2, 0x9 
    C, F round a C); its back's last cap 7 */
 #define LAMP_SHADE 0, 0xB, 0x8, 0x7, 0xF
 static const Ring lamp_rings[] = {      /* round the dome from its back: 15, 30, ... 90 degrees */
-    { -3.261, 1.812, LAMP_SHADE }, { -2.562, 3.5, LAMP_SHADE }, { -1.450, 4.950, LAMP_SHADE },
-    { 0.0, 6.062, LAMP_SHADE }, { 1.688, 6.761, LAMP_SHADE }, { 3.5, 7.0 },
+    { -3.261f, 1.812f, LAMP_SHADE }, { -2.562f, 3.5f, LAMP_SHADE }, { -1.450f, 4.950f, LAMP_SHADE },
+    { 0.0f, 6.062f, LAMP_SHADE }, { 1.688f, 6.761f, LAMP_SHADE }, { 3.5f, 7.0f },
 };
 static const Disc lamp_lens[] = { { 7, 0x7 } };   /* the face's ground, the body colour: its marks go over it (eye_marks) */
 /* An eye's face, as its look's picture facing the view has it (16 x 16
@@ -106,27 +106,27 @@ static const Disc lamp_lens[] = { { 7, 0x7 } };   /* the face's ground, the body
    light shine (8, B) inside it, the lash dark along its edge (a band of a ring 50 texels round, nearly straight); shut, the
    whole face 7, lighter (8) inside, the crease and the shine as the
    lid's, the rim dark round its lower left. */
-typedef struct { double cx, cy, r0, r1, t0, t1; uint8_t nib; } Mark;
+typedef struct { float cx, cy, r0, r1, t0, t1; uint8_t nib; } Mark;
 #define DISC(x, y, r, c) { x, y, 0, r, 0, 0, c }
 #define BAND(x, y, r0, r1, t0, t1, c) { x, y, r0, r1, t0, t1, c }
-#define RIM BAND(0, 0, 6.0, 7.0, 45, 200, 0xF), DISC(0, 0, 6.0, 0xB)
-#define RIM_PLAIN RIM, BAND(0, 0, 5.0, 6.0, 200, 300, 0xC)
+#define RIM BAND(0, 0, 6.0f, 7.0f, 45, 200, 0xF), DISC(0, 0, 6.0f, 0xB)
+#define RIM_PLAIN RIM, BAND(0, 0, 5.0f, 6.0f, 200, 300, 0xC)
 #define PUPIL_PLAIN \
-    DISC(-0.4, 0.5, 4.6, 0xE), DISC(0, 0, 3.0, 0xB), DISC(0, 0, 2.2, 0xF), \
-    BAND(0, 0.3, 1.4, 2.3, 40, 140, 0xC), DISC(0, -1.0, 1.0, 0xC), DISC(0.5, -1.4, 0.5, 0xE)
+    DISC(-0.4f, 0.5f, 4.6f, 0xE), DISC(0, 0, 3.0f, 0xB), DISC(0, 0, 2.2f, 0xF), \
+    BAND(0, 0.3f, 1.4f, 2.3f, 40, 140, 0xC), DISC(0, -1.0f, 1.0f, 0xC), DISC(0.5f, -1.4f, 0.5f, 0xE)
 #define PUPIL_STARTLED \
-    DISC(-0.1, 0.2, 5.0, 0xE), DISC(0, 0.5, 2.9, 0xB), DISC(0, 0.5, 2.3, 0xC), DISC(0, 2.0, 1.0, 0xE), \
-    BAND(0, 0.5, 0.9, 1.6, 180, 360, 0xF), DISC(0, 0.5, 0.8, 0xC)
+    DISC(-0.1f, 0.2f, 5.0f, 0xE), DISC(0, 0.5f, 2.9f, 0xB), DISC(0, 0.5f, 2.3f, 0xC), DISC(0, 2.0f, 1.0f, 0xE), \
+    BAND(0, 0.5f, 0.9f, 1.6f, 180, 360, 0xF), DISC(0, 0.5f, 0.8f, 0xC)
 #define LID \
-    BAND(0, 0, 0, 7.0, 180, 360, 0x7), BAND(0, 0, 4.7, 5.6, 200, 340, 0xF), \
-    DISC(0, -3.0, 1.5, 0x8), DISC(0, -3.0, 0.8, 0xB), BAND(0, 49.2, 49.2, 50.0, 262, 278, 0xF)
+    BAND(0, 0, 0, 7.0f, 180, 360, 0x7), BAND(0, 0, 4.7f, 5.6f, 200, 340, 0xF), \
+    DISC(0, -3.0f, 1.5f, 0x8), DISC(0, -3.0f, 0.8f, 0xB), BAND(0, 49.2f, 49.2f, 50.0f, 262, 278, 0xF)
 static const Mark eye_plain[] = { RIM_PLAIN, PUPIL_PLAIN };
 static const Mark eye_startled[] = { RIM, PUPIL_STARTLED };
 static const Mark eye_half[] = { RIM_PLAIN, PUPIL_PLAIN, LID };
 static const Mark eye_half_startled[] = { RIM, PUPIL_STARTLED, LID };
-static const Mark eye_shut[] = { DISC(0, 0, 7.0, 0x7), DISC(0, 0.5, 5.0, 0x8), BAND(0, 0, 4.7, 5.6, 200, 340, 0xF),
-                                 BAND(0, 0, 2.2, 3.0, 210, 330, 0xB), BAND(0, 0, 6.0, 7.0, 90, 200, 0xF) };
-static const Disc lamp_back[] = { { 1.812, 0x7 } };
+static const Mark eye_shut[] = { DISC(0, 0, 7.0f, 0x7), DISC(0, 0.5f, 5.0f, 0x8), BAND(0, 0, 4.7f, 5.6f, 200, 340, 0xF),
+                                 BAND(0, 0, 2.2f, 3.0f, 210, 330, 0xB), BAND(0, 0, 6.0f, 7.0f, 90, 200, 0xF) };
+static const Disc lamp_back[] = { { 1.812f, 0x7 } };
 
 #define N(a) (int)(sizeof a / sizeof a[0])
 static const Solid solids[] = {
@@ -144,7 +144,7 @@ static unsigned record;
 static int coloured;
 static uint8_t hi, tex_bank, tex_nib;
 static uint16_t tex_base;
-static double pos[3], view[3][3], scale;
+static float pos[3], view[3][3], scale;
 
 static uint16_t ram16(uint16_t a) { return (uint16_t)(gsu_rd8(0x700000u | a) | gsu_rd8(0x700000u | (uint16_t)(a + 1)) << 8); }
 
@@ -181,23 +181,23 @@ void fw_solid_object(uint16_t shape, unsigned rec)
    A point p in the model is p . view in view space. */
 static void turn(void)
 {
-    double a[3], s[3], c[3], m[3][3], e[3][3];
+    float a[3], s[3], c[3], m[3][3], e[3][3];
     int i, j, k;
 
     for (i = 0; i < 3; i++) {
-        a[i] = (double)(uint16_t)-(int)((ram16((uint16_t)(0x0020 + 2 * i)) & 0xFF) << 8) / 65536.0 * 2 * M_PI;
-        s[i] = sin(a[i]);
-        c[i] = cos(a[i]);
+        a[i] = (float)(uint16_t)-(int)((ram16((uint16_t)(0x0020 + 2 * i)) & 0xFF) << 8) / 65536.0f * 2 * (float)M_PI;
+        s[i] = sinf(a[i]);
+        c[i] = cosf(a[i]);
     }
     {
-        double sz = s[0], cz = c[0], sx = s[1], cx = c[1], sy = s[2], cy = c[2];
+        float sz = s[0], cz = c[0], sx = s[1], cx = c[1], sy = s[2], cy = c[2];
         m[0][0] = sx * sy * sz + cx * cy; m[0][1] = sx * cy * sz - cx * sy; m[0][2] = sx * cz;
         m[1][0] = sy * cz;                m[1][1] = cy * cz;                m[1][2] = -sz;
         m[2][0] = cx * sy * sz - sx * cy; m[2][1] = cx * cy * sz + sx * sy; m[2][2] = cx * cz;
     }
     for (i = 0; i < 3; i++)
         for (j = 0; j < 3; j++)
-            e[i][j] = (int16_t)ram16((uint16_t)(0x00E4 + 6 * i + 2 * j)) / 32768.0;
+            e[i][j] = (int16_t)ram16((uint16_t)(0x00E4 + 6 * i + 2 * j)) / 32768.0f;
     for (i = 0; i < 3; i++)
         for (j = 0; j < 3; j++)
             for (view[i][j] = 0, k = 0; k < 3; k++)
@@ -217,7 +217,7 @@ void fw_solid_begin(void)
         const uint8_t *w = nshvc_wram();
         uint16_t o = record < RM_RECORDS ? rm_record_object[record] : 0, g = record < RM_RECORDS ? rm_record_gaze[record] : 0;
         uint16_t look = (uint16_t)(w[(uint16_t)(0x205D + o)] | w[(uint16_t)(0x205E + o)] << 8);
-        double phi, d[3];
+        float phi, d[3];
         switch (look) {
         case 0x9AAF: face = eye_plain, nface = N(eye_plain); break;
         case 0x9AB1: face = eye_startled, nface = N(eye_startled); break;
@@ -228,8 +228,8 @@ void fw_solid_begin(void)
         }
         if (!(g & 0x100) || !face)
             return;
-        phi = (119.5 - (g & 0xFF)) * 2 * M_PI / 256;
-        d[0] = -sin(phi), d[1] = 0, d[2] = -cos(phi);
+        phi = (119.5f - (g & 0xFF)) * 2 * (float)M_PI / 256;
+        d[0] = -sinf(phi), d[1] = 0, d[2] = -cosf(phi);
         view[0][0] = d[2], view[0][1] = 0, view[0][2] = -d[0];      /* across: down x ahead */
         view[1][0] = 0, view[1][1] = 1, view[1][2] = 0;             /* down: the view's */
         view[2][0] = d[0], view[2][1] = d[1], view[2][2] = d[2];    /* the lens */
@@ -241,7 +241,7 @@ void fw_solid_begin(void)
         /* the sprite's size (01:B100, B128): a negative own size alone, else
            the shape's twice and the own shifted; 0 as 1 */
         int32_t own = (int16_t)ram16(0x00CE), size = own < 0 ? -own : 2 * ram16(0x00AA) + (own << ram16(0x0032));
-        scale = (double)(size ? size : 1) / object->texels;
+        scale = (float)(size ? size : 1) / object->texels;
     }
     if (rm_far_shift)                   /* a far object's place and size halved together */
         scale /= 1 << rm_far_shift;
@@ -249,7 +249,7 @@ void fw_solid_begin(void)
         int i, j;
         for (i = 0; i < 3; i++)
             for (j = 0; j < 3; j++)
-                view[i][j] = (int16_t)ram16((uint16_t)(0x00E4 + 6 * i + 2 * j)) / 32768.0;
+                view[i][j] = (int16_t)ram16((uint16_t)(0x00E4 + 6 * i + 2 * j)) / 32768.0f;
     } else if (object->shape != 0xA190)
         turn();
     armed = object;
@@ -270,13 +270,13 @@ void fw_solid_colour(uint8_t colr)
 
 /* a point of the solid, along its axis a, round it at turn t, radius r, to
    view space */
-static void place(const Solid *s, double a, double t, double r, double *out)
+static void place(const Solid *s, float a, float t, float r, float *out)
 {
-    double m[3];
+    float m[3];
     int j;
     m[s->axis] = a;
-    m[s->axis ? 0 : 1] = r * cos(t);
-    m[s->axis ? 1 : 2] = r * sin(t);
+    m[s->axis ? 0 : 1] = r * cosf(t);
+    m[s->axis ? 1 : 2] = r * sinf(t);
     for (j = 0; j < 3; j++)
         out[j] = pos[j] + scale * (m[0] * view[0][j] + m[1] * view[1][j] + m[2] * view[2][j]);
 }
@@ -284,9 +284,9 @@ static void place(const Solid *s, double a, double t, double r, double *out)
 /* a face's outward normal (from its first three points, turned away from
    the solid's centre) and whether it is seen: it faces the eye from its
    centre */
-static int face_seen(const double (*p)[3], int n, double *nv, double *centre)
+static int face_seen(const float (*p)[3], int n, float *nv, float *centre)
 {
-    double u[3], v[3], d = 0, e = 0;
+    float u[3], v[3], d = 0, e = 0;
     int i, j;
     for (j = 0; j < 3; j++) {
         u[j] = p[1][j] - p[0][j];
@@ -308,68 +308,68 @@ static int face_seen(const double (*p)[3], int n, double *nv, double *centre)
     return e < 0;
 }
 
-static uint8_t shade(const Ring *g, const double *nv)
+static uint8_t shade(const Ring *g, const float *nv)
 {
-    double up = -nv[1] / sqrt(nv[0] * nv[0] + nv[1] * nv[1] + nv[2] * nv[2]);   /* view y is down */
+    float up = -nv[1] / sqrtf(nv[0] * nv[0] + nv[1] * nv[1] + nv[2] * nv[2]);   /* view y is down */
     if (!g->up)
         return g->nib;
-    if (g->top && up > 0.8)
+    if (g->top && up > 0.8f)
         return g->top;
-    return up > 0.45 ? g->up : up < -0.45 ? g->down : g->across;
+    return up > 0.45f ? g->up : up < -0.45f ? g->down : g->across;
 }
 
 /* a cap at a, its rings over it outward in, when it faces the eye */
 static int cap_seen;                    /* the last cap's face is towards the eye */
 
-static void cap(const Solid *s, double a, const Disc *d, int nd, int n)
+static void cap(const Solid *s, float a, const Disc *d, int nd, int n)
 {
-    static double p[SEGMENTS_MAX][3];
-    double nv[3], c[3];
+    static float p[SEGMENTS_MAX][3];
+    float nv[3], c[3];
     int i, k;
     for (k = 0; k < nd; k++) {
         int m = k ? (n / 2 < 8 ? 8 : n / 2) : n;
         for (i = 0; i < m; i++)
-            place(s, a, 2 * M_PI * i / m, d[k].r, p[i]);
-        if (!k && !(cap_seen = face_seen((const double (*)[3])p, m, nv, c)))
+            place(s, a, 2 * (float)M_PI * i / m, d[k].r, p[i]);
+        if (!k && !(cap_seen = face_seen((const float (*)[3])p, m, nv, c)))
             return;
-        fw_view_face((const double (*)[3])p, m, (uint8_t)(hi | d[k].nib));
+        fw_view_face((const float (*)[3])p, m, (uint8_t)(hi | d[k].nib));
     }
 }
 
 /* an eye's face's marks (Mark) on its face plane at a, in order */
-static void eye_marks(const Solid *s, double a, const Mark *mk, int nm, int n)
+static void eye_marks(const Solid *s, float a, const Mark *mk, int nm, int n)
 {
-    static double p[SEGMENTS_MAX][3];
-    double q[4][3];
+    static float p[SEGMENTS_MAX][3];
+    float q[4][3];
     int k, i;
     for (k = 0; k < nm; k++) {
         const Mark *m = &mk[k];
         if (m->t0 == m->t1) {           /* a disc */
-            int sides = m->r1 < 1.5 ? 12 : n;
+            int sides = m->r1 < 1.5f ? 12 : n;
             for (i = 0; i < sides; i++) {
-                double t = 2 * M_PI * i / sides, x = m->cx + m->r1 * cos(t), y = m->cy + m->r1 * sin(t);
-                place(s, a, atan2(y, x), hypot(x, y), p[i]);
+                float t = 2 * (float)M_PI * i / sides, x = m->cx + m->r1 * cosf(t), y = m->cy + m->r1 * sinf(t);
+                place(s, a, atan2f(y, x), hypotf(x, y), p[i]);
             }
-            fw_view_face((const double (*)[3])p, sides, (uint8_t)(hi | m->nib));
+            fw_view_face((const float (*)[3])p, sides, (uint8_t)(hi | m->nib));
             continue;
         }
         {                               /* a band of a ring */
-            double t0 = m->t0 * M_PI / 180, t1 = m->t1 * M_PI / 180;
-            int steps = (int)ceil(n * (t1 - t0) / (2 * M_PI));
+            float t0 = m->t0 * (float)M_PI / 180, t1 = m->t1 * (float)M_PI / 180;
+            int steps = (int)ceilf(n * (t1 - t0) / (2 * (float)M_PI));
             if (steps < 2)
                 steps = 2;
             for (i = 0; i < steps; i++) {
-                double u0 = t0 + (t1 - t0) * i / steps, u1 = t0 + (t1 - t0) * (i + 1) / steps;
-                double xy[4][2] = { { m->cx + m->r0 * cos(u0), m->cy + m->r0 * sin(u0) },
-                                    { m->cx + m->r0 * cos(u1), m->cy + m->r0 * sin(u1) },
-                                    { m->cx + m->r1 * cos(u1), m->cy + m->r1 * sin(u1) },
-                                    { m->cx + m->r1 * cos(u0), m->cy + m->r1 * sin(u0) } };
+                float u0 = t0 + (t1 - t0) * i / steps, u1 = t0 + (t1 - t0) * (i + 1) / steps;
+                float xy[4][2] = { { m->cx + m->r0 * cosf(u0), m->cy + m->r0 * sinf(u0) },
+                                    { m->cx + m->r0 * cosf(u1), m->cy + m->r0 * sinf(u1) },
+                                    { m->cx + m->r1 * cosf(u1), m->cy + m->r1 * sinf(u1) },
+                                    { m->cx + m->r1 * cosf(u0), m->cy + m->r1 * sinf(u0) } };
                 int j, np = m->r0 > 0 ? 4 : 3;  /* from the middle: a wedge, its first two corners one */
                 for (j = 0; j < np; j++) {
                     int jj = m->r0 > 0 ? j : j + 1;
-                    place(s, a, atan2(xy[jj][1], xy[jj][0]), hypot(xy[jj][0], xy[jj][1]), q[j]);
+                    place(s, a, atan2f(xy[jj][1], xy[jj][0]), hypotf(xy[jj][0], xy[jj][1]), q[j]);
                 }
-                fw_view_face((const double (*)[3])q, np, (uint8_t)(hi | m->nib));
+                fw_view_face((const float (*)[3])q, np, (uint8_t)(hi | m->nib));
             }
         }
     }
@@ -378,7 +378,7 @@ static void eye_marks(const Solid *s, double a, const Mark *mk, int nm, int n)
 static void draw(const Solid *s)
 {
     /* the larger of the focal lengths across and down: a texel the finer way */
-    double rmax = 0, pr, f = fmax(fw_focal_x(), fw_focal_y()), p[4][3], nv[3], c[3];
+    float rmax = 0, pr, f = fmaxf(fw_focal_x(), fw_focal_y()), p[4][3], nv[3], c[3];
     int n, i, k;
 
     /* segments enough that the rim's flats are within half a texel of
@@ -387,7 +387,7 @@ static void draw(const Solid *s)
         if (s->rings[k].r > rmax)
             rmax = s->rings[k].r;
     pr = pos[2] > 0 ? rmax * scale * f / pos[2] : rmax;
-    n = pr > 0.5 ? (int)ceil(M_PI / acos(1 - 0.5 / pr)) : 8;
+    n = pr > 0.5f ? (int)ceilf((float)M_PI / acosf(1 - 0.5f / pr)) : 8;
     n = (n + 3) & ~3;
     if (n < 8)
         n = 8;
@@ -397,13 +397,13 @@ static void draw(const Solid *s)
     for (k = 0; k + 1 < s->nrings; k++) {
         const Ring *g = &s->rings[k], *h = &s->rings[k + 1];
         for (i = 0; i < n; i++) {
-            double t0 = 2 * M_PI * i / n, t1 = 2 * M_PI * (i + 1) / n;
+            float t0 = 2 * (float)M_PI * i / n, t1 = 2 * (float)M_PI * (i + 1) / n;
             place(s, g->a, t0, g->r, p[0]);
             place(s, g->a, t1, g->r, p[1]);
             place(s, h->a, t1, h->r, p[2]);
             place(s, h->a, t0, h->r, p[3]);
-            if (face_seen((const double (*)[3])p, 4, nv, c))
-                fw_view_face((const double (*)[3])p, 4, (uint8_t)(hi | shade(g, nv)));
+            if (face_seen((const float (*)[3])p, 4, nv, c))
+                fw_view_face((const float (*)[3])p, 4, (uint8_t)(hi | shade(g, nv)));
         }
     }
     cap(s, s->rings[s->nrings - 1].a, s->front, s->nfront, n);
@@ -436,14 +436,14 @@ typedef struct {
     int used, kind, texels;             /* the painting it is (its bank, base, nibble), measured once */
     uint8_t bank, nib;
     uint16_t base;
-    double half[PAINT_ROWS], light[3], share[16], from[16];
+    float half[PAINT_ROWS], light[3], share[16], from[16];
     int top, bottom, ncolours;
     uint8_t colour[16];                 /* darkest (the higher nibble) first */
 } Paint;
 
 static void paint_measure(const Solid *s, Paint *p)
 {
-    double count[16] = { 0 }, total = 0, mean = 0, cx = 0, cy = 0, lx = 0, ly = 0, l;
+    float count[16] = { 0 }, total = 0, mean = 0, cx = 0, cy = 0, lx = 0, ly = 0, l;
     int u, v, k, T = s->texels;
     uint8_t c, rank[16] = { 0 };
 #define TEXEL(u, v) ((fw_texel(tex_bank, (uint16_t)(tex_base + ((v) << 8) + (u))) >> (4 * tex_nib)) & 15)
@@ -458,7 +458,7 @@ static void paint_measure(const Solid *s, Paint *p)
                 right = u;
                 count[c]++, total++;
             }
-        p->half[v] = left < 0 ? 0 : (right + 1 - left) / 2.0;
+        p->half[v] = left < 0 ? 0 : (right + 1 - left) / 2.0f;
         if (left >= 0) {
             if (p->top < 0)
                 p->top = v;
@@ -475,23 +475,23 @@ static void paint_measure(const Solid *s, Paint *p)
     for (v = 0; v < T; v++)
         for (u = 0; u < T; u++)
             if ((c = TEXEL(u, v)))
-                mean += rank[c], cx += u + 0.5, cy += v + 0.5;
+                mean += rank[c], cx += u + 0.5f, cy += v + 0.5f;
     mean /= total, cx /= total, cy /= total;
     for (v = 0; v < T; v++)
         for (u = 0; u < T; u++)
             if ((c = TEXEL(u, v)))
-                lx += (rank[c] - mean) * (u + 0.5 - cx), ly += (rank[c] - mean) * (v + 0.5 - cy);
+                lx += (rank[c] - mean) * (u + 0.5f - cx), ly += (rank[c] - mean) * (v + 0.5f - cy);
 #undef TEXEL
-    l = sqrt(lx * lx + ly * ly);
-    p->light[0] = l ? 0.75 * lx / l : 0, p->light[1] = l ? 0.75 * ly / l : 0, p->light[2] = -0.66;
-    l = sqrt(p->light[0] * p->light[0] + p->light[1] * p->light[1] + p->light[2] * p->light[2]);
+    l = sqrtf(lx * lx + ly * ly);
+    p->light[0] = l ? 0.75f * lx / l : 0, p->light[1] = l ? 0.75f * ly / l : 0, p->light[2] = -0.66f;
+    l = sqrtf(p->light[0] * p->light[0] + p->light[1] * p->light[1] + p->light[2] * p->light[2]);
     for (k = 0; k < 3; k++)
         p->light[k] /= l;
 }
 
 /* a point of the tree: x and z across, y the world's down (texels from its
    painting's middle) */
-static void tree_point(double x, double y, double z, double *out)
+static void tree_point(float x, float y, float z, float *out)
 {
     int j;
     for (j = 0; j < 3; j++)
@@ -499,19 +499,19 @@ static void tree_point(double x, double y, double z, double *out)
 }
 
 #define TREE_FACES 4096
-typedef struct { double p[4][3], key, lit, area; int n; uint8_t c; } TreeFace;
+typedef struct { float p[4][3], key, lit, area; int n; uint8_t c; } TreeFace;
 static TreeFace faces[TREE_FACES];
 
 static int face_cmp(const void *a, const void *b)
 {
-    double x = ((const TreeFace *)a)->key, y = ((const TreeFace *)b)->key;
+    float x = ((const TreeFace *)a)->key, y = ((const TreeFace *)b)->key;
     return x > y ? -1 : x < y;
 }
 
 static TreeFace *by_lit[TREE_FACES];
 static int lit_cmp(const void *a, const void *b)
 {
-    double x = (*(TreeFace *const *)a)->lit, y = (*(TreeFace *const *)b)->lit;
+    float x = (*(TreeFace *const *)a)->lit, y = (*(TreeFace *const *)b)->lit;
     return x < y ? -1 : x > y;
 }
 
@@ -522,10 +522,10 @@ static int lit_cmp(const void *a, const void *b)
 /* a face of m points kept when seen, outward away from the upright at
    down ay; its light against the painting's and its area on the screen */
 static int nf;
-static double total_area;
-static void keep_face(const double (*q)[3], int m, double ay, const Paint *pt)
+static float total_area;
+static void keep_face(const float (*q)[3], int m, float ay, const Paint *pt)
 {
-    double u[3], v[3], nv[3], c[3] = { 0 }, axis[3], d = 0, e = 0, l, fxy = fw_focal_x() * fw_focal_y();
+    float u[3], v[3], nv[3], c[3] = { 0 }, axis[3], d = 0, e = 0, l, fxy = fw_focal_x() * fw_focal_y();
     TreeFace *f;
     int i, j;
     if (nf >= TREE_FACES)
@@ -550,18 +550,18 @@ static void keep_face(const double (*q)[3], int m, double ay, const Paint *pt)
         e += nv[j] * c[j];
     if (e >= 0)
         return;
-    l = sqrt(nv[0] * nv[0] + nv[1] * nv[1] + nv[2] * nv[2]);
+    l = sqrtf(nv[0] * nv[0] + nv[1] * nv[1] + nv[2] * nv[2]);
     f->lit = l ? (nv[0] * pt->light[0] + nv[1] * pt->light[1] + nv[2] * pt->light[2]) / l : -1;
     for (i = 0; i < m; i++)
         memcpy(f->p[i], q[i], sizeof f->p[i]);
     f->n = m;
     f->key = c[0] * c[0] + c[1] * c[1] + c[2] * c[2];
     for (f->area = 0, j = 0; j < m; j++) {      /* its area on the screen */
-        const double *a = q[j], *b = q[(j + 1) % m];
+        const float *a = q[j], *b = q[(j + 1) % m];
         if (a[2] > 0 && b[2] > 0)
             f->area += (a[0] / a[2]) * (b[1] / b[2]) - (b[0] / b[2]) * (a[1] / a[2]);
     }
-    f->area = fabs(f->area) * fxy / 2;
+    f->area = fabsf(f->area) * fxy / 2;
     total_area += f->area;
     nf++;
 }
@@ -580,62 +580,62 @@ static int calibrating;
    painting, by the same steps a face's corner was (its cos and sin), and
    each tree's corners placed once (tree_point) for all the faces on it. */
 #define RINGS_MAX (PAINT_ROWS / 2 + 4)
-static double placed[RINGS_MAX][TREE_SIDES_MAX + 1][3];
+static float placed[RINGS_MAX][TREE_SIDES_MAX + 1][3];
 
-static void tree_model(double (*m)[TREE_SIDES_MAX + 1][3], const double *y, const double *r, int nr, int sides,
-                       const double (*jag)[TREE_SIDES_MAX], const double (*rise)[TREE_SIDES_MAX], int stagger)
+static void tree_model(float (*m)[TREE_SIDES_MAX + 1][3], const float *y, const float *r, int nr, int sides,
+                       const float (*jag)[TREE_SIDES_MAX], const float (*rise)[TREE_SIDES_MAX], int stagger)
 {
     int k, c;
     for (k = 0; k < nr; k++) {
-        double o = stagger && (k & 1) ? 0.5 : 0;
+        float o = stagger && (k & 1) ? 0.5f : 0;
         for (c = 0; c <= sides; c++) {
             int w = c % sides;
-            double ra = r[k] * jag[k][w], t = 2 * M_PI * (c + o) / sides;
-            m[k][c][0] = ra * cos(t);
+            float ra = r[k] * jag[k][w], t = 2 * (float)M_PI * (c + o) / sides;
+            m[k][c][0] = ra * cosf(t);
             m[k][c][1] = y[k] + rise[k][w];
-            m[k][c][2] = ra * sin(t);
+            m[k][c][2] = ra * sinf(t);
         }
     }
 }
 
-static void tree_body(const double *y, int nr, int sides, double (*m)[TREE_SIDES_MAX + 1][3], const double *r,
+static void tree_body(const float *y, int nr, int sides, float (*m)[TREE_SIDES_MAX + 1][3], const float *r,
                       int stagger, Paint *pt)
 {
     int k, i;
-    double at;
+    float at;
     nf = 0, total_area = 0;
     for (k = 0; k < nr; k++)
         for (i = 0; i <= sides; i++)
             tree_point(m[k][i][0], m[k][i][1], m[k][i][2], placed[k][i]);
     for (k = 0; k + 1 < nr; k++) {
-        double o0 = stagger && (k & 1) ? 0.5 : 0, o1 = stagger && ((k + 1) & 1) ? 0.5 : 0, ay = (y[k] + y[k + 1]) / 2;
+        float o0 = stagger && (k & 1) ? 0.5f : 0, o1 = stagger && ((k + 1) & 1) ? 0.5f : 0, ay = (y[k] + y[k + 1]) / 2;
         for (i = 0; i < sides; i++) {
-            const double *a0 = placed[k][i], *a1 = placed[k][i + 1], *b0 = placed[k + 1][i], *b1 = placed[k + 1][i + 1];
-            double q[4][3];
+            const float *a0 = placed[k][i], *a1 = placed[k][i + 1], *b0 = placed[k + 1][i], *b1 = placed[k + 1][i + 1];
+            float q[4][3];
             if (!r[k]) {                /* a closed end: triangles to its point */
                 memcpy(q[0], a0, sizeof q[0]), memcpy(q[1], b1, sizeof q[0]), memcpy(q[2], b0, sizeof q[0]);
-                keep_face((const double (*)[3])q, 3, ay, pt);
+                keep_face((const float (*)[3])q, 3, ay, pt);
             } else if (!r[k + 1]) {
                 memcpy(q[0], a0, sizeof q[0]), memcpy(q[1], a1, sizeof q[0]), memcpy(q[2], b0, sizeof q[0]);
-                keep_face((const double (*)[3])q, 3, ay, pt);
+                keep_face((const float (*)[3])q, 3, ay, pt);
             } else if (o0 == o1) {      /* a band of four-sided faces */
                 memcpy(q[0], a0, sizeof q[0]), memcpy(q[1], a1, sizeof q[0]), memcpy(q[2], b1, sizeof q[0]), memcpy(q[3], b0, sizeof q[0]);
-                keep_face((const double (*)[3])q, 4, ay, pt);
+                keep_face((const float (*)[3])q, 4, ay, pt);
             } else if (o1 > o0) {       /* the next ring's point beside this edge: b0 */
                 memcpy(q[0], a0, sizeof q[0]), memcpy(q[1], a1, sizeof q[0]), memcpy(q[2], b0, sizeof q[0]);
-                keep_face((const double (*)[3])q, 3, ay, pt);
+                keep_face((const float (*)[3])q, 3, ay, pt);
                 memcpy(q[0], b0, sizeof q[0]), memcpy(q[1], a1, sizeof q[0]), memcpy(q[2], b1, sizeof q[0]);
-                keep_face((const double (*)[3])q, 3, ay, pt);
+                keep_face((const float (*)[3])q, 3, ay, pt);
             } else {                    /* this ring turned: the next ring's b1 beside this edge */
                 memcpy(q[0], a0, sizeof q[0]), memcpy(q[1], a1, sizeof q[0]), memcpy(q[2], b1, sizeof q[0]);
-                keep_face((const double (*)[3])q, 3, ay, pt);
+                keep_face((const float (*)[3])q, 3, ay, pt);
                 memcpy(q[0], a0, sizeof q[0]), memcpy(q[1], b1, sizeof q[0]), memcpy(q[2], b0, sizeof q[0]);
-                keep_face((const double (*)[3])q, 3, ay, pt);
+                keep_face((const float (*)[3])q, 3, ay, pt);
             }
         }
     }
     if (calibrating) {                  /* each colour's light: where the faces, least lit first, pass its share */
-        double edge;
+        float edge;
         for (i = 0; i < nf; i++)
             by_lit[i] = &faces[i];
         qsort(by_lit, (size_t)nf, sizeof by_lit[0], lit_cmp);
@@ -654,7 +654,7 @@ static void tree_body(const double *y, int nr, int sides, double (*m)[TREE_SIDES
     }
     qsort(faces, (size_t)nf, sizeof faces[0], face_cmp);
     for (i = 0; i < nf; i++)
-        fw_view_face((const double (*)[3])faces[i].p, faces[i].n, (uint8_t)(hi | faces[i].c));
+        fw_view_face((const float (*)[3])faces[i].p, faces[i].n, (uint8_t)(hi | faces[i].c));
 }
 
 /* A tree drawn at the detail its size on the screen asks: the wheels'
@@ -667,16 +667,16 @@ static void tree_body(const double *y, int nr, int sides, double (*m)[TREE_SIDES
    detail, so a face's colour means the same light at every level. */
 typedef struct {
     int ok, nr, sides;
-    double T, y[RINGS_MAX], r[RINGS_MAX];
-    double (*m)[TREE_SIDES_MAX + 1][3];
+    float T, y[RINGS_MAX], r[RINGS_MAX];
+    float (*m)[TREE_SIDES_MAX + 1][3];
 } TreeLevel;
 static TreeLevel levels[4][4][4];       /* painting, sides level, rings level */
 
 static TreeLevel *tree_level(const Solid *s, Paint *pp, int paint, int sl, int rl)
 {
-    static double jag[RINGS_MAX][TREE_SIDES_MAX], rise[RINGS_MAX][TREE_SIDES_MAX];
+    static float jag[RINGS_MAX][TREE_SIDES_MAX], rise[RINGS_MAX][TREE_SIDES_MAX];
     TreeLevel *L = &levels[paint][sl][rl];
-    double T = s->texels, *y = L->y, *r = L->r;
+    float T = s->texels, *y = L->y, *r = L->r;
     int full = s->tree == 1 ? 10 : 44, sides = full >> sl, step = (s->tree == 1 ? 2 : 3) << rl, nr = 0, v, k, i;
     if (L->ok && L->T == T)
         return L;
@@ -684,28 +684,28 @@ static TreeLevel *tree_level(const Solid *s, Paint *pp, int paint, int sl, int r
         sides = 5;
     y[nr] = pp->top - T / 2, r[nr++] = 0;
     for (v = pp->top; v <= pp->bottom; v += step) {
-        double h = 0;
+        float h = 0;
         for (k = v; k < v + step && k <= pp->bottom; k++)
             if (pp->half[k] > h)
                 h = pp->half[k];
-        y[nr] = v + step / 2.0 - T / 2, r[nr++] = h;
+        y[nr] = v + step / 2.0f - T / 2, r[nr++] = h;
     }
     if (s->tree == 2) {                 /* the canopy's outline eased: each ring with its neighbours */
-        double was[RINGS_MAX];
+        float was[RINGS_MAX];
         memcpy(was, r, sizeof was);
         for (k = 1; k + 1 < nr; k++)
-            r[k] = 0.25 * was[k - 1] + 0.5 * was[k] + 0.25 * was[k + 1];
+            r[k] = 0.25f * was[k - 1] + 0.5f * was[k] + 0.25f * was[k + 1];
     }
     y[nr] = pp->bottom + 1 - T / 2, r[nr++] = 0;
     for (k = 0; k < nr; k++)            /* the canopy's points in and out and up and down a little, the same for every tree */
         for (i = 0; i < sides; i++) {
             unsigned hsh = (unsigned)(k * 7919 + i * 104729) * 2654435761u;
-            jag[k][i] = s->tree == 2 ? 0.91 + 0.18 * ((hsh >> 16) & 0xFF) / 255.0 : 1.0;
-            rise[k][i] = s->tree == 2 && r[k] ? 1.6 * (((hsh >> 8) & 0xFF) / 255.0 - 0.5) : 0;
+            jag[k][i] = s->tree == 2 ? 0.91f + 0.18f * ((hsh >> 16) & 0xFF) / 255.0f : 1.0f;
+            rise[k][i] = s->tree == 2 && r[k] ? 1.6f * (((hsh >> 8) & 0xFF) / 255.0f - 0.5f) : 0;
         }
     if (!L->m && !(L->m = malloc(sizeof *L->m * RINGS_MAX)))
         return NULL;
-    tree_model(L->m, y, r, nr, sides, (const double (*)[TREE_SIDES_MAX])jag, (const double (*)[TREE_SIDES_MAX])rise,
+    tree_model(L->m, y, r, nr, sides, (const float (*)[TREE_SIDES_MAX])jag, (const float (*)[TREE_SIDES_MAX])rise,
                s->tree == 2);
     L->nr = nr;
     L->sides = sides;
@@ -720,7 +720,7 @@ static void tree(const Solid *s)
     static Paint paints[4];
     Paint *pp = NULL;
     TreeLevel *L;
-    double px, rmax = 0, f = fmax(fw_focal_x(), fw_focal_y());
+    float px, rmax = 0, f = fmaxf(fw_focal_x(), fw_focal_y());
     for (i = 0; i < 4 && !pp; i++)      /* the painting, measured once */
         if (paints[i].used && paints[i].kind == s->tree && paints[i].bank == tex_bank && paints[i].base == tex_base &&
             paints[i].nib == tex_nib)
@@ -740,7 +740,7 @@ static void tree(const Solid *s)
     if (!pp->ncolours || pp->top < 0)
         return;
     if (!pp->texels) {                  /* its colours' lights, once, at the full detail: the part from the front, far off */
-        double kp[3], kv[3][3], ks = scale;
+        float kp[3], kv[3][3], ks = scale;
         int a, b;
         if (!(L = tree_level(s, pp, paint, 0, 0)))
             return;
@@ -748,7 +748,7 @@ static void tree(const Solid *s)
         for (a = 0; a < 3; a++)
             for (b = 0; b < 3; b++)
                 view[a][b] = a == b;
-        pos[0] = pos[1] = 0, pos[2] = 1e5, scale = 1;
+        pos[0] = pos[1] = 0, pos[2] = 1e5f, scale = 1;
         calibrating = 1;
         tree_body(L->y, L->nr, L->sides, L->m, L->r, s->tree == 2, pp);
         calibrating = 0;
@@ -759,14 +759,14 @@ static void tree(const Solid *s)
     for (i = pp->top; i <= pp->bottom; i++)
         if (pp->half[i] > rmax)
             rmax = pp->half[i];
-    px = pos[2] > 0 ? scale * f / pos[2] : 1e9;
+    px = pos[2] > 0 ? scale * f / pos[2] : 1e9f;
     {
-        double pr = rmax * px;
-        int n = pr > 0.5 ? (int)ceil(M_PI / acos(1 - 0.5 / pr)) : 5;
+        float pr = rmax * px;
+        int n = pr > 0.5f ? (int)ceilf((float)M_PI / acosf(1 - 0.5f / pr)) : 5;
         for (sl = 3; sl > 0 && (full >> sl < 5 ? 5 : full >> sl) < n; sl--)
             ;
     }
-    for (rl = 0; rl < 3 && step * (1 << rl) * px < 1.5; rl++)
+    for (rl = 0; rl < 3 && step * (1 << rl) * px < 1.5f; rl++)
         ;
     if (!(L = tree_level(s, pp, paint, sl, rl)))
         return;

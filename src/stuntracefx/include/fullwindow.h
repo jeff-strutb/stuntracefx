@@ -223,7 +223,7 @@ int fw_rows(int n);
 void fw_sprite_draw(int32_t h);
 /* a flat convex face of n points in view space, colour c, into the
    picture (near-clipped and projected exactly) */
-void fw_view_face(const double (*p)[3], int n, uint8_t c);
+void fw_view_face(const float (*p)[3], int n, uint8_t c);
 /* Enhanced's sprites drawn as solid shapes (solids.c), from
    FxObjectsDraw (frame.c): the object's shape and its draw record's index
    (rm_record_object), then for a sprite past its depth test begin, its colour once its
