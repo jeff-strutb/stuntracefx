@@ -168,6 +168,22 @@ static NSString *const kernel_source = @
 "        }\n"
 "    }\n"
 "}\n"
+"/* a job's noise (fullwindow.c noise_fill): the generator's steps in order, one thread */\n"
+"struct NoiseJob { int w, h, cols, rows; uint seed, lo, hi, nib; };\n"
+"kernel void noise(device uchar *out [[buffer(0)]], constant NoiseJob &j [[buffer(2)]]) {\n"
+"    uint s = j.seed;\n"
+"    for (int y = 0; y < j.rows; y++)\n"
+"        for (int x = 0; x < j.cols; x++) {\n"
+"            uint t = (((s & 255u) << 8) ^ s) & 0xFFFFu, sw = ((t << 8) | (t >> 8)) & 0xFFFFu, r = ((t & 255u) * 2u) ^ sw;\n"
+"            if (r & 1u) s = ((r >> 1) ^ 0xFF00u ^ 0x8180u) & 0xFFFFu;\n"
+"            else { s = ((r >> 1) ^ 0xFF00u) & 0xFFFFu; if (s == 0xAA55u) s = 0u; }\n"
+"            uint i = s & 7u, c = ((i < 4u ? j.lo : j.hi) >> ((i & 3u) * 8u)) & 255u;\n"
+"            if (j.nib ? (c & 15u) == 0u : c == 0u) continue;\n"
+"            int px = x & 255, py = y & 255;\n"
+"            if (py >= j.h) { py -= j.h; px += 8; }\n"
+"            if (px < j.w && py < j.h) out[(long)py * j.w + px] = (uchar)c;\n"
+"        }\n"
+"}\n"
 "/* one effect's FxHazeSample and FxHazePlot (fullwindow.c haze_fill): one thread */\n"
 "struct HazeJob { int w, h, x, y, t, sxn, sxd, syn, syd, wrap; };\n"
 "static int floor_at(int v, int n, int d) { long p = (long)v * (long)n; return (int)(p >= 0 ? p / (long)d : -((-p + (long)d - 1) / (long)d)); }\n"
@@ -630,7 +646,7 @@ static NSString *const kernel_source = @
 
 static id<MTLDevice> dev;
 static id<MTLCommandQueue> queue;
-static id<MTLComputePipelineState> pipe_fill, pipe_rows, pipe_water, pipe_prims, pipe_pack, pipe_haze;
+static id<MTLComputePipelineState> pipe_fill, pipe_rows, pipe_water, pipe_prims, pipe_pack, pipe_haze, pipe_noise;
 static id<MTLBuffer> buf_snap, buf_bits;
 static id<MTLRenderPipelineState> pipe_tri, pipe_line, pipe_quad;
 static id<MTLTexture> tex_pic;           /* the picture as the render pass draws it (R8Uint) */
@@ -1022,6 +1038,25 @@ static int haze_run(int w, int h, const FwSpan *p)
     return 1;
 }
 
+/* a job's noise (the noise kernel) */
+static int noise_run(int w, int h, const FwSpan *p)
+{
+    uint64_t ramp = (uint64_t)p->u;
+    uint32_t job[8] = { (uint32_t)w, (uint32_t)h, (uint32_t)p->xl, (uint32_t)p->v, p->base, (uint32_t)ramp, (uint32_t)(ramp >> 32), p->por & 8u };
+    @autoreleasepool {
+        id<MTLCommandBuffer> cb = [queue commandBuffer];
+        id<MTLComputeCommandEncoder> e = [cb computeCommandEncoder];
+        [e setComputePipelineState:pipe_noise];
+        [e setBuffer:buf_out offset:0 atIndex:0];
+        [e setBytes:job length:sizeof job atIndex:2];
+        [e dispatchThreads:MTLSizeMake(1, 1, 1) threadsPerThreadgroup:MTLSizeMake(1, 1, 1)];
+        [e endEncoding];
+        [cb commit];
+        [cb waitUntilCompleted];
+    }
+    return 1;
+}
+
 /* the chip's bitplanes and the target (the pack kernel), the RAM copied across */
 static void bits_move(uint8_t *tex, uint8_t *ram, const FwBits *b, int pack)
 {
@@ -1093,6 +1128,12 @@ static void fill(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
             i++;
             continue;
         }
+        if (sp[i].textured == FW_NOISE) {   /* a job's noise (a marker too) */
+            if (!noise_run(w, h, &sp[i]))
+                fw_span_fill_cpu(out, w, h, &sp[i], 1);
+            i++;
+            continue;
+        }
         if (gpu_bin_face(&sp[i])) {
             for (j = i; j < n && gpu_bin_face(&sp[j]); j++)
                 ;
@@ -1101,7 +1142,7 @@ static void fill(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
             i = j;
             continue;
         }
-        for (j = i; j < n && !gpu_bin_face(&sp[j]) && sp[j].textured != FW_HAZE; j++)
+        for (j = i; j < n && !gpu_bin_face(&sp[j]) && !fw_span_kernel(&sp[j]); j++)
             if (!gpu_bin_ref_only(&sp[j]))
                 run[m++] = sp[j];
         if (!fill_spans(out, w, h, run, m))
@@ -1211,7 +1252,9 @@ int gpu_metal_init(void)
         pipe_pack = [dev newComputePipelineStateWithFunction:[lib newFunctionWithName:@"pack"] error:&err];
     if (pipe_pack)
         pipe_haze = [dev newComputePipelineStateWithFunction:[lib newFunctionWithName:@"haze"] error:&err];
-    if (pipe_haze) {
+    if (pipe_haze)
+        pipe_noise = [dev newComputePipelineStateWithFunction:[lib newFunctionWithName:@"noise"] error:&err];
+    if (pipe_noise) {
         MTLRenderPipelineDescriptor *d = [MTLRenderPipelineDescriptor new];
         d.vertexFunction = [lib newFunctionWithName:@"model_vertex"];
         d.fragmentFunction = [lib newFunctionWithName:@"model_fragment"];
@@ -1228,7 +1271,7 @@ int gpu_metal_init(void)
         if (pipe_line)
             pipe_quad = [dev newRenderPipelineStateWithDescriptor:d error:&err];
     }
-    if (!pipe_fill || !pipe_rows || !pipe_water || !pipe_prims || !pipe_pack || !pipe_haze || !pipe_tri || !pipe_line || !pipe_quad) {
+    if (!pipe_fill || !pipe_rows || !pipe_water || !pipe_prims || !pipe_pack || !pipe_haze || !pipe_noise || !pipe_tri || !pipe_line || !pipe_quad) {
         fprintf(stderr, "gpu_metal: the pipeline: %s\n", err.localizedDescription.UTF8String);
         return 0;
     }

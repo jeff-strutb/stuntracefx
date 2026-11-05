@@ -127,8 +127,10 @@ static void run_program(uint8_t bank, uint16_t addr)
     fw_gsu_program(1);                  /* Enhanced's full window: the HUD's pieces whole; Original on the GPU: the job's target (fullwindow.h) */
     r->abi();
     fw_gsu_program(0);
-    if (fw_job()->on)
+    if (fw_job()->on && !rm_enhanced()) {   /* (in Enhanced a program costs nothing) */
         gsu_job_cost(draw_clocks(fw_job()));
+        gsu_job_stores(fw_job()->stores);
+    }
 }
 
 /* ---- the board ---- */

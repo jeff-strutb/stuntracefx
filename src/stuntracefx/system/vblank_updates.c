@@ -10,6 +10,7 @@
 #include "hw.h"
 #include "wram.h"
 #include "remaster.h"
+#include "fullwindow.h"
 
 uint8_t VramDmaWideRowsFromGsuRam(uint8_t rows_less_one, uint16_t src, uint16_t vram, uint16_t *next);
 void CgramDmaIfPending(void);
@@ -71,7 +72,7 @@ static void menu_overlap(int set, unsigned keep)
 static void menu_flip(uint8_t bank, int set)
 {
     if (menu_canvas[set]) {
-        if (!rm_canvas_gpu_word(set ? 0x0B00 : 0x0000, 143))    /* SC_GPU: the GPU's picture */
+        if (!rm_canvas_gpu_word(set ? 0x0B00 : 0x0000, 143) && !fw_unplotted())    /* SC_GPU: the GPU's picture */
             rm_canvas_show_copied(set ? 0x0B00 : 0x0000, 143, 8);
         /* no copy took the blank's time: bit 5 of $11D7 left clear, so
            VblankUpdates' palette, VRAM and sprite transfers still run */

@@ -39,6 +39,8 @@ typedef struct {
 void gsu_host_price(uint8_t bank, uint16_t addr, GsuPrice *out);
 /* clocks added to the running program's duration (superfx.c) */
 void gsu_job_cost(uint64_t clocks);
+/* the price of n byte stores added to it, none of them made (superfx.c) */
+void gsu_job_stores(uint32_t n);
 uint8_t gsu_host_open_bus(void);              /* the data bus's open value */
 uint32_t gsu_host_ram_size(void);             /* the cartridge's RAM (a power of two) */
 /* a byte of the cartridge's ROM at file offset off for the Super FX;

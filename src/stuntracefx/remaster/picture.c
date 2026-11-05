@@ -143,6 +143,17 @@ int rm_canvas_gpu_word(unsigned word, unsigned count)
     return 1;
 }
 
+int rm_canvas_gpu_up(unsigned count) { return gpu_ready && gpu_count == count; }
+
+int rm_canvas_gpu_once(unsigned word, unsigned count)
+{
+    if (canvas_on && canvas_gpu && canvas_word == word && canvas_count == count) {
+        canvas_seen = 1;
+        return 1;
+    }
+    return rm_canvas_gpu_word(word, count);
+}
+
 void rm_canvas_show(unsigned word, uint16_t src, unsigned count)
 {
     if (src + count * 64 > 0x10000)

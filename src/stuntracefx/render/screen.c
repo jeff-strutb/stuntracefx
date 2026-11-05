@@ -26,6 +26,10 @@ uint16_t FxScreenClear(void)
     uint16_t at = gsu_ldw(FX_SCREEN_START);
     uint16_t n;
 
+    if (fw_job_clear(at, FX_SCREEN_WORDS * 2u)) {   /* SC_GPU, a job's: on the GPU; the loop's end as it leaves it */
+        gsu.ramaddr = (uint16_t)(at + FX_SCREEN_WORDS * 2u - 2u);
+        return (uint16_t)(at + FX_SCREEN_WORDS * 2u);
+    }
     n = 0;
     do {                                       /* LOOP at the bottom */
         gsu_stw(at, 0x0000);

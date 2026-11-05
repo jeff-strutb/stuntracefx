@@ -1,0 +1,37 @@
+#version 450
+/*
+ * noise.comp: a job's noise (07:EE88, fullwindow.c noise_fill, fullwindow.h
+ * FW_NOISE): the generator's steps in order, each pixel the ramp's byte its low
+ * 3 bits pick, by PLOT's rule, at the low bytes of its place: one thread.
+ */
+layout(local_size_x = 1) in;
+layout(std430, binding = 0) buffer Out { uint px[]; };
+layout(push_constant) uniform Push { int w, h, cols, rows; uint seed, lo, hi, nib; } pc;
+
+void main()
+{
+    uint s = pc.seed;
+    for (int y = 0; y < pc.rows; y++)
+        for (int x = 0; x < pc.cols; x++) {
+            uint t = (((s & 255u) << 8) ^ s) & 0xFFFFu, sw = ((t << 8) | (t >> 8)) & 0xFFFFu, r = ((t & 255u) * 2u) ^ sw;
+            if ((r & 1u) != 0u) {
+                s = ((r >> 1) ^ 0xFF00u ^ 0x8180u) & 0xFFFFu;
+            } else {
+                s = ((r >> 1) ^ 0xFF00u) & 0xFFFFu;
+                if (s == 0xAA55u)
+                    s = 0u;
+            }
+            uint i = s & 7u, c = ((i < 4u ? pc.lo : pc.hi) >> ((i & 3u) * 8u)) & 255u;
+            if (pc.nib != 0u ? (c & 15u) == 0u : c == 0u)
+                continue;
+            int xa = x & 255, ya = y & 255;
+            if (ya >= pc.h) {
+                ya -= pc.h;
+                xa += 8;
+            }
+            if (xa >= pc.w || ya >= pc.h)
+                continue;
+            uint o = uint(ya * pc.w + xa), sh = (o & 3u) * 8u;
+            px[o >> 2] = (px[o >> 2] & ~(255u << sh)) | (c << sh);
+        }
+}

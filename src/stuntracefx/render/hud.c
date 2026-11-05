@@ -306,6 +306,20 @@ static void noise_body(void)
     R[6] = NOISE_RAMP;
     R[1] = 0;
     R[2] = 0;
+    if (fw_noise(R[9], R[10], &R[8], R[6], &R[0])) {
+        /* SC_GPU, a job's: the GPU's; the registers as the rows leave them */
+        color(R[0]);
+        R[12] = 0;
+        R[13] = 0xEEBB;
+        R[1] = gsu_sub(R[1], R[1], 0);
+        R[2] = (uint16_t)(R[10] - 1);
+        R[10] = 1;
+        R[10] = gsu_dec(R[10]);
+        R[2] = gsu_inc(R[2]);
+        R[0] = rpix();
+        gsu_stw(HUD_NOISE_SEED, R[8]);
+        return;
+    }
     do {
         R[12] = R[9];
         R[13] = 0xEEBB;
@@ -390,7 +404,7 @@ static void picture_rows(uint16_t src, uint16_t row_start, uint16_t bytes)
 
     R[1] = R[8];
     gsu_r14((uint16_t)(PICTURE + src));
-    if (R[3] && fw_bitmap(R[8], R[2], gsu.rombr, R[14], R[3], (int)bytes, R[11])) {
+    if (fw_bitmap(R[8], R[2], gsu.rombr, R[14], R[3], (int)bytes, R[11])) {
         /* SC_GPU, a bitmap's or a job's picture: one quad; the registers as the rows leave them */
         R[13] = row_start;
         R[2] = (uint16_t)(R[2] + R[3]);
@@ -1044,6 +1058,17 @@ void FxGlyph24x32Bank04(void)
     gsu_r14(gsu_ldw(HUD_BITMAP));
     R[12] = 0x20;
     R[13] = 0xF3F7;
+    if (fw_bitmap(R[8], R[2], gsu.rombr, R[14], 0x20, 6, R[11])) {
+        /* SC_GPU, a bitmap's or a job's picture: one quad; the registers as the rows leave them */
+        R[3] = 0;
+        R[1] = R[8];
+        R[2] = (uint16_t)(R[2] + 0x20);
+        gsu_r14((uint16_t)(R[14] + 0x20 * 32));
+        R[12] = 0;
+        R[0] = rpix();
+        fw_sprite_rows_done();
+        return;
+    }
     do {
         R[3] = 6;
         do {
@@ -1141,6 +1166,16 @@ void FxGlyph16x32Double(void)
         return;
     R[12] = 0x20;
     R[13] = 0xF820;
+    if (fw_bitmap_scaled(R[8], R[2], R[8], R[2], 0x20, 0x40, gsu.rombr, R[14], 0x80, 0x80, R[11])) {
+        /* SC_GPU, a bitmap's or a job's picture: one quad, each pixel and row twice; the registers as the rows leave them */
+        R[0] = 0x1C;
+        R[1] = R[8];
+        R[2] = (uint16_t)(R[2] + 0x40);
+        gsu_r14((uint16_t)(R[14] + 0x20 * 32));
+        R[12] = 0;
+        fw_sprite_rows_done();
+        return;
+    }
     do {
         for (int b = 0; b < 4; b++) {
             bitmap_byte_double();

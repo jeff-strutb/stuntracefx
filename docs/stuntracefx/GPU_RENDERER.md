@@ -201,14 +201,48 @@ What was found by reading, and what is not the GPU's yet:
   full window's exact form): polygons with FwPoly pad[0] now do, in closed form.
 - A bitmap picture keeps its sprites (no solids) and has no water cut: as the
   chip's pictures always had.
-- Not the GPU's: with Frame rate off the tween's state does not exist, so those
-  windowed pictures are still the chip's bitmap on the CPU (the full window is
-  off there too); the race's pause shows the chip's bitmap from the copies; a
-  step's own frame program still plots on the CPU, unseen, beside the pictures;
-  in Original, 07:EE88's noise and any loop no quad stands for are 1-pixel spans
-  the CPU makes, and the screen clear is the chip's own stores.
-- A job at its STOP is taken as flushed: a program ending with pixels in the
-  chip's caches and no RPIX would differ until its next flush.
+- Frame rate off is not a mode of its own: `RM_OPT_FRAMERATE` is what
+  `rm_enhanced()` returns, so off is Original, its pictures a job's (below). The
+  option is the mode; only RM_REF_PACE (a check) runs Enhanced with no whole
+  steps, and that has jobs too.
+- A program whose bitmap nobody shows (`fw_silent`, fw_gsu_program's call: the
+  full window up, a step's with the GPU's bitmap picture on the canvas, a menu
+  frame's with its picture drawn) plots nothing and its RPIX reads 0. Everything
+  else runs as ever, row loops included: its stores, registers and flags, so the
+  weather's drops, the effects' and particles' records, the seed and the fill's
+  scratch stay exact. Why that is safe, by reading: the S-CPU never reads R0-R14
+  (only R15 is written); a pixel read goes to R0 and is overwritten at each RPIX
+  but FxHazeSample's, whose table only FxHazePlot reads, to plot. Still on the
+  CPU there: the program's arithmetic, its row and texel loops counting with no
+  pixel made. The clear's stores stand too, RAM kept as the chip's but for pixels.
+- The race's pause shows the last GPU picture: without widescreen the bitmap
+  picture on the canvas as it stands. The full window's texels are another
+  layout, so as it gives way (the pause, the end's fades) one GPU picture is drawn
+  in the bitmap's layout from the step's start, from the frame hook, every byte
+  put back (`still_try`). The VRAM copies remain only where no GPU is.
+- A job's loops are primitives, none left as CPU-made spans: 07:EE88's noise a
+  kernel (FW_NOISE, the CPU stepping the generator only for the seed the game
+  keeps); a blit across the bitmap's wrap or past its rows one quad a piece; a
+  step of 0 and the chip's 65536 rows of a count of 0 by the same quads; a thin
+  polygon's row and any single PLOT a flat quad; the screen clear flat quads of
+  colour 0 opaque over the columns the target holds, the bytes past it (no PLOT
+  reaches them) zeroed as RAM, the stores priced as they stood. The GE takes the
+  noise as 1-pixel sprites in its list (no compute) and still packs bitplanes on
+  the CPU.
+- Enhanced's own jobs where its bitmap is the one shown (07:EE88's course screen,
+  a race's first steps before its first picture) go the same way, unpriced.
+- A job at its STOP is flushed, settled by reading: every program the game starts
+  that plots ends in RPIX (01:AB13, D307's text, EE88, the rising pictures, the
+  glyphs and scaled sprites). Only 01:84CB, 84DA and 8515 do not, and nothing
+  starts them.
+- OBJ plot mode and the taller screens are never used, settled by reading: every
+  CMODE takes 0, 1, 2 or a colour word's high byte, and those words are built as
+  $08xx or $0Cxx (FxModelMaterial, FxSpriteMaterial), so POR bit 4 is never set;
+  SCMR comes from $0374, only ever 1 or 3 (8 and 4 bits a pixel, 128 rows). Dither
+  (POR bit 1) is set only by a shadow's material, and FxDrawList sets CMODE before
+  any fill, so no PLOT sees it. $01:AE99-AEE1, the other clears, nothing starts.
+- 07:EE88's row in the cost profile holds the whole noise in its fixed part, and
+  now job.quad holds it too: the refit in the final pass must take one out.
 
 One engine serves both: a picture in the bitmap's own coordinates times k, drawn
 by the GPU to a linear 8-bit target, handed as the characters it stands for.

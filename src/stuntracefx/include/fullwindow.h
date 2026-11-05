@@ -163,6 +163,13 @@ void fw_facing_cross(uint16_t *hi, uint16_t *lo);
    entries (bank 8, $F92E + 4 x time) read from the picture as it stands, then
    written opaque. */
 #define FW_HAZE 8
+/* 07:EE88's noise (textured 9, fw_noise): no pixels of its own, a GPU's run
+   broken at it: xl columns by v rows from the bitmap's corner, base the seed,
+   u's eight bytes the ramp; each pixel the generator's next step (draw_list.c
+   fx_noise_step), its low 3 bits the ramp's byte, by PLOT's rule (por 8: a low
+   nibble of 0 left out; 0: a 0 left out), at the low bytes of its place, a row
+   past the bitmap at x + 8 of its alias. */
+#define FW_NOISE 9
 typedef struct {
     int32_t y, x0, x1, pad0;
     int64_t xl, u, du, v, dv;
@@ -170,6 +177,8 @@ typedef struct {
     uint8_t bank, por, hi, colour, textured, pad1[7];
     float pq, pdq, pa, pda, pb, pdb, za, zx, zy, pad2;
 } FwSpan;
+/* a span a GPU's kernel of its own draws, its run broken there */
+static inline int fw_span_kernel(const FwSpan *s) { return s->textured == FW_HAZE || s->textured == FW_NOISE; }
 /* A polygon of the draw list's whole, in the spans' order in place of its
    rows: a span with textured 3, y its first row, x0 past its last, x1 its
    index in fw_polys. Its rows are made from its edges by fw_poly_row (the
@@ -452,6 +461,22 @@ uint8_t fw_por(void);
 /* one effect's haze (FW_HAZE): 1 when a GPU's span stands for FxHazeSample and
    FxHazePlot */
 int fw_haze(uint16_t x, uint16_t y, uint8_t time);
+/* A program whose bitmap nobody shows (Enhanced, SC_GPU: a step's or a menu
+   frame's, the GPU's picture on the canvas, fw_gsu_program's call): fw_silent
+   while it runs, its PLOTs left out and RPIX 0. Everything else of it runs: its
+   stores, registers and flags as ever, the game reading those (S-CPU reads no
+   register but through RAM; a pixel it read, FxHazeSample's, only plots again).
+   fw_unplotted: the last bitmap of the chip's was left so, not one to show. */
+extern int fw_silent;
+int fw_unplotted(void);
+/* a job's noise (FW_NOISE): 1 when a span stands for its cols x rows of plots:
+   *seed the generator's after them, *last the ramp's word (at ramp, RAM) of the
+   last. 0 to run the loop. */
+int fw_noise(uint16_t cols, uint16_t rows, uint16_t *seed, uint16_t ramp, uint16_t *last);
+/* a job's stores of zero to bytes of RAM from at (FxScreenClear's): 1 when the
+   GPU draws those the target holds (flat quads, the chip's rule: opaque 0) and
+   the rest are zeroed here, the stores' price charged; 0 to store them */
+int fw_job_clear(uint16_t at, uint32_t bytes);
 /* Original (SC_GPU, a GPU there): every job's PLOTs leave the bitmap (k 1):
    its program's draw list as polygons by the chip's rules, its loops as quads;
    the chip's bitplanes unpacked to a linear target (w x h, the shape PLOT
@@ -468,9 +493,10 @@ extern void (*fw_bits_filler)(uint8_t *tex, uint8_t *ram, const FwBits *b, int p
 void fw_ram_size(uint32_t size);
 /* what a job of Original's held, for its duration (superfx_cart.c): polygons
    flat and textured, their edges and areas in pixels, quads' pixels (blits,
-   sprites, lines), single plots; none when it drew nothing the GPU's way */
+   sprites, lines, noise), single plots, the byte stores a clear on the GPU left
+   unmade (priced as they stand); none when it drew nothing the GPU's way */
 typedef struct {
-    uint32_t flat, tex, edges;
+    uint32_t flat, tex, edges, stores;
     uint64_t area_flat, area_tex, quad, plots;
     int on;
 } FwJob;

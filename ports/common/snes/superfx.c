@@ -152,6 +152,14 @@ void gsu_job_cost(uint64_t clocks)
         cost += clocks * GSU_PRICE_ONE;
 }
 
+/* the running program's duration as n byte stores it did not make would add to
+   it (superfx.h): a clear the GPU draws is the same load on the model */
+void gsu_job_stores(uint32_t n)
+{
+    if (go && !holding)
+        cost += (uint64_t)n * price.weight[GSU_OP_STORE];
+}
+
 /* whole Super FX clocks in the console's: floor(units MASTER_HZ / GSU_HZ) */
 static uint64_t units_master(uint64_t units) { return units * MASTER_HZ / GSU_HZ; }
 

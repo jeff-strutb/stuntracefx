@@ -171,6 +171,10 @@ void rm_canvas_gpu_cut(unsigned first, unsigned cols, unsigned rows, const uint8
 void rm_canvas_gpu_ready(void);
 void rm_canvas_gpu_show(int word);
 int rm_canvas_gpu_word(unsigned word, unsigned count);
+/* up: a picture of count characters is drawn; once: rm_canvas_gpu_word, nothing
+   handed again when it stands there already (the race's pause, each frame) */
+int rm_canvas_gpu_up(unsigned count);
+int rm_canvas_gpu_once(unsigned word, unsigned count);
 void rm_canvas_show(unsigned word, uint16_t src, unsigned count);
 /* the same from bytes in buffer order; and a two-player set (360 4 bpp
    characters) from the players' buffers, 18 columns of $140 bytes $200
@@ -271,6 +275,9 @@ void RmMenuPictureShow(void);
 void rm_tween_tick_start(void);
 void rm_tween_frame_end(void);
 int rm_tween_ready(void);
+/* set round a picture drawn away from a race frame's wait (fullwindow.c, the
+   full window giving way mid-step): from the frame hook, every byte put back */
+extern int rm_tween_still;
 #define RM_TWEEN_BYTES 0x6800    /* a race screen buffer: 208 x 128 pixels as characters */
 /* draws it into the buffer the Super FX draws in next, gives its bytes and
    the start of the buffer shown ($2C00 or $9400); 0 when not ready */

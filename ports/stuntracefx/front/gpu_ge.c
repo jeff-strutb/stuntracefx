@@ -1339,6 +1339,8 @@ static int32_t haze_at(int32_t v, int64_t n, int64_t d)
     return (int32_t)((p >= 0 ? p : p - d + 1) / d);
 }
 
+uint16_t fx_noise_step(uint16_t s);
+
 static void haze_ge(const FwSpan *p, int w, int h)
 {
     static struct { int16_t x, y; uint8_t c; } put[256 * 16];
@@ -1387,6 +1389,32 @@ static void haze_ge(const FwSpan *p, int w, int h)
             flat(put[i].y, put[i].x, put[i].x, put[i].c);
 }
 
+/* a job's noise (fullwindow.h FW_NOISE, fullwindow.c noise_fill's steps), each
+   pixel a 1-pixel sprite in the list: the GE has no kernel to run the generator */
+static void noise_ge(const FwSpan *p, int w, int h)
+{
+    uint16_t s = p->base;
+    uint64_t ramp = (uint64_t)p->u;
+    int32_t cols = (int32_t)p->xl, rows = (int32_t)p->v, x, y;
+
+    model_mode(0);
+    for (y = 0; y < rows; y++)
+        for (x = 0; x < cols; x++) {
+            uint8_t c;
+            int32_t px = x & 255, py = y & 255;
+            s = fx_noise_step(s);
+            c = (uint8_t)(ramp >> ((s & 7) * 8));
+            if (p->por & 8 ? !(c & 15) : !c)
+                continue;
+            if (py >= h) {
+                py -= h;
+                px += 8;
+            }
+            if (px < w && py < h)
+                flat(py, px, px, c);
+        }
+}
+
 static void span(const FwSpan *p, int w, int h)
 {
     int32_t x, a;
@@ -1395,6 +1423,10 @@ static void span(const FwSpan *p, int w, int h)
         return;
     if (p->textured == FW_HAZE) {
         haze_ge(p, w, h);
+        return;
+    }
+    if (p->textured == FW_NOISE) {
+        noise_ge(p, w, h);
         return;
     }
     if (p->textured == FW_QUAD) {       /* a screen quad: the GE's whole */

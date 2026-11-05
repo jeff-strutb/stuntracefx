@@ -85,7 +85,7 @@ static uint32_t qfam;
 static VkPhysicalDeviceMemoryProperties memp;
 static VkDescriptorSetLayout dsl;
 static VkPipelineLayout pl;
-static VkPipeline pipe_rows, pipe_fill, pipe_water, pipe_prims, pipe_pack, pipe_haze;
+static VkPipeline pipe_rows, pipe_fill, pipe_water, pipe_prims, pipe_pack, pipe_haze, pipe_noise;
 /* the models (scene.h): the render pass over the picture (R8 colour
    indices) and each pixel's face (R32), their pipelines (triangles,
    lines), the images and the framebuffer at the picture's size */
@@ -469,7 +469,8 @@ static int device_open(void)
     pipe_prims = pipeline(k_prims_comp, sizeof k_prims_comp);
     pipe_pack = pipeline(k_pack_comp, sizeof k_pack_comp);
     pipe_haze = pipeline(k_haze_comp, sizeof k_haze_comp);
-    if (!pipe_rows || !pipe_fill || !pipe_water || !pipe_prims || !pipe_pack || !pipe_haze || !models_open())
+    pipe_noise = pipeline(k_noise_comp, sizeof k_noise_comp);
+    if (!pipe_rows || !pipe_fill || !pipe_water || !pipe_prims || !pipe_pack || !pipe_haze || !pipe_noise || !models_open())
         return 0;
     for (i = 0; i < B_N; i++)
         if (!buf_grow((int)i, 16))
@@ -952,6 +953,33 @@ static int haze_run(int w, int h, const FwSpan *p)
     return run_commands(haze_record, &j);
 }
 
+/* a job's noise (noise.comp) */
+static void noise_record(void *arg)
+{
+    pvkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_COMPUTE, pl, 0, 1, &dset, 0, NULL);
+    pvkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, pipe_noise);
+    pvkCmdPushConstants(cb, pl, STAGES, 0, 32, arg);
+    pvkCmdDispatch(cb, 1, 1, 1);
+    barrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_PIPELINE_STAGE_HOST_BIT, VK_ACCESS_HOST_READ_BIT);
+}
+
+static int noise_run(int w, int h, const FwSpan *p)
+{
+    uint32_t pc[8];
+    uint64_t ramp = (uint64_t)p->u;
+    if (dset_stale)
+        dset_update();
+    pc[0] = (uint32_t)w;
+    pc[1] = (uint32_t)h;
+    pc[2] = (uint32_t)p->xl;
+    pc[3] = (uint32_t)p->v;
+    pc[4] = p->base;
+    pc[5] = (uint32_t)ramp;
+    pc[6] = (uint32_t)(ramp >> 32);
+    pc[7] = p->por & 8u;
+    return run_commands(noise_record, pc);
+}
+
 /* the chip's bitplanes and the target (pack.comp), the RAM copied across */
 typedef struct {
     uint32_t pc[7], cols, rows;
@@ -1039,6 +1067,12 @@ static void fill(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
             i++;
             continue;
         }
+        if (sp[i].textured == FW_NOISE) {   /* a job's noise (a marker too) */
+            if (!noise_run(w, h, &sp[i]))
+                fw_span_fill_cpu(out, w, h, &sp[i], 1);
+            i++;
+            continue;
+        }
         if (gpu_bin_face(&sp[i])) {
             for (j = i; j < n && gpu_bin_face(&sp[j]); j++)
                 ;
@@ -1047,7 +1081,7 @@ static void fill(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
             i = j;
             continue;
         }
-        for (j = i; j < n && !gpu_bin_face(&sp[j]) && sp[j].textured != FW_HAZE; j++)
+        for (j = i; j < n && !gpu_bin_face(&sp[j]) && !fw_span_kernel(&sp[j]); j++)
             if (!gpu_bin_ref_only(&sp[j]))
                 run[m++] = sp[j];
         if (!fill_spans(w, h, run, m))

@@ -677,7 +677,7 @@ static void upload_rows(uint32_t b, int want, uint16_t n, uint16_t src,
     flag_0357(b, 1);
     if (nba) {
         put8(BG12NBA, nba);
-        if (split_canvas[set] && rm_canvas_gpu_word(set ? 0x2000 : 0x0000, 360))
+        if (split_canvas[set] && (rm_canvas_gpu_word(set ? 0x2000 : 0x0000, 360) || fw_unplotted()))
             ;                           /* SC_GPU: the GPU's pictures, not the chip's bitmaps */
         else if (split_canvas[set] && rm_whole_steps())
             rm_canvas_show_copied_late(set ? 0x2000 : 0x0000, 360, 4);
@@ -730,16 +730,19 @@ static void split_picture(uint32_t b, uint16_t x)
 /* The split screen's stages, by $0D23 (the table at $AA4B). */
 /* Remaster, Enhanced: in the race's pause ($0D2D set) BG1 shows the
    buffer of the last flip ($0D81: -1 A, 1 B) from VRAM, which the race's
-   copies to the canvas left out: the canvas shows its characters as the
-   copies would have left them */
+   copies to the canvas left out: the canvas shows the last GPU picture in
+   its characters' place (SC_GPU), else its characters as the copies would
+   have left them */
 static void pause_canvas(uint32_t b)
 {
     uint16_t shown = rd16(b | 0x0D81);
+    unsigned word = shown == 0x0001 ? 0x2200 : 0x0000;
 
     if (!rd8(b | 0x0D2D) || !rm_canvas_ready() || rd8(b | 0x0D62) || (shown != 0xFFFF && shown != 0x0001))
         return;
     rm_canvas_kept(RM_CANVAS_RACE);
-    rm_canvas_show_copied_once(shown == 0x0001 ? 0x2200 : 0x0000, 416, 8);
+    if (!rm_canvas_gpu_once(word, 416) && !fw_unplotted())
+        rm_canvas_show_copied_once(word, 416, 8);
 }
 
 static void split_stage(uint32_t b)
@@ -936,7 +939,7 @@ static void race_flip(int buf, uint16_t src, unsigned word)
     if (fw_on())                        /* the full window's pictures are drawn again (fullwindow.c) */
         return;
     if (race_canvas[buf]) {
-        if (!rm_canvas_gpu_word(word, 416))   /* SC_GPU: the GPU's picture, not the chip's bitmap */
+        if (!rm_canvas_gpu_word(word, 416) && !fw_unplotted())   /* SC_GPU: the GPU's picture, not the chip's bitmap */
             rm_canvas_show(word, src, 416);
     } else
         rm_canvas_off();

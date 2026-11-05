@@ -109,6 +109,10 @@ static FwJob job;
 static uint32_t ram_mask = 0x1FFFF;
 static int bit4;
 static int scale_lost;                  /* tw, th and the scale theirs: the full window's made again when it comes back */
+int fw_silent;                          /* (fullwindow.h) */
+static int unplotted;
+static int still_word = -1, still_tries;    /* the full window gone: the GPU's bitmap picture due at this VRAM word (fw_frame_end) */
+int fw_unplotted(void) { return unplotted; }
 int fw_bp_active(void) { return bp; }
 int fw_nibble(void) { return bit4; }
 uint8_t fw_por(void) { return (uint8_t)(gsu.por | (bit4 ? 8 : 0)); }
@@ -680,6 +684,31 @@ static void haze_fill(uint8_t *out, int w, int h, const FwSpan *p)
     }
 }
 
+/* a job's noise (FW_NOISE, the GPUs' the same) */
+uint16_t fx_noise_step(uint16_t s);
+static void noise_fill(uint8_t *out, int w, int h, const FwSpan *p)
+{
+    uint16_t s = p->base;
+    uint64_t ramp = (uint64_t)p->u;
+    int32_t cols = (int32_t)p->xl, rows = (int32_t)p->v, x, y;
+
+    for (y = 0; y < rows; y++)
+        for (x = 0; x < cols; x++) {
+            uint8_t c;
+            int px = x & 255, py = y & 255;
+            s = fx_noise_step(s);
+            c = (uint8_t)(ramp >> ((s & 7) * 8));
+            if (p->por & 8 ? !(c & 15) : !c)
+                continue;
+            if (py >= h) {
+                py -= h;
+                px += 8;
+            }
+            if (px < w && py < h)
+                out[(size_t)py * w + px] = c;
+        }
+}
+
 void fw_span_fill_cpu(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
 {
     size_t i;
@@ -693,6 +722,10 @@ void fw_span_fill_cpu(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
             continue;
         if (p->textured == FW_HAZE) {
             haze_fill(out, w, h, p);
+            continue;
+        }
+        if (p->textured == FW_NOISE) {
+            noise_fill(out, w, h, p);
             continue;
         }
         if (p->textured == FW_QUAD) {
@@ -1469,7 +1502,7 @@ static int bitmap_quad(int32_t ox, int32_t oy, int32_t dx0, int32_t dy0, int col
 {
     uint8_t pal[4];
     int i, j;
-    if (!bitmaps_on() || cols < 1 || rows < 1)
+    if (!bitmaps_on() || cols < 1 || rows < 1 || (rows > 0xFFFF && !bp && !gx))
         return 0;
     for (i = 0; i < 4; i++)
         pal[i] = ram8((uint16_t)(pal_at + i));
@@ -1502,22 +1535,35 @@ static int bitmap_quad(int32_t ox, int32_t oy, int32_t dx0, int32_t dy0, int col
     }
     if (bp || gx) {
         /* a bitmap picture's or a job's: at the bitmap's own place, as PLOT
-           puts it (the low bytes), each pixel its k x k texels; one across
-           the wrap, or past a job's rows, plotted as ever */
-        int64_t lx = (uint8_t)(ox + dx0), ly = (uint8_t)(oy + dy0);
-        int32_t r0, c0;
-        FwSpan *p;
-        if (lx + cols > 256 || ly + rows > 256 || (gx && ly + rows > th))
-            return 0;
-        r0 = row_at(ly);
-        c0 = col_at(lx);
-        p = quad_new(r0, row_at(ly + rows) - r0, c0, col_at(lx + cols) - 1, (int64_t)(r0 + 1) * SYD - 1 - (ly - dy0) * SYN, SYD);
-        if (p) {
-            p->xl = 0;
-            p->u = SXD - 1 - (lx - dx0) * SXN;
-            p->du = SXD;
-            p->mask = (uint16_t)SYN;
-            bitmap_fields(p, bank, at, pal, stepx, stepy, (uint32_t)SXN);
+           puts it (the low bytes), each pixel its k x k texels: one quad for
+           each piece the wraps leave, in the rows' order, a job's rows past
+           the bitmap on their alias (x + 8, y less the height) */
+        int32_t dy = dy0, left = rows;
+        while (left > 0) {
+            int32_t ly = (uint8_t)(oy + dy), n = left < 256 - ly ? left : 256 - ly, ty = ly, shift = 0, dx = dx0, lc = cols;
+            if (gx && ly >= th) {
+                ty = ly - th;
+                shift = 8;
+            } else if (gx && n > th - ly) {
+                n = th - ly;
+            }
+            while (lc > 0) {
+                int32_t lx = (uint8_t)(ox + dx), m = lc < 256 - lx ? lc : 256 - lx, tx = lx + shift;
+                int32_t r0 = row_at(ty), c0 = col_at(tx);
+                FwSpan *p = quad_new(r0, row_at(ty + n) - r0, c0, col_at(tx + m) - 1,
+                                     (int64_t)(r0 + 1) * SYD - 1 - (int64_t)(ty - dy) * SYN, SYD);
+                if (p) {
+                    p->xl = 0;
+                    p->u = SXD - 1 - (int64_t)(tx - dx) * SXN;
+                    p->du = SXD;
+                    p->mask = (uint16_t)SYN;
+                    bitmap_fields(p, bank, at, pal, stepx, stepy, (uint32_t)SXN);
+                }
+                dx += m;
+                lc -= m;
+            }
+            dy += n;
+            left -= n;
         }
         return quad_made();
     }
@@ -1654,7 +1700,8 @@ int fw_plot_colour(void) { return plot_colour(); }
 
 int fw_bitmap(uint16_t x, uint16_t y, uint8_t bank, uint16_t at, int rows, int bytes, uint16_t pal)
 {
-    return bitmap_quad((int16_t)x, (int16_t)y, 0, 0, 4 * bytes, rows, bank, at, 0, 0, pal);
+    /* (0 rows: the chip's LOOP counts 65536) */
+    return bitmap_quad((int16_t)x, (int16_t)y, 0, 0, 4 * bytes, rows ? rows : 0x10000, bank, at, 0, 0, pal);
 }
 
 /* ---- the weather (FxWeatherDraw) as quads ---- */
@@ -1714,10 +1761,28 @@ int fw_plot_line(uint16_t x, uint16_t y, uint16_t dx, uint16_t dy, uint16_t sx, 
 int fw_bitmap_scaled(uint16_t ox, uint16_t oy, uint16_t x, uint16_t y, int cols, int rows, uint8_t bank, uint16_t at,
                      uint16_t stepx, uint16_t stepy, uint16_t pal)
 {
-    if (!stepx || !stepy)               /* (a step of 0: every pixel the source's first, run as ever) */
-        return 0;
+    if (!stepx || !stepy) {             /* a step of 0: every pixel the source's first; (a step of 1 the same over the screen's 256) */
+        if (!bp && !gx)
+            return 0;
+        stepx = stepx ? stepx : 1;
+        stepy = stepy ? stepy : 1;
+    }
     return bitmap_quad((int16_t)ox, (int16_t)oy, (int16_t)x - (int16_t)ox, (int16_t)y - (int16_t)oy, cols, rows, bank, at,
                        stepx, stepy, pal);
+}
+
+/* a job's row or single plot, one flat quad (PLOT's rule already taken: its
+   colour opaque), not counted as a blit's pixels */
+static void gx_flat(int32_t y, int32_t l, int32_t r, uint8_t c)
+{
+    uint64_t q = job.quad;
+    FwSpan *p = quad_new(y, 1, l, r, 0, 0);
+    if (p) {
+        p->pad1[1] = 2;
+        p->colour = c;
+        p->xl = l;
+    }
+    job.quad = q;
 }
 
 /* FW_CENSUS (a measure, macOS): what the CPU still draws in the full
@@ -1798,7 +1863,7 @@ void fw_plot(uint16_t x, uint16_t y)
             px += 8;
         }
         job.plots++;
-        span_flat(py, px, px, (uint8_t)c);
+        gx_flat(py, px, px, (uint8_t)c);
         return;
     }
     if (bp && !label_on) {              /* a bitmap picture's program: at its own place, k x k texels */
@@ -1892,22 +1957,19 @@ void gsu_plot16(uint16_t x, uint16_t y)
 {
     if (fw_drawing)
         fw_plot(x, y);
-    else
+    else if (!fw_silent)
         gsu_plot((uint8_t)x, (uint8_t)y);
 }
 
 uint8_t gsu_rpix16(uint16_t x, uint16_t y)
 {
-    return fw_drawing ? fw_rpix(x, y) : gsu_rpix((uint8_t)x, (uint8_t)y);
+    return fw_drawing ? fw_rpix(x, y) : fw_silent ? 0 : gsu_rpix((uint8_t)x, (uint8_t)y);
 }
 
 void fw_clear(void)
 {
-    if (gx) {                           /* a job's: what is drawn packed; the chip's store then clears its RAM, unpacked again at the next drawing */
-        gx_sync();
-        gx_valid = 0;
+    if (gx)                             /* a job's: FxScreenClear's own (fw_job_clear) */
         return;
-    }
     nspans = npolys = nedges = 0;       /* drawn over: none of them shows */
     memset(tex, 0, (size_t)tw * th);
     if (gpu_pic) {                      /* the GPU's picture opened again, cleared */
@@ -3173,6 +3235,10 @@ static void flat_row(int32_t l, int32_t r, int32_t y)
     }
     if (c < 0 || y < 0 || y >= th)
         return;
+    if (gx) {
+        gx_flat(y, l, r, (uint8_t)c);
+        return;
+    }
     if (checking)
         for (x = l < 0 ? 0 : l; x <= r; x++)
             check_alias(x, y, c);
@@ -5015,6 +5081,7 @@ int fw_bp_picture(int j)
     if (!m || bp_done != bp_targets)
         return 0;
     rm_canvas_gpu_show(two ? -1 : (w[0x0D81] | w[0x0D82] << 8) == 0x0001 ? 0x2200 : 0x0000);
+    still_word = -1;
     return m;
 }
 
@@ -5022,7 +5089,8 @@ void fw_menu_picture(int on_) { menu_due = on_ && fw_bp_on() && !fw_drawing; }
 
 /* The menus' 3D frame: no redraw of a tween's (its step is a video frame's):
    its program's list made natively as it starts, the chip's RAM and registers
-   put back for the chip's own run beside it, the picture kept for the flip. */
+   put back for the chip's own run beside it (fw_silent, the picture drawn), the
+   picture kept for the flip. */
 void fw_menu_frame(void)
 {
     static uint8_t keep[0x20000];
@@ -5033,6 +5101,7 @@ void fw_menu_frame(void)
     if (!menu_due)
         return;
     menu_due = 0;
+    unplotted = 0;
     if (!bp_open(13, 11, 8, 1))
         return;
     s = nshvc_sram();
@@ -5051,8 +5120,10 @@ void fw_menu_frame(void)
     gpu_pic = gpu_open = 0;
     memcpy(s, keep, size);
     gsu = kept;
-    if (bp_done == bp_targets)
+    if (bp_done == bp_targets) {
         rm_canvas_gpu_ready();
+        fw_silent = unplotted = 1;
+    }
 }
 
 int fw_haze(uint16_t x, uint16_t y, uint8_t time)
@@ -5076,19 +5147,130 @@ int fw_haze(uint16_t x, uint16_t y, uint8_t time)
     return 1;
 }
 
-/* ---- a job of Original's ---- */
+int fw_noise(uint16_t cols, uint16_t rows, uint16_t *seed, uint16_t ramp, uint16_t *last)
+{
+    FwSpan *p;
+    uint64_t bytes = 0;
+    uint16_t s = *seed;
+    uint32_t i, n = (uint32_t)cols * rows;
+
+    if (!gx || !n || !(p = span_new()))
+        return 0;
+    for (i = 0; i < 8; i++)
+        bytes |= (uint64_t)gsu_peek8(gsu_ram((uint16_t)(ramp + 2 * i))) << (i * 8);
+    memset(p, 0, sizeof *p);
+    p->textured = FW_NOISE;
+    p->x0 = 1;
+    p->xl = cols;
+    p->v = rows;
+    p->base = s;
+    p->u = (int64_t)bytes;
+    p->por = (uint8_t)(bit4 ? 8 : 0);
+    job.quad += n;
+    for (i = 0; i < n; i++)             /* the generator's own state, the game's: no pixel of it */
+        s = fx_noise_step(s);
+    *seed = s;
+    i = (uint32_t)(s & 7) * 2;
+    *last = (uint16_t)(gsu_peek8(gsu_ram((uint16_t)(ramp + i))) | gsu_peek8(gsu_ram((uint16_t)(ramp + i + 1))) << 8);
+    return 1;
+}
+
+int fw_job_clear(uint16_t at, uint32_t bytes)
+{
+    uint8_t *ram;
+    uint32_t a, off, char_bytes, col_chars, cn, n, i;
+
+    if (!gx)
+        return 0;
+    a = gsu_ram(at) & gx_shape.mask;
+    char_bytes = (uint32_t)gx_shape.bpp * 8;
+    col_chars = (uint32_t)gx_shape.h / 8;
+    off = a - gx_shape.base;
+    if (gx_shape.ht == 3 || a < gx_shape.base || off % char_bytes || bytes % char_bytes) {
+        /* (no such start or layout in the game, GsuScreenFlip and SCMR's writes:) the chip's stores over what is drawn */
+        gx_sync();
+        gx_valid = 0;
+        return 0;
+    }
+    ram = nshvc_sram();
+    cn = off / char_bytes;
+    n = bytes / char_bytes;
+    while (n) {
+        uint32_t cx = cn / col_chars, cy = cn % col_chars, cols = 1, run = col_chars - cy;
+        if (cx >= (uint32_t)gx_shape.w / 8) {
+            /* past the target: no PLOT reaches these bytes, the RAM's alone */
+            uint32_t from = gx_shape.base + cn * char_bytes, count = n * char_bytes;
+            for (i = 0; i < count; i++)
+                ram[(from + i) & gx_shape.mask] = 0;
+            break;
+        }
+        if (cy == 0 && n >= col_chars) {    /* whole columns, one quad */
+            cols = n / col_chars;
+            if (cx + cols > (uint32_t)gx_shape.w / 8)
+                cols = (uint32_t)gx_shape.w / 8 - cx;
+        } else if (run > n) {
+            run = n;
+        }
+        {
+            uint64_t q = job.quad;
+            FwSpan *p = quad_new((int32_t)cy * 8, (int32_t)run * 8, (int32_t)cx * 8, (int32_t)(cx + cols) * 8 - 1, 0, 0);
+            if (p) {
+                p->pad1[1] = 2;
+                p->colour = 0;
+                p->xl = (int32_t)cx * 8;
+            }
+            job.quad = q;
+        }
+        cn += cols * run;
+        n -= cols * run;
+    }
+    job.stores += bytes;
+    return 1;
+}
+
+/* the frame hook, the full window having given way: the GPU's bitmap picture
+   in its place, drawn from the step's start (j 0) as it stands; every byte and
+   register put back (rm_tween_buffers). A few frames tried: it is refused while
+   an upload has the chip's RAM part way. */
+static void still_try(void)
+{
+    if (still_word < 0)
+        return;
+    if (on || !fw_bp_on() || ++still_tries > 8) {
+        still_word = -1;
+        return;
+    }
+    nshvc_set_cpu_costs(0);
+    rm_tween_still = 1;
+    fw_bp_picture(0);                   /* (still_word -1 when it stands) */
+    rm_tween_still = 0;
+    nshvc_set_cpu_costs(1);
+}
+
+/* ---- a job of Original's (and of Enhanced's, its bitmap the one shown) ---- */
 static void gx_begin(void)
 {
     /* no access of the chip's: the registers as they stand, only under SC_GPU */
     int md, ht;
     static int no = -1;
     job.on = 0;
-    if (fw_drawing || !sc_gpu_on() || rm_enhanced())
+    if (fw_drawing || !sc_gpu_on())
         return;
     if (no < 0)
         no = bp_checks() || !gpu_here();
     if (no)
         return;
+    if (rm_enhanced()) {
+        if (menu_due)                   /* fw_menu_frame's to say, as it starts */
+            return;
+        /* a bitmap nobody shows: the full window's up (race_flip, its giving way:
+           still_try), or a step's with the GPU's bitmap picture on the canvas */
+        if (on || (rm_tick60() && rm_whole_steps() && rm_canvas_ready() &&
+                   rm_canvas_gpu_up(nshvc_wram()[0x0D62] ? 360 : 416))) {
+            fw_silent = unplotted = 1;
+            return;
+        }
+    }
     md = gsu.scmr & 3;
     ht = ((gsu.scmr >> 2) & 1) | ((gsu.scmr >> 4) & 2);
     gx_shape.w = 264;
@@ -5097,8 +5279,10 @@ static void gx_begin(void)
     gx_shape.ht = ht;
     gx_shape.base = (uint32_t)gsu.scbr << 10;
     gx_shape.mask = ram_mask;
-    if (!tex_room((size_t)gx_shape.w * gx_shape.h))
+    if (!tex_room((size_t)gx_shape.w * gx_shape.h)) {
+        unplotted = 0;
         return;
+    }
     tw = gx_shape.w;
     th = gx_shape.h;
     SXN = SXD = SYN = SYD = 1;
@@ -5121,6 +5305,7 @@ static void gx_sync(void)
 {
     if (!nspans)
         return;
+    unplotted = 0;
     span_flush();
     if (gpu_pic && gpu_open) {
         fw_canvas_gpu->close(NULL, tex);
@@ -5131,6 +5316,7 @@ static void gx_sync(void)
 
 static void gx_end(void)
 {
+    fw_silent = 0;
     if (!gx)
         return;
     gx_sync();
@@ -6072,6 +6258,7 @@ void fw_frame_end(void)
     }
     if (!(was && !on)) {
         staged = 0;
+        still_try();
         return;
     }
     nshvc_hold_interrupts(1);
@@ -6102,7 +6289,11 @@ void fw_frame_end(void)
                the copies of the next pictures land */
             int b = (nshvc_wram()[0x0D81] | nshvc_wram()[0x0D82] << 8) == 0x0001;
             nshvc_ext_canvas_chars(0, 0, 0, NULL, 1);
-            rm_canvas_show(b ? 0x2200 : 0x0000, b ? 0x9400 : 0x2C00, 416);
+            if (fw_bp_on() && unplotted) {  /* SC_GPU: no bitmap of the chip's: the GPU's, below */
+                still_word = b ? 0x2200 : 0x0000;
+                still_tries = 0;
+            } else
+                rm_canvas_show(b ? 0x2200 : 0x0000, b ? 0x9400 : 0x2C00, 416);
         }
         handed = 0;
         page1_known = 0;                /* the original's screen again: page 1 written whole when it comes back */
@@ -6110,4 +6301,5 @@ void fw_frame_end(void)
     }
     nshvc_hold_interrupts(0);
     staged = 0;
+    still_try();
 }

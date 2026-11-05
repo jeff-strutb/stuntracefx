@@ -31,6 +31,7 @@ static RegsGSU pic_gsu[2];
 static unsigned pic_tick[2];
 static int pic_ok[2], pic_step[2], pic_now;
 int rm_tween_step;
+int rm_tween_still;
 static unsigned was_tick;                   /* the tick the kept start is of */
 static int was_ok, ticked, shown_tick;      /* a race tick since the last frame's end; the frame shown was one */
 static uint8_t done[0x10000 >> 1];          /* a Super FX word already set between */
@@ -89,7 +90,7 @@ int rm_tween_ready(void)
        them alone (a two-player race's split screen IRQ, at the frame's
        end every frame) is no bar. */
     return was_ok && (rm_whole_steps() || (shown_tick && rm_sharing_on())) && was_tick == rm_tick_count() &&
-           rm_in_tick_wait() && (gsu.scmr & 0x18) == 0x18;
+           (rm_in_tick_wait() || rm_tween_still) && (gsu.scmr & 0x18) == 0x18;
 }
 
 /* the word at a of `to` set num/den of the way from `was` to `now` */
