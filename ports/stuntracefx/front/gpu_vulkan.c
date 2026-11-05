@@ -350,17 +350,23 @@ static int device_open(void)
     {                                   /* the console's device and queue, where it lends them: the picture's image is theirs */
         NshvcGpuLoan loan;
         if (nshvc_ext_gpu_device(&loan) == NSHVC_GPU_VULKAN) {
+            VkPhysicalDeviceFeatures f;
             inst = (VkInstance)loan.instance;
             phys = (VkPhysicalDevice)loan.physical_device;
-            dev = (VkDevice)loan.device;
-            queue = (VkQueue)loan.queue;
-            qfam = loan.queue_family;
-            loaned = 1;
 #define LOAD(f) if (!(p##f = (PFN_##f)gipa(inst, #f))) return 0;
             VK_IFUNCS(LOAD)
 #undef LOAD
-            pvkGetPhysicalDeviceMemoryProperties(phys, &memp);
-            goto device_there;
+            pvkGetPhysicalDeviceFeatures(phys, &f);
+            if (f.shaderInt64) {        /* (the console enables it where the device has it) */
+                dev = (VkDevice)loan.device;
+                queue = (VkQueue)loan.queue;
+                qfam = loan.queue_family;
+                loaned = 1;
+                pvkGetPhysicalDeviceMemoryProperties(phys, &memp);
+                goto device_there;
+            }
+            /* no 64-bit integers there: a device of its own, the picture read back to
+               nshvc_ext_canvas_screen32 (hand_ready 0) */
         }
     }
 #endif
@@ -1348,8 +1354,9 @@ static void hand_record(void *arg)
         pvkCmdDispatch(cb, j->gx, j->gy, 1);
         barrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT);
     }
+    /* after all before it on the queue: the console's frame may still be reading this image */
     image_layout(j->to, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, VK_ACCESS_TRANSFER_WRITE_BIT,
-                 VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+                 VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
     bc.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     bc.imageSubresource.layerCount = 1;
     bc.bufferRowLength = (uint32_t)j->w;

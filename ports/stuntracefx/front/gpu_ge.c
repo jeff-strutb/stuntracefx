@@ -2066,6 +2066,10 @@ static void water_fill(const uint8_t *in, uint32_t *out, const FwWaterJob *j, co
 #ifdef SRFX_NSHVC_HANDOFF
 static int s_plane;                     /* the water's plane stands in the depth buffer: as s_plane_at */
 static float s_plane_at[4];
+/* the last picture handed, while nothing has drawn over it: the console keeps that
+   buffer whole while it is handed again (contract 2.22) */
+static void *s_hand_at;
+static int s_hand_stride, s_hand_w, s_hand_h;
 #endif
 
 static int cv_open(int w, int h, const uint8_t *keep)
@@ -2082,6 +2086,8 @@ static int cv_open(int w, int h, const uint8_t *keep)
     s_plane = 0;
     s_zcut = 0;
     s_zk = 1.0f;
+    if (lent == s_hand_at)              /* drawn over: the last picture handed is gone */
+        s_hand_at = NULL;
     if (s_zb && (w > s_zbw || h > 272))
         s_zb = NULL;                    /* (past the loan's: none in the game, the screen's own size) */
 #endif
@@ -2529,10 +2535,21 @@ static int hand_picture(int w, int h, int ground)
     list_close();
     s_c32 = 0;
     nshvc_ext_canvas_screen_ge(0, lent, s_stride, w, h, GU_PSM_8888, 1);
+    s_hand_at = lent;
+    s_hand_stride = s_stride;
+    s_hand_w = w;
+    s_hand_h = h;
     return 1;
 }
 
-static const FwHandoff s_hand_ops = { hand_ready, NULL, hand_picture, NULL, NULL, NULL };
+/* a frame with no new picture: the same address, none drawn since */
+static void hand_again(int w, int h)
+{
+    if (s_hand_at && w == s_hand_w && h == s_hand_h)
+        nshvc_ext_canvas_screen_ge(0, s_hand_at, s_hand_stride, w, h, GU_PSM_8888, 1);
+}
+
+static const FwHandoff s_hand_ops = { hand_ready, NULL, hand_picture, hand_again, NULL, NULL };
 #endif
 
 /* FW_SPANPLAY: the GE the program's own (no console runs, so libgu is

@@ -79,12 +79,13 @@ typedef struct {
 
 /* The finished full-window picture to the console (a front end's, which sets
    fw_handoff when its GPU has one):
-     ready    the contract is there: the device lent, or the GE's loan
+     ready    the contract is there: the device lent (Vulkan: with shaderInt64, else
+              the picture read back to nshvc_ext_canvas_screen32), or the GE's loan
      clear    the shared picture cleared by the GPU (NULL: the GE, a canvas of its own)
      picture  w x h handed. ground 1: the 32-bit picture stands (fw_texels32_alloc's,
               or the GE's canvas) with the ground in it; 0: the indices alone
-     again    the last handle again on a frame with no new picture (NULL: the GE, its
-              picture not kept past the frame's present)
+     again    the last handle again on a frame with no new picture (the GE: the same
+              address, while nothing has drawn over it)
      panel    the pause panel drawn and handed: the overlay's id, -1 when it could
               not be (NULL: no panel on this host: the PSP has none)
      panel_again  the panel as it stands, on a frame it shows */

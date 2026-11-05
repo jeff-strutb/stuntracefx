@@ -194,7 +194,14 @@ them (itself never run). `SRFX_NSHVC_HANDOFF=1 sh build.sh` links only against t
 - **The GE.** The picture stands in the loan. Its alpha is the stencil's mark while
   drawn (an index 0xFF, the ground's colour 1, colour 1 2); the GE zeroes the indices'
   and colour 1's in place and hands it. Ground colours are in the GE's own order when
-  handed. A frame with no new picture has nothing to hand: the memory is not kept.
+  handed. A frame with no new picture hands the same address again, the console
+  keeping that buffer whole while it is handed and nothing draws over it; so a
+  refused redraw opens no canvas. A redraw that fails after it has drawn over that
+  buffer leaves nothing to hand, and that frame shows the layer's tiles.
+- **Vulkan's lent device** must have shaderInt64, which is read from its physical
+  device; without it the game opens its own device and reads back to
+  `nshvc_ext_canvas_screen32`. The console's frame may still be executing when the
+  game submits, so each image's barrier waits on all before it on the queue.
 - **The GE's water cut.** Its depth comes out 65536 k / z - 1 by the projection, k
   the true depth's factor (a far object's halvings undone, a sprite's own 1 / depth),
   so depth is 1 / depth in 16 bits. The water's plane goes in first, colour masked

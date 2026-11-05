@@ -5006,6 +5006,14 @@ int fw_picture(int j)
     sc_picture_begin();                 /* the GPU's display list (scene.h) */
     m = rm_tween_buffers(j, RM_TICKS, scratch[0], scratch[1]);
     fw_drawing = 0;
+#ifdef SRFX_NSHVC_HANDOFF
+    /* a redraw refused, nothing drawn: the canvas not opened, the GE's last picture
+       standing whole in its buffer, to be handed again (fw_frame_end) */
+    if (!m && !nspans && !gpu_open && !hud_n && hand_pic()) {
+        fw_hud = 0;
+        return 0;
+    }
+#endif
     span_flush();
     if (hud_n)                          /* a redraw let go before the HUD's end: its pieces */
         hud_place();
