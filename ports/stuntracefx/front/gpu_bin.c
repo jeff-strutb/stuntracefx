@@ -160,46 +160,6 @@ void gpu_bin_faces(const FwSpan *sp, size_t n, GpuVert *tri, size_t *ntri, GpuVe
         *runs = nr;
 }
 
-static uint16_t bin_mult8(int a, int b) { return (uint16_t)((int)(int8_t)a * (int)(int8_t)b); }
-static uint16_t bin_fmult_rol(uint16_t a, uint16_t b) { return (uint16_t)(((int32_t)(int16_t)a * (int16_t)b) >> 15); }
-
-/* sc_points' steps for one coordinate j (the shaders' point_coord) */
-static int16_t bin_coord(const ScSlot *sl, const ScPoint *p, int j)
-{
-    int b0 = (uint8_t)p->b[0], b1 = (uint8_t)p->b[1], b2 = (uint8_t)p->b[2];
-    uint16_t xt, rest, r, m0 = (uint16_t)sl->m[j], m3 = (uint16_t)sl->m[3 + j], m6 = (uint16_t)sl->m[6 + j];
-    if (sl->shift < 3) {
-        xt = bin_mult8(m0 >> 8, b0);
-        rest = (uint16_t)(bin_mult8(m3 >> 8, b1) + bin_mult8(m6 >> 8, b2));
-        r = (uint16_t)(p->mirrored ? rest - xt : rest + xt);
-        r = bin_mult8((uint16_t)(r + r) >> 8, sl->scale);
-    } else {
-        xt = bin_fmult_rol(bin_mult8(b0, sl->scale), m0);
-        rest = (uint16_t)(bin_fmult_rol(bin_mult8(b1, sl->scale), m3) + bin_fmult_rol(bin_mult8(b2, sl->scale), m6));
-        r = (uint16_t)(p->mirrored ? rest - xt : rest + xt);
-    }
-    return (int16_t)(uint16_t)(r + (uint16_t)sl->pos[j]);
-}
-
-void gpu_corner_view(uint32_t point, float v[3])
-{
-    size_t n;
-    if (point & SC_FLOAT_POINT) {
-        const ScFPoint *q = &sc_list_fpoints(&n)[point & ~SC_FLOAT_POINT];
-        const ScFSlot *f = &sc_list_fslots(&n)[q->fslot];
-        int i;
-        for (i = 0; i < 3; i++)
-            v[i] = f->pos[i] + q->p[0] * f->m[i] + q->p[1] * f->m[3 + i] + q->p[2] * f->m[6 + i];
-    } else {
-        const ScPoint *p = &sc_list_points(&n)[point];
-        const ScSlot *sl = &sc_list_slots(&n)[p->slot];
-        int16_t z = bin_coord(sl, p, 2);
-        v[0] = (float)bin_coord(sl, p, 0);
-        v[1] = (float)bin_coord(sl, p, 1);
-        v[2] = (float)(z >= 0x100 && z > 0x43FE ? 0x43FE : z);
-    }
-}
-
 void gpu_bin_check(GpuCheck *c, const uint8_t *gpu, const uint8_t *ref, int w, int h)
 {
     long far0 = c->at[0];

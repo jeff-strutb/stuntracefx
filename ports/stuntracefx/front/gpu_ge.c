@@ -731,6 +731,7 @@ static int poly_ge(const FwPoly *p, int w, int h)
    in its colour; a line its two ends. A far point's depth is not held at
    $43FE here (the GE's floats). */
 static long s_faces;
+#define PATCH_DIV 16                    /* face_patches: 2 x 16 x 16 triangles a triangle */
 
 static void model_mode(int on)
 {
@@ -752,6 +753,8 @@ static void model_mode(int on)
         pr.w.z = -2.0f;                 /* z - 2 >= -z: in front of z = 1 */
         sceGuSetMatrix(GU_PROJECTION, &pr);
         sceGuEnable(GU_CLIP_PLANES);
+        sceGuPatchDivide(PATCH_DIV, PATCH_DIV);
+        sceGuPatchPrim(GU_TRIANGLE_STRIP);
         s_slot_now = -1;
     } else {
         sceGuSetMatrix(GU_PROJECTION, &pass);
@@ -801,67 +804,75 @@ static void corner_xyz(const ScPoint *pt, const ScFPoint *fp, uint32_t point, fl
     *z = (float)pt[point].b[2];
 }
 
-/* A face the GE cannot take whole (scene.h sc_needs_clip): the GE has no
-   near clip and its screen coordinates end about 1800 pixels from the
-   centre, so such a face is dropped whole. Its corners here in view space
-   (gpu_corner_view), clipped to z = 1 and the four sides of a band 6
-   times the screen's half-size, drawn with no slot matrix. CPU geometry,
-   for these few faces alone: the GE has no way to do it. */
+/* A face of an object near the eye or far off the sides (scene.h sc_near):
+   with its clip enabled the GE clips at the near plane, but a primitive
+   with a corner past 0 to 4095 after the viewport is dropped whole (about
+   2048 pixels from the centre), so such primitives must be divided first.
+   The GE divides them: each triangle of the fan a flat patch of 4 x 4
+   control points, bilinear (one edge the third corner, twice over), which
+   it cuts into PATCH_DIV x PATCH_DIV before its transform; a piece with a
+   corner past the range is dropped, which only shows very near the eye. No
+   point is turned by the CPU. */
 typedef struct {
-    float x, y, z, u, v;
-} CV5;
+    float u, v, x, y, z;
+} PatchCorner;
 
-static int cv5_clip(const CV5 *in, int n, CV5 *out, float a, float b, float c, float d)
+static void patch_point(const PatchCorner *a, const PatchCorner *b, const PatchCorner *c, int i, int j, PatchCorner *o)
 {
-    int i, m = 0;
-    for (i = 0; i < n; i++) {
-        const CV5 *p = &in[i], *q = &in[(i + 1) % n];
-        float fp = a * p->x + b * p->y + c * p->z + d, fq = a * q->x + b * q->y + c * q->z + d;
-        if (fp >= 0)
-            out[m++] = *p;
-        if ((fp >= 0) != (fq >= 0)) {
-            float t = fp / (fp - fq);
-            out[m].x = p->x + (q->x - p->x) * t;
-            out[m].y = p->y + (q->y - p->y) * t;
-            out[m].z = p->z + (q->z - p->z) * t;
-            out[m].u = p->u + (q->u - p->u) * t;
-            out[m].v = p->v + (q->v - p->v) * t;
-            m++;
-        }
-    }
-    return m;
+    float s = (float)i / 3.0f, t = (float)j / 3.0f, wa = (1.0f - t) * (1.0f - s), wb = (1.0f - t) * s;
+    o->u = wa * a->u + wb * b->u + t * c->u;
+    o->v = wa * a->v + wb * b->v + t * c->v;
+    o->x = wa * a->x + wb * b->x + t * c->x;
+    o->y = wa * a->y + wb * b->y + t * c->y;
+    o->z = wa * a->z + wb * b->z + t * c->z;
 }
 
-/* the clipped polygon in a, its count; n <= 8 corners, 5 planes: at most 13 */
-static int face_clipped(const ScFace *f, const ScCorner *c, uint32_t n, CV5 *a)
+/* the face's fan as patches (its matrix and texture set) */
+static void face_patches(const PatchCorner *pc, uint32_t n, int tex, uint8_t colour)
 {
-    CV5 b[16];
-    float fx = (float)fw_focal_x(), fy = (float)fw_focal_y(), cx, cy, G = 6.0f;
-    float ax = 2.0f * fx / (float)s_w, ay = 2.0f * fy / (float)s_h, bx, by;
-    uint32_t i;
-    int m;
-    (void)f;
-    fw_view_centre(&cx, &cy);
-    bx = 2.0f * cx / (float)s_w - 1.0f;          /* X = ax x + bx z, Y = -(ay y) + by z, W = z */
-    by = 1.0f - 2.0f * cy / (float)s_h;
-    for (i = 0; i < n; i++) {
-        float v[3];
-        gpu_corner_view(c[i].point, v);
-        b[i].x = v[0];
-        b[i].y = v[1];
-        b[i].z = v[2];
-        {                               /* u and v the nearest turn of 256 to the first corner's */
-            float du = c[i].u - c[0].u, dv = c[i].v - c[0].v;
-            b[i].u = c[0].u + du - 256.0f * (du > 128.0f) + 256.0f * (du < -128.0f);
-            b[i].v = c[0].v + dv - 256.0f * (dv > 128.0f) + 256.0f * (dv < -128.0f);
+    uint32_t k;
+    int i, j;
+    for (k = 1; k + 1 < n; k++) {
+        PatchCorner o;
+        s_used += 16 * sizeof(PTV) + 256;
+        room();
+        if (tex) {
+            PTV *t = (PTV *)sceGuGetMemory(16 * sizeof(PTV));
+            for (j = 0; j < 4; j++)
+                for (i = 0; i < 4; i++) {
+                    patch_point(&pc[0], &pc[k], &pc[k + 1], i, j, &o);
+                    t[4 * j + i].u = o.u;
+                    t[4 * j + i].v = o.v;
+                    t[4 * j + i].x = o.x;
+                    t[4 * j + i].y = o.y;
+                    t[4 * j + i].z = o.z;
+                }
+            sceGuDrawBezier(GU_TEXTURE_32BITF | GU_VERTEX_32BITF | GU_TRANSFORM_3D, 4, 4, 0, t);
+        } else if (s_c32) {
+            PCV32 *v = (PCV32 *)sceGuGetMemory(16 * sizeof(PCV32));
+            for (j = 0; j < 4; j++)
+                for (i = 0; i < 4; i++) {
+                    patch_point(&pc[0], &pc[k], &pc[k + 1], i, j, &o);
+                    v[4 * j + i].c = 0xFF000000u | colour;
+                    v[4 * j + i].x = o.x;
+                    v[4 * j + i].y = o.y;
+                    v[4 * j + i].z = o.z;
+                }
+            sceGuDrawBezier(GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D, 4, 4, 0, v);
+        } else {
+            PCV *v = (PCV *)sceGuGetMemory(16 * sizeof(PCV));
+            for (j = 0; j < 4; j++)
+                for (i = 0; i < 4; i++) {
+                    patch_point(&pc[0], &pc[k], &pc[k + 1], i, j, &o);
+                    v[4 * j + i].c = (uint16_t)(0xF000u | colour);
+                    v[4 * j + i].pad = 0;
+                    v[4 * j + i].x = o.x;
+                    v[4 * j + i].y = o.y;
+                    v[4 * j + i].z = o.z;
+                }
+            sceGuDrawBezier(GU_COLOR_4444 | GU_VERTEX_32BITF | GU_TRANSFORM_3D, 4, 4, 0, v);
         }
     }
-    m = cv5_clip(b, (int)n, a, 0, 0, 1, -1.0f);  /* z >= 1 */
-    m = cv5_clip(a, m, b, -ax, 0, G - bx, 0);    /* X <= G W */
-    m = cv5_clip(b, m, a, ax, 0, G + bx, 0);     /* X >= -G W */
-    m = cv5_clip(a, m, b, 0, ay, G - by, 0);     /* Y <= G W */
-    m = cv5_clip(b, m, a, 0, -ay, G + by, 0);    /* Y >= -G W */
-    return m;
 }
 
 static void face_ge(const FwSpan *p)
@@ -891,20 +902,18 @@ static void face_ge(const FwSpan *p)
     room();
     s_used += (size_t)(n + 8) * sizeof(PTV) + 256;
     model_mode(1);
-    if (f->pad[1]) {                    /* near the eye or far off the sides: clipped first */
-        static ScePspFMatrix4 ident = { { 1, 0, 0, 0 }, { 0, 1, 0, 0 }, { 0, 0, 1, 0 }, { 0, 0, 0, 1 } };
-        CV5 a[16];
-        int m = face_clipped(f, c, n, a), k;
-        if (m < 2 || (n > 2 && m < 3))
-            return;
-        if (s_slot_now != -2) {
-            sceGuSetMatrix(GU_MODEL, &ident);
-            s_slot_now = -2;
-        }
-        if (n == 2)
-            m = 2;
+    /* the slot's matrix (a solid's float slots numbered after the models') */
+    slot = c[0].point & SC_FLOAT_POINT ? (uint32_t)ns + fp[c[0].point & ~SC_FLOAT_POINT].fslot : pt[c[0].point].slot;
+    if ((int)slot != s_slot_now) {
+        if (slot >= ns)
+            fslot_matrix(&fs[slot - ns]);
+        else
+            slot_matrix(&sl[slot]);
+        s_slot_now = (int)slot;
+    }
+    if (n > 2 && (slot >= ns ? sc_fslot_near(slot - ns) : sl[slot].pad[0])) {
+        PatchCorner pc[8];
         if (f->textured) {
-            PTV *t = (PTV *)sceGuGetMemory((unsigned)m * sizeof(PTV));
             textured(1);
             use_texture(st);
             use_rules(f->por, f->hi);
@@ -916,47 +925,21 @@ static void face_ge(const FwSpan *p)
             ths = (float)pow2_at_least(st->th);
             ou = (float)f->ou / 256.0f;
             ov = (float)f->ov / 256.0f;
-            for (k = 0; k < m; k++) {
-                t[k].u = (a[k].u + ou) / tws;
-                t[k].v = (a[k].v + ov) / ths;
-                t[k].x = a[k].x;
-                t[k].y = a[k].y;
-                t[k].z = a[k].z;
-            }
-            sceGuDrawArray(n == 2 ? GU_LINES : GU_TRIANGLE_FAN, GU_TEXTURE_32BITF | GU_VERTEX_32BITF | GU_TRANSFORM_3D, m, 0, t);
-        } else if (s_c32) {
-            PCV32 *v = (PCV32 *)sceGuGetMemory((unsigned)m * sizeof(PCV32));
+            u0 = c[0].u;
+            v0 = c[0].v;
+        } else
             textured(0);
-            for (k = 0; k < m; k++) {
-                v[k].c = 0xFF000000u | f->colour;
-                v[k].x = a[k].x;
-                v[k].y = a[k].y;
-                v[k].z = a[k].z;
-            }
-            sceGuDrawArray(n == 2 ? GU_LINES : GU_TRIANGLE_FAN, GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D, m, 0, v);
-        } else {
-            PCV *v = (PCV *)sceGuGetMemory((unsigned)m * sizeof(PCV));
-            textured(0);
-            for (k = 0; k < m; k++) {
-                v[k].c = (uint16_t)(0xF000u | f->colour);
-                v[k].pad = 0;
-                v[k].x = a[k].x;
-                v[k].y = a[k].y;
-                v[k].z = a[k].z;
-            }
-            sceGuDrawArray(n == 2 ? GU_LINES : GU_TRIANGLE_FAN, GU_COLOR_4444 | GU_VERTEX_32BITF | GU_TRANSFORM_3D, m, 0, v);
+        for (i = 0; i < n; i++) {
+            float du = c[i].u - u0, dv = c[i].v - v0;
+            du += -256.0f * (du > 128.0f) + 256.0f * (du < -128.0f);
+            dv += -256.0f * (dv > 128.0f) + 256.0f * (dv < -128.0f);
+            pc[i].u = f->textured ? (u0 + du + ou) / tws : 0;
+            pc[i].v = f->textured ? (v0 + dv + ov) / ths : 0;
+            corner_xyz(pt, fp, c[i].point, &pc[i].x, &pc[i].y, &pc[i].z);
         }
+        face_patches(pc, n, f->textured, f->colour);
         s_faces++;
         return;
-    }
-    /* the slot's matrix (a solid's float slots numbered after the models') */
-    slot = c[0].point & SC_FLOAT_POINT ? (uint32_t)ns + fp[c[0].point & ~SC_FLOAT_POINT].fslot : pt[c[0].point].slot;
-    if ((int)slot != s_slot_now) {
-        if (slot >= ns)
-            fslot_matrix(&fs[slot - ns]);
-        else
-            slot_matrix(&sl[slot]);
-        s_slot_now = (int)slot;
     }
     if (f->textured) {
         PTV *t = (PTV *)sceGuGetMemory(n * sizeof(PTV));
@@ -1189,6 +1172,150 @@ static void quad_ge(const FwSpan *p, int w, int h)
     s_quads++;
 }
 
+/* ---- the objects' primitives (scene.h ScPrim): the GE's own transform ----
+   Each in view space under the view's projection, no matrix of an object's:
+   the GE projects it and its scissor keeps it to the screen. A sprite a
+   rectangle at its one depth, its texture across it (mirrored: backwards);
+   its rows capped as the chip's, a fixed size's in texel rows. A dot is its
+   pixels' size at its depth, a line its two ends; a drop at the depth the
+   chip's table gives it (the scale at 2 ($012C + z), doubled: $012C + z), a
+   streak's other end its last pixel taken back to that depth. */
+static void prim_model(void)
+{
+    static ScePspFMatrix4 ident = { { 1, 0, 0, 0 }, { 0, 1, 0, 0 }, { 0, 0, 1, 0 }, { 0, 0, 0, 1 } };
+    model_mode(1);
+    if (s_slot_now != -2) {
+        sceGuSetMatrix(GU_MODEL, &ident);
+        s_slot_now = -2;
+    }
+}
+
+static void prim_flat(int prim, const float (*q)[3], int n, uint8_t colour)
+{
+    int i;
+    s_used += (size_t)n * sizeof(PCV32) + 256;
+    room();
+    prim_model();
+    textured(0);
+    if (s_c32) {
+        PCV32 *v = (PCV32 *)sceGuGetMemory((unsigned)n * sizeof(PCV32));
+        for (i = 0; i < n; i++) {
+            v[i].c = 0xFF000000u | colour;
+            v[i].x = q[i][0];
+            v[i].y = q[i][1];
+            v[i].z = q[i][2];
+        }
+        sceGuDrawArray(prim, GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D, n, 0, v);
+    } else {
+        PCV *v = (PCV *)sceGuGetMemory((unsigned)n * sizeof(PCV));
+        for (i = 0; i < n; i++) {
+            v[i].c = (uint16_t)(0xF000u | colour);
+            v[i].pad = 0;
+            v[i].x = q[i][0];
+            v[i].y = q[i][1];
+            v[i].z = q[i][2];
+        }
+        sceGuDrawArray(prim, GU_COLOR_4444 | GU_VERTEX_32BITF | GU_TRANSFORM_3D, n, 0, v);
+    }
+    s_quads++;
+}
+
+static void prim_dot(float x, float y, float z, int n, uint8_t colour)
+{
+    float wd = (float)n * z / (float)fw_focal_x(), ht = (float)n * z / (float)fw_focal_y();
+    float q[4][3] = { { x, y, z }, { x + wd, y, z }, { x + wd, y + ht, z }, { x, y + ht, z } };
+    prim_flat(GU_TRIANGLE_FAN, q, 4, colour);
+}
+
+static void prim_sprite(const ScPrim *p)
+{
+    const ScPrimView *pv = sc_list_prim_view();
+    float z = (float)p->z, fy = (float)fw_focal_y(), hy, cap = (float)pv->rows_cap * z / (2.0f * fy), tws, ths;
+    int c8 = (p->mask & 0xFF) + 1, back = (p->mask & 0x8000) != 0;
+    const Stage *st;
+    PTV *t;
+    if (p->z <= 0x80)
+        return;
+    if (p->own >= 0) {
+        int size = (2 * (int)p->aa + ((int)p->own << p->shift)) & 0xFFFF;
+        if (!size)
+            size = 1;
+        if (p->far)
+            size = (int16_t)size >> p->far;
+        hy = (float)size / 2.0f;
+    } else
+        hy = (float)-(int16_t)p->rows * z / (2.0f * fy);
+    if (hy <= 0)
+        return;
+    if (hy > cap)
+        hy = cap;
+    st = stage_for(p->bank, p->base, (uint16_t)((pow2_at_least(c8) - 1) << 8 | 0xFF));
+    if (!st)
+        return;
+    s_used += 4 * sizeof(PTV) + 256;
+    room();
+    prim_model();
+    textured(1);
+    use_texture(st);
+    use_rules(p->por, p->hi);
+    if (!s_wrap) {
+        sceGuTexWrap(GU_REPEAT, GU_REPEAT);
+        s_wrap = 1;
+    }
+    tws = (float)pow2_at_least(st->tw);
+    ths = (float)pow2_at_least(st->th);
+    t = (PTV *)sceGuGetMemory(4 * sizeof(PTV));
+    t[0].x = t[3].x = (float)p->x - hy;
+    t[1].x = t[2].x = (float)p->x + hy;
+    t[0].y = t[1].y = (float)p->y - hy;
+    t[2].y = t[3].y = (float)p->y + hy;
+    t[0].z = t[1].z = t[2].z = t[3].z = z;
+    t[0].u = t[3].u = (back ? (float)c8 : 0) / tws;
+    t[1].u = t[2].u = (back ? 0 : (float)c8) / tws;
+    t[0].v = t[1].v = 0;
+    t[2].v = t[3].v = (float)c8 / ths;
+    sceGuDrawArray(GU_TRIANGLE_FAN, GU_TEXTURE_32BITF | GU_VERTEX_32BITF | GU_TRANSFORM_3D, 4, 0, t);
+    s_quads++;
+}
+
+static void prim_ge(const FwSpan *sp)
+{
+    size_t np;
+    const ScPrim *ps = sc_list_prims(&np), *p;
+    float cx, cy, fx = (float)fw_focal_x(), fy = (float)fw_focal_y();
+    if ((size_t)sp->xl >= np)
+        return;
+    p = &ps[sp->xl];
+    fw_view_centre(&cx, &cy);
+    switch (p->kind) {
+    case SC_PRIM_SPRITE:
+        prim_sprite(p);
+        break;
+    case SC_PRIM_DOT:
+        if (p->z >= 0x100)
+            prim_dot((float)p->x, (float)p->y, (float)(p->z > 0x4400 ? 0x43FF : p->z), p->n, p->colour);
+        break;
+    case SC_PRIM_LINE:
+        if (p->z >= 0x100 && p->z2 >= 0x100) {
+            float q[2][3] = { { (float)p->x, (float)p->y, (float)p->z }, { (float)p->x2, (float)p->y2, (float)p->z2 } };
+            prim_flat(GU_LINES, q, 2, p->colour);
+        }
+        break;
+    case SC_PRIM_WDOT: {
+        float z = (float)(0x012C + p->z);
+        prim_dot((float)p->x, (float)p->y - 0x14 * z / fy, z, p->n, p->colour);
+        break;
+    }
+    case SC_PRIM_WLINE: {
+        float z = (float)(0x012C + p->z);
+        float q[2][3] = { { (float)p->x, (float)p->y - 0x14 * z / fy, z },
+                          { ((float)p->x2 - cx) * z / fx, ((float)p->y2 - cy) * z / fy, z } };
+        prim_flat(GU_LINES, q, 2, p->colour);
+        break;
+    }
+    }
+}
+
 static void span(const FwSpan *p, int w, int h)
 {
     int32_t x, a;
@@ -1196,7 +1323,9 @@ static void span(const FwSpan *p, int w, int h)
     if (gpu_bin_ref_only(p))            /* the reference's own (a check's) */
         return;
     if (p->textured == FW_QUAD) {       /* a screen quad: the GE's whole */
-        if (p->pad1[1] & 32)
+        if (p->pad1[1] & 64)
+            prim_ge(p);
+        else if (p->pad1[1] & 32)
             line_ge(p, w, h);
         else
             quad_ge(p, w, h);

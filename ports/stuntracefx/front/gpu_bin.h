@@ -49,10 +49,6 @@ static inline int gpu_bin_face(const FwSpan *s) { return s->textured == 6 || s->
 void gpu_bin_faces(const FwSpan *sp, size_t n, GpuVert *tri, size_t *ntri, GpuVert *line, size_t *nline, FwSpan *quad,
                    size_t *nquad, size_t *runs, uint8_t *kind, uint32_t *len);
 
-/* a corner's point in view space on the CPU (the chip's integer steps,
-   the shaders' same; a solid's float point): for the few faces a GPU
-   without clipping needs clipped first (scene.h sc_needs_clip) */
-void gpu_corner_view(uint32_t point, float v[3]);
 
 /* The check (FW_GPUCHECK): a GPU's picture against the reference's, each
    pixel apart counted by how far the nearest texel with the GPU's value is

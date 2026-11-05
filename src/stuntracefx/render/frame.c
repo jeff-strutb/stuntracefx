@@ -21,6 +21,7 @@
 #include "console_ext.h"
 #include "widescreen.h"
 #include "fullwindow.h"
+#include "scene.h"
 
 #define R gsu.r
 
@@ -2321,7 +2322,10 @@ enter:
  */
 void abi_FxFrameProgram(void)
 {
+    if (sc_frame_native())              /* Enhanced's full window, SC_GPU: the display list natively (scene.h) */
+        return;
     frame_run(0xAB13, 0xFFFF);
+    sc_frame_ref_end();
 }
 
 /* Remaster, Enhanced: the far records (remaster.h) drawn before the near

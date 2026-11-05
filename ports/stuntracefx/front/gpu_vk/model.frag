@@ -37,8 +37,8 @@ void main()
     uint f = in_face * 6u, w2 = fcs[f + 2u], w3 = fcs[f + 3u], w4 = fcs[f + 4u], w5 = fcs[f + 5u];
     uint textured = w2 & 255u, colour = (w2 >> 8) & 255u, bank = (w2 >> 16) & 255u, por = w2 >> 24, hi = w3 & 255u;
     out_id = in_face + 1u;
-    if (pc.water.w != 0.0) {
-        /* the water nearer on the pixel's ray (fullwindow.c sunk) */
+    if (pc.water.w != 0.0 && fcs[f + 1u] != 2u) {
+        /* the water nearer on the pixel's ray (fullwindow.c sunk): a line has no depth there, and is not cut */
         precise float x = gl_FragCoord.x - 0.5, y = gl_FragCoord.y - 0.5, iz = 1.0 / in_z;
         precise float w = fma(pc.water.z, y, fma(pc.water.y, x, pc.water.x));
         if (iz > 0.0 && w > 0.0 && iz < w)

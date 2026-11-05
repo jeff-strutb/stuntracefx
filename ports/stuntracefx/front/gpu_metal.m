@@ -214,7 +214,7 @@ static NSString *const kernel_source = @
 "struct Face { uint first, n; uchar textured, colour, bank, por, hi, p0, p1, p2; ushort base, mask; short ou, ov; };\n"
 "struct Vert { uint point, face; float u, v; };\n"
 "struct View { float fx, fy, cx, cy, tw, th, p0, p1; };\n"
-"struct FSlot { float m[9]; float pos[3]; };\n"
+"struct FSlot { float m[9]; float pos[3]; float zs; float pad[3]; };\n"
 "struct FPoint { float p[3]; uint fslot; };\n"
 "struct VOut { float4 pos [[position]]; float u; float v; float z; uint face [[flat]]; };\n"
 "static ushort mult8(int a, int b) { return (ushort)((int)(char)a * (int)(char)b); }\n"
@@ -239,13 +239,14 @@ static NSString *const kernel_source = @
 "                         device const Slot *slots [[buffer(2)]], constant View &w [[buffer(3)]],\n"
 "                         device const FSlot *fslots [[buffer(4)]], device const FPoint *fpts [[buffer(5)]]) {\n"
 "    Vert vt = vs[vid];\n"
-"    float x, y, z;\n"
+"    float x, y, z, zs;\n"
 "    if (vt.point & 0x80000000u) {   /* a solid's point (solids.c): its slot's float matrix and place */\n"
 "        FPoint q = fpts[vt.point & 0x7FFFFFFFu];\n"
 "        FSlot f = fslots[q.fslot];\n"
 "        x = f.pos[0] + q.p[0] * f.m[0] + q.p[1] * f.m[3] + q.p[2] * f.m[6];\n"
 "        y = f.pos[1] + q.p[0] * f.m[1] + q.p[1] * f.m[4] + q.p[2] * f.m[7];\n"
 "        z = f.pos[2] + q.p[0] * f.m[2] + q.p[1] * f.m[5] + q.p[2] * f.m[8];\n"
+"        zs = f.zs;\n"
 "    } else {\n"
 "        Point p = pts[vt.point];\n"
 "        Slot sl = slots[p.slot];\n"
@@ -253,10 +254,11 @@ static NSString *const kernel_source = @
 "        short zi = point_coord(sl, p, 2);\n"
 "        if (zi >= 0x100 && zi > 0x43FE) zi = 0x43FE;   /* a far point's depth held, as the projection holds it */\n"
 "        z = (float)zi;\n"
+"        zs = (float)(1u << sl.pad1);   /* a far object's halvings: its true depth, for the water */\n"
 "    }\n"
 "    VOut o;\n"
 "    o.pos = float4(2.0f * (w.cx * z + w.fx * x) / w.tw - z, z - 2.0f * (w.cy * z + w.fy * y) / w.th, z - 1.0f, z);\n"
-"    o.u = vt.u; o.v = vt.v; o.z = z; o.face = vt.face;\n"
+"    o.u = vt.u; o.v = vt.v; o.z = z * zs; o.face = vt.face;\n"
 "    return o;\n"
 "}\n"
 "struct FOut { uint c [[color(0)]]; uint id [[color(1)]]; };\n"
@@ -265,7 +267,7 @@ static NSString *const kernel_source = @
 "                             constant float4 &water [[buffer(3)]]) {\n"
 "    Face f = faces[in.face];\n"
 "    FOut o; o.id = in.face + 1;\n"
-"    if (water.w != 0) {   /* the water nearer on the pixel's ray (fullwindow.c sunk): 1 / depth, the view's z exact */\n"
+"    if (water.w != 0 && f.n != 2) {   /* the water nearer on the pixel's ray (fullwindow.c sunk): 1 / depth, the true z exact; a line has none */\n"
 "        float x = in.pos.x - 0.5f, y = in.pos.y - 0.5f, iz = 1.0f / in.z;\n"
 "        float w = precise::fma(water.z, y, precise::fma(water.y, x, water.x));\n"
 "        if (iz > 0 && w > 0 && iz < w) discard_fragment();\n"
@@ -317,17 +319,233 @@ static NSString *const kernel_source = @
 "    if (water.w != 0 && (s.za != 0 || s.zx != 0 || s.zy != 0) && sunk(s, x, water)) discard_fragment();\n"
 "    FOut o; o.c = (uint)c; o.id = 0;\n"
 "    return o;\n"
+"}\n"
+"/* the objects' primitives (scene.h ScPrim) made into screen quads, as gpu_vk/prims.comp */\n"
+"struct Prim { short x, y, z, own; ushort aa, shift, far_s, rows; ushort base, mask; uchar bank, por, hi, colour;\n"
+"              uchar kind, n, pad[2]; short x2, y2, z2; ushort pad2; float za; };\n"
+"struct PView { int tw, th, cx, cy, left_e, right_e, top_e, bottom_e, rows_cap, square_t;\n"
+"               int fxn, fxd, fyn, fyd, sxn, sxd, syn, syd, pad[2]; };\n"
+"struct QNew { int y, rows, x0, x1; long xl, u, du, v, dv; uint base, mask, flags; };\n"
+"static int s16(int v) { return (int)(short)v; }\n"
+"static int u16(int v) { return v & 0xFFFF; }\n"
+"static int romw(device const uchar *banks, device const short *slot, uint bank, int a) {\n"
+"    device const uchar *b = banks + (ulong)slot[bank] * 65536;\n"
+"    return (int)b[(ushort)a] | (int)b[(ushort)(a + 1)] << 8;\n"
+"}\n"
+"static long floor_div(long p, long q) { return p >= 0 ? p / q : -((-p + q - 1) / q); }\n"
+"static int scale_mult(constant PView &w, int v, int scale, bool down) {\n"
+"    long n = down ? w.fyn : w.fxn, d = down ? w.fyd : w.fxd;\n"
+"    return s16((int)(floor_div((long)s16(v) * (long)s16(scale) * n, d << 23) & 0xFFFF));\n"
+"}\n"
+"static int scale_rol(constant PView &w, int v, int scale, bool down) {\n"
+"    int p = s16(v) * s16(scale);\n"
+"    return s16(((scale_mult(w, v, scale, down) << 1) | ((p >> 15) & 1)) & 0xFFFF);\n"
+"}\n"
+"static int fmult_rol(int a, int b) { return ((s16(a) * s16(b)) >> 15) & 0xFFFF; }\n"
+"static bool quad_new(constant PView &w, thread QNew &q, int y0, int rows, int a, int b, long v, long dv) {\n"
+"    int y1 = y0 + rows - 1;\n"
+"    if (y0 < 0) { v += dv * (long)(-y0); y0 = 0; }\n"
+"    if (y1 >= w.th) y1 = w.th - 1;\n"
+"    if (a < 0) a = 0;\n"
+"    if (b >= w.tw) b = w.tw - 1;\n"
+"    if (y1 < y0 || b < a) return false;\n"
+"    q.y = y0; q.rows = y1 - y0 + 1; q.x0 = a; q.x1 = b; q.v = v; q.dv = dv; q.xl = 0; q.u = 0; q.du = 0; q.mask = 0;\n"
+"    return true;\n"
+"}\n"
+"static bool sprite_not_square(constant PView &w, thread QNew &q, int bx, int by, int h, int c8, bool back, uint base) {\n"
+"    long sxn = w.sxn, sxd = w.sxd, syn = w.syn, syd = w.syd, du;\n"
+"    int wd = (int)(((long)h * sxn * syd * 2 + sxd * syn) / (2 * sxd * syn)), x0, y0, a, b, last;\n"
+"    if (wd < 1 || h < 1) return false;\n"
+"    x0 = bx - (wd + 1) / 2;\n"
+"    y0 = by - (h + 1) / 2;\n"
+"    a = x0 < 0 ? 0 : x0;\n"
+"    b = x0 + wd - 1 > w.right_e ? w.right_e : x0 + wd - 1;\n"
+"    if (b >= w.tw) b = w.tw - 1;\n"
+"    if (a > b) return false;\n"
+"    du = ((long)c8 << 32) / (long)wd;\n"
+"    last = y0 + h - 1;\n"
+"    if (last > w.bottom_e - 1) last = w.bottom_e - 1;\n"
+"    if (!quad_new(w, q, y0, last - y0 + 1, a, b, 0, (long)c8)) return false;\n"
+"    q.mask = (uint)h;\n"
+"    q.xl = x0;\n"
+"    if (!back) { q.base = base; q.du = du; }\n"
+"    else { q.base = (base + (uint)c8 - 1 - 255) & 0xFFFF; q.u = ((long)255 << 32) + (((long)1 << 32) - 1); q.du = -du; }\n"
+"    return true;\n"
+"}\n"
+"static bool sprite_small(constant PView &w, thread QNew &q, device const uchar *banks, device const short *slot, int x0, int y0, int size, int c8, bool back, uint base) {\n"
+"    int a = ((c8 << 8) | (c8 >> 8)) & 0xFFFF, step = fmult_rol(a, romw(banks, slot, 0, 0x94A0 + 2 * size));\n"
+"    int x = x0, cols = size, r5 = (int)base, last, r0;\n"
+"    long st;\n"
+"    if (back) r5 = u16(r5 + c8 - 1);\n"
+"    if (x0 < 0) {\n"
+"        int k = -x0, r8;\n"
+"        if (k >= cols) return false;\n"
+"        r8 = u16((back ? -k : k) * step);\n"
+"        cols -= k;\n"
+"        r5 = u16(r5 + (r8 >> 8));\n"
+"        x = 0;\n"
+"    }\n"
+"    r0 = s16(w.right_e - size - x);\n"
+"    if (r0 < 0) cols += r0 + 1;\n"
+"    if (cols <= 0) return false;\n"
+"    last = y0 + size - 1;\n"
+"    if (last > w.bottom_e - 1) last = w.bottom_e - 1;\n"
+"    st = (long)step << 24;\n"
+"    if (!quad_new(w, q, y0, last - y0 + 1, x, x + cols - 1, 0, st)) return false;\n"
+"    q.xl = x;\n"
+"    q.du = back ? -st : st;\n"
+"    q.base = (uint)r5;\n"
+"    return true;\n"
+"}\n"
+"static bool sprite_large(constant PView &w, thread QNew &q, int x0, int y0, int size, int c8, bool back, uint base) {\n"
+"    int r9 = c8 == size ? 0xFFFF : (int)(((long)c8 << 16) / (long)size) & 0xFFFF, step = r9 & 0xFFFE, cols, r5 = (int)base, frac = 0, x = x0;\n"
+"    long M = 65536, kin, kall;\n"
+"    int r13 = c8, r4, last, kmax;\n"
+"    if (back) r5 = u16(r5 + c8 - 1);\n"
+"    r4 = fmult_rol(step >> 1, u16(w.right_e - x0));\n"
+"    if (s16(r13 - r4 - 1) >= 0) r13 = r4;\n"
+"    cols = r13;\n"
+"    if (x0 < 0) {\n"
+"        int p = (step >> 1) * s16(-x0), lo = p & 0xFFFF, hi = (p >> 16) & 0xFFFF, r0;\n"
+"        frac = (lo * 2) & 0xFFFF;\n"
+"        r0 = ((hi << 1) | (lo >> 15)) & 0xFFFF;\n"
+"        if (s16(r0) < 0) return false;\n"
+"        r5 = u16(back ? r5 - r0 : r5 + r0);\n"
+"        cols = u16(r13 - r0);\n"
+"        if (s16(cols) < 0) return false;\n"
+"        x = 0;\n"
+"    }\n"
+"    if (cols == 0 || step == 0 || c8 == 0) return false;\n"
+"    last = y0 + (int)(((long)(c8 - 1) * M) / (long)step);\n"
+"    if (last > w.bottom_e - 1) last = w.bottom_e - 1;\n"
+"    kin = cols > 1 ? ((long)(cols - 1) * M - (long)frac + (long)step - 1) / (long)step : 0;\n"
+"    kall = ((long)cols * M - (long)frac + (long)step - 1) / (long)step;\n"
+"    kmax = (int)(kall - 1 < (long)(w.right_e - x) ? kall - 1 : (long)(w.right_e - x));\n"
+"    if ((long)kmax < kin - 1) kmax = (int)(kin - 1);\n"
+"    if (kmax < 0 || !quad_new(w, q, y0, last - y0 + 1, x, x + kmax, M - 1, (long)step)) return false;\n"
+"    q.v <<= 16;\n"
+"    q.dv <<= 16;\n"
+"    q.xl = x;\n"
+"    if (!back) { q.base = (uint)r5; q.u = (long)frac << 16; q.du = (long)step << 16; }\n"
+"    else { q.base = (uint)u16(r5 - 255); q.u = ((long)255 << 32) + (((long)1 << 32) - 1) - ((long)frac << 16); q.du = -((long)step << 16); }\n"
+"    return true;\n"
+"}\n"
+"static bool sprite(constant PView &w, thread QNew &q, device const uchar *banks, device const short *slot, Prim p) {\n"
+"    int X = p.x, Y = p.y, Z = p.z, own = p.own, c8 = (int)(p.mask & 255) + 1, size, r5 = 0, sc, bx, by, guard;\n"
+"    bool back = (p.mask & 0x8000) != 0;\n"
+"    uint base = p.base;\n"
+"    if (s16(0x0080 - Z) >= 0) return false;\n"
+"    if (own >= 0) {\n"
+"        r5 = u16(2 * (int)p.aa + (own << p.shift));\n"
+"        if (r5 == 0) r5 = 1;\n"
+"        if (p.far_s) r5 = u16(s16(r5) >> p.far_s);\n"
+"    }\n"
+"    for (guard = 0; guard < 16 && s16(0x4400 - Z) < 0; guard++) { X = s16(X) >> 1; Y = s16(Y) >> 1; r5 = u16(s16(r5) >> 1); Z = s16(Z) >> 1; }\n"
+"    for (guard = 0; guard < 16 && s16(0x0100 - Z) >= 0; guard++) { r5 = u16(r5 * 2); X = s16(X * 2); Y = s16(Y * 2); Z = s16(Z * 2); }\n"
+"    sc = romw(banks, slot, 0x14, 0x896C + (Z & 0xFFFE));\n"
+"    bx = s16(w.cx + scale_mult(w, X, sc, false));\n"
+"    by = s16(w.cy + scale_mult(w, Y, sc, true));\n"
+"    size = own >= 0 ? u16(scale_mult(w, r5, sc, true)) : u16(-(int)(short)p.rows);\n"
+"    if (size == 0) return false;\n"
+"    if (s16(w.rows_cap - size) < 0) size = w.rows_cap;\n"
+"    if (w.square_t == 0) return sprite_not_square(w, q, bx, by, s16(size), c8, back, base);\n"
+"    {\n"
+"        int hw = (size >> 1) + (size & 1), x0 = s16(bx - hw), y0 = s16(by - hw);\n"
+"        if (s16(x0 - (u16(-size) + 1)) < 0 || s16(x0 - w.right_e) >= 0) return false;\n"
+"        return size < c8 ? sprite_small(w, q, banks, slot, x0, y0, size, c8, back, base) : sprite_large(w, q, x0, y0, size, c8, back, base);\n"
+"    }\n"
+"}\n"
+"static int scale_for(device const uchar *banks, device const short *slot, int z) {\n"
+"    if (s16(0x4400 - z) < 0) z = 0x43FF;\n"
+"    if (s16(0x0100 - z) > 0) return -1;\n"
+"    return romw(banks, slot, 0x14, 0x896C + (z & 0xFFFE));\n"
+"}\n"
+"static bool line_to(constant PView &w, thread QNew &q, int x, int y, int ex, int ey) {\n"
+"    int dx = s16(ex - x), dy = s16(ey - y), isx = 1, isy = 1, a, b, ya, yb;\n"
+"    bool ymaj;\n"
+"    long dmaj, dmin, a0, n, st, x1, y1;\n"
+"    if (dx < 0) { isx = -1; dx = -dx; }\n"
+"    if (dy < 0) { isy = -1; dy = -dy; }\n"
+"    ymaj = dx < dy;\n"
+"    dmaj = ymaj ? dy : dx;\n"
+"    dmin = ymaj ? dx : dy;\n"
+"    a0 = (dmaj - dmin) >> 1;\n"
+"    n = dmaj * dmin - a0;\n"
+"    st = n <= 0 ? 0 : (n + dmaj - 1) / dmaj;\n"
+"    x1 = (long)x + (ymaj ? (long)isx * st : (long)isx * dmaj);\n"
+"    y1 = (long)y + (ymaj ? (long)isy * dmaj : (long)isy * st);\n"
+"    a = (int)((long)x < x1 ? (long)x : x1);\n"
+"    b = (int)((long)x < x1 ? x1 : (long)x);\n"
+"    ya = (int)((long)y < y1 ? (long)y : y1);\n"
+"    yb = (int)((long)y < y1 ? y1 : (long)y);\n"
+"    if (!quad_new(w, q, ya, yb - ya + 1, a, b, 0, 0)) return false;\n"
+"    q.flags = 2 | 32;\n"
+"    q.xl = x;\n"
+"    q.v = y;\n"
+"    q.u = a0;\n"
+"    q.du = dmaj;\n"
+"    q.dv = dmin;\n"
+"    q.mask = (ymaj ? 1u : 0u) | (isx < 0 ? 2u : 0u) | (isy < 0 ? 4u : 0u);\n"
+"    return true;\n"
+"}\n"
+"static bool dot_q(constant PView &w, thread QNew &q, int x, int y, int n) {\n"
+"    if (!quad_new(w, q, y, n, x, x + n - 1, 0, 0)) return false;\n"
+"    q.flags = 2;\n"
+"    q.xl = x;\n"
+"    return true;\n"
+"}\n"
+"kernel void prims(uint id [[thread_position_in_grid]], device Span *qs [[buffer(0)]], constant PView &w [[buffer(1)]],\n"
+"                  device const Prim *ps [[buffer(2)]], device const uchar *banks [[buffer(3)]], device const short *slot [[buffer(4)]]) {\n"
+"    device Span &s = qs[id];\n"
+"    QNew q;\n"
+"    Prim p;\n"
+"    bool made = false;\n"
+"    if (!(s.pad1[1] & 64)) return;\n"
+"    p = ps[s.xl];\n"
+"    q.base = 0;\n"
+"    q.flags = 0;\n"
+"    if (p.kind == 0) {\n"
+"        made = sprite(w, q, banks, slot, p);\n"
+"    } else if (p.kind == 1 || p.kind == 2) {\n"
+"        int sc = p.z < 0 ? -1 : scale_for(banks, slot, p.z);\n"
+"        if (sc >= 0) {\n"
+"            int px = u16(scale_mult(w, p.x, sc, false) + w.cx), py = u16(scale_mult(w, p.y, sc, true) + w.cy);\n"
+"            if (px < u16(w.right_e) && py < u16(w.bottom_e)) {\n"
+"                if (p.kind == 1) made = dot_q(w, q, s16(px), s16(py), p.n);\n"
+"                else {\n"
+"                    int s2 = scale_for(banks, slot, p.z2);\n"
+"                    if (s2 >= 0) {\n"
+"                        int ex = u16(scale_mult(w, p.x2, s2, false) + w.cx), ey = u16(scale_mult(w, p.y2, s2, true) + w.cy);\n"
+"                        if (ex < u16(w.right_e) && ey < u16(w.bottom_e)) made = line_to(w, q, s16(px), s16(py), s16(ex), s16(ey));\n"
+"                    }\n"
+"                }\n"
+"            }\n"
+"        }\n"
+"    } else {\n"
+"        int sc = romw(banks, slot, 0x14, 0x896C + (0x012C + (int)p.z) * 2);\n"
+"        int px = s16(w.cx + scale_rol(w, p.x, sc, false)), py = s16(w.cy - 0x14 + scale_rol(w, p.y, sc, true));\n"
+"        if (s16(w.left_e - px) < 0 && s16(w.right_e - 2 - px) >= 0 && s16(w.top_e - py) < 0 && s16(w.bottom_e - 4 - py) >= 0)\n"
+"            made = p.kind == 3 ? dot_q(w, q, px, py, p.n) : line_to(w, q, px, py, p.x2, p.y2);\n"
+"    }\n"
+"    if (!made) return;\n"
+"    s.y = q.y; s.pad0 = q.rows; s.x0 = q.x0; s.x1 = q.x1;\n"
+"    s.xl = q.xl; s.u = q.u; s.du = q.du; s.v = q.v; s.dv = q.dv;\n"
+"    s.base = (ushort)q.base; s.mask = (ushort)q.mask;\n"
+"    s.bank = p.bank; s.por = p.por; s.hi = p.hi; s.colour = p.colour;\n"
+"    s.pad1[1] = (uchar)q.flags;\n"
+"    s.za = p.kind == 0 ? p.za : 0.0f;\n"
+"    s.zx = 0.0f; s.zy = 0.0f;\n"
 "}\n";
 
 static id<MTLDevice> dev;
 static id<MTLCommandQueue> queue;
-static id<MTLComputePipelineState> pipe_fill, pipe_rows, pipe_water;
+static id<MTLComputePipelineState> pipe_fill, pipe_rows, pipe_water, pipe_prims;
 static id<MTLRenderPipelineState> pipe_tri, pipe_line, pipe_quad;
 static id<MTLTexture> tex_pic;           /* the picture as the render pass draws it (R8Uint) */
 static id<MTLTexture> tex_id;            /* (FW_GPUCHECK) each pixel's last display-list face + 1 (R32Uint) */
 static id<MTLBuffer> buf_id;
 static int id_clear;                     /* tex_id to clear at the fill's first faces */
-static id<MTLBuffer> buf_quads, buf_verts, buf_lverts, buf_lpoints, buf_lslots, buf_lfaces, buf_fslots, buf_fpoints;
+static id<MTLBuffer> buf_prims, buf_quads, buf_verts, buf_lverts, buf_lpoints, buf_lslots, buf_lfaces, buf_fslots, buf_fpoints;
 static long faces_drawn;
 static id<MTLBuffer> buf_out32, buf_job, buf_gap;
 static size_t out32_len;
@@ -489,7 +707,8 @@ static int face_banks(const ScFace *f, size_t nf, const FwSpan *sp, size_t n)
    kept beside it (tex_id) for the check */
 static int draw_faces(int w, int h, const FwSpan *sp, size_t n)
 {
-    size_t ns, np, nf, nt, nl, nq, nr, r, t0 = 0, l0 = 0, q0 = 0, nfs, nfp;
+    size_t ns, np, nf, nt, nl, nq, nr, r, t0 = 0, l0 = 0, q0 = 0, nfs, nfp, nprim;
+    const ScPrim *prims = sc_list_prims(&nprim);
     const ScSlot *sl = sc_list_slots(&ns);
     const ScPoint *pt = sc_list_points(&np);
     const ScFace *fc = sc_list_faces(&nf);
@@ -502,6 +721,12 @@ static int draw_faces(int w, int h, const FwSpan *sp, size_t n)
 
     if (!face_banks(fc, nf, sp, n))
         return 0;
+    if (nprim) {                        /* the ROM's tables the primitives are made by */
+        if ((!bank_fresh(SC_TABLE_BANK_SCALE) && !bank_put(SC_TABLE_BANK_SCALE)) ||
+            (!bank_fresh(SC_TABLE_BANK_RECIP) && !bank_put(SC_TABLE_BANK_RECIP)))
+            return 0;
+        memcpy(buf_slot.contents, bank_slot, sizeof bank_slot);
+    }
     if (cap < n) {
         free(kind);
         free(len);
@@ -520,7 +745,8 @@ static int draw_faces(int w, int h, const FwSpan *sp, size_t n)
     buf_lfaces = grow(buf_lfaces, nf * sizeof *fc);
     buf_fslots = grow(buf_fslots, nfs * sizeof *fs);
     buf_fpoints = grow(buf_fpoints, nfp * sizeof *fp);
-    if (!buf_quads || !buf_verts || !buf_lverts || !buf_lpoints || !buf_lslots || !buf_lfaces || !buf_fslots || !buf_fpoints)
+    buf_prims = grow(buf_prims, sizeof(ScPrimView) + nprim * sizeof(ScPrim));
+    if (!buf_prims || !buf_quads || !buf_verts || !buf_lverts || !buf_lpoints || !buf_lslots || !buf_lfaces || !buf_fslots || !buf_fpoints)
         return 0;
     gpu_bin_faces(sp, n, (GpuVert *)buf_verts.contents, &nt, (GpuVert *)buf_lverts.contents, &nl, (FwSpan *)buf_quads.contents,
                   &nq, &nr, kind, len);
@@ -534,6 +760,9 @@ static int draw_faces(int w, int h, const FwSpan *sp, size_t n)
         memcpy(buf_fslots.contents, fs, nfs * sizeof *fs);
     if (nfp)
         memcpy(buf_fpoints.contents, fp, nfp * sizeof *fp);
+    memcpy(buf_prims.contents, sc_list_prim_view(), sizeof(ScPrimView));
+    if (nprim)
+        memcpy((uint8_t *)buf_prims.contents + sizeof(ScPrimView), prims, nprim * sizeof *prims);
     fw_view_centre(&cx, &cy);
     view[0] = (float)fw_focal_x();
     view[1] = (float)fw_focal_y();
@@ -561,6 +790,21 @@ static int draw_faces(int w, int h, const FwSpan *sp, size_t n)
         id<MTLBlitCommandEncoder> bl = [cb blitCommandEncoder];
         MTLRenderPassDescriptor *rp = [MTLRenderPassDescriptor renderPassDescriptor];
         id<MTLRenderCommandEncoder> re;
+        if (nprim && nq) {              /* the objects' primitives into their quads (prims) */
+            id<MTLBlitCommandEncoder> none = bl;
+            id<MTLComputeCommandEncoder> e;
+            [none endEncoding];
+            e = [cb computeCommandEncoder];
+            [e setComputePipelineState:pipe_prims];
+            [e setBuffer:buf_quads offset:0 atIndex:0];
+            [e setBuffer:buf_prims offset:0 atIndex:1];
+            [e setBuffer:buf_prims offset:sizeof(ScPrimView) atIndex:2];
+            [e setBuffer:buf_banks offset:0 atIndex:3];
+            [e setBuffer:buf_slot offset:0 atIndex:4];
+            [e dispatchThreads:MTLSizeMake(nq, 1, 1) threadsPerThreadgroup:MTLSizeMake(64, 1, 1)];
+            [e endEncoding];
+            bl = [cb blitCommandEncoder];
+        }
         [bl copyFromBuffer:buf_out sourceOffset:0 sourceBytesPerRow:(NSUInteger)w sourceBytesPerImage:(NSUInteger)w * h
                 sourceSize:MTLSizeMake((NSUInteger)w, (NSUInteger)h, 1) toTexture:tex_pic destinationSlice:0
           destinationLevel:0 destinationOrigin:MTLOriginMake(0, 0, 0)];
@@ -789,7 +1033,9 @@ int gpu_metal_init(void)
         pipe_rows = [dev newComputePipelineStateWithFunction:[lib newFunctionWithName:@"rows"] error:&err];
     if (pipe_rows)
         pipe_water = [dev newComputePipelineStateWithFunction:[lib newFunctionWithName:@"water"] error:&err];
-    if (pipe_water) {
+    if (pipe_water)
+        pipe_prims = [dev newComputePipelineStateWithFunction:[lib newFunctionWithName:@"prims"] error:&err];
+    if (pipe_prims) {
         MTLRenderPipelineDescriptor *d = [MTLRenderPipelineDescriptor new];
         d.vertexFunction = [lib newFunctionWithName:@"model_vertex"];
         d.fragmentFunction = [lib newFunctionWithName:@"model_fragment"];
@@ -806,7 +1052,7 @@ int gpu_metal_init(void)
         if (pipe_line)
             pipe_quad = [dev newRenderPipelineStateWithDescriptor:d error:&err];
     }
-    if (!pipe_fill || !pipe_rows || !pipe_water || !pipe_tri || !pipe_line || !pipe_quad) {
+    if (!pipe_fill || !pipe_rows || !pipe_water || !pipe_prims || !pipe_tri || !pipe_line || !pipe_quad) {
         fprintf(stderr, "gpu_metal: the pipeline: %s\n", err.localizedDescription.UTF8String);
         return 0;
     }

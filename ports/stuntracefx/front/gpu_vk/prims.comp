@@ -1,0 +1,411 @@
+#version 450
+/*
+ * prims.comp: the objects' primitives (scene.h ScPrim) made into screen quads
+ * (fullwindow.h FW_QUAD) before the picture is drawn: a scaled sprite
+ * (FxObjectSprite 01:B0D9, FxProjectScaled, the rows' set-up 01:B182, 01:B1CB,
+ * 01:B2ED, or the texels not square as fw_sprite_draw), a particle's dot or
+ * line (FxParticlesDraw) and a drop of the weather (FxWeatherDraw): each
+ * projected here by the chip's integer steps, 16-bit words wrapping as its
+ * registers do, each quad as fullwindow.c's quad_new and its callers make it.
+ * Each placeholder quad's words overwritten; none made leaves it no pixels.
+ */
+#extension GL_GOOGLE_include_directive : require
+#include "common.glsl"
+
+layout(local_size_x = 64) in;
+layout(std430, binding = 4) readonly buffer Banks { uint banks[]; };
+layout(std430, binding = 5) readonly buffer Slot { int slot[]; };
+layout(std430, binding = 21) buffer Quads { uint qs[]; };
+layout(std430, binding = 22) readonly buffer Prims { uint ps[]; };   /* ScPrimView, then ScPrim */
+layout(push_constant) uniform Push { uint nq; } pc;
+
+#define HEAD_WORDS 20u
+#define PRIM_WORDS 10u
+
+int tw, th, cx, cy, left_e, right_e, top_e, bottom_e, rows_cap, square_t;
+int64_t fxn, fxd, fyn, fyd, sxn, sxd, syn, syd;
+
+int s16(int v) { return (v << 16) >> 16; }
+int u16(int v) { return v & 0xFFFF; }
+uint rom8(uint bank, uint a)
+{
+    uint at = uint(slot[bank]) * 65536u + (a & 0xFFFFu);
+    return (banks[at >> 2] >> ((at & 3u) * 8u)) & 255u;
+}
+int romw(uint bank, int a) { return int(rom8(bank, uint(a)) | (rom8(bank, uint(a + 1)) << 8)); }
+int64_t floor_div(int64_t p, int64_t q) { return p >= 0l ? p / q : -((-p + q - 1l) / q); }
+
+/* v * scale * focal >> 23, rounded down (project.c scaled) */
+int scale_mult(int v, int scale, bool down)
+{
+    int64_t n = down ? fyn : fxn, d = down ? fyd : fxd;
+    return s16(int(floor_div(int64_t(s16(v)) * int64_t(s16(scale)) * n, d << 23) & 0xFFFFl));
+}
+/* the same then ROL, the carry FMULT left (the product's bit 15) */
+int scale_rol(int v, int scale, bool down)
+{
+    int p = s16(v) * s16(scale);
+    return s16(((scale_mult(v, scale, down) << 1) | ((p >> 15) & 1)) & 0xFFFF);
+}
+int fmult_rol(int a, int b) { return ((s16(a) * s16(b)) >> 15) & 0xFFFF; }
+
+/* the quad being made */
+int qy, qrows, qx0, qx1;
+int64_t qxl, qu, qdu, qv, qdv;
+uint qbase, qmask, qbank, qpor, qhi, qcolour, qflags;
+float qza;
+
+/* quad_new: rows and columns past the texels left out */
+bool quad_new(int y0, int rows, int a, int b, int64_t v, int64_t dv)
+{
+    int y1 = y0 + rows - 1;
+    if (y0 < 0) {
+        v += dv * int64_t(-y0);
+        y0 = 0;
+    }
+    if (y1 >= th)
+        y1 = th - 1;
+    if (a < 0)
+        a = 0;
+    if (b >= tw)
+        b = tw - 1;
+    if (y1 < y0 || b < a)
+        return false;
+    qy = y0;
+    qrows = y1 - y0 + 1;
+    qx0 = a;
+    qx1 = b;
+    qv = v;
+    qdv = dv;
+    qxl = 0l;
+    qu = 0l;
+    qdu = 0l;
+    qmask = 0u;
+    return true;
+}
+
+void put64(uint at, int64_t v)
+{
+    qs[at] = uint(v & 0xFFFFFFFFl);
+    qs[at + 1u] = uint((v >> 32) & 0xFFFFFFFFl);
+}
+
+void quad_put(uint q)
+{
+    uint b = q * SPAN_WORDS;
+    qs[b] = uint(qy);
+    qs[b + 1u] = uint(qx0);
+    qs[b + 2u] = uint(qx1);
+    qs[b + 3u] = uint(qrows);
+    put64(b + 4u, qxl);
+    put64(b + 6u, qu);
+    put64(b + 8u, qdu);
+    put64(b + 10u, qv);
+    put64(b + 12u, qdv);
+    qs[b + 14u] = (qbase & 0xFFFFu) | (qmask << 16);
+    qs[b + 15u] = (qbank & 255u) | ((qpor & 255u) << 8) | ((qhi & 255u) << 16) | ((qcolour & 255u) << 24);
+    qs[b + 16u] = (qs[b + 16u] & 0xFF00FFFFu) | ((qflags & 255u) << 16);
+    qs[b + 24u] = floatBitsToUint(qza);
+    qs[b + 25u] = 0u;
+    qs[b + 26u] = 0u;
+}
+
+/* fw_sprite_draw: the texels not square */
+bool sprite_not_square(int bx, int by, int h, int c8, bool back, uint base)
+{
+    int64_t w64;
+    int w, x0, y0, a, b, last;
+    int64_t du;
+    w64 = (int64_t(h) * sxn * syd * 2l + sxd * syn) / (2l * sxd * syn);
+    w = int(w64);
+    if (w < 1 || h < 1)
+        return false;
+    x0 = bx - (w + 1) / 2;
+    y0 = by - (h + 1) / 2;
+    a = x0 < 0 ? 0 : x0;
+    b = x0 + w - 1 > right_e ? right_e : x0 + w - 1;
+    if (b >= tw)
+        b = tw - 1;
+    if (a > b)
+        return false;
+    du = (int64_t(c8) << 32) / int64_t(w);
+    last = y0 + h - 1;
+    if (last > bottom_e - 1)
+        last = bottom_e - 1;
+    if (!quad_new(y0, last - y0 + 1, a, b, 0l, int64_t(c8)))
+        return false;
+    qmask = uint(h);
+    qxl = int64_t(x0);
+    if (!back) {
+        qbase = base;
+        qdu = du;
+    } else {
+        qbase = (base + uint(c8) - 1u - 255u) & 0xFFFFu;
+        qu = (255l << 32) + ((1l << 32) - 1l);
+        qdu = -du;
+    }
+    return true;
+}
+
+/* 01:B1CB: the size below the texture's */
+bool sprite_small(int x0, int y0, int size, int c8, bool back, uint base)
+{
+    int a = ((c8 << 8) | (c8 >> 8)) & 0xFFFF, step = fmult_rol(a, romw(0u, 0x94A0 + 2 * size));
+    int x = x0, cols = size, r5 = int(base), last;
+    int64_t st;
+    if (back)
+        r5 = u16(r5 + c8 - 1);
+    if (x0 < 0) {
+        int k = -x0, r8;
+        if (k >= cols)
+            return false;
+        r8 = u16((back ? -k : k) * step);
+        cols -= k;
+        r5 = u16(r5 + (r8 >> 8));
+        x = 0;
+    }
+    {
+        int r0 = s16(right_e - size - x);
+        if (r0 < 0)
+            cols += r0 + 1;
+    }
+    if (cols <= 0)
+        return false;
+    last = y0 + size - 1;
+    if (last > bottom_e - 1)
+        last = bottom_e - 1;
+    st = int64_t(step) << 24;
+    if (!quad_new(y0, last - y0 + 1, x, x + cols - 1, 0l, st))
+        return false;
+    qxl = int64_t(x);
+    qdu = back ? -st : st;
+    qbase = uint(r5);
+    return true;
+}
+
+/* 01:B2ED: the rows' loop */
+bool sprite_large(int x0, int y0, int size, int c8, bool back, uint base)
+{
+    int r9 = c8 == size ? 0xFFFF : int((int64_t(c8) << 16) / int64_t(size)) & 0xFFFF, step, cols, r5 = int(base), frac = 0, x = x0;
+    int64_t M = 65536l, kin, kall;
+    int r13 = c8, r4, last, kmax;
+    step = r9 & 0xFFFE;
+    if (back)
+        r5 = u16(r5 + c8 - 1);
+    r4 = fmult_rol(step >> 1, u16(right_e - x0));
+    if (s16(r13 - r4 - 1) >= 0)
+        r13 = r4;
+    cols = r13;
+    if (x0 < 0) {
+        int p = (step >> 1) * s16(-x0), lo = p & 0xFFFF, hi = (p >> 16) & 0xFFFF, r0;
+        frac = (lo * 2) & 0xFFFF;
+        r0 = ((hi << 1) | (lo >> 15)) & 0xFFFF;
+        if (s16(r0) < 0)
+            return false;
+        r5 = u16(back ? r5 - r0 : r5 + r0);
+        cols = u16(r13 - r0);
+        if (s16(cols) < 0)
+            return false;
+        x = 0;
+    }
+    if (cols == 0 || step == 0 || c8 == 0)
+        return false;
+    last = y0 + int((int64_t(c8 - 1) * M) / int64_t(step));
+    if (last > bottom_e - 1)
+        last = bottom_e - 1;
+    kin = cols > 1 ? (int64_t(cols - 1) * M - int64_t(frac) + int64_t(step) - 1l) / int64_t(step) : 0l;
+    kall = (int64_t(cols) * M - int64_t(frac) + int64_t(step) - 1l) / int64_t(step);
+    kmax = int(kall - 1l < int64_t(right_e - x) ? kall - 1l : int64_t(right_e - x));
+    if (int64_t(kmax) < kin - 1l)
+        kmax = int(kin - 1l);
+    if (kmax < 0 || !quad_new(y0, last - y0 + 1, x, x + kmax, M - 1l, int64_t(step)))
+        return false;
+    qv <<= 16;
+    qdv <<= 16;
+    qxl = int64_t(x);
+    if (!back) {
+        qbase = uint(r5);
+        qu = int64_t(frac) << 16;
+        qdu = int64_t(step) << 16;
+    } else {
+        qbase = uint(u16(r5 - 255));
+        qu = (255l << 32) + ((1l << 32) - 1l) - (int64_t(frac) << 16);
+        qdu = -(int64_t(step) << 16);
+    }
+    return true;
+}
+
+bool sprite(uint w0, uint w1, uint w2, uint w3, uint w4)
+{
+    int X = s16(int(w0)), Y = s16(int(w0 >> 16)), Z = s16(int(w1)), own = s16(int(w1 >> 16));
+    int aa = int(w2 & 0xFFFFu), shift = int(w2 >> 16), far_s = int(w3 & 0xFFFFu), rows = s16(int(w3 >> 16));
+    uint base = w4 & 0xFFFFu, mask = w4 >> 16;
+    int c8 = int(mask & 255u) + 1, size, r5 = 0, sc, bx, by, guard;
+    bool back = (mask & 0x8000u) != 0u;
+    if (s16(0x0080 - Z) >= 0)
+        return false;
+    if (own >= 0) {
+        r5 = u16(2 * aa + (own << shift));
+        if (r5 == 0)
+            r5 = 1;
+        if (far_s != 0)
+            r5 = u16(s16(r5) >> far_s);
+    }
+    for (guard = 0; guard < 16 && s16(0x4400 - Z) < 0; guard++) {   /* FxProjectScaled */
+        X = s16(X) >> 1;
+        Y = s16(Y) >> 1;
+        r5 = u16(s16(r5) >> 1);
+        Z = s16(Z) >> 1;
+    }
+    for (guard = 0; guard < 16 && s16(0x0100 - Z) >= 0; guard++) {
+        r5 = u16(r5 * 2);
+        X = s16(X * 2);
+        Y = s16(Y * 2);
+        Z = s16(Z * 2);
+    }
+    sc = romw(0x14u, 0x896C + (Z & 0xFFFE));
+    bx = s16(cx + scale_mult(X, sc, false));
+    by = s16(cy + scale_mult(Y, sc, true));
+    size = own >= 0 ? u16(scale_mult(r5, sc, true)) : u16(-rows);
+    if (size == 0)
+        return false;
+    if (s16(rows_cap - size) < 0)
+        size = rows_cap;
+    if (square_t == 0)
+        return sprite_not_square(bx, by, s16(size), c8, back, base);
+    {
+        int hw = (size >> 1) + (size & 1), x0 = s16(bx - hw), y0 = s16(by - hw);
+        if (s16(x0 - (u16(-size) + 1)) < 0 || s16(x0 - right_e) >= 0)
+            return false;
+        return size < c8 ? sprite_small(x0, y0, size, c8, back, base) : sprite_large(x0, y0, size, c8, back, base);
+    }
+}
+
+/* fx_scale_for: the depth's scale, or -1 */
+int scale_for(int z)
+{
+    if (s16(0x4400 - z) < 0)
+        z = 0x43FF;
+    if (s16(0x0100 - z) > 0)
+        return -1;
+    return romw(0x14u, 0x896C + (z & 0xFFFE));
+}
+
+/* fw_plot_line: a streak from (x, y) to (ex, ey) */
+bool line_to(int x, int y, int ex, int ey)
+{
+    int dx = s16(ex - x), dy = s16(ey - y), isx = 1, isy = 1, a, b, ya, yb;
+    bool ymaj;
+    int64_t dmaj, dmin, a0, n, st, x1, y1;
+    if (dx < 0) {
+        isx = -1;
+        dx = -dx;
+    }
+    if (dy < 0) {
+        isy = -1;
+        dy = -dy;
+    }
+    ymaj = dx < dy;
+    dmaj = int64_t(ymaj ? dy : dx);
+    dmin = int64_t(ymaj ? dx : dy);
+    a0 = (dmaj - dmin) >> 1;
+    n = dmaj * dmin - a0;
+    st = n <= 0l ? 0l : (n + dmaj - 1l) / dmaj;
+    x1 = int64_t(x) + (ymaj ? int64_t(isx) * st : int64_t(isx) * dmaj);
+    y1 = int64_t(y) + (ymaj ? int64_t(isy) * dmaj : int64_t(isy) * st);
+    a = int(int64_t(x) < x1 ? int64_t(x) : x1);
+    b = int(int64_t(x) < x1 ? x1 : int64_t(x));
+    ya = int(int64_t(y) < y1 ? int64_t(y) : y1);
+    yb = int(int64_t(y) < y1 ? y1 : int64_t(y));
+    if (!quad_new(ya, yb - ya + 1, a, b, 0l, 0l))
+        return false;
+    qflags = 2u | 32u;
+    qxl = int64_t(x);
+    qv = int64_t(y);
+    qu = a0;
+    qdu = dmaj;
+    qdv = dmin;
+    qmask = uint(ymaj ? 1 : 0) | (isx < 0 ? 2u : 0u) | (isy < 0 ? 4u : 0u);
+    return true;
+}
+
+bool dot_q(int x, int y, int n)
+{
+    if (!quad_new(y, n, x, x + n - 1, 0l, 0l))
+        return false;
+    qflags = 2u;
+    qxl = int64_t(x);
+    return true;
+}
+
+void main()
+{
+    uint q = gl_GlobalInvocationID.x, b, p, kind, w5;
+    bool made = false;
+    if (q >= pc.nq)
+        return;
+    b = q * SPAN_WORDS;
+    if ((qs[b + 16u] & (64u << 16)) == 0u)
+        return;
+    tw = int(ps[0]);
+    th = int(ps[1]);
+    cx = int(ps[2]);
+    cy = int(ps[3]);
+    left_e = int(ps[4]);
+    right_e = int(ps[5]);
+    top_e = int(ps[6]);
+    bottom_e = int(ps[7]);
+    rows_cap = int(ps[8]);
+    square_t = int(ps[9]);
+    fxn = int64_t(int(ps[10]));
+    fxd = int64_t(int(ps[11]));
+    fyn = int64_t(int(ps[12]));
+    fyd = int64_t(int(ps[13]));
+    sxn = int64_t(int(ps[14]));
+    sxd = int64_t(int(ps[15]));
+    syn = int64_t(int(ps[16]));
+    syd = int64_t(int(ps[17]));
+    p = HEAD_WORDS + qs[b + 4u] * PRIM_WORDS;
+    w5 = ps[p + 5u];
+    kind = ps[p + 6u] & 255u;
+    qbank = w5 & 255u;
+    qpor = (w5 >> 8) & 255u;
+    qhi = (w5 >> 16) & 255u;
+    qcolour = w5 >> 24;
+    qza = 0.0;
+    qbase = 0u;
+    qflags = 0u;
+    if (kind == 0u) {
+        qza = uintBitsToFloat(ps[p + 9u]);
+        made = sprite(ps[p], ps[p + 1u], ps[p + 2u], ps[p + 3u], ps[p + 4u]);
+    } else {
+        int x = s16(int(ps[p])), y = s16(int(ps[p] >> 16)), z = s16(int(ps[p + 1u]));
+        int n = int((ps[p + 6u] >> 8) & 255u);
+        int x2 = s16(int(ps[p + 7u])), y2 = s16(int(ps[p + 7u] >> 16)), z2 = s16(int(ps[p + 8u]));
+        if (kind == 1u || kind == 2u) {         /* a particle: FxParticlesDraw */
+            int sc = z < 0 ? -1 : scale_for(z);
+            if (sc >= 0) {
+                int px = u16(scale_mult(x, sc, false) + cx), py = u16(scale_mult(y, sc, true) + cy);
+                if (px < u16(right_e) && py < u16(bottom_e)) {
+                    if (kind == 1u)
+                        made = dot_q(s16(px), s16(py), n);
+                    else {
+                        int s2 = scale_for(z2);
+                        if (s2 >= 0) {
+                            int ex = u16(scale_mult(x2, s2, false) + cx), ey = u16(scale_mult(y2, s2, true) + cy);
+                            if (ex < u16(right_e) && ey < u16(bottom_e))
+                                made = line_to(s16(px), s16(py), s16(ex), s16(ey));
+                        }
+                    }
+                }
+            }
+        } else {                                /* a drop: FxWeatherDraw */
+            int sc = romw(0x14u, 0x896C + (0x012C + z) * 2);
+            int px = s16(cx + scale_rol(x, sc, false)), py = s16(cy - 0x14 + scale_rol(y, sc, true));
+            if (s16(left_e - px) < 0 && s16(right_e - 2 - px) >= 0 && s16(top_e - py) < 0 && s16(bottom_e - 4 - py) >= 0)
+                made = kind == 3u ? dot_q(px, py, n) : line_to(px, py, x2, y2);
+        }
+    }
+    if (made)
+        quad_put(q);
+}

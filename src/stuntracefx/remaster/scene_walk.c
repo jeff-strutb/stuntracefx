@@ -43,6 +43,12 @@ typedef struct {
     int np;                             /* the points made so far, in view space as FxModelProject takes them */
     int32_t vx[128], vy[128], vz[128];
     uint8_t flag[64];                   /* the walk's own facing flags (bit 7: the face turned to the eye) */
+    /* the native walk (sc_walk_model): each point's entry and side, made
+       only when a facing test needs it; the slot's matrix for them */
+    int native;
+    uint16_t pt_at[128];
+    uint8_t pt_side[128], pt_made[128];
+    uint16_t m[9], shift, scale, place[3];
     /* the slot's material inputs: the material table ($004A, bank $03),
        the animated materials' mask ($0046), the model flags ($0054); made
        here: the light turned into the object, the depth-shade tier's table
@@ -93,6 +99,18 @@ static void walk_points(Walk *w, uint16_t at, int n, int mirrored)
     int16_t out[6 * 256];
     uint16_t m[9];
     int i, k;
+    if (w->native) {                    /* no point turned here: the entries noted for the facing tests */
+        for (i = 0; i < 3 * n; i++)
+            bytes[i] = byte(w, (uint16_t)(at + i));
+        list_points(bytes, n, mirrored);
+        for (i = 0; i < n; i++)
+            for (k = 0; k < (mirrored ? 2 : 1) && w->np < 128; k++, w->np++) {
+                w->pt_at[w->np] = (uint16_t)(at + 3 * i);
+                w->pt_side[w->np] = (uint8_t)k;
+                w->pt_made[w->np] = 0;
+            }
+        return;
+    }
     for (i = 0; i < 9; i++)
         m[i] = ram16((uint16_t)(0x0132 + 2 * i));
     for (i = 0; i < 3 * n; i++)
@@ -108,6 +126,26 @@ static void walk_points(Walk *w, uint16_t at, int n, int mirrored)
     }
 }
 
+/* point q in view space for a facing test: by the chip's integer steps,
+   the object's place added, a far point's depth held at $43FE */
+static void walk_point(Walk *w, int q)
+{
+    uint8_t b[3];
+    int16_t out[6];
+    int k = w->pt_side[q], i;
+    if (w->pt_made[q])
+        return;
+    for (i = 0; i < 3; i++)
+        b[i] = byte(w, (uint16_t)(w->pt_at[q] + i));
+    sc_points(b, 1, k ? 1 : 0, w->shift, w->scale, w->m, out);
+    w->vx[q] = (int16_t)(out[3 * k] + w->place[0]);
+    w->vy[q] = (int16_t)(out[3 * k + 1] + w->place[1]);
+    w->vz[q] = (int16_t)(out[3 * k + 2] + w->place[2]);
+    if (w->vz[q] >= 0x100 && w->vz[q] > 0x43FE)
+        w->vz[q] = 0x43FE;
+    w->pt_made[q] = 1;
+}
+
 /* a facing command's flags: each triple's determinant of its three points
    in view space, its sign the face's facing (bit 7 set: turned to the eye);
    0 for a determinant of 0 */
@@ -120,6 +158,11 @@ static void walk_facing(Walk *w, uint16_t at, int n)
         if (a >= w->np || b >= w->np || c >= w->np) {
             w->flag[i] = 0;
             continue;
+        }
+        if (w->native) {
+            walk_point(w, a);
+            walk_point(w, b);
+            walk_point(w, c);
         }
         d = (int64_t)w->vx[a] * ((int64_t)w->vy[b] * w->vz[c] - (int64_t)w->vz[b] * w->vy[c]) -
             (int64_t)w->vy[a] * ((int64_t)w->vx[b] * w->vz[c] - (int64_t)w->vz[b] * w->vx[c]) +
@@ -350,7 +393,7 @@ static long run_command(Walk *w, uint16_t at)
         return dispatch(w, (uint16_t)(p + 2 + 3 * n));
     case 0x0C:                          /* the projection, then the list at $0018 (01:8D44); every point
                                            past one edge: a return (01:924D), which the check takes from
-                                           the chip */
+                                           the chip; the native walk rejects nothing */
         if (w->rejected) {
             w->rejected = 0;
             return resume(w);
@@ -409,7 +452,11 @@ static long run_command(Walk *w, uint16_t at)
     case 0x30:                          /* facing: n triples of point indices, flags made */
         n = byte(w, (uint16_t)(p + 1));
         walk_facing(w, (uint16_t)(p + 2), n);
-        sc_walk_facing((uint16_t)(p + 2), n);
+        if (w->native) {
+            for (i = 0; i < n && i < 64; i++)
+                flags[i] = w->flag[i];
+        } else
+            sc_walk_facing((uint16_t)(p + 2), n);
         return dispatch(w, (uint16_t)(p + 2 + 3 * n));
     case 0x3C: case 0x58:               /* the deferred lists begin */
         w->qp = 0;
@@ -456,6 +503,24 @@ static int face_mn, face_mat;
 
 void sc_walk_face(uint16_t at)
 {
+    if (walk.native) {                  /* the face into the picture, in the list's order */
+        Material mt = walk_material(&walk, at);
+        int32_t id = list_face(at, &mt);
+        if (mt.kind > 1) {              /* no play has reached it: said, not drawn */
+            static int said;
+            if (!said++)
+                fprintf(stderr, "scene walk: a face of material kind %d at $%02X:%04X not drawn\n", mt.kind, walk.bank, at);
+        }
+        if (id < 0)
+            return;
+        gsu.por = 0;                    /* FxDrawList's (fullwindow.c): what the next sprite's COLOR sees */
+        gsu.colr = mt.kind == 1 ? (uint8_t)mt.face_colour : mt.colour;
+        if (mt.kind == 1)
+            gsu.por = (uint8_t)(mt.face_colour >> 8 & 0x1F);
+        if (fw_gpu_face(id))
+            fw_gpu_face_done();
+        return;
+    }
     if (brk && brk_face++ % 1000 == 0)  /* SC_BREAK: a face left out now and then, to show the check fails */
         return;
     if (getenv("SC_TRACE") && slots <= 400)
@@ -480,7 +545,7 @@ void sc_walk_facing(uint16_t at, uint16_t n)
 void sc_walk_begin(void)
 {
     (void)sc_gpu_on();                  /* (its settings read) */
-    if (!check)
+    if (!check || (fw_ref_pass && !reporting))
         return;
     if (walking && !walk.done) {
         {
@@ -522,6 +587,49 @@ void sc_walk_begin(void)
     face_mn = face_mat = 0;
     pend_facing = 0;
     slots++;
+}
+
+/* the native walk of one model: its inputs in the Super FX's RAM as the
+   frame program leaves them, no register of the chip's read; a facing test
+   by the determinant of its points alone, nothing projected or rejected */
+static int slot_radius = 1 << 14;
+static int l_slot;
+
+void sc_walk_model(int radius)
+{
+    uint16_t angle[3], e[9], m[9];
+    long a;
+    int i, guard = 0;
+
+    walking = 0;
+    memset(&walk, 0, sizeof walk);
+    walk.native = 1;
+    walk.bank = (uint8_t)ram16(0x001C);
+    walk.faces_at = ram16(0x0018);
+    walk.frame = ram16(0x0044);
+    walk.mat_table = ram16(0x004A);
+    walk.mat_mask = ram16(0x0046);
+    walk.flags = ram16(0x0054);
+    walk.shift = ram16(0x0032);
+    walk.scale = (uint16_t)(walk.shift < 16 ? 1u << walk.shift : 0);
+    for (i = 0; i < 3; i++) {
+        angle[i] = ram16((uint16_t)(0x0020 + 2 * i));
+        walk.place[i] = ram16((uint16_t)(0x0026 + 2 * i));
+    }
+    for (i = 0; i < 9; i++)
+        e[i] = ram16((uint16_t)(0x00E4 + 2 * i));
+    sc_matrix(angle, rm_angle_frac, walk.flags, e, 0, m);
+    walk_materials(&walk, m, rm_far_shift ? rm_far_depth : ram16(0x002A), ram16(0x108C) & 0xFF);
+    sc_matrix(angle, rm_angle_frac, walk.flags, e, rm_far_shift, walk.m);
+    slot_radius = rm_far_shift ? radius >> rm_far_shift : radius;
+    list_slot_begin(angle, e);
+    slot_radius = 1 << 14;
+    if (l_slot < 0)
+        return;
+    push(&walk, K_END, 0);
+    a = dispatch(&walk, ram16(0x0016));
+    while (a >= 0 && !walk.done && guard++ < 1000000)
+        a = run_command(&walk, (uint16_t)a);
 }
 
 /* a facing command's flags, the chip's against the walk's: in Enhanced's
@@ -718,7 +826,10 @@ static int grow_to(void **a, size_t *cap, size_t want, size_t size)
 
 static ScFSlot *l_fslots;
 static ScFPoint *l_fpoints;
-static size_t l_nfs, l_nfp, cap_fs, cap_fp;
+static size_t l_nfs, l_nfp, cap_fs, cap_fp, cap_fn;
+static uint8_t *l_fnear;
+static ScPrim *l_prims;
+static size_t l_nprim, cap_prim;
 
 int sc_gpu_on(void)
 {
@@ -731,18 +842,39 @@ int sc_gpu_on(void)
         if (reporting)
             atexit(report);
     }
-    return check > 0 && gpu;
+    return check > 0 && gpu && !fw_ref_pass;
 }
-void sc_picture_begin(void) { l_ns = l_np = l_nf = l_nc = l_nfs = l_nfp = 0; }
+void sc_picture_begin(void) { l_ns = l_np = l_nf = l_nc = l_nfs = l_nfp = l_nprim = 0; }
+
+int sc_list_prim(const ScPrim *p)
+{
+    if (!grow_to((void **)&l_prims, &cap_prim, l_nprim + 1, sizeof *l_prims))
+        return -1;
+    l_prims[l_nprim] = *p;
+    return (int)l_nprim++;
+}
+const ScPrim *sc_list_prims(size_t *n) { *n = l_nprim; return l_prims; }
+static ScPrimView l_view;
+const ScPrimView *sc_list_prim_view(void) { return &l_view; }
+void sc_list_prim_view_set(void) { fw_prim_view(&l_view); }
+int sc_fslot_near(size_t i) { return i < l_nfs ? l_fnear[i] : 0; }
 const ScFSlot *sc_list_fslots(size_t *n) { *n = l_nfs; return l_fslots; }
 const ScFPoint *sc_list_fpoints(size_t *n) { *n = l_nfp; return l_fpoints; }
 
 int sc_list_fslot(const float m[9], const float pos[3])
 {
-    if (!sc_gpu_on() || !fw_view_active() || !grow_to((void **)&l_fslots, &cap_fs, l_nfs + 1, sizeof *l_fslots))
+    float big = 0;
+    int i;
+    if (!sc_gpu_on() || !fw_view_active() || !grow_to((void **)&l_fslots, &cap_fs, l_nfs + 1, sizeof *l_fslots) ||
+        !grow_to((void **)&l_fnear, &cap_fn, l_nfs + 1, 1))
         return -1;
     memcpy(l_fslots[l_nfs].m, m, sizeof l_fslots[l_nfs].m);
     memcpy(l_fslots[l_nfs].pos, pos, sizeof l_fslots[l_nfs].pos);
+    l_fslots[l_nfs].zs = (float)(1 << rm_far_shift);
+    for (i = 0; i < 9; i++)             /* a solid's points are within its picture's 64 texels of its middle */
+        if ((m[i] < 0 ? -m[i] : m[i]) > big)
+            big = m[i] < 0 ? -m[i] : m[i];
+    l_fnear[l_nfs] = (uint8_t)sc_near(pos[0], pos[1], pos[2], 64 * big);
     return (int)l_nfs++;
 }
 
@@ -761,11 +893,6 @@ int sc_list_float_face(int fslot, const float (*p)[3], int n, uint8_t c)
     f->colour = c;
     for (i = 0; i < n; i++) {
         ScFPoint *q = &l_fpoints[l_nfp];
-        const ScFSlot *sl = &l_fslots[fslot];
-        if (sc_needs_clip(sl->pos[0] + p[i][0] * sl->m[0] + p[i][1] * sl->m[3] + p[i][2] * sl->m[6],
-                          sl->pos[1] + p[i][0] * sl->m[1] + p[i][1] * sl->m[4] + p[i][2] * sl->m[7],
-                          sl->pos[2] + p[i][0] * sl->m[2] + p[i][1] * sl->m[5] + p[i][2] * sl->m[8]))
-            f->pad[1] = 1;
         memcpy(q->p, p[i], sizeof q->p);
         q->fslot = (uint32_t)fslot;
         l_corners[l_nc].point = SC_FLOAT_POINT | (uint32_t)l_nfp++;
@@ -798,7 +925,8 @@ static void list_slot_begin(const uint16_t angle[3], const uint16_t e[9])
         sl->pos[i] = (int16_t)ram16((uint16_t)(0x0026 + 2 * i));
     sl->shift = shift;
     sl->scale = (uint16_t)(shift < 16 ? 1u << shift : 0);   /* 01:8651: 1 doubled $0032 times */
-    sl->pad[0] = sl->pad[1] = 0;
+    sl->pad[0] = (uint16_t)sc_near(sl->pos[0], sl->pos[1], sl->pos[2], (float)slot_radius);
+    sl->pad[1] = (uint16_t)rm_far_shift;
     l_slot = (int)l_ns++;
     l_point_base = (uint32_t)l_np;
 }
@@ -847,10 +975,8 @@ static int32_t list_face(uint16_t p, const Material *mt)
     for (i = 0; i < n; i++) {
         ScCorner *c = &l_corners[l_nc++];
         int q = byte(&walk, (uint16_t)(p + 7 + i));
-        if (q < walk.np && walk.vz[q] < 0x100)   /* a corner the chip projects as a near point (01:8C7D) */
+        if (!walk.native && q < walk.np && walk.vz[q] < 0x100)   /* a corner the chip projects as a near point (01:8C7D) */
             f->pad[0] = 1;
-        if (q >= walk.np || sc_needs_clip((float)walk.vx[q], (float)walk.vy[q], (float)walk.vz[q]))
-            f->pad[1] = 1;
         c->point = l_point_base + byte(&walk, (uint16_t)(p + 7 + i));
         c->u = c->v = 0;
         if (f->textured) {

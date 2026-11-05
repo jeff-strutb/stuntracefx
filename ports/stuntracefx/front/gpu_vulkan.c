@@ -84,7 +84,7 @@ static uint32_t qfam;
 static VkPhysicalDeviceMemoryProperties memp;
 static VkDescriptorSetLayout dsl;
 static VkPipelineLayout pl;
-static VkPipeline pipe_rows, pipe_fill, pipe_water;
+static VkPipeline pipe_rows, pipe_fill, pipe_water, pipe_prims;
 /* the models (scene.h): the render pass over the picture (R8 colour
    indices) and each pixel's face (R32), their pipelines (triangles,
    lines), the images and the framebuffer at the picture's size */
@@ -110,8 +110,8 @@ typedef struct {
     void *at;
 } Buf;
 enum { B_OUT, B_SPANS, B_ROW_AT, B_ROW_SPANS, B_BANKS, B_SLOT, B_POLYS, B_EDGES, B_ROW_POLY, B_OUT32, B_JOB, B_GAP,
-       B_VERTS, B_LPOINTS, B_LSLOTS, B_LFACES, B_ID, B_FSLOTS, B_FPOINTS, B_QUADS, B_N };
-static const uint32_t binding_of[B_N] = {0, 1, 2, 3, 4, 5, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21};
+       B_VERTS, B_LPOINTS, B_LSLOTS, B_LFACES, B_ID, B_FSLOTS, B_FPOINTS, B_QUADS, B_PRIMS, B_N };
+static const uint32_t binding_of[B_N] = {0, 1, 2, 3, 4, 5, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
 /* the stages that see the descriptors and the push constants: the fill's
    kernels and the models' shaders */
 #define STAGES (VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
@@ -465,7 +465,8 @@ static int device_open(void)
     pipe_rows = pipeline(k_rows_comp, sizeof k_rows_comp);
     pipe_fill = pipeline(k_fill_comp, sizeof k_fill_comp);
     pipe_water = pipeline(k_water_comp, sizeof k_water_comp);
-    if (!pipe_rows || !pipe_fill || !pipe_water || !models_open())
+    pipe_prims = pipeline(k_prims_comp, sizeof k_prims_comp);
+    if (!pipe_rows || !pipe_fill || !pipe_water || !pipe_prims || !models_open())
         return 0;
     for (i = 0; i < B_N; i++)
         if (!buf_grow((int)i, 16))
@@ -708,7 +709,7 @@ static int images_at(int w, int h)
 /* a run of display-list faces' draw (draw_faces), recorded */
 typedef struct {
     int w, h;
-    size_t nr, nt;
+    size_t nr, nt, nq, nprim;
     const uint8_t *kind;
     const uint32_t *len;
     float view[12];
@@ -728,6 +729,15 @@ static void faces_record(void *arg)
     bc.imageExtent.width = (uint32_t)j->w;
     bc.imageExtent.height = (uint32_t)j->h;
     bc.imageExtent.depth = 1;
+    if (j->nprim) {                     /* the objects' primitives into their quads (prims.comp) */
+        uint32_t nq = (uint32_t)j->nq;
+        pvkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_COMPUTE, pl, 0, 1, &dset, 0, NULL);
+        pvkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, pipe_prims);
+        pvkCmdPushConstants(cb, pl, STAGES, 0, 4, &nq);
+        pvkCmdDispatch(cb, (nq + 63) / 64, 1, 1);
+        barrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT,
+                VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT);
+    }
     barrier(VK_PIPELINE_STAGE_HOST_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
             VK_ACCESS_HOST_WRITE_BIT | VK_ACCESS_SHADER_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
             VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT);
@@ -780,7 +790,8 @@ static void faces_record(void *arg)
    their order (gpu_metal.m's draw_faces, the same display list) */
 static int draw_faces(int w, int h, const FwSpan *sp, size_t n)
 {
-    size_t ns, np, nf, nt, nl, nq, i, nfs, nfp;
+    size_t ns, np, nf, nt, nl, nq, i, nfs, nfp, nprim;
+    const ScPrim *prims = sc_list_prims(&nprim);
     const ScSlot *sl = sc_list_slots(&ns);
     const ScPoint *pt = sc_list_points(&np);
     const ScFace *fc = sc_list_faces(&nf);
@@ -816,11 +827,15 @@ static int draw_faces(int w, int h, const FwSpan *sp, size_t n)
                 return 0;
             put[b] = 1;
         }
+        /* the ROM's tables the primitives are made by */
+        if (nprim && ((!bank_fresh(SC_TABLE_BANK_SCALE) && !bank_put(SC_TABLE_BANK_SCALE)) ||
+                      (!bank_fresh(SC_TABLE_BANK_RECIP) && !bank_put(SC_TABLE_BANK_RECIP))))
+            return 0;
     }
     memcpy(bufs[B_SLOT].at, bank_slot, sizeof bank_slot);
     gpu_bin_faces(sp, n, NULL, &nt, NULL, &nl, NULL, &nq, NULL, NULL, NULL);
     if (!images_at(w, h) || !buf_grow(B_VERTS, (nt + nl) * sizeof(GpuVert)) || !buf_grow(B_LPOINTS, np * sizeof *pt) ||
-        !buf_grow(B_QUADS, nq * sizeof(FwSpan)) ||
+        !buf_grow(B_QUADS, nq * sizeof(FwSpan)) || !buf_grow(B_PRIMS, sizeof(ScPrimView) + nprim * sizeof(ScPrim)) ||
         !buf_grow(B_LSLOTS, ns * sizeof *sl) || !buf_grow(B_LFACES, nf * sizeof *fc) ||
         !buf_grow(B_FSLOTS, nfs * sizeof *fs) || !buf_grow(B_FPOINTS, nfp * sizeof *fp))
         return 0;
@@ -836,12 +851,17 @@ static int draw_faces(int w, int h, const FwSpan *sp, size_t n)
         memcpy(bufs[B_FSLOTS].at, fs, nfs * sizeof *fs);
     if (nfp)
         memcpy(bufs[B_FPOINTS].at, fp, nfp * sizeof *fp);
+    memcpy(bufs[B_PRIMS].at, sc_list_prim_view(), sizeof(ScPrimView));
+    if (nprim)
+        memcpy((uint8_t *)bufs[B_PRIMS].at + sizeof(ScPrimView), prims, nprim * sizeof *prims);
     if (dset_stale)
         dset_update();
     fw_view_centre(&cx, &cy);
     j.w = w;
     j.h = h;
     j.nt = nt;
+    j.nq = nq;
+    j.nprim = nprim;
     j.kind = kind;
     j.len = len;
     j.view[0] = (float)fw_focal_x();

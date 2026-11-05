@@ -297,6 +297,14 @@ void fw_sprite_draw(int32_t h);
 int fw_sprite_small(uint16_t y, uint16_t x, uint16_t cols, uint16_t rows, uint16_t base, uint16_t step, int back);
 int fw_sprite_large(uint16_t y, uint16_t x, uint16_t cols, uint16_t frac, uint16_t step, uint16_t base, int back);
 void fw_sprite_rows_done(void);
+/* a primitive the GPU projects (scene.h ScPrim): listed, its placeholder in
+   the picture's order; the view it is made in (a ScPrimView) */
+void fw_prim(const void *prim, int textured);
+void fw_prim_view(void *out);
+/* PLOT's colour under the Super FX's COLR and POR now, or -1 */
+int fw_plot_colour(void);
+/* the water's plane for the picture, as FxDrawList finds it */
+void fw_water_view(void);
 /* the 32 bits a quad's float field holds (pq, pdq, pda: FW_QUAD) */
 static inline uint32_t fw_quad_word(const float *f)
 {

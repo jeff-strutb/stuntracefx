@@ -8,13 +8,13 @@
 layout(std430, binding = 14) readonly buffer Verts { uint vs[]; };      /* GpuVert: point, face, u, v */
 layout(std430, binding = 15) readonly buffer Points { uint pts[]; };    /* ScPoint: bytes, mirrored; slot */
 layout(std430, binding = 16) readonly buffer Slots { uint sls[]; };     /* ScSlot: 16 shorts */
-layout(std430, binding = 19) readonly buffer FSlots { float fsl[]; };    /* ScFSlot: m[9], pos[3] */
+layout(std430, binding = 19) readonly buffer FSlots { float fsl[]; };    /* ScFSlot: m[9], pos[3], zs, 3 unused */
 layout(std430, binding = 20) readonly buffer FPoints { uint fpts[]; };   /* ScFPoint: p[3] (float bits), fslot */
 layout(push_constant) uniform Push { float fx, fy, cx, cy, tw, th, p0, p1; vec4 water; } pc;
 layout(location = 0) out float out_u;
 layout(location = 1) out float out_v;
 layout(location = 2) flat out uint out_face;
-layout(location = 3) out float out_z;      /* the view's z, perspective-correct: exact on a face */
+layout(location = 3) out float out_z;      /* the true depth (a far object's halvings undone), perspective-correct: exact on a face */
 
 int s8(uint v) { return int(v << 24) >> 24; }
 int s16(uint v) { return int(v << 16) >> 16; }
@@ -47,13 +47,14 @@ int point_coord(uint sl, uint word, int j)
 void main()
 {
     uint at = uint(gl_VertexIndex) * 4u, p = vs[at];
-    float x, y, z;
+    float x, y, z, zs;
     if ((p & 0x80000000u) != 0u) {      /* a solid's point (solids.c): its slot's float matrix and place */
-        uint q = (p & 0x7FFFFFFFu) * 4u, f = fpts[q + 3u] * 12u;
+        uint q = (p & 0x7FFFFFFFu) * 4u, f = fpts[q + 3u] * 16u;
         float px = uintBitsToFloat(fpts[q]), py = uintBitsToFloat(fpts[q + 1u]), pz = uintBitsToFloat(fpts[q + 2u]);
         x = fsl[f + 9u] + px * fsl[f + 0u] + py * fsl[f + 3u] + pz * fsl[f + 6u];
         y = fsl[f + 10u] + px * fsl[f + 1u] + py * fsl[f + 4u] + pz * fsl[f + 7u];
         z = fsl[f + 11u] + px * fsl[f + 2u] + py * fsl[f + 5u] + pz * fsl[f + 8u];
+        zs = fsl[f + 12u];
     } else {
         uint word = pts[p * 2u], sl = pts[p * 2u + 1u];
         x = float(point_coord(sl, word, 0));
@@ -62,10 +63,11 @@ void main()
         if (zi >= 0x100 && zi > 0x43FE)
             zi = 0x43FE;
         z = float(zi);
+        zs = float(1u << slot_short(sl, 15u));
     }
     gl_Position = vec4(2.0 * (pc.cx * z + pc.fx * x) / pc.tw - z, 2.0 * (pc.cy * z + pc.fy * y) / pc.th - z, z - 1.0, z);
     out_u = uintBitsToFloat(vs[at + 2u]);
     out_v = uintBitsToFloat(vs[at + 3u]);
     out_face = vs[at + 1u];
-    out_z = z;
+    out_z = z * zs;
 }

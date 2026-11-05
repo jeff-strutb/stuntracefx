@@ -45,6 +45,7 @@
 #include "remaster.h"
 #include "fullwindow.h"
 #include "scene.h"
+#include "widescreen.h"
 #include "menuwindow.h"
 #include "rm_options.h"
 
@@ -521,7 +522,7 @@ static FwSpan *span_new(void)
     {
         FwSpan *p = &spans[nspans++];
         int none = fw_hud || label_on;
-        p->pad1[0] = (uint8_t)span_ref_only;
+        p->pad1[0] = (uint8_t)(span_ref_only | fw_ref_pass);
         p->za = none ? 0 : cur_z[0];
         p->zx = none ? 0 : cur_z[1];
         p->zy = none ? 0 : cur_z[2];
@@ -537,7 +538,7 @@ static void span_flat(int32_t y, int32_t x0, int32_t x1, uint8_t c)
     if (nspans) {                       /* the last one's run on: the same pixels as two */
         p = &spans[nspans - 1];
         if (!p->textured && p->y == y && p->colour == c && p->x1 + 1 == x0 && p->za == cur_z[0] && p->zx == cur_z[1] &&
-            p->zy == cur_z[2] && !fw_hud && !label_on && p->pad1[0] == span_ref_only) {
+            p->zy == cur_z[2] && !fw_hud && !label_on && p->pad1[0] == (span_ref_only | fw_ref_pass)) {
             p->x1 = x1;
             return;
         }
@@ -1053,7 +1054,7 @@ void fw_sprite_draw(int32_t h)
         if (!(p = span_new()))
             break;
         memset(p, 0, sizeof *p);
-        p->pad1[0] = (uint8_t)span_ref_only;
+        p->pad1[0] = (uint8_t)(span_ref_only | fw_ref_pass);
         p->za = sprite_z[0];
         p->y = y;
         p->x0 = a;
@@ -1091,7 +1092,7 @@ void fw_sprite_span(uint16_t y, uint16_t x0, uint16_t x1, uint16_t bank, uint16_
     if (!(p = span_new()))
         return;
     memset(p, 0, sizeof *p);
-    p->pad1[0] = (uint8_t)span_ref_only;
+    p->pad1[0] = (uint8_t)(span_ref_only | fw_ref_pass);
     p->za = sprite_z[0];                /* the sprite's one depth */
     p->y = y;
     p->x0 = a;
@@ -1473,6 +1474,53 @@ static void hud_quad(const HudQuad *h, int s, int t)
     p->por = h->por;
     p->hi = h->hi;
 }
+
+/* ---- the primitives the GPU projects (scene.h ScPrim) ---- */
+void fw_prim(const void *prim, int textured)
+{
+    int id = sc_list_prim((const ScPrim *)prim);
+    FwSpan *p;
+    if (id < 0 || !(p = span_new()))
+        return;
+    memset(p, 0, sizeof *p);
+    p->textured = FW_QUAD;
+    p->pad1[0] = 2;                     /* the GPU's alone */
+    p->pad1[1] = (uint8_t)(64 | (textured ? 0 : 2));
+    p->x0 = 1;                          /* no pixels until the GPU makes it */
+    p->xl = id;
+    p->bank = ((const ScPrim *)prim)->bank;
+    quads_made++;
+    cen_quads++;
+}
+
+void fw_prim_view(void *out)
+{
+    ScPrimView *v = (ScPrimView *)out;
+    int64_t n, d;
+    memset(v, 0, sizeof *v);
+    v->tw = tw;
+    v->th = th;
+    v->cx = (int16_t)ram16(0x0034);
+    v->cy = (int16_t)ram16(0x0036);
+    v->left = (int16_t)ram16(0x0038);
+    v->right = (int16_t)ram16(0x003A);
+    v->top = (int16_t)ram16(0x003C);
+    v->bottom = (int16_t)ram16(0x003E);
+    v->rows_cap = fw_rows(0x00F0);
+    v->square = fw_square();
+    ws_focal_q(0, &n, &d);
+    v->fxn = (int32_t)n;
+    v->fxd = (int32_t)d;
+    ws_focal_q(1, &n, &d);
+    v->fyn = (int32_t)n;
+    v->fyd = (int32_t)d;
+    v->sxn = (int32_t)SXN;
+    v->sxd = (int32_t)SXD;
+    v->syn = (int32_t)SYN;
+    v->syd = (int32_t)SYD;
+}
+
+int fw_plot_colour(void) { return plot_colour(); }
 
 int fw_bitmap(uint16_t x, uint16_t y, uint8_t bank, uint16_t at, int rows, int bytes, uint16_t pal)
 {
@@ -2461,7 +2509,7 @@ static int poly_put(FwPoly *p, int32_t ymin, int32_t yend)
         return 0;
     }
     memset(s, 0, sizeof *s);
-    s->pad1[0] = (uint8_t)span_ref_only;
+    s->pad1[0] = (uint8_t)(span_ref_only | fw_ref_pass);
     s->y = p->ya;
     s->x0 = p->yb;
     s->x1 = (int32_t)(p - fw_polys);
@@ -3504,7 +3552,7 @@ static uint16_t tex_polygon(uint16_t p, int n)
                     int64_t k = x1 - 1 - xl;
                     unsigned iu, iv;
                     memset(sp, 0, sizeof *sp);
-                    sp->pad1[0] = (uint8_t)span_ref_only;
+                    sp->pad1[0] = (uint8_t)(span_ref_only | fw_ref_pass);
                     sp->y = row;
                     sp->x0 = (int32_t)x0;
                     sp->x1 = (int32_t)(x1 - 1);
@@ -3611,6 +3659,8 @@ void fw_depth_sprite(int on)
     cur_z[0] = sprite_z[0];
     cur_z[1] = cur_z[2] = 0;
 }
+
+void fw_water_view(void) { water_view(); }
 
 void fw_draw_list(void)
 {
