@@ -129,9 +129,9 @@ depth.
 - The pause panel: baked textures and shaded shapes.
 - Water and ground: a full-screen pass against the depth buffer.
 
-## Contracts asked of nativeshvc (drafts, 2026-11-05, for Jeff's approval)
+## Contracts asked of nativeshvc (shapes approved by Jeff, 2026-11-05; not built)
 
-None of these is agreed or built: nativeshvc dab5da4 and its lazy-console tip
+None of these is built: nativeshvc dab5da4 and its lazy-console tip
 (5e33c21, contract 2.20) hold none of them. The game side of the hand-off and
 turning the GPU on by default wait for them. Each is new, optional and
 reported by a query, so a host without it goes on as now.
