@@ -499,6 +499,16 @@ static void flat(int32_t y, int32_t x0, int32_t x1, uint8_t c)
 {
     x0 += s_dx;                         /* (through the transform: the offset not applied) */
     x1 += s_dx;
+#ifdef SRFX_NSHVC_HANDOFF
+    if (s_sx1) {                        /* to the pass's columns: never a vertex left of the buffer */
+        if (x0 < s_sx0)
+            x0 = s_sx0;
+        if (x1 >= s_sx1)
+            x1 = s_sx1 - 1;
+        if (x1 < x0)
+            return;
+    }
+#endif
     if (s_break == 1) {
         s_break = 2;
         return;
@@ -535,6 +545,22 @@ static void flat(int32_t y, int32_t x0, int32_t x1, uint8_t c)
 static void run(int32_t y, int32_t x, int32_t n, int u, int v, int step)
 {
     TV *t;
+#ifdef SRFX_NSHVC_HANDOFF
+    if (s_sx1) {                        /* to the pass's columns, its texels with them (flat()'s) */
+        int32_t b = x + s_dx, e = b + n;
+        if (b < s_sx0) {
+            if (step)
+                u += s_sx0 - b;
+            x += s_sx0 - b;
+            b = s_sx0;
+        }
+        if (e > s_sx1)
+            e = s_sx1;
+        if (e <= b)
+            return;
+        n = e - b;
+    }
+#endif
     room();
     textured(1);
     ztest(0);
@@ -2130,8 +2156,10 @@ static int cv_open(int w, int h, const uint8_t *keep)
     size_t need;
 #ifdef SRFX_NSHVC_HANDOFF
     int ch = s_ch.on && fw_bp_active();
-    if (ch && s_ch.bpp <= 4)
-        stride = 512;                   /* (two players: 16 bits a pixel, the bands 512 across) */
+    /* the widths the GE has drawn to in the console, 256 and 512 (two players: 16 bits a
+       pixel, the bands 512 across) */
+    if (ch)
+        stride = s_ch.bpp <= 4 || w > 256 ? 512 : 256;
     need = (size_t)stride * (size_t)h * (ch && s_ch.bpp <= 4 ? 2 : 4);
     if (ch) {
         int n = (stride < 512 ? stride : 512) / s_ch.side, cols = s_ch.cols * s_ch.targets;

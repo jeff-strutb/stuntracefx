@@ -189,10 +189,14 @@ them (itself never run). `SRFX_NSHVC_HANDOFF=1 sh build.sh` links only against t
   stride 512, 32 columns a band: 512 x 320 at 16 bits, 327,680 of the loan's 557,056
   bytes. The second target's columns 32-35 fall in the band below, so it goes in two
   passes, the draw buffer at the band's start, the offset and scissor keeping each to
-  its columns: its geometry is sent twice. Jeff: if that costs too much, revisit. Its
-  columns 32-35 rest on the GE clipping at the scissor pixels left of the buffer's
-  column 0; not checked on the hardware. A menu's picture drawn before its flip is
-  handed at the hook, or the next present draws over it: its first in set 0's place.
+  its columns: its geometry is sent twice. Jeff: if that costs too much, revisit. Flat
+  spans and runs are trimmed on the CPU to the pass's columns, no vertex left of the
+  buffer; faces and quads through the viewport rest on the GE's scissor there, not
+  checked on the hardware. Strides are 512 and, the menus, 256, the widths the console
+  has drawn to. By reading, a menu's word comes with its picture: under Frame rate 60
+  RmMenuPictureShow flips at once. Were one drawn before its flip, it is handed at the
+  hook, or the next present draws over it: its first in set 0's place, which could show
+  stale VRAM for that frame.
 - **The bitmap pictures, Metal and Vulkan (Jeff, 2026-11-05: "Yes, build it").** Two
   players, the menus' 3D and no widescreen go as `nshvc_ext_canvas_chars_gpu`, the
   console placing them as ever. Each target's characters are copied by the GPU from
