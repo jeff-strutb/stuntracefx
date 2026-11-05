@@ -198,6 +198,29 @@ void rm_canvas_off(void);
 enum { RM_CANVAS_RACE = 1, RM_CANVAS_MENU = 2 };
 void rm_canvas_kept(int owner);
 void rm_canvas_frame_end(void);
+/* A job's pictures as the GPU's characters (fw_job_chars; the S-CPU's uploads run as
+   ever, of RAM no PLOT has written). rm_canvas_job_word: 1 when set stands at word as
+   count characters, per_column a column, from its column first_col. rm_canvas_job_held:
+   the one standing stays while this screen's uploads run. rm_canvas_job_part: while one
+   stands, the part of set 0 at word in its place, the rest VRAM's. fw_job_upload: set
+   of player's is being uploaded, its next picture the other's (menu: the menus' one
+   buffer, else the race's). fw_job_last: the set drawn last. rm_canvas_job_mode: 1 when
+   a job's pictures are so, none in the chip's RAM to show. */
+#ifdef SRFX_NSHVC_HANDOFF
+int rm_canvas_job_word(int set, unsigned word, unsigned count, int per_column, int first_col, unsigned bpp);
+void rm_canvas_job_held(int owner);
+void rm_canvas_job_part(unsigned word, unsigned count, int first_col);
+void fw_job_upload(int player, int set, int menu);
+int fw_job_last(void);
+#define rm_canvas_job_mode() fw_job_chars()
+#else
+#define rm_canvas_job_mode() 0
+#define rm_canvas_job_word(set, word, count, per_column, first_col, bpp) 0
+#define rm_canvas_job_held(owner) ((void)0)
+#define rm_canvas_job_part(word, count, first_col) ((void)0)
+#define fw_job_upload(player, set, menu) ((void)0)
+#define fw_job_last() 0
+#endif
 /* Enhanced's view distance (object/draw_list.c, render/frame.c): the
    far records in the Super FX's second bank ($71): the count, then each
    a draw record (30 bytes, as the near ones at $7E:F77F) and its place

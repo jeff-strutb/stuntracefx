@@ -180,8 +180,36 @@ Off by default, and SC_GPU stays off by default. `nshvc_handoff.h` holds the
 console's functions, as contract 2.22 on nativeshvc's branch `contract-2.22` gives
 them (itself never run). `SRFX_NSHVC_HANDOFF=1 sh build.sh` links only against that.
 
-- **Not handed off:** Original's job stays read back at STOP by design; on the GE its
-  bitplanes are packed on the CPU, and its noise and haze are made there.
+- **Not handed off:** Metal's and Vulkan's Original job stays read back at STOP by
+  design, byte-identical. The GE reads none back (below).
+- **A job on the GE (Jeff, 2026-11-05: "Yes, hand characters", in place of the read-back
+  and the pack; the GE cannot pack, its alpha written only through the stencil). No PLOT
+  reaches the chip's RAM there; every store does, and the S-CPU's uploads run as ever, of
+  RAM no PLOT wrote. Every plotted byte's route out of RAM ends in BG1's characters, by
+  reading: the race's 416 at $0000 or $2200, two players' 360 at $0000 or $2000, the
+  menus' 143 at $0000 or $0B00, the course screen's 32 at $0400. $70:4000 to $6600 and
+  stage 4 ($AB85, $0D23 by the ROM's table at 7E:AA4B) are stores, not plots. So each is
+  `nshvc_ext_canvas_chars_ge` at k 1, handed from the sites that upload it.
+  The loan's contents are not kept and its address moves, and such a picture is drawn
+  over frames and waits for its flip: each of two sets stands in RAM the CPU never
+  touches, the GE copying it into this frame's loan as it is first drawn or shown, back
+  at the frame hook (the manual's inter-buffer transfer, either way between local and
+  host memory; CMD_TSYNC around it). That is up to 135 KB each way a frame, its time not
+  measured. A set's handed at the frame hook, so it may show a frame after VRAM's would.
+  The race's buffers are a set each; two players' and the menus' one RAM picture draws
+  the set not last uploaded. A set stands while the screen's uploads run ($0D22's stages
+  too: pause, results, the race's end) and goes when they stop. In two players' pause
+  the panel takes one player's 180 characters back to VRAM. Not settled by reading:
+  anything a screen writes into those characters while its stages still run (the
+  championship screen's, tilemap.c), and plots past what is uploaded (x from 208 falls in
+  the other buffer on the chip, here is lost): not byte-identical, as Jeff accepted.
+- **The GE's noise and haze.** Noise: the generator's whole sequence a T8 texture made
+  once, the ramp the palette and PLOT's rule its alpha; a row is sprites of its run of
+  texels, ending at a chain's end (a tail of 5,582 into a cycle of 32,767; a cycle of
+  27,185; two states their own next) and a texture row. Haze: the GE copies each block's
+  source to a strip in RAM, all before any is drawn, then draws each from it by the alpha
+  test over a 0. Neither reads a pixel on the CPU. The CPU still steps the generator for
+  the seed the game keeps, on every host.
 - **The bitmap pictures, the GE (Jeff, 2026-11-05: by column; two players stay at the
   game's resolution, k 2).** Each target is drawn where `nshvc_ext_canvas_chars_ge`
   reads it, so nothing is cut or copied. One player, no widescreen (26 x 16) and the
@@ -268,6 +296,7 @@ What was found by reading, and what is not the GPU's yet:
   are sprites, not plots.
 - rows.comp and fill.comp did not walk by the chip's slopes (`edge_x` is the
   full window's exact form): polygons with FwPoly pad[0] now do, in closed form.
+- (The GE, since: no job is read back or packed; see "A job on the GE" above.)
 - A bitmap picture keeps its sprites (no solids) and has no water cut: as the
   chip's pictures always had.
 - Frame rate off is not a mode of its own: `RM_OPT_FRAMERATE` is what
@@ -296,8 +325,7 @@ What was found by reading, and what is not the GPU's yet:
   polygon's row and any single PLOT a flat quad; the screen clear flat quads of
   colour 0 opaque over the columns the target holds, the bytes past it (no PLOT
   reaches them) zeroed as RAM, the stores priced as they stood. The GE takes the
-  noise as 1-pixel sprites in its list (no compute) and still packs bitplanes on
-  the CPU.
+  noise as a texture's runs (no compute), and packs nothing.
 - Enhanced's own jobs where its bitmap is the one shown (07:EE88's course screen,
   a race's first steps before its first picture) go the same way, unpriced.
 - A job at its STOP is flushed, settled by reading: every program the game starts
@@ -338,8 +366,8 @@ by the GPU to a linear 8-bit target, handed as the characters it stands for.
   loops as quads (their hooks exist, gated off in Original today), lines, the
   screen clear. A new kernel packs the linear target into the chip's bitplanes;
   the bytes read back into its RAM at STOP. RPIX per the census above. No chip
-  access added while off. The GE reads its target back the same way, not
-  byte-identical.
+  access added while off. The GE reads nothing back (Jeff, 2026-11-05): its
+  characters, not byte-identical.
 - **Duration.** gsuprice.py's load model gains a form over what a job holds
   (polygons, area, edges, flat or textured, other primitives), its table's
   coefficients marked not fitted until the final pass collects the jobs.
@@ -347,7 +375,7 @@ by the GPU to a linear 8-bit target, handed as the characters it stands for.
 FxHazeSample on the GPU, written, no play reaches it, shipped unproven: a marker
 span (FW_HAZE) breaks the run, a kernel samples each of its 256 shape entries
 (bank 8, $F92E + 4 x time) from a copy of the picture and plots them opaque; the
-GE draws 1-pixel sprites from its canvas.
+GE copies each block to a strip in RAM and draws them from it.
 
 ## Baselines (2026-11-04, SRFX 464c9dca, race100.sfx frames 1401-1500)
 

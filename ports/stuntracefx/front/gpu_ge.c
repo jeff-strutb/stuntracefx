@@ -1482,29 +1482,17 @@ static void prim_ge(const FwSpan *sp)
     }
 }
 
-/* one effect's haze (fullwindow.h FW_HAZE, fullwindow.c haze_fill's steps): the
-   GE's work so far finished and the target read at each entry's source (the
-   canvas's or the 4444 target's low byte), all before any is drawn, then each
-   texel a 1-pixel sprite of what was there */
+/* one effect's haze (fullwindow.h FW_HAZE, fullwindow.c haze_fill's steps). What is
+   read is drawn over, so every source goes first: the GE's work finished (CMD_TSYNC)
+   and the GE copying each entry's block from the target to a strip in RAM the CPU
+   never touches, then each block's place 0 and, over it, what was there: from the
+   strip, by the alpha test, where the target held an index (a mark of 0xFF, the 4444
+   target's 0xF). A block is 4 x 4 at most, k 1 or 2 here. No pixel is read here. */
 static volatile uint32_t *s_cv;
 static volatile uint16_t *s_t16;
-static uint8_t haze_read(int32_t x, int32_t y, int w, int h)
-{
-    if (x < 0 || x >= w || y < 0 || y >= h)
-        return 0;
-    if (s_c32) {
-        uint32_t v = s_cv[(size_t)y * s_stride + x];
-        return (v >> 24) == 0xFF ? (uint8_t)v : 0;
-    }
-#ifdef SRFX_NSHVC_HANDOFF
-    if (s_ch.on && fw_bp_active()) {    /* where the target's pixel is in its band (no play reaches a haze here;
-                                           in two passes the second reads what the first drew) */
-        int n = (s_stride < 512 ? s_stride : 512) / s_ch.side, ac = s_ch.t * s_ch.cols + x / s_ch.side;
-        return (uint8_t)s_t16[(size_t)((ac / n) * h + y) * s_stride + (ac % n) * s_ch.side + x % s_ch.side];
-    }
-#endif
-    return (uint8_t)s_t16[(size_t)y * s_stride + x];
-}
+#define HZ_BLOCK 4
+#define HZ_ROOM (256u * (2u * HZ_BLOCK * 128u + 64u))
+static uint32_t __attribute__((aligned(64))) s_hz[16 * HZ_BLOCK * 16 * HZ_BLOCK];
 
 static int32_t haze_at(int32_t v, int64_t n, int64_t d)
 {
@@ -1514,20 +1502,50 @@ static int32_t haze_at(int32_t v, int64_t n, int64_t d)
 
 uint16_t fx_noise_step(uint16_t s);
 
+/* the source's (x, y) of the target to (bx, by) of the buffer from `at`, x's run at
+   most *n in one place */
+static void haze_place(int32_t x, int32_t y, int *bx, int *by, unsigned *at, int32_t *n)
+{
+#ifdef SRFX_NSHVC_HANDOFF
+    if (s_ch.on && fw_bp_active()) {    /* where the target's pixel is in its band */
+        int a = (s_stride < 512 ? s_stride : 512) / s_ch.side, ac = s_ch.t * s_ch.cols + x / s_ch.side;
+        int left = s_ch.side - x % s_ch.side;
+        *bx = (ac % a) * s_ch.side + x % s_ch.side;
+        *by = (ac / a) * s_h + y;
+        *at = s_base;
+        if (*n > left)
+            *n = left;
+        return;
+    }
+#endif
+    *bx = x + s_dx;
+    *by = y;
+    *at = s_off;
+}
+
 static void haze_ge(const FwSpan *p, int w, int h)
 {
-    static struct { int16_t x, y; uint8_t c; } put[256 * 16];
-    int32_t X = (int32_t)p->xl, Y = p->pad0, r, c, np = 0, i;
+    static struct { int16_t c0, r0, s0, t0, su, sv, bw, bh; } cell[256];
+    int32_t X = (int32_t)p->xl, Y = p->pad0, r, c;
     uint16_t at = (uint16_t)(0xF92E + 4 * p->base);
     uint16_t shape = (uint16_t)(fw_texel(8, at) | fw_texel(8, (uint16_t)(at + 1)) << 8);
     uint16_t offs = (uint16_t)(fw_texel(8, (uint16_t)(at + 2)) | fw_texel(8, (uint16_t)(at + 3)) << 8);
+    int psm = s_c32 ? GU_PSM_8888 : GU_PSM_4444, n = 0, i;
+    int32_t u, v;
 
-    list_close();
+    model_mode(0);
+    flats_out();
+    if (s_used + HZ_ROOM > LIST_ROOM) {
+        list_close();
+        list_open();
+    }
+    s_used += 256u * 64u;
+    sceGuTexSync();
     for (r = 0; r < 16; r++) {
         int32_t sy = Y + (int8_t)fw_texel(8, (uint16_t)(offs + r)), ty = (Y - 8 + r) & 255;
         for (c = 0; c < 16; c++) {
             int8_t b = (int8_t)fw_texel(8, (uint16_t)(shape + r * 16 + c));
-            int32_t sx = X + b, tx = (X - 8 + c) & 255, sya = sy, tya = ty, u, v, c0, c1, r0, r1, s0, t0;
+            int32_t sx = X + b, tx = (X - 8 + c) & 255, sya = sy, tya = ty, c0, c1, r0, r1, s0, t0, u0, u1, v0, v1;
             if (!b)
                 continue;
             if (p->pad1[2]) {
@@ -1548,44 +1566,173 @@ static void haze_ge(const FwSpan *p, int w, int h)
             r1 = haze_at(tya + 1, p->v, p->dv);
             s0 = haze_at(sx, p->u, p->du);
             t0 = haze_at(sya, p->v, p->dv);
-            for (v = 0; v < r1 - r0; v++)
-                for (u = 0; u < c1 - c0 && np < 256 * 16; u++) {
-                    put[np].x = (int16_t)(c0 + u);
-                    put[np].y = (int16_t)(r0 + v);
-                    put[np++].c = haze_read(s0 + u, t0 + v, w, h);
-                }
+            cell[n].c0 = (int16_t)c0;
+            cell[n].r0 = (int16_t)r0;
+            cell[n].s0 = (int16_t)s0;
+            cell[n].t0 = (int16_t)t0;
+            cell[n].su = (int16_t)(c * HZ_BLOCK);
+            cell[n].sv = (int16_t)(r * HZ_BLOCK);
+            cell[n].bw = (int16_t)(c1 - c0 < HZ_BLOCK ? c1 - c0 : HZ_BLOCK);
+            cell[n].bh = (int16_t)(r1 - r0 < HZ_BLOCK ? r1 - r0 : HZ_BLOCK);
+            u0 = -s0 > 0 ? -s0 : 0;
+            u1 = w - s0 < cell[n].bw ? w - s0 : cell[n].bw;
+            v0 = -t0 > 0 ? -t0 : 0;
+            v1 = h - t0 < cell[n].bh ? h - t0 : cell[n].bh;
+            for (u = u0; u < u1 && v0 < v1;) {
+                int bx, by;
+                unsigned from;
+                int32_t run_n = u1 - u;
+                haze_place(s0 + u, t0 + v0, &bx, &by, &from, &run_n);
+                sceGuCopyImage(psm, bx, by, (int)run_n, (int)(v1 - v0), s_stride, (char *)sceGeEdramGetAddr() + from,
+                               cell[n].su + (int)u, cell[n].sv + (int)v0, 16 * HZ_BLOCK, s_hz);
+                u += run_n;
+            }
+            n++;
         }
     }
-    list_open();
-    for (i = 0; i < np; i++)
-        if (put[i].x >= 0 && put[i].x < w && put[i].y >= 0 && put[i].y < h)
-            flat(put[i].y, put[i].x, put[i].x, put[i].c);
+    sceGuTexSync();
+    sceGuTexMode(psm, 0, 0, 0);
+    sceGuTexImage(0, 16 * HZ_BLOCK, 16 * HZ_BLOCK, 16 * HZ_BLOCK, s_hz);
+    sceGuTexFlush();
+    sceGuAlphaFunc(GU_EQUAL, 0xFF, 0xFF);
+    for (i = 0; i < n; i++) {
+        int32_t c0 = cell[i].c0, r0 = cell[i].r0, s0 = cell[i].s0, t0 = cell[i].t0;
+        int32_t x0 = c0 > 0 ? c0 : 0, x1 = c0 + cell[i].bw < w ? c0 + cell[i].bw : w;
+        int32_t u0 = -c0 > -s0 ? -c0 : -s0, u1 = w - c0 < w - s0 ? w - c0 : w - s0;
+        if (u0 < 0)
+            u0 = 0;
+        if (u1 > cell[i].bw)
+            u1 = cell[i].bw;
+        for (v = 0; v < cell[i].bh; v++) {
+            int32_t y = r0 + v;
+            if (y < 0 || y >= h || x1 <= x0)
+                continue;
+            flat(y, x0, x1 - 1, 0);
+            if (t0 + v >= 0 && t0 + v < h && u0 < u1)
+                run(y, c0 + u0, u1 - u0, cell[i].su + (int)u0, cell[i].sv + (int)v, 1);
+        }
+    }
+    flats_out();
+    sceGuAlphaFunc(GU_GREATER, 0, 0xFF);
+    sceGuTexMode(GU_PSM_T8, 0, 0, 0);
+    sceGuTexFlush();
+    s_tex_now = NULL;
 }
 
-/* a job's noise (fullwindow.h FW_NOISE, fullwindow.c noise_fill's steps), each
-   pixel a 1-pixel sprite in the list: the GE has no kernel to run the generator */
+/* a job's noise (fullwindow.h FW_NOISE, fullwindow.c noise_fill's steps): the
+   generator's whole sequence a texture, made once (fx_noise_step's low 3 bits, each
+   state's next the texel after), its ramp the palette and PLOT's rule the palette's
+   alpha, so a row is sprites of its run of texels. The sequence is chains (a tail into
+   a cycle of 32,767, a cycle of 27,185, two states their own next): a sprite ends at a
+   chain's end and at the texture's row. */
+#define NZ_CHAINS 4
+static uint8_t __attribute__((aligned(64))) s_nz_tex[65536];
+static uint16_t s_nz_at[65536];         /* a state's texel */
+static uint32_t s_nz_end[NZ_CHAINS], s_nz_to[NZ_CHAINS];
+static int s_nz_chains;
+static Stage s_nz_stage;
+
+static void noise_make(void)
+{
+    static uint8_t seen[65536], fed[65536];
+    uint32_t i, n = 0, pass;
+
+    for (i = 0; i < 65536; i++)
+        fed[fx_noise_step((uint16_t)i)] = 1;
+    for (pass = 0; pass < 2; pass++)    /* those with no state before them first: a chain's whole */
+        for (i = 0; i < 65536; i++) {
+            uint16_t s = (uint16_t)i;
+            if (seen[s] || (!pass && fed[s]))
+                continue;
+            while (!seen[s]) {
+                seen[s] = 1;
+                s_nz_at[s] = (uint16_t)n;
+                s_nz_tex[n++] = (uint8_t)(s & 7);
+                s = fx_noise_step(s);
+            }
+            s_nz_end[s_nz_chains] = n;
+            s_nz_to[s_nz_chains++] = s_nz_at[s];
+        }
+    sceKernelDcacheWritebackRange(s_nz_tex, sizeof s_nz_tex);
+    s_nz_stage.at = s_nz_tex;
+    s_nz_stage.tw = s_nz_stage.th = 256;
+    s_nz_stage.um = s_nz_stage.vm = 255;
+}
+
+/* the texture and this job's palette (again after a list's end) */
+static void noise_state(uint64_t ramp, int low_nibble)
+{
+    uint8_t *m;
+    int i;
+    if (s_tex_now == &s_nz_stage && s_clut_now == 3)
+        return;
+    use_texture(&s_nz_stage);
+    m = (uint8_t *)(((uintptr_t)sceGuGetMemory(64) + 15) & ~(uintptr_t)15);
+    for (i = 0; i < 8; i++) {
+        uint8_t c = (uint8_t)(ramp >> (i * 8));
+        int clear = low_nibble ? !(c & 15) : !c;
+        if (s_c32)
+            ((uint32_t *)m)[i] = clear ? 0 : 0xFF000000u | c;
+        else
+            ((uint16_t *)m)[i] = (uint16_t)(clear ? 0 : 0xF000u | c);
+    }
+    sceGuClutMode(s_c32 ? GU_PSM_8888 : GU_PSM_4444, 0, 7, 0);
+    sceGuClutLoad(1, m);
+    s_clut_now = 3;
+    s_cmode_now = -1;
+}
+
 static void noise_ge(const FwSpan *p, int w, int h)
 {
-    uint16_t s = p->base;
     uint64_t ramp = (uint64_t)p->u;
-    int32_t cols = (int32_t)p->xl, rows = (int32_t)p->v, x, y;
+    int32_t cols = (int32_t)p->xl, rows = (int32_t)p->v, y;
+    uint32_t at, end;
+    int ch;
 
+    if (!s_nz_chains)
+        noise_make();
+    at = s_nz_at[p->base];              /* the texel after the seed's: the first pixel's */
+    for (ch = 0; at >= s_nz_end[ch]; ch++)
+        ;
+    at = at + 1 == s_nz_end[ch] ? s_nz_to[ch] : at + 1;
+    for (ch = 0; at >= s_nz_end[ch]; ch++)
+        ;
+    end = s_nz_end[ch];
     model_mode(0);
-    for (y = 0; y < rows; y++)
-        for (x = 0; x < cols; x++) {
-            uint8_t c;
-            int32_t px = x & 255, py = y & 255;
-            s = fx_noise_step(s);
-            c = (uint8_t)(ramp >> ((s & 7) * 8));
-            if (p->por & 8 ? !(c & 15) : !c)
-                continue;
+    for (y = 0; y < rows; y++) {
+        int32_t x = 0;
+        while (x < cols) {
+            int32_t px = x & 255, py = y & 255, n = cols - x;
+            if (n > 256 - px)
+                n = 256 - px;
+            if ((uint32_t)n > end - at)
+                n = (int32_t)(end - at);
+            if (n > 256 - (int32_t)(at & 255))
+                n = 256 - (int32_t)(at & 255);
             if (py >= h) {
                 py -= h;
                 px += 8;
             }
-            if (px < w && py < h)
-                flat(py, px, px, c);
+            if (px < w && py < h) {
+                flats_out();
+                if (s_used + 512 > LIST_ROOM) {
+                    list_close();
+                    list_open();
+                }
+                noise_state(ramp, (p->por & 8) != 0);
+                run(py, px, px + n > w ? w - px : n, (int)(at & 255), (int)(at >> 8), 1);
+            }
+            at += (uint32_t)n;
+            if (at == end) {
+                at = s_nz_to[ch];
+                for (ch = 0; at >= s_nz_end[ch]; ch++)
+                    ;
+                end = s_nz_end[ch];
+            }
+            x += n;
         }
+    }
+    s_clut_now = s_cmode_now = -1;
 }
 
 static void span(const FwSpan *p, int w, int h)
@@ -2126,6 +2273,72 @@ static int s_hand_stride, s_hand_w, s_hand_h;
 static void *s_chars_at;
 static int s_chars_stride, s_chars_per_col, s_chars_psm;
 
+/* A job's pictures as characters (fw_job_chars). The loan's contents are not kept and
+   its address moves from frame to frame (contract 2.15), and such a picture is drawn
+   over frames and waits for its flip, so each of the two sets stands in RAM the CPU
+   never touches: the GE copies it to its place in this frame's loan as it is first
+   drawn or shown, and back at the frame hook. Drawn there as the console reads it, by
+   column: stride 512, a set JOB_ROWS down, a second player's half at column 18. */
+#define JOB_ROWS 128
+#define JOB_RAM_W 288
+static uint32_t __attribute__((aligned(64))) s_job_ram[2][JOB_RAM_W * JOB_ROWS];
+static struct {
+    int on, set, bpp, second;
+    int psm[2], dirty[2], loaded[2];
+    int show_set, show_per, show_first, show_bpp;
+    unsigned show_word, show_count;
+} s_job;
+
+static void job_copy(int set, int psm, unsigned base, int save)
+{
+    int w = psm == GU_PSM_4444 ? JOB_RAM_W : 264;
+    char *vram = (char *)sceGeEdramGetAddr() + base;
+    if (save)
+        sceGuCopyImage(psm, 0, set * JOB_ROWS, w, JOB_ROWS, 512, vram, 0, 0, JOB_RAM_W, s_job_ram[set]);
+    else
+        sceGuCopyImage(psm, 0, 0, w, JOB_ROWS, JOB_RAM_W, s_job_ram[set], 0, set * JOB_ROWS, 512, vram);
+}
+
+static int job_open(void *lent, size_t bytes, int w, int h)
+{
+    int b = s_job.bpp <= 4 ? 2 : 4, set = s_job.set;
+    report_once();
+    if (!lent || (size_t)512 * 2 * JOB_ROWS * (size_t)b > bytes || w > JOB_RAM_W || h > JOB_ROWS)
+        return 0;
+    s_cv_opens++;
+    s_c32 = b == 4;
+    if (lent == s_chars_at)
+        s_chars_at = NULL;
+    if (lent == s_hand_at)
+        s_hand_at = NULL;
+    s_plane = 0;
+    s_zcut = 0;
+    s_zk = 1.0f;
+    if (s_zb && (w > s_zbw || h > 272))
+        s_zb = NULL;
+    s_stride = 512;
+    s_w = w;
+    s_h = h;
+    s_base = (unsigned)((uintptr_t)lent - (uintptr_t)sceGeEdramGetAddr());
+    s_off = s_base + (unsigned)(set * JOB_ROWS * 512 * b);
+    s_dx = s_job.second ? 144 : 0;
+    s_sx0 = s_dx;
+    s_sx1 = b == 2 ? s_dx + 144 : w;
+    s_cv = (volatile uint32_t *)(((uintptr_t)lent + (s_off - s_base)) | 0x40000000u);
+    s_t16 = (volatile uint16_t *)s_cv;
+    s_textured = -1;
+    s_job.psm[set] = b == 2 ? GU_PSM_4444 : GU_PSM_8888;
+    if (!s_job.loaded[set]) {
+        list_open();
+        job_copy(set, s_job.psm[set], s_base, 0);
+        sceGuTexSync();
+        list_close();
+        s_job.loaded[set] = 1;
+    }
+    s_job.dirty[set] = 1;
+    return 1;
+}
+
 /* pass p of the target: the band's offset, its place, its columns; 0 past the last */
 static int ch_pass(int p)
 {
@@ -2156,6 +2369,8 @@ static int cv_open(int w, int h, const uint8_t *keep)
     size_t need;
 #ifdef SRFX_NSHVC_HANDOFF
     int ch = s_ch.on && fw_bp_active();
+    if (s_job.on)
+        return job_open(lent, bytes, w, h);
     /* the widths the GE has drawn to in the console, 256 and 512 (two players: 16 bits a
        pixel, the bands 512 across) */
     if (ch)
@@ -2716,8 +2931,73 @@ static void hand_chars(unsigned word, unsigned count, int k)
         nshvc_ext_canvas_chars_ge(0, word, (int)count, s_chars_at, s_chars_stride, s_chars_per_col, s_chars_psm, k);
 }
 
+static void hand_job_target(int set, int bpp, int second)
+{
+    s_job.on = set >= 0;
+    s_job.set = set;
+    s_job.bpp = bpp;
+    s_job.second = second;
+}
+
+static void hand_job_show(int set, unsigned word, unsigned count, int per_column, int first_col, int bpp)
+{
+    s_job.show_set = set;
+    s_job.show_word = word;
+    s_job.show_count = count;
+    s_job.show_per = per_column;
+    s_job.show_first = first_col;
+    s_job.show_bpp = bpp;
+}
+
+/* the frame hook, the loan still lent: what was drawn saved, the set that stands put
+   in its place and handed */
+static void hand_job_frame(int show)
+{
+    size_t bytes = 0;
+    void *lent;
+    unsigned base;
+    int i, b = s_job.show_bpp <= 4 ? 2 : 4, psm = b == 2 ? GU_PSM_4444 : GU_PSM_8888;
+
+    if (!show && !s_job.dirty[0] && !s_job.dirty[1]) {
+        s_job.loaded[0] = s_job.loaded[1] = 0;
+        return;
+    }
+    lent = s_lend(&bytes);
+    if (!lent || (size_t)512 * 2 * JOB_ROWS * 4 > bytes)
+        return;
+    base = (unsigned)((uintptr_t)lent - (uintptr_t)sceGeEdramGetAddr());
+    s_c32 = 1;
+    s_stride = 512;
+    s_w = 512;
+    s_h = 2 * JOB_ROWS;
+    s_off = s_base = base;
+    s_dx = s_sx0 = s_sx1 = 0;
+    if (lent == s_chars_at)
+        s_chars_at = NULL;
+    if (lent == s_hand_at)
+        s_hand_at = NULL;
+    list_open();
+    sceGuTexSync();
+    for (i = 0; i < 2; i++)
+        if (s_job.dirty[i]) {
+            job_copy(i, s_job.psm[i], base, 1);
+            s_job.dirty[i] = 0;
+        }
+    if (show && !s_job.loaded[s_job.show_set])
+        job_copy(s_job.show_set, psm, base, 0);
+    sceGuTexSync();
+    list_close();
+    s_c32 = 0;
+    s_job.loaded[0] = s_job.loaded[1] = 0;
+    if (show)
+        nshvc_ext_canvas_chars_ge(0, s_job.show_word, (int)s_job.show_count,
+                                  (char *)lent + s_job.show_set * JOB_ROWS * 512 * b + s_job.show_first * 8 * b, 512,
+                                  s_job.show_per, psm, 1);
+}
+
 static const FwHandoff s_hand_ops = { hand_ready, NULL, hand_picture, hand_again, NULL, NULL,
-                                      hand_chars_cut, hand_chars, hand_chars_target };
+                                      hand_chars_cut, hand_chars, hand_chars_target,
+                                      hand_job_target, hand_job_show, hand_job_frame };
 #endif
 
 /* FW_SPANPLAY: the GE the program's own (no console runs, so libgu is
@@ -2744,6 +3024,11 @@ int gpu_ge_init(void)
             s_clut32[c][i] = clear ? 0 : 0xFF000000u | (uint32_t)i;
         }
     sceKernelDcacheWritebackRange(s_clut32, sizeof s_clut32);
+    /* (the GE's alone from here: no dirty line of the CPU's left to fall over what it writes) */
+    sceKernelDcacheWritebackInvalidateRange(s_hz, sizeof s_hz);
+#ifdef SRFX_NSHVC_HANDOFF
+    sceKernelDcacheWritebackInvalidateRange(s_job_ram, sizeof s_job_ram);
+#endif
     if (!getenv("FW_GECANVAS_OFF"))
         fw_canvas_gpu = &s_canvas_ops;
 #ifdef SRFX_NSHVC_HANDOFF

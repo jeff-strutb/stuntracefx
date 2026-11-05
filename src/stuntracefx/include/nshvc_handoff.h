@@ -113,7 +113,13 @@ typedef struct {
      chars_hand   the one standing handed for word, count and k: its fence the first
                   time, none after
      chars_target the target about to be drawn, t of targets (NULL: the shared picture
-                  takes any; the GE draws each where the console reads it) */
+                  takes any; the GE draws each where the console reads it)
+     job_target   a job's pictures as characters, the GE's (NULL: a job's bitplanes in
+                  the chip's RAM): its drawing goes to set (of 2; -1: the job is over),
+                  second the second player's half
+     job_show     set stands from now, at word, count characters, per_column a column,
+                  from its column first_col
+     job_frame    the frame hook: what was drawn kept, the set that stands handed (show) */
 typedef struct {
     int (*ready)(void);
     void (*clear)(int w, int h);
@@ -124,10 +130,16 @@ typedef struct {
     void (*chars_cut)(unsigned first, unsigned cols, unsigned rows, int side, int w, unsigned count);
     void (*chars_hand)(unsigned word, unsigned count, int k);
     void (*chars_target)(int t, int cols, int rows, int bpp, int targets, int k);
+    void (*job_target)(int set, int bpp, int second);
+    void (*job_show)(int set, unsigned word, unsigned count, int per_column, int first_col, int bpp);
+    void (*job_frame)(int show);
 } FwHandoff;
 extern const FwHandoff *fw_handoff;
 /* the bitmap pictures go as characters of the GPU's: SC_GPU, the contract there, no check's */
 int fw_chars_on(void);
+/* a job's pictures go as the GPU's characters, none in the chip's RAM: SC_GPU, the
+   contract there, no check's */
+int fw_job_chars(void);
 
 /* the ground being drawn is for the hand-off: on the GE, its colours in the GE's
    own order (0xttbbggrr), not read back as 0xFFrrggbb */

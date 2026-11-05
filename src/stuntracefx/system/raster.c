@@ -7,6 +7,7 @@
 #include "draw_list.h"
 #include "cpu_ops.h"
 #include "fullwindow.h"
+#include "remaster.h"
 
 /*
  * @routine 7E:A2FD WaitHBlank
@@ -369,6 +370,7 @@ void abi_RasterStage(void)
         put8(MDMAEN, 0x01);
         c = (uint8_t)(rd8(b | 0x0374) | 0x18);
         put8(GSU_SCMR, c);
+        rm_canvas_job_held(RM_CANVAS_RACE);
         op_rep(P_M | P_X);
         op_lda16(b | 0x0D7F);
         if (cpu.a) {
@@ -377,6 +379,7 @@ void abi_RasterStage(void)
             cpu.y = 0x0400;
             op_lda16_imm(0x0800);
             (abi_VramDmaFromGsuRam());
+            rm_canvas_job_word(fw_job_last(), 0x0400, 32, 16, 0, 8);   /* (a job's characters: the course screen's noise) */
             op_rep(P_M);
             op_lda16_imm(0xFFFF);
             wr16(0x000D81, 0xFFFF);
