@@ -183,6 +183,49 @@ object's place and radius, no point turned) go as flat Bezier patches the GE
 divides itself. A piece with a corner past the range is still dropped, very
 near the eye (Jeff's decision, 2026-11-05). Not yet checked on real hardware.
 
+## Not built: the bitmap pictures (items 3 and 4)
+
+Jeff's decisions, 2026-11-05: two players, the menus' 3D and Enhanced without
+widescreen keep their layouts; Original on the PSP is drawn by the GE and is not
+byte-identical there; the job-duration refit is written with placeholder
+coefficients and fitted in the final pass.
+
+One engine serves both: a picture in the bitmap's own coordinates times k, drawn
+by the GPU to a linear 8-bit target, handed as the characters it stands for.
+
+- **The target.** fullwindow.c's `tw`, `th`, `SXN`-`SYD` set to the bitmap's
+  shape times k, the view words the game's own times k (its FW_CHECK and
+  FW_KCHECK paths already draw in the bitmap's coordinates; `checking` writes
+  `tex` on the CPU and must make spans instead).
+- **Enhanced (k from `nshvc_ext_canvas_scale`).** `sc_frame_native` runs for
+  every 01:AB13 in a picture, its `fw_view_active` widened from the one-player
+  words to these. Layouts: 416 characters 8bpp (208 x 128, one player), 360 at
+  4bpp (two players, `rm_canvas_show_players`), 143 at 8bpp (menus,
+  `menu_flip`); all column-major (`gsu_pixel`). The linear target is cut into
+  characters of 8k x 8k texels for `nshvc_ext_canvas_chars` in `picture.c`, in
+  place of `rm_picture_chars`, until the hand-off. Two players walk twice, one
+  target each, between `RmTweenDrawTwoPlayers`' two views. A step's own picture
+  must be redrawn as `rm_race_frame` does for the full window, not taken from
+  the chip's bitmap (`race_flip`, `split` stages in video/dma.c). To find by
+  reading: which other programs plot into the menus' bitmap; each needs its
+  quads as the HUD's have (`fw_bitmap`, or a new `ScPrim`).
+- **Original (k 1).** The chip's C goes on making the draw list, exact. Every
+  PLOT leaves the bitmap: FxDrawList's entries as `FwPoly` (rows.comp and
+  fill.comp already walk them by the chip's slopes), the sprites' and blits'
+  loops as quads (their hooks exist, gated off in Original today), lines, the
+  screen clear. A new kernel packs the linear target into the chip's bitplanes;
+  the bytes read back into its RAM at STOP. RPIX per the census above. No chip
+  access added while off. The GE reads its target back the same way, not
+  byte-identical.
+- **Duration.** gsuprice.py's load model gains a form over what a job holds
+  (polygons, area, edges, flat or textured, other primitives), its table's
+  coefficients marked not fitted until the final pass collects the jobs.
+
+Also not built: FxHazeSample on the GPU (`effects_run` in scene_frame.c says so
+when reached). It reads the picture: a marker span breaks the run, a kernel
+samples each of its 256 shape entries (bank 8, $F92E + 4 x time) from the shared
+picture and plots them opaque; the GE draws 1-pixel sprites from its canvas.
+
 ## Baselines (2026-11-04, SRFX 464c9dca, race100.sfx frames 1401-1500)
 
 | Host, nativeshvc | Original: run + present = frame (ms) | Enhanced: run + present = frame (ms) |
