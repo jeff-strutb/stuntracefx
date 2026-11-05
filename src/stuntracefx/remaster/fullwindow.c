@@ -1091,7 +1091,7 @@ static void span_flush(void)
     if (gpu_pic && !gpu_open) {         /* the GPU's picture opened: cleared, or the last one's to draw over */
 #ifdef SRFX_NSHVC_HANDOFF
         /* (handed, no texels here to draw over: every setup of the race sets $01C4, so it is cleared) */
-        if (fw_canvas_gpu->open(tw, th, gpu_cleared || hand_pic() ? NULL : tex))
+        if (fw_canvas_gpu->open(tw, th, gpu_cleared || hand_pic() || (bp && fw_chars_on()) ? NULL : tex))
 #else
         if (fw_canvas_gpu->open(tw, th, gpu_cleared ? NULL : tex))
 #endif
@@ -5121,6 +5121,10 @@ static int bp_open(int cols, int rows, int bpp, int targets)
     bp_bpp = bpp;
     bp_targets = targets;
     bp_done = bp_open_now = 0;
+#ifdef SRFX_NSHVC_HANDOFF
+    if (fw_chars_on() && fw_handoff->chars_target)
+        fw_handoff->chars_target(0, cols, rows, bpp, targets, k);
+#endif
     nspans = npolys = nedges = 0;
     gpu_pic = fw_canvas_gpu != NULL;
     gpu_open = gpu_cleared = 0;
@@ -5136,7 +5140,11 @@ static void bp_finish(void)
     bp_open_now = 0;
     span_flush();
     if (gpu_pic && gpu_open)
+#ifdef SRFX_NSHVC_HANDOFF
+        fw_canvas_gpu->close(NULL, fw_chars_on() ? NULL : tex);
+#else
         fw_canvas_gpu->close(NULL, tex);
+#endif
     gpu_open = gpu_cleared = 0;
     rm_canvas_gpu_cut((unsigned)(bp_done * bp_cols * bp_rows), (unsigned)bp_cols, (unsigned)bp_rows, tex, tw,
                       bp_bpp < 8 ? 0x0Fu : 0xFFu);
@@ -5159,6 +5167,10 @@ int fw_bp_frame(int begin)
         return 1;
     }
     bp_finish();
+#ifdef SRFX_NSHVC_HANDOFF
+    if (fw_chars_on() && fw_handoff->chars_target)
+        fw_handoff->chars_target(bp_done, bp_cols, bp_rows, bp_bpp, bp_targets, (int)SXN);
+#endif
     sc_picture_begin();
     for (i = 0; i < 8; i++)
         bp_game[i] = (uint16_t)(s[view_at[i]] | s[view_at[i] + 1] << 8);

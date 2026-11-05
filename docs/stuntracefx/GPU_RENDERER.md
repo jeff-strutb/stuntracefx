@@ -180,12 +180,19 @@ Off by default, and SC_GPU stays off by default. `nshvc_handoff.h` holds the
 console's functions, as contract 2.22 on nativeshvc's branch `contract-2.22` gives
 them (itself never run). `SRFX_NSHVC_HANDOFF=1 sh build.sh` links only against that.
 
-- **Not handed off:** on the PSP, two players, the menus' 3D and no widescreen stay
-  on `nshvc_ext_canvas_chars` and their read-back. `nshvc_ext_canvas_chars_ge`'s grid
-  runs across rows, the game's characters down columns, and the loan has no room for
-  the cut; by-column waits on Jeff, and PSP two players (576 texels across at k 2,
-  512 the most) on his choice too. Original's job stays read back at STOP by design;
-  on the GE its bitplanes are packed on the CPU, and its noise and haze are made there.
+- **Not handed off:** Original's job stays read back at STOP by design; on the GE its
+  bitplanes are packed on the CPU, and its noise and haze are made there.
+- **The bitmap pictures, the GE (Jeff, 2026-11-05: by column; two players stay at the
+  game's resolution, k 2).** Each target is drawn where `nshvc_ext_canvas_chars_ge`
+  reads it, so nothing is cut or copied. One player, no widescreen (26 x 16) and the
+  menus (13 x 11): 8888, one band, drawn straight. Two players (two of 18 x 10): 4444,
+  stride 512, 32 columns a band: 512 x 320 at 16 bits, 327,680 of the loan's 557,056
+  bytes. The second target's columns 32-35 fall in the band below, so it goes in two
+  passes, the draw buffer at the band's start, the offset and scissor keeping each to
+  its columns: its geometry is sent twice. Jeff: if that costs too much, revisit. Its
+  columns 32-35 rest on the GE clipping at the scissor pixels left of the buffer's
+  column 0; not checked on the hardware. A menu's picture drawn before its flip is
+  handed at the hook, or the next present draws over it: its first in set 0's place.
 - **The bitmap pictures, Metal and Vulkan (Jeff, 2026-11-05: "Yes, build it").** Two
   players, the menus' 3D and no widescreen go as `nshvc_ext_canvas_chars_gpu`, the
   console placing them as ever. Each target's characters are copied by the GPU from

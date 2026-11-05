@@ -57,6 +57,7 @@ static int canvas_k, canvas_on, canvas_seen, canvas_owner, owner_now;
 static int canvas_gpu, gpu_ready, gpu_k;
 #ifdef SRFX_NSHVC_HANDOFF
 static int gpu_handed;                  /* the characters handed since the last frame hook */
+static int gpu_fresh;                   /* a picture drawn, none handed yet */
 #endif
 static unsigned gpu_count, gpu_bpp;
 
@@ -145,7 +146,13 @@ void rm_canvas_gpu_cut(unsigned first, unsigned cols, unsigned rows, const uint8
         }
 }
 
-void rm_canvas_gpu_ready(void) { gpu_ready = 1; }
+void rm_canvas_gpu_ready(void)
+{
+    gpu_ready = 1;
+#ifdef SRFX_NSHVC_HANDOFF
+    gpu_fresh = 1;
+#endif
+}
 
 #ifdef SRFX_NSHVC_HANDOFF
 /* Before nshvc_ext_screen: past the platform's canvas at the k it is on is fatal
@@ -180,6 +187,7 @@ static void gpu_hand(unsigned word)
     if (fw_chars_on()) {
         fw_handoff->chars_hand(word, gpu_count, gpu_k);
         gpu_handed = 1;
+        gpu_fresh = 0;
     } else
 #endif
     nshvc_ext_canvas_chars(0, word, (int)gpu_count, texels, gpu_k);
@@ -360,8 +368,15 @@ void rm_canvas_frame_end(void)
     canvas_seen = 0;
 #ifdef SRFX_NSHVC_HANDOFF
     /* handed every frame (contract 2.22): a picture that stands, again */
-    if (canvas_on && canvas_gpu && !gpu_handed && fw_chars_on())
+    if (canvas_on && canvas_gpu && !gpu_handed && fw_chars_on()) {
         fw_handoff->chars_hand(canvas_word, canvas_count, canvas_k);
+        gpu_fresh = 0;
+    } else if (!canvas_on && gpu_fresh && !gpu_handed && fw_chars_on()) {
+        /* a menu's first picture, its flip still to come: handed now, in set 0's place,
+           or the console's next present draws over it on the GE; the flip's word follows */
+        fw_handoff->chars_hand(0x0000, gpu_count, gpu_k);
+        gpu_fresh = 0;
+    }
     gpu_handed = 0;
 #endif
     if (!canvas_on)

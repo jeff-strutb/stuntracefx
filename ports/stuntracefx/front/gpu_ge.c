@@ -110,7 +110,19 @@ static void *lend_vram(size_t *bytes)
     return p;
 }
 static void *(*s_lend)(size_t *bytes) = lend_vram;
+
+/* A bitmap picture as the console's characters (contract 2.22): each target drawn
+   where nshvc_ext_canvas_chars_ge reads it, by column. s_ch the picture's shape, the
+   target t. s_dx the target's column 0 in the buffer, s_sx0 to s_sx1 the scissor's
+   columns, s_base the loan's offset (s_off a band's): a target past the band's edge
+   goes in two passes, each its part. */
+static struct {
+    int on, t, cols, rows, side, targets, bpp;
+} s_ch;
+static int s_dx, s_sx0, s_sx1;
+static unsigned s_base;
 #else
+#define s_dx 0
 static void *(*s_lend)(size_t *bytes) = nshvc_ext_ge_vram;
 #endif
 
@@ -176,8 +188,13 @@ static void report_once(void)
 static void list_state(int stride, int w, int h, unsigned off)
 {
     sceGuDrawBufferList(s_c32 ? GU_PSM_8888 : GU_PSM_4444, (void *)off, stride);
-    sceGuOffset(2048 - w / 2, 2048 - h / 2);
+    sceGuOffset(2048 - w / 2 - s_dx, 2048 - h / 2);
     sceGuViewport(2048, 2048, w, h);
+#ifdef SRFX_NSHVC_HANDOFF
+    if (s_sx1)
+        sceGuScissor(s_sx0, 0, s_sx1, h);
+    else
+#endif
     sceGuScissor(0, 0, w, h);
     sceGuEnable(GU_SCISSOR_TEST);
     sceGuDisable(GU_BLEND);
@@ -480,6 +497,8 @@ static void flats_out(void)
 
 static void flat(int32_t y, int32_t x0, int32_t x1, uint8_t c)
 {
+    x0 += s_dx;                         /* (through the transform: the offset not applied) */
+    x1 += s_dx;
     if (s_break == 1) {
         s_break = 2;
         return;
@@ -524,9 +543,9 @@ static void run(int32_t y, int32_t x, int32_t n, int u, int v, int step)
         s_wrap = 0;
     }
     t = (TV *)sceGuGetMemory(2 * sizeof(TV));
-    t[0].x = (int16_t)x;
+    t[0].x = (int16_t)(x + s_dx);
     t[0].y = (int16_t)y;
-    t[1].x = (int16_t)(x + n);
+    t[1].x = (int16_t)(x + s_dx + n);
     t[1].y = (int16_t)(y + 1);
     t[0].z = t[1].z = 0;
     if (step) {
@@ -1451,6 +1470,13 @@ static uint8_t haze_read(int32_t x, int32_t y, int w, int h)
         uint32_t v = s_cv[(size_t)y * s_stride + x];
         return (v >> 24) == 0xFF ? (uint8_t)v : 0;
     }
+#ifdef SRFX_NSHVC_HANDOFF
+    if (s_ch.on && fw_bp_active()) {    /* where the target's pixel is in its band (no play reaches a haze here;
+                                           in two passes the second reads what the first drew) */
+        int n = (s_stride < 512 ? s_stride : 512) / s_ch.side, ac = s_ch.t * s_ch.cols + x / s_ch.side;
+        return (uint8_t)s_t16[(size_t)((ac / n) * h + y) * s_stride + (ac % n) * s_ch.side + x % s_ch.side];
+    }
+#endif
     return (uint8_t)s_t16[(size_t)y * s_stride + x];
 }
 
@@ -2070,6 +2096,30 @@ static float s_plane_at[4];
    buffer whole while it is handed again (contract 2.22) */
 static void *s_hand_at;
 static int s_hand_stride, s_hand_w, s_hand_h;
+/* the characters standing, while nothing has drawn over them */
+static void *s_chars_at;
+static int s_chars_stride, s_chars_per_col, s_chars_psm;
+
+/* pass p of the target: the band's offset, its place, its columns; 0 past the last */
+static int ch_pass(int p)
+{
+    int n = (s_stride < 512 ? s_stride : 512) / s_ch.side, at = s_ch.t * s_ch.cols, col = at % n, band = at / n;
+    int first = n - col < s_ch.cols ? n - col : s_ch.cols, bytes = s_ch.bpp <= 4 ? 2 : 4;
+    if (p == 0) {
+        s_dx = col * s_ch.side;
+        s_sx0 = s_dx;
+        s_sx1 = s_dx + first * s_ch.side;
+        s_off = s_base + (unsigned)(band * s_h * s_stride * bytes);
+        return 1;
+    }
+    if (p > 1 || first >= s_ch.cols)
+        return 0;
+    s_dx = -first * s_ch.side;
+    s_sx0 = 0;
+    s_sx1 = (s_ch.cols - first) * s_ch.side;
+    s_off = s_base + (unsigned)((band + 1) * s_h * s_stride * bytes);
+    return 1;
+}
 #endif
 
 static int cv_open(int w, int h, const uint8_t *keep)
@@ -2077,12 +2127,30 @@ static int cv_open(int w, int h, const uint8_t *keep)
     size_t bytes = 0;
     void *lent = s_lend(&bytes);
     int stride = (w + 63) & ~63, x, y;
+    size_t need;
+#ifdef SRFX_NSHVC_HANDOFF
+    int ch = s_ch.on && fw_bp_active();
+    if (ch && s_ch.bpp <= 4)
+        stride = 512;                   /* (two players: 16 bits a pixel, the bands 512 across) */
+    need = (size_t)stride * (size_t)h * (ch && s_ch.bpp <= 4 ? 2 : 4);
+    if (ch) {
+        int n = (stride < 512 ? stride : 512) / s_ch.side, cols = s_ch.cols * s_ch.targets;
+        need *= (size_t)((cols + n - 1) / n);
+    }
+#else
+    need = (size_t)stride * (size_t)h * 4;
+#endif
     report_once();
-    if (!lent || (size_t)stride * (size_t)h * 4 > bytes || w > 512 || h > 512)
+    if (!lent || need > bytes || w > 512 || h > 512)
         return 0;
     s_cv_opens++;
     s_c32 = 1;
 #ifdef SRFX_NSHVC_HANDOFF
+    if (ch && s_ch.bpp <= 4)
+        s_c32 = 0;
+    if (lent == s_chars_at)             /* drawn over: the characters standing are gone */
+        s_chars_at = NULL;
+    s_dx = s_sx0 = s_sx1 = 0;
     s_plane = 0;
     s_zcut = 0;
     s_zk = 1.0f;
@@ -2097,6 +2165,28 @@ static int cv_open(int w, int h, const uint8_t *keep)
     s_off = (unsigned)((uintptr_t)lent - (uintptr_t)sceGeEdramGetAddr());
     s_cv = (volatile uint32_t *)((uintptr_t)lent | 0x40000000u);
     s_textured = -1;
+#ifdef SRFX_NSHVC_HANDOFF
+    s_t16 = (volatile uint16_t *)((uintptr_t)lent | 0x40000000u);
+    s_base = s_off;
+    if (ch) {                           /* cleared where it goes, each part */
+        int p;
+        for (p = 0; ch_pass(p); p++) {
+            CV32 *v;
+            list_open();
+            v = (CV32 *)sceGuGetMemory(2 * sizeof(CV32));
+            textured(0);
+            v[0].c = v[1].c = 0;
+            v[0].x = (int16_t)s_sx0;
+            v[0].y = 0;
+            v[1].x = (int16_t)s_sx1;
+            v[1].y = (int16_t)h;
+            v[0].z = v[1].z = v[0].pad = v[1].pad = 0;
+            sceGuDrawArray(GU_SPRITES, GU_COLOR_8888 | GU_VERTEX_16BIT | GU_TRANSFORM_2D, 2, 0, v);
+            list_close();
+        }
+        return 1;
+    }
+#endif
     if (keep) {                         /* the last picture's, to draw over */
         s_cv_kept++;
         for (y = 0; y < h; y++)
@@ -2193,7 +2283,7 @@ static void plane_write(void)
 }
 #endif
 
-static void cv_spans(const FwSpan *sp, size_t n)
+static void cv_spans_one(const FwSpan *sp, size_t n)
 {
     size_t i;
     stages_begin();
@@ -2218,6 +2308,21 @@ static void cv_spans(const FwSpan *sp, size_t n)
         s_cvt[3] += 0;
         x_sync += sceKernelGetSystemTimeWide() - t;
     }
+}
+
+/* the spans, in each part of the target (a bitmap picture past its band's edge: its
+   geometry sent twice) */
+static void cv_spans(const FwSpan *sp, size_t n)
+{
+#ifdef SRFX_NSHVC_HANDOFF
+    if (s_ch.on && fw_bp_active()) {
+        int p;
+        for (p = 0; ch_pass(p); p++)
+            cv_spans_one(sp, n);
+        return;
+    }
+#endif
+    cv_spans_one(sp, n);
 }
 
 static uint8_t cv_read(int x, int y)
@@ -2246,6 +2351,8 @@ static void cv_close(uint32_t *out32, uint8_t *out8)
     int x, y;
 #ifdef SRFX_NSHVC_HANDOFF
     s_zcut = 0;
+    s_dx = s_sx0 = s_sx1 = 0;
+    s_off = s_base;
     if (!out32 && !out8) {              /* handed: none of it read back */
         s_c32 = 0;
         return;
@@ -2549,8 +2656,40 @@ static void hand_again(int w, int h)
         nshvc_ext_canvas_screen_ge(0, s_hand_at, s_hand_stride, w, h, GU_PSM_8888, 1);
 }
 
-/* (no characters here yet: the bitmap pictures read back, the PSP's form's layout Jeff's call) */
-static const FwHandoff s_hand_ops = { hand_ready, NULL, hand_picture, hand_again, NULL, NULL, NULL, NULL };
+/* The bitmap pictures' characters: drawn where the console reads them, so nothing is
+   copied; the last target makes them the ones standing. */
+static void hand_chars_target(int t, int cols, int rows, int bpp, int targets, int k)
+{
+    s_ch.on = 1;
+    s_ch.t = t < targets ? t : targets - 1;
+    s_ch.cols = cols;
+    s_ch.rows = rows;
+    s_ch.side = 8 * k;
+    s_ch.targets = targets;
+    s_ch.bpp = bpp;
+}
+
+static void hand_chars_cut(unsigned first, unsigned cols, unsigned rows, int side, int w, unsigned count)
+{
+    size_t bytes = 0;
+    (void)side;
+    (void)w;
+    if (first + cols * rows != count)
+        return;
+    s_chars_at = s_lend(&bytes);
+    s_chars_stride = s_stride;
+    s_chars_per_col = (int)rows;
+    s_chars_psm = s_ch.bpp <= 4 ? GU_PSM_4444 : GU_PSM_8888;
+}
+
+static void hand_chars(unsigned word, unsigned count, int k)
+{
+    if (s_chars_at)
+        nshvc_ext_canvas_chars_ge(0, word, (int)count, s_chars_at, s_chars_stride, s_chars_per_col, s_chars_psm, k);
+}
+
+static const FwHandoff s_hand_ops = { hand_ready, NULL, hand_picture, hand_again, NULL, NULL,
+                                      hand_chars_cut, hand_chars, hand_chars_target };
 #endif
 
 /* FW_SPANPLAY: the GE the program's own (no console runs, so libgu is
