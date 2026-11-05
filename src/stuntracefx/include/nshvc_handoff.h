@@ -15,6 +15,7 @@
 #ifdef SRFX_NSHVC_HANDOFF
 
 /* ---- the console's (contract 2.22) ---- */
+#ifndef NSHVC_VERSION_MAJOR             /* (for the game's files; a front end's has them from nshvc.h first) */
 /* the host's device and queue lent: NSHVC_GPU_METAL, NSHVC_GPU_VULKAN, or 0 with
    none. Metal: device id<MTLDevice>, queue id<MTLCommandQueue>. Vulkan: VkDevice,
    VkQueue, VkInstance, VkPhysicalDevice, the queue's family. Asked from the first
@@ -72,6 +73,7 @@ int nshvc_ext_overlay_gpu(NshvcGpuHandle handle, int w, int h, NshvcGpuFence fen
 void *nshvc_ext_ge_vram2(size_t *bytes, void **depth, int *depth_stride);
 
 void nshvc_fatal(const char *fmt, ...);
+#endif
 
 /* ---- the game's, between fullwindow.c and the front end's GPU ---- */
 /* the pause panel's shapes in order, each blended as pause.c's blend does
