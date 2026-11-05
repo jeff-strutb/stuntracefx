@@ -33,6 +33,7 @@ int gpu_ge_init(void);
 void gpu_ge_standalone(void);
 #endif
 #include "rm_options.h"
+#include "nshvc_handoff.h"
 int fw_span_play(const char *path);     /* fullwindow.h's: FW_SPANPLAY and FW_WATERPLAY, checks */
 int fw_water_play(const char *path);
 
@@ -174,10 +175,37 @@ static int on_pointer(float x, float y, int buttons)
 }
 #endif
 
+#ifdef SRFX_NSHVC_HANDOFF
+/* The cartridge's GPU opened at the first frame hook, not before the console starts:
+   its device is the console's, and the renderer opens after the power on (the PSP's
+   opens below, its GE needs nothing of the kind) */
+static void gpu_start(void)
+{
+    static int done;
+    int ok = 1;
+    if (done)
+        return;
+    done = 1;
+#if FW_GPU_METAL
+    ok = getenv("FW_CPUFILL") || gpu_metal_init();
+#elif FW_GPU_VULKAN
+    ok = getenv("FW_CPUFILL") || gpu_vulkan_init();
+#elif !FW_GPU_GE
+    ok = 0;
+#endif
+    fw_gpu_settled = 1;
+    if (!ok)
+        fw_cpu_fallback("the picture, no GPU open,");
+}
+#endif
+
 static void on_frame(void)
 {
     static int made, badge_made;
     TouchView v;
+#ifdef SRFX_NSHVC_HANDOFF
+    gpu_start();
+#endif
 #if FRONT_PAUSE
     pause_frame();
     if (pause_active()) {
@@ -287,7 +315,16 @@ NSHVC_MAIN(argc, argv)
 #else
     nshvc_set_write_hook(pacing_write);
 #endif
+#if defined(SRFX_NSHVC_HANDOFF) && !FW_GPU_GE
+    /* (gpu_start; here only for the checks that start no console) */
+    if ((getenv("FW_SPANPLAY") || getenv("FW_WATERPLAY")) && !getenv("FW_CPUFILL")) {
 #if FW_GPU_METAL
+        gpu_metal_init();
+#elif FW_GPU_VULKAN
+        gpu_vulkan_init();
+#endif
+    }
+#elif FW_GPU_METAL
     if (!getenv("FW_CPUFILL"))          /* FW_CPUFILL=1 (a check): the CPU's fill, to compare */
         gpu_metal_init();               /* the full window's picture on the cartridge's GPU */
 #elif FW_GPU_VULKAN

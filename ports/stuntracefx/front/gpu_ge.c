@@ -94,7 +94,25 @@ static void *own_vram(size_t *bytes)
     *bytes = 2u * 1024u * 1024u;
     return sceGeEdramGetAddr();
 }
+#ifdef SRFX_NSHVC_HANDOFF
+/* the loan with its depth buffer (contract 2.22): s_zb its address, s_zbw its
+   stride, NULL with none (paused, the backdrop's there) */
+static void *s_zb;
+static int s_zbw;
+static void *lend_vram(size_t *bytes)
+{
+    void *p;
+    s_zb = NULL;
+    s_zbw = 0;
+    p = nshvc_ext_ge_vram2(bytes, &s_zb, &s_zbw);
+    if (!p)
+        s_zb = NULL;
+    return p;
+}
+static void *(*s_lend)(size_t *bytes) = lend_vram;
+#else
 static void *(*s_lend)(size_t *bytes) = nshvc_ext_ge_vram;
+#endif
 
 typedef struct {
     float u, v;
@@ -202,10 +220,41 @@ static void list_state(int stride, int w, int h, unsigned off)
         sceGuTexScale(1.0f, 1.0f);
         sceGuTexOffset(0.0f, 0.0f);
     }
+#ifdef SRFX_NSHVC_HANDOFF
+    if (s_c32 && s_zb) {
+        /* the water's cut (plane_write): by the GE's registers ZBP and ZBW, not
+           sceGuDepthBuffer (libgu's kept state, the loan's contract); the host puts
+           the GE's state back. Tested per primitive, written only by plane_write. */
+        unsigned at = (unsigned)((uintptr_t)s_zb - (uintptr_t)sceGeEdramGetAddr());
+        sceGuSendCommandi(158, (int)(at & 0xFFFFFFu));
+        sceGuSendCommandi(159, (int)((at >> 24) << 16 | (unsigned)s_zbw));
+        sceGuDepthMask(GU_TRUE);
+        sceGuDepthFunc(GU_GEQUAL);
+    }
+#endif
     s_clut_now = s_cmode_now = -1;
     s_tex_now = NULL;
     s_wrap = 0;
 }
+
+#ifdef SRFX_NSHVC_HANDOFF
+/* The depth test on or off, per primitive (the list opens with it off): on for
+   what the water cuts (s_zcut, the plane written). */
+static int s_zt, s_zcut;
+static void ztest(int on)
+{
+    if (on == s_zt)
+        return;
+    if (on)
+        sceGuEnable(GU_DEPTH_TEST);
+    else
+        sceGuDisable(GU_DEPTH_TEST);
+    s_zt = on;
+}
+#else
+#define ztest(on) ((void)0)
+#define s_zcut 0
+#endif
 
 static int s_stride, s_w, s_h;
 static unsigned s_off;
@@ -223,6 +272,9 @@ static void list_open(void)
     s_slot_now = -1;
     s_used = 1024;
     s_textured = -1;
+#ifdef SRFX_NSHVC_HANDOFF
+    s_zt = 0;
+#endif
 }
 
 static void list_close(void)
@@ -413,6 +465,7 @@ static void flats_out(void)
         return;
     s_fbn = 0;
     textured(0);
+    ztest(0);
     if (s_c32) {
         m = sceGuGetMemory((unsigned)(2 * n) * sizeof(CV32));
         memcpy(m, s_fb32, (size_t)(2 * n) * sizeof(CV32));
@@ -465,6 +518,7 @@ static void run(int32_t y, int32_t x, int32_t n, int u, int v, int step)
     TV *t;
     room();
     textured(1);
+    ztest(0);
     if (s_wrap) {
         sceGuTexWrap(GU_CLAMP, GU_CLAMP);
         s_wrap = 0;
@@ -670,6 +724,7 @@ static int poly_ge(const FwPoly *p, int w, int h)
         return 1;
     room();
     s_used += (size_t)n * sizeof(PTV);
+    ztest(0);
     if (p->kind) {
         PTV *t;
         textured(1);
@@ -733,6 +788,40 @@ static int poly_ge(const FwPoly *p, int w, int h)
 static long s_faces;
 #define PATCH_DIV 16                    /* face_patches: 2 x 16 x 16 triangles a triangle */
 
+/* The view's projection, w = z. The GE's depth comes out 65536 k / z - 1 (z' = z -
+   2 k over w = z; the range 65535, 0 maps ndc -1 to 65535, 1 to -1): at k 1 the
+   pixel's 1 / z in 16 bits, what the water's plane is written in. k the factor to
+   the true 1 / depth: 1, the inverse of a far object's halvings, a sprite's own. In
+   front of z = k. */
+static float s_zk = 1.0f;
+
+static void model_projection(void)
+{
+    ScePspFMatrix4 pr;
+    float cx, cy, w = (float)s_w, h = (float)s_h;
+    fw_view_centre(&cx, &cy);
+    memset(&pr, 0, sizeof pr);
+    pr.x.x = 2.0f * (float)fw_focal_x() / w;
+    pr.y.y = -2.0f * (float)fw_focal_y() / h;
+    pr.z.x = 2.0f * cx / w - 1.0f;
+    pr.z.y = 1.0f - 2.0f * cy / h;
+    pr.z.z = 1.0f;
+    pr.z.w = 1.0f;                      /* w = z */
+    pr.w.z = -2.0f * s_zk;              /* z - 2 >= -z: in front of z = 1 */
+    sceGuSetMatrix(GU_PROJECTION, &pr);
+}
+
+#ifdef SRFX_NSHVC_HANDOFF
+static void model_depth(float k)
+{
+    if (k == s_zk)
+        return;
+    s_zk = k;
+    if (s_model)
+        model_projection();
+}
+#endif
+
 static void model_mode(int on)
 {
     static ScePspFMatrix4 pass = { { 1, 0, 0, 0 }, { 0, 1, 0, 0 }, { 0, 0, 0, 1 }, { 0, 0, 0, 0 } };
@@ -740,18 +829,7 @@ static void model_mode(int on)
     if (on == s_model)
         return;
     if (on) {
-        ScePspFMatrix4 pr;
-        float cx, cy, w = (float)s_w, h = (float)s_h;
-        fw_view_centre(&cx, &cy);
-        memset(&pr, 0, sizeof pr);
-        pr.x.x = 2.0f * (float)fw_focal_x() / w;
-        pr.y.y = -2.0f * (float)fw_focal_y() / h;
-        pr.z.x = 2.0f * cx / w - 1.0f;
-        pr.z.y = 1.0f - 2.0f * cy / h;
-        pr.z.z = 1.0f;
-        pr.z.w = 1.0f;                  /* w = z */
-        pr.w.z = -2.0f;                 /* z - 2 >= -z: in front of z = 1 */
-        sceGuSetMatrix(GU_PROJECTION, &pr);
+        model_projection();
         sceGuEnable(GU_CLIP_PLANES);
         sceGuPatchDivide(PATCH_DIV, PATCH_DIV);
         sceGuPatchPrim(GU_TRIANGLE_STRIP);
@@ -910,7 +988,14 @@ static void face_ge(const FwSpan *p)
         else
             slot_matrix(&sl[slot]);
         s_slot_now = (int)slot;
+#ifdef SRFX_NSHVC_HANDOFF
+        if (s_zcut) {                   /* the true depth: a far object's halvings undone */
+            float zs = slot >= ns ? fs[slot - ns].zs : (float)(1u << sl[slot].pad[1]);
+            model_depth(zs > 0 ? 1.0f / zs : 1.0f);
+        }
+#endif
     }
+    ztest(s_zcut && n > 2);             /* (a line has no depth there: not cut, the reference's) */
     if (n > 2 && (slot >= ns ? sc_fslot_near(slot - ns) : sl[slot].pad[0])) {
         PatchCorner pc[8];
         if (f->textured) {
@@ -1037,6 +1122,18 @@ static double quad_bias(int64_t a, int64_t d, int32_t n, int64_t den)
     return (double)least / (2.0 * (double)den);
 }
 
+#ifdef SRFX_NSHVC_HANDOFF
+/* z over w = 1 for the plane a + b x + c y of 1 / depth (x, y pixel numbers, here
+   screen points, a pixel's centre at number + 0.5): the GE's depth 65536 q - 1, as
+   model_projection's. q held to 0 and 1, past which the test has its answer. */
+static float plane_z(float a, float b, float c, float X, float Y)
+{
+    float q = a + b * (X - 0.5f) + c * (Y - 0.5f);
+    q = q < 0.0f ? 0.0f : q > 1.0f ? 1.0f : q;
+    return 1.0f - 2.0f * q;
+}
+#endif
+
 /* a line quad (the weather's streaks): the GE's line from its first
    pixel's centre to its last's */
 static void line_ge(const FwSpan *p, int w, int h)
@@ -1049,6 +1146,7 @@ static void line_ge(const FwSpan *p, int w, int h)
     s_used += 2 * sizeof(PCV32) + 256;
     model_mode(0);
     textured(0);
+    ztest(0);
     if (s_c32) {
         PCV32 *c = (PCV32 *)sceGuGetMemory(2 * sizeof(PCV32));
         c[0].c = c[1].c = 0xFF000000u | p->colour;
@@ -1088,7 +1186,8 @@ static void quad_ge(const FwSpan *p, int w, int h)
     a[1].x = a[2].x = X1;
     a[0].y = a[1].y = Y0;
     a[2].y = a[3].y = Y1;
-    if (fw_water[3] != 0 && (p->za != 0 || p->zx != 0 || p->zy != 0)) {
+    int cut = s_zcut && (p->za != 0 || p->zx != 0 || p->zy != 0);
+    if (!cut && fw_water[3] != 0 && (p->za != 0 || p->zx != 0 || p->zy != 0)) {
         /* kept where the water's 1 / depth is not above the quad's at the
            pixel's centre (x - 0.5, y - 0.5 in pixel numbers) */
         float ca = fw_water[1] - p->zx, cb = fw_water[2] - p->zy, cc = fw_water[0] - p->za;
@@ -1120,6 +1219,16 @@ static void quad_ge(const FwSpan *p, int w, int h)
     room();
     s_used += (size_t)n * sizeof(PTV) + 256;
     model_mode(0);
+    ztest(cut);
+#ifdef SRFX_NSHVC_HANDOFF
+    if (cut) {                          /* its 1 / depth as z, over w = 1: plane_write's scale */
+        static ScePspFMatrix4 ident = { { 1, 0, 0, 0 }, { 0, 1, 0, 0 }, { 0, 0, 1, 0 }, { 0, 0, 0, 1 } };
+        sceGuSetMatrix(GU_PROJECTION, &ident);
+    }
+#define QUAD_Z(i) (cut ? plane_z(p->za, p->zx, p->zy, a[i].x, a[i].y) : 1.0f)
+#else
+#define QUAD_Z(i) 1.0f
+#endif
     if (s) {
         PTV *t = (PTV *)sceGuGetMemory((unsigned)n * sizeof(PTV));
         float tws = (float)pow2_at_least(s->tw), ths = (float)pow2_at_least(s->th);
@@ -1144,7 +1253,7 @@ static void quad_ge(const FwSpan *p, int w, int h)
             t[i].v = (float)(cv + bv) / ths;
             t[i].x = 2.0f * a[i].x / (float)w - 1.0f;
             t[i].y = 1.0f - 2.0f * a[i].y / (float)h;
-            t[i].z = 1.0f;
+            t[i].z = QUAD_Z(i);
         }
         sceGuDrawArray(GU_TRIANGLE_FAN, GU_TEXTURE_32BITF | GU_VERTEX_32BITF | GU_TRANSFORM_3D, n, 0, t);
     } else if (s_c32) {
@@ -1154,7 +1263,7 @@ static void quad_ge(const FwSpan *p, int w, int h)
             c[i].c = 0xFF000000u | p->colour;
             c[i].x = 2.0f * a[i].x / (float)w - 1.0f;
             c[i].y = 1.0f - 2.0f * a[i].y / (float)h;
-            c[i].z = 1.0f;
+            c[i].z = QUAD_Z(i);
         }
         sceGuDrawArray(GU_TRIANGLE_FAN, GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D, n, 0, c);
     } else {
@@ -1169,6 +1278,12 @@ static void quad_ge(const FwSpan *p, int w, int h)
         }
         sceGuDrawArray(GU_TRIANGLE_FAN, GU_COLOR_4444 | GU_VERTEX_32BITF | GU_TRANSFORM_3D, n, 0, c);
     }
+#ifdef SRFX_NSHVC_HANDOFF
+    if (cut) {                          /* model_mode(0)'s again */
+        static ScePspFMatrix4 pass = { { 1, 0, 0, 0 }, { 0, 1, 0, 0 }, { 0, 0, 0, 1 }, { 0, 0, 0, 0 } };
+        sceGuSetMatrix(GU_PROJECTION, &pass);
+    }
+#endif
     s_quads++;
 }
 
@@ -1197,6 +1312,7 @@ static void prim_flat(int prim, const float (*q)[3], int n, uint8_t colour)
     room();
     prim_model();
     textured(0);
+    ztest(0);                           /* (dots and streaks: not cut, as prims.comp leaves them) */
     if (s_c32) {
         PCV32 *v = (PCV32 *)sceGuGetMemory((unsigned)n * sizeof(PCV32));
         for (i = 0; i < n; i++) {
@@ -1255,6 +1371,11 @@ static void prim_sprite(const ScPrim *p)
     s_used += 4 * sizeof(PTV) + 256;
     room();
     prim_model();
+#ifdef SRFX_NSHVC_HANDOFF
+    if (s_zcut && p->za > 0)            /* the sprite's one depth: its 1 / depth at z */
+        model_depth(p->za * z);
+    ztest(s_zcut && p->za > 0);
+#endif
     textured(1);
     use_texture(st);
     use_rules(p->por, p->hi);
@@ -1451,6 +1572,8 @@ static void span(const FwSpan *p, int w, int h)
             return;
         }
         s_polys_cpu++;
+        if (!s_rows)
+            FW_CPU_FALLBACK("a polygon's rows");
         for (row = p->y; row < p->x0; row++)
             if (fw_poly_row(&fw_polys[p->x1], fw_edges, row, w, &r))
                 span(&r, w, h);
@@ -1940,6 +2063,11 @@ static void water_fill(const uint8_t *in, uint32_t *out, const FwWaterJob *j, co
    512 stride: the loan's 557,056 bytes) from its first span to its
    hand-off: the spans drawn into it as they come, the ground surface put
    in after where nothing is drawn, read out once. s_cv the canvas, uncached. */
+#ifdef SRFX_NSHVC_HANDOFF
+static int s_plane;                     /* the water's plane stands in the depth buffer: as s_plane_at */
+static float s_plane_at[4];
+#endif
+
 static int cv_open(int w, int h, const uint8_t *keep)
 {
     size_t bytes = 0;
@@ -1950,6 +2078,13 @@ static int cv_open(int w, int h, const uint8_t *keep)
         return 0;
     s_cv_opens++;
     s_c32 = 1;
+#ifdef SRFX_NSHVC_HANDOFF
+    s_plane = 0;
+    s_zcut = 0;
+    s_zk = 1.0f;
+    if (s_zb && (w > s_zbw || h > 272))
+        s_zb = NULL;                    /* (past the loan's: none in the game, the screen's own size) */
+#endif
     s_stride = stride;
     s_w = w;
     s_h = h;
@@ -1981,6 +2116,77 @@ static int cv_open(int w, int h, const uint8_t *keep)
     return 1;
 }
 
+#ifdef SRFX_NSHVC_HANDOFF
+/* The water's plane into the depth buffer, before what it cuts: the buffer 0 (the
+   water behind the eye: nothing is cut), then the screen's rectangle where its 1 /
+   depth q is above 0 as that plane, where past 1 at 1. No colour is written. The
+   list's own depth test then passes a pixel with its 1 / depth at or above the
+   plane's: the reference's !(z < w), in 16 bits of 1 / z (a unit 1 / 65536 of it:
+   16 of view depth at 1024, 256 at 4096). */
+static void plane_fan(const PV *a, int n, int held)
+{
+    PCV32 *c;
+    int i;
+    if (n < 3)
+        return;
+    c = (PCV32 *)sceGuGetMemory((unsigned)n * sizeof(PCV32));
+    for (i = 0; i < n; i++) {
+        c[i].c = 0;
+        c[i].x = 2.0f * a[i].x / (float)s_w - 1.0f;
+        c[i].y = 1.0f - 2.0f * a[i].y / (float)s_h;
+        c[i].z = held ? -1.0f : plane_z(fw_water[0], fw_water[1], fw_water[2], a[i].x, a[i].y);
+    }
+    sceGuDrawArray(GU_TRIANGLE_FAN, GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D, n, 0, c);
+}
+
+static void plane_write(void)
+{
+    static ScePspFMatrix4 ident = { { 1, 0, 0, 0 }, { 0, 1, 0, 0 }, { 0, 0, 1, 0 }, { 0, 0, 0, 1 } };
+    static ScePspFMatrix4 pass = { { 1, 0, 0, 0 }, { 0, 1, 0, 0 }, { 0, 0, 0, 1 }, { 0, 0, 0, 0 } };
+    PV r[4], up[8], low[8], high[8];
+    float wb = fw_water[1], wc = fw_water[2], wa = fw_water[0] - 0.5f * wb - 0.5f * wc;
+    int nu, nl, nh;
+    CV32 *v;
+
+    flats_out();
+    model_mode(0);
+    textured(0);
+    sceGuDisable(GU_STENCIL_TEST);
+    sceGuPixelMask(0xFFFFFFFFu);        /* no colour, no alpha */
+    sceGuEnable(GU_DEPTH_TEST);
+    sceGuDepthMask(GU_FALSE);
+    sceGuDepthFunc(GU_ALWAYS);
+    v = (CV32 *)sceGuGetMemory(2 * sizeof(CV32));   /* through the transform, z the depth itself */
+    v[0].c = v[1].c = 0;
+    v[0].x = v[0].y = 0;
+    v[1].x = (int16_t)s_w;
+    v[1].y = (int16_t)s_h;
+    v[0].z = v[1].z = v[0].pad = v[1].pad = 0;
+    sceGuDrawArray(GU_SPRITES, GU_COLOR_8888 | GU_VERTEX_16BIT | GU_TRANSFORM_2D, 2, 0, v);
+    memset(r, 0, sizeof r);
+    r[0].x = r[3].x = 0;
+    r[1].x = r[2].x = (float)s_w;
+    r[0].y = r[1].y = 0;
+    r[2].y = r[3].y = (float)s_h;
+    nu = half_clip(r, 4, up, -wb, -wc, -wa);                /* q >= 0 */
+    nl = half_clip(up, nu, low, wb, wc, wa - 1.0f);         /* of those, q <= 1 */
+    nh = half_clip(up, nu, high, -wb, -wc, 1.0f - wa);      /* of those, q >= 1 */
+    sceGuSetMatrix(GU_PROJECTION, &ident);
+    plane_fan(low, nl, 0);
+    plane_fan(high, nh, 1);
+    sceGuSetMatrix(GU_PROJECTION, &pass);
+    sceGuDisable(GU_DEPTH_TEST);
+    s_zt = 0;
+    sceGuDepthMask(GU_TRUE);
+    sceGuDepthFunc(GU_GEQUAL);
+    sceGuPixelMask(0);
+    sceGuEnable(GU_STENCIL_TEST);
+    s_used += 4 * 8 * sizeof(PCV32) + 1024;
+    memcpy(s_plane_at, fw_water, sizeof s_plane_at);
+    s_plane = 1;
+}
+#endif
+
 static void cv_spans(const FwSpan *sp, size_t n)
 {
     size_t i;
@@ -1989,6 +2195,12 @@ static void cv_spans(const FwSpan *sp, size_t n)
     s_break = getenv("FW_GEBREAK") ? 1 : 0;
     s_rows = getenv("FW_GEROWS") != NULL;
     list_open();
+#ifdef SRFX_NSHVC_HANDOFF
+    /* each flush by the water as it stands then, the reference's fill's */
+    s_zcut = s_zb && fw_water[3] != 0;
+    if (s_zcut && (!s_plane || memcmp(s_plane_at, fw_water, sizeof s_plane_at)))
+        plane_write();
+#endif
     for (i = 0; i < n; i++) {
         x_kind[sp[i].textured > 3 ? 0 : sp[i].textured]++;
         span(&sp[i], s_w, s_h);
@@ -2016,12 +2228,23 @@ static uint32_t cv_word(uint32_t v)
         return v & 0xFFu;
     if (a == 0x01)
         return rgb == 1 ? 1 : 0xFF000000u | rgb;
+#ifdef SRFX_NSHVC_HANDOFF
+    if (a == 0x02)                      /* (gflat's mark) */
+        return 1;
+#endif
     return 0;
 }
 
 static void cv_close(uint32_t *out32, uint8_t *out8)
 {
     int x, y;
+#ifdef SRFX_NSHVC_HANDOFF
+    s_zcut = 0;
+    if (!out32 && !out8) {              /* handed: none of it read back */
+        s_c32 = 0;
+        return;
+    }
+#endif
     for (y = 0; y < s_h; y++) {
         volatile const uint32_t *r = s_cv + (size_t)y * s_stride;
         for (x = 0; x < s_w; x++) {
@@ -2059,6 +2282,16 @@ static void gflat(int32_t y, int32_t x0, int32_t x1, uint32_t c)
     v[1].x = (int16_t)(x1 + 1);
     v[1].y = (int16_t)(y + 1);
     v[0].z = v[1].z = v[0].pad = v[1].pad = 0;
+#ifdef SRFX_NSHVC_HANDOFF
+    if (c == 1) {                       /* colour 1, an index, marked apart from a colour (hand_picture): alpha 2, where it is 0 */
+        sceGuStencilFunc(GU_EQUAL, 2, 0xFD);
+        sceGuStencilOp(GU_KEEP, GU_KEEP, GU_REPLACE);
+        sceGuDrawArray(GU_SPRITES, GU_COLOR_8888 | GU_VERTEX_16BIT | GU_TRANSFORM_2D, 2, 0, v);
+        sceGuStencilFunc(GU_EQUAL, 0, 0xFF);
+        sceGuStencilOp(GU_KEEP, GU_KEEP, GU_INCR);
+        return;
+    }
+#endif
     sceGuDrawArray(GU_SPRITES, GU_COLOR_8888 | GU_VERTEX_16BIT | GU_TRANSFORM_2D, 2, 0, v);
 }
 
@@ -2128,6 +2361,14 @@ static int sign_range(float a, float b, float sgn, float eps, int32_t lo, int32_
     return f <= t;
 }
 
+/* a ground colour as the target holds it: read back, 0xFFrrggbb's low bytes; handed
+   (contract 2.22), the GE's own order, 0xttbbggrr; colour 1 left, an index */
+#ifdef SRFX_NSHVC_HANDOFF
+static uint32_t ground_word(uint32_t c) { return fw_ground_handed && c != 1 ? abgr(c) : c; }
+#else
+#define ground_word(c) (c)
+#endif
+
 static void cv_ground(const FwWaterJob *j, const uint32_t *gap)
 {
     const float *e = j->e;
@@ -2159,7 +2400,7 @@ static void cv_ground(const FwWaterJob *j, const uint32_t *gap)
     sceGuDisable(GU_ALPHA_TEST);
     s_textured = 1;
     for (y = 0; y < h; y++) {
-        uint32_t g = gap[y], r0 = j->land ? gap[h + y] : 0, none = j->under ? g : 0;
+        uint32_t g = ground_word(gap[y]), r0 = j->land ? ground_word(gap[h + y]) : 0, none = j->under ? g : 0;
         float vy = ((float)y + 0.5f - j->oy) / j->fy, A = e[4] * (0.5f - j->ox) / j->fx + e[5] * vy + e[6],
               B = e[4] / j->fx;
         int32_t a, b, a2, b2, c0, c1, d0, d1;
@@ -2214,7 +2455,7 @@ static void cv_ground(const FwWaterJob *j, const uint32_t *gap)
                 }
                 end = l;
             }
-            grun(j, y, a2, end, g, j->ripple[lo]);
+            grun(j, y, a2, end, g, ground_word(j->ripple[lo]));
             a2 = end + 1;
         }
     }
@@ -2245,6 +2486,55 @@ static void t_ground(const FwWaterJob *j, const uint32_t *gap) { SceInt64 t = sc
 static void t_close(uint32_t *o32, uint8_t *o8) { SceInt64 t = sceKernelGetSystemTimeWide(); cv_close(o32, o8); s_cvt[3] += sceKernelGetSystemTimeWide() - t; }
 static const FwCanvasGpu s_canvas_ops = { t_open, t_spans, cv_read, t_ground, t_close };
 
+#ifdef SRFX_NSHVC_HANDOFF
+/* ---- the hand-off (nshvc_handoff.h, contract 2.22) ----
+   The canvas's own coding is alpha the stencil's: an index 0xFF, the ground's colour
+   1, colour 1 2, nothing 0. The console takes the words as the GE drew them, the
+   stencil not 0 for a colour, 0 for an index and clear: the GE zeroes the indices'
+   and colour 1's in place, their colours untouched. */
+static void alpha_zero(int ref)
+{
+    CV32 *v = (CV32 *)sceGuGetMemory(2 * sizeof(CV32));
+    sceGuStencilFunc(GU_EQUAL, ref, 0xFF);
+    sceGuStencilOp(GU_KEEP, GU_KEEP, GU_ZERO);
+    v[0].c = v[1].c = 0;
+    v[0].x = v[0].y = 0;
+    v[1].x = (int16_t)s_w;
+    v[1].y = (int16_t)s_h;
+    v[0].z = v[1].z = v[0].pad = v[1].pad = 0;
+    sceGuDrawArray(GU_SPRITES, GU_COLOR_8888 | GU_VERTEX_16BIT | GU_TRANSFORM_2D, 2, 0, v);
+}
+
+static int hand_ready(void)
+{
+    size_t bytes = 0;
+    return s_lend == lend_vram && s_lend(&bytes) != NULL;
+}
+
+static int hand_picture(int w, int h, int ground)
+{
+    size_t bytes = 0;
+    void *lent = s_lend(&bytes);
+    if (!lent || w != s_w || h != s_h)
+        return 0;
+    s_c32 = 1;
+    list_open();
+    textured(0);
+    model_mode(0);
+    sceGuPixelMask(0x00FFFFFFu);        /* alpha alone */
+    alpha_zero(0xFF);
+    if (ground)
+        alpha_zero(2);
+    sceGuPixelMask(0);
+    list_close();
+    s_c32 = 0;
+    nshvc_ext_canvas_screen_ge(0, lent, s_stride, w, h, GU_PSM_8888, 1);
+    return 1;
+}
+
+static const FwHandoff s_hand_ops = { hand_ready, NULL, hand_picture, NULL, NULL, NULL };
+#endif
+
 /* FW_SPANPLAY: the GE the program's own (no console runs, so libgu is
    started here and all of VRAM is the fill's) */
 void gpu_ge_standalone(void)
@@ -2271,6 +2561,10 @@ int gpu_ge_init(void)
     sceKernelDcacheWritebackRange(s_clut32, sizeof s_clut32);
     if (!getenv("FW_GECANVAS_OFF"))
         fw_canvas_gpu = &s_canvas_ops;
+#ifdef SRFX_NSHVC_HANDOFF
+    if (fw_canvas_gpu)
+        fw_handoff = &s_hand_ops;
+#endif
     fw_span_filler = fill;
     fw_water_filler = water_fill;
     return 1;

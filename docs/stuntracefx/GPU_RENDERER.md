@@ -171,7 +171,49 @@ Two causes of Aqua Tunnel's errors were found by reading the water path, fixed
 on Metal and Vulkan, and not yet measured: the shaders compared a far object's
 halved depth (the reference's `depth_plane` undoes the halvings, so far objects
 missed the cut), and they cut lines, which the reference never does. The GE
-still ignores the cut on faces, sprites and particles until the loan above.
+ignores the cut on faces and sprites until the loan above; written for it under
+the switch below, not run.
+
+## The hand-off, the game's side (SRFX_NSHVC_HANDOFF: written, not linked, not run)
+
+Off by default, and SC_GPU stays off by default. `nshvc_handoff.h` holds the
+console's functions, as contract 2.22 on nativeshvc's branch `contract-2.22` gives
+them (itself never run). `SRFX_NSHVC_HANDOFF=1 sh build.sh` links only against that.
+
+- **Not handed off:** two players, the menus' 3D and no widescreen stay on
+  `nshvc_ext_canvas_chars` and their read-back, until Jeff decides the character
+  form. Original's job stays read back at STOP by design; on the GE its bitplanes are
+  packed on the CPU, and its noise and haze are made there.
+- **Metal, Vulkan.** The device and queue are the console's, so the GPU opens at the
+  first frame hook (the renderer opens after the power on); a job before that hook,
+  if any, is the chip's. The picture stays in its GPU buffers, cleared by the GPU and
+  never touched by the CPU; a kernel (`widen`) makes the indices 32 bits where there
+  is no ground, the GPU copies that into one of three images, and it is handed with
+  a fence. A frame with no new picture hands the last again with no fence. Vulkan's
+  fill needs whole words, so its texels' width is rounded up to 4 under SC_GPU.
+- **The GE.** The picture stands in the loan. Its alpha is the stencil's mark while
+  drawn (an index 0xFF, the ground's colour 1, colour 1 2); the GE zeroes the indices'
+  and colour 1's in place and hands it. Ground colours are in the GE's own order when
+  handed. A frame with no new picture has nothing to hand: the memory is not kept.
+- **The GE's water cut.** Its depth comes out 65536 k / z - 1 by the projection, k
+  the true depth's factor (a far object's halvings undone, a sprite's own 1 / depth),
+  so depth is 1 / depth in 16 bits. The water's plane goes in first, colour masked
+  off, depth testing at or above it on faces, sprites and quads; lines, dots and
+  streaks are not cut. A unit is 16 of view depth at 1024 and 256 at 4096, coarser
+  than the reference's floats.
+- **The pause panel (Metal, Vulkan; the PSP has no panel).** Its shapes are recorded,
+  not rasterized, binned by row, and a kernel (`panel`) shades each pixel by pause.c's
+  distances and blend, with the baked controller once as a buffer. Handed each frame
+  it shows; the pause and play buttons stay baked overlay images.
+- **Fatal under SC_GPU, outside a check:** the spans' and the ground's CPU fills, a
+  job's CPU bitplanes on Metal and Vulkan, a picture or job with no GPU memory, a GE
+  polygon's rows, no GPU open. The CPU's paths stand for the checks.
+- **Contract 2.20 on the PSP, by reading.** The sizes pass: 338 x 224 from its 480 x
+  272, no mode 5 or 6, interlace or pseudo-hires set. But a canvas at k 2 on the
+  256-wide screen is fatal as the menus widen to 338 (676 past 512), and the console's
+  k follows a frame or two late. Under the switch the game keeps k to what the screen
+  it asked for allows (`rm_canvas_scale`, `rm_canvas_screen`). A pin moved to 2.20
+  without the switch has that fatal.
 
 ## GE clipping (the GE Users Manual, chapter 10)
 
@@ -384,5 +426,6 @@ Vulkan and the GE, written and not compiled on Metal, not run anywhere.
 7. Original's bitmap on the GPU, read back at STOP; the job-duration model
    refitted.
 8. The hand-off and the pause panel, once the contracts land; the CPU
-   paths kept for checks only.
+   paths kept for checks only. The game's side written under the switch (above),
+   compiled on Vulkan and the GE, Metal unbuilt, not linked, not run.
 9. Cost, every host, against the baselines above.

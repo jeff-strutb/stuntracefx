@@ -21,6 +21,8 @@
 #include <string.h>
 #include <math.h>
 
+#include "nshvc_handoff.h"
+
 /* a multiply-add as the reference writes it, a * b + c rounded once
    (fmaf), so every host's fill and the GPUs' (fma) agree texel for texel;
    on the PSP, whose FPU has none and whose library's is double precision

@@ -30,6 +30,9 @@
 
 #include "front.h"
 #include "baked.h"
+#ifdef SRFX_NSHVC_HANDOFF
+#include "nshvc_handoff.h"
+#endif
 
 #define DENSITY 2                   /* pixels a point */
 #define PW 640                      /* the panel, in its own points */
@@ -46,6 +49,48 @@ typedef struct {
     uint32_t *px;
     int w, h;
 } Img;
+
+#ifdef SRFX_NSHVC_HANDOFF
+/* The panel on the GPU (SC_GPU, the console's overlay from a texture): draw_panel's
+   shapes recorded in their order, not rasterized here; the GPU's kernel shades each
+   as SHAPE and blend do below. A shape's pixels as SHAPE finds them. */
+static HandShape *rec;
+static size_t rec_n, rec_cap;
+static int rec_on;
+
+static void rec_shape(int kind, float x0, float y0, float x1, float y1, uint32_t c, float a, float p0, float p1, float p2,
+                      float p3, float p4, float p5)
+{
+    int xa = (int)floorf(x0 * DENSITY) - 1, ya = (int)floorf(y0 * DENSITY) - 1;
+    int xb = (int)ceilf(x1 * DENSITY) + 1, yb = (int)ceilf(y1 * DENSITY) + 1;
+    HandShape *s;
+    if (rec_n == rec_cap) {
+        size_t cap = rec_cap ? 2 * rec_cap : 2048;
+        HandShape *g = (HandShape *)realloc(rec, cap * sizeof *rec);
+        if (!g)
+            return;
+        rec = g;
+        rec_cap = cap;
+    }
+    xa = xa < 0 ? 0 : xa;
+    ya = ya < 0 ? 0 : ya;
+    xb = xb > PW * DENSITY ? PW * DENSITY : xb;
+    yb = yb > PH * DENSITY ? PH * DENSITY : yb;
+    if (xa >= xb || ya >= yb)
+        return;
+    s = &rec[rec_n++];
+    s->p[0] = p0, s->p[1] = p1, s->p[2] = p2, s->p[3] = p3, s->p[4] = p4, s->p[5] = p5;
+    s->colour = c;
+    s->alpha = a;
+    s->kind = kind;
+    s->x0 = xa;
+    s->x1 = xb;
+    s->rows = (uint32_t)ya | (uint32_t)yb << 16;
+}
+#else
+#define rec_on 0
+#define rec_shape(...) ((void)0)
+#endif
 
 static void blend(Img *m, int x, int y, uint32_t c, float a)
 {
@@ -101,21 +146,37 @@ static float d_roundrect(float px, float py, float x, float y, float w, float h,
 
 static void rrect(Img *m, float x, float y, float w, float h, float r, uint32_t c, float a)
 {
+    if (rec_on) {
+        rec_shape(HAND_RRECT, x, y, x + w, y + h, c, a, x, y, w, h, r, 0);
+        return;
+    }
     SHAPE(m, x, y, x + w, y + h, c, a, d_roundrect(px, py, x, y, w, h, r));
 }
 
 static void rrect_edge(Img *m, float x, float y, float w, float h, float r, float t, uint32_t c, float a)
 {
+    if (rec_on) {
+        rec_shape(HAND_RRECT_EDGE, x - t, y - t, x + w + t, y + h + t, c, a, x, y, w, h, r, t);
+        return;
+    }
     SHAPE(m, x - t, y - t, x + w + t, y + h + t, c, a, fabsf(d_roundrect(px, py, x, y, w, h, r)) - t / 2);
 }
 
 static void disc(Img *m, float cx, float cy, float r, uint32_t c, float a)
 {
+    if (rec_on) {
+        rec_shape(HAND_DISC, cx - r, cy - r, cx + r, cy + r, c, a, cx, cy, r, 0, 0, 0);
+        return;
+    }
     SHAPE(m, cx - r, cy - r, cx + r, cy + r, c, a, d_circle(px, py, cx, cy, r));
 }
 
 static void line(Img *m, float ax, float ay, float bx, float by, float t, uint32_t c, float a)
 {
+    if (rec_on) {
+        rec_shape(HAND_LINE, fminf(ax, bx) - t, fminf(ay, by) - t, fmaxf(ax, bx) + t, fmaxf(ay, by) + t, c, a, ax, ay, bx, by, t, 0);
+        return;
+    }
     SHAPE(m, fminf(ax, bx) - t, fminf(ay, by) - t, fmaxf(ax, bx) + t, fmaxf(ay, by) + t, c, a,
           d_segment(px, py, ax, ay, bx, by) - t / 2);
 }
@@ -417,7 +478,10 @@ static void draw_controller(Img *m)
             pad_px = NULL;
         }
     }
-    if (pad_px)
+    if (rec_on) {
+        if (pad_px)
+            rec_shape(HAND_PAD, 0, 0, PW, PH, 0, 1, 0, 0, 0, 0, 0, 0);
+    } else if (pad_px)
         for (i = 0; i < n; i++)
             if (pad_px[i] >> 24) {
                 uint32_t c = pad_px[i];
@@ -440,7 +504,10 @@ static void draw_controller(Img *m)
         line(m, ex, ey, k_ctl[i].bx - dx / l * end, k_ctl[i].by - dy / l * end, lit ? 1.75f : 1.1f, c, 1);
         if (!end)
             disc(m, k_ctl[i].bx, k_ctl[i].by, lit ? 2.2f : 1.6f, c, 1);
-        if (lit)
+        if (lit && rec_on)
+            rec_shape(HAND_RING, k_ctl[i].bx - 20, k_ctl[i].by - 20, k_ctl[i].bx + 20, k_ctl[i].by + 20, GOLD, 1, k_ctl[i].bx,
+                      k_ctl[i].by, k_ctl[i].br + 2.5f, 1, 0, 0);
+        else if (lit)
             SHAPE(m, k_ctl[i].bx - 20, k_ctl[i].by - 20, k_ctl[i].bx + 20, k_ctl[i].by + 20, GOLD, 1,
                   fabsf(d_circle(px, py, k_ctl[i].bx, k_ctl[i].by, k_ctl[i].br + 2.5f)) - 1);
     }
@@ -471,7 +538,8 @@ static void draw_tags(Img *m)
 static void draw_panel(Img *m)
 {
     size_t k;
-    memset(m->px, 0, (size_t)m->w * m->h * 4);
+    if (!rec_on)
+        memset(m->px, 0, (size_t)m->w * m->h * 4);
     /* the plate, edged in gold */
     rrect(m, 2, 2, PW - 4, PH - 4, 18, 0x0E1220, 0.62f);
     rrect_edge(m, 3, 3, PW - 6, PH - 6, 17, 1.5f, GOLD, 1);
@@ -664,6 +732,20 @@ static void pause_at_check(void)
     }
 }
 
+#ifdef SRFX_NSHVC_HANDOFF
+/* the panel's GPU: its shapes drawn and handed; the overlay's id */
+static int panel_gpu_on;
+
+static int panel_gpu_draw(void)
+{
+    rec_n = 0;
+    rec_on = 1;
+    draw_panel(&panel);
+    rec_on = 0;
+    return fw_handoff->panel(rec, rec_n, pad_px, panel.w, panel.h);
+}
+#endif
+
 void pause_frame(void)
 {
     float bx, by, k, cx, cy;
@@ -677,15 +759,39 @@ void pause_frame(void)
         /* the panel first: the overlays are drawn in the order made, and
            the play button goes over it where a small window brings them
            together */
-        panel = img_new(PW, PH);
-        draw_panel(&panel);
-        id_panel = front_overlay_image(panel.px, panel.w, panel.h);
+#ifdef SRFX_NSHVC_HANDOFF
+        if (fw_handoff && fw_handoff->panel && sc_gpu_on() && fw_handoff->ready()) {
+            panel.w = PW * DENSITY;
+            panel.h = PH * DENSITY;
+            panel.px = NULL;
+            id_panel = panel_gpu_draw();
+            if (id_panel < 0)
+                fw_cpu_fallback("the pause panel");
+            panel_gpu_on = id_panel >= 0;
+        }
+        if (!panel_gpu_on)
+#endif
+        {
+            panel = img_new(PW, PH);
+            draw_panel(&panel);
+            id_panel = front_overlay_image(panel.px, panel.w, panel.h);
+        }
         panel_dirty = 0;
         id_pause = a.px ? front_overlay_image(a.px, a.w, a.h) : -1;
         id_play = b.px ? front_overlay_image(b.px, b.w, b.h) : -1;
         free(a.px);
         free(b.px);
     }
+#ifdef SRFX_NSHVC_HANDOFF
+    if (panel_gpu_on && paused) {       /* handed every frame it shows (contract 2.22): anew when it changed */
+        if (panel_dirty) {
+            if (panel_gpu_draw() < 0)
+                fw_cpu_fallback("the pause panel");
+            panel_dirty = 0;
+        } else
+            fw_handoff->panel_again(panel.w, panel.h);
+    }
+#endif
     if (paused && panel_dirty && panel.px) {
         draw_panel(&panel);
         nshvc_overlay_update(id_panel, panel.px);

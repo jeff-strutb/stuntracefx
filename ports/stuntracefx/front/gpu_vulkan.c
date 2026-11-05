@@ -35,6 +35,11 @@ static PFN_vkGetInstanceProcAddr gipa;
     X(vkEnumeratePhysicalDevices) X(vkGetPhysicalDeviceQueueFamilyProperties) X(vkGetPhysicalDeviceFeatures) \
     X(vkGetPhysicalDeviceProperties) X(vkGetPhysicalDeviceMemoryProperties) X(vkCreateDevice) \
     X(vkGetDeviceProcAddr) X(vkEnumerateDeviceExtensionProperties)
+#ifdef SRFX_NSHVC_HANDOFF
+#define VK_HAND_FUNCS(X) X(vkCreateSemaphore) X(vkDestroySemaphore) X(vkCmdFillBuffer)
+#else
+#define VK_HAND_FUNCS(X)
+#endif
 #define VK_DFUNCS(X) \
     X(vkGetDeviceQueue) X(vkCreateBuffer) X(vkDestroyBuffer) X(vkGetBufferMemoryRequirements) \
     X(vkAllocateMemory) X(vkFreeMemory) X(vkBindBufferMemory) X(vkMapMemory) X(vkCreateShaderModule) \
@@ -47,7 +52,7 @@ static PFN_vkGetInstanceProcAddr gipa;
     X(vkCreateRenderPass) X(vkCreateFramebuffer) X(vkCreateGraphicsPipelines) X(vkCmdBeginRenderPass) \
     X(vkCmdEndRenderPass) X(vkCmdDraw) X(vkCmdCopyBufferToImage) X(vkCmdCopyImageToBuffer) X(vkCmdSetViewport) \
     X(vkCmdSetScissor) X(vkDestroyImage) X(vkDestroyImageView) X(vkDestroyFramebuffer) X(vkCmdClearColorImage) \
-    X(vkCmdCopyBuffer)
+    X(vkCmdCopyBuffer) VK_HAND_FUNCS(X)
 #define DECL(f) static PFN_##f p##f;
 VK_FUNCS(DECL) VK_IFUNCS(DECL) VK_DFUNCS(DECL)
 #undef DECL
@@ -86,6 +91,10 @@ static VkPhysicalDeviceMemoryProperties memp;
 static VkDescriptorSetLayout dsl;
 static VkPipelineLayout pl;
 static VkPipeline pipe_rows, pipe_fill, pipe_water, pipe_prims, pipe_pack, pipe_haze, pipe_noise;
+#ifdef SRFX_NSHVC_HANDOFF
+static VkPipeline pipe_widen, pipe_panel;
+static int loaned;                      /* the device the console's (contract 2.22) */
+#endif
 /* the models (scene.h): the render pass over the picture (R8 colour
    indices) and each pixel's face (R32), their pipelines (triangles,
    lines), the images and the framebuffer at the picture's size */
@@ -111,8 +120,16 @@ typedef struct {
     void *at;
 } Buf;
 enum { B_OUT, B_SPANS, B_ROW_AT, B_ROW_SPANS, B_BANKS, B_SLOT, B_POLYS, B_EDGES, B_ROW_POLY, B_OUT32, B_JOB, B_GAP,
-       B_VERTS, B_LPOINTS, B_LSLOTS, B_LFACES, B_ID, B_FSLOTS, B_FPOINTS, B_QUADS, B_PRIMS, B_SNAP, B_BITS, B_N };
-static const uint32_t binding_of[B_N] = {0, 1, 2, 3, 4, 5, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24};
+       B_VERTS, B_LPOINTS, B_LSLOTS, B_LFACES, B_ID, B_FSLOTS, B_FPOINTS, B_QUADS, B_PRIMS, B_SNAP, B_BITS,
+#ifdef SRFX_NSHVC_HANDOFF
+       B_PANEL, B_PANEL_AT, B_PANEL_LIST, B_PANEL_PAD, B_PANEL_OUT,
+#endif
+       B_N };
+static const uint32_t binding_of[B_N] = {0, 1, 2, 3, 4, 5, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+#ifdef SRFX_NSHVC_HANDOFF
+                                         25, 26, 27, 28, 29,
+#endif
+};
 /* the stages that see the descriptors and the push constants: the fill's
    kernels and the models' shaders */
 #define STAGES (VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
@@ -329,6 +346,24 @@ static int device_open(void)
     VkExtensionProperties *exts;
     int best = -1, best_score = -1;
 
+#ifdef SRFX_NSHVC_HANDOFF
+    {                                   /* the console's device and queue, where it lends them: the picture's image is theirs */
+        NshvcGpuLoan loan;
+        if (nshvc_ext_gpu_device(&loan) == NSHVC_GPU_VULKAN) {
+            inst = (VkInstance)loan.instance;
+            phys = (VkPhysicalDevice)loan.physical_device;
+            dev = (VkDevice)loan.device;
+            queue = (VkQueue)loan.queue;
+            qfam = loan.queue_family;
+            loaned = 1;
+#define LOAD(f) if (!(p##f = (PFN_##f)gipa(inst, #f))) return 0;
+            VK_IFUNCS(LOAD)
+#undef LOAD
+            pvkGetPhysicalDeviceMemoryProperties(phys, &memp);
+            goto device_there;
+        }
+    }
+#endif
     app.pApplicationName = "Stunt Race FX";
     app.apiVersion = VK_API_VERSION_1_1;
     ii.pApplicationInfo = &app;
@@ -411,9 +446,15 @@ static int device_open(void)
         if (pvkCreateDevice(phys, &di, NULL, &dev) != VK_SUCCESS)
             return 0;
     }
+#ifdef SRFX_NSHVC_HANDOFF
+device_there:
+#endif
 #define LOAD(f) if (!(p##f = (PFN_##f)pvkGetDeviceProcAddr(dev, #f))) return 0;
     VK_DFUNCS(LOAD)
 #undef LOAD
+#ifdef SRFX_NSHVC_HANDOFF
+    if (!loaned)
+#endif
     pvkGetDeviceQueue(dev, qfam, 0, &queue);
     {
         VkDescriptorSetLayoutBinding b[B_N];
@@ -472,6 +513,12 @@ static int device_open(void)
     pipe_noise = pipeline(k_noise_comp, sizeof k_noise_comp);
     if (!pipe_rows || !pipe_fill || !pipe_water || !pipe_prims || !pipe_pack || !pipe_haze || !pipe_noise || !models_open())
         return 0;
+#ifdef SRFX_NSHVC_HANDOFF
+    pipe_widen = pipeline(k_widen_comp, sizeof k_widen_comp);
+    pipe_panel = pipeline(k_panel_comp, sizeof k_panel_comp);
+    if (!pipe_widen || !pipe_panel)
+        return 0;
+#endif
     for (i = 0; i < B_N; i++)
         if (!buf_grow((int)i, 16))
             return 0;
@@ -1001,6 +1048,7 @@ static void bits_move(uint8_t *tex, uint8_t *ram, const FwBits *b, int pack)
     size_t size = (size_t)b->mask + 1;
     PackJob j;
     if (tex != (uint8_t *)bufs[B_OUT].at || !buf_grow(B_BITS, size)) {
+        FW_CPU_FALLBACK("a job's bitplanes");
         fw_bits_cpu(tex, ram, b, pack);
         return;
     }
@@ -1017,6 +1065,7 @@ static void bits_move(uint8_t *tex, uint8_t *ram, const FwBits *b, int pack)
     j.cols = (uint32_t)b->w / 8;
     j.rows = (uint32_t)b->h / 8;
     if (!run_commands(pack_record, &j)) {
+        FW_CPU_FALLBACK("a job's bitplanes");
         fw_bits_cpu(tex, ram, b, pack);
         return;
     }
@@ -1168,6 +1217,282 @@ static void water_fill(const uint8_t *in, uint32_t *out, const FwWaterJob *j, co
     }
 }
 
+#ifdef SRFX_NSHVC_HANDOFF
+/* ---- the hand-off (nshvc_handoff.h, contract 2.22) ----
+   The finished picture copied by the GPU from its buffer into an image the console
+   takes, never by the CPU: three images in turn, the console's frames still copying
+   the last ones. A fresh binary semaphore each time, one kept unwaited being no harm
+   (destroyed eight hands on, past any frame in flight). */
+#define HAND_RING 3
+#define HAND_FENCES 8
+typedef struct {
+    VkImage im;
+    VkDeviceMemory mem;
+    VkImageView view;
+} HandImage;
+typedef struct {
+    HandImage img[HAND_RING];
+    int w, h, at;
+} HandRing;
+static HandRing ring_pic, ring_panel;
+static VkSemaphore hand_sem[HAND_FENCES];
+static unsigned hand_sem_at;
+static int pad_up;
+
+static VkSemaphore hand_fence(void)
+{
+    VkSemaphoreCreateInfo si = {VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
+    unsigned i = hand_sem_at++ % HAND_FENCES;
+    if (hand_sem[i])
+        pvkDestroySemaphore(dev, hand_sem[i], NULL);
+    hand_sem[i] = VK_NULL_HANDLE;
+    if (pvkCreateSemaphore(dev, &si, NULL, &hand_sem[i]) != VK_SUCCESS)
+        return VK_NULL_HANDLE;
+    return hand_sem[i];
+}
+
+/* the ring at this size (the console no longer copies from the old: the queue idle) */
+static int ring_at(HandRing *r, VkFormat format, VkImageUsageFlags usage, int w, int h)
+{
+    int i;
+    if (r->img[0].im && r->w == w && r->h == h)
+        return 1;
+    pvkDeviceWaitIdle(dev);
+    for (i = 0; i < HAND_RING; i++) {
+        VkImageCreateInfo ii = {VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+        VkImageViewCreateInfo vi = {VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+        VkMemoryAllocateInfo ai = {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+        VkMemoryRequirements req;
+        HandImage *o = &r->img[i];
+        int t;
+        if (o->im) {
+            pvkDestroyImageView(dev, o->view, NULL);
+            pvkDestroyImage(dev, o->im, NULL);
+            pvkFreeMemory(dev, o->mem, NULL);
+            memset(o, 0, sizeof *o);
+        }
+        ii.imageType = VK_IMAGE_TYPE_2D;
+        ii.format = format;
+        ii.extent.width = (uint32_t)w;
+        ii.extent.height = (uint32_t)h;
+        ii.extent.depth = 1;
+        ii.mipLevels = 1;
+        ii.arrayLayers = 1;
+        ii.samples = VK_SAMPLE_COUNT_1_BIT;
+        ii.tiling = VK_IMAGE_TILING_OPTIMAL;
+        ii.usage = usage;
+        ii.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        if (pvkCreateImage(dev, &ii, NULL, &o->im) != VK_SUCCESS)
+            return 0;
+        pvkGetImageMemoryRequirements(dev, o->im, &req);
+        if ((t = mem_type(req.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) < 0)
+            return 0;
+        ai.allocationSize = req.size;
+        ai.memoryTypeIndex = (uint32_t)t;
+        if (pvkAllocateMemory(dev, &ai, NULL, &o->mem) != VK_SUCCESS || pvkBindImageMemory(dev, o->im, o->mem, 0) != VK_SUCCESS)
+            return 0;
+        vi.image = o->im;
+        vi.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        vi.format = format;
+        vi.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        vi.subresourceRange.levelCount = 1;
+        vi.subresourceRange.layerCount = 1;
+        if (pvkCreateImageView(dev, &vi, NULL, &o->view) != VK_SUCCESS)
+            return 0;
+    }
+    r->w = w;
+    r->h = h;
+    r->at = 0;
+    return 1;
+}
+
+/* what is recorded for one hand: a kernel if any, then its buffer into the image,
+   which ends SHADER_READ_ONLY_OPTIMAL (what it held before is not kept) */
+typedef struct {
+    VkPipeline pipe;
+    uint32_t push[2], gx, gy;
+    VkBuffer from;
+    VkImage to;
+    int w, h;
+} HandJob;
+
+static void image_layout(VkImage im, VkImageLayout from, VkImageLayout to, VkAccessFlags src, VkAccessFlags dst,
+                         VkPipelineStageFlags ps, VkPipelineStageFlags pd)
+{
+    VkImageMemoryBarrier ib = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+    ib.srcAccessMask = src;
+    ib.dstAccessMask = dst;
+    ib.oldLayout = from;
+    ib.newLayout = to;
+    ib.srcQueueFamilyIndex = ib.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    ib.image = im;
+    ib.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    ib.subresourceRange.levelCount = 1;
+    ib.subresourceRange.layerCount = 1;
+    pvkCmdPipelineBarrier(cb, ps, pd, 0, 0, NULL, 0, NULL, 1, &ib);
+}
+
+static void hand_record(void *arg)
+{
+    HandJob *j = (HandJob *)arg;
+    VkBufferImageCopy bc = {0};
+    /* the picture as the runs before left it */
+    barrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_HOST_BIT,
+            VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_HOST_WRITE_BIT,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT);
+    if (j->pipe) {
+        pvkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_COMPUTE, pl, 0, 1, &dset, 0, NULL);
+        pvkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, j->pipe);
+        pvkCmdPushConstants(cb, pl, STAGES, 0, 8, j->push);
+        pvkCmdDispatch(cb, j->gx, j->gy, 1);
+        barrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT);
+    }
+    image_layout(j->to, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, VK_ACCESS_TRANSFER_WRITE_BIT,
+                 VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+    bc.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    bc.imageSubresource.layerCount = 1;
+    bc.bufferRowLength = (uint32_t)j->w;
+    bc.imageExtent.width = (uint32_t)j->w;
+    bc.imageExtent.height = (uint32_t)j->h;
+    bc.imageExtent.depth = 1;
+    pvkCmdCopyBufferToImage(cb, j->from, j->to, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &bc);
+    image_layout(j->to, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT,
+                 VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                 VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
+}
+
+/* the job run, the semaphore signalled by its end, waited for as every run here */
+static int hand_run(HandJob *j, VkSemaphore sem)
+{
+    VkCommandBufferBeginInfo bi = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+    VkSubmitInfo si = {VK_STRUCTURE_TYPE_SUBMIT_INFO};
+    if (dset_stale)
+        dset_update();
+    pvkResetCommandBuffer(cb, 0);
+    bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    pvkBeginCommandBuffer(cb, &bi);
+    hand_record(j);
+    pvkEndCommandBuffer(cb);
+    si.commandBufferCount = 1;
+    si.pCommandBuffers = &cb;
+    si.signalSemaphoreCount = 1;
+    si.pSignalSemaphores = &sem;
+    pvkResetFences(dev, 1, &fence);
+    return pvkQueueSubmit(queue, 1, &si, fence) == VK_SUCCESS &&
+           pvkWaitForFences(dev, 1, &fence, VK_TRUE, 5000000000ull) == VK_SUCCESS;
+}
+
+static NshvcGpuHandle ring_handle(const HandRing *r, int i)
+{
+    NshvcGpuHandle h;
+    h.image = (uint64_t)r->img[i].im;
+    h.view = (uint64_t)r->img[i].view;
+    return h;
+}
+
+static int hand_ready(void) { return loaned; }
+
+static void clear_record(void *arg)
+{
+    (void)arg;
+    pvkCmdFillBuffer(cb, bufs[B_OUT].b, 0, VK_WHOLE_SIZE, 0);
+    barrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_HOST_BIT,
+            VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_HOST_READ_BIT);
+}
+
+static void hand_clear(int w, int h)
+{
+    (void)w;
+    (void)h;
+    id_clear = 1;
+    if (!run_commands(clear_record, NULL))
+        fw_cpu_fallback("the picture's clear");
+}
+
+static int hand_picture(int w, int h, int ground)
+{
+    size_t len = (size_t)w * h;
+    HandJob j;
+    VkSemaphore sem;
+    NshvcGpuFence f = {0, 0};
+    if (len * 4 > bufs[B_OUT32].len ||
+        !ring_at(&ring_pic, VK_FORMAT_R32_UINT,
+                 VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, w, h) ||
+        !(sem = hand_fence()))
+        return 0;
+    memset(&j, 0, sizeof j);
+    if (!ground) {                      /* (the ground's: water.comp wrote them) */
+        j.pipe = pipe_widen;
+        j.push[0] = (uint32_t)len;
+        j.gx = (uint32_t)((len + 63) / 64);
+        j.gy = 1;
+    }
+    j.from = bufs[B_OUT32].b;
+    ring_pic.at = (ring_pic.at + 1) % HAND_RING;
+    j.to = ring_pic.img[ring_pic.at].im;
+    j.w = w;
+    j.h = h;
+    if (!hand_run(&j, sem))
+        return 0;
+    f.event = (uint64_t)sem;
+    nshvc_ext_canvas_screen_gpu(0, ring_handle(&ring_pic, ring_pic.at), w, h, NSHVC_GPU_FORMAT_VULKAN, 1, f);
+    return 1;
+}
+
+static void hand_again(int w, int h)
+{
+    NshvcGpuFence none = {0, 0};
+    if (ring_pic.img[0].im && ring_pic.w == w && ring_pic.h == h)
+        nshvc_ext_canvas_screen_gpu(0, ring_handle(&ring_pic, ring_pic.at), w, h, NSHVC_GPU_FORMAT_VULKAN, 1, none);
+}
+
+/* the pause panel (panel.comp), drawn into its image and handed */
+static int hand_panel(const HandShape *s, size_t n, const uint32_t *pad, int w, int h)
+{
+    size_t len = (size_t)w * h, total = gpu_bin_panel(s, n, h, NULL, NULL);
+    HandJob j;
+    VkSemaphore sem;
+    NshvcGpuFence f = {0, 0};
+    if (!buf_grow(B_PANEL, n * sizeof *s) || !buf_grow(B_PANEL_AT, ((size_t)h + 1) * 4) || !buf_grow(B_PANEL_LIST, total * 4) ||
+        !buf_grow(B_PANEL_PAD, len * 4) || !buf_grow(B_PANEL_OUT, len * 4) ||
+        !ring_at(&ring_panel, VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, w, h) ||
+        !(sem = hand_fence()))
+        return -1;
+    memcpy(bufs[B_PANEL].at, s, n * sizeof *s);
+    gpu_bin_panel(s, n, h, (uint32_t *)bufs[B_PANEL_AT].at, (uint32_t *)bufs[B_PANEL_LIST].at);
+    if (pad && !pad_up) {               /* the baked picture, once */
+        memcpy(bufs[B_PANEL_PAD].at, pad, len * 4);
+        pad_up = 1;
+    }
+    memset(&j, 0, sizeof j);
+    j.pipe = pipe_panel;
+    j.push[0] = (uint32_t)w;
+    j.push[1] = (uint32_t)h;
+    j.gx = (uint32_t)((w + 7) / 8);
+    j.gy = (uint32_t)((h + 7) / 8);
+    j.from = bufs[B_PANEL_OUT].b;
+    ring_panel.at = (ring_panel.at + 1) % HAND_RING;
+    j.to = ring_panel.img[ring_panel.at].im;
+    j.w = w;
+    j.h = h;
+    if (!hand_run(&j, sem))
+        return -1;
+    f.event = (uint64_t)sem;
+    return nshvc_ext_overlay_gpu(ring_handle(&ring_panel, ring_panel.at), w, h, f);
+}
+
+static void hand_panel_again(int w, int h)
+{
+    NshvcGpuFence none = {0, 0};
+    if (ring_panel.img[0].im)
+        nshvc_ext_overlay_gpu(ring_handle(&ring_panel, ring_panel.at), w, h, none);
+}
+
+static const FwHandoff s_hand_ops = { hand_ready, hand_clear, hand_picture, hand_again, hand_panel, hand_panel_again };
+#endif
+
 /* the GPU's fill in fw_span_filler's place, when there is a Vulkan GPU */
 int gpu_vulkan_init(void)
 {
@@ -1185,5 +1510,9 @@ int gpu_vulkan_init(void)
     fw_texels32_alloc = texels32_alloc;
     fw_water_filler = water_fill;
     fw_bits_filler = bits_move;
+#ifdef SRFX_NSHVC_HANDOFF
+    fw_tex_align = 4;                   /* (fill.comp's whole words) */
+    fw_handoff = &s_hand_ops;
+#endif
     return 1;
 }

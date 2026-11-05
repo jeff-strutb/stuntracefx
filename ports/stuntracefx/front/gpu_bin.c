@@ -160,6 +160,41 @@ void gpu_bin_faces(const FwSpan *sp, size_t n, GpuVert *tri, size_t *ntri, GpuVe
         *runs = nr;
 }
 
+#ifdef SRFX_NSHVC_HANDOFF
+size_t gpu_bin_panel(const HandShape *s, size_t n, int h, uint32_t *row_at, uint32_t *list)
+{
+    static uint32_t *put;
+    static int put_h;
+    size_t i, total = 0;
+    int r;
+    if (!list) {
+        for (i = 0; i < n; i++) {
+            uint32_t y0 = s[i].rows & 0xFFFFu, y1 = s[i].rows >> 16;
+            total += y1 > y0 ? y1 - y0 : 0;
+        }
+        return total;
+    }
+    if (put_h < h) {
+        free(put);
+        put = malloc((size_t)h * 4);
+        put_h = put ? h : 0;
+        if (!put)
+            return 0;
+    }
+    memset(row_at, 0, ((size_t)h + 1) * 4);
+    for (i = 0; i < n; i++)
+        for (r = (int)(s[i].rows & 0xFFFFu); r < (int)(s[i].rows >> 16); r++)
+            row_at[r + 1]++;
+    for (r = 0; r < h; r++)
+        row_at[r + 1] += row_at[r];
+    memcpy(put, row_at, (size_t)h * 4);
+    for (i = 0; i < n; i++)             /* each row's in the shapes' order */
+        for (r = (int)(s[i].rows & 0xFFFFu); r < (int)(s[i].rows >> 16); r++)
+            list[put[r]++] = (uint32_t)i;
+    return (size_t)row_at[h];
+}
+#endif
+
 void gpu_bin_check(GpuCheck *c, const uint8_t *gpu, const uint8_t *ref, int w, int h)
 {
     long far0 = c->at[0];

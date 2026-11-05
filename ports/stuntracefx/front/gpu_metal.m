@@ -644,6 +644,77 @@ static NSString *const kernel_source = @
 "    s.zx = 0.0f; s.zy = 0.0f;\n"
 "}\n";
 
+#ifdef SRFX_NSHVC_HANDOFF
+/* the hand-off's kernels (gpu_vk/widen.comp, panel.comp's): the picture's indices as
+   the canvas's 32 bits; the pause panel, each pixel the shapes on its row in their
+   order by pause.c's blend, out 0xAARRGGBB */
+static NSString *const hand_source = @
+"#include <metal_stdlib>\n"
+"using namespace metal;\n"
+"kernel void widen(const device uchar *in [[buffer(0)]], device uint *out [[buffer(1)]],\n"
+"                  uint2 id [[thread_position_in_grid]]) {\n"
+"    out[id.x] = in[id.x];\n"
+"}\n"
+"static float cover(float d) { return d < -0.5f ? 1.0f : d > 0.5f ? 0.0f : 0.5f - d; }\n"
+"static float d_roundrect(float2 q, float x, float y, float w, float h, float r) {\n"
+"    float qx = fabs(q.x - (x + w / 2.0f)) - (w / 2.0f - r), qy = fabs(q.y - (y + h / 2.0f)) - (h / 2.0f - r);\n"
+"    return length(float2(max(qx, 0.0f), max(qy, 0.0f))) + min(max(qx, qy), 0.0f) - r;\n"
+"}\n"
+"static float d_segment(float2 q, float2 a, float2 b) {\n"
+"    float2 v = b - a;\n"
+"    float t = clamp(dot(q - a, v) / dot(v, v), 0.0f, 1.0f);\n"
+"    return length(q - a - t * v);\n"
+"}\n"
+"kernel void panel(const device uint *sh [[buffer(0)]], const device uint *row_at [[buffer(1)]],\n"
+"                  const device uint *list [[buffer(2)]], const device uint *pad [[buffer(3)]],\n"
+"                  device uint *px [[buffer(4)]], constant uint2 &size [[buffer(5)]],\n"
+"                  uint2 id [[thread_position_in_grid]]) {\n"
+"    uint x = id.x, y = id.y, d = 0;\n"
+"    float2 q = float2((float(x) + 0.5f) / 2.0f, (float(y) + 0.5f) / 2.0f);\n"
+"    for (uint i = row_at[y]; i < row_at[y + 1]; i++) {\n"
+"        uint s = list[i] * 12, c = sh[s + 6], kind = sh[s + 8];\n"
+"        float a;\n"
+"        if (int(x) < int(sh[s + 9]) || int(x) >= int(sh[s + 10]))\n"
+"            continue;\n"
+"        if (kind == 5) {\n"
+"            uint b = pad[y * size.x + x];\n"
+"            if ((b >> 24) == 0)\n"
+"                continue;\n"
+"            a = float(b >> 24) / 255.0f;\n"
+"            c = b & 0xFFFFFFu;\n"
+"        } else {\n"
+"            float p0 = as_type<float>(sh[s]), p1 = as_type<float>(sh[s + 1]), p2 = as_type<float>(sh[s + 2]);\n"
+"            float p3 = as_type<float>(sh[s + 3]), p4 = as_type<float>(sh[s + 4]), p5 = as_type<float>(sh[s + 5]), dist;\n"
+"            if (kind == 0)\n"
+"                dist = d_roundrect(q, p0, p1, p2, p3, p4);\n"
+"            else if (kind == 1)\n"
+"                dist = fabs(d_roundrect(q, p0, p1, p2, p3, p4)) - p5 / 2.0f;\n"
+"            else if (kind == 2)\n"
+"                dist = length(q - float2(p0, p1)) - p2;\n"
+"            else if (kind == 3)\n"
+"                dist = d_segment(q, float2(p0, p1), float2(p2, p3)) - p4 / 2.0f;\n"
+"            else\n"
+"                dist = fabs(length(q - float2(p0, p1)) - p2) - p3;\n"
+"            a = as_type<float>(sh[s + 7]) * cover(dist * 2.0f);\n"
+"        }\n"
+"        if (a <= 0.0f)\n"
+"            continue;\n"
+"        float da = float(d >> 24) / 255.0f, oa = a + da * (1.0f - a);\n"
+"        uint o = 0;\n"
+"        for (uint k = 0; k < 3; k++) {\n"
+"            uint sft = 16 - 8 * k;\n"
+"            float sc = float((c >> sft) & 255u), t = float((d >> sft) & 255u);\n"
+"            float v = oa > 0.0f ? (sc * a + t * da * (1.0f - a)) / oa : 0.0f;\n"
+"            o |= uint(v + 0.5f) << sft;\n"
+"        }\n"
+"        d = o | uint(oa * 255.0f + 0.5f) << 24;\n"
+"    }\n"
+"    px[y * size.x + x] = d;\n"
+"}\n";
+static int loaned;                      /* the device the console's (contract 2.22) */
+static id<MTLComputePipelineState> pipe_widen, pipe_panel;
+#endif
+
 static id<MTLDevice> dev;
 static id<MTLCommandQueue> queue;
 static id<MTLComputePipelineState> pipe_fill, pipe_rows, pipe_water, pipe_prims, pipe_pack, pipe_haze, pipe_noise;
@@ -1064,6 +1135,7 @@ static void bits_move(uint8_t *tex, uint8_t *ram, const FwBits *b, int pack)
     uint32_t job[7] = { (uint32_t)b->w, (uint32_t)b->h, (uint32_t)b->bpp, (uint32_t)b->ht, b->base, b->mask, (uint32_t)pack };
     buf_bits = grow(buf_bits, size);
     if (!buf_bits || tex != (uint8_t *)buf_out.contents) {
+        FW_CPU_FALLBACK("a job's bitplanes");
         fw_bits_cpu(tex, ram, b, pack);
         return;
     }
@@ -1221,6 +1293,164 @@ static void water_fill(const uint8_t *in, uint32_t *out, const FwWaterJob *j, co
     }
 }
 
+#ifdef SRFX_NSHVC_HANDOFF
+/* ---- the hand-off (nshvc_handoff.h, contract 2.22) ----
+   The finished picture copied by the GPU from its buffer into a texture the console
+   takes, never by the CPU: three in turn, the console's frames still reading the
+   last ones; the shared event's value each hand's own. */
+#define HAND_RING 3
+static id<MTLTexture> ring_pic[HAND_RING], ring_panel[HAND_RING];
+static int pic_at, panel_at;
+static id<MTLSharedEvent> hand_event;
+static uint64_t hand_value;
+static id<MTLBuffer> buf_panel, buf_panel_at, buf_panel_list, buf_panel_pad, buf_panel_out;
+
+static int ring_make(id<MTLTexture> __strong *r, MTLPixelFormat format, int w, int h)
+{
+    int i;
+    if (r[0] && r[0].width == (NSUInteger)w && r[0].height == (NSUInteger)h)
+        return 1;
+    MTLTextureDescriptor *d = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:format
+                                                                                 width:(NSUInteger)w
+                                                                                height:(NSUInteger)h
+                                                                             mipmapped:NO];
+    d.usage = MTLTextureUsageShaderRead;
+    d.storageMode = MTLStorageModePrivate;
+    for (i = 0; i < HAND_RING; i++) {
+        r[i] = [dev newTextureWithDescriptor:d];
+        if (!r[i])
+            return 0;
+    }
+    return 1;
+}
+
+static NshvcGpuHandle tex_handle(id<MTLTexture> t)
+{
+    NshvcGpuHandle h;
+    h.image = (uint64_t)(uintptr_t)(__bridge void *)t;
+    h.view = 0;
+    return h;
+}
+
+static NshvcGpuFence hand_fence(void)
+{
+    NshvcGpuFence f;
+    f.event = (uint64_t)(uintptr_t)(__bridge void *)hand_event;
+    f.value = hand_value;
+    return f;
+}
+
+static int hand_ready(void) { return loaned; }
+
+static void hand_clear(int w, int h)
+{
+    (void)w;
+    (void)h;
+    id_clear = 1;
+    @autoreleasepool {
+        id<MTLCommandBuffer> cb = [queue commandBuffer];
+        id<MTLBlitCommandEncoder> bl = [cb blitCommandEncoder];
+        [bl fillBuffer:buf_out range:NSMakeRange(0, out_len) value:0];
+        [bl endEncoding];
+        [cb commit];
+        [cb waitUntilCompleted];
+    }
+}
+
+static int hand_picture(int w, int h, int ground)
+{
+    size_t len = (size_t)w * h;
+    if (len * 4 > out32_len || !ring_make(ring_pic, MTLPixelFormatR32Uint, w, h))
+        return 0;
+    pic_at = (pic_at + 1) % HAND_RING;
+    hand_value++;
+    @autoreleasepool {
+        id<MTLCommandBuffer> cb = [queue commandBuffer];
+        id<MTLBlitCommandEncoder> bl;
+        if (!ground) {                  /* (the ground's: the water kernel wrote them) */
+            id<MTLComputeCommandEncoder> e = [cb computeCommandEncoder];
+            [e setComputePipelineState:pipe_widen];
+            [e setBuffer:buf_out offset:0 atIndex:0];
+            [e setBuffer:buf_out32 offset:0 atIndex:1];
+            [e dispatchThreads:MTLSizeMake(len, 1, 1) threadsPerThreadgroup:MTLSizeMake(64, 1, 1)];
+            [e endEncoding];
+        }
+        bl = [cb blitCommandEncoder];
+        [bl copyFromBuffer:buf_out32 sourceOffset:0 sourceBytesPerRow:(NSUInteger)w * 4 sourceBytesPerImage:len * 4
+                sourceSize:MTLSizeMake((NSUInteger)w, (NSUInteger)h, 1) toTexture:ring_pic[pic_at] destinationSlice:0
+          destinationLevel:0 destinationOrigin:MTLOriginMake(0, 0, 0)];
+        [bl endEncoding];
+        [cb encodeSignalEvent:hand_event value:hand_value];
+        [cb commit];
+        [cb waitUntilCompleted];
+    }
+    nshvc_ext_canvas_screen_gpu(0, tex_handle(ring_pic[pic_at]), w, h, NSHVC_GPU_FORMAT_METAL, 1, hand_fence());
+    return 1;
+}
+
+static void hand_again(int w, int h)
+{
+    NshvcGpuFence none = {0, 0};
+    if (ring_pic[pic_at] && ring_pic[pic_at].width == (NSUInteger)w && ring_pic[pic_at].height == (NSUInteger)h)
+        nshvc_ext_canvas_screen_gpu(0, tex_handle(ring_pic[pic_at]), w, h, NSHVC_GPU_FORMAT_METAL, 1, none);
+}
+
+/* the pause panel (the panel kernel), drawn into its texture and handed */
+static int hand_panel(const HandShape *s, size_t n, const uint32_t *pad, int w, int h)
+{
+    size_t len = (size_t)w * h, total = gpu_bin_panel(s, n, h, NULL, NULL);
+    uint32_t size[2] = { (uint32_t)w, (uint32_t)h };
+    buf_panel = grow(buf_panel, n * sizeof *s);
+    buf_panel_at = grow(buf_panel_at, ((size_t)h + 1) * 4);
+    buf_panel_list = grow(buf_panel_list, total * 4);
+    buf_panel_out = grow(buf_panel_out, len * 4);
+    if (!buf_panel_pad) {               /* the baked picture, once */
+        buf_panel_pad = [dev newBufferWithLength:len * 4 options:MTLResourceStorageModeShared];
+        if (buf_panel_pad && pad)
+            memcpy(buf_panel_pad.contents, pad, len * 4);
+    }
+    if (!buf_panel || !buf_panel_at || !buf_panel_list || !buf_panel_out || !buf_panel_pad ||
+        !ring_make(ring_panel, MTLPixelFormatBGRA8Unorm, w, h))
+        return -1;
+    memcpy(buf_panel.contents, s, n * sizeof *s);
+    gpu_bin_panel(s, n, h, (uint32_t *)buf_panel_at.contents, (uint32_t *)buf_panel_list.contents);
+    panel_at = (panel_at + 1) % HAND_RING;
+    hand_value++;
+    @autoreleasepool {
+        id<MTLCommandBuffer> cb = [queue commandBuffer];
+        id<MTLComputeCommandEncoder> e = [cb computeCommandEncoder];
+        id<MTLBlitCommandEncoder> bl;
+        [e setComputePipelineState:pipe_panel];
+        [e setBuffer:buf_panel offset:0 atIndex:0];
+        [e setBuffer:buf_panel_at offset:0 atIndex:1];
+        [e setBuffer:buf_panel_list offset:0 atIndex:2];
+        [e setBuffer:buf_panel_pad offset:0 atIndex:3];
+        [e setBuffer:buf_panel_out offset:0 atIndex:4];
+        [e setBytes:size length:sizeof size atIndex:5];
+        [e dispatchThreads:MTLSizeMake((NSUInteger)w, (NSUInteger)h, 1) threadsPerThreadgroup:MTLSizeMake(8, 8, 1)];
+        [e endEncoding];
+        bl = [cb blitCommandEncoder];
+        [bl copyFromBuffer:buf_panel_out sourceOffset:0 sourceBytesPerRow:(NSUInteger)w * 4 sourceBytesPerImage:len * 4
+                sourceSize:MTLSizeMake((NSUInteger)w, (NSUInteger)h, 1) toTexture:ring_panel[panel_at] destinationSlice:0
+          destinationLevel:0 destinationOrigin:MTLOriginMake(0, 0, 0)];
+        [bl endEncoding];
+        [cb encodeSignalEvent:hand_event value:hand_value];
+        [cb commit];
+        [cb waitUntilCompleted];
+    }
+    return nshvc_ext_overlay_gpu(tex_handle(ring_panel[panel_at]), w, h, hand_fence());
+}
+
+static void hand_panel_again(int w, int h)
+{
+    NshvcGpuFence none = {0, 0};
+    if (ring_panel[panel_at])
+        nshvc_ext_overlay_gpu(tex_handle(ring_panel[panel_at]), w, h, none);
+}
+
+static const FwHandoff s_hand_ops = { hand_ready, hand_clear, hand_picture, hand_again, hand_panel, hand_panel_again };
+#endif
+
 /* the GPU's fill in fw_span_filler's place, when there is a Metal device */
 int gpu_metal_init(void)
 {
@@ -1228,9 +1458,23 @@ int gpu_metal_init(void)
     id<MTLLibrary> lib;
     int i;
 
+#ifdef SRFX_NSHVC_HANDOFF
+    {                                   /* the console's device and queue, where it lends them: the picture's texture is theirs */
+        NshvcGpuLoan loan;
+        if (nshvc_ext_gpu_device(&loan) == NSHVC_GPU_METAL) {
+            dev = (__bridge id<MTLDevice>)loan.device;
+            queue = (__bridge id<MTLCommandQueue>)loan.queue;
+            loaned = 1;
+        }
+    }
+    if (!dev)
+#endif
     dev = MTLCreateSystemDefaultDevice();
     if (!dev)
         return 0;
+#ifdef SRFX_NSHVC_HANDOFF
+    if (!queue)
+#endif
     queue = [dev newCommandQueue];
     {
         MTLCompileOptions *opt = [MTLCompileOptions new];
@@ -1286,5 +1530,20 @@ int gpu_metal_init(void)
     fw_texels32_alloc = texels32_alloc;
     fw_water_filler = water_fill;
     fw_bits_filler = bits_move;
+#ifdef SRFX_NSHVC_HANDOFF
+    {
+        id<MTLLibrary> hl = [dev newLibraryWithSource:hand_source options:nil error:&err];
+        if (hl) {
+            pipe_widen = [dev newComputePipelineStateWithFunction:[hl newFunctionWithName:@"widen"] error:&err];
+            pipe_panel = [dev newComputePipelineStateWithFunction:[hl newFunctionWithName:@"panel"] error:&err];
+        }
+        hand_event = [dev newSharedEvent];
+        if (!pipe_widen || !pipe_panel || !hand_event) {
+            fprintf(stderr, "gpu_metal: the hand-off's kernels: %s\n", err.localizedDescription.UTF8String);
+            return 0;
+        }
+        fw_handoff = &s_hand_ops;
+    }
+#endif
     return 1;
 }

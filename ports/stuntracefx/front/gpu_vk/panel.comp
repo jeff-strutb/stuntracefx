@@ -1,0 +1,80 @@
+#version 450
+/*
+ * panel.comp: the pause panel (pause.c) on the GPU: each pixel the shapes on its row
+ * in their order (nshvc_handoff.h HandShape, gpu_bin_panel), each by its distance
+ * from the pixel, an edge blended across one pixel, by pause.c's blend: straight
+ * alpha, 8 bits a channel after each. The controller its baked picture, once on the
+ * GPU. Out 0xAARRGGBB, BGRA in memory, a word a pixel.
+ */
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(std430, binding = 25) readonly buffer Shapes { uint sh[]; };
+layout(std430, binding = 26) readonly buffer RowAt { uint row_at[]; };
+layout(std430, binding = 27) readonly buffer List { uint list[]; };
+layout(std430, binding = 28) readonly buffer Pad { uint pad[]; };
+layout(std430, binding = 29) writeonly buffer Out { uint px[]; };
+layout(push_constant) uniform Push { uint w, h; } pc;
+
+#define DENSITY 2.0
+#define P(i) uintBitsToFloat(sh[s + uint(i)])
+
+float cover(float d) { return d < -0.5 ? 1.0 : d > 0.5 ? 0.0 : 0.5 - d; }
+
+float d_roundrect(vec2 q, float x, float y, float w, float h, float r)
+{
+    float qx = abs(q.x - (x + w / 2.0)) - (w / 2.0 - r), qy = abs(q.y - (y + h / 2.0)) - (h / 2.0 - r);
+    return length(vec2(max(qx, 0.0), max(qy, 0.0))) + min(max(qx, qy), 0.0) - r;
+}
+
+float d_segment(vec2 q, vec2 a, vec2 b)
+{
+    vec2 v = b - a;
+    float t = clamp(dot(q - a, v) / dot(v, v), 0.0, 1.0);
+    return length(q - a - t * v);
+}
+
+void main()
+{
+    uint x = gl_GlobalInvocationID.x, y = gl_GlobalInvocationID.y, d = 0u, i;
+    vec2 q = vec2((float(x) + 0.5) / DENSITY, (float(y) + 0.5) / DENSITY);
+    if (x >= pc.w || y >= pc.h)
+        return;
+    for (i = row_at[y]; i < row_at[y + 1u]; i++) {
+        uint s = list[i] * 12u, c = sh[s + 6u], kind = sh[s + 8u];
+        float a, dist = 0.0, da, oa;
+        uint out_, k;
+        if (int(x) < int(sh[s + 9u]) || int(x) >= int(sh[s + 10u]))
+            continue;
+        if (kind == 5u) {
+            uint b = pad[y * pc.w + x];
+            if ((b >> 24) == 0u)
+                continue;
+            a = float(b >> 24) / 255.0;
+            c = b & 0xFFFFFFu;
+        } else {
+            if (kind == 0u)
+                dist = d_roundrect(q, P(0), P(1), P(2), P(3), P(4));
+            else if (kind == 1u)
+                dist = abs(d_roundrect(q, P(0), P(1), P(2), P(3), P(4))) - P(5) / 2.0;
+            else if (kind == 2u)
+                dist = length(q - vec2(P(0), P(1))) - P(2);
+            else if (kind == 3u)
+                dist = d_segment(q, vec2(P(0), P(1)), vec2(P(2), P(3))) - P(4) / 2.0;
+            else
+                dist = abs(length(q - vec2(P(0), P(1))) - P(2)) - P(3);
+            a = uintBitsToFloat(sh[s + 7u]) * cover(dist * DENSITY);
+        }
+        if (a <= 0.0)
+            continue;
+        da = float(d >> 24) / 255.0;
+        oa = a + da * (1.0 - a);
+        out_ = 0u;
+        for (k = 0u; k < 3u; k++) {
+            uint sft = 16u - 8u * k;
+            float sc = float((c >> sft) & 255u), t = float((d >> sft) & 255u);
+            float v = oa > 0.0 ? (sc * a + t * da * (1.0 - a)) / oa : 0.0;
+            out_ |= uint(v + 0.5) << sft;
+        }
+        d = out_ | uint(oa * 255.0 + 0.5) << 24;
+    }
+    px[y * pc.w + x] = d;
+}

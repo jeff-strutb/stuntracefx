@@ -13,6 +13,10 @@
 #     CC=clang                    the compiler (with its target, for iOS)
 #     DEFS=                       the host's defines (-DNSHVC_HOST_IOS=1 for iOS)
 #     LIBS=                       the host's frameworks and libraries
+#     SRFX_NSHVC_HANDOFF=         1: the GPU's hand-off to nativeshvc (the game's
+#                                 nshvc_handoff.h); links only once nativeshvc has
+#                                 those contracts. Objects are not rebuilt for a
+#                                 change of it: a clean OUT
 #   check: the touch scheme's and the pause screen's checks (touch_check.c,
 #          pause_check.c; PAUSE_PICTURES=DIR writes the panel's pictures) only
 #   bake:  the front end's fixed pictures rasterized again into
@@ -52,6 +56,11 @@ if [ "$1" = bake ]; then
   exec sh "$0" check
 fi
 
+GDEFS=
+if [ -n "$SRFX_NSHVC_HANDOFF" ]; then
+  GDEFS=-DSRFX_NSHVC_HANDOFF=1
+  DEFS="$DEFS $GDEFS"
+fi
 cp "$GAME"/include/*.h "$OUT/include/"
 SRFX_GAME="$GAME" python3 ports/stuntracefx/tools/routines.py "$ROM" "$OUT/gen/routines.c" >/dev/null
 ASSETS_DATA=$ASSETS_DATA python3 ports/stuntracefx/tools/assets.py "$ROM" "$OUT/gen" $ASSETS >/dev/null
@@ -61,7 +70,7 @@ HDR=$(ls -t "$GAME"/include/*.h | head -1)
 for f in $(find "$GAME" -name '*.c' | sort) "$OUT/gen/routines.c" "$OUT/gen/assets.c"; do
   o="$OUT/obj/$(echo "$f" | sed 's#[/.]#_#g').o"
   if [ ! -f "$o" ] || [ "$f" -nt "$o" ] || [ "$HDR" -nt "$o" ]; then
-    $CC -O2 -std=gnu11 -fno-strict-aliasing -ffp-contract=off -w \
+    $CC -O2 -std=gnu11 -fno-strict-aliasing -ffp-contract=off -w $GDEFS \
       -I"$OUT/include" -I"$OUT/gen" -I"$FRONT" -I"$NSHVC/include" -c "$f" -o "$o"
   fi
   OBJS="$OBJS $o"

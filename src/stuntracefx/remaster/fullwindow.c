@@ -92,7 +92,21 @@ static int handed;                      /* the canvas is the full window's */
    (gpu_pic), opened there (gpu_open), from a cleared screen (gpu_cleared) */
 const FwCanvasGpu *fw_canvas_gpu;
 static int gpu_pic, gpu_open, gpu_cleared;
-static int staged;                      /* this frame's upload stage ran in the full window */
+#ifdef SRFX_NSHVC_HANDOFF
+/* the hand-off (nshvc_handoff.h): this file's picture goes to the console as the
+   GPU's own (hand_pic), the texels neither written nor read here; handed_now, one
+   handed since the last frame hook */
+const FwHandoff *fw_handoff;
+int fw_tex_align = 1;
+int fw_gpu_settled;
+int fw_ground_handed;
+static int handed_now;
+static int hand_pic(void);
+#define CANVAS_SCALE() rm_canvas_scale()
+#else
+#define CANVAS_SCALE() nshvc_ext_canvas_scale()
+#endif
+static int staged;                    /* this frame's upload stage ran in the full window */
 
 /* the bitmap pictures (fullwindow.h): Enhanced's at k (bp: its shape's columns
    and rows of characters, bits a pixel, targets wanted and done, the one open;
@@ -210,6 +224,14 @@ static float centre_rowf(void) { centre_row(); return centre_f; }
 static void block_set(int x, int y, uint8_t c)
 {
     int x0 = col_at(x), x1 = col_at(x + 1), y0 = row_at(y), y1 = row_at(y + 1), j;
+#ifdef SRFX_NSHVC_HANDOFF
+    if (hand_pic()) {                   /* (Metal, Vulkan: no fw_canvas_gpu, the same) */
+        for (j = y0; j < y1; j++)
+            if (x1 > x0)
+                span_flat(j, x0, x1 - 1, c);
+        return;
+    }
+#endif
     if (gpu_pic || bp) {                /* drawn in its order with the rest, as spans */
         for (j = y0; j < y1; j++)
             if (x1 > x0)
@@ -711,6 +733,7 @@ static void noise_fill(uint8_t *out, int w, int h, const FwSpan *p)
 
 void fw_span_fill_cpu(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
 {
+    FW_CPU_FALLBACK("the spans' fill");
     size_t i;
     (void)h;
     for (i = 0; i < n; i++) {
@@ -1066,10 +1089,17 @@ static void span_flush(void)
     if (gx && !nspans)
         return;
     if (gpu_pic && !gpu_open) {         /* the GPU's picture opened: cleared, or the last one's to draw over */
+#ifdef SRFX_NSHVC_HANDOFF
+        /* (handed, no texels here to draw over: every setup of the race sets $01C4, so it is cleared) */
+        if (fw_canvas_gpu->open(tw, th, gpu_cleared || hand_pic() ? NULL : tex))
+#else
         if (fw_canvas_gpu->open(tw, th, gpu_cleared ? NULL : tex))
+#endif
             gpu_open = 1;
-        else
+        else {
+            FW_CPU_FALLBACK("a picture with no GPU memory");
             gpu_pic = 0;                /* no GPU memory: the CPU's texels */
+        }
     }
     if (nspans) {
         span_record();
@@ -1971,8 +2001,14 @@ void fw_clear(void)
     if (gx)                             /* a job's: FxScreenClear's own (fw_job_clear) */
         return;
     nspans = npolys = nedges = 0;       /* drawn over: none of them shows */
+#ifdef SRFX_NSHVC_HANDOFF
+    if (hand_pic()) {
+        if (fw_handoff->clear)          /* (the GE: a canvas of its own, opened cleared below) */
+            fw_handoff->clear(tw, th);
+    } else
+#endif
     memset(tex, 0, (size_t)tw * th);
-    if (gpu_pic) {                      /* the GPU's picture opened again, cleared */
+    if (gpu_pic) {                    /* the GPU's picture opened again, cleared */
         gpu_cleared = 1;
         gpu_open = 0;
     }
@@ -4120,6 +4156,10 @@ static int size_for_window(void)
     nshvc_ext_canvas_presented(&pw, &ph);
     if (pw < 1 || ph < 1)
         return 0;
+#ifdef SRFX_NSHVC_HANDOFF
+    if (fw_tex_align > 1 && sc_gpu_on())    /* (Vulkan's fill: else every odd window the CPU's) */
+        pw = (pw + fw_tex_align - 1) & ~(fw_tex_align - 1);
+#endif
     if (pw != tw || ph != th || w != W || h != H || !tex || scale_lost) {
         scale_lost = 0;
         W = w;
@@ -4139,8 +4179,10 @@ static int size_for_window(void)
                 tex = malloc(need);
             }
             tex_size = tex ? need : 0;
-            if (!tex_size)
+            if (!tex_size) {
+                FW_CPU_FALLBACK("the full window with no GPU memory");
                 return 0;
+            }
         }
         handed = 0;
         page1_known = 0;                /* the screen anew: page 1 written whole again */
@@ -4383,6 +4425,7 @@ uint32_t fw_water_texel(const uint8_t *in, const FwWaterJob *j, const uint32_t *
 
 void fw_water_fill_cpu(const uint8_t *in, uint32_t *out, const FwWaterJob *j, const uint32_t *gap)
 {
+    FW_CPU_FALLBACK("the ground's fill");
     int32_t x, y;
     for (y = 0; y < j->h; y++)
         for (x = 0; x < j->w; x++)
@@ -4413,6 +4456,25 @@ static int glint(unsigned x, unsigned y)
     return y % 4 == oy && x % 8 >= ox && x % 8 < ox + 4 && (h >> 16) % 2 ? 2 : 0;
 }
 
+/* the 32-bit texels' memory, for tw x th */
+static int tex32_room(void)
+{
+    size_t need = (size_t)tw * th;
+
+    if (need > tex32_size) {
+        if (fw_texels32_alloc) {        /* the GPU's memory, which it fills */
+            tex32 = fw_texels32_alloc(need * sizeof *tex32);
+        } else {
+            free(tex32);
+            tex32 = malloc(need * sizeof *tex32);
+        }
+        tex32_size = tex32 ? need : 0;
+        if (!tex32)
+            return 0;
+    }
+    return 1;
+}
+
 /* the texels with the water where nothing is drawn, 32 bits each
    (FW_WATERCHECK: idx, the water between the ripples left to the
    console's colour 1, or band, this file's; either with the cells read
@@ -4427,20 +4489,13 @@ static const uint32_t *water_pass(void)
     int index_gap = chk && !strcmp(chk, "idx");
     const uint8_t *w = nshvc_wram();
     const uint16_t *v = nshvc_vram();
-    size_t need = (size_t)tw * th;
     unsigned r, x, y, i, k;
 
-    if (need > tex32_size) {
-        if (fw_texels32_alloc) {        /* the GPU's memory, which it fills */
-            tex32 = fw_texels32_alloc(need * sizeof *tex32);
-        } else {
-            free(tex32);
-            tex32 = malloc(need * sizeof *tex32);
-        }
-        tex32_size = tex32 ? need : 0;
-        if (!tex32)
-            return NULL;
-    }
+#ifdef SRFX_NSHVC_HANDOFF
+    if (!(gpu_pic && hand_pic()))       /* (the GE's, handed: its canvas holds them) */
+#endif
+    if (!tex32_room())
+        return NULL;
     if ((size_t)th > gap_rows) {
         free(gap);
         gap = malloc(2 * (size_t)th * sizeof *gap);
@@ -4505,7 +4560,18 @@ static const uint32_t *water_pass(void)
             span_flush();
     }
     if (gpu_pic) {
+#ifdef SRFX_NSHVC_HANDOFF
+        fw_ground_handed = hand_pic();
+#endif
         fw_canvas_gpu->ground(&job, gap);
+#ifdef SRFX_NSHVC_HANDOFF
+        if (hand_pic()) {              /* none of it read back: the mark says it has its ground */
+            static const uint32_t ground_mark = 0;
+            fw_canvas_gpu->close(NULL, NULL);
+            gpu_pic = gpu_open = 0;
+            return &ground_mark;
+        }
+#endif
         fw_canvas_gpu->close(tex32, tex);
         gpu_pic = gpu_open = 0;
         water_record(tex, &job, gap);
@@ -4514,6 +4580,24 @@ static const uint32_t *water_pass(void)
     water_record(tex, &job, gap);
     fw_water_filler(tex, tex32, &job, gap);
     return tex32;
+}
+
+/* the finished picture to the console: t32 its 32 bits with the ground, or the
+   indices alone */
+static void picture_out(const uint32_t *t32)
+{
+#ifdef SRFX_NSHVC_HANDOFF
+    if (hand_pic()) {
+        if ((!t32 && !fw_canvas_gpu && !tex32_room()) || !fw_handoff->picture(tw, th, t32 != NULL))
+            fw_cpu_fallback("the picture's hand-off");
+        handed_now = 1;
+        return;
+    }
+#endif
+    if (t32)
+        nshvc_ext_canvas_screen32(0, t32, tw, th, 0, 1, 0);
+    else
+        nshvc_ext_canvas_screen(0, tex, tw, th, 0, 1, 0);
 }
 
 /* the texels to the canvas, the screen's picture */
@@ -4532,15 +4616,16 @@ static void hand(void)
     }
     water_seen = 0;
     if (gpu_pic && !t32) {              /* the GPU's picture out: its indices */
+#ifdef SRFX_NSHVC_HANDOFF
+        fw_canvas_gpu->close(NULL, hand_pic() ? NULL : tex);
+#else
         fw_canvas_gpu->close(NULL, tex);
+#endif
         gpu_pic = gpu_open = 0;
     }
     rm_canvas_taken();
-    if (t32)
-        nshvc_ext_canvas_screen32(0, t32, tw, th, 0, 1, 0);
-    else
-        nshvc_ext_canvas_screen(0, tex, tw, th, 0, 1, 0);
-    if (!handed) {                      /* the first picture: the screen taken over with it, in the same blank */
+    picture_out(t32);
+    if (!handed) {                    /* the first picture: the screen taken over with it, in the same blank */
         nshvc_hold_interrupts(1);
         takeover();
         nshvc_hold_interrupts(0);
@@ -4909,8 +4994,12 @@ int fw_picture(int j)
     prof_mark(-1);
     fw_water[3] = 0;                    /* no water until this picture's view says so (water_view) */
     if (gpu_pic && gpu_open)            /* (a last picture never handed: its texels kept) */
+#ifdef SRFX_NSHVC_HANDOFF
+        fw_canvas_gpu->close(NULL, hand_pic() ? NULL : tex);
+#else
         fw_canvas_gpu->close(NULL, tex);
-    gpu_pic = fw_canvas_gpu && !fw_env("FW_CHECK") && !fw_env("FW_KCHECK") && !fw_env("FW_CCHECK") && !fw_env("FW_WATERCHECK");
+#endif
+    gpu_pic = fw_canvas_gpu &&!fw_env("FW_CHECK") && !fw_env("FW_KCHECK") && !fw_env("FW_CCHECK") && !fw_env("FW_WATERCHECK");
     gpu_open = gpu_cleared = 0;
     fw_drawing = 1;
     list_gen++;
@@ -4971,15 +5060,41 @@ static int bp_checks(void)
 /* a GPU to draw them on: its fill in place, or its canvas */
 static int gpu_here(void) { return fw_span_filler != fw_span_fill_cpu || fw_canvas_gpu != NULL; }
 
+#ifdef SRFX_NSHVC_HANDOFF
+/* the full window's picture handed as the GPU's own: SC_GPU, the contract there,
+   no check's (a check reads the texels) */
+static int hand_pic(void)
+{
+    static int recording = -1;
+    if (recording < 0)
+        recording = fw_env("FW_SPANREC") || fw_env("FW_WATERREC");
+    return on && !bp && !gx && !checking && !recording && fw_handoff && sc_gpu_on() && !bp_checks() && fw_handoff->ready();
+}
+
+void fw_cpu_fallback(const char *what)
+{
+    static int check = -1;
+    if (!fw_gpu_settled || !sc_gpu_on())
+        return;
+    if (check < 0)
+        check = bp_checks() || fw_env("FW_CPUFILL") || fw_env("FW_SPANPLAY") || fw_env("FW_WATERPLAY") || fw_env("FW_GEROWS");
+    if (!check)
+        nshvc_fatal("SC_GPU: %s would go to the CPU", what);
+}
+#endif
+
 int fw_bp_on(void) { return sc_gpu_on() && !on && !bp_checks() && gpu_here() && rm_canvas_ready(); }
 
 /* a bitmap picture begins: its shape times k, the texels and the canvas's room */
 static int bp_open(int cols, int rows, int bpp, int targets)
 {
-    int k = nshvc_ext_canvas_scale();
+    int k = CANVAS_SCALE();
     if (k < 1 || !tex_room((size_t)cols * 8 * k * rows * 8 * k) ||
-        !rm_canvas_gpu_begin((unsigned)(cols * rows * targets), (unsigned)bpp, k))
+        !rm_canvas_gpu_begin((unsigned)(cols * rows * targets), (unsigned)bpp, k)) {
+        if (k >= 1)
+            FW_CPU_FALLBACK("a bitmap picture with no memory");
         return 0;
+    }
     SXN = SYN = k;
     SXD = SYD = 1;
     tw = cols * 8 * k;
@@ -5256,10 +5371,22 @@ static void gx_begin(void)
     job.on = 0;
     if (fw_drawing || !sc_gpu_on())
         return;
+#ifdef SRFX_NSHVC_HANDOFF
+    /* (not kept: on Metal and Vulkan the GPU opens at the first frame hook) */
+    if (no < 0)
+        no = bp_checks();
+    if (no)
+        return;
+    if (!gpu_here()) {
+        FW_CPU_FALLBACK("a job");
+        return;
+    }
+#else
     if (no < 0)
         no = bp_checks() || !gpu_here();
     if (no)
         return;
+#endif
     if (rm_enhanced()) {
         if (menu_due)                   /* fw_menu_frame's to say, as it starts */
             return;
@@ -5280,6 +5407,7 @@ static void gx_begin(void)
     gx_shape.base = (uint32_t)gsu.scbr << 10;
     gx_shape.mask = ram_mask;
     if (!tex_room((size_t)gx_shape.w * gx_shape.h)) {
+        FW_CPU_FALLBACK("a job with no memory");
         unplotted = 0;
         return;
     }
@@ -5833,7 +5961,7 @@ void fw_sky(void)
     water_due = 0;
     if ((t32 = water_pass())) {
         rm_canvas_taken();
-        nshvc_ext_canvas_screen32(0, t32, tw, th, 0, 1, 0);
+        picture_out(t32);
     }
 }
 
@@ -5943,6 +6071,9 @@ static void screen_set(void)
         vram = 1;
     }
     if (screen_w != W || screen_h != H) {
+#ifdef SRFX_NSHVC_HANDOFF
+        rm_canvas_screen(W, H);
+#endif
         nshvc_ext_screen(W, H);
         nshvc_ext_screen_origin(-1, origin_row());
         screen_w = W;
@@ -5955,6 +6086,9 @@ static void screen_back(void)
 {
     sky_take();
     if (screen_w != 256 || screen_h != 224) {
+#ifdef SRFX_NSHVC_HANDOFF
+        rm_canvas_screen(256, 224);
+#endif
         nshvc_ext_screen(256, 224);
         nshvc_ext_screen_origin(-1, -1);
         screen_w = 256;
@@ -6234,6 +6368,11 @@ void fw_frame_end(void)
 {
     int was = on;
 
+#ifdef SRFX_NSHVC_HANDOFF
+    if (handed && !handed_now && hand_pic() && fw_handoff->again)   /* a frame with no new picture: the last again */
+        fw_handoff->again(tw, th);
+    handed_now = 0;
+#endif
 
     /* the race screen's stages run once a frame (from the hook while the
        full window is on) */
