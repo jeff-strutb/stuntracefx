@@ -129,13 +129,59 @@ depth.
 - The pause panel: baked textures and shaded shapes.
 - Water and ground: a full-screen pass against the depth buffer.
 
-## Contracts asked of nativeshvc (2026-11-04)
+## Contracts asked of nativeshvc (drafts, 2026-11-05, for Jeff's approval)
 
-Sent to its session, "Console redesign: lazy, not an emulator": the canvas
-as a GPU texture (device and queue lent per backend, a fence the console
-waits on), the PSP's present by the GE from VRAM, and the overlay from a
-GPU texture. It plans them as 2.18, after its core stages; shapes to be
-approved by Jeff.
+None of these is agreed or built: nativeshvc dab5da4 and its lazy-console tip
+(5e33c21, contract 2.20) hold none of them. The game side of the hand-off and
+turning the GPU on by default wait for them. Each is new, optional and
+reported by a query, so a host without it goes on as now.
+
+1. **The canvas as a GPU texture.** `nshvc_ext_gpu_device(NshvcGpuLoan *)`
+   lends the host's device and queue: Metal `id<MTLDevice>` and
+   `id<MTLCommandQueue>`; Vulkan the instance, physical device, device, queue
+   and queue family; 0 on a host with none. `nshvc_ext_canvas_screen_gpu(layer,
+   handle, w, h, format, priority, fence)` takes the game's finished picture in
+   place of `nshvc_ext_canvas_screen32`'s texels: `handle` an `MTLTexture` or a
+   `VkImage` with its view, `format` the same four encodings (0 transparent, 1
+   CGRAM colour 1, `0x000000ii` an index, `0xFFrrggbb` a colour) as 32-bit
+   unsigned texels, `fence` an `MTLSharedEvent` value or a `VkSemaphore` the
+   console waits on before it samples. The console keeps the handle until the
+   next one is handed or the frame hook ends. Why: read back to the CPU and
+   copied up again is the last CPU step of a picture.
+2. **The PSP's present by the GE from VRAM.** `nshvc_ext_canvas_screen_ge(layer,
+   vram_address, stride, w, h, psm, priority)`: the picture in VRAM, in the loan
+   below, drawn straight by the console's GE list; the game's list synced before
+   the frame hook returns. Why: on the PSP the picture crosses to the CPU today,
+   501 ms a picture in the baseline below.
+3. **The overlay from a GPU texture.** `nshvc_ext_overlay_gpu(handle, w, h,
+   fence)`, as the first's handle and fence, in the place of the overlay's CPU
+   texels, for the pause panel; on the PSP a VRAM address and stride as the
+   second's. Why: the panel is the last picture the game draws on the CPU.
+4. **The GE's loan with a depth buffer.** `nshvc_ext_ge_vram` lends 557,056
+   bytes today, the canvas alone. Asked: `nshvc_ext_ge_vram2(size_t *bytes,
+   void **depth, int *depth_stride)`, the same colour memory plus a 16-bit depth
+   buffer of the screen's size (at most 512 x 272: 278,528 bytes), its contents
+   not kept. Why: the GE's water cut on faces, sprites and quads tests each
+   pixel against the water's plane written first.
+
+## The water cut
+
+The reference cuts a face's pixel where the water's plane is nearer on its ray.
+Two causes of Aqua Tunnel's errors were found by reading the water path, fixed
+on Metal and Vulkan, and not yet measured: the shaders compared a far object's
+halved depth (the reference's `depth_plane` undoes the halvings, so far objects
+missed the cut), and they cut lines, which the reference never does. The GE
+still ignores the cut on faces, sprites and particles until the loan above.
+
+## GE clipping (the GE Users Manual, chapter 10)
+
+An earlier note here said the GE has no near clip. With clipping enabled it
+clips triangles at the near plane; what it drops whole is a primitive with a
+corner past 0 to 4095 after the viewport, and such primitives must be divided
+first. The CPU's clip is gone: faces of objects near the eye (`sc_near`, by the
+object's place and radius, no point turned) go as flat Bezier patches the GE
+divides itself. A piece with a corner past the range is still dropped, very
+near the eye (Jeff's decision, 2026-11-05). Not yet checked on real hardware.
 
 ## Baselines (2026-11-04, SRFX 464c9dca, race100.sfx frames 1401-1500)
 
@@ -153,9 +199,17 @@ slowdown's cause (its inline-access path) and is fixing it.
 
 ## Stages
 
-Each stage verified and committed with numbers; every check shown able to
-fail with a planted break. macOS Metal first, then Vulkan and the GE from
-the same display list.
+Stages 1 to 3 below were each verified with numbers when made. The pixel counts
+in stages 4 and 5 were measured before the native walk and are out of date;
+the last measured figures (race100: Metal = Vulkan 345,208 apart, 17,348 more
+than 3 pixels off; the GE 617,394, 37,113 off; Aqua Tunnel 9,131,853, 1,496,143
+off) predate every change since, and nothing has been measured after them.
+
+The frame program's pictures are walked natively (scene_frame.c, scene_walk.c
+sc_walk_model): the sorted slots to the display list, facing by the determinant
+over only the points each test needs, nothing projected or rejected by the CPU.
+Sprites, particles and drops are ScPrim, projected by the GPU. Compiled on
+Vulkan and the GE, written and not compiled on Metal, not run anywhere.
 
 1. Geometry: the decoder and transform beside the existing redraw, each
    slot's points against the chip's ($0340 + 6i plus the object's place).
