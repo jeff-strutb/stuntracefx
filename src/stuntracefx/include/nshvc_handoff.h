@@ -45,6 +45,14 @@ typedef struct {
 #define NSHVC_GPU_FORMAT_VULKAN 98u     /* VK_FORMAT_R32_UINT */
 void nshvc_ext_canvas_screen_gpu(int layer, NshvcGpuHandle handle, int w, int h, uint32_t format, int priority,
                                  NshvcGpuFence fence);
+/* The characters in a layer's place, as nshvc_ext_canvas_chars's (the console places
+   them: map, scroll, flips, priority, palette): an 8-bit unsigned texture
+   (MTLPixelFormatR8Uint, VK_FORMAT_R8_UINT; Vulkan as the canvas's above), each
+   character 8k x 8k texels, per_row of them a row from the top left; a value's bits
+   past the layer's depth ignored. Handed as the canvas is; only one canvas of any
+   form. The PSP's form waits for its layout: Jeff's call. */
+void nshvc_ext_canvas_chars_gpu(int layer, unsigned word_addr, int count, NshvcGpuHandle handle, int per_row, int k,
+                                NshvcGpuFence fence);
 /* The PSP's: the picture in the loan's VRAM, GU_PSM_8888 alone, words as the GE drew
    them, 0xttbbggrr, tt the stencil: not 0 for a colour, 0 for an index and clear */
 void nshvc_ext_canvas_screen_ge(int layer, void *vram_address, int stride, int w, int h, int psm, int priority);
@@ -88,7 +96,13 @@ typedef struct {
               address, while nothing has drawn over it)
      panel    the pause panel drawn and handed: the overlay's id, -1 when it could
               not be (NULL: no panel on this host: the PSP has none)
-     panel_again  the panel as it stands, on a frame it shows */
+     panel_again  the panel as it stands, on a frame it shows
+     chars_cut    a bitmap picture's target (the shared picture, w texels a row) copied
+                  by the GPU into its characters: from first, cols x rows of them, side
+                  texels each, column by column, of count in all; the last target's
+                  makes it the one standing (NULL: this host's are read back)
+     chars_hand   the one standing handed for word, count and k: its fence the first
+                  time, none after */
 typedef struct {
     int (*ready)(void);
     void (*clear)(int w, int h);
@@ -96,8 +110,12 @@ typedef struct {
     void (*again)(int w, int h);
     int (*panel)(const HandShape *s, size_t n, const uint32_t *pad, int w, int h);
     void (*panel_again)(int w, int h);
+    void (*chars_cut)(unsigned first, unsigned cols, unsigned rows, int side, int w, unsigned count);
+    void (*chars_hand)(unsigned word, unsigned count, int k);
 } FwHandoff;
 extern const FwHandoff *fw_handoff;
+/* the bitmap pictures go as characters of the GPU's: SC_GPU, the contract there, no check's */
+int fw_chars_on(void);
 
 /* the ground being drawn is for the hand-off: on the GE, its colours in the GE's
    own order (0xttbbggrr), not read back as 0xFFrrggbb */

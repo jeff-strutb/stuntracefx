@@ -2002,7 +2002,7 @@ void fw_clear(void)
         return;
     nspans = npolys = nedges = 0;       /* drawn over: none of them shows */
 #ifdef SRFX_NSHVC_HANDOFF
-    if (hand_pic()) {
+    if (hand_pic() || (bp && fw_chars_on())) {
         if (fw_handoff->clear)          /* (the GE: a canvas of its own, opened cleared below) */
             fw_handoff->clear(tw, th);
     } else
@@ -5077,6 +5077,11 @@ static int hand_pic(void)
     if (recording < 0)
         recording = fw_env("FW_SPANREC") || fw_env("FW_WATERREC");
     return on && !bp && !gx && !checking && !recording && fw_handoff && sc_gpu_on() && !bp_checks() && fw_handoff->ready();
+}
+
+int fw_chars_on(void)
+{
+    return fw_handoff && fw_handoff->chars_cut && sc_gpu_on() && !bp_checks() && fw_handoff->ready();
 }
 
 void fw_cpu_fallback(const char *what)

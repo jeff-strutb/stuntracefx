@@ -1369,8 +1369,8 @@ static void hand_record(void *arg)
                  VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
 }
 
-/* the job run, the semaphore signalled by its end, waited for as every run here */
-static int hand_run(HandJob *j, VkSemaphore sem)
+/* a recording run, the semaphore (if any) signalled by its end, waited for as every run here */
+static int hand_submit(void (*fn)(void *), void *arg, VkSemaphore sem)
 {
     VkCommandBufferBeginInfo bi = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
     VkSubmitInfo si = {VK_STRUCTURE_TYPE_SUBMIT_INFO};
@@ -1379,16 +1379,18 @@ static int hand_run(HandJob *j, VkSemaphore sem)
     pvkResetCommandBuffer(cb, 0);
     bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     pvkBeginCommandBuffer(cb, &bi);
-    hand_record(j);
+    fn(arg);
     pvkEndCommandBuffer(cb);
     si.commandBufferCount = 1;
     si.pCommandBuffers = &cb;
-    si.signalSemaphoreCount = 1;
+    si.signalSemaphoreCount = sem ? 1 : 0;
     si.pSignalSemaphores = &sem;
     pvkResetFences(dev, 1, &fence);
     return pvkQueueSubmit(queue, 1, &si, fence) == VK_SUCCESS &&
            pvkWaitForFences(dev, 1, &fence, VK_TRUE, 5000000000ull) == VK_SUCCESS;
 }
+
+static int hand_run(HandJob *j, VkSemaphore sem) { return hand_submit(hand_record, j, sem); }
 
 static NshvcGpuHandle ring_handle(const HandRing *r, int i)
 {
@@ -1497,7 +1499,102 @@ static void hand_panel_again(int w, int h)
         nshvc_ext_overlay_gpu(ring_handle(&ring_panel, ring_panel.at), w, h, none);
 }
 
-static const FwHandoff s_hand_ops = { hand_ready, hand_clear, hand_picture, hand_again, hand_panel, hand_panel_again };
+/* The bitmap pictures' characters: each copied by the GPU from its place in the shared
+   picture to its place in the image's grid (the characters' order column by column,
+   the grid's row by row). A new picture into the ring's next image; the last target's
+   copy makes it the one standing, the one before handed until then. */
+static HandRing ring_chars;
+static int chars_ok, chars_next, chars_per_row;
+static VkSemaphore chars_sem;
+typedef struct {
+    VkImage to;
+    const VkBufferImageCopy *re;
+    uint32_t n;
+    int fresh;
+} CharsJob;
+
+static void chars_record(void *arg)
+{
+    CharsJob *j = (CharsJob *)arg;
+    barrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT);
+    /* (a second target's: the first's characters kept) */
+    image_layout(j->to, j->fresh ? VK_IMAGE_LAYOUT_UNDEFINED : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                 VK_PIPELINE_STAGE_TRANSFER_BIT);
+    pvkCmdCopyBufferToImage(cb, bufs[B_OUT].b, j->to, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, j->n, j->re);
+    image_layout(j->to, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT,
+                 VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                 VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
+}
+
+static void hand_chars_cut(unsigned first, unsigned cols, unsigned rows, int side, int w, unsigned count)
+{
+    static VkBufferImageCopy *re;
+    static size_t cap;
+    unsigned per_row = count / rows, grid = (count + per_row - 1) / per_row, c, r;
+    int iw = (int)per_row * side, ih = (int)grid * side, last = first + cols * rows == count;
+    size_t n = (size_t)cols * rows, k = 0;
+    VkSemaphore sem = VK_NULL_HANDLE;
+    CharsJob j;
+
+    if (!ring_chars.img[0].im || ring_chars.w != iw || ring_chars.h != ih)
+        chars_ok = 0;                   /* (made again: none stands) */
+    if (cap < n) {
+        free(re);
+        re = malloc(n * sizeof *re);
+        cap = re ? n : 0;
+    }
+    if (!re || !ring_at(&ring_chars, VK_FORMAT_R8_UINT,
+                        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, iw, ih) ||
+        (last && !(sem = hand_fence()))) {
+        fw_cpu_fallback("a bitmap picture's characters");
+        return;
+    }
+    if (!first)
+        chars_next = (ring_chars.at + 1) % HAND_RING;
+    memset(re, 0, n * sizeof *re);
+    for (c = 0; c < cols; c++)
+        for (r = 0; r < rows; r++, k++) {
+            unsigned i = first + c * rows + r;
+            re[k].bufferOffset = (VkDeviceSize)r * (unsigned)side * (unsigned)w + (VkDeviceSize)c * (unsigned)side;
+            re[k].bufferRowLength = (uint32_t)w;
+            re[k].imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            re[k].imageSubresource.layerCount = 1;
+            re[k].imageOffset.x = (int32_t)(i % per_row) * side;
+            re[k].imageOffset.y = (int32_t)(i / per_row) * side;
+            re[k].imageExtent.width = re[k].imageExtent.height = (uint32_t)side;
+            re[k].imageExtent.depth = 1;
+        }
+    j.to = ring_chars.img[chars_next].im;
+    j.re = re;
+    j.n = (uint32_t)n;
+    j.fresh = !first;
+    if (!hand_submit(chars_record, &j, sem)) {
+        fw_cpu_fallback("a bitmap picture's characters");
+        return;
+    }
+    if (last) {
+        ring_chars.at = chars_next;
+        chars_per_row = (int)per_row;
+        chars_sem = sem;
+        chars_ok = 1;
+    }
+}
+
+static void hand_chars(unsigned word, unsigned count, int k)
+{
+    NshvcGpuFence f = {0, 0};
+    if (!chars_ok)
+        return;
+    f.event = (uint64_t)chars_sem;      /* (waited on once: none after) */
+    chars_sem = VK_NULL_HANDLE;
+    nshvc_ext_canvas_chars_gpu(0, word, (int)count, ring_handle(&ring_chars, ring_chars.at), chars_per_row, k, f);
+}
+
+static const FwHandoff s_hand_ops = { hand_ready, hand_clear, hand_picture, hand_again, hand_panel, hand_panel_again,
+                                      hand_chars_cut, hand_chars };
 #endif
 
 /* the GPU's fill in fw_span_filler's place, when there is a Vulkan GPU */

@@ -55,6 +55,9 @@ static int canvas_k, canvas_on, canvas_seen, canvas_owner, owner_now;
    canvas_src's (canvas_gpu, as handed; gpu_ready, one drawn): its count, bits
    a pixel and k */
 static int canvas_gpu, gpu_ready, gpu_k;
+#ifdef SRFX_NSHVC_HANDOFF
+static int gpu_handed;                  /* the characters handed since the last frame hook */
+#endif
 static unsigned gpu_count, gpu_bpp;
 
 #ifdef SRFX_NSHVC_HANDOFF
@@ -104,6 +107,9 @@ int rm_canvas_gpu_begin(unsigned count, unsigned bpp, int k)
 {
     size_t need = (size_t)count * 64 * k * k;
 
+#ifdef SRFX_NSHVC_HANDOFF
+    if (!fw_chars_on())                 /* (the GPU's own: no texels here) */
+#endif
     if (need > texels_size) {
         free(texels);
         texels = malloc(need);
@@ -123,6 +129,12 @@ void rm_canvas_gpu_cut(unsigned first, unsigned cols, unsigned rows, const uint8
 {
     unsigned c, r, x, y, side = 8 * (unsigned)gpu_k;
 
+#ifdef SRFX_NSHVC_HANDOFF
+    if (fw_chars_on()) {                /* on the GPU, no pixel read here; a value's bits past the layer's the console's to drop */
+        fw_handoff->chars_cut(first, cols, rows, (int)side, w, gpu_count);
+        return;
+    }
+#endif
     for (c = 0; c < cols; c++)
         for (r = 0; r < rows; r++) {
             uint8_t *o = texels + (size_t)(first + c * rows + r) * side * side;
@@ -164,6 +176,12 @@ static void gpu_hand(unsigned word)
     canvas_bpp = gpu_bpp;
     canvas_k = gpu_k;
     canvas_gpu = 1;
+#ifdef SRFX_NSHVC_HANDOFF
+    if (fw_chars_on()) {
+        fw_handoff->chars_hand(word, gpu_count, gpu_k);
+        gpu_handed = 1;
+    } else
+#endif
     nshvc_ext_canvas_chars(0, word, (int)gpu_count, texels, gpu_k);
     canvas_on = 1;
 }
@@ -340,6 +358,12 @@ void rm_canvas_frame_end(void)
     if (canvas_on && !canvas_seen)       /* the screen that handed it is gone */
         rm_canvas_off();
     canvas_seen = 0;
+#ifdef SRFX_NSHVC_HANDOFF
+    /* handed every frame (contract 2.22): a picture that stands, again */
+    if (canvas_on && canvas_gpu && !gpu_handed && fw_chars_on())
+        fw_handoff->chars_hand(canvas_word, canvas_count, canvas_k);
+    gpu_handed = 0;
+#endif
     if (!canvas_on)
         return;
     k = CANVAS_SCALE();

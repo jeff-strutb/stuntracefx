@@ -2549,7 +2549,8 @@ static void hand_again(int w, int h)
         nshvc_ext_canvas_screen_ge(0, s_hand_at, s_hand_stride, w, h, GU_PSM_8888, 1);
 }
 
-static const FwHandoff s_hand_ops = { hand_ready, NULL, hand_picture, hand_again, NULL, NULL };
+/* (no characters here yet: the bitmap pictures read back, the PSP's form's layout Jeff's call) */
+static const FwHandoff s_hand_ops = { hand_ready, NULL, hand_picture, hand_again, NULL, NULL, NULL, NULL };
 #endif
 
 /* FW_SPANPLAY: the GE the program's own (no console runs, so libgu is

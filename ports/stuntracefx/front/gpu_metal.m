@@ -1448,7 +1448,74 @@ static void hand_panel_again(int w, int h)
         nshvc_ext_overlay_gpu(tex_handle(ring_panel[panel_at]), w, h, none);
 }
 
-static const FwHandoff s_hand_ops = { hand_ready, hand_clear, hand_picture, hand_again, hand_panel, hand_panel_again };
+/* The bitmap pictures' characters: each copied by the GPU from its place in the shared
+   picture to its place in the texture's grid (the characters' order column by column,
+   the grid's row by row). A new picture into the ring's next texture; the last target's
+   copy makes it the one standing, the one before handed until then. */
+static id<MTLTexture> ring_chars[HAND_RING];
+static int chars_at, chars_next, chars_ok, chars_per_row;
+static uint64_t chars_value;
+
+static void hand_chars_cut(unsigned first, unsigned cols, unsigned rows, int side, int w, unsigned count)
+{
+    unsigned per_row = count / rows, grid = (count + per_row - 1) / per_row, c, r;
+    int iw = (int)per_row * side, ih = (int)grid * side, last = first + cols * rows == count;
+    if (!ring_chars[0] || ring_chars[0].width != (NSUInteger)iw || ring_chars[0].height != (NSUInteger)ih)
+        chars_ok = 0;                   /* (made again: none stands) */
+    if (!ring_make(ring_chars, MTLPixelFormatR8Uint, iw, ih)) {
+        fw_cpu_fallback("a bitmap picture's characters");
+        return;
+    }
+    if (!first)
+        chars_next = (chars_at + 1) % HAND_RING;
+    if (last)
+        hand_value++;
+    @autoreleasepool {
+        id<MTLCommandBuffer> cb = [queue commandBuffer];
+        id<MTLBlitCommandEncoder> bl = [cb blitCommandEncoder];
+        for (c = 0; c < cols; c++)
+            for (r = 0; r < rows; r++) {
+                unsigned i = first + c * rows + r;
+                [bl copyFromBuffer:buf_out
+                          sourceOffset:(NSUInteger)r * (NSUInteger)side * (NSUInteger)w + (NSUInteger)c * (NSUInteger)side
+                     sourceBytesPerRow:(NSUInteger)w
+                   sourceBytesPerImage:(NSUInteger)w * (NSUInteger)side
+                            sourceSize:MTLSizeMake((NSUInteger)side, (NSUInteger)side, 1)
+                             toTexture:ring_chars[chars_next]
+                      destinationSlice:0
+                      destinationLevel:0
+                     destinationOrigin:MTLOriginMake((NSUInteger)(i % per_row) * (NSUInteger)side,
+                                                     (NSUInteger)(i / per_row) * (NSUInteger)side, 0)];
+            }
+        [bl endEncoding];
+        if (last)
+            [cb encodeSignalEvent:hand_event value:hand_value];
+        [cb commit];
+        [cb waitUntilCompleted];
+    }
+    if (last) {
+        chars_at = chars_next;
+        chars_per_row = (int)per_row;
+        chars_value = hand_value;
+        chars_ok = 1;
+    }
+}
+
+static void hand_chars(unsigned word, unsigned count, int k)
+{
+    NshvcGpuFence f = {0, 0};
+    if (!chars_ok)
+        return;
+    if (chars_value) {                  /* (its value the first time: none after) */
+        f.event = (uint64_t)(uintptr_t)(__bridge void *)hand_event;
+        f.value = chars_value;
+        chars_value = 0;
+    }
+    nshvc_ext_canvas_chars_gpu(0, word, (int)count, tex_handle(ring_chars[chars_at]), chars_per_row, k, f);
+}
+
+static const FwHandoff s_hand_ops = { hand_ready, hand_clear, hand_picture, hand_again, hand_panel, hand_panel_again,
+                                      hand_chars_cut, hand_chars };
 #endif
 
 /* the GPU's fill in fw_span_filler's place, when there is a Metal device */

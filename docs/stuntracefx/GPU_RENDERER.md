@@ -180,10 +180,19 @@ Off by default, and SC_GPU stays off by default. `nshvc_handoff.h` holds the
 console's functions, as contract 2.22 on nativeshvc's branch `contract-2.22` gives
 them (itself never run). `SRFX_NSHVC_HANDOFF=1 sh build.sh` links only against that.
 
-- **Not handed off:** two players, the menus' 3D and no widescreen stay on
-  `nshvc_ext_canvas_chars` and their read-back, until Jeff decides the character
-  form. Original's job stays read back at STOP by design; on the GE its bitplanes are
-  packed on the CPU, and its noise and haze are made there.
+- **Not handed off:** on the PSP, two players, the menus' 3D and no widescreen stay
+  on `nshvc_ext_canvas_chars` and their read-back. `nshvc_ext_canvas_chars_ge`'s grid
+  runs across rows, the game's characters down columns, and the loan has no room for
+  the cut; by-column waits on Jeff, and PSP two players (576 texels across at k 2,
+  512 the most) on his choice too. Original's job stays read back at STOP by design;
+  on the GE its bitplanes are packed on the CPU, and its noise and haze are made there.
+- **The bitmap pictures, Metal and Vulkan (Jeff, 2026-11-05: "Yes, build it").** Two
+  players, the menus' 3D and no widescreen go as `nshvc_ext_canvas_chars_gpu`, the
+  console placing them as ever. Each target's characters are copied by the GPU from
+  the shared picture into a grid in an R8 image, one image of three in turn, the last
+  target's copy making it the one that stands; handed every frame, the fence once.
+  The target is cleared by the GPU. A value's high nibble needs no masking: the
+  console keeps the layer's depth bits.
 - **Metal, Vulkan.** The device and queue are the console's, so the GPU opens at the
   first frame hook (the renderer opens after the power on); a job before that hook,
   if any, is the chip's. The picture stays in its GPU buffers, cleared by the GPU and
