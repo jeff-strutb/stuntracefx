@@ -94,6 +94,28 @@ const FwCanvasGpu *fw_canvas_gpu;
 static int gpu_pic, gpu_open, gpu_cleared;
 static int staged;                      /* this frame's upload stage ran in the full window */
 
+/* the bitmap pictures (fullwindow.h): Enhanced's at k (bp: its shape's columns
+   and rows of characters, bits a pixel, targets wanted and done, the one open;
+   the game's view words while the frame program has k's; its centre in
+   texels), a job of Original's (gx: its target valid, its shape), the screen's
+   low-nibble rule (bit4) */
+static int bp, bp_cols, bp_rows, bp_bpp, bp_targets, bp_done, bp_open_now;
+static uint16_t bp_game[8];
+static int bp_cx, bp_cy;
+static int menu_due;
+static int gx, gx_valid;
+static FwBits gx_shape;
+static FwJob job;
+static uint32_t ram_mask = 0x1FFFF;
+static int bit4;
+static int scale_lost;                  /* tw, th and the scale theirs: the full window's made again when it comes back */
+int fw_bp_active(void) { return bp; }
+int fw_nibble(void) { return bit4; }
+uint8_t fw_por(void) { return (uint8_t)(gsu.por | (bit4 ? 8 : 0)); }
+void fw_ram_size(uint32_t size) { ram_mask = size - 1; }
+const FwJob *fw_job(void) { return &job; }
+void (*fw_bits_filler)(uint8_t *tex, uint8_t *ram, const FwBits *b, int pack) = fw_bits_cpu;
+
 static void panels_draw(void);
 static void sprites_write(void);
 static void span_flush(void);
@@ -114,7 +136,7 @@ static void takeover(void);
 
 /* the view's centre line on this screen: the original's, the rows a taller
    screen adds shared above and below it */
-static int view_cy(void) { return VIEW_CY + (H - 224) / 2; }
+static int view_cy(void) { return bp ? bp_cy : VIEW_CY + (H - 224) / 2; }
 /* FW_CCHECK's larger picture: texels added above the screen (its centre
    that much lower) */
 static int cy_off;
@@ -184,7 +206,7 @@ static float centre_rowf(void) { centre_row(); return centre_f; }
 static void block_set(int x, int y, uint8_t c)
 {
     int x0 = col_at(x), x1 = col_at(x + 1), y0 = row_at(y), y1 = row_at(y + 1), j;
-    if (gpu_pic) {                      /* drawn in its order with the rest, as spans */
+    if (gpu_pic || bp) {                /* drawn in its order with the rest, as spans */
         for (j = y0; j < y1; j++)
             if (x1 > x0)
                 span_flat(j, x0, x1 - 1, c);
@@ -214,7 +236,7 @@ static int plot_colour(void)
     uint8_t c = gsu.colr;
 
     if (!(gsu.por & 0x01)) {
-        if (gsu.por & 0x08) {
+        if ((gsu.por & 0x08) || bit4) {
             if (!(c & 0x0F))
                 return -1;
         } else if (!c) {
@@ -328,14 +350,19 @@ static int hud_run, hud_x0, hud_x1, hud_y0, hud_y1, hud_vx0, hud_vx1, hud_vy0, h
 static int hud_n, hp_x0[HUD_PIECES], hp_x1[HUD_PIECES], hp_y0[HUD_PIECES], hp_y1[HUD_PIECES], hp_up[HUD_PIECES];
 static int hv_x0[HUD_PIECES], hv_x1[HUD_PIECES], hv_y0[HUD_PIECES], hv_y1[HUD_PIECES];
 
+static void gx_begin(void);
+static void gx_end(void);
+
 void fw_gsu_program(int begin)
 {
     if (begin) {
-        hud_run = fw_hud && !checking && hud_n < HUD_PIECES;
+        gx_begin();
+        hud_run = fw_hud && !checking && !bp && hud_n < HUD_PIECES;
         hud_x0 = hud_y0 = hud_vx0 = hud_vy0 = 0x7FFF;
         hud_x1 = hud_y1 = hud_vx1 = hud_vy1 = -1;
         return;
     }
+    gx_end();
     if (!hud_run)
         return;
     hud_run = 0;
@@ -595,6 +622,64 @@ static unsigned persp_texel(float a, float q)
     return (unsigned)(int)floorf(t) & 0xFF;
 }
 
+/* one effect's haze (FW_HAZE, the GPUs' the same): each entry's block of
+   texels read from the picture as FxHazeSample left it, all before any is
+   written, then written opaque in the shape's order */
+static void haze_fill(uint8_t *out, int w, int h, const FwSpan *p)
+{
+    static uint8_t *from;
+    static size_t from_len;
+    size_t len = (size_t)w * h;
+    int32_t X = (int32_t)p->xl, Y = p->pad0, r, c;
+    uint16_t at = (uint16_t)(0xF92E + 4 * p->base);
+    uint16_t shape = (uint16_t)(fw_texel(8, at) | fw_texel(8, (uint16_t)(at + 1)) << 8);
+    uint16_t offs = (uint16_t)(fw_texel(8, (uint16_t)(at + 2)) | fw_texel(8, (uint16_t)(at + 3)) << 8);
+    int wrap = p->pad1[2];
+
+    if (from_len < len) {
+        free(from);
+        from = malloc(len);
+        from_len = from ? len : 0;
+        if (!from)
+            return;
+    }
+    memcpy(from, out, len);
+    for (r = 0; r < 16; r++) {
+        int32_t sy = Y + (int8_t)fw_texel(8, (uint16_t)(offs + r)), ty = Y - 8 + r;
+        for (c = 0; c < 16; c++) {
+            int8_t b = (int8_t)fw_texel(8, (uint16_t)(shape + r * 16 + c));
+            int32_t sx = X + b, tx = (X - 8 + c) & 255, ty8 = ty & 255, sxa = sx, sya = sy, u, v;
+            int64_t c0, c1, r0, r1, s0, t0;
+            if (!b)
+                continue;
+            if (wrap) {
+                sxa &= 255;
+                sya &= 255;
+                if (sya >= h) {
+                    sya -= h;
+                    sxa += 8;
+                }
+                if (ty8 >= h) {
+                    ty8 -= h;
+                    tx += 8;
+                }
+            }
+            c0 = floor_div(tx * p->u, p->du);
+            c1 = floor_div((tx + 1) * p->u, p->du);
+            r0 = floor_div(ty8 * p->v, p->dv);
+            r1 = floor_div((ty8 + 1) * p->v, p->dv);
+            s0 = floor_div(sxa * p->u, p->du);
+            t0 = floor_div(sya * p->v, p->dv);
+            for (v = 0; v < r1 - r0; v++)
+                for (u = 0; u < c1 - c0; u++) {
+                    int64_t xs = s0 + u, ys = t0 + v, xd = c0 + u, yd = r0 + v;
+                    if (xd >= 0 && xd < w && yd >= 0 && yd < h)
+                        out[yd * w + xd] = xs >= 0 && xs < w && ys >= 0 && ys < h ? from[ys * w + xs] : 0;
+                }
+        }
+    }
+}
+
 void fw_span_fill_cpu(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
 {
     size_t i;
@@ -606,6 +691,10 @@ void fw_span_fill_cpu(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
         int deep = fw_water[3] != 0 && (p->za != 0 || p->zx != 0 || p->zy != 0);
         if (p->textured == 6)           /* a face the GPU draws (the reference's own spans are beside it) */
             continue;
+        if (p->textured == FW_HAZE) {
+            haze_fill(out, w, h, p);
+            continue;
+        }
         if (p->textured == FW_QUAD) {
             if (p->pad1[0] != 2)        /* (2: the GPU's alone, the reference's spans beside it) */
                 quad_fill(out, w, p);
@@ -937,6 +1026,12 @@ static void quad_check(void)
 /* the spans drawn into the texels */
 static void span_flush(void)
 {
+    if (gx && !gx_valid && nspans) {    /* a job's first drawing: the chip's bitplanes unpacked */
+        fw_bits_filler(tex, nshvc_sram(), &gx_shape, 0);
+        gx_valid = 1;
+    }
+    if (gx && !nspans)
+        return;
     if (gpu_pic && !gpu_open) {         /* the GPU's picture opened: cleared, or the last one's to draw over */
         if (fw_canvas_gpu->open(tw, th, gpu_cleared ? NULL : tex))
             gpu_open = 1;
@@ -968,13 +1063,17 @@ int fw_label_begin(uint16_t x, uint16_t y)
     label_y = y;
     /* x is half the side offset past the centre (tw / 2, the full
        window's $34), in console pixels; y the original's row on its
-       128-row view, centre line 64 */
-    label_tx = tw / 2 + (int)floor_div(((int)(int16_t)x - tw / 2) * SXN, SXD);
+       128-row view, centre line 64 (a bitmap picture: the row itself, the
+       centre its own) */
+    {
+        int cx = bp ? bp_cx : tw / 2;
+        label_tx = cx + (int)floor_div(((int)(int16_t)x - cx) * SXN, SXD);
+    }
     if (label_tx < 0)
         label_tx = 0;
     if (label_tx > tw - 1 - lw)
         label_tx = tw - 1 - lw;
-    label_ty = row_at(view_cy() + (int)(int16_t)y - 64) + cy_off;
+    label_ty = bp ? row_at((int16_t)y) : row_at(view_cy() + (int)(int16_t)y - 64) + cy_off;
     label_on = 1;
     return 1;
 }
@@ -1112,13 +1211,20 @@ void fw_sprite_span(uint16_t y, uint16_t x0, uint16_t x1, uint16_t bank, uint16_
         p->u = ((int64_t)0xFF << 32) + (((int64_t)1 << 32) - 1) - ((int64_t)frac << 16);
         p->du = -((int64_t)step << 16);
     }
+    p->por = fw_por();
 }
 
 /* ---- screen quads (textured 7, fullwindow.h) ------------------------------ */
 
 /* the quads drawn by the GPU: its display list's (SC_GPU), the 3D's sprites */
 /* (FW_NOQUADS, a check: the sprites by the chip's loops, the GPU's faces kept) */
-static int quads_on(void) { return fw_drawing && sc_gpu_on() && !checking && !fw_hud && !label_on && !fw_env("FW_NOQUADS"); }
+/* (a bitmap picture's programs plot at the bitmap's own places, fw_plot's; a
+   job with dither on a 4-bit screen, none made, by the loop's plots) */
+static int quads_on(void)
+{
+    return fw_drawing && sc_gpu_on() && !checking && !fw_hud && !label_on && !bp && !(gx && bit4 && (gsu.por & 2)) &&
+           !fw_env("FW_NOQUADS");
+}
 /* the reference's own spans kept beside them (FW_GPUCHECK, FW_QUADCHECK) */
 static int quads_both(void) { return fw_env("FW_GPUCHECK") || fw_env("FW_QUADCHECK"); }
 
@@ -1153,10 +1259,12 @@ static FwSpan *quad_new(int32_t y0, int32_t rows, int32_t a, int32_t b, int64_t 
     p->zy = cur_z[2];
     p->textured = FW_QUAD;
     p->pad1[0] = quads_both() ? 2 : 0;
-    p->por = gsu.por;
+    p->por = fw_por();
     p->hi = (uint8_t)(gsu.colr & 0xF0);
     quads_made++;
     cen_quads++;
+    if (gx)
+        job.quad += (uint64_t)(b - a + 1) * (uint64_t)(y1 - y0 + 1);
     if (fw_env("SC_BREAK"))             /* (a planted break: the check must see it) */
         p->x1 += p->x1 > p->x0;
     return p;
@@ -1333,7 +1441,7 @@ static void bitmap_fields(FwSpan *p, uint8_t bank, uint16_t at, const uint8_t pa
     memcpy(&p->pq, &cden, 4);
     memcpy(&p->pdq, &mx, 4);
     memcpy(&p->pda, &my, 4);
-    p->por = gsu.por;
+    p->por = fw_por();
     p->hi = (uint8_t)(gsu.colr & 0xF0);
     p->za = p->zx = p->zy = 0;          /* no depth: the HUD's and labels' (span_new's) */
 }
@@ -1349,7 +1457,8 @@ static int bitmap_colour(uint8_t bank, uint16_t at, int64_t sx, int64_t sy, cons
 
 static int bitmaps_on(void)
 {
-    return fw_drawing && sc_gpu_on() && !checking && !cropping && !fw_env("FW_NOQUADS") && (label_on || (fw_hud && hud_run));
+    return fw_drawing && sc_gpu_on() && !checking && !cropping && !fw_env("FW_NOQUADS") &&
+           (label_on || (fw_hud && hud_run) || bp || gx);
 }
 
 /* the bitmap's pixels (dx, dy from the origin ox, oy; cols by rows from
@@ -1385,6 +1494,27 @@ static int bitmap_quad(int32_t ox, int32_t oy, int32_t dx0, int32_t dy0, int col
         if (p) {
             p->xl = label_tx;
             p->u = SXD - 1 - DXo * SXN;
+            p->du = SXD;
+            p->mask = (uint16_t)SYN;
+            bitmap_fields(p, bank, at, pal, stepx, stepy, (uint32_t)SXN);
+        }
+        return quad_made();
+    }
+    if (bp || gx) {
+        /* a bitmap picture's or a job's: at the bitmap's own place, as PLOT
+           puts it (the low bytes), each pixel its k x k texels; one across
+           the wrap, or past a job's rows, plotted as ever */
+        int64_t lx = (uint8_t)(ox + dx0), ly = (uint8_t)(oy + dy0);
+        int32_t r0, c0;
+        FwSpan *p;
+        if (lx + cols > 256 || ly + rows > 256 || (gx && ly + rows > th))
+            return 0;
+        r0 = row_at(ly);
+        c0 = col_at(lx);
+        p = quad_new(r0, row_at(ly + rows) - r0, c0, col_at(lx + cols) - 1, (int64_t)(r0 + 1) * SYD - 1 - (ly - dy0) * SYN, SYD);
+        if (p) {
+            p->xl = 0;
+            p->u = SXD - 1 - (lx - dx0) * SXN;
             p->du = SXD;
             p->mask = (uint16_t)SYN;
             bitmap_fields(p, bank, at, pal, stepx, stepy, (uint32_t)SXN);
@@ -1654,6 +1784,30 @@ void fw_plot(uint16_t x, uint16_t y)
 
     census_plot(c < 0 ? 3 : fw_hud ? 0 : label_on ? 1 : sprite_hidden && !checking ? 3 : 2);
 
+    if (gx) {                           /* a job's, as gsu_plot's: the low bytes, dither on a 4-bit screen, its alias */
+        int px = (uint8_t)x, py = (uint8_t)y;
+        if (c < 0)
+            return;
+        if ((gsu.por & 2) && bit4) {
+            if ((px ^ py) & 1)
+                c >>= 4;
+            c &= 0x0F;
+        }
+        if (py >= th) {
+            py -= th;
+            px += 8;
+        }
+        job.plots++;
+        span_flat(py, px, px, (uint8_t)c);
+        return;
+    }
+    if (bp && !label_on) {              /* a bitmap picture's program: at its own place, k x k texels */
+        int px = (uint8_t)x, py = (uint8_t)y;
+        if (c >= 0 && px < bp_cols * 8 && py < bp_rows * 8)
+            block_set(px, py, (uint8_t)c);
+        return;
+    }
+
     if (label_on && c >= 0 && !checking) {
         int64_t dx = (int)(int16_t)x - label_x, dy = (int)(int16_t)y - label_y;
         int px0 = label_tx + (int)floor_div(dx * SXN, SXD), px1 = label_tx + (int)floor_div((dx + 1) * SXN, SXD) - 1;
@@ -1703,8 +1857,16 @@ void fw_plot(uint16_t x, uint16_t y)
     }
 }
 
+static void gx_sync(void);
+
 uint8_t fw_rpix(uint16_t x, uint16_t y)
 {
+    if (gx) {                           /* a job's: what is drawn so far in the chip's RAM, read there */
+        gx_sync();
+        return gsu_rpix((uint8_t)x, (uint8_t)y);
+    }
+    if (bp)                             /* a pixel-cache flush whose value goes unread (the census) */
+        return 0;
     if (fw_hud && hud_run) {
         int px = (uint8_t)x + VIEW_X, py = (uint8_t)y + VIEW_Y;
         return py < 224 && hud_px[py][px] ? (uint8_t)(hud_px[py][px] - 1) : 0;
@@ -1741,6 +1903,11 @@ uint8_t gsu_rpix16(uint16_t x, uint16_t y)
 
 void fw_clear(void)
 {
+    if (gx) {                           /* a job's: what is drawn packed; the chip's store then clears its RAM, unpacked again at the next drawing */
+        gx_sync();
+        gx_valid = 0;
+        return;
+    }
     nspans = npolys = nedges = 0;       /* drawn over: none of them shows */
     memset(tex, 0, (size_t)tw * th);
     if (gpu_pic) {                      /* the GPU's picture opened again, cleared */
@@ -1799,7 +1966,7 @@ static float fw_focal_yf(void) { fw_focal_y(); return focal_yf; }
 int fw_half_width(void) { return tw / 2; }
 void fw_view_centre(float *cx, float *cy)
 {
-    *cx = (float)(tw / 2);
+    *cx = (float)(bp ? bp_cx : tw / 2);
     *cy = centre_rowf();
 }
 
@@ -1807,7 +1974,7 @@ int fw_view_words(const uint16_t w[6], uint16_t out[8])
 {
     int i, cy = (int)centre_row(), below = th - cy;
 
-    if (!fw_drawing || fw_hud)
+    if (!fw_drawing || fw_hud || bp || gx)
         return 0;
     for (i = 0; i < 6; i++)
         if (w[i] != k_race1p[i])
@@ -1842,7 +2009,7 @@ void fw_view_begin(void)
     int i;
 
     view_set = 0;
-    if (!fw_drawing || checking)
+    if (!fw_drawing || checking || bp)
         return;
     for (i = 0; i < 8; i++)
         view_game[i] = (uint16_t)(s[view_at[i]] | s[view_at[i] + 1] << 8);
@@ -2380,6 +2547,8 @@ static int64_t edge_uv(int32_t a, int32_t d, int32_t y0, int32_t n, int32_t row)
     return ((int64_t)a << 32) + ((int64_t)d << 32) * (row - y0) / n;
 }
 
+static uint16_t row_step(uint16_t r, uint16_t l, uint32_t n);
+
 static const FwEdge *edge_at(const FwEdge *e, int32_t n, int32_t row)
 {
     int32_t i;
@@ -2404,6 +2573,10 @@ int fw_poly_row(const FwPoly *p, const FwEdge *edges, int32_t row, int32_t w, Fw
     int64_t xl = edge_x(l->from, l->to, l->y0, l->n, row) >> 8, xr = edge_x(r->from, r->to, r->y0, r->n, row) >> 8;
     int64_t width, x0, x1, uL, uR, vL, vR, d;
 
+    if (p->pad[0]) {                    /* the chip's: each edge's x stepped */
+        xl = fw_chip_x(l->pad[0], l->pad[1], row - l->y0) >> 8;
+        xr = fw_chip_x(r->pad[0], r->pad[1], row - r->y0) >> 8;
+    }
     memset(s, 0, sizeof *s);
     s->y = row;
     s->za = p->za;
@@ -2435,6 +2608,18 @@ int fw_poly_row(const FwPoly *p, const FwEdge *edges, int32_t row, int32_t w, Fw
     s->por = p->por;
     s->hi = p->hi;
     s->textured = 1;
+    if (p->pad[0]) {                    /* the chip's 8.8 u and v: each edge's by its steps, the row's by the reciprocal */
+        uint32_t il = (uint32_t)(row - l->y0), ir = (uint32_t)(row - r->y0);
+        uint16_t ul = (uint16_t)((uint32_t)l->pad[2] + il * (uint32_t)l->pad[3]);
+        uint16_t ur = (uint16_t)((uint32_t)r->pad[2] + ir * (uint32_t)r->pad[3]);
+        uint16_t vl = (uint16_t)(((uint32_t)l->pad[2] >> 16) + il * ((uint32_t)l->pad[3] >> 16));
+        uint16_t vr = (uint16_t)(((uint32_t)r->pad[2] >> 16) + ir * ((uint32_t)r->pad[3] >> 16));
+        s->u = (int64_t)(uint16_t)(ul + (uint16_t)p->ou) << 24;
+        s->v = (int64_t)(uint16_t)(vl + (uint16_t)p->ov) << 24;
+        s->du = (int64_t)row_step(ur, ul, (uint32_t)width) << 24;
+        s->dv = (int64_t)row_step(vr, vl, (uint32_t)width) << 24;
+        return 1;
+    }
     uL = edge_uv(l->ua, l->dua, l->y0, l->n, row);
     uR = edge_uv(r->ua, r->dua, r->y0, r->n, row);
     vL = edge_uv(l->va, l->dva, l->y0, l->n, row);
@@ -2521,11 +2706,20 @@ static int poly_put(FwPoly *p, int32_t ymin, int32_t yend)
    value by its address in the Super FX's RAM (sw_val), good for this list
    (sw_gen, the list's generation: a list drawn, every one gone) */
 
-static int32_t vw(uint16_t a) { return sw_gen[a >> 1] == list_gen ? sw_val[a >> 1] : (int16_t)ram16(a); }
+static int32_t vw(uint16_t a)
+{
+    if (gx)                             /* a job's: the chip takes the low byte (LDB) */
+        return ram8(a);
+    return sw_gen[a >> 1] == list_gen ? sw_val[a >> 1] : (int16_t)ram16(a);
+}
 
 /* a vertex word copied, its exact value with it (the fill's copies) */
 static void wcopy(uint16_t dst, uint16_t src)
 {
+    if (gx) {                           /* the chip's copy: the low byte alone (STB) */
+        ram8w(dst, ram8(src));
+        return;
+    }
     ram16w(dst, ram16(src));
     if (sw_gen[src >> 1] == list_gen) {
         sw_val[dst >> 1] = sw_val[src >> 1];
@@ -2972,6 +3166,11 @@ static void flat_row(int32_t l, int32_t r, int32_t y)
     int32_t x;
     int c = plot_colour();
     uint8_t *o;
+    if (gx && y >= th && y < 256) {     /* a job's row past the bitmap, on its alias (a thin polygon on the bottom edge) */
+        y -= th;
+        l += 8;
+        r += 8;
+    }
     if (c < 0 || y < 0 || y >= th)
         return;
     if (checking)
@@ -2990,6 +3189,38 @@ static void flat_row(int32_t l, int32_t r, int32_t y)
     o = tex + (size_t)y * tw;
     for (x = l; x <= r; x++)
         o[x] = (uint8_t)c;
+}
+
+/* a job's flat edge by the chip's rules (FwEdge's pad, from its vertices'
+   columns and rows): its slope from the reciprocal; where the next edge starts,
+   as A9D0 and AA0D round it */
+static int64_t edge_chip(FwEdge *f)
+{
+    int64_t x8 = f->from * 256, s = slope(f->to - f->from, (uint32_t)f->n);
+    f->pad[0] = (int32_t)x8;
+    f->pad[1] = (int32_t)s;
+    return (fw_chip_x(x8, s, f->n) + 0x7F) >> 8;
+}
+
+/* what a job's polygon adds to its duration: its area by its vertices (a
+   stride apart from v), its edges */
+static void job_poly(uint16_t v, int stride, int n, const FwPoly *pg)
+{
+    int64_t a = 0;
+    int i;
+    for (i = 0; i < n; i++) {
+        uint16_t p = (uint16_t)(v + i * stride), q = (uint16_t)(v + ((i + 1) % n) * stride);
+        a += (int64_t)ram8(p) * ram8((uint16_t)(q + 2)) - (int64_t)ram8(q) * ram8((uint16_t)(p + 2));
+    }
+    a = (a < 0 ? -a : a) / 2;
+    job.edges += (uint32_t)(pg->ln + pg->rn);
+    if (pg->kind) {
+        job.tex++;
+        job.area_tex += (uint64_t)a;
+    } else {
+        job.flat++;
+        job.area_flat += (uint64_t)a;
+    }
 }
 
 /* A95C: a flat polygon of n vertices, its colour byte at p */
@@ -3029,8 +3260,11 @@ static uint16_t flat_polygon(uint16_t p, int n)
                 xmax = vw(dst);
             dst = (uint16_t)(dst + 4);
         }
-        if (xmax - xmin > 0)
+        if (xmax - xmin > 0) {
+            if (gx)
+                job.plots += (uint64_t)(xmax - xmin);
             flat_row(xmin, xmax - 1, ymin);
+        }
         return (uint16_t)(v + size);
     }
     row = ymin;
@@ -3044,25 +3278,30 @@ static uint16_t flat_polygon(uint16_t p, int n)
         if (c < 0 || !(pg = poly_new()))
             return (uint16_t)(v + size);
         pg->colour = (uint8_t)c;
+        pg->pad[0] = (uint8_t)gx;
         pg->le = (int32_t)nedges;
         from = vw(left_at);             /* the left chain: forward from the top */
         left_at = (uint16_t)(left_at + 4);
         for (;;) {
             FwEdge *f;
+            int64_t next;
             to = vw(left_at);
             y = vw((uint16_t)(left_at + 2));
             left_at = (uint16_t)(left_at + 4);
             if (y - lend < 0)
                 break;
+            next = to;
             if (y - lend && (f = edge_new())) {
                 f->from = from;
                 f->to = to;
                 f->y0 = lend;
                 f->n = y - lend;
                 pg->ln++;
+                if (gx)
+                    next = edge_chip(f);
                 lend = y;
             }
-            from = to;
+            from = next;
             if (lend >= th)
                 break;
         }
@@ -3070,24 +3309,30 @@ static uint16_t flat_polygon(uint16_t p, int n)
         from = vw((uint16_t)(top_at - 2));      /* the right chain: back from the top */
         for (;;) {
             FwEdge *f;
+            int64_t next;
             y = vw(right_at);
             right_at = (uint16_t)(right_at - 2);
             to = vw(right_at);
             right_at = (uint16_t)(right_at - 2);
             if (y - rend < 0)
                 break;
+            next = to;
             if (y - rend && (f = edge_new())) {
                 f->from = from;
                 f->to = to;
                 f->y0 = rend;
                 f->n = y - rend;
                 pg->rn++;
+                if (gx)
+                    next = edge_chip(f);
                 rend = y;
             }
-            from = to;
+            from = next;
             if (rend >= th)
                 break;
         }
+        if (gx)
+            job_poly(v, 4, n, pg);
         poly_put(pg, ymin, lend < rend ? lend : rend);
         return (uint16_t)(v + size);
     }
@@ -3206,6 +3451,13 @@ static uint16_t line(uint16_t p)
     gsu_color(ram8(p));
     if (dx < 0) { sx = -1; dx = -dx; }
     if (dy < 0) { sy = -1; dy = -dy; }
+    if (gx) {                           /* a job's: one quad for the GPU (its steps fw_plot_line's), else plotted */
+        uint16_t xe, ye;
+        int made = fw_plot_line((uint16_t)x, (uint16_t)y, (uint16_t)dx, (uint16_t)dy, (uint16_t)sx, (uint16_t)sy, &xe, &ye);
+        fw_sprite_rows_done();
+        if (made)
+            return (uint16_t)(p + 9);
+    }
     if (dx >= dy) {
         n = dx + 1;
         e = (dx - dy) >> 1;
@@ -3307,7 +3559,7 @@ static void edge_persp(const TexEdge *e, int32_t row, double *u, double *v, doub
    u and v without its 8.8 steps' rounding, which over the thousands of rows
    a polygon near the camera spans at k texels a pixel leaves the texture
    standing still; the check's pass (the original's view) keeps the 8.8 */
-static int tex_precise(void) { return !checking; }
+static int tex_precise(void) { return !checking && !gx; }
 
 /* A7D9 / A879: the next edge, forward (left) or back (right) */
 static int tex_edge(TexEdge *e, int32_t row, int left)
@@ -3387,6 +3639,11 @@ static uint16_t tex_polygon(uint16_t p, int n)
     gsu.por = 0;
     gsu_color((uint8_t)word);
     gsu.por = (uint8_t)((word >> 8) & 0x1F);
+    if (gx) {                                  /* the RAM's words the chip's fill sets */
+        ram16w(0x00A6, bank);
+        ram16w(0x00A8, base);
+        ram16w(0x00D4, mask);
+    }
     for (i = 0; i < n; i++) {                  /* u and v moved down a byte */
         int32_t y = vw((uint16_t)(src + 2));
         wcopy(dst, src);
@@ -3421,7 +3678,7 @@ static uint16_t tex_polygon(uint16_t p, int n)
     }
     l.rows = r.rows = 0;
     row = ymin;
-    if (tex_precise()) {                /* whole: its edges, its rows made where it is filled */
+    if (tex_precise() || gx) {          /* whole: its edges, its rows made where it is filled */
         FwPoly *pg = poly_new();
         int32_t lend = ymin, rend = ymin;
         if (!pg) {
@@ -3430,10 +3687,11 @@ static uint16_t tex_polygon(uint16_t p, int n)
         }
         pg->kind = 1;
         pg->persp = pl != NULL;
+        pg->pad[0] = (uint8_t)gx;
         pg->bank = bank;
         pg->base = base;
         pg->mask = mask;
-        pg->por = gsu.por;
+        pg->por = fw_por();
         pg->hi = (uint8_t)(gsu.colr & 0xF0);
         pg->ou = ram16(TEX_U_OFF);
         pg->ov = ram16(TEX_V_OFF);
@@ -3458,6 +3716,15 @@ static uint16_t tex_polygon(uint16_t p, int n)
                 f->dva = (int8_t)(uint8_t)(e->vv - (uint8_t)e->hv);
                 f->qa = (float)e->qa;
                 f->qb = (float)e->qb;
+                if (gx) {               /* the chip's: its 8.8 start and steps; on to where the next edge's start comes from */
+                    f->pad[0] = (int32_t)e->x;
+                    f->pad[1] = (int32_t)e->slope;
+                    f->pad[2] = (int32_t)((uint32_t)e->u | (uint32_t)e->v << 16);
+                    f->pad[3] = (int32_t)((uint32_t)e->du | (uint32_t)e->dv << 16);
+                    e->x = fw_chip_x(e->x, e->slope, e->n);
+                    e->u = (uint16_t)(e->u + e->du * (uint32_t)e->n);
+                    e->v = (uint16_t)(e->v + e->dv * (uint32_t)e->n);
+                }
                 *end += e->n;
                 if (i)
                     pg->rn++;
@@ -3467,6 +3734,8 @@ static uint16_t tex_polygon(uint16_t p, int n)
                     break;
             }
         }
+        if (gx)
+            job_poly(v, 8, n, pg);
         if (poly_put(pg, ymin, lend < rend ? lend : rend)) {
             /* COLOR as the last row on the screen leaves it: its last pixel's texel */
             FwSpan last;
@@ -3676,7 +3945,7 @@ void fw_draw_list(void)
     at = DRAW_LIST;
     for (;;) {
         int8_t type = (int8_t)ram8(at);
-        int face = fw_drawing && sc_gpu_on() ? sc_face_for_entry(at) : -1;
+        int face = fw_drawing && sc_gpu_on() && !gx ? sc_face_for_entry(at) : -1;
         if (face >= 0 && getenv("SC_NEARREF")) {    /* (a check) a face with a near corner left to the reference */
             size_t nf;
             const ScFace *fc = sc_list_faces(&nf);
@@ -3785,7 +4054,8 @@ static int size_for_window(void)
     nshvc_ext_canvas_presented(&pw, &ph);
     if (pw < 1 || ph < 1)
         return 0;
-    if (pw != tw || ph != th || w != W || h != H || !tex) {
+    if (pw != tw || ph != th || w != W || h != H || !tex || scale_lost) {
+        scale_lost = 0;
         W = w;
         H = h;
         tw = pw;
@@ -3905,6 +4175,10 @@ static int water_here(void);
 static void water_view(void)
 {
     int i, j;
+    if (bp || gx) {                     /* the bitmap pictures have none: the console's own layers show through */
+        fw_water[3] = 0;
+        return;
+    }
     for (i = 0; i < 3; i++) {
         for (j = 0; j < 3; j++)
             water_e[i][j] = (int16_t)ram16((uint16_t)(0x00E4 + 6 * i + 2 * j)) / 32768.0;
@@ -4599,6 +4873,307 @@ int fw_picture(int j)
     hand();
     prof_mark(PR_HAND);
     return 1;
+}
+
+/* ---- the bitmap pictures (fullwindow.h) ------------------------------------- */
+
+/* the texels' memory for this many, as size_for_window keeps it */
+static int tex_room(size_t need)
+{
+    if (need > tex_size) {
+        if (fw_texels_alloc) {
+            tex = fw_texels_alloc(need);
+        } else {
+            free(tex);
+            tex = malloc(need);
+        }
+        tex_size = tex ? need : 0;
+    }
+    return tex != NULL && tex_size >= need;
+}
+
+/* the switches a check of the full window's turns these off with */
+static int bp_checks(void)
+{
+    static int off = -1;
+    if (off < 0)
+        off = getenv("SC_CHECK") || getenv("FW_NOQUADS") || getenv("FW_QUADCHECK") || getenv("FW_GPUCHECK") ||
+              getenv("FW_CHECK") || getenv("FW_KCHECK") || getenv("FW_CCHECK") || getenv("FW_WATERCHECK");
+    return off;
+}
+
+/* a GPU to draw them on: its fill in place, or its canvas */
+static int gpu_here(void) { return fw_span_filler != fw_span_fill_cpu || fw_canvas_gpu != NULL; }
+
+int fw_bp_on(void) { return sc_gpu_on() && !on && !bp_checks() && gpu_here() && rm_canvas_ready(); }
+
+/* a bitmap picture begins: its shape times k, the texels and the canvas's room */
+static int bp_open(int cols, int rows, int bpp, int targets)
+{
+    int k = nshvc_ext_canvas_scale();
+    if (k < 1 || !tex_room((size_t)cols * 8 * k * rows * 8 * k) ||
+        !rm_canvas_gpu_begin((unsigned)(cols * rows * targets), (unsigned)bpp, k))
+        return 0;
+    SXN = SYN = k;
+    SXD = SYD = 1;
+    tw = cols * 8 * k;
+    th = rows * 8 * k;
+    scale_lost = 1;
+    view_set = 0;
+    bp = 1;
+    bit4 = bpp < 8;
+    bp_cols = cols;
+    bp_rows = rows;
+    bp_bpp = bpp;
+    bp_targets = targets;
+    bp_done = bp_open_now = 0;
+    nspans = npolys = nedges = 0;
+    gpu_pic = fw_canvas_gpu != NULL;
+    gpu_open = gpu_cleared = 0;
+    fw_water[3] = 0;
+    return 1;
+}
+
+/* the target drawn: into the texels, cut into its characters */
+static void bp_finish(void)
+{
+    if (!bp_open_now)
+        return;
+    bp_open_now = 0;
+    span_flush();
+    if (gpu_pic && gpu_open)
+        fw_canvas_gpu->close(NULL, tex);
+    gpu_open = gpu_cleared = 0;
+    rm_canvas_gpu_cut((unsigned)(bp_done * bp_cols * bp_rows), (unsigned)bp_cols, (unsigned)bp_rows, tex, tw,
+                      bp_bpp < 8 ? 0x0Fu : 0xFFu);
+    bp_done++;
+}
+
+int fw_bp_frame(int begin)
+{
+    uint8_t *s;
+    int i;
+    if (!bp)
+        return 0;
+    s = nshvc_sram();
+    if (!begin) {                       /* the game's words back, for what the programs after it read */
+        for (i = 0; i < 8; i++) {
+            s[view_at[i]] = (uint8_t)bp_game[i];
+            s[view_at[i] + 1] = (uint8_t)(bp_game[i] >> 8);
+        }
+        view_set = 0;
+        return 1;
+    }
+    bp_finish();
+    sc_picture_begin();
+    for (i = 0; i < 8; i++)
+        bp_game[i] = (uint16_t)(s[view_at[i]] | s[view_at[i] + 1] << 8);
+    {
+        /* the game's view times k: the right edge its last column, the bottom
+           one past its last row; the planes' slopes the same */
+        int32_t k = (int32_t)SXN, full[8];
+        full[0] = (int16_t)bp_game[0] * k;
+        full[1] = (int16_t)bp_game[1] * k;
+        full[2] = (int16_t)bp_game[2] * k;
+        full[3] = ((int16_t)bp_game[3] + 1) * k - 1;
+        full[4] = (int16_t)bp_game[4] * k;
+        full[5] = (int16_t)bp_game[5] * k;
+        full[6] = bp_game[6];
+        full[7] = bp_game[7];
+        bp_cx = full[0];
+        bp_cy = (int16_t)bp_game[1];
+        for (i = 0; i < 8; i++) {
+            s[view_at[i]] = (uint8_t)full[i];
+            s[view_at[i] + 1] = (uint8_t)(full[i] >> 8);
+        }
+    }
+    view_set = 1;
+    bp_open_now = 1;
+    return 1;
+}
+
+int fw_bp_picture(int j)
+{
+    static uint8_t scratch[2][RM_TWEEN_BYTES];
+    const uint8_t *w = nshvc_wram();
+    int two = w[0x0D62] != 0, m;
+
+    if (!(two ? bp_open(18, 10, 4, 2) : bp_open(26, 16, 8, 1)))
+        return 0;
+    fw_drawing = 1;
+    list_gen++;
+    sc_picture_begin();
+    m = rm_tween_buffers(j, RM_TICKS, scratch[0], scratch[1]);
+    fw_drawing = 0;
+    fw_hud = 0;
+    if (m)
+        bp_finish();
+    bp_open_now = 0;
+    bp = bit4 = 0;
+    view_set = 0;
+    gpu_pic = gpu_open = 0;
+    if (!m || bp_done != bp_targets)
+        return 0;
+    rm_canvas_gpu_show(two ? -1 : (w[0x0D81] | w[0x0D82] << 8) == 0x0001 ? 0x2200 : 0x0000);
+    return m;
+}
+
+void fw_menu_picture(int on_) { menu_due = on_ && fw_bp_on() && !fw_drawing; }
+
+/* The menus' 3D frame: no redraw of a tween's (its step is a video frame's):
+   its program's list made natively as it starts, the chip's RAM and registers
+   put back for the chip's own run beside it, the picture kept for the flip. */
+void fw_menu_frame(void)
+{
+    static uint8_t keep[0x20000];
+    RegsGSU kept;
+    uint8_t *s;
+    size_t size = (size_t)ram_mask + 1;
+
+    if (!menu_due)
+        return;
+    menu_due = 0;
+    if (!bp_open(13, 11, 8, 1))
+        return;
+    s = nshvc_sram();
+    if (size > sizeof keep)
+        size = sizeof keep;
+    memcpy(keep, s, size);
+    kept = gsu;
+    fw_drawing = 1;
+    list_gen++;
+    sc_picture_begin();
+    sc_frame_native();
+    fw_drawing = 0;
+    bp_finish();
+    bp = bit4 = 0;
+    view_set = 0;
+    gpu_pic = gpu_open = 0;
+    memcpy(s, keep, size);
+    gsu = kept;
+    if (bp_done == bp_targets)
+        rm_canvas_gpu_ready();
+}
+
+int fw_haze(uint16_t x, uint16_t y, uint8_t time)
+{
+    FwSpan *p;
+    if (!fw_drawing || checking || cropping || !sc_gpu_on() || !(p = span_new()))
+        return 0;
+    memset(p, 0, sizeof *p);
+    p->textured = FW_HAZE;
+    p->x0 = 1;
+    p->pad0 = (int16_t)y;
+    p->xl = (int16_t)x;
+    p->base = time;
+    p->u = SXN;
+    p->du = SXD;
+    p->v = SYN;
+    p->dv = SYD;
+    p->pad1[2] = (uint8_t)gx;
+    if (gx)
+        job.plots += 256;
+    return 1;
+}
+
+/* ---- a job of Original's ---- */
+static void gx_begin(void)
+{
+    /* no access of the chip's: the registers as they stand, only under SC_GPU */
+    int md, ht;
+    static int no = -1;
+    job.on = 0;
+    if (fw_drawing || !sc_gpu_on() || rm_enhanced())
+        return;
+    if (no < 0)
+        no = bp_checks() || !gpu_here();
+    if (no)
+        return;
+    md = gsu.scmr & 3;
+    ht = ((gsu.scmr >> 2) & 1) | ((gsu.scmr >> 4) & 2);
+    gx_shape.w = 264;
+    gx_shape.h = ht == 0 ? 128 : ht == 1 ? 160 : ht == 2 ? 192 : 256;
+    gx_shape.bpp = 2 << (md - (md >> 1));
+    gx_shape.ht = ht;
+    gx_shape.base = (uint32_t)gsu.scbr << 10;
+    gx_shape.mask = ram_mask;
+    if (!tex_room((size_t)gx_shape.w * gx_shape.h))
+        return;
+    tw = gx_shape.w;
+    th = gx_shape.h;
+    SXN = SXD = SYN = SYD = 1;
+    scale_lost = 1;
+    view_set = 0;
+    memset(&job, 0, sizeof job);
+    job.on = 1;
+    gx = 1;
+    gx_valid = 0;
+    bit4 = md != 3;
+    nspans = npolys = nedges = 0;
+    gpu_pic = fw_canvas_gpu != NULL;
+    gpu_open = gpu_cleared = 0;
+    fw_water[3] = 0;
+    fw_drawing = 1;
+}
+
+/* what is drawn so far into the chip's RAM */
+static void gx_sync(void)
+{
+    if (!nspans)
+        return;
+    span_flush();
+    if (gpu_pic && gpu_open) {
+        fw_canvas_gpu->close(NULL, tex);
+        gpu_open = 0;
+    }
+    fw_bits_filler(tex, nshvc_sram(), &gx_shape, 1);
+}
+
+static void gx_end(void)
+{
+    if (!gx)
+        return;
+    gx_sync();
+    gx = 0;
+    bit4 = 0;
+    fw_drawing = 0;
+    gpu_pic = gpu_open = 0;
+}
+
+/* The chip's bitplanes and the linear target (w x h), the address as PLOT's
+   (superfx.c char_addr): pack, each character from the target; else each
+   pixel of the target from its character. The kernels' the same. */
+void fw_bits_cpu(uint8_t *t, uint8_t *ram, const FwBits *b, int pack)
+{
+    int cx, cy, y, x, n, bytes = b->bpp * 8;
+    for (cx = 0; cx < b->w / 8; cx++)
+        for (cy = 0; cy < b->h / 8; cy++) {
+            uint32_t cn, X = (uint32_t)cx * 8, Y = (uint32_t)cy * 8, at;
+            switch (b->ht) {
+            case 0: cn = (uint32_t)cx * 16 + (uint32_t)cy; break;
+            case 1: cn = (uint32_t)cx * 20 + (uint32_t)cy; break;
+            case 2: cn = (uint32_t)cx * 24 + (uint32_t)cy; break;
+            default: cn = ((Y & 0x80u) << 2) + ((X & 0x80u) << 1) + ((Y & 0x78u) << 1) + ((X & 0x78u) >> 3); break;
+            }
+            at = b->base + cn * (uint32_t)bytes;
+            for (y = 0; y < 8; y++) {
+                uint8_t *row = t + (size_t)(cy * 8 + y) * b->w + cx * 8;
+                if (pack)
+                    for (n = 0; n < b->bpp; n++) {
+                        uint8_t d = 0;
+                        for (x = 0; x < 8; x++)
+                            d |= (uint8_t)(((row[x] >> n) & 1) << (7 - x));
+                        ram[(at + (uint32_t)((n >> 1) * 16 + y * 2 + (n & 1))) & b->mask] = d;
+                    }
+                else
+                    for (x = 0; x < 8; x++) {
+                        uint8_t v = 0;
+                        for (n = 0; n < b->bpp; n++)
+                            v |= (uint8_t)(((ram[(at + (uint32_t)((n >> 1) * 16 + y * 2 + (n & 1))) & b->mask] >> (7 - x)) & 1) << n);
+                        row[x] = v;
+                    }
+            }
+        }
 }
 
 /* ---- the panels ------------------------------------------------------------ */

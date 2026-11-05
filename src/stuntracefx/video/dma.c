@@ -677,7 +677,9 @@ static void upload_rows(uint32_t b, int want, uint16_t n, uint16_t src,
     flag_0357(b, 1);
     if (nba) {
         put8(BG12NBA, nba);
-        if (split_canvas[set] && rm_whole_steps())
+        if (split_canvas[set] && rm_canvas_gpu_word(set ? 0x2000 : 0x0000, 360))
+            ;                           /* SC_GPU: the GPU's pictures, not the chip's bitmaps */
+        else if (split_canvas[set] && rm_whole_steps())
             rm_canvas_show_copied_late(set ? 0x2000 : 0x0000, 360, 4);
         else if (split_canvas[set])
             rm_canvas_show_copied(set ? 0x2000 : 0x0000, 360, 4);
@@ -933,9 +935,10 @@ static void race_flip(int buf, uint16_t src, unsigned word)
 {
     if (fw_on())                        /* the full window's pictures are drawn again (fullwindow.c) */
         return;
-    if (race_canvas[buf])
-        rm_canvas_show(word, src, 416);
-    else
+    if (race_canvas[buf]) {
+        if (!rm_canvas_gpu_word(word, 416))   /* SC_GPU: the GPU's picture, not the chip's bitmap */
+            rm_canvas_show(word, src, 416);
+    } else
         rm_canvas_off();
 }
 

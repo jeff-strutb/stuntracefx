@@ -962,12 +962,13 @@ static int32_t list_face(uint16_t p, const Material *mt)
     f->first = (uint32_t)l_nc;
     f->n = (uint32_t)n;
     f->textured = (uint8_t)(mt->kind == 1);
-    f->colour = mt->colour;
+    /* a bitmap picture 4 bits a pixel: PLOT leaves a colour of a low nibble of 0 out */
+    f->colour = fw_nibble() && !(mt->colour & 0x0F) ? 0 : mt->colour;
     if (f->textured) {
         f->bank = mt->bank;
         f->base = mt->base;
         f->mask = mt->mask;
-        f->por = (uint8_t)(mt->face_colour >> 8 & 0x1F);
+        f->por = (uint8_t)((mt->face_colour >> 8 & 0x1F) | (fw_nibble() ? 8 : 0));
         f->hi = (uint8_t)(mt->face_colour & 0xF0);
         f->ou = (int16_t)ram16(0x00C0);
         f->ov = (int16_t)ram16(0x00C2);

@@ -183,12 +183,32 @@ object's place and radius, no point turned) go as flat Bezier patches the GE
 divides itself. A piece with a corner past the range is still dropped, very
 near the eye (Jeff's decision, 2026-11-05). Not yet checked on real hardware.
 
-## Not built: the bitmap pictures (items 3 and 4)
+## The bitmap pictures (items 3 and 4): written, compiled on Vulkan and the GE, Metal unbuilt, none run
 
 Jeff's decisions, 2026-11-05: two players, the menus' 3D and Enhanced without
 widescreen keep their layouts; Original on the PSP is drawn by the GE and is not
 byte-identical there; the job-duration refit is written with placeholder
 coefficients and fitted in the final pass.
+
+What was found by reading, and what is not the GPU's yet:
+
+- The menus' bitmap: 01:AB13 is the only program that plots into it (a car's
+  label within it); no menu or object code starts another plotter. Two players:
+  AB13 and, on a step's picture, the phases under RaceSoundsPlayer1 and 2 (their
+  glyphs, scaled pieces and banners, quads). The gauges, digits and map markers
+  are sprites, not plots.
+- rows.comp and fill.comp did not walk by the chip's slopes (`edge_x` is the
+  full window's exact form): polygons with FwPoly pad[0] now do, in closed form.
+- A bitmap picture keeps its sprites (no solids) and has no water cut: as the
+  chip's pictures always had.
+- Not the GPU's: with Frame rate off the tween's state does not exist, so those
+  windowed pictures are still the chip's bitmap on the CPU (the full window is
+  off there too); the race's pause shows the chip's bitmap from the copies; a
+  step's own frame program still plots on the CPU, unseen, beside the pictures;
+  in Original, 07:EE88's noise and any loop no quad stands for are 1-pixel spans
+  the CPU makes, and the screen clear is the chip's own stores.
+- A job at its STOP is taken as flushed: a program ending with pixels in the
+  chip's caches and no RPIX would differ until its next flush.
 
 One engine serves both: a picture in the bitmap's own coordinates times k, drawn
 by the GPU to a linear 8-bit target, handed as the characters it stands for.
@@ -221,10 +241,10 @@ by the GPU to a linear 8-bit target, handed as the characters it stands for.
   (polygons, area, edges, flat or textured, other primitives), its table's
   coefficients marked not fitted until the final pass collects the jobs.
 
-Also not built: FxHazeSample on the GPU (`effects_run` in scene_frame.c says so
-when reached). It reads the picture: a marker span breaks the run, a kernel
-samples each of its 256 shape entries (bank 8, $F92E + 4 x time) from the shared
-picture and plots them opaque; the GE draws 1-pixel sprites from its canvas.
+FxHazeSample on the GPU, written, no play reaches it, shipped unproven: a marker
+span (FW_HAZE) breaks the run, a kernel samples each of its 256 shape entries
+(bank 8, $F92E + 4 x time) from a copy of the picture and plots them opaque; the
+GE draws 1-pixel sprites from its canvas.
 
 ## Baselines (2026-11-04, SRFX 464c9dca, race100.sfx frames 1401-1500)
 

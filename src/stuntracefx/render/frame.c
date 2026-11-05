@@ -2322,6 +2322,7 @@ enter:
  */
 void abi_FxFrameProgram(void)
 {
+    fw_menu_frame();                    /* Enhanced's menus' 3D, SC_GPU: its list natively, beside the program */
     if (sc_frame_native())              /* Enhanced's full window, SC_GPU: the display list natively (scene.h) */
         return;
     frame_run(0xAB13, 0xFFFF);

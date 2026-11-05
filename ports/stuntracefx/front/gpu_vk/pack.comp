@@ -1,0 +1,61 @@
+#version 450
+/*
+ * pack.comp: the chip's bitplanes and the linear target (fullwindow.c
+ * fw_bits_cpu's steps), a thread a character: pack, the character's bytes from
+ * its 8 x 8 pixels; else the pixels from its bytes. A character is 16, 32 or 64
+ * bytes on its own boundary and 8 pixels of a target whose width is a multiple
+ * of 8, so a thread's words are its own.
+ */
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(std430, binding = 0) buffer Out { uint px[]; };
+layout(std430, binding = 24) buffer Bits { uint bits[]; };
+layout(push_constant) uniform Push { uint w, h, bpp, ht, base, mask, pack; } pc;
+
+void main()
+{
+    uint cx = gl_GlobalInvocationID.x, cy = gl_GlobalInvocationID.y, X = cx * 8u, Y = cy * 8u, cn;
+    if (X >= pc.w || Y >= pc.h)
+        return;
+    if (pc.ht == 0u)
+        cn = cx * 16u + cy;
+    else if (pc.ht == 1u)
+        cn = cx * 20u + cy;
+    else if (pc.ht == 2u)
+        cn = cx * 24u + cy;
+    else
+        cn = ((Y & 0x80u) << 2) + ((X & 0x80u) << 1) + ((Y & 0x78u) << 1) + ((X & 0x78u) >> 3);
+    uint at = pc.base + cn * pc.bpp * 8u, words = pc.bpp * 2u;
+    if (pc.pack != 0u) {
+        uint o[16];
+        for (uint i = 0u; i < 16u; i++)
+            o[i] = 0u;
+        for (uint y = 0u; y < 8u; y++) {
+            uint p = (Y + y) * pc.w + X, a = px[p >> 2], b = px[(p >> 2) + 1u];
+            for (uint n = 0u; n < pc.bpp; n++) {
+                uint d = 0u, off = (n >> 1) * 16u + y * 2u + (n & 1u);
+                for (uint x = 0u; x < 8u; x++) {
+                    uint v = x < 4u ? (a >> (x * 8u)) : (b >> ((x - 4u) * 8u));
+                    d |= ((v >> n) & 1u) << (7u - x);
+                }
+                o[off >> 2] |= d << ((off & 3u) * 8u);
+            }
+        }
+        for (uint i = 0u; i < words; i++)
+            bits[((at + i * 4u) & pc.mask) >> 2] = o[i];
+        return;
+    }
+    for (uint y = 0u; y < 8u; y++) {
+        uint r[2];
+        r[0] = 0u;
+        r[1] = 0u;
+        for (uint n = 0u; n < pc.bpp; n++) {
+            uint off = (n >> 1) * 16u + y * 2u + (n & 1u);
+            uint d = (bits[((at + (off & ~3u)) & pc.mask) >> 2] >> ((off & 3u) * 8u)) & 255u;
+            for (uint x = 0u; x < 8u; x++)
+                r[x >> 2] |= ((d >> (7u - x)) & 1u) << (n + (x & 3u) * 8u);
+        }
+        uint p = (Y + y) * pc.w + X;
+        px[p >> 2] = r[0];
+        px[(p >> 2) + 1u] = r[1];
+    }
+}

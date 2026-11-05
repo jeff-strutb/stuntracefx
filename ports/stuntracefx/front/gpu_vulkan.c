@@ -46,7 +46,8 @@ static PFN_vkGetInstanceProcAddr gipa;
     X(vkDeviceWaitIdle) X(vkCreateImage) X(vkGetImageMemoryRequirements) X(vkBindImageMemory) X(vkCreateImageView) \
     X(vkCreateRenderPass) X(vkCreateFramebuffer) X(vkCreateGraphicsPipelines) X(vkCmdBeginRenderPass) \
     X(vkCmdEndRenderPass) X(vkCmdDraw) X(vkCmdCopyBufferToImage) X(vkCmdCopyImageToBuffer) X(vkCmdSetViewport) \
-    X(vkCmdSetScissor) X(vkDestroyImage) X(vkDestroyImageView) X(vkDestroyFramebuffer) X(vkCmdClearColorImage)
+    X(vkCmdSetScissor) X(vkDestroyImage) X(vkDestroyImageView) X(vkDestroyFramebuffer) X(vkCmdClearColorImage) \
+    X(vkCmdCopyBuffer)
 #define DECL(f) static PFN_##f p##f;
 VK_FUNCS(DECL) VK_IFUNCS(DECL) VK_DFUNCS(DECL)
 #undef DECL
@@ -84,7 +85,7 @@ static uint32_t qfam;
 static VkPhysicalDeviceMemoryProperties memp;
 static VkDescriptorSetLayout dsl;
 static VkPipelineLayout pl;
-static VkPipeline pipe_rows, pipe_fill, pipe_water, pipe_prims;
+static VkPipeline pipe_rows, pipe_fill, pipe_water, pipe_prims, pipe_pack, pipe_haze;
 /* the models (scene.h): the render pass over the picture (R8 colour
    indices) and each pixel's face (R32), their pipelines (triangles,
    lines), the images and the framebuffer at the picture's size */
@@ -110,8 +111,8 @@ typedef struct {
     void *at;
 } Buf;
 enum { B_OUT, B_SPANS, B_ROW_AT, B_ROW_SPANS, B_BANKS, B_SLOT, B_POLYS, B_EDGES, B_ROW_POLY, B_OUT32, B_JOB, B_GAP,
-       B_VERTS, B_LPOINTS, B_LSLOTS, B_LFACES, B_ID, B_FSLOTS, B_FPOINTS, B_QUADS, B_PRIMS, B_N };
-static const uint32_t binding_of[B_N] = {0, 1, 2, 3, 4, 5, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
+       B_VERTS, B_LPOINTS, B_LSLOTS, B_LFACES, B_ID, B_FSLOTS, B_FPOINTS, B_QUADS, B_PRIMS, B_SNAP, B_BITS, B_N };
+static const uint32_t binding_of[B_N] = {0, 1, 2, 3, 4, 5, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24};
 /* the stages that see the descriptors and the push constants: the fill's
    kernels and the models' shaders */
 #define STAGES (VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
@@ -466,7 +467,9 @@ static int device_open(void)
     pipe_fill = pipeline(k_fill_comp, sizeof k_fill_comp);
     pipe_water = pipeline(k_water_comp, sizeof k_water_comp);
     pipe_prims = pipeline(k_prims_comp, sizeof k_prims_comp);
-    if (!pipe_rows || !pipe_fill || !pipe_water || !pipe_prims || !models_open())
+    pipe_pack = pipeline(k_pack_comp, sizeof k_pack_comp);
+    pipe_haze = pipeline(k_haze_comp, sizeof k_haze_comp);
+    if (!pipe_rows || !pipe_fill || !pipe_water || !pipe_prims || !pipe_pack || !pipe_haze || !models_open())
         return 0;
     for (i = 0; i < B_N; i++)
         if (!buf_grow((int)i, 16))
@@ -547,6 +550,9 @@ static int fill_spans(int w, int h, const FwSpan *sp, size_t n)
                 return 0;
             fresh[b] = 1;
         }
+        /* the reciprocals a job's textured rows are stepped by (rows.comp) */
+        if (z.rows && !bank_fresh(SC_TABLE_BANK_RECIP) && !bank_put(SC_TABLE_BANK_RECIP))
+            return 0;
     }
     memcpy(bufs[B_SLOT].at, bank_slot, sizeof bank_slot);
     if (dset_stale)
@@ -903,6 +909,93 @@ static const uint32_t *face_ids(int w, int h)
     return run_commands(ids_record, wh) ? (const uint32_t *)bufs[B_ID].at : NULL;
 }
 
+/* one effect's haze (haze.comp): the picture copied as it stands, its shape's
+   entries read from the copy and written */
+typedef struct {
+    size_t len;
+    int32_t pc[10];
+} HazeJob;
+
+static void haze_record(void *arg)
+{
+    HazeJob *j = (HazeJob *)arg;
+    VkBufferCopy c = {0, 0, j->len};
+    pvkCmdCopyBuffer(cb, bufs[B_OUT].b, bufs[B_SNAP].b, 1, &c);
+    barrier(VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT);
+    pvkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_COMPUTE, pl, 0, 1, &dset, 0, NULL);
+    pvkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, pipe_haze);
+    pvkCmdPushConstants(cb, pl, STAGES, 0, sizeof j->pc, j->pc);
+    pvkCmdDispatch(cb, 1, 1, 1);
+    barrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_PIPELINE_STAGE_HOST_BIT, VK_ACCESS_HOST_READ_BIT);
+}
+
+static int haze_run(int w, int h, const FwSpan *p)
+{
+    HazeJob j;
+    uint8_t haze_bank = 8;
+    j.len = (size_t)w * h;
+    if (!buf_grow(B_SNAP, j.len) || (!bank_fresh(haze_bank) && !bank_put(haze_bank)))
+        return 0;
+    memcpy(bufs[B_SLOT].at, bank_slot, sizeof bank_slot);
+    if (dset_stale)
+        dset_update();
+    j.pc[0] = w;
+    j.pc[1] = h;
+    j.pc[2] = (int32_t)p->xl;
+    j.pc[3] = p->pad0;
+    j.pc[4] = p->base;
+    j.pc[5] = (int32_t)p->u;
+    j.pc[6] = (int32_t)p->du;
+    j.pc[7] = (int32_t)p->v;
+    j.pc[8] = (int32_t)p->dv;
+    j.pc[9] = p->pad1[2];
+    return run_commands(haze_record, &j);
+}
+
+/* the chip's bitplanes and the target (pack.comp), the RAM copied across */
+typedef struct {
+    uint32_t pc[7], cols, rows;
+} PackJob;
+
+static void pack_record(void *arg)
+{
+    PackJob *j = (PackJob *)arg;
+    pvkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_COMPUTE, pl, 0, 1, &dset, 0, NULL);
+    pvkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, pipe_pack);
+    pvkCmdPushConstants(cb, pl, STAGES, 0, sizeof j->pc, j->pc);
+    pvkCmdDispatch(cb, (j->cols + 7) / 8, (j->rows + 7) / 8, 1);
+    barrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT,
+            VK_PIPELINE_STAGE_HOST_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_HOST_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT);
+}
+
+static void bits_move(uint8_t *tex, uint8_t *ram, const FwBits *b, int pack)
+{
+    size_t size = (size_t)b->mask + 1;
+    PackJob j;
+    if (tex != (uint8_t *)bufs[B_OUT].at || !buf_grow(B_BITS, size)) {
+        fw_bits_cpu(tex, ram, b, pack);
+        return;
+    }
+    memcpy(bufs[B_BITS].at, ram, size);
+    if (dset_stale)
+        dset_update();
+    j.pc[0] = (uint32_t)b->w;
+    j.pc[1] = (uint32_t)b->h;
+    j.pc[2] = (uint32_t)b->bpp;
+    j.pc[3] = (uint32_t)b->ht;
+    j.pc[4] = b->base;
+    j.pc[5] = b->mask;
+    j.pc[6] = (uint32_t)pack;
+    j.cols = (uint32_t)b->w / 8;
+    j.rows = (uint32_t)b->h / 8;
+    if (!run_commands(pack_record, &j)) {
+        fw_bits_cpu(tex, ram, b, pack);
+        return;
+    }
+    if (pack)
+        memcpy(ram, bufs[B_BITS].at, size);
+}
+
 static void fill(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
 {
     static uint8_t *ref;
@@ -940,6 +1033,12 @@ static void fill(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
        display list's faces by the render pass (gpu_metal.m's) */
     for (i = 0; i < n;) {
         size_t m = 0;
+        if (sp[i].textured == FW_HAZE) {    /* an effect's haze: what is drawn so far read (a marker: the runs broken here) */
+            if (!haze_run(w, h, &sp[i]))
+                fw_span_fill_cpu(out, w, h, &sp[i], 1);
+            i++;
+            continue;
+        }
         if (gpu_bin_face(&sp[i])) {
             for (j = i; j < n && gpu_bin_face(&sp[j]); j++)
                 ;
@@ -948,7 +1047,7 @@ static void fill(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
             i = j;
             continue;
         }
-        for (j = i; j < n && !gpu_bin_face(&sp[j]); j++)
+        for (j = i; j < n && !gpu_bin_face(&sp[j]) && sp[j].textured != FW_HAZE; j++)
             if (!gpu_bin_ref_only(&sp[j]))
                 run[m++] = sp[j];
         if (!fill_spans(w, h, run, m))
@@ -1051,5 +1150,6 @@ int gpu_vulkan_init(void)
     fw_span_filler = fill;
     fw_texels32_alloc = texels32_alloc;
     fw_water_filler = water_fill;
+    fw_bits_filler = bits_move;
     return 1;
 }

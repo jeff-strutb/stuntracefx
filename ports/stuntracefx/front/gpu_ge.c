@@ -1316,12 +1316,87 @@ static void prim_ge(const FwSpan *sp)
     }
 }
 
+/* one effect's haze (fullwindow.h FW_HAZE, fullwindow.c haze_fill's steps): the
+   GE's work so far finished and the target read at each entry's source (the
+   canvas's or the 4444 target's low byte), all before any is drawn, then each
+   texel a 1-pixel sprite of what was there */
+static volatile uint32_t *s_cv;
+static volatile uint16_t *s_t16;
+static uint8_t haze_read(int32_t x, int32_t y, int w, int h)
+{
+    if (x < 0 || x >= w || y < 0 || y >= h)
+        return 0;
+    if (s_c32) {
+        uint32_t v = s_cv[(size_t)y * s_stride + x];
+        return (v >> 24) == 0xFF ? (uint8_t)v : 0;
+    }
+    return (uint8_t)s_t16[(size_t)y * s_stride + x];
+}
+
+static int32_t haze_at(int32_t v, int64_t n, int64_t d)
+{
+    int64_t p = v * n;
+    return (int32_t)((p >= 0 ? p : p - d + 1) / d);
+}
+
+static void haze_ge(const FwSpan *p, int w, int h)
+{
+    static struct { int16_t x, y; uint8_t c; } put[256 * 16];
+    int32_t X = (int32_t)p->xl, Y = p->pad0, r, c, np = 0, i;
+    uint16_t at = (uint16_t)(0xF92E + 4 * p->base);
+    uint16_t shape = (uint16_t)(fw_texel(8, at) | fw_texel(8, (uint16_t)(at + 1)) << 8);
+    uint16_t offs = (uint16_t)(fw_texel(8, (uint16_t)(at + 2)) | fw_texel(8, (uint16_t)(at + 3)) << 8);
+
+    list_close();
+    for (r = 0; r < 16; r++) {
+        int32_t sy = Y + (int8_t)fw_texel(8, (uint16_t)(offs + r)), ty = (Y - 8 + r) & 255;
+        for (c = 0; c < 16; c++) {
+            int8_t b = (int8_t)fw_texel(8, (uint16_t)(shape + r * 16 + c));
+            int32_t sx = X + b, tx = (X - 8 + c) & 255, sya = sy, tya = ty, u, v, c0, c1, r0, r1, s0, t0;
+            if (!b)
+                continue;
+            if (p->pad1[2]) {
+                sx &= 255;
+                sya &= 255;
+                if (sya >= h) {
+                    sya -= h;
+                    sx += 8;
+                }
+                if (tya >= h) {
+                    tya -= h;
+                    tx += 8;
+                }
+            }
+            c0 = haze_at(tx, p->u, p->du);
+            c1 = haze_at(tx + 1, p->u, p->du);
+            r0 = haze_at(tya, p->v, p->dv);
+            r1 = haze_at(tya + 1, p->v, p->dv);
+            s0 = haze_at(sx, p->u, p->du);
+            t0 = haze_at(sya, p->v, p->dv);
+            for (v = 0; v < r1 - r0; v++)
+                for (u = 0; u < c1 - c0 && np < 256 * 16; u++) {
+                    put[np].x = (int16_t)(c0 + u);
+                    put[np].y = (int16_t)(r0 + v);
+                    put[np++].c = haze_read(s0 + u, t0 + v, w, h);
+                }
+        }
+    }
+    list_open();
+    for (i = 0; i < np; i++)
+        if (put[i].x >= 0 && put[i].x < w && put[i].y >= 0 && put[i].y < h)
+            flat(put[i].y, put[i].x, put[i].x, put[i].c);
+}
+
 static void span(const FwSpan *p, int w, int h)
 {
     int32_t x, a;
     (void)h;
     if (gpu_bin_ref_only(p))            /* the reference's own (a check's) */
         return;
+    if (p->textured == FW_HAZE) {
+        haze_ge(p, w, h);
+        return;
+    }
     if (p->textured == FW_QUAD) {       /* a screen quad: the GE's whole */
         if (p->pad1[1] & 64)
             prim_ge(p);
@@ -1400,6 +1475,7 @@ static void fill(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
     }
     /* the texels into the target, the low byte each */
     t = (volatile uint16_t *)((uintptr_t)lent | 0x40000000u);
+    s_t16 = t;
     for (y = 0; y < h; y++)
         for (x = 0; x < w; x++)
             t[(size_t)y * stride + x] = (uint16_t)(0xF000u | out[(size_t)y * w + x]);
@@ -1831,9 +1907,7 @@ static void water_fill(const uint8_t *in, uint32_t *out, const FwWaterJob *j, co
    The whole picture kept in the lent GPU memory (480 x 272 at 32 bits, a
    512 stride: the loan's 557,056 bytes) from its first span to its
    hand-off: the spans drawn into it as they come, the ground surface put
-   in after where nothing is drawn, read out once. */
-static volatile uint32_t *s_cv;         /* the canvas, uncached */
-
+   in after where nothing is drawn, read out once. s_cv the canvas, uncached. */
 static int cv_open(int w, int h, const uint8_t *keep)
 {
     size_t bytes = 0;

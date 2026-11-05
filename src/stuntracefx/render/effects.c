@@ -5,6 +5,7 @@
  */
 #include "gsu.h"
 #include "gsu_ops.h"
+#include "fullwindow.h"
 
 #define FX_EFFECTS 0x2688u
 #define FX_EFFECT_SIZE 6u
@@ -355,10 +356,12 @@ void abi_FxEffectsDraw(void)
             gsu.r[3] = gsu_inc(gsu_inc(gsu.r[3]));
             gsu.r[2] = gsu_ldw(gsu.r[3]);
             gsu.r[3] = gsu_inc(gsu_inc(gsu.r[3]));
-            gsu.r[11] = 0xC1A5;
-            abi_FxHazeSample();
-            gsu.r[11] = 0xC1AA;
-            abi_FxHazePlot();
+            if (!fw_haze(gsu.r[1], gsu.r[2], (uint8_t)gsu.r[0])) {   /* SC_GPU: the GPU reads and plots them */
+                gsu.r[11] = 0xC1A5;
+                abi_FxHazeSample();
+                gsu.r[11] = 0xC1AA;
+                abi_FxHazePlot();
+            }
         }
         gsu.r[3] = gsu_pull(&gsu.r[10]);
         gsu.r[4] = gsu_pull(&gsu.r[10]);

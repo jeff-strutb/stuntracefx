@@ -1,0 +1,71 @@
+#version 450
+/*
+ * haze.comp: one effect's FxHazeSample and FxHazePlot (fullwindow.c haze_fill's
+ * steps, fullwindow.h FW_HAZE): its 256 shape entries (bank 8, $F92E + 4 x
+ * time), each entry's block of texels read from the picture as it stood (the
+ * copy at binding 23) and written opaque, in the shape's order: one thread.
+ */
+#extension GL_GOOGLE_include_directive : require
+#include "common.glsl"
+
+layout(local_size_x = 1) in;
+layout(std430, binding = 0) buffer Out { uint px[]; };
+layout(std430, binding = 23) readonly buffer Snap { uint snap[]; };
+layout(std430, binding = 4) readonly buffer Banks { uint banks[]; };
+layout(std430, binding = 5) readonly buffer Slot { int slot[]; };
+layout(push_constant) uniform Push { int w, h, x, y, t, sxn, sxd, syn, syd, wrap; } pc;
+
+uint rom8(uint a)
+{
+    uint at = uint(slot[8]) * 65536u + (a & 0xFFFFu);
+    return (banks[at >> 2] >> ((at & 3u) * 8u)) & 255u;
+}
+int sbyte(uint v) { return int(v << 24) >> 24; }
+int floor_at(int v, int n, int d)
+{
+    int64_t p = int64_t(v) * int64_t(n);
+    return int(p >= 0l ? p / int64_t(d) : -((-p + int64_t(d) - 1l) / int64_t(d)));
+}
+
+void main()
+{
+    uint at = 0xF92Eu + 4u * uint(pc.t);
+    uint shape = rom8(at) | (rom8(at + 1u) << 8), offs = rom8(at + 2u) | (rom8(at + 3u) << 8);
+    for (int r = 0; r < 16; r++) {
+        int sy = pc.y + sbyte(rom8(offs + uint(r))), ty = (pc.y - 8 + r) & 255;
+        for (int c = 0; c < 16; c++) {
+            int b = sbyte(rom8(shape + uint(r * 16 + c)));
+            if (b == 0)
+                continue;
+            int sx = pc.x + b, tx = (pc.x - 8 + c) & 255, sya = sy, tya = ty;
+            if (pc.wrap != 0) {
+                sx &= 255;
+                sya &= 255;
+                if (sya >= pc.h) {
+                    sya -= pc.h;
+                    sx += 8;
+                }
+                if (tya >= pc.h) {
+                    tya -= pc.h;
+                    tx += 8;
+                }
+            }
+            int c0 = floor_at(tx, pc.sxn, pc.sxd), c1 = floor_at(tx + 1, pc.sxn, pc.sxd);
+            int r0 = floor_at(tya, pc.syn, pc.syd), r1 = floor_at(tya + 1, pc.syn, pc.syd);
+            int s0 = floor_at(sx, pc.sxn, pc.sxd), t0 = floor_at(sya, pc.syn, pc.syd);
+            for (int v = 0; v < r1 - r0; v++)
+                for (int u = 0; u < c1 - c0; u++) {
+                    int xs = s0 + u, ys = t0 + v, xd = c0 + u, yd = r0 + v;
+                    uint val = 0u;
+                    if (xd < 0 || xd >= pc.w || yd < 0 || yd >= pc.h)
+                        continue;
+                    if (xs >= 0 && xs < pc.w && ys >= 0 && ys < pc.h) {
+                        uint a = uint(ys * pc.w + xs);
+                        val = (snap[a >> 2] >> ((a & 3u) * 8u)) & 255u;
+                    }
+                    uint o = uint(yd * pc.w + xd), sh = (o & 3u) * 8u;
+                    px[o >> 2] = (px[o >> 2] & ~(255u << sh)) | (val << sh);
+                }
+        }
+    }
+}

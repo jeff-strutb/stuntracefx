@@ -71,7 +71,8 @@ static void menu_overlap(int set, unsigned keep)
 static void menu_flip(uint8_t bank, int set)
 {
     if (menu_canvas[set]) {
-        rm_canvas_show_copied(set ? 0x0B00 : 0x0000, 143, 8);
+        if (!rm_canvas_gpu_word(set ? 0x0B00 : 0x0000, 143))    /* SC_GPU: the GPU's picture */
+            rm_canvas_show_copied(set ? 0x0B00 : 0x0000, 143, 8);
         /* no copy took the blank's time: bit 5 of $11D7 left clear, so
            VblankUpdates' palette, VRAM and sprite transfers still run */
         wr8(dbw(bank, 0x11D7), (uint8_t)(rd8(dbw(bank, 0x11D7)) & 0xDF));

@@ -144,6 +144,14 @@ void gsu_reset(void)
 uint8_t *snes_sfx_ram(void) { return ram_store; }
 
 /* ---- time ---- */
+/* the running program's duration added to (superfx.h): what its drawing costs
+   when the GPU draws it (the cartridge's model of what the job held) */
+void gsu_job_cost(uint64_t clocks)
+{
+    if (go && !holding)
+        cost += clocks * GSU_PRICE_ONE;
+}
+
 /* whole Super FX clocks in the console's: floor(units MASTER_HZ / GSU_HZ) */
 static uint64_t units_master(uint64_t units) { return units * MASTER_HZ / GSU_HZ; }
 

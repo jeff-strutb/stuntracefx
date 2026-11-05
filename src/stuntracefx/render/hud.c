@@ -390,6 +390,17 @@ static void picture_rows(uint16_t src, uint16_t row_start, uint16_t bytes)
 
     R[1] = R[8];
     gsu_r14((uint16_t)(PICTURE + src));
+    if (R[3] && fw_bitmap(R[8], R[2], gsu.rombr, R[14], R[3], (int)bytes, R[11])) {
+        /* SC_GPU, a bitmap's or a job's picture: one quad; the registers as the rows leave them */
+        R[13] = row_start;
+        R[2] = (uint16_t)(R[2] + R[3]);
+        gsu_r14((uint16_t)(R[14] + R[3] * 32));
+        R[12] = 0;
+        R[3] = 0;
+        R[0] = rpix();
+        fw_sprite_rows_done();
+        return;
+    }
     R[12] = R[3];
     R[13] = row_start;
     do {

@@ -30,6 +30,22 @@ percentile over POOR_P95), with its share of the recorded time, so the
 table never hides one. --write puts
 the table between the "gsuprice: begin" and "gsuprice: end" marks of
 CART_C (ports/stuntracefx/front/superfx_cart.c).
+
+    gsuprice.py --draw JOBS [JOBS ...] [--write CART_C]
+
+The form for a job the GPU draws (Original under SC_GPU, docs/stuntracefx/
+GPU_RENDERER.md), over what the job holds, not the RAM accesses PLOT no longer
+makes. JOBS: "d PC CLOCKS MODEL FLAT TEX EDGES AREA_FLAT AREA_TEX QUAD PLOTS",
+one line a job of the original's that draws: its clocks less its bus waits, its
+load model's own clocks for its loads and stores, its polygons flat and
+textured, their edges and areas in pixels, its quads' pixels and single plots
+(fullwindow.h FwJob). One table, every part non-negative:
+
+    clocks - MODEL = flat F + tex T + edge E + area_flat AF + area_tex AT
+                     + quad Q + plot P
+
+Its coefficients in CART_C are placeholders marked NOT FITTED until the final
+pass collects the jobs and writes them here.
 """
 import collections, itertools, re, sys
 
@@ -124,6 +140,62 @@ def errors(rows, model):
             sum(x for _, x in top) / len(top))
 
 
+DRAW_NAMES = ('flat', 'tex', 'edge', 'area_flat', 'area_tex', 'quad', 'plot')
+
+
+def draw_jobs(paths):
+    """[(clocks less the job's load model, (flat, tex, edges, area flat, area tex, quad, plots))]"""
+    rows = []
+    for path in paths:
+        for line in open(path):
+            p = line.split()
+            if p and p[0] == 'd':
+                k = [int(x) for x in p[2:]]
+                rows.append((k[0] - k[1], tuple(k[2:9])))
+    return rows
+
+
+def draw_fit(rows):
+    """the non-negative least squares over the parts: each set of parts solved,
+    of the solutions all >= 0 the one with the least squared error"""
+    ys = [t for t, _ in rows]
+    best = None
+    for size in range(1, len(DRAW_NAMES) + 1):
+        for cols in itertools.combinations(range(len(DRAW_NAMES)), size):
+            a = [[sum(x[i] * x[j] for _, x in rows) for j in cols] for i in cols]
+            b = [sum(x[i] * y for (_, x), y in zip(rows, ys)) for i in cols]
+            w = solve(a, b)
+            if w is None or min(w) < 0:
+                continue
+            full = [0.0] * len(DRAW_NAMES)
+            for c, v in zip(cols, w):
+                full[c] = v
+            err = sum((sum(f * v for f, v in zip(full, x)) - t) ** 2 for t, x in rows)
+            if best is None or err < best[0]:
+                best = (err, full)
+    return best[1] if best else None
+
+
+def draw_main(paths, out):
+    rows = draw_jobs(paths)
+    m = draw_fit(rows) if rows else None
+    if m is None:
+        raise SystemExit('no draw jobs, or no fit')
+    print('draw: %d jobs: %s' % (len(rows), ' '.join('%s %.3f' % nv for nv in zip(DRAW_NAMES, m))))
+    e = sorted(abs(sum(f * v for f, v in zip(m, x)) - t) / t for t, x in rows if t)
+    if e:
+        print('error: mean %.1f%%, p95 %.1f%%, worst %.1f%%' % (100 * sum(e) / len(e), 100 * e[min(len(e) - 1, int(len(e) * 0.95))], 100 * e[-1]))
+    if out:
+        text = open(out).read()
+        table = '/* gsuprice draw: begin */\nstatic const GsuDrawPrice draw_price = {%s};\n/* gsuprice draw: end */' % ', '.join('%.3f' % v for v in m)
+        new, n = re.subn(r'/\* gsuprice draw: begin \*/.*?/\* gsuprice draw: end \*/', table, text, flags=re.S)
+        if n != 1:
+            raise SystemExit('%s: the gsuprice draw marks not found once' % out)
+        open(out, 'w').write(new)
+        print('written: %s (remove its NOT FITTED note by hand once checked)' % out)
+    return 0
+
+
 def main(argv):
     args = argv[1:]
     out = None
@@ -131,6 +203,9 @@ def main(argv):
         i = args.index('--write')
         out = args[i + 1]
         del args[i:i + 2]
+    if '--draw' in args:
+        args.remove('--draw')
+        return draw_main(args, out)
     if not args:
         print(__doc__)
         return 2

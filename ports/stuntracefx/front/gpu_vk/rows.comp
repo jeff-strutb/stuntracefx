@@ -11,7 +11,50 @@ layout(std430, binding = 1) buffer Spans { uint sp[]; };
 layout(std430, binding = 8) readonly buffer Polys { uint pd[]; };
 layout(std430, binding = 9) readonly buffer Edges { uint ed[]; };
 layout(std430, binding = 10) readonly buffer RowPoly { uint rp[]; };
+layout(std430, binding = 4) readonly buffer Banks { uint banks[]; };
+layout(std430, binding = 5) readonly buffer Slot { int slot[]; };
 layout(push_constant) uniform Push { uint w; uint n; } pc;
+
+/* fullwindow.h fw_chip_x: an edge's 8.8 x i rows on by the chip's step */
+int64_t chip_x(int64_t x, int64_t s, int64_t i)
+{
+    int64_t j;
+    if (i <= 0l)
+        return x;
+    if (s < 0l) {
+        j = (x + 1l - s - 1l) / -s;
+        if (x + 1l <= 0l)
+            j = 1l;
+    } else if (s > 0l) {
+        j = x + 0x800l <= 0l ? (-0x800l - x + s - 1l) / s : 1l;
+    } else {
+        return x < 0l && x >= -0x800l ? 0l : x;
+    }
+    if (j < 1l)
+        j = 1l;
+    if (j > i || x + j * s >= 0l || x + j * s < -0x800l)
+        return x + i * s;
+    if (s < 0l && s >= -0x800l)
+        return 0l;
+    return (i - j) * s;
+}
+
+uint rom8(uint bank, uint a)
+{
+    uint at = uint(slot[bank]) * 65536u + (a & 0xFFFFu);
+    return (banks[at >> 2] >> ((at & 3u) * 8u)) & 255u;
+}
+
+/* fullwindow.c row_step: the step across a row of n pixels by the ROM's reciprocal */
+uint row_step(uint r, uint l, int n)
+{
+    int d = (int((r - l) & 0xFFFFu) << 16) >> 16;
+    if (n >= 256)
+        return uint(d / n) & 0xFFFFu;
+    int rec = int(rom8(0u, 0x94A0u + 2u * uint(n)) | (rom8(0u, 0x94A1u + 2u * uint(n)) << 8));
+    uint p = uint(d * ((rec << 16) >> 16));
+    return (((p >> 16) << 1) | ((p >> 15) & 1u)) & 0xFFFFu;
+}
 
 struct Edge { int64_t from_, to_; int y0, n, ua, va, dua, dva; float qa, qb; };
 
@@ -117,8 +160,17 @@ void main()
     uint base = pd[pb + 8] & 0xFFFFu, mask = pd[pb + 8] >> 16;
     uint bank = pd[pb + 9] & 0xFFu, por = (pd[pb + 9] >> 8) & 0xFFu, hi = (pd[pb + 9] >> 16) & 0xFFu;
     uint colour = pd[pb + 9] >> 24, kind = pd[pb + 10] & 0xFFu, persp = (pd[pb + 10] >> 8) & 0xFFu;
-    Edge l = edge_read(edge_at(le, ln, row)), r = edge_read(edge_at(re, rn, row));
-    int64_t xl = edge_x(l.from_, l.to_, l.y0, l.n, row) >> 8, xr = edge_x(r.from_, r.to_, r.y0, r.n, row) >> 8;
+    bool chip = ((pd[pb + 10] >> 16) & 0xFFu) != 0u;
+    uint el = edge_at(le, ln, row), er = edge_at(re, rn, row);
+    Edge l = edge_read(el), r = edge_read(er);
+    int64_t xl, xr;
+    if (chip) {                         /* a job of Original's: the chip's steps (FwEdge's pad) */
+        xl = chip_x(int64_t(int(ed[el * EDGE_WORDS + 12u])), int64_t(int(ed[el * EDGE_WORDS + 13u])), int64_t(row - l.y0)) >> 8;
+        xr = chip_x(int64_t(int(ed[er * EDGE_WORDS + 12u])), int64_t(int(ed[er * EDGE_WORDS + 13u])), int64_t(row - r.y0)) >> 8;
+    } else {
+        xl = edge_x(l.from_, l.to_, l.y0, l.n, row) >> 8;
+        xr = edge_x(r.from_, r.to_, r.y0, r.n, row) >> 8;
+    }
     Span s;
     s.y = row; s.x0 = 1; s.x1 = 0; s.xl = 0l; s.u = 0l; s.du = 0l; s.v = 0l; s.dv = 0l;
     s.base = 0u; s.mask = 0u; s.bank = 0u; s.por = 0u; s.hi = 0u; s.colour = colour; s.textured = 0u;
@@ -140,6 +192,18 @@ void main()
     }
     s.x0 = int(x0); s.x1 = int(x1 - 1l); s.xl = xl;
     s.bank = bank; s.base = base; s.mask = mask; s.por = por; s.hi = hi; s.textured = 1u;
+    if (chip) {                         /* fw_poly_row's: 8.8 u and v, each row's step by the reciprocal */
+        uint b = el * EDGE_WORDS, c = er * EDGE_WORDS, il = uint(row - l.y0), ir = uint(row - r.y0);
+        uint ul = (ed[b + 14u] + il * ed[b + 15u]) & 0xFFFFu, ur = (ed[c + 14u] + ir * ed[c + 15u]) & 0xFFFFu;
+        uint vl = ((ed[b + 14u] >> 16) + il * (ed[b + 15u] >> 16)) & 0xFFFFu;
+        uint vr = ((ed[c + 14u] >> 16) + ir * (ed[c + 15u] >> 16)) & 0xFFFFu;
+        s.u = int64_t((ul + uint(ou)) & 0xFFFFu) << 24;
+        s.v = int64_t((vl + uint(ov)) & 0xFFFFu) << 24;
+        s.du = int64_t(row_step(ur, ul, int(width))) << 24;
+        s.dv = int64_t(row_step(vr, vl, int(width))) << 24;
+        span_write(at, s);
+        return;
+    }
     int64_t uL = edge_uv(l.ua, l.dua, l.y0, l.n, row), uR = edge_uv(r.ua, r.dua, r.y0, r.n, row);
     int64_t vL = edge_uv(l.va, l.dva, l.y0, l.n, row), vR = edge_uv(r.va, r.dva, r.y0, r.n, row);
     s.du = nearer(uR - uL) / width;

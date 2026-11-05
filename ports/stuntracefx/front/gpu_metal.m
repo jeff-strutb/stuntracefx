@@ -61,10 +61,32 @@ static NSString *const kernel_source = @
 "    return precise::divide(precise::fma(t, da, a0), q);\n"
 "}\n"
 "static long nearer(long d) { long t = (long)128 << 32; return ((d + t) & (((long)256 << 32) - 1)) - t; }\n"
+"/* fullwindow.h fw_chip_x: an edge's 8.8 x i rows on by the chip's step */\n"
+"static long chip_x(long x, long s, long i) {\n"
+"    long j;\n"
+"    if (i <= 0) return x;\n"
+"    if (s < 0) { j = (x + 1 - s - 1) / -s; if (x + 1 <= 0) j = 1; }\n"
+"    else if (s > 0) j = x + 0x800 <= 0 ? (-0x800 - x + s - 1) / s : 1;\n"
+"    else return x < 0 && x >= -0x800 ? 0 : x;\n"
+"    if (j < 1) j = 1;\n"
+"    if (j > i || x + j * s >= 0 || x + j * s < -0x800) return x + i * s;\n"
+"    if (s < 0 && s >= -0x800) return 0;\n"
+"    return (i - j) * s;\n"
+"}\n"
+"/* fullwindow.c row_step: the step across a row of n pixels by the ROM's reciprocal (bank 0) */\n"
+"static ushort row_step(device const uchar *rec, ushort r, ushort l, int n) {\n"
+"    int d = (int)(short)(ushort)(r - l);\n"
+"    if (n >= 256) return (ushort)(d / n);\n"
+"    int f = (int)(short)(ushort)((uint)rec[(ushort)(0x94A0 + 2 * n)] | (uint)rec[(ushort)(0x94A1 + 2 * n)] << 8);\n"
+"    uint q = (uint)(d * f);\n"
+"    return (ushort)((q >> 16) << 1 | (q >> 15 & 1));\n"
+"}\n"
 "/* fw_poly_row's (fullwindow.c), step for step: a polygon's row as a span */\n"
-"static bool poly_row(Poly p, device const Edge *edges, int row, int w, thread Span &s) {\n"
+"static bool poly_row(Poly p, device const Edge *edges, device const uchar *rec, int row, int w, thread Span &s) {\n"
 "    Edge l = edges[edge_at(edges, p.le, p.ln, row)], r = edges[edge_at(edges, p.re, p.rn, row)];\n"
-"    long xl = edge_x(l.from, l.to, l.y0, l.n, row) >> 8, xr = edge_x(r.from, r.to, r.y0, r.n, row) >> 8;\n"
+"    bool chip = p.pad[0] != 0;   /* a job of Original's: the chip's steps (FwEdge's pad) */\n"
+"    long xl = chip ? chip_x(l.pad[0], l.pad[1], row - l.y0) >> 8 : edge_x(l.from, l.to, l.y0, l.n, row) >> 8;\n"
+"    long xr = chip ? chip_x(r.pad[0], r.pad[1], row - r.y0) >> 8 : edge_x(r.from, r.to, r.y0, r.n, row) >> 8;\n"
 "    s.y = row; s.x0 = 1; s.x1 = 0; s.textured = 0; s.colour = p.colour; s.za = p.za; s.zx = p.zx; s.zy = p.zy;\n"
 "    if (p.kind == 0) {\n"
 "        if (xr < xl) return false;\n"
@@ -77,6 +99,14 @@ static NSString *const kernel_source = @
 "    if (x0 >= x1) return false;\n"
 "    s.x0 = (int)x0; s.x1 = (int)(x1 - 1); s.xl = xl;\n"
 "    s.bank = p.bank; s.base = p.base; s.mask = p.mask; s.por = p.por; s.hi = p.hi; s.textured = 1;\n"
+"    if (chip) {\n"
+"        uint il = (uint)(row - l.y0), ir = (uint)(row - r.y0), la = (uint)l.pad[2], ls = (uint)l.pad[3], ra = (uint)r.pad[2], rs = (uint)r.pad[3];\n"
+"        ushort ul = (ushort)(la + il * ls), ur = (ushort)(ra + ir * rs);\n"
+"        ushort vl = (ushort)((la >> 16) + il * (ls >> 16)), vr = (ushort)((ra >> 16) + ir * (rs >> 16));\n"
+"        s.u = (long)(ushort)(ul + (ushort)p.ou) << 24; s.v = (long)(ushort)(vl + (ushort)p.ov) << 24;\n"
+"        s.du = (long)row_step(rec, ur, ul, (int)width) << 24; s.dv = (long)row_step(rec, vr, vl, (int)width) << 24;\n"
+"        return true;\n"
+"    }\n"
 "    long uL = edge_uv(l.ua, l.dua, l.y0, l.n, row), uR = edge_uv(r.ua, r.dua, r.y0, r.n, row);\n"
 "    long vL = edge_uv(l.va, l.dva, l.y0, l.n, row), vR = edge_uv(r.va, r.dva, r.y0, r.n, row);\n"
 "    s.du = nearer(uR - uL) / width; s.dv = nearer(vR - vL) / width;\n"
@@ -100,13 +130,74 @@ static NSString *const kernel_source = @
 "/* the polygons' rows into their places in the spans (a thread a row) */\n"
 "kernel void rows(device Span *sp [[buffer(1)]], device const Poly *polys [[buffer(8)]],\n"
 "                 device const Edge *edges [[buffer(9)]], device const uint *row_poly [[buffer(10)]],\n"
+"                 device const uchar *banks [[buffer(4)]], device const short *slot [[buffer(5)]],\n"
 "                 constant uint &w [[buffer(6)]], constant uint &n [[buffer(7)]], uint g [[thread_position_in_grid]]) {\n"
 "    if (g >= n) return;\n"
 "    uint at = row_poly[2 * g], pi = row_poly[2 * g + 1];\n"
 "    Poly p = polys[pi];\n"
 "    Span s;\n"
-"    poly_row(p, edges, sp[at].y, (int)w, s);\n"
+"    poly_row(p, edges, banks + (ulong)slot[0] * 65536, sp[at].y, (int)w, s);\n"
 "    sp[at] = s;\n"
+"}\n"
+"/* the chip's bitplanes and the linear target (fullwindow.c fw_bits_cpu), a thread a character */\n"
+"struct BitsJob { uint w, h, bpp, ht, base, mask, pack; };\n"
+"kernel void pack(device uchar *px [[buffer(0)]], device uchar *bits [[buffer(1)]], constant BitsJob &j [[buffer(2)]],\n"
+"                 uint2 g [[thread_position_in_grid]]) {\n"
+"    uint cx = g.x, cy = g.y, X = cx * 8, Y = cy * 8, cn;\n"
+"    if (X >= j.w || Y >= j.h) return;\n"
+"    if (j.ht == 0) cn = cx * 16 + cy;\n"
+"    else if (j.ht == 1) cn = cx * 20 + cy;\n"
+"    else if (j.ht == 2) cn = cx * 24 + cy;\n"
+"    else cn = ((Y & 0x80) << 2) + ((X & 0x80) << 1) + ((Y & 0x78) << 1) + ((X & 0x78) >> 3);\n"
+"    uint at = j.base + cn * j.bpp * 8;\n"
+"    for (uint y = 0; y < 8; y++) {\n"
+"        device uchar *row = px + (ulong)(Y + y) * j.w + X;\n"
+"        if (j.pack) {\n"
+"            for (uint n = 0; n < j.bpp; n++) {\n"
+"                uchar d = 0;\n"
+"                for (uint x = 0; x < 8; x++) d |= (uchar)(((row[x] >> n) & 1) << (7 - x));\n"
+"                bits[(at + (n >> 1) * 16 + y * 2 + (n & 1)) & j.mask] = d;\n"
+"            }\n"
+"        } else {\n"
+"            for (uint x = 0; x < 8; x++) {\n"
+"                uchar v = 0;\n"
+"                for (uint n = 0; n < j.bpp; n++)\n"
+"                    v |= (uchar)(((bits[(at + (n >> 1) * 16 + y * 2 + (n & 1)) & j.mask] >> (7 - x)) & 1) << n);\n"
+"                row[x] = v;\n"
+"            }\n"
+"        }\n"
+"    }\n"
+"}\n"
+"/* one effect's FxHazeSample and FxHazePlot (fullwindow.c haze_fill): one thread */\n"
+"struct HazeJob { int w, h, x, y, t, sxn, sxd, syn, syd, wrap; };\n"
+"static int floor_at(int v, int n, int d) { long p = (long)v * (long)n; return (int)(p >= 0 ? p / (long)d : -((-p + (long)d - 1) / (long)d)); }\n"
+"kernel void haze(device uchar *out [[buffer(0)]], device const uchar *snap [[buffer(1)]], constant HazeJob &j [[buffer(2)]],\n"
+"                 device const uchar *banks [[buffer(4)]], device const short *slot [[buffer(5)]]) {\n"
+"    device const uchar *rom = banks + (ulong)slot[8] * 65536;\n"
+"    ushort at = (ushort)(0xF92E + 4 * j.t);\n"
+"    ushort shape = (ushort)((uint)rom[at] | (uint)rom[(ushort)(at + 1)] << 8), offs = (ushort)((uint)rom[(ushort)(at + 2)] | (uint)rom[(ushort)(at + 3)] << 8);\n"
+"    for (int r = 0; r < 16; r++) {\n"
+"        int sy = j.y + (int)(char)rom[(ushort)(offs + r)], ty = (j.y - 8 + r) & 255;\n"
+"        for (int c = 0; c < 16; c++) {\n"
+"            int b = (int)(char)rom[(ushort)(shape + r * 16 + c)];\n"
+"            if (!b) continue;\n"
+"            int sx = j.x + b, tx = (j.x - 8 + c) & 255, sya = sy, tya = ty;\n"
+"            if (j.wrap) {\n"
+"                sx &= 255; sya &= 255;\n"
+"                if (sya >= j.h) { sya -= j.h; sx += 8; }\n"
+"                if (tya >= j.h) { tya -= j.h; tx += 8; }\n"
+"            }\n"
+"            int c0 = floor_at(tx, j.sxn, j.sxd), c1 = floor_at(tx + 1, j.sxn, j.sxd);\n"
+"            int r0 = floor_at(tya, j.syn, j.syd), r1 = floor_at(tya + 1, j.syn, j.syd);\n"
+"            int s0 = floor_at(sx, j.sxn, j.sxd), t0 = floor_at(sya, j.syn, j.syd);\n"
+"            for (int v = 0; v < r1 - r0; v++)\n"
+"                for (int u = 0; u < c1 - c0; u++) {\n"
+"                    int xs = s0 + u, ys = t0 + v, xd = c0 + u, yd = r0 + v;\n"
+"                    if (xd < 0 || xd >= j.w || yd < 0 || yd >= j.h) continue;\n"
+"                    out[(long)yd * j.w + xd] = xs >= 0 && xs < j.w && ys >= 0 && ys < j.h ? snap[(long)ys * j.w + xs] : (uchar)0;\n"
+"                }\n"
+"        }\n"
+"    }\n"
 "}\n"
 "/* fullwindow.c's sunk: the water nearer than the span on this pixel's ray */\n"
 "static bool sunk(Span s, int x, float4 water) {\n"
@@ -539,7 +630,8 @@ static NSString *const kernel_source = @
 
 static id<MTLDevice> dev;
 static id<MTLCommandQueue> queue;
-static id<MTLComputePipelineState> pipe_fill, pipe_rows, pipe_water, pipe_prims;
+static id<MTLComputePipelineState> pipe_fill, pipe_rows, pipe_water, pipe_prims, pipe_pack, pipe_haze;
+static id<MTLBuffer> buf_snap, buf_bits;
 static id<MTLRenderPipelineState> pipe_tri, pipe_line, pipe_quad;
 static id<MTLTexture> tex_pic;           /* the picture as the render pass draws it (R8Uint) */
 static id<MTLTexture> tex_id;            /* (FW_GPUCHECK) each pixel's last display-list face + 1 (R32Uint) */
@@ -645,6 +737,9 @@ static int fill_spans(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
                     return 0;
                 fresh[b] = 1;
             }
+        /* the reciprocals a job's textured rows are stepped by (poly_row) */
+        if (nrows_now && !bank_fresh(SC_TABLE_BANK_RECIP) && !bank_put(SC_TABLE_BANK_RECIP))
+            return 0;
     }
     memcpy(buf_slot.contents, bank_slot, sizeof bank_slot);
     @autoreleasepool {
@@ -656,6 +751,8 @@ static int fill_spans(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
             [e setBuffer:buf_polys offset:0 atIndex:8];
             [e setBuffer:buf_edges offset:0 atIndex:9];
             [e setBuffer:buf_row_poly offset:0 atIndex:10];
+            [e setBuffer:buf_banks offset:0 atIndex:4];
+            [e setBuffer:buf_slot offset:0 atIndex:5];
             [e setBytes:&wu length:4 atIndex:6];
             [e setBytes:&nrows_now length:4 atIndex:7];
             [e dispatchThreads:MTLSizeMake(nrows_now, 1, 1) threadsPerThreadgroup:MTLSizeMake(64, 1, 1)];
@@ -883,6 +980,75 @@ static const uint32_t *face_ids(int w, int h)
     return (const uint32_t *)buf_id.contents;
 }
 
+/* one effect's haze (the haze kernel): the picture copied as it stands, its
+   shape's entries read from the copy and written */
+static int haze_run(int w, int h, const FwSpan *p)
+{
+    int32_t job[10];
+    size_t len = (size_t)w * h;
+    uint8_t haze_bank = 8;
+    buf_snap = grow(buf_snap, len);
+    if (!buf_snap || (!bank_fresh(haze_bank) && !bank_put(haze_bank)))
+        return 0;
+    memcpy(buf_slot.contents, bank_slot, sizeof bank_slot);
+    job[0] = w;
+    job[1] = h;
+    job[2] = (int32_t)p->xl;
+    job[3] = p->pad0;
+    job[4] = p->base;
+    job[5] = (int32_t)p->u;
+    job[6] = (int32_t)p->du;
+    job[7] = (int32_t)p->v;
+    job[8] = (int32_t)p->dv;
+    job[9] = p->pad1[2];
+    @autoreleasepool {
+        id<MTLCommandBuffer> cb = [queue commandBuffer];
+        id<MTLBlitCommandEncoder> bl = [cb blitCommandEncoder];
+        id<MTLComputeCommandEncoder> e;
+        [bl copyFromBuffer:buf_out sourceOffset:0 toBuffer:buf_snap destinationOffset:0 size:len];
+        [bl endEncoding];
+        e = [cb computeCommandEncoder];
+        [e setComputePipelineState:pipe_haze];
+        [e setBuffer:buf_out offset:0 atIndex:0];
+        [e setBuffer:buf_snap offset:0 atIndex:1];
+        [e setBytes:job length:sizeof job atIndex:2];
+        [e setBuffer:buf_banks offset:0 atIndex:4];
+        [e setBuffer:buf_slot offset:0 atIndex:5];
+        [e dispatchThreads:MTLSizeMake(1, 1, 1) threadsPerThreadgroup:MTLSizeMake(1, 1, 1)];
+        [e endEncoding];
+        [cb commit];
+        [cb waitUntilCompleted];
+    }
+    return 1;
+}
+
+/* the chip's bitplanes and the target (the pack kernel), the RAM copied across */
+static void bits_move(uint8_t *tex, uint8_t *ram, const FwBits *b, int pack)
+{
+    size_t size = (size_t)b->mask + 1;
+    uint32_t job[7] = { (uint32_t)b->w, (uint32_t)b->h, (uint32_t)b->bpp, (uint32_t)b->ht, b->base, b->mask, (uint32_t)pack };
+    buf_bits = grow(buf_bits, size);
+    if (!buf_bits || tex != (uint8_t *)buf_out.contents) {
+        fw_bits_cpu(tex, ram, b, pack);
+        return;
+    }
+    memcpy(buf_bits.contents, ram, size);
+    @autoreleasepool {
+        id<MTLCommandBuffer> cb = [queue commandBuffer];
+        id<MTLComputeCommandEncoder> e = [cb computeCommandEncoder];
+        [e setComputePipelineState:pipe_pack];
+        [e setBuffer:buf_out offset:0 atIndex:0];
+        [e setBuffer:buf_bits offset:0 atIndex:1];
+        [e setBytes:job length:sizeof job atIndex:2];
+        [e dispatchThreads:MTLSizeMake((NSUInteger)b->w / 8, (NSUInteger)b->h / 8, 1) threadsPerThreadgroup:MTLSizeMake(8, 8, 1)];
+        [e endEncoding];
+        [cb commit];
+        [cb waitUntilCompleted];
+    }
+    if (pack)
+        memcpy(ram, buf_bits.contents, size);
+}
+
 static void fill(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
 {
     static uint8_t *ref;
@@ -921,6 +1087,12 @@ static void fill(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
        pass */
     for (i = 0; i < n;) {
         size_t m = 0;
+        if (sp[i].textured == FW_HAZE) {    /* an effect's haze: what is drawn so far read (a marker: the runs broken here) */
+            if (!haze_run(w, h, &sp[i]))
+                fw_span_fill_cpu(out, w, h, &sp[i], 1);
+            i++;
+            continue;
+        }
         if (gpu_bin_face(&sp[i])) {
             for (j = i; j < n && gpu_bin_face(&sp[j]); j++)
                 ;
@@ -929,7 +1101,7 @@ static void fill(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
             i = j;
             continue;
         }
-        for (j = i; j < n && !gpu_bin_face(&sp[j]); j++)
+        for (j = i; j < n && !gpu_bin_face(&sp[j]) && sp[j].textured != FW_HAZE; j++)
             if (!gpu_bin_ref_only(&sp[j]))
                 run[m++] = sp[j];
         if (!fill_spans(out, w, h, run, m))
@@ -1035,7 +1207,11 @@ int gpu_metal_init(void)
         pipe_water = [dev newComputePipelineStateWithFunction:[lib newFunctionWithName:@"water"] error:&err];
     if (pipe_water)
         pipe_prims = [dev newComputePipelineStateWithFunction:[lib newFunctionWithName:@"prims"] error:&err];
-    if (pipe_prims) {
+    if (pipe_prims)
+        pipe_pack = [dev newComputePipelineStateWithFunction:[lib newFunctionWithName:@"pack"] error:&err];
+    if (pipe_pack)
+        pipe_haze = [dev newComputePipelineStateWithFunction:[lib newFunctionWithName:@"haze"] error:&err];
+    if (pipe_haze) {
         MTLRenderPipelineDescriptor *d = [MTLRenderPipelineDescriptor new];
         d.vertexFunction = [lib newFunctionWithName:@"model_vertex"];
         d.fragmentFunction = [lib newFunctionWithName:@"model_fragment"];
@@ -1052,7 +1228,7 @@ int gpu_metal_init(void)
         if (pipe_line)
             pipe_quad = [dev newRenderPipelineStateWithDescriptor:d error:&err];
     }
-    if (!pipe_fill || !pipe_rows || !pipe_water || !pipe_prims || !pipe_tri || !pipe_line || !pipe_quad) {
+    if (!pipe_fill || !pipe_rows || !pipe_water || !pipe_prims || !pipe_pack || !pipe_haze || !pipe_tri || !pipe_line || !pipe_quad) {
         fprintf(stderr, "gpu_metal: the pipeline: %s\n", err.localizedDescription.UTF8String);
         return 0;
     }
@@ -1066,5 +1242,6 @@ int gpu_metal_init(void)
     fw_span_filler = fill;
     fw_texels32_alloc = texels32_alloc;
     fw_water_filler = water_fill;
+    fw_bits_filler = bits_move;
     return 1;
 }

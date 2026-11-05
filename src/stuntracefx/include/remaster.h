@@ -158,6 +158,19 @@ int rm_canvas_ready(void);
 /* the canvas handed by another (Enhanced's full-window race, fullwindow.c):
    not this file's to hand again or turn off */
 void rm_canvas_taken(void);
+/* The GPU's bitmap picture (fullwindow.h) as the characters it stands for, in
+   place of rm_picture_chars, until the hand-off (GPU_RENDERER.md): begin: count
+   characters of bpp bits at k, room made, 0 without; cut: cols by rows of them
+   from character first on, column-major, from the linear target px (w across),
+   each texel under mask; ready: one is drawn; show: drawn and on the canvas at
+   VRAM word `word` (below 0: where it is, or 0); word: at a flip, the picture
+   drawn (count characters) on the canvas at that word, 0 when there is none
+   (off, and at SC_GPU off, always) */
+int rm_canvas_gpu_begin(unsigned count, unsigned bpp, int k);
+void rm_canvas_gpu_cut(unsigned first, unsigned cols, unsigned rows, const uint8_t *px, int w, unsigned mask);
+void rm_canvas_gpu_ready(void);
+void rm_canvas_gpu_show(int word);
+int rm_canvas_gpu_word(unsigned word, unsigned count);
 void rm_canvas_show(unsigned word, uint16_t src, unsigned count);
 /* the same from bytes in buffer order; and a two-player set (360 4 bpp
    characters) from the players' buffers, 18 columns of $140 bytes $200

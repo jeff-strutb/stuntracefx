@@ -77,7 +77,9 @@ void abi_RaceFrameStep(void)
         wait_nonzero8(0x030357);         /* the NMI's upload */
         (void)rd8(0x030357);
         cpu.p &= (uint8_t)~(P_M | P_X);
+        fw_menu_picture(1);             /* Enhanced, SC_GPU: its picture on the GPU, beside the program */
         abi_GsuAB13WithParams();
+        fw_menu_picture(0);
         (abi_GsuScreenFlip());
         wr8(0x030357, 0x00);
         if (rm_tick60())

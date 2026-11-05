@@ -221,6 +221,15 @@ void rm_race_frame(void)
         fw_sky();
         drawing = 0;
         cpu_costs(0);
+    } else if (rm_whole && fw_bp_on()) {    /* two players, or no widescreen, SC_GPU: the same, in the bitmap's layout */
+        int m;
+        drawing = 1;
+        cpu_costs(0);
+        m = fw_bp_picture(0);
+        drawing = 0;
+        cpu_costs(0);
+        if (m == 3)                     /* (one player's backdrop the step's own: its rows land with its uploads) */
+            rm_tween_backdrop_show();
     }
     for (rm_wait_k = 0; rm_wait_k < (rm_whole ? RM_TICKS : rm_pace); rm_wait_k++)
         nshvc_wait_vblank();
@@ -255,6 +264,14 @@ static void whole_tween(void)
         if (m)
             rm_tween_backdrop_show();
         fw_sky();
+        return;
+    }
+    if (fw_bp_on()) {                   /* two players, or no widescreen, SC_GPU: on the GPU, in the bitmap's layout */
+        m = fw_bp_picture(j);
+        drawing = 0;
+        cpu_costs(0);
+        if (m)
+            rm_tween_backdrop_show();
         return;
     }
     m = rm_tween_buffers(j, RM_TICKS, px[0], px[1]);

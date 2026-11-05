@@ -97,15 +97,38 @@ void gsu_host_price(uint8_t bank, uint16_t addr, GsuPrice *out)
         price_of(&profile->chip_default, out);
 }
 
+/* ---- a job's drawing when the GPU draws it (Original, SC_GPU) ---- */
+/* The cartridge's statement of what the job holds (fullwindow.h FwJob), in
+   Super FX clocks, on top of its load model's fixed part and its loads and
+   stores: the same on every host. tools/stuntracefx/gsuprice.py --draw fits
+   and writes the table.
+   NOT FITTED: these are placeholders, a guess from the chip's bus speed, until
+   the final pass collects the original's jobs. */
+typedef struct {
+    double flat, tex, edge, area_flat, area_tex, quad, plot;
+} GsuDrawPrice;
+/* gsuprice draw: begin */
+static const GsuDrawPrice draw_price = {200.0, 400.0, 60.0, 6.0, 30.0, 20.0, 10.0};   /* NOT FITTED */
+/* gsuprice draw: end */
+
+static uint64_t draw_clocks(const FwJob *j)
+{
+    return (uint64_t)(draw_price.flat * j->flat + draw_price.tex * j->tex + draw_price.edge * j->edges +
+                      draw_price.area_flat * (double)j->area_flat + draw_price.area_tex * (double)j->area_tex +
+                      draw_price.quad * (double)j->quad + draw_price.plot * (double)j->plots);
+}
+
 /* ---- its programs: the cartridge's routines ---- */
 static void run_program(uint8_t bank, uint16_t addr)
 {
     const nshvc_routine *r = nshvc_cart_routine((uint32_t)bank << 16 | addr);
     if (!r)
         nshvc_fatal("Super FX program at $%02X:%04X has no C", bank, addr);
-    fw_gsu_program(1);                  /* Enhanced's full window: the HUD's pieces whole (fullwindow.h) */
+    fw_gsu_program(1);                  /* Enhanced's full window: the HUD's pieces whole; Original on the GPU: the job's target (fullwindow.h) */
     r->abi();
     fw_gsu_program(0);
+    if (fw_job()->on)
+        gsu_job_cost(draw_clocks(fw_job()));
 }
 
 /* ---- the board ---- */
@@ -115,6 +138,7 @@ static void power(const nshvc_cart *cart)
     if (profile && profile->chip_ops != GSU_OPS)
         nshvc_fatal("the cost profile prices %d Super FX op kinds, the chip makes %d", profile->chip_ops, GSU_OPS);
     ram_size = cart->sram_size;
+    fw_ram_size(ram_size);
     snes_gsu_run_hook = run_program;
     gsu_reset();
     {   /* a recorded play's save put back (SRFX_REPLAY_SAVE, the game's

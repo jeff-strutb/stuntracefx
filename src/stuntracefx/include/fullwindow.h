@@ -156,6 +156,13 @@ void fw_facing_cross(uint16_t *hi, uint16_t *lo);
    pad1[0] 2: the GPU's alone (a check's, the reference's own spans
    beside it). */
 #define FW_QUAD 7
+/* FxHazeSample and FxHazePlot of one effect (textured 8, fw_haze): no pixels
+   of its own, a GPU's run broken at it: pad0 its Y, xl its X, base its time,
+   u / du the texels a console pixel across, v / dv down; pad1[2] 1 in a job
+   of Original's (a place past the bitmap wraps as PLOT's do). Its 256 shape
+   entries (bank 8, $F92E + 4 x time) read from the picture as it stands, then
+   written opaque. */
+#define FW_HAZE 8
 typedef struct {
     int32_t y, x0, x1, pad0;
     int64_t xl, u, du, v, dv;
@@ -170,7 +177,10 @@ typedef struct {
    chains of edges in fw_edges (first, count), each row on the one whose
    rows hold it; kind 0 flat (colour), 1 textured (bank, base, mask, por,
    hi; ou and ov the texture's offsets, 8.8; persp: perspective-correct,
-   each edge's 1 / z at its ends) */
+   each edge's 1 / z at its ends). pad[0] 1, the chip's own rules (a job of
+   Original's): each edge's x stepped from its 8.8 start by its 8.8 slope
+   (fw_chip_x), its u and v by their 8.8 steps, each row's step across by the
+   ROM's reciprocal: FwEdge's pad */
 typedef struct {
     int32_t ya, yb, le, ln, re, rn, ou, ov;
     uint16_t base, mask;
@@ -217,7 +227,9 @@ extern void (*fw_water_filler)(const uint8_t *in, uint32_t *out, const FwWaterJo
 extern uint32_t *(*fw_texels32_alloc)(size_t len);
 /* An edge: its ends' x (texels), its first row and its rows; u and v (the
    texture's 0-255) at its start and their change to its end (-128 to 127,
-   the original's walk's); 1 / z at its ends */
+   the original's walk's); 1 / z at its ends. By the chip's rules (FwPoly
+   pad[0]): pad[0] x at its start and pad[1] its slope, 8.8; pad[2] u (low
+   word) and v (high word) at its start, 8.8; pad[3] their steps a row */
 typedef struct {
     int64_t from, to;
     int32_t y0, n, ua, va, dua, dva;
@@ -226,6 +238,31 @@ typedef struct {
 } FwEdge;
 extern FwPoly *fw_polys;
 extern FwEdge *fw_edges;
+/* An edge's x (8.8) i rows on by the chip's step (raster.c edge_step): x +=
+   s, set to 0 when it lands below 0 and not below -8.0. In closed form, a row
+   made on its own thread: the first row it lands there, then on from 0. */
+static inline int64_t fw_chip_x(int64_t x, int64_t s, int64_t i)
+{
+    int64_t j;
+    if (i <= 0)
+        return x;
+    if (s < 0) {
+        j = (x + 1 - s - 1) / -s;       /* the first with x + j s <= -1 */
+        if (x + 1 <= 0)
+            j = 1;
+    } else if (s > 0) {
+        j = x + 0x800 <= 0 ? (-0x800 - x + s - 1) / s : 1;  /* the first with x + j s >= -$800 */
+    } else {
+        return x < 0 && x >= -0x800 ? 0 : x;
+    }
+    if (j < 1)
+        j = 1;
+    if (j > i || x + j * s >= 0 || x + j * s < -0x800)
+        return x + i * s;
+    if (s < 0 && s >= -0x800)           /* from 0 it lands there again each row */
+        return 0;
+    return (i - j) * s;
+}
 /* polygon p's row `row` as a span (screen width w): 0 when nothing of it
    is on the screen */
 int fw_poly_row(const FwPoly *p, const FwEdge *edges, int32_t row, int32_t w, FwSpan *s);
@@ -389,5 +426,54 @@ void fw_vblank_uploads(void);
 void fw_upload_done(void);
 /* at each frame's end: the console's screen and BG1 set for the mode */
 void fw_frame_end(void);
+
+/* ---- the bitmap pictures (docs/stuntracefx/GPU_RENDERER.md) ----
+   One engine: a picture in the bitmap's own coordinates times k, drawn by the
+   GPU to a linear 8-bit target, handed as the characters it stands for.
+   Enhanced (SC_GPU; k from the canvas): two players, Enhanced without
+   widescreen and the menus' 3D, walked natively as the full window's are.
+   fw_bp_on: such a picture may be drawn now; fw_bp_picture: picture j of a
+   race step's wait, drawn from the tween's state and handed, 0 when none could
+   be; fw_bp_frame: the frame program (01:AB13) begins (1) or ends (0): a new
+   target, its view's words times k while it runs; fw_menu_picture: the menus'
+   3D frame's program about to run (1) or run (0), fw_menu_frame at its start
+   drawing it beside the chip's, kept for the flip; fw_bp_active: one being
+   drawn; fw_nibble: its screen (or a job's) 4 bits a pixel or less, a colour
+   of a low nibble of 0 transparent; fw_por: the plot options for a span or
+   quad under that rule. */
+int fw_bp_on(void);
+int fw_bp_picture(int j);
+int fw_bp_frame(int begin);
+void fw_menu_picture(int on);
+void fw_menu_frame(void);
+int fw_bp_active(void);
+int fw_nibble(void);
+uint8_t fw_por(void);
+/* one effect's haze (FW_HAZE): 1 when a GPU's span stands for FxHazeSample and
+   FxHazePlot */
+int fw_haze(uint16_t x, uint16_t y, uint8_t time);
+/* Original (SC_GPU, a GPU there): every job's PLOTs leave the bitmap (k 1):
+   its program's draw list as polygons by the chip's rules, its loops as quads;
+   the chip's bitplanes unpacked to a linear target (w x h, the shape PLOT
+   addresses: 264 across so a row past the bitmap's aliases with x + 8) when a
+   job first draws, packed back at each RPIX and its STOP. fw_bits_filler the
+   kernels (NULL fields: fw_bits_cpu, the GE's). */
+typedef struct {
+    int32_t w, h, bpp, ht;              /* the target, the screen's bits a pixel and height mode */
+    uint32_t base, mask;                /* SCBR's byte address; the RAM's size less 1 */
+} FwBits;
+void fw_bits_cpu(uint8_t *tex, uint8_t *ram, const FwBits *b, int pack);
+extern void (*fw_bits_filler)(uint8_t *tex, uint8_t *ram, const FwBits *b, int pack);
+/* the RAM's size (the board's, at power) */
+void fw_ram_size(uint32_t size);
+/* what a job of Original's held, for its duration (superfx_cart.c): polygons
+   flat and textured, their edges and areas in pixels, quads' pixels (blits,
+   sprites, lines), single plots; none when it drew nothing the GPU's way */
+typedef struct {
+    uint32_t flat, tex, edges;
+    uint64_t area_flat, area_tex, quad, plots;
+    int on;
+} FwJob;
+const FwJob *fw_job(void);
 
 #endif

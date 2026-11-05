@@ -135,7 +135,7 @@ static void object_sprite(const Obj *o, uint8_t mat, int16_t own)
             p.base = rd(0x00A8);
             p.mask = rd(0x00D4);
             p.bank = (uint8_t)rd(0x00A6);
-            p.por = gsu.por;
+            p.por = fw_por();
             p.hi = (uint8_t)(gsu.colr & 0xF0);
             p.za = z > 0 ? (float)(1.0 / z) : 0;
             fw_prim(&p, 1);
@@ -651,11 +651,13 @@ static void text_notice(void)
     wr(0x2732, 0);
 }
 
-/* FxEffectsRun (01:BF6D): new effects and their ages as the chip's; their
-   drawing reads the picture's own pixels (FxHazeSample), which no play has
-   reached */
+/* FxEffectsRun (01:BF6D): new effects and their ages as the chip's; each one
+   in use drawn by the GPU from the picture's own pixels (FxHazeSample and
+   FxHazePlot, a marker span, fullwindow.h FW_HAZE); no play has reached it */
 static void effects_run(void)
 {
+    unsigned i;
+
     uint16_t n = 0, v;
     if (!(rd(0x2736) & 0x4000))
         return;
@@ -667,15 +669,17 @@ static void effects_run(void)
     }
     {
         RegsGSU kept = gsu;
-        static int said;
         if (n) {
             gsu.r[0] = n;
             abi_FxEffectsSpawn();
         }
         abi_FxEffectsAge();
         gsu = kept;
-        if (!said++)
-            fprintf(stderr, "scene frame: the haze effects (FxHazeSample) are not drawn\n");
+    }
+    for (i = 0; i < 16; i++) {          /* FxEffectsDraw (01:C175): X at +2, Y at +4 */
+        uint32_t rec = 0x2688 + 6 * i;
+        if (s[rec])
+            fw_haze(rd(rec + 2), rd(rec + 4), s[rec]);
     }
 }
 
@@ -692,6 +696,7 @@ int sc_frame_native(void)
     static uint8_t keep[0x2C00], keep2[0x400];
     static int check = -1;
     RegsGSU kept;
+    int pic = fw_bp_frame(1);           /* a bitmap picture's target: its view's words times k */
 
     if (!native_on())
         return 0;
@@ -735,6 +740,8 @@ int sc_frame_native(void)
         fw_ref_pass = 1;
         return 0;
     }
+    if (pic)
+        fw_bp_frame(0);
     return 1;
 }
 

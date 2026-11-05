@@ -273,7 +273,7 @@ void fw_solid_begin(void)
     armed = NULL;
     coloured = 0;
     face = NULL;
-    if (!object || !fw_sprite_rows() || !fw_view_active() || sprites_kept())
+    if (!object || !fw_sprite_rows() || !fw_view_active() || sprites_kept() || fw_bp_active())   /* (a bitmap picture keeps its sprites) */
         return;
     if (object->shape == 0xA190) {      /* an eye: by its gaze, in its plain look */
         const uint8_t *w = nshvc_wram();

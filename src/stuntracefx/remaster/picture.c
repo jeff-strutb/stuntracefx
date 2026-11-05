@@ -50,6 +50,11 @@ static unsigned canvas_word, canvas_count, canvas_bpp = 8;
    (rm_canvas_copy) */
 static uint8_t vram_shadow[0x10000];
 static int canvas_k, canvas_on, canvas_seen, canvas_owner, owner_now;
+/* the GPU's bitmap picture (remaster.h): the characters in `texels` its, not
+   canvas_src's (canvas_gpu, as handed; gpu_ready, one drawn): its count, bits
+   a pixel and k */
+static int canvas_gpu, gpu_ready, gpu_k;
+static unsigned gpu_count, gpu_bpp;
 
 int rm_canvas_ready(void)
 {
@@ -72,6 +77,70 @@ static void canvas_hand(void)
     rm_picture_chars(canvas_src, canvas_count, canvas_bpp, (unsigned)canvas_k, texels);
     nshvc_ext_canvas_chars(0, canvas_word, (int)canvas_count, texels, canvas_k);
     canvas_on = 1;
+    canvas_gpu = 0;
+    gpu_ready = 0;
+}
+
+int rm_canvas_gpu_begin(unsigned count, unsigned bpp, int k)
+{
+    size_t need = (size_t)count * 64 * k * k;
+
+    if (need > texels_size) {
+        free(texels);
+        texels = malloc(need);
+        texels_size = texels ? need : 0;
+        if (!texels)
+            return 0;
+    }
+    if (gpu_count != count || gpu_k != k)   /* (the same shape: the last stands until a new one is cut) */
+        gpu_ready = 0;
+    gpu_count = count;
+    gpu_bpp = bpp;
+    gpu_k = k;
+    return 1;
+}
+
+void rm_canvas_gpu_cut(unsigned first, unsigned cols, unsigned rows, const uint8_t *px, int w, unsigned mask)
+{
+    unsigned c, r, x, y, side = 8 * (unsigned)gpu_k;
+
+    for (c = 0; c < cols; c++)
+        for (r = 0; r < rows; r++) {
+            uint8_t *o = texels + (size_t)(first + c * rows + r) * side * side;
+            const uint8_t *from = px + (size_t)(r * side) * w + c * side;
+            for (y = 0; y < side; y++, from += w, o += side)
+                for (x = 0; x < side; x++)
+                    o[x] = (uint8_t)(from[x] & mask);
+        }
+}
+
+void rm_canvas_gpu_ready(void) { gpu_ready = 1; }
+
+static void gpu_hand(unsigned word)
+{
+    canvas_seen = 1;
+    canvas_owner = owner_now;
+    canvas_word = word;
+    canvas_count = gpu_count;
+    canvas_bpp = gpu_bpp;
+    canvas_k = gpu_k;
+    canvas_gpu = 1;
+    nshvc_ext_canvas_chars(0, word, (int)gpu_count, texels, gpu_k);
+    canvas_on = 1;
+}
+
+void rm_canvas_gpu_show(int word)
+{
+    gpu_ready = 1;
+    gpu_hand(word >= 0 ? (unsigned)word : canvas_on && canvas_count == gpu_count ? canvas_word : 0x0000);
+}
+
+int rm_canvas_gpu_word(unsigned word, unsigned count)
+{
+    if (!gpu_ready || gpu_count != count)
+        return 0;
+    gpu_hand(word);
+    return 1;
 }
 
 void rm_canvas_show(unsigned word, uint16_t src, unsigned count)
@@ -147,7 +216,7 @@ void rm_canvas_show_copied(unsigned word, unsigned count, unsigned bpp)
 
 void rm_canvas_show_copied_once(unsigned word, unsigned count, unsigned bpp)
 {
-    if (canvas_on && canvas_word == word && canvas_count == count && canvas_bpp == bpp &&
+    if (canvas_on && !canvas_gpu && canvas_word == word && canvas_count == count && canvas_bpp == bpp &&
         !memcmp(canvas_src, vram_shadow + word * 2, (size_t)count * bpp * 8)) {
         canvas_seen = 1;
         return;
@@ -185,7 +254,7 @@ void rm_canvas_narrow(unsigned word, unsigned count)
 {
     unsigned w = canvas_bpp * 4;       /* words a character */
 
-    if (!canvas_on || word < canvas_word || word + count * w > canvas_word + canvas_count * w)
+    if (!canvas_on || canvas_gpu || word < canvas_word || word + count * w > canvas_word + canvas_count * w)
         return;
     memmove(canvas_src, canvas_src + (word - canvas_word) * 2, (size_t)count * canvas_bpp * 8);
     canvas_word = word;
@@ -196,6 +265,7 @@ void rm_canvas_narrow(unsigned word, unsigned count)
 void rm_canvas_taken(void)
 {
     canvas_on = 0;
+    canvas_gpu = gpu_ready = 0;
 }
 
 void rm_canvas_off(void)
@@ -203,6 +273,7 @@ void rm_canvas_off(void)
     if (canvas_on)
         nshvc_ext_canvas_chars(0, 0, 0, NULL, 1);
     canvas_on = 0;
+    canvas_gpu = gpu_ready = 0;
 }
 
 void rm_canvas_kept(int owner)
@@ -222,7 +293,7 @@ void rm_canvas_frame_end(void)
     if (!canvas_on)
         return;
     k = nshvc_ext_canvas_scale();
-    if (k > 0 && k != canvas_k) {
+    if (k > 0 && k != canvas_k && !canvas_gpu) {     /* (the GPU's: its next picture at the new k) */
         canvas_k = k;
         canvas_hand();
     }
