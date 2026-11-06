@@ -225,14 +225,14 @@ static NSString *const kernel_source = @
 "                 device const uint *row_at [[buffer(2)]], device const uint *row_spans [[buffer(3)]],\n"
 "                 device const uchar *banks [[buffer(4)]], device const short *slot [[buffer(5)]],\n"
 "                 constant uint &w [[buffer(6)]], constant uint &h [[buffer(7)]], constant float4 &water [[buffer(11)]],\n"
-"                 uint2 g [[thread_position_in_grid]]) {\n"
-"    if (g.y >= h) return;\n"
+"                 constant uint2 &clip [[buffer(12)]], uint2 g [[thread_position_in_grid]]) {\n"
+"    if (g.y >= h || g.y < (clip.y & 0xFFFFu) || g.y > (clip.y >> 16)) return;\n"
 "    int c0 = (int)g.x * 32, c1 = c0 + 31;\n"
 "    if (c0 >= (int)w) return;\n"
 "    device uchar *o = out + (ulong)g.y * w;\n"
 "    for (uint i = row_at[g.y]; i < row_at[g.y + 1]; i++) {\n"
 "        Span s = sp[row_spans[i]];\n"
-"        int a = max(s.x0, c0), b = min(s.x1, c1);\n"
+"        int a = max(max(s.x0, c0), (int)(clip.x & 0xFFFFu)), b = min(min(s.x1, c1), (int)(clip.x >> 16));\n"
 "        if (a > b) continue;\n"
 "        bool deep = water.w != 0 && (s.za != 0 || s.zx != 0 || s.zy != 0);\n"
 "        if (!s.textured) { for (int x = a; x <= b; x++) if (!(deep && sunk(s, x, water))) o[x] = s.colour; continue; }\n"
@@ -264,6 +264,15 @@ static NSString *const kernel_source = @
 "}\n"
 "static int ripples_in(constant Job &j, int u0, int u1, int v0, int v1) {\n"
 "    return ripples_to(j, u1 + 1, v1 + 1) - ripples_to(j, u0, v1 + 1) - ripples_to(j, u1 + 1, v0) + ripples_to(j, u0, v0);\n"
+"}\n"
+"struct SkyJob { int w, h, side, split, seam; };\n"
+"kernel void sky(device const uchar *in [[buffer(0)]], device uint *out [[buffer(1)]], constant SkyJob &j [[buffer(2)]],\n"
+"                device const uint *gap [[buffer(3)]], uint2 g [[thread_position_in_grid]]) {\n"
+"    if ((int)g.x >= j.w || (int)g.y >= j.h) return;\n"
+"    int at = j.side ? (int)g.x : (int)g.y;\n"
+"    ulong i = (ulong)g.y * j.w + g.x;\n"
+"    uint c = in[i];\n"
+"    out[i] = c ? c : at >= j.seam && at < j.split ? 0xFF000000u : gap[(at >= j.split ? (uint)j.h : 0u) + g.y];\n"
 "}\n"
 "kernel void water(device const uchar *in [[buffer(0)]], device uint *out [[buffer(1)]], constant Job &j [[buffer(2)]],\n"
 "                  device const uint *gap [[buffer(3)]], uint2 gid [[thread_position_in_grid]]) {\n"
@@ -717,7 +726,7 @@ static id<MTLComputePipelineState> pipe_widen, pipe_panel;
 
 static id<MTLDevice> dev;
 static id<MTLCommandQueue> queue;
-static id<MTLComputePipelineState> pipe_fill, pipe_rows, pipe_water, pipe_prims, pipe_pack, pipe_haze, pipe_noise;
+static id<MTLComputePipelineState> pipe_fill, pipe_rows, pipe_water, pipe_sky, pipe_prims, pipe_pack, pipe_haze, pipe_noise;
 static id<MTLBuffer> buf_snap, buf_bits;
 static id<MTLRenderPipelineState> pipe_tri, pipe_line, pipe_quad;
 static id<MTLTexture> tex_pic;           /* the picture as the render pass draws it (R8Uint) */
@@ -854,6 +863,11 @@ static int fill_spans(uint8_t *out, int w, int h, const FwSpan *sp, size_t n)
         [e setBytes:&wu length:4 atIndex:6];
         [e setBytes:&hu length:4 atIndex:7];
         [e setBytes:fw_water length:16 atIndex:11];
+        {
+            uint32_t clip[2];           /* a player's rectangle of the picture (fullwindow.h) */
+            fw_clip_words(w, h, clip);
+            [e setBytes:clip length:sizeof clip atIndex:12];
+        }
         [e dispatchThreads:MTLSizeMake(((NSUInteger)w + 31) / 32, (NSUInteger)h, 1)
          threadsPerThreadgroup:MTLSizeMake(8, 8, 1)];
         [e endEncoding];
@@ -1002,6 +1016,9 @@ static int draw_faces(int w, int h, const FwSpan *sp, size_t n)
         rp.colorAttachments[1].storeAction = MTLStoreActionStore;
         id_clear = 0;
         re = [cb renderCommandEncoderWithDescriptor:rp];
+        if (fw_clip[2] >= 0)            /* a player's rectangle of the picture (fullwindow.h) */
+            [re setScissorRect:(MTLScissorRect){(NSUInteger)fw_clip[0], (NSUInteger)fw_clip[1],
+                                                (NSUInteger)(fw_clip[2] - fw_clip[0] + 1), (NSUInteger)(fw_clip[3] - fw_clip[1] + 1)}];
         [re setVertexBuffer:buf_lpoints offset:0 atIndex:1];
         [re setVertexBuffer:buf_lslots offset:0 atIndex:2];
         [re setVertexBytes:view length:sizeof view atIndex:3];
@@ -1243,6 +1260,37 @@ static void water_report(void)
 }
 
 /* the water pass (fullwindow.h) on the GPU: the shared pictures only */
+/* two players' sky pass (fullwindow.h) */
+static void sky_fill(const uint8_t *in, uint32_t *out, int w, int h, const uint32_t *gap, int side, int split, int seam)
+{
+    size_t len = (size_t)w * h;
+    int32_t job[5] = { w, h, side, split, seam };
+    if (in != (const uint8_t *)buf_out.contents || out != (uint32_t *)buf_out32.contents || len > out_len ||
+        len * 4 > out32_len) {
+        fw_sky_fill_cpu(in, out, w, h, gap, side, split, seam);
+        return;
+    }
+    buf_gap = grow(buf_gap, (size_t)h * 8);
+    if (!buf_gap) {
+        fw_sky_fill_cpu(in, out, w, h, gap, side, split, seam);
+        return;
+    }
+    memcpy(buf_gap.contents, gap, (size_t)h * 8);
+    @autoreleasepool {
+        id<MTLCommandBuffer> cb = [queue commandBuffer];
+        id<MTLComputeCommandEncoder> e = [cb computeCommandEncoder];
+        [e setComputePipelineState:pipe_sky];
+        [e setBuffer:buf_out offset:0 atIndex:0];
+        [e setBuffer:buf_out32 offset:0 atIndex:1];
+        [e setBytes:job length:sizeof job atIndex:2];
+        [e setBuffer:buf_gap offset:0 atIndex:3];
+        [e dispatchThreads:MTLSizeMake((NSUInteger)w, (NSUInteger)h, 1) threadsPerThreadgroup:MTLSizeMake(16, 16, 1)];
+        [e endEncoding];
+        [cb commit];
+        [cb waitUntilCompleted];
+    }
+}
+
 static void water_fill(const uint8_t *in, uint32_t *out, const FwWaterJob *j, const uint32_t *gap)
 {
     size_t len = (size_t)j->w * (size_t)j->h;
@@ -1558,6 +1606,8 @@ int gpu_metal_init(void)
     if (pipe_rows)
         pipe_water = [dev newComputePipelineStateWithFunction:[lib newFunctionWithName:@"water"] error:&err];
     if (pipe_water)
+        pipe_sky = [dev newComputePipelineStateWithFunction:[lib newFunctionWithName:@"sky"] error:&err];
+    if (pipe_sky)
         pipe_prims = [dev newComputePipelineStateWithFunction:[lib newFunctionWithName:@"prims"] error:&err];
     if (pipe_prims)
         pipe_pack = [dev newComputePipelineStateWithFunction:[lib newFunctionWithName:@"pack"] error:&err];
@@ -1582,7 +1632,7 @@ int gpu_metal_init(void)
         if (pipe_line)
             pipe_quad = [dev newRenderPipelineStateWithDescriptor:d error:&err];
     }
-    if (!pipe_fill || !pipe_rows || !pipe_water || !pipe_prims || !pipe_pack || !pipe_haze || !pipe_noise || !pipe_tri || !pipe_line || !pipe_quad) {
+    if (!pipe_fill || !pipe_rows || !pipe_water || !pipe_sky || !pipe_prims || !pipe_pack || !pipe_haze || !pipe_noise || !pipe_tri || !pipe_line || !pipe_quad) {
         fprintf(stderr, "gpu_metal: the pipeline: %s\n", err.localizedDescription.UTF8String);
         return 0;
     }
@@ -1596,6 +1646,7 @@ int gpu_metal_init(void)
     fw_span_filler = fill;
     fw_texels32_alloc = texels32_alloc;
     fw_water_filler = water_fill;
+    fw_sky_filler = sky_fill;
     fw_bits_filler = bits_move;
 #ifdef SRFX_NSHVC_HANDOFF
     {

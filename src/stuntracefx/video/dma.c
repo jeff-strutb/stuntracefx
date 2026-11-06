@@ -678,7 +678,9 @@ static void upload_rows(uint32_t b, int want, uint16_t n, uint16_t src,
     flag_0357(b, 1);
     if (nba) {
         put8(BG12NBA, nba);
-        if (split_canvas[set] && (rm_canvas_gpu_word(set ? 0x2000 : 0x0000, 360) || fw_unplotted()))
+        if (fw_on())                    /* the full window's pictures are drawn again (fullwindow.c) */
+            ;
+        else if (split_canvas[set] && (rm_canvas_gpu_word(set ? 0x2000 : 0x0000, 360) || fw_unplotted()))
             ;                           /* SC_GPU: the GPU's pictures, not the chip's bitmaps */
         else if (rm_canvas_job_word(set, set ? 0x2000 : 0x0000, 360, 10, 0, 4))
             ;

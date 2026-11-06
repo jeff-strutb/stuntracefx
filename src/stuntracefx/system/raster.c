@@ -471,7 +471,7 @@ void abi_RasterStage(void)
         abi_PaletteKeptColoursStep();
         break;
     case 0xA60F:
-        ldx8(0x80);
+        ldx8(fw_split_blank(0x80));     /* Enhanced's full window: no blank between the players */
         abi_WaitHBlank();
         wr8(INIDISP, (uint8_t)cpu.x);
         put8(VTIMEL, 0x77);
@@ -496,7 +496,7 @@ void abi_RasterStage(void)
         ldx8((rd8(b | 0x0D61)));
         abi_WaitHBlank();
         wr8(INIDISP, (uint8_t)cpu.x);
-        put8(VTIMEL, 0xD7);
+        put8(VTIMEL, fw_split_line());      /* $D7; Enhanced's full window: the fallback (fullwindow.c) */
         irq_ack();
         put8(b | 0x0D3F, 0x0E);
         op_rep(P_M);
@@ -547,6 +547,7 @@ void abi_RasterStage(void)
         irq_ack();
         put8(b | 0x0D3F, 0x08);
         (abi_GradientPointersToBank7F());
+        fw_upload_done();               /* Enhanced's full window: the screen on again, the sprites placed */
         break;
     case 0xA75D:
         put8(VTIMEL, 0x10);

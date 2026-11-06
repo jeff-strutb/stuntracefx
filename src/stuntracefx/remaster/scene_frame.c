@@ -136,7 +136,7 @@ static void object_sprite(const Obj *o, uint8_t mat, int16_t own)
             p.mask = rd(0x00D4);
             p.bank = (uint8_t)rd(0x00A6);
             p.por = fw_por();
-            p.hi = (uint8_t)(gsu.colr & 0xF0);
+            p.hi = fw_hi();
             p.za = z > 0 ? (float)(1.0 / z) : 0;
             fw_prim(&p, 1);
         }

@@ -280,6 +280,9 @@ object's place and radius, no point turned) go as flat Bezier patches the GE
 divides itself. A piece with a corner past the range is still dropped, very
 near the eye (Jeff's decision, 2026-11-05). Not yet checked on real hardware.
 
+(Two players with Widescreen on now take the full window on Metal and Vulkan, not the
+bitmap pictures below: ports/stuntracefx/WIDESCREEN.md, "Two players". The PSP keeps them.)
+
 ## The bitmap pictures (items 3 and 4): written, compiled on Vulkan and the GE, Metal unbuilt, none run
 
 Jeff's decisions, 2026-11-05: two players, the menus' 3D and Enhanced without

@@ -1,0 +1,22 @@
+#version 450
+/*
+ * sky.comp: two players' sky pass (fullwindow.c's fw_sky_fill_cpu, the Metal
+ * kernel's), a thread a texel: each texel nothing was drawn on its player's
+ * row's colour, black between the two; else its index.
+ */
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(std430, binding = 0) readonly buffer In { uint px[]; };
+layout(std430, binding = 11) writeonly buffer Out32 { uint o32[]; };
+layout(std430, binding = 13) readonly buffer Gap { uint gap[]; };
+layout(push_constant) uniform Push { int w; int h; int side; int split; int seam; } pc;
+
+void main()
+{
+    int x = int(gl_GlobalInvocationID.x), y = int(gl_GlobalInvocationID.y);
+    if (x >= pc.w || y >= pc.h)
+        return;
+    uint i = uint(y) * uint(pc.w) + uint(x);
+    uint c = (px[i >> 2] >> ((i & 3u) * 8u)) & 255u;
+    int at = pc.side != 0 ? x : y;
+    o32[i] = c != 0u ? c : at >= pc.seam && at < pc.split ? 0xFF000000u : gap[(at >= pc.split ? uint(pc.h) : 0u) + uint(y)];
+}

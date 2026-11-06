@@ -141,6 +141,21 @@ int fw_unplotted(void) { return unplotted; }
 #endif
 int fw_bp_active(void) { return bp; }
 int fw_nibble(void) { return bit4; }
+/* Two players in the full window: one picture, each player's view on a rectangle
+   of it (two_layout), drawn in their order. The screen's shape chooses: left and
+   right once each column holds the original's 144 columns, else top and bottom,
+   made again as the window changes. */
+#define TWO_BOX_W 80                    /* a player's boxes' place (panels_two) */
+#define TWO_BOX_H 96
+#define TWO_SEAM 2                      /* console pixels between the players' views */
+#define TWO_SIDE_W 288                  /* the screen's width from which they are side by side */
+static int two;                         /* this frame's full window is two players' */
+static int two_p;                       /* the player being drawn */
+static int two_side, two_w, two_h, two_x[2], two_y[2];  /* each view on the screen, console pixels */
+int fw_clip[4] = { 0, 0, -1, -1 };      /* (fullwindow.h) */
+uint8_t fw_hi(void) { return two ? 0x20 : gsu.colr & 0xF0; }
+uint8_t fw_face_colour(uint8_t c) { return two ? (c & 0x0F ? (uint8_t)(0x20 | (c & 0x0F)) : 0) : c; }
+#define POR_NOW() (two ? fw_por() : gsu.por)
 uint8_t fw_por(void) { return (uint8_t)(gsu.por | (bit4 ? 8 : 0)); }
 void fw_ram_size(uint32_t size) { ram_mask = size - 1; }
 const FwJob *fw_job(void) { return &job; }
@@ -166,10 +181,11 @@ static void takeover(void);
 
 /* the view's centre line on this screen: the original's, the rows a taller
    screen adds shared above and below it */
-static int view_cy(void) { return bp ? bp_cy : VIEW_CY + (H - 224) / 2; }
+static int view_cy(void);
 /* FW_CCHECK's larger picture: texels added above the screen (its centre
    that much lower) */
 static int cy_off;
+static int view_cy(void) { return bp ? bp_cy : two ? two_y[two_p] + two_h / 2 : VIEW_CY + (H - 224) / 2; }
 
 int fw_width(void) { return tw; }
 int fw_height(void) { return th; }
@@ -213,6 +229,8 @@ static int row_at(int64_t y)
     return y >= 0 && y < AT_MAX ? row_tab[y] : row_at_(y);
 }
 int fw_col_at(int x) { return col_at(x); }
+/* the view's centre column in texels: the screen's middle, or its player's */
+static int view_cx(void) { return bp ? bp_cx : two ? col_at(two_x[two_p] + two_w / 2) : tw / 2; }
 int fw_row_at(int y) { return row_at(y); }
 
 /* the view's centre line in texels (kept: its inputs rarely change, and
@@ -273,6 +291,8 @@ static int plot_colour(void)
 {
     uint8_t c = gsu.colr;
 
+    if (two)                            /* its bitmap's characters: 4 bits, palette 2 (BG1's map), a 0 clear */
+        return c & 0x0F ? 0x20 | (c & 0x0F) : -1;
     if (!(gsu.por & 0x01)) {
         if ((gsu.por & 0x08) || bit4) {
             if (!(c & 0x0F))
@@ -339,6 +359,88 @@ static int anchor_shift(int x0, int x1)
    16:9 the box's edges are the window's, so a piece the bezel cut (the
    start lamps) is cut by the window's edge there, and what the bezel hid
    is off the screen. */
+/* Two players: where the view's own (144 x 80) top left goes for a piece of it
+   (lx0 to lx1, ly0 to ly1 on the view): by its middle, to the near side of its
+   player's rectangle, or about the rectangle's middle */
+/* Each box floating on its own, its digits and gauge with it (panels_two: all one
+   picture on the GPU), its place on the original's (TWO_BOX_W x TWO_BOX_H from
+   two_bx, two_by: DAMAGE, the map, the speed, TIME; the second player's map and speed
+   the other way round) to its place on its player's rectangle, scaled together: top
+   and bottom, down the rectangle's right side as the original's column; left and
+   right, in a row along its bottom. two_q: the scale, 256ths: at most 0.6, the row
+   within 70% of the rectangle's width, the column within 80% of its height and 30%
+   of its width; no less than a source pixel a window pixel while that fits. */
+static const int two_sx[2][4] = { { 0, 0, 32, 0 }, { 0, 48, 0, 0 } }, two_sy[4] = { 0, 32, 32, 64 };
+static const int two_sw[4] = { 80, 32, 48, 80 };
+/* the map's sprites run past its place, a row above and two below, over their
+   neighbours': they have their own rows of the texture, from TWO_MAP_Y */
+#define TWO_MAP_Y 100
+#define TWO_MAP_TOP 31
+#define TWO_MAP_H 35
+#define TWO_BOX_ROW 32
+#define TWO_BOX_GAP 2
+#define TWO_ROW_W (240 + 3 * TWO_BOX_GAP)
+static int two_q(void)
+{
+    int q = 154, a, fit, least = (int)(256 * SXD / SXN);
+    if (two_side) {
+        a = 256 * 7 * two_w / (10 * TWO_ROW_W);
+        fit = 256 * two_w / TWO_ROW_W;
+    } else {
+        a = 256 * 8 * two_h / (10 * TWO_BOX_H);
+        if (a > 256 * 3 * two_w / (10 * TWO_BOX_W))
+            a = 256 * 3 * two_w / (10 * TWO_BOX_W);
+        fit = 256 * two_h / TWO_BOX_H;
+    }
+    if (q > a)
+        q = a;
+    if (q < least)
+        q = least;
+    if (q > fit)
+        q = fit;
+    return q > 256 ? 256 : q;
+}
+/* n source pixels' texels across and down, at the scale */
+static int two_tx(int n, int q) { return (int)((int64_t)n * q * SXN / (256 * SXD)); }
+static int two_ty(int n, int q) { return (int)((int64_t)n * q * SYN / (256 * SYD)); }
+/* the rows the boxes take at the rectangle's bottom, console pixels */
+static int two_band(void) { return two_side ? (TWO_MAP_H * two_q() + 255) / 256 + TWO_BOX_GAP : 0; }
+/* box b's texels */
+static void two_box_place(int p, int b, int *x, int *y, int *w, int *h)
+{
+    int ml = two_x[p] == 0 ? safe_px[0] : 0, mr = two_x[p] + two_w == W ? safe_px[2] : 0;
+    int mt = two_y[p] == 0 ? safe_px[1] : 0, mb = two_y[p] + two_h == H ? safe_px[3] : 0;
+    int left = col_at(two_x[p] + ml), right = col_at(two_x[p] + two_w - mr), top = row_at(two_y[p] + mt), bottom = row_at(two_y[p] + two_h - mb);
+    int q = two_q(), wide = two_tx(TWO_BOX_W, q), gap = two_tx(TWO_BOX_GAP, q);
+
+    *w = two_tx(two_sw[b], q);
+    *h = two_ty(b == 1 ? TWO_MAP_H : TWO_BOX_ROW, q);
+    if (!two_side) {
+        *x = right - wide + two_tx(two_sx[p][b], q);
+        *y = top + two_ty(b == 1 ? TWO_MAP_TOP : two_sy[b], q);
+        return;
+    }
+    *y = bottom - *h;
+    *x = b == 0 ? left : b == 1 ? left + wide + gap : b == 2 ? right - wide - gap - *w : right - wide;
+}
+static void two_anchor(int lx0, int lx1, int ly0, int ly1, int *ox, int *oy)
+{
+    int p = two_p, cx = (lx0 + lx1) / 2, cy = (ly0 + ly1) / 2;
+    int ml = two_x[p] == 0 ? safe_px[0] : 0, mr = two_x[p] + two_w == W ? safe_px[2] : 0;
+    int mt = two_y[p] == 0 ? safe_px[1] : 0, mb = two_y[p] + two_h == H ? safe_px[3] : 0;
+
+    *ox = cx < 64 ? two_x[p] + ml : cx > 80 ? two_x[p] + two_w - 144 - mr : two_x[p] + (two_w - 144) / 2;
+    *oy = cy < 32 ? two_y[p] + mt : cy > 48 ? two_y[p] + two_h - 80 - mb : two_y[p] + (two_h - 80) / 2;
+    if (two_side) {                     /* the bottom's pieces above the boxes' row */
+        if (cy > 48)
+            *oy -= two_band();
+    } else {                            /* clear of the boxes' column, where a short rectangle would put it under them */
+        int q = two_q(), bx = two_x[p] + two_w - mr - TWO_BOX_W * q / 256, by = two_y[p] + mt;
+        if (*oy + ly0 < by + TWO_BOX_H * q / 256 && *oy + ly1 >= by && *ox + lx1 >= bx)
+            *ox = bx - 2 - lx1;
+    }
+}
+
 static int view_shift(int x0, int x1)
 {
     int margin = W > UI_W_MAX ? (W - UI_W_MAX) / 2 : 0;
@@ -473,8 +575,15 @@ static void hud_place(void)
     }
     for (a = 0; a < hud_n; a++)
         if (hud_root(a) == a && g1[a] >= 0) {
-            s[a] = view_shift(g0[a], g1[a]);
-            t[a] = anchor_shift_y(h0[a], h1[a]);
+            if (two) {                  /* (the layer's the view's place + VIEW_X, VIEW_Y) */
+                int ox, oy;
+                two_anchor(g0[a] - VIEW_X, g1[a] - VIEW_X, h0[a] - VIEW_Y, h1[a] - VIEW_Y, &ox, &oy);
+                s[a] = ox - VIEW_X;
+                t[a] = oy - VIEW_Y;
+            } else {
+                s[a] = view_shift(g0[a], g1[a]);
+                t[a] = anchor_shift_y(h0[a], h1[a]);
+            }
         }
     for (a = 0, q = 0; a < hud_n; a++) {
         int g = hud_root(a);
@@ -622,16 +731,16 @@ static void span_flat(int32_t y, int32_t x0, int32_t x1, uint8_t c)
 static uint8_t *play_bank[256];         /* FW_SPANPLAY's recorded banks */
 /* the panels' boxes as textures (panels_draw): banks $F0 to $F3, no
    bank of the Super FX's; their version moved on as they change */
-static uint8_t panel_bank[4][0x10000];
-static uint32_t panel_version[4];
-uint32_t fw_bank_version(uint8_t bank) { return bank >= 0xF0 && bank <= 0xF3 ? panel_version[bank & 3] : 0; }
+static uint8_t panel_bank[8][0x10000];  /* ($F4 to $F7: two players' hills, two_hills) */
+static uint32_t panel_version[8];
+uint32_t fw_bank_version(uint8_t bank) { return bank >= 0xF0 && bank <= 0xF7 ? panel_version[bank & 7] : 0; }
 
 uint8_t fw_texel(uint8_t bank, uint16_t at)
 {
     if (play_bank[bank])
         return play_bank[bank][at];
-    if (bank >= 0xF0 && bank <= 0xF3)
-        return panel_bank[bank & 3][at];
+    if (bank >= 0xF0 && bank <= 0xF7)
+        return panel_bank[bank & 7][at];
     return gsu_rd8((uint32_t)bank << 16 | at);
 }
 
@@ -1091,6 +1200,39 @@ static void quad_check(void)
         qc_apart += a[i] != b[i];
 }
 
+/* the CPU's fill held to the fw_clip the GPUs' take: what it drew past the
+   rectangle put back */
+static void two_fill_cpu(void)
+{
+    static uint8_t *kept;
+    static size_t kept_len;
+    size_t len = (size_t)tw * th;
+    int y;
+    if (fw_clip[2] < 0) {
+        fw_span_fill_cpu(tex, tw, th, spans, nspans);
+        return;
+    }
+    if (kept_len < len) {
+        free(kept);
+        kept = malloc(len);
+        kept_len = kept ? len : 0;
+        if (!kept)
+            return;
+    }
+    memcpy(kept, tex, len);
+    fw_span_fill_cpu(tex, tw, th, spans, nspans);
+    for (y = 0; y < th; y++) {
+        uint8_t *t = tex + (size_t)y * tw;
+        const uint8_t *k = kept + (size_t)y * tw;
+        if (y < fw_clip[1] || y > fw_clip[3]) {
+            memcpy(t, k, (size_t)tw);
+            continue;
+        }
+        memcpy(t, k, (size_t)fw_clip[0]);
+        memcpy(t + fw_clip[2] + 1, k + fw_clip[2] + 1, (size_t)(tw - 1 - fw_clip[2]));
+    }
+}
+
 /* the spans drawn into the texels */
 static void span_flush(void)
 {
@@ -1119,6 +1261,8 @@ static void span_flush(void)
             quad_check();
         if (gpu_pic)
             fw_canvas_gpu->spans(spans, nspans);
+        else if (two && fw_span_filler == fw_span_fill_cpu)
+            two_fill_cpu();
         else
             fw_span_filler(tex, tw, th, spans, nspans);
     }
@@ -1141,14 +1285,14 @@ int fw_label_begin(uint16_t x, uint16_t y)
        128-row view, centre line 64 (a bitmap picture: the row itself, the
        centre its own) */
     {
-        int cx = bp ? bp_cx : tw / 2;
+        int cx = view_cx();
         label_tx = cx + (int)floor_div(((int)(int16_t)x - cx) * SXN, SXD);
     }
     if (label_tx < 0)
         label_tx = 0;
     if (label_tx > tw - 1 - lw)
         label_tx = tw - 1 - lw;
-    label_ty = bp ? row_at((int16_t)y) : row_at(view_cy() + (int)(int16_t)y - 64) + cy_off;
+    label_ty = bp ? row_at((int16_t)y) : row_at(view_cy() + (int)(int16_t)y - (two ? 40 : 64)) + cy_off;
     label_on = 1;
     return 1;
 }
@@ -1202,7 +1346,7 @@ void fw_sprite_draw(int32_t h)
             q->mask = (uint16_t)h;
             q->xl = x0;
             q->bank = (uint8_t)bank;
-            q->hi = (uint8_t)(gsu.colr & 0xF0);
+            q->hi = fw_hi();
             if (!back) {
                 q->base = base;
                 q->du = du;
@@ -1236,8 +1380,8 @@ void fw_sprite_draw(int32_t h)
         p->xl = x0;
         p->bank = (uint8_t)bank;
         p->mask = 0x00FF;
-        p->por = gsu.por;
-        p->hi = (uint8_t)(gsu.colr & 0xF0);
+        p->por = POR_NOW();
+        p->hi = fw_hi();
         p->textured = 1;
         p->base = (uint16_t)(base + (v << 8));
         if (!back) {                    /* column k's texel floor(k du) */
@@ -1274,8 +1418,8 @@ void fw_sprite_span(uint16_t y, uint16_t x0, uint16_t x1, uint16_t bank, uint16_
     p->xl = x0;
     p->bank = (uint8_t)bank;
     p->mask = 0x00FF;
-    p->por = gsu.por;
-    p->hi = (uint8_t)(gsu.colr & 0xF0);
+    p->por = POR_NOW();
+    p->hi = fw_hi();
     p->textured = 1;
     if (!back) {                        /* texel (frac + k step) >> 16 from at */
         p->base = at;
@@ -1335,7 +1479,7 @@ static FwSpan *quad_new(int32_t y0, int32_t rows, int32_t a, int32_t b, int64_t 
     p->textured = FW_QUAD;
     p->pad1[0] = quads_both() ? 2 : 0;
     p->por = fw_por();
-    p->hi = (uint8_t)(gsu.colr & 0xF0);
+    p->hi = fw_hi();
     quads_made++;
     cen_quads++;
     if (gx)
@@ -1517,7 +1661,7 @@ static void bitmap_fields(FwSpan *p, uint8_t bank, uint16_t at, const uint8_t pa
     memcpy(&p->pdq, &mx, 4);
     memcpy(&p->pda, &my, 4);
     p->por = fw_por();
-    p->hi = (uint8_t)(gsu.colr & 0xF0);
+    p->hi = fw_hi();
     p->za = p->zx = p->zy = 0;          /* no depth: the HUD's and labels' (span_new's) */
 }
 
@@ -1527,7 +1671,7 @@ static int bitmap_colour(uint8_t bank, uint16_t at, int64_t sx, int64_t sy, cons
 {
     uint8_t b = fw_texel(bank, (uint16_t)(at + sy * 32 + (sx >> 2)));
     uint8_t c = pal[(b >> 2 * (sx & 3)) & 3];
-    return texel_colour(c, gsu.por, (uint8_t)(gsu.colr & 0xF0));
+    return texel_colour(c, gsu.por, fw_hi());
 }
 
 static int bitmaps_on(void)
@@ -1635,8 +1779,8 @@ static int bitmap_quad(int32_t ox, int32_t oy, int32_t dx0, int32_t dy0, int col
         h->stepx = stepx;
         h->stepy = stepy;
         h->bank = bank;
-        h->por = gsu.por;
-        h->hi = (uint8_t)(gsu.colr & 0xF0);
+        h->por = POR_NOW();
+        h->hi = fw_hi();
         memcpy(h->pal, pal, 4);
         h->piece = hud_n;
         quads_made++;
@@ -2008,10 +2152,16 @@ uint8_t gsu_rpix16(uint16_t x, uint16_t y)
     return fw_drawing ? fw_rpix(x, y) : fw_silent ? 0 : gsu_rpix((uint8_t)x, (uint8_t)y);
 }
 
+static void clear_now(void);
 void fw_clear(void)
 {
-    if (gx)                             /* a job's: FxScreenClear's own (fw_job_clear) */
+    if (gx || two)                      /* a job's: FxScreenClear's own (fw_job_clear); two players': one, before the first (two_begin) */
         return;
+    clear_now();
+}
+
+static void clear_now(void)
+{
     nspans = npolys = nedges = 0;       /* drawn over: none of them shows */
 #ifdef SRFX_NSHVC_HANDOFF
     if (hand_pic() || (bp && fw_chars_on())) {
@@ -2073,10 +2223,10 @@ double fw_focal_y(void)
    time (a double's is software on some hosts) */
 static float fw_focal_xf(void) { fw_focal_x(); return focal_xf; }
 static float fw_focal_yf(void) { fw_focal_y(); return focal_yf; }
-int fw_half_width(void) { return tw / 2; }
+int fw_half_width(void) { return view_cx(); }
 void fw_view_centre(float *cx, float *cy)
 {
-    *cx = (float)(bp ? bp_cx : tw / 2);
+    *cx = (float)view_cx();
     *cy = centre_rowf();
 }
 
@@ -2086,6 +2236,20 @@ int fw_view_words(const uint16_t w[6], uint16_t out[8])
 
     if (!fw_drawing || fw_hud || bp || gx)
         return 0;
+    if (two) {                          /* its player's rectangle, the frustum planes for it */
+        int x0 = col_at(two_x[two_p]), x1 = col_at(two_x[two_p] + two_w) - 1;
+        int y0 = row_at(two_y[two_p]), y1 = row_at(two_y[two_p] + two_h);
+        int cx = view_cx(), hw = cx - x0 > x1 + 1 - cx ? cx - x0 : x1 + 1 - cx, hh = cy - y0 > y1 - cy ? cy - y0 : y1 - cy;
+        out[0] = (uint16_t)cx;
+        out[1] = (uint16_t)cy;
+        out[2] = (uint16_t)x0;
+        out[3] = (uint16_t)x1;
+        out[4] = (uint16_t)y0;
+        out[5] = (uint16_t)y1;
+        out[6] = (uint16_t)(((uint64_t)128 * SXN << 14) / ((uint64_t)SXD * (uint64_t)hw));
+        out[7] = (uint16_t)(((uint64_t)128 * SYN << 13) / ((uint64_t)SYD * (uint64_t)hh));
+        return 1;
+    }
     for (i = 0; i < 6; i++)
         if (w[i] != k_race1p[i])
             return 0;
@@ -2121,6 +2285,7 @@ void fw_view_begin(void)
     view_set = 0;
     if (!fw_drawing || checking || bp)
         return;
+    two_p = 0;
     for (i = 0; i < 8; i++)
         view_game[i] = (uint16_t)(s[view_at[i]] | s[view_at[i] + 1] << 8);
     if (!fw_view_words(view_game, full))
@@ -2130,6 +2295,23 @@ void fw_view_begin(void)
         s[view_at[i] + 1] = (uint8_t)(full[i] >> 8);
     }
     view_set = 1;
+}
+
+/* two players: the second's view, for its sort and picture */
+void fw_two_next(void)
+{
+    uint8_t *s = nshvc_sram();
+    uint16_t full[8];
+    int i;
+    if (!two || !fw_drawing)
+        return;
+    two_p = 1;
+    if (!fw_view_words(view_game, full))
+        return;
+    for (i = 0; i < 8; i++) {
+        s[view_at[i]] = (uint8_t)full[i];
+        s[view_at[i] + 1] = (uint8_t)(full[i] >> 8);
+    }
 }
 
 /* the game's words back, for the HUD's pieces (GsuPieceOffsetFromView
@@ -2244,7 +2426,7 @@ static void project_exact(int64_t x, int64_t y, int64_t z, int64_t *sx, int64_t 
         rx = rx * 0x3FFF * SYN / d;
         ry = ry * 0x3FFF * SYN / d;
     }
-    *sx = tw / 2 + rx;
+    *sx = view_cx() + rx;
     *sy = centre_row() + ry;
 }
 
@@ -2267,7 +2449,7 @@ static void depth_report(void)
 
 static void depth_plane(const float (*P)[3], int n, float z[3])
 {
-    float fx = fw_focal_xf(), fy = fw_focal_yf(), ox = tw / 2.0f, oy = centre_rowf(), sc = (float)(1 << rm_far_shift);
+    float fx = fw_focal_xf(), fy = fw_focal_yf(), ox = (float)view_cx(), oy = centre_rowf(), sc = (float)(1 << rm_far_shift);
     float X[EXACT_MAX + 8], Y[EXACT_MAX + 8], Q[EXACT_MAX + 8], best = 0, c[3] = { 0 }, d;
     int i, j, k, m = 0, a = 0, b = 1, e = 2;
 
@@ -2487,7 +2669,7 @@ int fw_exact_clip(void)
         static int reported;
         for (i = 0; i < n; i++) {
             int64_t x = (int16_t)ram16((uint16_t)(list + 4 * i)), y = (int16_t)ram16((uint16_t)(list + 4 * i + 2));
-            int64_t rx = x - tw / 2, ry = y - centre_row();
+            int64_t rx = x - view_cx(), ry = y - centre_row();
             seen++;
             if (rx >= 0x3FF0 || rx <= -0x3FF0 || ry >= 0x3FF0 || ry <= -0x3FF0) {
                 held++;
@@ -2964,7 +3146,7 @@ int fw_exact_tex_draw(void)
         cv[2][EXACT_MAX + 2];
     uint16_t list, n;
     int i, m = 0, left = 1, right = 1, above = 1, below = 1;
-    double fx = fw_focal_x(), fy = fw_focal_y(), ox = tw / 2, oy = (double)centre_row();
+    double fx = fw_focal_x(), fy = fw_focal_y(), ox = view_cx(), oy = (double)centre_row();
 
     /* nothing read unless in the full window: the Super FX's accesses are
        timed in Original */
@@ -3060,7 +3242,7 @@ void fw_view_face(const float (*p)[3], int n, uint8_t c)
 {
     static float v[FACE_MAX][3], s[2][FACE_MAX][2];
     int64_t X[FACE_MAX], Y[FACE_MAX];
-    float fx = fw_focal_xf(), fy = fw_focal_yf(), ox = (float)(tw / 2), oy = centre_rowf();
+    float fx = fw_focal_xf(), fy = fw_focal_yf(), ox = (float)view_cx(), oy = centre_rowf();
     int64_t area = 0;
     int i, m = 0, k, top = 0, at, next;
     int32_t lend, rend;
@@ -3126,7 +3308,7 @@ void fw_view_face(const float (*p)[3], int n, uint8_t c)
             top = i;
     if (!(pg = poly_new()))
         return;
-    pg->colour = c;
+    pg->colour = fw_face_colour(c);
     pg->le = (int32_t)nedges;
     lend = (int32_t)Y[top];
     for (at = top, i = 0; i < k; i++, at = next) {      /* the left chain: forward from the top */
@@ -3197,7 +3379,7 @@ int fw_exact_gather_begin(uint16_t count, uint16_t r14)
 void fw_exact_gather_end(void)
 {
     double cx[EXACT_MAX + 2], cy[EXACT_MAX + 2], cz[EXACT_MAX + 2];
-    double fx = fw_focal_x(), fy = fw_focal_y(), ox = tw / 2, oy = (double)centre_row();
+    double fx = fw_focal_x(), fy = fw_focal_y(), ox = view_cx(), oy = (double)centre_row();
     uint16_t list = ram16(0x005A);
     int i, m = 0, n = ga_n, lines = n == 2, in[4] = {0, 0, 0, 0};
 
@@ -3656,7 +3838,7 @@ static const TexPlane *tex_persp;
 
 static double plane_q(double sx, double sy)
 {
-    double rx = (sx - tw / 2) / fw_focal_x(), ry = (sy - (double)centre_row()) / fw_focal_y();
+    double rx = (sx - view_cx()) / fw_focal_x(), ry = (sy - (double)centre_row()) / fw_focal_y();
     return tex_persp->q[0] * rx + tex_persp->q[1] * ry + tex_persp->q[2];
 }
 
@@ -3806,7 +3988,7 @@ static uint16_t tex_polygon(uint16_t p, int n)
         pg->base = base;
         pg->mask = mask;
         pg->por = fw_por();
-        pg->hi = (uint8_t)(gsu.colr & 0xF0);
+        pg->hi = fw_hi();
         pg->ou = ram16(TEX_U_OFF);
         pg->ov = ram16(TEX_V_OFF);
         for (i = 0; i < 2; i++) {
@@ -3947,8 +4129,8 @@ static uint16_t tex_polygon(uint16_t p, int n)
                     sp->bank = bank;
                     sp->base = base;
                     sp->mask = mask;
-                    sp->por = gsu.por;
-                    sp->hi = (uint8_t)(gsu.colr & 0xF0);
+                    sp->por = POR_NOW();
+                    sp->hi = fw_hi();
                     sp->textured = 1;
                     if (pl) {           /* perspective-correct: the row's ends from its edges (tex_persp) */
                         double ou = ram16(TEX_U_OFF) / 256.0, ov = ram16(TEX_V_OFF) / 256.0;
@@ -4143,6 +4325,8 @@ static void size_of_window(int *w, int *h)
     *w = 256;
     *h = 224;
     nshvc_window_size(&ww, &wh);
+    if (fw_env("FW_WINDOW"))            /* a check: the window's shape, width,height (headless has none of its own) */
+        sscanf(fw_env("FW_WINDOW"), "%f,%f", &ww, &wh);
     if (!(ww > 0 && wh > 0))
         return;
     a = (ww / wh) / (4.0f / 3.0f);
@@ -4295,7 +4479,7 @@ static int water_here(void);
 static void water_view(void)
 {
     int i, j;
-    if (bp || gx) {                     /* the bitmap pictures have none: the console's own layers show through */
+    if (bp || gx || two) {              /* the bitmap pictures have none: the console's own layers show through; two players: one surface a picture won't do */
         fw_water[3] = 0;
         return;
     }
@@ -4612,12 +4796,216 @@ static void picture_out(const uint32_t *t32)
         nshvc_ext_canvas_screen(0, tex, tw, th, 0, 1, 0);
 }
 
+/* ---- two players' pictures ------------------------------------------------- */
+/* Each player's rectangle (fullwindow.h fw_clip's while it draws) from the
+   screen's size. */
+static void two_layout(void)
+{
+    two_side = W >= TWO_SIDE_W;
+    if (two_side) {
+        two_w = (W - TWO_SEAM) / 2;
+        two_h = H;
+        two_x[0] = 0;
+        two_x[1] = W - two_w;
+        two_y[0] = two_y[1] = 0;
+    } else {
+        two_w = W;
+        two_h = (H - TWO_SEAM) / 2;
+        two_x[0] = two_x[1] = 0;
+        two_y[0] = 0;
+        two_y[1] = H - two_h;
+    }
+}
+
+/* where each player's view is on the original's screen, and its centre (the
+   backdrop's and sky's place about it) */
+static const int two_vx[2] = { 16, 96 }, two_vy[2] = { 24, 128 };
+
+/* a texture of the banks ($F0 up, 256 x 256, 0 not drawn) on the screen: console
+   columns c0 to c1 and rows r0 to r1, column c its column c - s and row r its row
+   r - top */
+static void bank_quad(int bank, int c0, int c1, int r0, int r1, int s, int top)
+{
+    int32_t t0 = row_at(r0), t1 = row_at(r1 + 1) - 1;
+    FwSpan *p = quad_new(t0, t1 - t0 + 1, col_at(c0), col_at(c1 + 1) - 1, (int64_t)(t0 + 1) * SYD - 1 - (int64_t)top * SYN, SYD);
+    uint32_t den = (uint32_t)SXN, zero = 0;
+    if (!p)
+        return;
+    p->xl = 0;
+    p->u = SXD - 1 - (int64_t)s * SXN;
+    p->du = SXD;
+    p->mask = (uint16_t)SYN;
+    p->bank = (uint8_t)bank;
+    p->base = 0;
+    p->pad1[1] = 8;
+    memcpy(&p->pq, &den, 4);
+    memcpy(&p->pdq, &zero, 4);
+    memcpy(&p->pda, &zero, 4);
+    p->por = 0;
+    p->hi = 0;
+    p->za = p->zx = p->zy = 0;
+}
+
+/* a part of a texture (sw x sh from sx, sy) over w x h texels at x, y */
+static void bank_quad_scaled(int bank, int sx, int sy, int sw, int sh, int x, int y, int w, int h)
+{
+    FwSpan *p;
+    uint32_t den = (uint32_t)w, zero = 0;
+    if (w < 1 || h < 1 || !(p = quad_new(y, h, x, x + w - 1, (int64_t)sy * h, sh)))
+        return;
+    p->xl = x;
+    p->u = (int64_t)sx * w;
+    p->du = sw;
+    p->mask = (uint16_t)h;
+    p->bank = (uint8_t)bank;
+    p->base = 0;
+    p->pad1[1] = 8;
+    memcpy(&p->pq, &den, 4);
+    memcpy(&p->pdq, &zero, 4);
+    memcpy(&p->pda, &zero, 4);
+    p->por = 0;
+    p->hi = 0;
+    p->za = p->zx = p->zy = 0;
+}
+
+/* The hills: BG2's map as the two players' race has it ($3C00, 64 x 64, characters
+   from $4000) as four textures, 512 x 512, each pixel its CGRAM index; the sky's
+   colour 1 and colour 0 not drawn (two_sky's behind them). Written when they differ. */
+#define TWO_BG2_MAP 0x3C00
+#define TWO_BG2_CHARS 0x4000
+static void two_hills(void)
+{
+    static uint8_t img[4][0x10000];
+    const uint16_t *v = nshvc_vram();
+    int r, c, y, x, k;
+
+    memset(img, 0, sizeof img);
+    for (r = 0; r < 64; r++)
+        for (c = 0; c < 64; c++) {
+            /* the map: the screens 32 x 32, left then right, top then bottom */
+            uint16_t e = v[TWO_BG2_MAP + (r >= 32 ? 0x800 : 0) + (c >= 32 ? 0x400 : 0) + (r & 31) * 32 + (c & 31)];
+            const uint16_t *ch = v + ((TWO_BG2_CHARS + (e & 0x3FF) * 16) & 0x7FFF);
+            int pal = e >> 10 & 7;
+            for (y = 0; y < 8; y++) {
+                int py = e & 0x8000 ? 7 - y : y, sy = r * 8 + y;
+                uint16_t w0 = ch[py], w1 = ch[8 + py];
+                for (x = 0; x < 8; x++) {
+                    int px = e & 0x4000 ? x : 7 - x, sx = c * 8 + x;
+                    int n = (w0 >> px & 1) | (w0 >> (8 + px) & 1) << 1 | (w1 >> px & 1) << 2 | (w1 >> (8 + px) & 1) << 3;
+                    if (n && !(n == 1 && !pal))
+                        img[(sy >> 8) * 2 + (sx >> 8)][(sy & 255) * 256 + (sx & 255)] = (uint8_t)(pal << 4 | n);
+                }
+            }
+        }
+    for (k = 0; k < 4; k++)
+        if (memcmp(img[k], panel_bank[4 + k], 0x10000)) {
+            memcpy(panel_bank[4 + k], img[k], 0x10000);
+            panel_version[4 + k]++;
+        }
+}
+
+/* the hills on player p's rectangle: the original's column and line about its
+   view's centre at the rectangle's, at its scroll ($0D92, $0D8E: this player's as the
+   backdrop's angles left them), a quad for each texture's part */
+static void two_hills_quads(int p)
+{
+    const uint8_t *w = nshvc_wram();
+    int X = w[0x0D92 + 2 * p] | w[0x0D93 + 2 * p] << 8, Y = w[0x0D8E + 2 * p] | w[0x0D8F + 2 * p] << 8;
+    int sx0 = X + two_vx[p] + 72 - two_w / 2, sy0 = Y + 1 + two_vy[p] + 40 - two_h / 2, r = 0;
+
+    while (r < two_h) {
+        int sy = (sy0 + r) & 511, n = 256 - (sy & 255), c = 0;
+        if (n > two_h - r)
+            n = two_h - r;
+        while (c < two_w) {
+            int sx = (sx0 + c) & 511, m = 256 - (sx & 255);
+            if (m > two_w - c)
+                m = two_w - c;
+            bank_quad(0xF4 + (sy >> 8) * 2 + (sx >> 8), two_x[p] + c, two_x[p] + c + m - 1, two_y[p] + r, two_y[p] + r + n - 1,
+                      two_x[p] + c - (sx & 255), two_y[p] + r - (sy & 255));
+            c += m;
+        }
+        r += n;
+    }
+}
+
+/* each player's sky a texel row (two_gap[p * th + y]): the original's colour 1 at
+   the line the same height above its view's centre, from its 80-line band
+   (GradientPointersToBank7F's address at $0D96 + 2p, bank $7F), the band's ends held */
+static uint32_t *two_gap;
+static size_t two_gap_rows;
+static void two_sky_rows(int p)
+{
+    const uint8_t *w = nshvc_wram();
+    unsigned at = w[0x0D96 + 2 * p] | w[0x0D97 + 2 * p] << 8;
+    int y;
+    if ((size_t)th > two_gap_rows) {
+        free(two_gap);
+        two_gap = malloc(2 * (size_t)th * sizeof *two_gap);
+        two_gap_rows = two_gap ? (size_t)th : 0;
+        if (!two_gap)
+            return;
+    }
+    for (y = 0; y < th; y++) {
+        int i = 40 + (int)floor_div((int64_t)y * SYD, SYN) - (two_y[p] + two_h / 2);
+        unsigned a;
+        if (i < 0)
+            i = 0;
+        if (i > 79)
+            i = 79;
+        a = 0x10000 + ((at + 2 * (unsigned)i) & 0xFFFF);
+        two_gap[(size_t)p * th + y] = rgb8((uint16_t)(w[a] | w[a + 1] << 8));
+    }
+}
+
+/* the frame program of a player begins (01:AB13): the last player's drawn, this
+   one's rectangle held to, its backdrop first */
+static void two_begin(void)
+{
+    span_flush();
+    if (!two_p)
+        clear_now();
+    fw_clip[0] = col_at(two_x[two_p]);
+    fw_clip[1] = row_at(two_y[two_p]);
+    fw_clip[2] = col_at(two_x[two_p] + two_w) - 1;
+    fw_clip[3] = row_at(two_y[two_p] + two_h) - 1;
+    sc_picture_begin();
+    if (!two_p)
+        two_hills();
+    two_hills_quads(two_p);
+    two_sky_rows(two_p);
+}
+
+/* the picture's 32 bits: its indices, and where nothing is drawn its player's sky
+   (black between the two) */
+static const uint32_t *two_sky(void)
+{
+    int split = two_side ? col_at(two_x[1]) : row_at(two_y[1]);
+    int seam = two_side ? col_at(two_x[0] + two_w) : row_at(two_y[0] + two_h);
+
+    if (!two_gap || !tex32_room())
+        return NULL;
+    fw_sky_filler(tex, tex32, tw, th, two_gap, two_side, split, seam);
+    return tex32;
+}
+
 /* the texels to the canvas, the screen's picture */
 static void hand(void)
 {
     const uint32_t *t32 = NULL;
 
     span_flush();                       /* the panels' and the HUD's pieces (block_set) */
+    if (two && (t32 = two_sky()) != NULL) {
+        rm_canvas_taken();
+        picture_out(t32);
+        if (!handed) {
+            nshvc_hold_interrupts(1);
+            takeover();
+            nshvc_hold_interrupts(0);
+        }
+        handed = 1;
+        return;
+    }
     if (water_seen && water_here()) {   /* the water's colours from the band this picture is shown with: fw_sky's, after it */
         water_seen = 0;
         if (handed) {
@@ -5005,6 +5393,7 @@ int fw_picture(int j)
         check_picture(j);
     prof_mark(-1);
     fw_water[3] = 0;                    /* no water until this picture's view says so (water_view) */
+    bit4 = two;                         /* (its bitmap's 4 bits a pixel) */
     if (gpu_pic && gpu_open)            /* (a last picture never handed: its texels kept) */
 #ifdef SRFX_NSHVC_HANDOFF
         fw_canvas_gpu->close(NULL, hand_pic() ? NULL : tex);
@@ -5030,6 +5419,8 @@ int fw_picture(int j)
     if (hud_n)                          /* a redraw let go before the HUD's end: its pieces */
         hud_place();
     fw_hud = 0;
+    bit4 = 0;
+    fw_clip[2] = fw_clip[3] = -1;       /* the panels, over the whole picture */
     if (!m)
         return 0;
     if (fw_env("FW_KCHECK"))            /* before the backdrop and panels: the 3D and HUD alone */
@@ -5192,6 +5583,10 @@ int fw_bp_frame(int begin)
 {
     uint8_t *s;
     int i;
+    if (two && fw_drawing && begin) {
+        two_begin();
+        return 0;
+    }
     if (!bp)
         return 0;
     s = nshvc_sram();
@@ -5662,6 +6057,119 @@ static void box_quad(int k, int top)
     p->hi = 0;
 }
 
+/* Two players' boxes: each player's DAMAGE, map, speed and time as the original's
+   screen has them beside its view, BG1's map $1C00 (a view's rows 2 to 13 of it, 12
+   rows of 10 characters, 96 x 80 pixels; the second's rows 15 to 26), less the
+   bezel's colour reached from their edges, a texture ($F0, $F1), each box at its
+   own place (two_box_place). */
+static const int two_bx[2] = { 168, 8 }, two_by[2] = { 16, 120 };
+
+static uint8_t two_pixel(unsigned x, unsigned y)
+{
+    const uint16_t *v = nshvc_vram();
+    uint16_t e = v[0x1C00 + (y >> 3) * 32 + (x >> 3)];
+    unsigned px = e & 0x4000 ? 7 - (x & 7) : x & 7, py = e & 0x8000 ? 7 - (y & 7) : y & 7, n, c = 0;
+    const uint16_t *ch = v + ((((unsigned)mw_ppu_last(0x210B) & 0x0F) * 0x1000 + (e & 0x3FFu) * 16) & 0x7FFF);
+
+    for (n = 0; n < 4; n++)
+        c |= (unsigned)(ch[(n >> 1) * 8 + py] >> ((n & 1) * 8 + 7 - px) & 1) << n;
+    return c ? (uint8_t)((e >> 10 & 7) << 4 | c) : 0;
+}
+
+/* the sprites in player p's boxes (the HUD's, priority 3: its digits, gauge and map)
+   into their picture, scaled with it, each pixel its CGRAM index ($80 up), the first
+   sprite on top as the console's (OBSEL $03: characters from $6000) */
+static void two_box_sprites(int p, uint8_t *img)
+{
+    const uint8_t *o = nshvc_wram() + 0x0375;
+    const uint16_t *v = nshvc_vram();
+    int i;
+
+    for (i = p ? 127 : 63; i >= (p ? 64 : 0); i--) {
+        unsigned yy = o[i * 4 + 1], at = o[i * 4 + 3], bits = o[512 + i / 4] >> (2 * (i & 3));
+        unsigned name = o[i * 4 + 2] | (at & 1) << 8;
+        int h = bits & 2 ? 16 : 8, xx = o[i * 4] | (bits & 1) << 8, tx, ty, mapped;
+        if (xx >= 256)
+            xx -= 512;
+        {                               /* (its middle in the map's place: the map's rows of the texture) */
+            int mx = xx + h / 2 - two_bx[p], my = (int)yy + h / 2 - two_by[p];
+            mapped = mx >= two_sx[p][1] && mx < two_sx[p][1] + two_sw[1] && my >= two_sy[1] && my < two_sy[1] + TWO_BOX_ROW;
+        }
+        if ((at & 0x30) != 0x30 || yy >= 224 || yy + (unsigned)h > 256 || xx + h / 2 < two_bx[p] || xx + h / 2 >= two_bx[p] + TWO_BOX_W)
+            continue;
+        for (ty = 0; ty < h; ty++)
+            for (tx = 0; tx < h; tx++) {
+                int sx = at & 0x40 ? h - 1 - tx : tx, sy = at & 0x80 ? h - 1 - ty : ty;
+                int lx = xx + tx - two_bx[p], ly = (int)yy + ty - two_by[p], px = 7 - (sx & 7), r = sy & 7, n;
+                unsigned ch = (name & 0x100) | ((name + (unsigned)(sy >> 3) * 16) & 0xF0) | ((name + (unsigned)(sx >> 3)) & 0x0F);
+                const uint16_t *c = v + ((0x6000 + ch * 16) & 0x7FFF);
+                if (lx < 0 || lx >= TWO_BOX_W || ly < 0 || ly >= TWO_BOX_H || (mapped && (ly < TWO_MAP_TOP || ly >= TWO_MAP_TOP + TWO_MAP_H)))
+                    continue;
+                n = (c[r] >> px & 1) | (c[r] >> (8 + px) & 1) << 1 | (c[8 + r] >> px & 1) << 2 | (c[8 + r] >> (8 + px) & 1) << 3;
+                if (n)
+                    img[(mapped ? ly - TWO_MAP_TOP + TWO_MAP_Y : ly) * 256 + lx] = (uint8_t)(0x80 | (at >> 1 & 7) << 4 | n);
+            }
+    }
+}
+
+static void panels_two(void)
+{
+    static uint8_t img[0x10000], keep[TWO_BOX_H][TWO_BOX_W];
+    static int16_t stack[TWO_BOX_H * TWO_BOX_W][2];
+    uint8_t bg = two_pixel(21 * 8 + 4, 7 * 8 + 4);  /* the bezel's fill: its character under the map (map row 7, column 21) */
+    int p, x, y, n, k, dx, dy;
+
+    for (p = 0; p < 2; p++) {
+        n = 0;
+        memset(img, 0, sizeof img);
+        for (y = 0; y < TWO_BOX_H; y++)
+            for (x = 0; x < TWO_BOX_W; x++) {
+                uint8_t c = two_pixel((unsigned)(two_bx[p] + x), (unsigned)(two_by[p] + y));
+                img[y * 256 + x] = c;
+                keep[y][x] = c != 0 && y && y != TWO_BOX_H - 1;   /* (its first and last rows the bezel's rim) */
+            }
+        /* floating, as one player's: only the boxes kept, the fill gone wherever it
+           is reached from outside their outlines (the map's whole place is fill) */
+        for (y = 0; y < TWO_BOX_H; y++)
+            for (x = 0; x < TWO_BOX_W; x++)
+                if ((!x || x == TWO_BOX_W - 1 || y == 1 || y == TWO_BOX_H - 2 ||
+                     ((p ? x / 8 >= 6 : x / 8 < 4) && y / 8 >= 4 && y / 8 < 8)) &&
+                    img[y * 256 + x] == bg && keep[y][x]) {
+                    keep[y][x] = 0;
+                    stack[n][0] = (int16_t)x;
+                    stack[n++][1] = (int16_t)y;
+                }
+        while (n) {
+            static const int d[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+            n--;
+            x = stack[n][0];
+            y = stack[n][1];
+            for (k = 0; k < 4; k++) {
+                int a = x + d[k][0], b = y + d[k][1];
+                if (a < 0 || a >= TWO_BOX_W || b < 0 || b >= TWO_BOX_H || !keep[b][a] || img[b * 256 + a] != bg)
+                    continue;
+                keep[b][a] = 0;
+                stack[n][0] = (int16_t)a;
+                stack[n++][1] = (int16_t)b;
+            }
+        }
+        for (y = 0; y < TWO_BOX_H; y++)
+            for (x = 0; x < TWO_BOX_W; x++)
+                if (!keep[y][x])
+                    img[y * 256 + x] = 0;
+        two_box_sprites(p, img);
+        if (memcmp(img, panel_bank[p], sizeof img)) {
+            memcpy(panel_bank[p], img, sizeof img);
+            panel_version[p]++;
+        }
+        for (k = 0; k < 4; k++) {
+            int bw, bh;
+            two_box_place(p, k, &dx, &dy, &bw, &bh);
+            bank_quad_scaled(0xF0 + p, two_sx[p][k], k == 1 ? TWO_MAP_Y : two_sy[k], two_sw[k], k == 1 ? TWO_MAP_H : TWO_BOX_ROW, dx, dy, bw, bh);
+        }
+    }
+}
+
 static void panels_draw(void)
 {
     static uint8_t px[PANEL_ROWS][256], keep[PANEL_ROWS][256];
@@ -5672,6 +6180,10 @@ static void panels_draw(void)
     uint64_t key;
     uint8_t bg;
 
+    if (two) {
+        panels_two();
+        return;
+    }
     /* the boxes as before while the band is (the GPU's: their textures and
        quads; the reference's, a check's, its rows again) */
     key = quads ? panel_key() : 0;
@@ -5843,6 +6355,83 @@ static int spr_root(int *up, int i)
     return i;
 }
 
+/* Two players' (the original's: the first 64 the first player's, on lines to 111,
+   the rest the second's): at priority 3, in a player's boxes with them, else by the
+   view's own piece (two_anchor: a picture of several sprites moves whole); below it,
+   the 3D's, about the rectangle's middle, those in the boxes' place left out. */
+static void sprites_two(void)
+{
+    const uint8_t *o = nshvc_wram() + OAM_TABLE;
+    int i, b, ox = (W - 256) / 2, oy = origin_row(), kept = two_p;
+    int sx0[128], sy0[128], sz[128], up[128], px0[128], px1[128], py0[128], py1[128], shown[128], box[128];
+    uint8_t high[32];
+
+    for (i = 0; i < 128; i++) {
+        unsigned yy = o[i * 4 + 1], h = (o[512 + i / 4] >> (2 * (i & 3)) & 2) ? 16 : 8, at = o[i * 4 + 3];
+        int xx = o[i * 4] | (o[512 + i / 4] >> (2 * (i & 3)) & 1) << 8, p = i >= 64, cx;
+        if (xx >= 256)
+            xx -= 512;
+        cx = xx + (int)h / 2;
+        up[i] = i;
+        box[i] = cx >= two_bx[p] && cx < two_bx[p] + TWO_BOX_W;
+        shown[i] = !(yy + h > 256 || yy >= 224 || xx + (int)h <= 0 || xx >= 256 ||
+                     (int)yy + (int)h <= two_by[p] || (int)yy >= two_by[p] + TWO_BOX_H ||
+                     box[i]);           /* (the boxes' are in their picture, panels_two) */
+        sx0[i] = xx;
+        sy0[i] = (int)yy;
+        sz[i] = (int)h;
+        if (!shown[i])
+            continue;
+        for (b = p ? 64 : 0; b < i; b++)
+            if (shown[b] && ((o[b * 4 + 3] & 0x30) == 0x30) == ((at & 0x30) == 0x30) && box[b] == box[i] &&
+                sx0[b] <= xx + (int)h && xx <= sx0[b] + sz[b] && sy0[b] <= (int)yy + (int)h && (int)yy <= sy0[b] + sz[b])
+                up[spr_root(up, b)] = spr_root(up, i);
+    }
+    for (i = 0; i < 128; i++)
+        px0[i] = py0[i] = 0x7FFF, px1[i] = py1[i] = -0x7FFF;
+    for (i = 0; i < 128; i++)
+        if (shown[i]) {
+            int g = spr_root(up, i);
+            if (sx0[i] < px0[g]) px0[g] = sx0[i];
+            if (sx0[i] + sz[i] - 1 > px1[g]) px1[g] = sx0[i] + sz[i] - 1;
+            if (sy0[i] < py0[g]) py0[g] = sy0[i];
+            if (sy0[i] + sz[i] - 1 > py1[g]) py1[g] = sy0[i] + sz[i] - 1;
+        }
+    memcpy(high, o + 512, sizeof high);
+    wr8(OAMADDL, 0x00);
+    wr8(OAMADDH, 0x00);
+    for (i = 0; i < 128; i++) {
+        int g = spr_root(up, i), p = i >= 64, x = 0, y = 0xF0, xp = 0, yp = 32, dx, dy;
+        unsigned at = o[i * 4 + 3];
+        if (shown[i]) {
+            two_p = p;
+            if ((at & 0x30) == 0x30) {
+                two_anchor(px0[g] - two_vx[p], px1[g] - two_vx[p], py0[g] - two_vy[p], py1[g] - two_vy[p], &dx, &dy);
+                dx += sx0[i] - two_vx[p];
+                dy += sy0[i] - two_vy[p];
+            } else {
+                dx = two_x[p] + two_w / 2 + sx0[i] - two_vx[p] - 72;
+                dy = two_y[p] + two_h / 2 + sy0[i] - two_vy[p] - 40;
+            }
+            x = dx - ox;
+            y = dy - oy;
+            xp = x >= 256 ? (x - 256) / 512 + 1 : x < -256 ? -((-256 - x + 511) / 512) : 0;
+            x -= 512 * xp;
+            yp = y >= 0 ? y / 256 : -((255 - y) / 256);
+            y -= 256 * yp;
+        }
+        high[i / 4] = (uint8_t)((high[i / 4] & ~(1u << (2 * (i & 3)))) | ((unsigned)(x >> 8) & 1) << (2 * (i & 3)));
+        nshvc_ext_sprite_page(i, xp, yp);
+        wr8(OAMDATA, (uint8_t)x);
+        wr8(OAMDATA, (uint8_t)y);
+        wr8(OAMDATA, o[i * 4 + 2]);
+        wr8(OAMDATA, o[i * 4 + 3]);
+    }
+    for (i = 0; i < 32; i++)
+        wr8(OAMDATA, high[i]);
+    two_p = kept;
+}
+
 static void sprites_place(void)
 {
     const uint8_t *o = nshvc_wram() + OAM_TABLE;
@@ -5850,6 +6439,10 @@ static void sprites_place(void)
     int sx0[128], sy0[128], sz[128], up[128], px0[128], px1[128], py0[128], py1[128], shown[128];
     uint8_t high[32];
 
+    if (two) {
+        sprites_two();
+        return;
+    }
     for (i = 0; i < 128; i++) {         /* the sprites shown, and their pieces */
         unsigned yy = o[i * 4 + 1], h = (o[512 + i / 4] >> (2 * (i & 3)) & 2) ? 16 : 8;
         unsigned t = o[i * 4 + 2] | (o[i * 4 + 3] & 1) << 8, at = o[i * 4 + 3];
@@ -5945,13 +6538,19 @@ int fw_upload_line(void)
     return on && handed ? 0xF0 : 0xD0;
 }
 
+/* The two players' screen's stages (system/raster.c): the blank between the halves
+   is the original's bezel's, none on the full window's screen; and its upload stage's
+   line, as fw_upload_line's. */
+uint8_t fw_split_blank(uint8_t game) { return on && handed && two ? nshvc_wram()[0x0D61] : game; }
+int fw_split_line(void) { return on && handed && two ? 0xF0 : 0xD7; }
+
 void abi_RasterStage(void);
 
 void fw_vblank_uploads(void)
 {
     Regs65816 kept = cpu;
 
-    if (!on || !rm_in_tick_wait() || nshvc_wram()[0x0D3F] != 0x06)
+    if (!on || !rm_in_tick_wait() || nshvc_wram()[0x0D3F] != (two ? 0x0E : 0x06))
         return;
     nshvc_hold_interrupts(1);
     nshvc_set_cpu_costs(0);
@@ -6027,6 +6626,19 @@ static void sky_make(void);
 
 /* the band for the picture just drawn, then a water picture handed with
    its colours from it */
+/* (the reference; a GPU's the same) */
+void fw_sky_fill_cpu(const uint8_t *in, uint32_t *out, int w, int h, const uint32_t *gap, int side, int split, int seam)
+{
+    int x, y;
+    for (y = 0; y < h; y++)
+        for (x = 0; x < w; x++) {
+            int at = side ? x : y;
+            uint8_t c = in[(size_t)y * w + x];
+            out[(size_t)y * w + x] = c ? c : at >= seam && at < split ? 0xFF000000u : gap[(at >= split ? (size_t)h : 0) + y];
+        }
+}
+void (*fw_sky_filler)(const uint8_t *in, uint32_t *out, int w, int h, const uint32_t *gap, int side, int split, int seam) = fw_sky_fill_cpu;
+
 void fw_sky(void)
 {
     const uint32_t *t32;
@@ -6049,7 +6661,7 @@ static void sky_make(void)
     static uint16_t orig[256];          /* the original's colour each line */
     uint16_t last = 0;
 
-    if (!on || !handed)
+    if (!on || !handed || two)
         return;
     sky_take();                         /* the game's (or tween.c's) table to read */
     for (n = 0; n < SKY_ENTRIES && w[SKY_TABLE + 3 * n]; n++) {
@@ -6341,7 +6953,7 @@ static void bg2_prepare(void)
    would show the page the last frame's end made */
 void fw_backdrop_update(void)
 {
-    if (!on || !handed)
+    if (!on || !handed || two)
         return;
     nshvc_hold_interrupts(1);
     nshvc_set_cpu_costs(0);
@@ -6376,7 +6988,7 @@ static int wobjsel_ours = -1;           /* the one the full window last wrote */
    or inside a safe area that edge is not the screen's (view_shift) */
 static void sprites_box(void)
 {
-    int margin = W > UI_W_MAX ? (W - UI_W_MAX) / 2 : 0;
+    int margin = W > UI_W_MAX && !two ? (W - UI_W_MAX) / 2 : 0;   /* (two players' HUD is on its rectangles, the whole screen's) */
     int l = margin > safe_px[0] ? margin : safe_px[0], r = margin > safe_px[2] ? margin : safe_px[2];
 
     if (wobjsel_game < 0 || mw_ppu_last(0x2125) != wobjsel_ours)   /* the game's, or one it wrote since */
@@ -6417,17 +7029,23 @@ static void takeover(void)
 
     nshvc_set_cpu_costs(0);
     sprites_place();
-    wr8(TM, 0x13);                      /* BG1, BG2 (the hills, bg2_prepare) and the sprites, as the race's */
+    if (two) {
+        wr8(BGMODE, 0x03);              /* the canvas's texels whole CGRAM entries (at Mode 1's 4 bits they would be cut) */
+        nshvc_ext_sprite_limits(0);     /* the players' sprites share their lines side by side */
+    }
+    wr8(TM, two ? 0x11 : 0x13);         /* BG1, BG2 (the hills, bg2_prepare; two players': two_hills, in the picture) and the sprites, as the race's */
     sprites_box();
     wr8(TMW, 0x10);                     /* the sprites' window alone */
     cgwsel_game = mw_ppu_last(0x2130);  /* the stage's, just set (WindowsSetupSelect) */
     wr8(CGWSEL, cgwsel_full((uint8_t)cgwsel_game));
     screen_set();
     nshvc_ext_sprite_wrap(0);           /* Y page 0's sprites nowhere above line 1 (those above it on page -1) */
-    nshvc_ext_layer_page(1, 1);         /* BG2 on page 1: its map at $4800, 64 x 64, characters from $6000 (bg2_prepare) */
-    if (bg2sc_kept < 0)
-        bg2sc_kept = mw_ppu_last(0x2108);
-    wr8(BG2SC, BG2_WIDE_SC);
+    if (!two) {
+        nshvc_ext_layer_page(1, 1);     /* BG2 on page 1: its map at $4800, 64 x 64, characters from $6000 (bg2_prepare) */
+        if (bg2sc_kept < 0)
+            bg2sc_kept = mw_ppu_last(0x2108);
+        wr8(BG2SC, BG2_WIDE_SC);
+    }
     wr8(INIDISP, w[0x0D61]);
     nshvc_set_cpu_costs(1);
 }
@@ -6442,7 +7060,7 @@ void fw_upload_done(void)
 
 void fw_frame_end(void)
 {
-    int was = on;
+    int was = on, two_was;
 
 #ifdef SRFX_NSHVC_HANDOFF
     if (handed && !handed_now && hand_pic() && fw_handoff->again)   /* a frame with no new picture: the last again */
@@ -6458,13 +7076,27 @@ void fw_frame_end(void)
        frame of the race): the pause, the end's fades and the screens
        before and after keep the original's screen and their own timing */
     safe_area_update();
-    on = unseen <= 1 && rm_enhanced() && rm_option(RM_OPT_WIDESCREEN) && rm_canvas_ready() && !nshvc_wram()[0x0D62] && rm_whole_steps() &&
-         rm_in_tick_wait() && size_for_window();
+    {
+        int players = nshvc_wram()[0x0D62] != 0;
+#ifdef __PSP__
+        int two_here = 0;               /* (Jeff, 2026-11-05: the PSP's two players stay at k 2 for now) */
+#else
+        int two_here = 1;
+#endif
+        on = unseen <= 1 && rm_enhanced() && rm_option(RM_OPT_WIDESCREEN) && rm_canvas_ready() && (!players || two_here) &&
+             rm_whole_steps() && rm_in_tick_wait() && size_for_window();
+        if (on && players != two)       /* (screen_set's own for either, its registers taken again) */
+            handed = 0;
+        two_was = two;
+        two = on && players;
+        if (two)
+            two_layout();
+    }
     /* the writes here are the full window's own, in no original's time:
        made with interrupts held, where the console's time does not pass
        (and only when there are any: a hold may move where a due interrupt
        is taken) */
-    if (on && handed) {                 /* the hills' page, as the game's VRAM now has them */
+    if (on && handed && !two) {         /* the hills' page, as the game's VRAM now has them */
         nshvc_hold_interrupts(1);
         nshvc_set_cpu_costs(0);
         bg2_prepare();
@@ -6504,7 +7136,13 @@ void fw_frame_end(void)
                the copies of the next pictures land */
             int b = (nshvc_wram()[0x0D81] | nshvc_wram()[0x0D82] << 8) == 0x0001;
             nshvc_ext_canvas_chars(0, 0, 0, NULL, 1);
-            if (fw_bp_on() && (unplotted || gx_or_job_chars())) {  /* SC_GPU: no bitmap of the chip's: the GPU's, below */
+            if (two_was) {
+            wr8(BGMODE, 0x01);
+            nshvc_ext_sprite_limits(1);
+        }
+        if (two_was && !(fw_bp_on() && (unplotted || gx_or_job_chars()))) {   /* two players: their bitmaps as the copies left them */
+                rm_canvas_show_copied((mw_ppu_last(0x210B) & 0x0F) ? 0x2000 : 0x0000, 360, 4);
+            } else if (fw_bp_on() && (unplotted || gx_or_job_chars())) {  /* SC_GPU: no bitmap of the chip's: the GPU's, below */
                 still_word = b ? 0x2200 : 0x0000;
                 still_tries = 0;
             } else
