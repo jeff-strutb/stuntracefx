@@ -192,7 +192,7 @@ static void list_state(int stride, int w, int h, unsigned off)
     sceGuViewport(2048, 2048, w, h);
 #ifdef SRFX_NSHVC_HANDOFF
     if (s_sx1)
-        sceGuScissor(s_sx0, 0, s_sx1, h);
+        sceGuScissor(s_sx0, 0, s_sx1 - s_sx0, h);   /* (x, y, width, height) */
     else
 #endif
     sceGuScissor(0, 0, w, h);
