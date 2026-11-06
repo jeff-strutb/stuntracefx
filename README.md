@@ -189,14 +189,16 @@ programs as native C, with no separate port copy. On top of it:
 |---|---|---|
 | **macOS** (Apple silicon and Intel, macOS 12+) | `NSHVC=../nativeshvc sh ports/stuntracefx/front/package_app.sh`, then open `build/stuntracefx/front/macos/Stunt Race FX.app` | Metal: the console's compositor and the cartridge's 3D fill |
 | **iPhone and iPad** | `IOS_SDK=iphoneos IOS_SIGN=... IOS_PROFILE=... sh ports/stuntracefx/front/package_ios.sh` | Metal; touch controls, landscape and portrait |
-| **Windows** (10+, 64-bit) | the builder, or `ports/stuntracefx/front/build.sh` with MinGW | OpenGL 3.3; the 3D fill on the CPU |
-| **PSP** (PSP-2000 and later; PPSSPP) | `PSPDEV=... sh ports/stuntracefx/front/package_psp.sh`, then `build/stuntracefx/front/psp/PSP/GAME/STUNTRACEFX/EBOOT.PBP` | the GE: the console's picture and the cartridge's 3D fill; not yet at full speed (below) |
+| **Windows** (10+, 64-bit) | the builder, or `ports/stuntracefx/front/build.sh` with MinGW | OpenGL 3.3: the console's compositor. Vulkan: the cartridge's 3D fill (`GPU_VULKAN=1`), on the CPU where there is no Vulkan |
 | headless | `sh ports/stuntracefx/front/build.sh` (nativeshvc `build/null`) | the CPU: the plays and checks |
 
 Players don't need this tree: **Stunt Race FX Builder**
 ([builder/](builder/README.md)) builds the Mac app, the iPhone's `.ipa` or the
 Windows folder from the player's own No-Intro ROM, checked by MD5, and ships
-none of the ROM's data. Linux is not built yet.
+none of the ROM's data. Linux is not built yet: nativeshvc has no Linux window host at
+the pin (dab5da4), so the Vulkan code compiles there only against its headless host.
+The PSP is tabled (Jeff, 2026-11-05): its port and GE renderer are gone from the tree,
+and the tag `psp-tabled` holds them.
 
 ```sh
 build/stuntracefx/front/null/stuntracefx --script PLAY --headless --out DIR   # an input-only play
@@ -204,30 +206,20 @@ build/stuntracefx/front/null/stuntracefx --script PLAY --headless --out DIR   # 
 
 The build expects nativeshvc's checkout beside this one (`NSHVC=../nativeshvc`,
 contract 2.15 or later, at least its commit 9ff3702: the screen canvas at no
-whole scale, and the GPU memory the PSP lends the game).
+whole scale).
 
 **The screen and the window.** Enhanced's screen is the nearest even width
 to the window's shape at 224 lines (or, narrower than 4:3, the nearest even
-height): the PSP's 480 x 272 gives 338 x 224. Its 3D is drawn at the window's
+height). Its 3D is drawn at the window's
 own resolution, a texel a window pixel. The console's picture around it
 (the HUD, panels, sprites and menus) is presented over the window with
 sharp bilinear: with today's nativeshvc at the console's exact pixel shape
 (4:3 for 256 x 224), which leaves a gap at the edges of up to about a
-column (the PSP: 479 x 272, one column unlit); presented over the whole
+column; presented over the whole
 window, each axis at its own scale, the console's pixels are within a
 fraction of a percent of that shape and nothing is left unlit (asked of
 nativeshvc).
 
-**The PSP.** `package_psp.sh` builds with pspdev against nativeshvc's PSP host
-and GE renderer; the 3D's spans are filled on the GE exactly as the CPU's
-reference fills them, and Enhanced's water pass on the GE to within a few
-levels (most texels apart by 1). It runs, but not yet at full speed: by
-PPSSPP's clock (an instruction a cycle at 333 MHz) the title takes about
-16 ms a frame, an Original race about 30 ms and an Enhanced race several
-seconds, Enhanced's 3D being written in double precision, which the PSP
-does in software. That work is under way. `PSP_CHECK=1` builds a check
-program for PPSSPP's headless runner (`FW_SPANPLAY`, `FW_WATERPLAY`:
-recorded fills replayed on the GE against the CPU).
 `--pacing FILE` logs each race frame's TV frames (`$06D4`), the measure to
 compare with the original's.
 
@@ -321,8 +313,6 @@ iPhone and Windows. Known and not yet right:
 - In Enhanced's crash flash (the screen tinted red), the bottom panels are
   tinted too, where the original's window kept them clear; they are in the
   same BG1 picture as the 3D.
-- The Windows build fills the 3D on the CPU; GL and Vulkan fills are not
-  written yet.
 - The race music: the fix for its garbled upload (the sound CPU's accesses
   costing their bus time) is in nativeshvc (328e308); the music has not
   been rechecked since.

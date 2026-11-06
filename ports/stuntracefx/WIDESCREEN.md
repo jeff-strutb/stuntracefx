@@ -283,8 +283,7 @@ is Jeff's call.
 
 ## Two players
 
-With Widescreen on, a two-player race fills the window too, every host but the
-PSP (Jeff, 2026-11-05: its two players stay at k 2 for now). `remaster/fullwindow.c`
+With Widescreen on, a two-player race fills the window too. `remaster/fullwindow.c`
 (search `two`):
 
 - **The split follows the window, each frame:** left and right once each column

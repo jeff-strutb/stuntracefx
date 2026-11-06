@@ -1,13 +1,23 @@
 # The cartridge's GPU renderer (design; stage 1 being built)
 
-Every picture SRFX draws is drawn by a GPU: Metal (macOS, iOS), Vulkan
-(Windows, Linux) and the PSP's GE, from one display list. The CPU runs the
+Every picture SRFX draws is drawn by a GPU: Metal (macOS, iOS) and Vulkan
+(Windows, Linux), from one display list. The CPU runs the
 game and builds the display list: meshes, matrices, materials, draw order.
 It touches no pixel, no row and no projected vertex.
 
 This covers Enhanced's pictures (the full window, the menus' 3D, two
 players, Enhanced without widescreen, the pause panel) and Original's
 Super FX bitmap.
+
+## The PSP: tabled
+
+Jeff tabled the PSP on 2026-11-05: its first windowed look, in PPSSPP, showed broken
+menus, an awful frame rate and no way into a race. The cause was never found, no
+frame's time was ever split into game, Super FX, console and rendering, and nothing
+ran on a real PSP, so this is no finding that the GE cannot do it. The GE renderer,
+the PSP's package, the GE's parts of the hand-off and their design notes in this file
+are gone from the tree; the tag `psp-tabled` (8041c535) holds them all as last run. If
+it reopens, measure a frame's split first.
 
 ## Original mode: the Super FX's bitmap on the GPU
 
@@ -73,8 +83,7 @@ Model commands reached ($cc the command byte):
   (bit 15) 34K, kind -2 (bits 15 and 14) none.
 - Points: shift below 3 uses the packed 8-bit matrix ($0128-$0130, MULT);
   3 and up the full one ($0132-$0142, FMULT). The GPU's transform repeats
-  the chip's integer steps (Metal, Vulkan); the GE's floats come within a
-  unit.
+  the chip's integer steps.
 - Super FX programs drawing in Enhanced's pictures: 01:AB13 (the frame
   program: objects, sprites, particles, weather, effects, text) and the
   HUD programs 07:F121, F15B, F6DF, FA88, FAF2. Step only: 07:EE88 (the
@@ -120,8 +129,7 @@ depth.
   transparent, 1 CGRAM colour 1, 0x000000ii a CGRAM index, 0xFFrrggbb a
   colour).
 - Flat faces: the index. Textured: the texel at ((v << 8 | u) & mask) +
-  base in its bank, through COLOR and PLOT's rules, perspective-correct;
-  on the GE a T8 texture with a palette lookup and power-of-two repeat.
+  base in its bank, through COLOR and PLOT's rules, perspective-correct.
 - Lines, scaled sprites, particles, weather, text: GPU lines, textured
   quads and points.
 - HUD pieces and panels: the game's own art as textures (the HUD
@@ -129,12 +137,14 @@ depth.
 - The pause panel: baked textures and shaded shapes.
 - Water and ground: a full-screen pass against the depth buffer.
 
-## Contracts asked of nativeshvc (shapes approved by Jeff, 2026-11-05; not built)
+## Contracts asked of nativeshvc (shapes approved by Jeff, 2026-11-05)
 
-None of these is built: nativeshvc dab5da4 and its lazy-console tip
-(5e33c21, contract 2.20) hold none of them. The game side of the hand-off and
-turning the GPU on by default wait for them. Each is new, optional and
-reported by a query, so a host without it goes on as now.
+These are on nativeshvc's branch `contract-2.22` (a056a76), which has no remote
+branch and is not on its main; SRFX's default pin, dab5da4, holds none of them. The
+game side of the hand-off and turning the GPU on by default wait for them to land.
+That branch also holds the PSP's forms of these functions, which the game no longer
+calls. Each is new, optional and reported by a query, so a host without it goes on
+as now.
 
 1. **The canvas as a GPU texture.** `nshvc_ext_gpu_device(NshvcGpuLoan *)`
    lends the host's device and queue: Metal `id<MTLDevice>` and
@@ -148,21 +158,10 @@ reported by a query, so a host without it goes on as now.
    console waits on before it samples. The console keeps the handle until the
    next one is handed or the frame hook ends. Why: read back to the CPU and
    copied up again is the last CPU step of a picture.
-2. **The PSP's present by the GE from VRAM.** `nshvc_ext_canvas_screen_ge(layer,
-   vram_address, stride, w, h, psm, priority)`: the picture in VRAM, in the loan
-   below, drawn straight by the console's GE list; the game's list synced before
-   the frame hook returns. Why: on the PSP the picture crosses to the CPU today,
-   501 ms a picture in the baseline below.
-3. **The overlay from a GPU texture.** `nshvc_ext_overlay_gpu(handle, w, h,
+2. **The overlay from a GPU texture.** `nshvc_ext_overlay_gpu(handle, w, h,
    fence)`, as the first's handle and fence, in the place of the overlay's CPU
-   texels, for the pause panel; on the PSP a VRAM address and stride as the
-   second's. Why: the panel is the last picture the game draws on the CPU.
-4. **The GE's loan with a depth buffer.** `nshvc_ext_ge_vram` lends 557,056
-   bytes today, the canvas alone. Asked: `nshvc_ext_ge_vram2(size_t *bytes,
-   void **depth, int *depth_stride)`, the same colour memory plus a 16-bit depth
-   buffer of the screen's size (at most 512 x 272: 278,528 bytes), its contents
-   not kept. Why: the GE's water cut on faces, sprites and quads tests each
-   pixel against the water's plane written first.
+   texels, for the pause panel. Why: the panel is the last picture the game draws on
+   the CPU.
 
 ## The water cut
 
@@ -170,68 +169,28 @@ The reference cuts a face's pixel where the water's plane is nearer on its ray.
 Two causes of Aqua Tunnel's errors were found by reading the water path, fixed
 on Metal and Vulkan, and not yet measured: the shaders compared a far object's
 halved depth (the reference's `depth_plane` undoes the halvings, so far objects
-missed the cut), and they cut lines, which the reference never does. The GE
-ignores the cut on faces and sprites until the loan above; written for it under
-the switch below, not run.
+missed the cut), and they cut lines, which the reference never does.
 
-## The hand-off, the game's side (SRFX_NSHVC_HANDOFF: written, not linked, not run)
+## The hand-off, the game's side (SRFX_NSHVC_HANDOFF: compiled and linked on Vulkan, Metal unbuilt, no recorded run on either)
 
 Off by default, and SC_GPU stays off by default. `nshvc_handoff.h` holds the
 console's functions, as contract 2.22 on nativeshvc's branch `contract-2.22` gives
-them (itself never run). `SRFX_NSHVC_HANDOFF=1 sh build.sh` links only against that.
+them. `SRFX_NSHVC_HANDOFF=1 sh build.sh` links only against that. Its only recorded
+runs were on the GE under PPSSPP (this file at the tag `psp-tabled`); what they showed
+says nothing of Metal's or Vulkan's hand-off.
 
 - **Not handed off:** Metal's and Vulkan's Original job stays read back at STOP by
-  design, byte-identical. The GE reads none back (below).
-- **A job on the GE (Jeff, 2026-11-05: "Yes, hand characters", in place of the read-back
-  and the pack; the GE cannot pack, its alpha written only through the stencil). No PLOT
-  reaches the chip's RAM there; every store does, and the S-CPU's uploads run as ever, of
-  RAM no PLOT wrote. Every plotted byte's route out of RAM ends in BG1's characters, by
-  reading: the race's 416 at $0000 or $2200, two players' 360 at $0000 or $2000, the
-  menus' 143 at $0000 or $0B00, the course screen's 32 at $0400. $70:4000 to $6600 and
-  stage 4 ($AB85, $0D23 by the ROM's table at 7E:AA4B) are stores, not plots. So each is
-  `nshvc_ext_canvas_chars_ge` at k 1, handed from the sites that upload it.
-  The loan's contents are not kept and its address moves, and such a picture is drawn
-  over frames and waits for its flip: each of two sets stands in RAM the CPU never
-  touches, the GE copying it into this frame's loan as it is first drawn or shown, back
-  at the frame hook (the manual's inter-buffer transfer, either way between local and
-  host memory; CMD_TSYNC around it). That is up to 135 KB each way a frame, its time not
-  measured. A set's handed at the frame hook, so it may show a frame after VRAM's would.
-  The race's buffers are a set each; two players' and the menus' one RAM picture draws
-  the set not last uploaded. A set stands while the screen's uploads run ($0D22's stages
-  too: pause, results, the race's end) and goes when they stop. In two players' pause
-  the panel takes one player's 180 characters back to VRAM. Not settled by reading:
-  anything a screen writes into those characters while its stages still run (the
-  championship screen's, tilemap.c), and plots past what is uploaded (x from 208 falls in
-  the other buffer on the chip, here is lost): not byte-identical, as Jeff accepted.
-- **The GE's noise and haze.** Noise: the generator's whole sequence a T8 texture made
-  once, the ramp the palette and PLOT's rule its alpha; a row is sprites of its run of
-  texels, ending at a chain's end (a tail of 5,582 into a cycle of 32,767; a cycle of
-  27,185; two states their own next) and a texture row. Haze: the GE copies each block's
-  source to a strip in RAM, all before any is drawn, then draws each from it by the alpha
-  test over a 0. Neither reads a pixel on the CPU. The CPU still steps the generator for
-  the seed the game keeps, on every host.
-- **The bitmap pictures, the GE (Jeff, 2026-11-05: by column; two players stay at the
-  game's resolution, k 2).** Each target is drawn where `nshvc_ext_canvas_chars_ge`
-  reads it, so nothing is cut or copied. One player, no widescreen (26 x 16) and the
-  menus (13 x 11): 8888, one band, drawn straight. Two players (two of 18 x 10): 4444,
-  stride 512, 32 columns a band: 512 x 320 at 16 bits, 327,680 of the loan's 557,056
-  bytes. The second target's columns 32-35 fall in the band below, so it goes in two
-  passes, the draw buffer at the band's start, the offset and scissor keeping each to
-  its columns: its geometry is sent twice. Jeff: if that costs too much, revisit. Flat
-  spans and runs are trimmed on the CPU to the pass's columns, no vertex left of the
-  buffer; faces and quads through the viewport rest on the GE's scissor there, not
-  checked on the hardware. Strides are 512 and, the menus, 256, the widths the console
-  has drawn to. By reading, a menu's word comes with its picture: under Frame rate 60
-  RmMenuPictureShow flips at once. Were one drawn before its flip, it is handed at the
-  hook, or the next present draws over it: its first in set 0's place, which could show
-  stale VRAM for that frame.
+  design, byte-identical.
 - **The bitmap pictures, Metal and Vulkan (Jeff, 2026-11-05: "Yes, build it").** Two
   players, the menus' 3D and no widescreen go as `nshvc_ext_canvas_chars_gpu`, the
   console placing them as ever. Each target's characters are copied by the GPU from
   the shared picture into a grid in an R8 image, one image of three in turn, the last
   target's copy making it the one that stands; handed every frame, the fence once.
   The target is cleared by the GPU. A value's high nibble needs no masking: the
-  console keeps the layer's depth bits.
+  console keeps the layer's depth bits. A menu's first picture, its flip still to come,
+  is handed at the frame's end in set 0's place, which could show stale VRAM for that
+  frame (`rm_canvas_frame_end`): this path came with the GE's characters, and Metal and
+  Vulkan take it too.
 - **Metal, Vulkan.** The device and queue are the console's, so the GPU opens at the
   first frame hook (the renderer opens after the power on); a job before that hook,
   if any, is the chip's. The picture stays in its GPU buffers, cleared by the GPU and
@@ -239,67 +198,25 @@ them (itself never run). `SRFX_NSHVC_HANDOFF=1 sh build.sh` links only against t
   is no ground, the GPU copies that into one of three images, and it is handed with
   a fence. A frame with no new picture hands the last again with no fence. Vulkan's
   fill needs whole words, so its texels' width is rounded up to 4 under SC_GPU.
-- **The GE.** The picture stands in the loan. Its alpha is the stencil's mark while
-  drawn (an index 0xFF, the ground's colour 1, colour 1 2); the GE zeroes the indices'
-  and colour 1's in place and hands it. Ground colours are in the GE's own order when
-  handed. A frame with no new picture hands the same address again, the console
-  keeping that buffer whole while it is handed and nothing draws over it; so a
-  refused redraw opens no canvas. A redraw that fails after it has drawn over that
-  buffer leaves nothing to hand, and that frame shows the layer's tiles.
 - **Vulkan's lent device** must have shaderInt64, which is read from its physical
   device; without it the game opens its own device and reads back to
   `nshvc_ext_canvas_screen32`. The console's frame may still be executing when the
   game submits, so each image's barrier waits on all before it on the queue.
-- **Run so far (2026-11-05, 60ab724a on nativeshvc a056a76; PPSSPP's software GE, not a
-  PSP):** battle.sfx to its race start, SC_GPU, with characters from the GE. No fatal. The
-  race-start shot is 3 of 130,560 pixels from the read-back's (SC_GPU, the switch off);
-  both are 9,033 from SC_GPU off, 6,117 by more than 32 a channel, not yet explained. No
-  frame past the race start was looked at, and no cost measured. The water cut has not
-  run. speed_novice_coupe to its race's opening, the same way: the car select, race start
-  and a frame 120 on are 0 pixels from the read-back's, so the full window's hand-off and
-  the menus' characters draw what it draws there. Against SC_GPU off, those three are
-  1,892, 3,019 and 5,682 apart, the same with or without the hand-off, the menu car's
-  colours among them: the native drawing's, not explained. The course screen with the
-  switch on loses its noise past the middle 256 columns (45,806 apart); the read-back's
-  is 0 from SC_GPU off, so that one is the switch-on path's, not explained.
-- **The GE's water cut.** Its depth comes out 65536 k / z - 1 by the projection, k
-  the true depth's factor (a far object's halvings undone, a sprite's own 1 / depth),
-  so depth is 1 / depth in 16 bits. The water's plane goes in first, colour masked
-  off, depth testing at or above it on faces, sprites and quads; lines, dots and
-  streaks are not cut. A unit is 16 of view depth at 1024 and 256 at 4096, coarser
-  than the reference's floats.
-- **The pause panel (Metal, Vulkan; the PSP has no panel).** Its shapes are recorded,
+- **The pause panel.** Its shapes are recorded,
   not rasterized, binned by row, and a kernel (`panel`) shades each pixel by pause.c's
   distances and blend, with the baked controller once as a buffer. Handed each frame
   it shows; the pause and play buttons stay baked overlay images.
 - **Fatal under SC_GPU, outside a check:** the spans' and the ground's CPU fills, a
-  job's CPU bitplanes on Metal and Vulkan, a picture or job with no GPU memory, a GE
-  polygon's rows, no GPU open. The CPU's paths stand for the checks.
-- **Contract 2.20 on the PSP, by reading.** The sizes pass: 338 x 224 from its 480 x
-  272, no mode 5 or 6, interlace or pseudo-hires set. But a canvas at k 2 on the
-  256-wide screen is fatal as the menus widen to 338 (676 past 512), and the console's
-  k follows a frame or two late. Under the switch the game keeps k to what the screen
-  it asked for allows (`rm_canvas_scale`, `rm_canvas_screen`). A pin moved to 2.20
-  without the switch has that fatal.
-
-## GE clipping (the GE Users Manual, chapter 10)
-
-An earlier note here said the GE has no near clip. With clipping enabled it
-clips triangles at the near plane; what it drops whole is a primitive with a
-corner past 0 to 4095 after the viewport, and such primitives must be divided
-first. The CPU's clip is gone: faces of objects near the eye (`sc_near`, by the
-object's place and radius, no point turned) go as flat Bezier patches the GE
-divides itself. A piece with a corner past the range is still dropped, very
-near the eye (Jeff's decision, 2026-11-05). Not yet checked on real hardware.
+  job's CPU bitplanes, a bitmap picture with no memory, a job with no GPU, no GPU open.
+  The CPU's paths stand for the checks.
 
 (Two players with Widescreen on now take the full window on Metal and Vulkan, not the
-bitmap pictures below: ports/stuntracefx/WIDESCREEN.md, "Two players". The PSP keeps them.)
+bitmap pictures below: ports/stuntracefx/WIDESCREEN.md, "Two players".)
 
-## The bitmap pictures (items 3 and 4): written, compiled on Vulkan and the GE, Metal unbuilt, none run
+## The bitmap pictures (items 3 and 4): written, compiled on Vulkan, Metal unbuilt, none run
 
 Jeff's decisions, 2026-11-05: two players, the menus' 3D and Enhanced without
-widescreen keep their layouts; Original on the PSP is drawn by the GE and is not
-byte-identical there; the job-duration refit is written with placeholder
+widescreen keep their layouts; the job-duration refit is written with placeholder
 coefficients and fitted in the final pass.
 
 What was found by reading, and what is not the GPU's yet:
@@ -311,7 +228,6 @@ What was found by reading, and what is not the GPU's yet:
   are sprites, not plots.
 - rows.comp and fill.comp did not walk by the chip's slopes (`edge_x` is the
   full window's exact form): polygons with FwPoly pad[0] now do, in closed form.
-- (The GE, since: no job is read back or packed; see "A job on the GE" above.)
 - A bitmap picture keeps its sprites (no solids) and has no water cut: as the
   chip's pictures always had.
 - Frame rate off is not a mode of its own: `RM_OPT_FRAMERATE` is what
@@ -339,8 +255,7 @@ What was found by reading, and what is not the GPU's yet:
   step of 0 and the chip's 65536 rows of a count of 0 by the same quads; a thin
   polygon's row and any single PLOT a flat quad; the screen clear flat quads of
   colour 0 opaque over the columns the target holds, the bytes past it (no PLOT
-  reaches them) zeroed as RAM, the stores priced as they stood. The GE takes the
-  noise as a texture's runs (no compute), and packs nothing.
+  reaches them) zeroed as RAM, the stores priced as they stood.
 - Enhanced's own jobs where its bitmap is the one shown (07:EE88's course screen,
   a race's first steps before its first picture) go the same way, unpriced.
 - A job at its STOP is flushed, settled by reading: every program the game starts
@@ -381,44 +296,37 @@ by the GPU to a linear 8-bit target, handed as the characters it stands for.
   loops as quads (their hooks exist, gated off in Original today), lines, the
   screen clear. A new kernel packs the linear target into the chip's bitplanes;
   the bytes read back into its RAM at STOP. RPIX per the census above. No chip
-  access added while off. The GE reads nothing back (Jeff, 2026-11-05): its
-  characters, not byte-identical.
+  access added while off.
 - **Duration.** gsuprice.py's load model gains a form over what a job holds
   (polygons, area, edges, flat or textured, other primitives), its table's
   coefficients marked not fitted until the final pass collects the jobs.
 
 FxHazeSample on the GPU, written, no play reaches it, shipped unproven: a marker
 span (FW_HAZE) breaks the run, a kernel samples each of its 256 shape entries
-(bank 8, $F92E + 4 x time) from a copy of the picture and plots them opaque; the
-GE copies each block to a strip in RAM and draws them from it.
+(bank 8, $F92E + 4 x time) from a copy of the picture and plots them opaque.
 
 ## Baselines (2026-11-04, SRFX 464c9dca, race100.sfx frames 1401-1500)
 
 | Host, nativeshvc | Original: run + present = frame (ms) | Enhanced: run + present = frame (ms) |
 |---|---|---|
-| PSP, cc5549d | 23.218 + 17.796 = 41.253 | 125.890 + 501.508 = 627.681 |
-| PSP, 2.17 (023f51a) | 24.234 + 17.712 = 42.187 | 136.301 + 501.515 = 638.118 |
 | macOS null host, 2.17 | 0.330 + 1.488 | 1.999 + 2.722 |
 
-PSP in PPSSPPHeadless with GPU_GE=1; macOS with GPU_METAL=1. Frames
-1401-1500 of race100 are not all race: 1401-1430 are forced blank and the
-full window's takeover, and 1431-1460 fade in (INIDISP $00 to $0F). Shots
-byte-identical across the two nativeshvc versions. nativeshvc has the 2.17
-slowdown's cause (its inline-access path) and is fixing it.
+macOS with GPU_METAL=1. Frames 1401-1500 of race100 are not all race: 1401-1430
+are forced blank and the full window's takeover, and 1431-1460 fade in (INIDISP $00
+to $0F).
 
 ## Stages
 
 Stages 1 to 3 below were each verified with numbers when made. The pixel counts
 in stages 4 and 5 were measured before the native walk and are out of date;
 the last measured figures (race100: Metal = Vulkan 345,208 apart, 17,348 more
-than 3 pixels off; the GE 617,394, 37,113 off; Aqua Tunnel 9,131,853, 1,496,143
-off) predate every change since, and nothing has been measured after them.
+than 3 pixels off; Aqua Tunnel 9,131,853, 1,496,143 off) predate every change since, and nothing has been measured after them.
 
 The frame program's pictures are walked natively (scene_frame.c, scene_walk.c
 sc_walk_model): the sorted slots to the display list, facing by the determinant
 over only the points each test needs, nothing projected or rejected by the CPU.
 Sprites, particles and drops are ScPrim, projected by the GPU. Compiled on
-Vulkan and the GE, written and not compiled on Metal, not run anywhere.
+Vulkan, written and not compiled on Metal, not run anywhere.
 
 1. Geometry: the decoder and transform beside the existing redraw, each
    slot's points against the chip's ($0340 + 6i plus the object's place).
@@ -456,9 +364,7 @@ Vulkan and the GE, written and not compiled on Metal, not run anywhere.
      the CPU; 0 whose colour or bank is not its face's). Race100, all
      faces the GPU's: Metal and Vulkan 345,208 pixels apart from the CPU
      reference (273,081 a texel away, 17,348 farther), identical to each
-     other; the GE 617,394 (474,791 a texel away, 37,113 farther), with
-     faces near the eye or far off the sides clipped first (sc_needs_clip:
-     the GE has no near clip and drops them whole). Aqua Tunnel: Metal and
+     other. Aqua Tunnel: Metal and
      Vulkan 9,131,853 (1,496,143 farther), the cause not yet known. Earlier
      counts were too low: FW_GPUCHECK's polygon spans had lost their
      reference-only flag, so the CPU's polygons were drawn over the GPU's
@@ -470,9 +376,7 @@ Vulkan and the GE, written and not compiled on Metal, not run anywhere.
      (each quad against the chip's loops, on the CPU): 0 texels apart over
      4,059 small, 1,989 large and 30,359 not-square quads; SC_BREAK 30,805
      apart. Metal and Vulkan: every shot identical to the chip's loops on
-     the GPU's fill (541 shots, two plays; SC_BREAK: 42 differ). The GE:
-     its interpolation (speed_expert_4wd: 16,607 more pixels apart over
-     458 quads than the loops' rows).
+     the GPU's fill (541 shots, two plays; SC_BREAK: 42 differ).
    - The 2D on the GPU too, each a screen quad drawn by the GPU's own
      raster with the chip's rule per pixel: the HUD's glyphs and scaled
      sprites (07:F121, F15B, F6DF, FA88, FAF2 and every 2-bit blit: 2-bit
@@ -492,10 +396,10 @@ Vulkan and the GE, written and not compiled on Metal, not run anywhere.
      speed_expert_4wd: the HUD's programs 9.4 million plots (07:F121,
      F15B, F6DF glyphs, FA88 and FAF2 scaled sprites), labels 144,204
      (FxTextNotice), the frame program's other plots 24,052 (weather).
-6. Vulkan, then the GE.
+6. Vulkan.
 7. Original's bitmap on the GPU, read back at STOP; the job-duration model
    refitted.
 8. The hand-off and the pause panel, once the contracts land; the CPU
    paths kept for checks only. The game's side written under the switch (above),
-   compiled on Vulkan and the GE, Metal unbuilt, not linked, not run.
+   compiled and linked on Vulkan, Metal unbuilt, not run.
 9. Cost, every host, against the baselines above.
