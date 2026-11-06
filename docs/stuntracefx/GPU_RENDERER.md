@@ -254,8 +254,14 @@ them (itself never run). `SRFX_NSHVC_HANDOFF=1 sh build.sh` links only against t
   PSP):** battle.sfx to its race start, SC_GPU, with characters from the GE. No fatal. The
   race-start shot is 3 of 130,560 pixels from the read-back's (SC_GPU, the switch off);
   both are 9,033 from SC_GPU off, 6,117 by more than 32 a channel, not yet explained. No
-  frame past the race start was looked at, and no cost measured. The full window's
-  hand-off and the water cut have not run.
+  frame past the race start was looked at, and no cost measured. The water cut has not
+  run. speed_novice_coupe to its race's opening, the same way: the car select, race start
+  and a frame 120 on are 0 pixels from the read-back's, so the full window's hand-off and
+  the menus' characters draw what it draws there. Against SC_GPU off, those three are
+  1,892, 3,019 and 5,682 apart, the same with or without the hand-off, the menu car's
+  colours among them: the native drawing's, not explained. The course screen with the
+  switch on loses its noise past the middle 256 columns (45,806 apart); the read-back's
+  is 0 from SC_GPU off, so that one is the switch-on path's, not explained.
 - **The GE's water cut.** Its depth comes out 65536 k / z - 1 by the projection, k
   the true depth's factor (a far object's halvings undone, a sprite's own 1 / depth),
   so depth is 1 / depth in 16 bits. The water's plane goes in first, colour masked
