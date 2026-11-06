@@ -126,9 +126,6 @@ extern const FwHandoff *fw_handoff;
 /* the bitmap pictures go as characters of the GPU's: SC_GPU, the contract there, no check's */
 int fw_chars_on(void);
 
-/* the ground being drawn is for the hand-off: on the GE, its colours in the GE's
-   own order (0xttbbggrr), not read back as 0xFFrrggbb */
-extern int fw_ground_handed;
 /* the texels' width in whole units of this (Vulkan's fill: 4 bytes a word) */
 extern int fw_tex_align;
 /* 1 once the front end has opened its GPU (the first frame hook on Metal and

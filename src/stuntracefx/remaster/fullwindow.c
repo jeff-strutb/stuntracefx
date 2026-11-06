@@ -88,10 +88,6 @@ static int64_t SXN = 256, SXD = 256, SYN = 224, SYD = 224;
 static uint8_t *tex;
 static size_t tex_size;
 static int handed;                      /* the canvas is the full window's */
-/* the picture in the GPU's memory (fw_canvas_gpu): this picture's
-   (gpu_pic), opened there (gpu_open), from a cleared screen (gpu_cleared) */
-const FwCanvasGpu *fw_canvas_gpu;
-static int gpu_pic, gpu_open, gpu_cleared;
 #ifdef SRFX_NSHVC_HANDOFF
 /* the hand-off (nshvc_handoff.h): this file's picture goes to the console as the
    GPU's own (hand_pic), the texels neither written nor read here; handed_now, one
@@ -99,7 +95,6 @@ static int gpu_pic, gpu_open, gpu_cleared;
 const FwHandoff *fw_handoff;
 int fw_tex_align = 1;
 int fw_gpu_settled;
-int fw_ground_handed;
 static int handed_now;
 static int hand_pic(void);
 #define CANVAS_SCALE() rm_canvas_scale()
@@ -243,14 +238,14 @@ static void block_set(int x, int y, uint8_t c)
 {
     int x0 = col_at(x), x1 = col_at(x + 1), y0 = row_at(y), y1 = row_at(y + 1), j;
 #ifdef SRFX_NSHVC_HANDOFF
-    if (hand_pic()) {                   /* (Metal, Vulkan: no fw_canvas_gpu, the same) */
+    if (hand_pic()) {
         for (j = y0; j < y1; j++)
             if (x1 > x0)
                 span_flat(j, x0, x1 - 1, c);
         return;
     }
 #endif
-    if (gpu_pic || bp) {                /* drawn in its order with the rest, as spans */
+    if (bp) {                           /* drawn in its order with the rest, as spans */
         for (j = y0; j < y1; j++)
             if (x1 > x0)
                 span_flat(j, x0, x1 - 1, c);
@@ -1230,26 +1225,11 @@ static void span_flush(void)
     }
     if (gx && !nspans)
         return;
-    if (gpu_pic && !gpu_open) {         /* the GPU's picture opened: cleared, or the last one's to draw over */
-#ifdef SRFX_NSHVC_HANDOFF
-        /* (handed, no texels here to draw over: every setup of the race sets $01C4, so it is cleared) */
-        if (fw_canvas_gpu->open(tw, th, gpu_cleared || hand_pic() || (bp && fw_chars_on()) ? NULL : tex))
-#else
-        if (fw_canvas_gpu->open(tw, th, gpu_cleared ? NULL : tex))
-#endif
-            gpu_open = 1;
-        else {
-            FW_CPU_FALLBACK("a picture with no GPU memory");
-            gpu_pic = 0;                /* no GPU memory: the CPU's texels */
-        }
-    }
     if (nspans) {
         span_record();
         if (fw_env("FW_QUADCHECK"))
             quad_check();
-        if (gpu_pic)
-            fw_canvas_gpu->spans(spans, nspans);
-        else if (two && fw_span_filler == fw_span_fill_cpu)
+        if (two && fw_span_filler == fw_span_fill_cpu)
             two_fill_cpu();
         else
             fw_span_filler(tex, tw, th, spans, nspans);
@@ -2114,16 +2094,9 @@ uint8_t fw_rpix(uint16_t x, uint16_t y)
         int px = hud_x((uint8_t)x), py = hud_y((uint8_t)y);
         if (px < 0 || px >= W || py < 0 || py >= H)
             return 0;
-        if (gpu_pic) {
-            span_flush();
-            if (gpu_pic)
-                return fw_canvas_gpu->read(col_at(px), row_at(py));
-        }
         return tex[(size_t)row_at(py) * tw + col_at(px)];
     }
     span_flush();                       /* a read of the 3D: what is drawn so far */
-    if (gpu_pic)
-        return x < tw && y < th ? fw_canvas_gpu->read(x, y) : 0;
     return x < tw && y < th ? tex[(size_t)y * tw + x] : 0;
 }
 
@@ -2158,10 +2131,6 @@ static void clear_now(void)
     } else
 #endif
     memset(tex, 0, (size_t)tw * th);
-    if (gpu_pic) {                    /* the GPU's picture opened again, cleared */
-        gpu_cleared = 1;
-        gpu_open = 0;
-    }
 }
 
 /* ---- the view ------------------------------------------------------------ */
@@ -4669,9 +4638,6 @@ static const uint32_t *water_pass(void)
     const uint16_t *v = nshvc_vram();
     unsigned r, x, y, i, k;
 
-#ifdef SRFX_NSHVC_HANDOFF
-    if (!(gpu_pic && hand_pic()))       /* (the GE's, handed: its canvas holds them) */
-#endif
     if (!tex32_room())
         return NULL;
     if ((size_t)th > gap_rows) {
@@ -4733,28 +4699,6 @@ static const uint32_t *water_pass(void)
             gap[th + y] = have ? rgb8(line[(int)l + SHADE_LINES < n ? l + SHADE_LINES : (unsigned)n - 1]) : 1;
         }
     }
-    if (gpu_pic) {                      /* the GPU's picture: its ground drawn there, then out */
-        if (!gpu_open)
-            span_flush();
-    }
-    if (gpu_pic) {
-#ifdef SRFX_NSHVC_HANDOFF
-        fw_ground_handed = hand_pic();
-#endif
-        fw_canvas_gpu->ground(&job, gap);
-#ifdef SRFX_NSHVC_HANDOFF
-        if (hand_pic()) {              /* none of it read back: the mark says it has its ground */
-            static const uint32_t ground_mark = 0;
-            fw_canvas_gpu->close(NULL, NULL);
-            gpu_pic = gpu_open = 0;
-            return &ground_mark;
-        }
-#endif
-        fw_canvas_gpu->close(tex32, tex);
-        gpu_pic = gpu_open = 0;
-        water_record(tex, &job, gap);
-        return tex32;
-    }
     water_record(tex, &job, gap);
     fw_water_filler(tex, tex32, &job, gap);
     return tex32;
@@ -4766,7 +4710,7 @@ static void picture_out(const uint32_t *t32)
 {
 #ifdef SRFX_NSHVC_HANDOFF
     if (hand_pic()) {
-        if ((!t32 && !fw_canvas_gpu && !tex32_room()) || !fw_handoff->picture(tw, th, t32 != NULL))
+        if ((!t32 && !tex32_room()) || !fw_handoff->picture(tw, th, t32 != NULL))
             fw_cpu_fallback("the picture's hand-off");
         handed_now = 1;
         return;
@@ -4997,14 +4941,6 @@ static void hand(void)
         t32 = water_pass();
     }
     water_seen = 0;
-    if (gpu_pic && !t32) {              /* the GPU's picture out: its indices */
-#ifdef SRFX_NSHVC_HANDOFF
-        fw_canvas_gpu->close(NULL, hand_pic() ? NULL : tex);
-#else
-        fw_canvas_gpu->close(NULL, tex);
-#endif
-        gpu_pic = gpu_open = 0;
-    }
     rm_canvas_taken();
     picture_out(t32);
     if (!handed) {                    /* the first picture: the screen taken over with it, in the same blank */
@@ -5376,23 +5312,15 @@ int fw_picture(int j)
     prof_mark(-1);
     fw_water[3] = 0;                    /* no water until this picture's view says so (water_view) */
     bit4 = two;                         /* (its bitmap's 4 bits a pixel) */
-    if (gpu_pic && gpu_open)            /* (a last picture never handed: its texels kept) */
-#ifdef SRFX_NSHVC_HANDOFF
-        fw_canvas_gpu->close(NULL, hand_pic() ? NULL : tex);
-#else
-        fw_canvas_gpu->close(NULL, tex);
-#endif
-    gpu_pic = fw_canvas_gpu &&!fw_env("FW_CHECK") && !fw_env("FW_KCHECK") && !fw_env("FW_CCHECK") && !fw_env("FW_WATERCHECK");
-    gpu_open = gpu_cleared = 0;
     fw_drawing = 1;
     list_gen++;
     sc_picture_begin();                 /* the GPU's display list (scene.h) */
     m = rm_tween_buffers(j, RM_TICKS, scratch[0], scratch[1]);
     fw_drawing = 0;
 #ifdef SRFX_NSHVC_HANDOFF
-    /* a redraw refused, nothing drawn: the canvas not opened, the GE's last picture
-       standing whole in its buffer, to be handed again (fw_frame_end) */
-    if (!m && !nspans && !gpu_open && !hud_n && hand_pic()) {
+    /* a redraw refused, nothing drawn: the last picture stands, to be handed again
+       (fw_frame_end) */
+    if (!m && !nspans && !hud_n && hand_pic()) {
         fw_hud = 0;
         return 0;
     }
@@ -5450,8 +5378,8 @@ static int bp_checks(void)
     return off;
 }
 
-/* a GPU to draw them on: its fill in place, or its canvas */
-static int gpu_here(void) { return fw_span_filler != fw_span_fill_cpu || fw_canvas_gpu != NULL; }
+/* a GPU to draw them on: its fill in place */
+static int gpu_here(void) { return fw_span_filler != fw_span_fill_cpu; }
 
 #ifdef SRFX_NSHVC_HANDOFF
 /* the full window's picture handed as the GPU's own: SC_GPU, the contract there,
@@ -5507,8 +5435,6 @@ static int bp_open(int cols, int rows, int bpp, int targets)
     bp_targets = targets;
     bp_done = bp_open_now = 0;
     nspans = npolys = nedges = 0;
-    gpu_pic = fw_canvas_gpu != NULL;
-    gpu_open = gpu_cleared = 0;
     fw_water[3] = 0;
     return 1;
 }
@@ -5520,13 +5446,6 @@ static void bp_finish(void)
         return;
     bp_open_now = 0;
     span_flush();
-    if (gpu_pic && gpu_open)
-#ifdef SRFX_NSHVC_HANDOFF
-        fw_canvas_gpu->close(NULL, fw_chars_on() ? NULL : tex);
-#else
-        fw_canvas_gpu->close(NULL, tex);
-#endif
-    gpu_open = gpu_cleared = 0;
     rm_canvas_gpu_cut((unsigned)(bp_done * bp_cols * bp_rows), (unsigned)bp_cols, (unsigned)bp_rows, tex, tw,
                       bp_bpp < 8 ? 0x0Fu : 0xFFu);
     bp_done++;
@@ -5598,7 +5517,6 @@ int fw_bp_picture(int j)
     bp_open_now = 0;
     bp = bit4 = 0;
     view_set = 0;
-    gpu_pic = gpu_open = 0;
     if (!m || bp_done != bp_targets)
         return 0;
     rm_canvas_gpu_show(two ? -1 : (w[0x0D81] | w[0x0D82] << 8) == 0x0001 ? 0x2200 : 0x0000);
@@ -5638,7 +5556,6 @@ void fw_menu_frame(void)
     bp_finish();
     bp = bit4 = 0;
     view_set = 0;
-    gpu_pic = gpu_open = 0;
     memcpy(s, keep, size);
     gsu = kept;
     if (bp_done == bp_targets) {
@@ -5828,8 +5745,6 @@ static void gx_begin(void)
     gx_valid = 0;
     bit4 = md != 3;
     nspans = npolys = nedges = 0;
-    gpu_pic = fw_canvas_gpu != NULL;
-    gpu_open = gpu_cleared = 0;
     fw_water[3] = 0;
     fw_drawing = 1;
 }
@@ -5841,10 +5756,6 @@ static void gx_sync(void)
         return;
     unplotted = 0;
     span_flush();
-    if (gpu_pic && gpu_open) {
-        fw_canvas_gpu->close(NULL, tex);
-        gpu_open = 0;
-    }
     fw_bits_filler(tex, nshvc_sram(), &gx_shape, 1);
 }
 
@@ -5857,7 +5768,6 @@ static void gx_end(void)
     gx = 0;
     bit4 = 0;
     fw_drawing = 0;
-    gpu_pic = gpu_open = 0;
 }
 
 /* The chip's bitplanes and the linear target (w x h), the address as PLOT's
