@@ -592,10 +592,9 @@ void sc_walk_begin(void)
 /* the native walk of one model: its inputs in the Super FX's RAM as the
    frame program leaves them, no register of the chip's read; a facing test
    by the determinant of its points alone, nothing projected or rejected */
-static int slot_radius = 1 << 14;
 static int l_slot;
 
-void sc_walk_model(int radius)
+void sc_walk_model(void)
 {
     uint16_t angle[3], e[9], m[9];
     long a;
@@ -621,9 +620,7 @@ void sc_walk_model(int radius)
     sc_matrix(angle, rm_angle_frac, walk.flags, e, 0, m);
     walk_materials(&walk, m, rm_far_shift ? rm_far_depth : ram16(0x002A), ram16(0x108C) & 0xFF);
     sc_matrix(angle, rm_angle_frac, walk.flags, e, rm_far_shift, walk.m);
-    slot_radius = rm_far_shift ? radius >> rm_far_shift : radius;
     list_slot_begin(angle, e);
-    slot_radius = 1 << 14;
     if (l_slot < 0)
         return;
     push(&walk, K_END, 0);
@@ -826,8 +823,7 @@ static int grow_to(void **a, size_t *cap, size_t want, size_t size)
 
 static ScFSlot *l_fslots;
 static ScFPoint *l_fpoints;
-static size_t l_nfs, l_nfp, cap_fs, cap_fp, cap_fn;
-static uint8_t *l_fnear;
+static size_t l_nfs, l_nfp, cap_fs, cap_fp;
 static ScPrim *l_prims;
 static size_t l_nprim, cap_prim;
 
@@ -857,24 +853,16 @@ const ScPrim *sc_list_prims(size_t *n) { *n = l_nprim; return l_prims; }
 static ScPrimView l_view;
 const ScPrimView *sc_list_prim_view(void) { return &l_view; }
 void sc_list_prim_view_set(void) { fw_prim_view(&l_view); }
-int sc_fslot_near(size_t i) { return i < l_nfs ? l_fnear[i] : 0; }
 const ScFSlot *sc_list_fslots(size_t *n) { *n = l_nfs; return l_fslots; }
 const ScFPoint *sc_list_fpoints(size_t *n) { *n = l_nfp; return l_fpoints; }
 
 int sc_list_fslot(const float m[9], const float pos[3])
 {
-    float big = 0;
-    int i;
-    if (!sc_gpu_on() || !fw_view_active() || !grow_to((void **)&l_fslots, &cap_fs, l_nfs + 1, sizeof *l_fslots) ||
-        !grow_to((void **)&l_fnear, &cap_fn, l_nfs + 1, 1))
+    if (!sc_gpu_on() || !fw_view_active() || !grow_to((void **)&l_fslots, &cap_fs, l_nfs + 1, sizeof *l_fslots))
         return -1;
     memcpy(l_fslots[l_nfs].m, m, sizeof l_fslots[l_nfs].m);
     memcpy(l_fslots[l_nfs].pos, pos, sizeof l_fslots[l_nfs].pos);
     l_fslots[l_nfs].zs = (float)(1 << rm_far_shift);
-    for (i = 0; i < 9; i++)             /* a solid's points are within its picture's 64 texels of its middle */
-        if ((m[i] < 0 ? -m[i] : m[i]) > big)
-            big = m[i] < 0 ? -m[i] : m[i];
-    l_fnear[l_nfs] = (uint8_t)sc_near(pos[0], pos[1], pos[2], 64 * big);
     return (int)l_nfs++;
 }
 
@@ -925,7 +913,7 @@ static void list_slot_begin(const uint16_t angle[3], const uint16_t e[9])
         sl->pos[i] = (int16_t)ram16((uint16_t)(0x0026 + 2 * i));
     sl->shift = shift;
     sl->scale = (uint16_t)(shift < 16 ? 1u << shift : 0);   /* 01:8651: 1 doubled $0032 times */
-    sl->pad[0] = (uint16_t)sc_near(sl->pos[0], sl->pos[1], sl->pos[2], (float)slot_radius);
+    sl->pad[0] = 0;
     sl->pad[1] = (uint16_t)rm_far_shift;
     l_slot = (int)l_ns++;
     l_point_base = (uint32_t)l_np;

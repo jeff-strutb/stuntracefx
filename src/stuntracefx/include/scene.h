@@ -76,7 +76,7 @@ void sc_walk_facing(uint16_t at, uint16_t n);
    the near plane and fills; the CPU touches no vertex's place. */
 typedef struct {
     int16_t m[9], pos[3];
-    uint16_t scale, shift, pad[2];      /* pad[0] sc_near; pad[1] a far object's halvings: its true depth, z << them, for the water */
+    uint16_t scale, shift, pad[2];      /* pad[0] unused, 0; pad[1] a far object's halvings: its true depth, z << them, for the water */
 } ScSlot;                               /* 32 bytes */
 typedef struct {
     int8_t b[3];
@@ -111,17 +111,6 @@ typedef struct {
 #define SC_FLOAT_POINT 0x80000000u
 /* a float slot for a solid (its index, or -1 when no list is being made) */
 int sc_list_fslot(const float m[9], const float pos[3]);
-/* An object a GPU's coordinates may not reach whole, by its place and
-   radius alone, no point turned: within 8 of the eye or past 7.5 to 1 from
-   its axis (the GE: a primitive with a corner about 2048 pixels from the
-   centre is dropped, so its faces are divided: gpu_ge.c). ScSlot pad[0], and
-   sc_fslot_near for a float slot. */
-static inline int sc_near(float x, float y, float z, float r)
-{
-    float a = x < 0 ? -x : x, b = y < 0 ? -y : y, d = z - r;
-    return r <= 0 || d < 8 || 4 * (a + r) > 30 * d || 4 * (b + r) > 30 * d;
-}
-int sc_fslot_near(size_t i);
 /* a solid's flat face of n object-space points in fslot, colour c: its
    place in the list, or -1 */
 int sc_list_float_face(int fslot, const float (*p)[3], int n, uint8_t c);
@@ -132,7 +121,7 @@ const ScFPoint *sc_list_fpoints(size_t *n);
    A scaled sprite, a particle's dot or line, a drop of the weather: the
    CPU lists what the object is in view space; the GPU makes its screen quad
    (FW_QUAD) by the chip's integer rule (gpu_vk/prims.comp, gpu_metal.m's
-   prims; the GE by its own transform, gpu_ge.c). In the picture's order a
+   prims). In the picture's order a
    placeholder span (FW_QUAD, pad1[1] bit 6, xl the primitive's index, no
    pixels) stands for it. */
 enum { SC_PRIM_SPRITE, SC_PRIM_DOT, SC_PRIM_LINE, SC_PRIM_WDOT, SC_PRIM_WLINE };
@@ -176,9 +165,9 @@ void sc_frame_ref_end(void);
 /* the program being run for the reference alone (FW_GPUCHECK, above) */
 extern int fw_ref_pass;
 /* a model in the native walk: its inputs as the frame program leaves them
-   in the Super FX's RAM ($0016-$002A, $0030-$0054, $00C0, $00C2, $01B6) and
-   its object's radius; its faces into the picture in the list's order */
-void sc_walk_model(int radius);
+   in the Super FX's RAM ($0016-$002A, $0030-$0054, $00C0, $00C2, $01B6);
+   its faces into the picture in the list's order */
+void sc_walk_model(void);
 
 /* SC_GPU set */
 int sc_gpu_on(void);

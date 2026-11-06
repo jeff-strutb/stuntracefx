@@ -282,7 +282,7 @@ static void object_draw(const Obj *o, uint8_t first)
     if (faces) {
         wr(0x0054, 0x8000);             /* FxModelDraw with $01B4 0 (01:8584) */
         fw_water_view();
-        sc_walk_model((int16_t)romw(0, (uint16_t)(shape + 0x10)));
+        sc_walk_model();
     }
 }
 
