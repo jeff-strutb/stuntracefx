@@ -571,9 +571,6 @@ void mw_frame_end(void)
         memset(sliding, 0, sizeof sliding);
         sprite_pages(0);
         layers(0);
-#ifdef SRFX_NSHVC_HANDOFF
-        rm_canvas_screen(256, 224);
-#endif
         nshvc_ext_screen(256, 224);
         nshvc_ext_screen_origin(-1, -1);
         fw_screen_lost();
@@ -585,9 +582,6 @@ void mw_frame_end(void)
         if (!on)
             nshvc_ext_window_edges(1);
         if (!on || w != W || h != H) {
-#ifdef SRFX_NSHVC_HANDOFF
-            rm_canvas_screen(w, h);
-#endif
             nshvc_ext_screen(w, h);
             nshvc_ext_screen_origin(-1, -1);
             fw_screen_lost();

@@ -61,24 +61,6 @@ static int gpu_fresh;                   /* a picture drawn, none handed yet */
 #endif
 static unsigned gpu_count, gpu_bpp;
 
-#ifdef SRFX_NSHVC_HANDOFF
-/* the screen the game has asked for (rm_canvas_screen) */
-static int asked_w = 256, asked_h = 224;
-
-int rm_canvas_scale(void)
-{
-    int k = nshvc_ext_canvas_scale();
-#if defined(__PSP__)
-    while (k > 1 && (asked_w * k > 512 || asked_h * k > 512))   /* contract 2.20: the canvas's 512 x 512 texels */
-        k--;
-#endif
-    return k;
-}
-#define CANVAS_SCALE() rm_canvas_scale()
-#else
-#define CANVAS_SCALE() nshvc_ext_canvas_scale()
-#endif
-
 int rm_canvas_ready(void)
 {
     return rm_enhanced() && nshvc_ext_canvas_scale() > 0;
@@ -154,26 +136,6 @@ void rm_canvas_gpu_ready(void)
 #endif
 }
 
-#ifdef SRFX_NSHVC_HANDOFF
-/* Before nshvc_ext_screen: past the platform's canvas at the k it is on is fatal
-   (2.20: on the PSP a canvas at k 2 on the 256-wide screen, the menus going to 338
-   across). The canvas handed again at the k that screen allows, as this file would
-   a frame later; a GPU's picture has no other k to cut: off, until its next one. */
-void rm_canvas_screen(int w, int h)
-{
-    asked_w = w;
-    asked_h = h;
-    if (!canvas_on || canvas_k <= rm_canvas_scale())
-        return;
-    if (canvas_gpu) {
-        rm_canvas_off();
-        return;
-    }
-    canvas_k = rm_canvas_scale();
-    canvas_hand();
-}
-#endif
-
 static void gpu_hand(unsigned word)
 {
     canvas_seen = 1;
@@ -246,7 +208,7 @@ void rm_canvas_show_players(const uint8_t *p1, const uint8_t *p2)
     canvas_word = set;
     canvas_count = 360;
     canvas_bpp = 4;
-    canvas_k = CANVAS_SCALE();
+    canvas_k = nshvc_ext_canvas_scale();
     canvas_hand();
 }
 
@@ -260,7 +222,7 @@ void rm_canvas_show_bytes(unsigned word, const uint8_t *src, unsigned count)
     canvas_word = word;
     canvas_count = count;
     canvas_bpp = 8;
-    canvas_k = CANVAS_SCALE();
+    canvas_k = nshvc_ext_canvas_scale();
     canvas_hand();
 }
 
@@ -286,7 +248,7 @@ void rm_canvas_show_copied(unsigned word, unsigned count, unsigned bpp)
     canvas_word = word;
     canvas_count = count;
     canvas_bpp = bpp;
-    canvas_k = CANVAS_SCALE();
+    canvas_k = nshvc_ext_canvas_scale();
     canvas_hand();
 }
 
@@ -317,7 +279,7 @@ void rm_canvas_show_copied_late(unsigned word, unsigned count, unsigned bpp)
         canvas_word = word;
         canvas_count = count;
         canvas_bpp = bpp;
-        canvas_k = CANVAS_SCALE();
+        canvas_k = nshvc_ext_canvas_scale();
         canvas_hand();
     } else {
         rm_canvas_show_copied(word, count, bpp);
@@ -381,7 +343,7 @@ void rm_canvas_frame_end(void)
 #endif
     if (!canvas_on)
         return;
-    k = CANVAS_SCALE();
+    k = nshvc_ext_canvas_scale();
     if (k > 0 && k != canvas_k && !canvas_gpu) {     /* (the GPU's: its next picture at the new k) */
         canvas_k = k;
         canvas_hand();

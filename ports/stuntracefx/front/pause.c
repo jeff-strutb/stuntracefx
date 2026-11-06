@@ -760,7 +760,7 @@ void pause_frame(void)
            the play button goes over it where a small window brings them
            together */
 #ifdef SRFX_NSHVC_HANDOFF
-        if (fw_handoff && fw_handoff->panel && sc_gpu_on() && fw_handoff->ready()) {
+        if (fw_handoff && sc_gpu_on() && fw_handoff->ready()) {
             panel.w = PW * DENSITY;
             panel.h = PH * DENSITY;
             panel.px = NULL;

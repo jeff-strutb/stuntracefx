@@ -97,9 +97,6 @@ int fw_tex_align = 1;
 int fw_gpu_settled;
 static int handed_now;
 static int hand_pic(void);
-#define CANVAS_SCALE() rm_canvas_scale()
-#else
-#define CANVAS_SCALE() nshvc_ext_canvas_scale()
 #endif
 static int staged;                    /* this frame's upload stage ran in the full window */
 
@@ -2126,8 +2123,7 @@ static void clear_now(void)
     nspans = npolys = nedges = 0;       /* drawn over: none of them shows */
 #ifdef SRFX_NSHVC_HANDOFF
     if (hand_pic() || (bp && fw_chars_on())) {
-        if (fw_handoff->clear)          /* (the GE: a canvas of its own, opened cleared below) */
-            fw_handoff->clear(tw, th);
+        fw_handoff->clear(tw, th);
     } else
 #endif
     memset(tex, 0, (size_t)tw * th);
@@ -5414,7 +5410,7 @@ int fw_bp_on(void) { return sc_gpu_on() && !on && !bp_checks() && gpu_here() && 
 /* a bitmap picture begins: its shape times k, the texels and the canvas's room */
 static int bp_open(int cols, int rows, int bpp, int targets)
 {
-    int k = CANVAS_SCALE();
+    int k = nshvc_ext_canvas_scale();
     if (k < 1 || !tex_room((size_t)cols * 8 * k * rows * 8 * k) ||
         !rm_canvas_gpu_begin((unsigned)(cols * rows * targets), (unsigned)bpp, k)) {
         if (k >= 1)
@@ -6604,9 +6600,6 @@ static void screen_set(void)
         vram = 1;
     }
     if (screen_w != W || screen_h != H) {
-#ifdef SRFX_NSHVC_HANDOFF
-        rm_canvas_screen(W, H);
-#endif
         nshvc_ext_screen(W, H);
         nshvc_ext_screen_origin(-1, origin_row());
         screen_w = W;
@@ -6619,9 +6612,6 @@ static void screen_back(void)
 {
     sky_take();
     if (screen_w != 256 || screen_h != 224) {
-#ifdef SRFX_NSHVC_HANDOFF
-        rm_canvas_screen(256, 224);
-#endif
         nshvc_ext_screen(256, 224);
         nshvc_ext_screen_origin(-1, -1);
         screen_w = 256;

@@ -54,23 +54,9 @@ void nshvc_ext_canvas_screen_gpu(int layer, NshvcGpuHandle handle, int w, int h,
    form. */
 void nshvc_ext_canvas_chars_gpu(int layer, unsigned word_addr, int count, NshvcGpuHandle handle, int per_row, int k,
                                 NshvcGpuFence fence);
-/* The PSP's characters, in the loan's one buffer, by column: c = i / per_column; n =
-   min(stride, 512) / 8k columns a band, further ones in a band below. Character i's
-   top left at x = (c % n) 8k, y = ((c / n) per_column + i % per_column) 8k. psm
-   GU_PSM_8888 (the value the red byte) or GU_PSM_4444 (the red nibble, layers of 4
-   bits or fewer). */
-void nshvc_ext_canvas_chars_ge(int layer, unsigned word_addr, int count, void *vram_address, int stride, int per_column,
-                               int psm, int k);
-/* The PSP's: the picture in the loan's VRAM, GU_PSM_8888 alone, words as the GE drew
-   them, 0xttbbggrr, tt the stencil: not 0 for a colour, 0 for an index and clear */
-void nshvc_ext_canvas_screen_ge(int layer, void *vram_address, int stride, int w, int h, int psm, int priority);
 /* The one overlay from a GPU texture, its id returned for nshvc_overlay_place,
    sampled through its view: 8 bits a channel, unorm, straight alpha */
 int nshvc_ext_overlay_gpu(NshvcGpuHandle handle, int w, int h, NshvcGpuFence fence);
-/* nshvc_ext_ge_vram's memory plus a 16-bit depth buffer of the screen's size, its
-   contents not kept: set by sceGuSendCommandi 158 and 159 (ZBP, ZBW), no
-   sceGuDepthBuffer. *depth NULL while paused. */
-void *nshvc_ext_ge_vram2(size_t *bytes, void **depth, int *depth_stride);
 
 void nshvc_fatal(const char *fmt, ...);
 #endif
@@ -97,14 +83,13 @@ typedef struct {
 /* The finished full-window picture to the console (a front end's, which sets
    fw_handoff when its GPU has one):
      ready    the contract is there: the device lent (Vulkan: with shaderInt64, else
-              the picture read back to nshvc_ext_canvas_screen32), or the GE's loan
-     clear    the shared picture cleared by the GPU (NULL: the GE, a canvas of its own)
-     picture  w x h handed. ground 1: the 32-bit picture stands (fw_texels32_alloc's,
-              or the GE's canvas) with the ground in it; 0: the indices alone
-     again    the last handle again on a frame with no new picture (the GE: the same
-              address, while nothing has drawn over it)
+              the picture read back to nshvc_ext_canvas_screen32)
+     clear    the shared picture cleared by the GPU
+     picture  w x h handed. ground 1: the 32-bit picture stands (fw_texels32_alloc's)
+              with the ground in it; 0: the indices alone
+     again    the last handle again on a frame with no new picture
      panel    the pause panel drawn and handed: the overlay's id, -1 when it could
-              not be (NULL: no panel on this host: the PSP has none)
+              not be
      panel_again  the panel as it stands, on a frame it shows
      chars_cut    a bitmap picture's target (the shared picture, w texels a row) copied
                   by the GPU into its characters: from first, cols x rows of them, side
@@ -136,13 +121,6 @@ int sc_gpu_on(void);
    (fullwindow.c): the CPU's paths stand for the checks alone */
 void fw_cpu_fallback(const char *what);
 #define FW_CPU_FALLBACK(what) fw_cpu_fallback(what)
-
-/* the canvas's k for the screen the game has asked for: no more than the PSP's
-   canvas takes (contract 2.20), the console's own following a change a frame or
-   two late; and that screen told before nshvc_ext_screen, a canvas on past it
-   handed again at the k that screen allows */
-int rm_canvas_scale(void);
-void rm_canvas_screen(int w, int h);
 
 /* the panel's shapes binned by row for its kernel: list NULL counts (the
    entries' total returned), else row_at (h + 1) and list (the total) written */
