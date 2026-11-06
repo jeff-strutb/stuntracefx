@@ -28,19 +28,14 @@ int gpu_metal_init(void);
 #if FW_GPU_VULKAN
 int gpu_vulkan_init(void);
 #endif
-#if FW_GPU_GE
-int gpu_ge_init(void);
-void gpu_ge_standalone(void);
-#endif
 #include "rm_options.h"
 #include "nshvc_handoff.h"
 int fw_span_play(const char *path);     /* fullwindow.h's: FW_SPANPLAY and FW_WATERPLAY, checks */
 int fw_water_play(const char *path);
 
 /* the pause screen and its key map (pause.c): the hosts with a keyboard
-   and a pointer, not iOS (its touch scheme's own) and not the PSP (its
-   buttons fixed, no keys to lay out) */
-#if !defined(NSHVC_HOST_IOS) && !defined(__PSP__)
+   and a pointer, not iOS (its touch scheme's own) */
+#if !defined(NSHVC_HOST_IOS)
 #define FRONT_PAUSE 1
 #else
 #define FRONT_PAUSE 0
@@ -177,8 +172,7 @@ static int on_pointer(float x, float y, int buttons)
 
 #ifdef SRFX_NSHVC_HANDOFF
 /* The cartridge's GPU opened at the first frame hook, not before the console starts:
-   its device is the console's, and the renderer opens after the power on (the PSP's
-   opens below, its GE needs nothing of the kind) */
+   its device is the console's, and the renderer opens after the power on */
 static void gpu_start(void)
 {
     static int done;
@@ -190,7 +184,7 @@ static void gpu_start(void)
     ok = getenv("FW_CPUFILL") || gpu_metal_init();
 #elif FW_GPU_VULKAN
     ok = getenv("FW_CPUFILL") || gpu_vulkan_init();
-#elif !FW_GPU_GE
+#else
     ok = 0;
 #endif
     fw_gpu_settled = 1;
@@ -315,7 +309,7 @@ NSHVC_MAIN(argc, argv)
 #else
     nshvc_set_write_hook(pacing_write);
 #endif
-#if defined(SRFX_NSHVC_HANDOFF) && !FW_GPU_GE
+#ifdef SRFX_NSHVC_HANDOFF
     /* (gpu_start; here only for the checks that start no console) */
     if ((getenv("FW_SPANPLAY") || getenv("FW_WATERPLAY")) && !getenv("FW_CPUFILL")) {
 #if FW_GPU_METAL
@@ -330,11 +324,6 @@ NSHVC_MAIN(argc, argv)
 #elif FW_GPU_VULKAN
     if (!getenv("FW_CPUFILL"))
         gpu_vulkan_init();
-#elif FW_GPU_GE
-    if (!getenv("FW_CPUFILL"))
-        gpu_ge_init();                  /* the PSP's GE */
-    if (getenv("FW_SPANPLAY") || getenv("FW_WATERPLAY"))
-        gpu_ge_standalone();
 #endif
     if (getenv("FW_SPANPLAY"))          /* a check: recorded fills, the CPU's against the GPU's; no console */
         return fw_span_play(getenv("FW_SPANPLAY"));
