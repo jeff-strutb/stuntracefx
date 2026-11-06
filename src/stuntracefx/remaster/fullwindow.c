@@ -4313,8 +4313,7 @@ static int origin_row(void) { return (H - 224) / 2; }
    height; to 1024 each way. The console's pixels keep their shape: the
    screen is presented at its exact aspect, so a window whose shape no
    whole even width meets shows a gap of up to a column or a line or so at
-   its edges, never a stretched picture (the PSP's 480 x 272: 338 columns,
-   presented 479 x 272, one column of the screen's pixels unlit). */
+   its edges, never a stretched picture. */
 #define W_MAX 1024
 #define H_MAX 1024
 
@@ -4612,11 +4611,6 @@ static uint32_t water_texel(const uint8_t *in, const FwWaterJob *j, const uint32
         out |= (uint32_t)floorf(fw_fmaf(b - a, cover, a) + 0.5f) << s;
     }
     return out;
-}
-
-uint32_t fw_water_texel(const uint8_t *in, const FwWaterJob *j, const uint32_t *gap, int32_t x, int32_t y)
-{
-    return water_texel(in, j, gap, x, y);
 }
 
 void fw_water_fill_cpu(const uint8_t *in, uint32_t *out, const FwWaterJob *j, const uint32_t *gap)
@@ -5518,7 +5512,7 @@ void fw_cpu_fallback(const char *what)
     if (!fw_gpu_settled || !sc_gpu_on())
         return;
     if (check < 0)
-        check = bp_checks() || fw_env("FW_CPUFILL") || fw_env("FW_SPANPLAY") || fw_env("FW_WATERPLAY") || fw_env("FW_GEROWS");
+        check = bp_checks() || fw_env("FW_CPUFILL") || fw_env("FW_SPANPLAY") || fw_env("FW_WATERPLAY");
     if (!check)
         nshvc_fatal("SC_GPU: %s would go to the CPU", what);
 }
@@ -7078,12 +7072,7 @@ void fw_frame_end(void)
     safe_area_update();
     {
         int players = nshvc_wram()[0x0D62] != 0;
-#ifdef __PSP__
-        int two_here = 0;               /* (Jeff, 2026-11-05: the PSP's two players stay at k 2 for now) */
-#else
-        int two_here = 1;
-#endif
-        on = unseen <= 1 && rm_enhanced() && rm_option(RM_OPT_WIDESCREEN) && rm_canvas_ready() && (!players || two_here) &&
+        on = unseen <= 1 && rm_enhanced() && rm_option(RM_OPT_WIDESCREEN) && rm_canvas_ready() &&
              rm_whole_steps() && rm_in_tick_wait() && size_for_window();
         if (on && players != two)       /* (screen_set's own for either, its registers taken again) */
             handed = 0;

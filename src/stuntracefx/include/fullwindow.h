@@ -24,18 +24,10 @@
 #include "nshvc_handoff.h"
 
 /* a multiply-add as the reference writes it, a * b + c rounded once
-   (fmaf), so every host's fill and the GPUs' (fma) agree texel for texel;
-   on the PSP, whose FPU has none and whose library's is double precision
-   in software (hundreds of instructions), a multiply and an add, each
-   rounded: its pictures the GE's own there, within a float's rounding of
-   the reference */
+   (fmaf), so every host's fill and the GPUs' (fma) agree texel for texel */
 static inline float fw_fmaf(float a, float b, float c)
 {
-#ifdef __PSP__
-    return a * b + c;
-#else
     return fmaf(a, b, c);
-#endif
 }
 
 /* the full-window race this frame (Enhanced, one player's race screen,
@@ -253,8 +245,6 @@ typedef struct {
     int32_t sat[17 * 65 + 3];
 } FwWaterJob;
 void fw_water_fill_cpu(const uint8_t *in, uint32_t *out, const FwWaterJob *j, const uint32_t *gap);
-/* the reference's texel (x, y) of the water pass */
-uint32_t fw_water_texel(const uint8_t *in, const FwWaterJob *j, const uint32_t *gap, int32_t x, int32_t y);
 /* FW_WATERPLAY (a check): the passes FW_WATERREC recorded, each by the CPU
    and by fw_water_filler, the texels apart and how far printed */
 int fw_water_play(const char *path);
