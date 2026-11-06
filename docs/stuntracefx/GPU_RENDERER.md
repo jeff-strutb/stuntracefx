@@ -250,6 +250,12 @@ them (itself never run). `SRFX_NSHVC_HANDOFF=1 sh build.sh` links only against t
   device; without it the game opens its own device and reads back to
   `nshvc_ext_canvas_screen32`. The console's frame may still be executing when the
   game submits, so each image's barrier waits on all before it on the queue.
+- **Run so far (2026-11-05, 60ab724a on nativeshvc a056a76; PPSSPP's software GE, not a
+  PSP):** battle.sfx to its race start, SC_GPU, with characters from the GE. No fatal. The
+  race-start shot is 3 of 130,560 pixels from the read-back's (SC_GPU, the switch off);
+  both are 9,033 from SC_GPU off, 6,117 by more than 32 a channel, not yet explained. No
+  frame past the race start was looked at, and no cost measured. The full window's
+  hand-off and the water cut have not run.
 - **The GE's water cut.** Its depth comes out 65536 k / z - 1 by the projection, k
   the true depth's factor (a far object's halvings undone, a sprite's own 1 / depth),
   so depth is 1 / depth in 16 bits. The water's plane goes in first, colour masked
