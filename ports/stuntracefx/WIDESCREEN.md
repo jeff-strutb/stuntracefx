@@ -54,7 +54,7 @@ stunt_bluelake, speed_novice_coupe):
 
 HUD modes ($0D2B) 0-3 (RaceVideoSetup's table at $03:DA53, RaceHudLoad's
 at $03:DD56); two players ($0D62) have their own setup
-(RaceHudSetupTwoPlayers) and stay 4:3.
+(RaceHudSetupTwoPlayers); see "Two players" below.
 
 ## Audit (step 1), done
 
@@ -183,7 +183,7 @@ high-resolution path. In the game's C, under the option:
   box, unless the Super FX plots those corner cells (a few cells a box).
 - **Panel sprites**: moved with their panels; those on the right past
   X 255 use the extended X bit.
-- **Menus, results, two players**: no extension (256 x 224), pillarboxed.
+- **Menus, results**: no extension (256 x 224), pillarboxed.
 
 ### The cost, and pacing
 
@@ -279,4 +279,32 @@ is Jeff's call.
   pieces to their corners, messages centred.
 - No faster modelled chips; wide races run untimed (choice 1 or 2 above
   is Jeff's); the original mode is the exact one.
-- Menus, results and two-player races at 4:3 for now.
+- Menus and results at 4:3 for now. Two-player races: below.
+
+## Two players
+
+With Widescreen on, a two-player race fills the window too, every host but the
+PSP (Jeff, 2026-11-05: its two players stay at k 2 for now). `remaster/fullwindow.c`
+(search `two`):
+
+- **The split follows the window, each frame:** left and right once each column
+  holds the original's 144 columns (a screen 288 wide, 3:2), else top and bottom.
+  A black seam of 2 console pixels between.
+- **The 3D:** one picture, each player's view words on its rectangle, focal length
+  128 as one player's, so the view grows with the rectangle. `fw_clip` holds each
+  player's fill and render pass to it. The chip's bitmap is 4 bits a pixel, palette 2:
+  `fw_hi`, `fw_face_colour`; BG1 goes to Mode 3 so the canvas takes whole CGRAM entries.
+- **The boxes:** DAMAGE, the map, the speed and TIME float with no bezel, along the
+  rectangle's bottom (left and right) or down its right side (top and bottom), scaled
+  together (`two_q`). Their sprites are drawn into their texture, since a console
+  sprite cannot scale; BOOST and RANK stay sprites and pieces at the console's size.
+- **Hills and sky:** BG2 has one scroll a line, which two views side by side
+  cannot share, so both are drawn per player on the GPU: the hills as quads from BG2's
+  map, the sky by `sky.comp` from each player's 80-line band, for both layouts.
+- **Kept as they are:** the sprite wheels (the solids' colours are the 8-bit
+  palette's); no water surface pass (one surface a picture); the pause and results
+  screens the original's framed ones, as one player's.
+- **Not per player:** the colour window and COLDATA are the console's, by line, so a
+  crash's tint is not held to its own view when side by side.
+
+`FW_WINDOW=w,h` sets the window's shape for a headless check.

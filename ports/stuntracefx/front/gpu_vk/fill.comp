@@ -16,7 +16,7 @@ layout(std430, binding = 2) readonly buffer RowAt { uint row_at[]; };
 layout(std430, binding = 3) readonly buffer RowSpans { uint row_spans[]; };
 layout(std430, binding = 4) readonly buffer Banks { uint banks[]; };
 layout(std430, binding = 5) readonly buffer Slot { int slot[]; };
-layout(push_constant) uniform Push { uint w; uint h; uint pad0; uint pad1; vec4 water; } pc;
+layout(push_constant) uniform Push { uint w; uint h; uint clipx; uint clipy; vec4 water; } pc;   /* clip: fullwindow.h fw_clip_words */
 
 /* fullwindow.c's sunk: the water nearer than the span on this pixel's ray */
 bool sunk(float za, float zx, float zy, int x, int y)
@@ -58,7 +58,7 @@ uint bank_byte(int s, uint at)
 void main()
 {
     uint gx = gl_GlobalInvocationID.x, gy = gl_GlobalInvocationID.y;
-    if (gy >= pc.h)
+    if (gy >= pc.h || gy < (pc.clipy & 0xFFFFu) || gy > (pc.clipy >> 16))
         return;
     int c0 = int(gx) * 32, c1 = c0 + 31;
     if (c0 >= int(pc.w))
@@ -72,7 +72,7 @@ void main()
     for (uint i = row_at[gy]; i < row_at[gy + 1u]; i++) {
         uint b = row_spans[i] * SPAN_WORDS;
         int x0 = int(sp[b + 1]), x1 = int(sp[b + 2]);
-        int a = max(x0, c0), e = min(x1, c1);
+        int a = max(max(x0, c0), int(pc.clipx & 0xFFFFu)), e = min(min(x1, c1), int(pc.clipx >> 16));
         if (a > e)
             continue;
         uint textured = sp[b + 16] & 255u;

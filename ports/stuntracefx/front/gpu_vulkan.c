@@ -18,6 +18,8 @@
 #if defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#undef far                              /* (windows.h's macros: scene.h's ScPrim has a field of the name) */
+#undef near
 #else
 #include <dlfcn.h>
 #endif
@@ -90,7 +92,7 @@ static uint32_t qfam;
 static VkPhysicalDeviceMemoryProperties memp;
 static VkDescriptorSetLayout dsl;
 static VkPipelineLayout pl;
-static VkPipeline pipe_rows, pipe_fill, pipe_water, pipe_prims, pipe_pack, pipe_haze, pipe_noise;
+static VkPipeline pipe_rows, pipe_fill, pipe_water, pipe_prims, pipe_pack, pipe_haze, pipe_noise, pipe_sky;
 #ifdef SRFX_NSHVC_HANDOFF
 static VkPipeline pipe_widen, pipe_panel;
 static int loaned;                      /* the device the console's (contract 2.22) */
@@ -513,11 +515,12 @@ device_there:
     pipe_rows = pipeline(k_rows_comp, sizeof k_rows_comp);
     pipe_fill = pipeline(k_fill_comp, sizeof k_fill_comp);
     pipe_water = pipeline(k_water_comp, sizeof k_water_comp);
+    pipe_sky = pipeline(k_sky_comp, sizeof k_sky_comp);
     pipe_prims = pipeline(k_prims_comp, sizeof k_prims_comp);
     pipe_pack = pipeline(k_pack_comp, sizeof k_pack_comp);
     pipe_haze = pipeline(k_haze_comp, sizeof k_haze_comp);
     pipe_noise = pipeline(k_noise_comp, sizeof k_noise_comp);
-    if (!pipe_rows || !pipe_fill || !pipe_water || !pipe_prims || !pipe_pack || !pipe_haze || !pipe_noise || !models_open())
+    if (!pipe_rows || !pipe_fill || !pipe_water || !pipe_sky || !pipe_prims || !pipe_pack || !pipe_haze || !pipe_noise || !models_open())
         return 0;
 #ifdef SRFX_NSHVC_HANDOFF
     pipe_widen = pipeline(k_widen_comp, sizeof k_widen_comp);
@@ -628,7 +631,7 @@ static int fill_spans(int w, int h, const FwSpan *sp, size_t n)
     }
     pc[0] = (uint32_t)w;
     pc[1] = (uint32_t)h;
-    pc[2] = pc[3] = 0;
+    fw_clip_words(w, h, &pc[2]);
     memcpy(&pc[4], fw_water, 16);
     pvkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, pipe_fill);
     pvkCmdPushConstants(cb, pl, STAGES, 0, 32, pc);
@@ -819,8 +822,15 @@ static void faces_record(void *arg)
     pvkCmdPushConstants(cb, pl, STAGES, 0, 48, j->view);
     vp.width = (float)j->w;
     vp.height = (float)j->h;
-    sc.extent.width = (uint32_t)j->w;
-    sc.extent.height = (uint32_t)j->h;
+    if (fw_clip[2] >= 0) {              /* a player's rectangle of the picture (fullwindow.h) */
+        sc.offset.x = fw_clip[0];
+        sc.offset.y = fw_clip[1];
+        sc.extent.width = (uint32_t)(fw_clip[2] - fw_clip[0] + 1);
+        sc.extent.height = (uint32_t)(fw_clip[3] - fw_clip[1] + 1);
+    } else {
+        sc.extent.width = (uint32_t)j->w;
+        sc.extent.height = (uint32_t)j->h;
+    }
     pvkCmdSetViewport(cb, 0, 1, &vp);
     pvkCmdSetScissor(cb, 0, 1, &sc);
     for (r = 0; r < j->nr; r++) {
@@ -1157,6 +1167,38 @@ static long water_fills, water_apart;
 static void water_report(void)
 {
     fprintf(stderr, "gpucheck: %ld water passes, %ld texels apart from the CPU's\n", water_fills, water_apart);
+}
+
+/* two players' sky pass (fullwindow.h, sky.comp) */
+static void sky_record(void *arg)
+{
+    const int32_t *pc = (const int32_t *)arg;
+    pvkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_COMPUTE, pl, 0, 1, &dset, 0, NULL);
+    pvkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, pipe_sky);
+    pvkCmdPushConstants(cb, pl, STAGES, 0, 20, pc);
+    pvkCmdDispatch(cb, (uint32_t)((pc[0] + 7) / 8), (uint32_t)((pc[1] + 7) / 8), 1);
+    barrier(VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_PIPELINE_STAGE_HOST_BIT, VK_ACCESS_HOST_READ_BIT);
+}
+
+static void sky_fill(const uint8_t *in, uint32_t *out, int w, int h, const uint32_t *gap, int side, int split, int seam)
+{
+    size_t len = (size_t)w * h;
+    int32_t pc[5];
+    if (in != (const uint8_t *)bufs[B_OUT].at || out != (uint32_t *)bufs[B_OUT32].at || len > bufs[B_OUT].len ||
+        len * 4 > bufs[B_OUT32].len || !buf_grow(B_GAP, (size_t)h * 8)) {
+        fw_sky_fill_cpu(in, out, w, h, gap, side, split, seam);
+        return;
+    }
+    memcpy(bufs[B_GAP].at, gap, (size_t)h * 8);
+    if (dset_stale)
+        dset_update();
+    pc[0] = w;
+    pc[1] = h;
+    pc[2] = side;
+    pc[3] = split;
+    pc[4] = seam;
+    if (!run_commands(sky_record, pc))
+        fw_sky_fill_cpu(in, out, w, h, gap, side, split, seam);
 }
 
 static uint32_t *texels32_alloc(size_t len)
@@ -1613,6 +1655,7 @@ int gpu_vulkan_init(void)
     fw_span_filler = fill;
     fw_texels32_alloc = texels32_alloc;
     fw_water_filler = water_fill;
+    fw_sky_filler = sky_fill;
     fw_bits_filler = bits_move;
 #ifdef SRFX_NSHVC_HANDOFF
     fw_tex_align = 4;                   /* (fill.comp's whole words) */

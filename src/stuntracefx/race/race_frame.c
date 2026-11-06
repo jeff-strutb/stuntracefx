@@ -1071,6 +1071,7 @@ void RmTweenDrawTwoPlayers(void)
 {
     uint32_t b;
 
+    fw_view_begin();                    /* Enhanced's full-window picture: the first player's view */
     op_sep(P_M);
     op_rep(P_X);
     cpu.db = 0x02;
@@ -1102,10 +1103,13 @@ void RmTweenDrawTwoPlayers(void)
     abi_FrameRunGsuAB13B();
     if (rm_tween_step) {
         op_sep(P_M);
+        fw_hud_begin();
         abi_RaceSoundsPlayer1();
+        fw_hud_end();
     }
     op_sep(P_M);
     abi_GsuScreenFlipMenu();
+    fw_two_next();                      /* the second player's */
     op_sep(P_M);
     abi_ViewUpdateAndGsuAEF8();
     abi_BackdropAnglesFromView();
@@ -1115,7 +1119,9 @@ void RmTweenDrawTwoPlayers(void)
     abi_FrameRunGsuAB13A();
     if (rm_tween_step) {
         op_sep(P_M);
+        fw_hud_begin();
         abi_RaceSoundsPlayer2();
+        fw_hud_end();
     }
     op_sep(P_M);
     abi_GsuScreenFlipMenu();

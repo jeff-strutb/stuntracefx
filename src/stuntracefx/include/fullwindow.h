@@ -93,8 +93,18 @@ int fw_half_width(void);
 void fw_view_centre(float *cx, float *cy);
 
 /* the redraw's start (race_frame.c RmTweenDraw): the full-window view's
-   words in the Super FX's RAM (the redraw puts the RAM back after) */
+   words in the Super FX's RAM (the redraw puts the RAM back after);
+   fw_two_next: two players' second view's, for its sort and picture */
 void fw_view_begin(void);
+void fw_two_next(void);
+/* a colour's high nibble (its COLOR's frozen one; two players' 4-bit bitmap's
+   palette) and a display-list face's flat colour under it */
+uint8_t fw_hi(void);
+uint8_t fw_face_colour(uint8_t c);
+/* (system/raster.c) the two players' stages in the full window: the value for the
+   blank between the halves; the upload stage's line */
+uint8_t fw_split_blank(uint8_t game);
+int fw_split_line(void);
 /* the HUD's pieces drawn into a full-window picture from here to the end
    (tween.c's redraw: the text program, RaceSoundsAndHud): the original's
    view words put back for them, their pixels placed (fw_hud) */
@@ -204,6 +214,21 @@ typedef struct {
    w > 0 and z < w (the water nearer on the ray), is not drawn: the water
    is put there (fw_span_fill_cpu, the GPU's the same) */
 extern float fw_water[4];
+/* The rectangle a fill and a render pass hold to while a player's view of two is
+   drawn: x0, y0, x1, y1 (inclusive; x1 below 0: the whole picture). The words the
+   kernels take: x0 | x1 << 16, y0 | y1 << 16 */
+extern int fw_clip[4];
+static inline void fw_clip_words(int w, int h, uint32_t out[2])
+{
+    int on = fw_clip[2] >= 0;
+    out[0] = (uint32_t)(on ? fw_clip[0] : 0) | (uint32_t)(on ? fw_clip[2] : w - 1) << 16;
+    out[1] = (uint32_t)(on ? fw_clip[1] : 0) | (uint32_t)(on ? fw_clip[3] : h - 1) << 16;
+}
+/* Two players' sky pass: each texel nothing was drawn on (in, 0) its player's row's
+   colour, gap[y] the first player's and gap[h + y] the second's, the player by the
+   column (side) or row at or past split, those from seam to split black; else its index */
+void fw_sky_fill_cpu(const uint8_t *in, uint32_t *out, int w, int h, const uint32_t *gap, int side, int split, int seam);
+extern void (*fw_sky_filler)(const uint8_t *in, uint32_t *out, int w, int h, const uint32_t *gap, int side, int split, int seam);
 /* The water pass (fullwindow.c): each texel nothing was drawn on (in, 0)
    made the water surface's along its ray, into out (32 bits: 0
    transparent, 1 CGRAM colour 1, 0xFFrrggbb a colour), w x h; gap[y] row
