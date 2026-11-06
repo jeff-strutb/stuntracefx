@@ -663,7 +663,6 @@ static void upload_rows(uint32_t b, int want, uint16_t n, uint16_t src,
         return;
     next_stage(b, n);
     set = vram >= 0x2000;
-    fw_job_upload(src == 0x9400, set, 0);
     if (want)
         split_canvas[set] = rm_canvas_ready();
     ld3(src, vram, 0x0012, 0x0012);
@@ -682,8 +681,6 @@ static void upload_rows(uint32_t b, int want, uint16_t n, uint16_t src,
             ;
         else if (split_canvas[set] && (rm_canvas_gpu_word(set ? 0x2000 : 0x0000, 360) || fw_unplotted()))
             ;                           /* SC_GPU: the GPU's pictures, not the chip's bitmaps */
-        else if (rm_canvas_job_word(set, set ? 0x2000 : 0x0000, 360, 10, 0, 4))
-            ;
         else if (split_canvas[set] && rm_whole_steps())
             rm_canvas_show_copied_late(set ? 0x2000 : 0x0000, 360, 4);
         else if (split_canvas[set])
@@ -746,7 +743,7 @@ static void pause_canvas(uint32_t b)
     if (!rd8(b | 0x0D2D) || !rm_canvas_ready() || rd8(b | 0x0D62) || (shown != 0xFFFF && shown != 0x0001))
         return;
     rm_canvas_kept(RM_CANVAS_RACE);
-    if (!rm_canvas_gpu_once(word, 416) && !fw_unplotted() && !rm_canvas_job_mode())   /* (a job's: no bytes to show, rm_canvas_job_held's) */
+    if (!rm_canvas_gpu_once(word, 416) && !fw_unplotted())
         rm_canvas_show_copied_once(word, 416, 8);
 }
 
@@ -755,7 +752,6 @@ static void split_stage(uint32_t b)
     uint8_t s;
 
     pause_canvas(b);
-    rm_canvas_job_held(RM_CANVAS_RACE);  /* (a job's set stands: pause, results and the race's end keep it) */
     cpu.p |= P_M | P_X;
     cpu.x &= 0x00FF;
     cpu.y &= 0x00FF;
@@ -811,12 +807,10 @@ static void split_stage(uint32_t b)
     case 0xAA91:
         cpu.p = (uint8_t)((cpu.p | P_M) & ~P_X);
         split_picture(b, 0x0000);
-        rm_canvas_job_part(0x0B40, 180, 18);   /* (the panel over the first player's characters: VRAM's) */
         break;
     case 0xAA9A:
         cpu.p = (uint8_t)((cpu.p | P_M) & ~P_X);
         split_picture(b, 0x0B40);
-        rm_canvas_job_part(0x0000, 180, 0);    /* (over the second player's) */
         break;
     case 0xAB0F:
         cpu.p &= (uint8_t)~P_M;
@@ -946,11 +940,10 @@ static void race_flip(int buf, uint16_t src, unsigned word)
 {
     if (fw_on())                        /* the full window's pictures are drawn again (fullwindow.c) */
         return;
-    fw_job_upload(0, buf, 0);
     if (race_canvas[buf]) {
-        if (!rm_canvas_gpu_word(word, 416) && !fw_unplotted() && !rm_canvas_job_word(buf, word, 416, 16, 0, 8))   /* SC_GPU: the GPU's picture, not the chip's bitmap */
+        if (!rm_canvas_gpu_word(word, 416) && !fw_unplotted())   /* SC_GPU: the GPU's picture, not the chip's bitmap */
             rm_canvas_show(word, src, 416);
-    } else if (!rm_canvas_job_word(buf, word, 416, 16, 0, 8))
+    } else
         rm_canvas_off();
 }
 

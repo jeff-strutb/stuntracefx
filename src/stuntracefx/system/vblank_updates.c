@@ -72,13 +72,12 @@ static void menu_overlap(int set, unsigned keep)
 static void menu_flip(uint8_t bank, int set)
 {
     if (menu_canvas[set]) {
-        if (!rm_canvas_gpu_word(set ? 0x0B00 : 0x0000, 143) && !fw_unplotted() &&
-            !rm_canvas_job_word(set, set ? 0x0B00 : 0x0000, 143, 11, 0, 8))    /* SC_GPU: the GPU's picture */
+        if (!rm_canvas_gpu_word(set ? 0x0B00 : 0x0000, 143) && !fw_unplotted())    /* SC_GPU: the GPU's picture */
             rm_canvas_show_copied(set ? 0x0B00 : 0x0000, 143, 8);
         /* no copy took the blank's time: bit 5 of $11D7 left clear, so
            VblankUpdates' palette, VRAM and sprite transfers still run */
         wr8(dbw(bank, 0x11D7), (uint8_t)(rd8(dbw(bank, 0x11D7)) & 0xDF));
-    } else if (!rm_canvas_job_word(set, set ? 0x0B00 : 0x0000, 143, 11, 0, 8)) {
+    } else {
         rm_canvas_off();
     }
 }
@@ -123,7 +122,6 @@ uint16_t GsuPictureUploadStep(uint8_t bank, int *copied)
     switch (stage) {
     case 0x0:
         menu_canvas[0] = rm_canvas_ready();
-        fw_job_upload(0, 0, 1);
         return (upload_rows(bank, 0, 0x0002, 3, 0x2C00, 0x0000));
     case 0x2:
         return (upload_rows(bank, 0, 0x0004, 3, 0x3C00, 0x0580));
@@ -135,7 +133,6 @@ uint16_t GsuPictureUploadStep(uint8_t bank, int *copied)
         return ((uint16_t)((a & 0xFF00) | f));
     case 0x8:
         menu_canvas[1] = rm_canvas_ready();
-        fw_job_upload(0, 1, 1);
         return (upload_rows(bank, 1, 0x000A, 3, 0x5000, 0x1760));
     case 0xA:
         return (upload_rows(bank, 1, 0x000C, 3, 0x4000, 0x11E0));

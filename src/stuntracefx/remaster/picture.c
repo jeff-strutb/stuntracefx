@@ -58,7 +58,6 @@ static int canvas_gpu, gpu_ready, gpu_k;
 #ifdef SRFX_NSHVC_HANDOFF
 static int gpu_handed;                  /* the characters handed since the last frame hook */
 static int gpu_fresh;                   /* a picture drawn, none handed yet */
-static int job_canvas;                  /* the canvas a job's set (rm_canvas_job_word): the frame hook hands it */
 #endif
 static unsigned gpu_count, gpu_bpp;
 
@@ -89,9 +88,6 @@ static void canvas_hand(void)
 {
     size_t need = (size_t)canvas_count * 64 * canvas_k * canvas_k;
 
-#ifdef SRFX_NSHVC_HANDOFF
-    job_canvas = 0;
-#endif
     if (need > texels_size) {
         free(texels);
         texels = malloc(need);
@@ -178,47 +174,8 @@ void rm_canvas_screen(int w, int h)
 }
 #endif
 
-#ifdef SRFX_NSHVC_HANDOFF
-int rm_canvas_job_word(int set, unsigned word, unsigned count, int per_column, int first_col, unsigned bpp)
-{
-    if (!fw_job_chars())
-        return 0;
-    canvas_seen = 1;
-    canvas_owner = owner_now;
-    canvas_word = word;
-    canvas_count = count;
-    canvas_bpp = bpp;
-    canvas_k = 1;
-    canvas_gpu = 1;
-    canvas_on = 1;
-    job_canvas = 1;
-    gpu_ready = 0;
-    gpu_fresh = 0;
-    fw_handoff->job_show(set, word, count, per_column, first_col, (int)bpp);
-    return 1;
-}
-
-void rm_canvas_job_held(int owner)
-{
-    if (!job_canvas)
-        return;
-    owner_now = owner;
-    canvas_owner = owner;
-    canvas_seen = 1;
-}
-
-void rm_canvas_job_part(unsigned word, unsigned count, int first_col)
-{
-    if (job_canvas && canvas_bpp == 4)  /* (two players': 10 characters a column) */
-        rm_canvas_job_word(0, word, count, 10, first_col, 4);
-}
-#endif
-
 static void gpu_hand(unsigned word)
 {
-#ifdef SRFX_NSHVC_HANDOFF
-    job_canvas = 0;
-#endif
     canvas_seen = 1;
     canvas_owner = owner_now;
     canvas_word = word;
@@ -383,18 +340,12 @@ void rm_canvas_narrow(unsigned word, unsigned count)
 
 void rm_canvas_taken(void)
 {
-#ifdef SRFX_NSHVC_HANDOFF
-    job_canvas = 0;
-#endif
     canvas_on = 0;
     canvas_gpu = gpu_ready = 0;
 }
 
 void rm_canvas_off(void)
 {
-#ifdef SRFX_NSHVC_HANDOFF
-    job_canvas = 0;
-#endif
     if (canvas_on)
         nshvc_ext_canvas_chars(0, 0, 0, NULL, 1);
     canvas_on = 0;
@@ -416,15 +367,13 @@ void rm_canvas_frame_end(void)
         rm_canvas_off();
     canvas_seen = 0;
 #ifdef SRFX_NSHVC_HANDOFF
-    if (fw_handoff && fw_handoff->job_frame)
-        fw_handoff->job_frame(canvas_on && job_canvas);
     /* handed every frame (contract 2.22): a picture that stands, again */
-    if (canvas_on && canvas_gpu && !job_canvas && !gpu_handed && fw_chars_on()) {
+    if (canvas_on && canvas_gpu && !gpu_handed && fw_chars_on()) {
         fw_handoff->chars_hand(canvas_word, canvas_count, canvas_k);
         gpu_fresh = 0;
     } else if (!canvas_on && gpu_fresh && !gpu_handed && fw_chars_on()) {
-        /* a menu's first picture, its flip still to come: handed now, in set 0's place,
-           or the console's next present draws over it on the GE; the flip's word follows */
+        /* a menu's first picture, its flip still to come: handed now, in set 0's place;
+           the flip's word follows */
         fw_handoff->chars_hand(0x0000, gpu_count, gpu_k);
         gpu_fresh = 0;
     }

@@ -125,20 +125,8 @@ static int bit4;
 static int scale_lost;                  /* tw, th and the scale theirs: the full window's made again when it comes back */
 int fw_silent;                          /* (fullwindow.h) */
 static int unplotted;
-#ifdef SRFX_NSHVC_HANDOFF
-/* a job's pictures as the GPU's characters: this job's, each player's set last
-   uploaded, the menus' one buffer, the set drawn last */
-static int gx_chars, job_up[2] = { 1, 1 }, job_menu, job_last;
-#else
-#define gx_chars 0
-#endif
 static int still_word = -1, still_tries;    /* the full window gone: the GPU's bitmap picture due at this VRAM word (fw_frame_end) */
 int fw_unplotted(void) { return unplotted; }
-#ifdef SRFX_NSHVC_HANDOFF
-#define gx_or_job_chars() fw_job_chars()
-#else
-#define gx_or_job_chars() 0
-#endif
 int fw_bp_active(void) { return bp; }
 int fw_nibble(void) { return bit4; }
 /* Two players in the full window: one picture, each player's view on a rectangle
@@ -1236,7 +1224,7 @@ static void two_fill_cpu(void)
 /* the spans drawn into the texels */
 static void span_flush(void)
 {
-    if (gx && !gx_chars && !gx_valid && nspans) {    /* a job's first drawing: the chip's bitplanes unpacked */
+    if (gx && !gx_valid && nspans) {    /* a job's first drawing: the chip's bitplanes unpacked */
         fw_bits_filler(tex, nshvc_sram(), &gx_shape, 0);
         gx_valid = 1;
     }
@@ -1245,7 +1233,7 @@ static void span_flush(void)
     if (gpu_pic && !gpu_open) {         /* the GPU's picture opened: cleared, or the last one's to draw over */
 #ifdef SRFX_NSHVC_HANDOFF
         /* (handed, no texels here to draw over: every setup of the race sets $01C4, so it is cleared) */
-        if (fw_canvas_gpu->open(tw, th, gpu_cleared || hand_pic() || gx_chars || (bp && fw_chars_on()) ? NULL : tex))
+        if (fw_canvas_gpu->open(tw, th, gpu_cleared || hand_pic() || (bp && fw_chars_on()) ? NULL : tex))
 #else
         if (fw_canvas_gpu->open(tw, th, gpu_cleared ? NULL : tex))
 #endif
@@ -5481,31 +5469,6 @@ int fw_chars_on(void)
     return fw_handoff && fw_handoff->chars_cut && sc_gpu_on() && !bp_checks() && fw_handoff->ready();
 }
 
-int fw_job_chars(void)
-{
-    return fw_handoff && fw_handoff->job_target && fw_canvas_gpu && sc_gpu_on() && !bp_checks() && fw_handoff->ready();
-}
-
-void fw_job_upload(int player, int set, int menu)
-{
-    job_up[player != 0] = set;
-    job_menu = menu;
-}
-
-int fw_job_last(void) { return job_last; }
-
-/* the set a job draws: the race's two buffers each their own; two players' and the
-   menus' one picture at a time, the set not last uploaded (their RAM's one buffer
-   waits for its upload as the chip's must) */
-static int job_set(int second)
-{
-    if (gx_shape.bpp <= 4)
-        return !job_up[second];
-    if (gsu.scbr == 0x25)
-        return 1;
-    return job_menu ? !job_up[0] : 0;
-}
-
 void fw_cpu_fallback(const char *what)
 {
     static int check = -1;
@@ -5543,10 +5506,6 @@ static int bp_open(int cols, int rows, int bpp, int targets)
     bp_bpp = bpp;
     bp_targets = targets;
     bp_done = bp_open_now = 0;
-#ifdef SRFX_NSHVC_HANDOFF
-    if (fw_chars_on() && fw_handoff->chars_target)
-        fw_handoff->chars_target(0, cols, rows, bpp, targets, k);
-#endif
     nspans = npolys = nedges = 0;
     gpu_pic = fw_canvas_gpu != NULL;
     gpu_open = gpu_cleared = 0;
@@ -5593,10 +5552,6 @@ int fw_bp_frame(int begin)
         return 1;
     }
     bp_finish();
-#ifdef SRFX_NSHVC_HANDOFF
-    if (fw_chars_on() && fw_handoff->chars_target)
-        fw_handoff->chars_target(bp_done, bp_cols, bp_rows, bp_bpp, bp_targets, (int)SXN);
-#endif
     sc_picture_begin();
     for (i = 0; i < 8; i++)
         bp_game[i] = (uint16_t)(s[view_at[i]] | s[view_at[i] + 1] << 8);
@@ -5877,14 +5832,6 @@ static void gx_begin(void)
     gpu_open = gpu_cleared = 0;
     fw_water[3] = 0;
     fw_drawing = 1;
-#ifdef SRFX_NSHVC_HANDOFF
-    gx_chars = fw_job_chars();
-    if (gx_chars) {                     /* its pixels the GPU's alone: none read back, the RAM's bitmap left */
-        int second = gx_shape.bpp <= 4 && gsu.scbr == 0x25;
-        job_last = job_set(second);
-        fw_handoff->job_target(job_last, gx_shape.bpp, second);
-    }
-#endif
 }
 
 /* what is drawn so far into the chip's RAM */
@@ -5895,11 +5842,10 @@ static void gx_sync(void)
     unplotted = 0;
     span_flush();
     if (gpu_pic && gpu_open) {
-        fw_canvas_gpu->close(NULL, gx_chars ? NULL : tex);
+        fw_canvas_gpu->close(NULL, tex);
         gpu_open = 0;
     }
-    if (!gx_chars)
-        fw_bits_filler(tex, nshvc_sram(), &gx_shape, 1);
+    fw_bits_filler(tex, nshvc_sram(), &gx_shape, 1);
 }
 
 static void gx_end(void)
@@ -5908,11 +5854,6 @@ static void gx_end(void)
     if (!gx)
         return;
     gx_sync();
-#ifdef SRFX_NSHVC_HANDOFF
-    if (gx_chars)
-        fw_handoff->job_target(-1, 0, 0);
-    gx_chars = 0;
-#endif
     gx = 0;
     bit4 = 0;
     fw_drawing = 0;
@@ -7129,9 +7070,9 @@ void fw_frame_end(void)
             wr8(BGMODE, 0x01);
             nshvc_ext_sprite_limits(1);
         }
-        if (two_was && !(fw_bp_on() && (unplotted || gx_or_job_chars()))) {   /* two players: their bitmaps as the copies left them */
+        if (two_was && !(fw_bp_on() && unplotted)) {   /* two players: their bitmaps as the copies left them */
                 rm_canvas_show_copied((mw_ppu_last(0x210B) & 0x0F) ? 0x2000 : 0x0000, 360, 4);
-            } else if (fw_bp_on() && (unplotted || gx_or_job_chars())) {  /* SC_GPU: no bitmap of the chip's: the GPU's, below */
+            } else if (fw_bp_on() && unplotted) {  /* SC_GPU: no bitmap of the chip's: the GPU's, below */
                 still_word = b ? 0x2200 : 0x0000;
                 still_tries = 0;
             } else
