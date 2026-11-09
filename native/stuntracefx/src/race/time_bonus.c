@@ -173,12 +173,12 @@ static void take_from_time(void)
         v = BcdSub16(v, 0x0001, &c);
         g.time_left = v;
         if (v == 0)
-            SoundPort0QueuePushRawDecimal(0x44);
+            SoundPort0QueuePushRaw(0x44);
         c = 0;
         v = BcdAdd16(g.digit_pair, 0x0001, &c);
     }
     if (v >= 0x0099) {
-        SoundPort0QueuePushRawDecimal(0x44);
+        SoundPort0QueuePushRaw(0x44);
         v = 0x0099;
     }
     g.digit_pair = v;
