@@ -35,7 +35,8 @@ void CourseScreenRasterLine55(void);
 void CourseScreenStep(void);
 uint8_t CourseFromSelection(void);
 /* the race after the course menu: begin once, then each update until nonzero */
-int race_pacing_record(const char *path);   /* check only: each step's frames from a recording */
+int race_pacing_record(const char *path);
+uint8_t race_step_frames(void);         /* the frames the step being run tells its work it took */   /* check only: each step's frames from a recording */
 void race_session_begin(void);
 int race_session_update(void);
 
