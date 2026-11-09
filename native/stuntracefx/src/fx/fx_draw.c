@@ -504,7 +504,11 @@ void fx_bitmap_row(uint16_t x, uint16_t y, uint16_t n, uint16_t palette, uint16_
     block.stride = 0;
 }
 
-void fx_scaled_row_start(void) {}
+/* The scaled glyphs call fx_scaled_row at every pixel of a row, each time
+   with the whole row's width: the row is sent once, at its first pixel. */
+static int scaled_row_open;
+
+void fx_scaled_row_start(void) { scaled_row_open = 1; }
 
 /* One row of a glyph drawn scaled: pixel k shows column ((tu + k) du) / 256 of the row at base. */
 void fx_scaled_row(uint16_t x, uint16_t y, uint16_t n, uint16_t tu, uint16_t du, uint16_t base, uint16_t palette)
@@ -514,8 +518,9 @@ void fx_scaled_row(uint16_t x, uint16_t y, uint16_t n, uint16_t tu, uint16_t du,
     int i, row;
     nshvc_image image;
 
-    if ((!target.id && !recording) || !n)
+    if (!scaled_row_open || (!target.id && !recording) || !n)
         return;
+    scaled_row_open = 0;
     blocks_flush();
     for (i = 0; i < 4; i++)
         colours[i] = fx_ram[(uint16_t)(palette + i)];
