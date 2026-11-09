@@ -86,7 +86,15 @@ static inline void fx_cmode(uint16_t a) { fxs.por = (uint8_t)(a & 0x1F); }
 void fx_list_begin(void);
 void fx_list_end(void);
 void fx_op_clear(void);
+#ifdef FX_COUNT_PLOTS
+void fx_plot_counted(const char *where);
+#define fx_plot(x, y) fx_plot_counted(__func__)
+#else
 void fx_plot(uint8_t x, uint8_t y);
+#endif
 uint8_t fx_rpix(uint8_t x, uint8_t y);
+uint16_t fx_sprite_shrink(uint16_t size, uint16_t c8, uint16_t step, uint16_t left, uint16_t top, uint16_t bank, uint16_t base, uint16_t mask);
+uint16_t fx_sprite_magnify(uint16_t c8, uint16_t step, uint16_t left, uint16_t top, uint16_t bank, uint16_t base, uint16_t mask);
+void fx_flat_row(uint16_t x, uint16_t y, uint16_t n);
 
 #endif

@@ -598,7 +598,6 @@ uint16_t FxParticlesDraw(uint16_t key, uint16_t *stack)
                                                 y_major_error = (uint16_t)(y_major_half_gap - line_abs_dx);
                                                 for (;;) {
                                                     fx_flat_row(screen_x, screen_y, 1);
-                                                    fx_plot((uint8_t)screen_x, (uint8_t)screen_y);
                                                     y_major_next_x = (uint16_t)(screen_x + 1);
                                                     if (y_major_error_settled) {
                                                     } else {
@@ -624,7 +623,6 @@ uint16_t FxParticlesDraw(uint16_t key, uint16_t *stack)
                                                 x_major_error = (uint16_t)(x_major_half_gap - line_abs_dy);
                                                 for (;;) {
                                                     fx_flat_row(screen_x, screen_y, 1);
-                                                    fx_plot((uint8_t)screen_x, (uint8_t)screen_y);
                                                     x_major_next_x = (uint16_t)(screen_x + 1);
                                                     if (x_major_error_settled) {
                                                     } else {
@@ -650,13 +648,9 @@ uint16_t FxParticlesDraw(uint16_t key, uint16_t *stack)
                                 }
                             } else {
                                 fx_flat_row(screen_x, screen_y, 2); fx_flat_row(screen_x, (uint16_t)(screen_y + 1), 2);
-                                fx_plot((uint8_t)screen_x, (uint8_t)screen_y);
                                 dot_right_x = (uint16_t)(screen_x + 1);
-                                fx_plot((uint8_t)dot_right_x, (uint8_t)screen_y);
                                 dot_next_y = (uint16_t)(screen_y + 1);
                                 dot_left_x = (uint16_t)(dot_right_x - 1);
-                                fx_plot((uint8_t)dot_left_x, (uint8_t)dot_next_y);
-                                fx_plot((uint8_t)(uint16_t)(dot_left_x + 1), (uint8_t)dot_next_y);
                             }
                         } else {
                         }

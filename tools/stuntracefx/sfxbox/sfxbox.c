@@ -338,7 +338,8 @@ static void cyclog_timing(int kind, int clocks, uint32_t addr)
    FFFFFFFF. The machine is sfxbox_core_snapshot's: work RAM, Super FX RAM,
    VRAM, OAM, CGRAM, APU RAM. shots.txt names each shot's frame. */
 #define NATIVE_STATE (0x20000 + 0x10000 + 0x10000 + 544 + 512 + 0x10000)
-static FILE *native_ppu_f, *native_state_f, *native_shots_f;
+static FILE *native_ppu_f, *native_state_f, *native_shots_f, *native_jobs_f;
+static void (*native_gsu_get)(void *);
 static void (*native_snapshot)(uint8_t *);
 static uint8_t native_now[NATIVE_STATE], native_last[NATIVE_STATE];
 
@@ -357,6 +358,13 @@ static void native_mark(uint32_t kind, uint32_t pc)
 
     if (!native_state_f) return;
     native_snapshot(native_now);
+    if (kind == NATIVE_JOB_START && native_jobs_f && native_gsu_get) {
+        uint8_t st[256];                /* the Super FX's registers as a job starts */
+
+        native_gsu_get(st);
+        fwrite(head, 4, 3, native_jobs_f);
+        fwrite(st, 1, 64, native_jobs_f);
+    }
     fwrite(head, 4, 3, native_state_f);
     for (at = 0; at < NATIVE_STATE; at += 64) {
         uint32_t n = NATIVE_STATE - at < 64 ? NATIVE_STATE - at : 64;
@@ -1012,6 +1020,9 @@ int main(int argc, char **argv) {
         if (!(native_ppu_f = fopen(p, "wb"))) die("cannot write %s", p);
         snprintf(p, sizeof p, "%s/state.bin", native_dir);
         if (!(native_state_f = fopen(p, "wb"))) die("cannot write %s", p);
+        snprintf(p, sizeof p, "%s/jobs.bin", native_dir);
+        native_jobs_f = fopen(p, "wb");
+        *(void **)&native_gsu_get = dlsym(core, "sfxbox_gsu_get");
         snprintf(p, sizeof p, "%s/shots.txt", native_dir);
         if (!(native_shots_f = fopen(p, "w"))) die("cannot write %s", p);
         *tap = native_ppu_write;
@@ -1089,6 +1100,7 @@ int main(int argc, char **argv) {
     if (pacing_f) fclose(pacing_f);
     if (native_ppu_f) fclose(native_ppu_f);
     if (native_state_f) fclose(native_state_f);
+    if (native_jobs_f) fclose(native_jobs_f);
     if (native_shots_f) fclose(native_shots_f);
     if (cyclog_f) fclose(cyclog_f);
     if (rows_f) fclose(rows_f);

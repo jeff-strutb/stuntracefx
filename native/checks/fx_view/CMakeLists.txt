@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.20)
+project(fx_view C)
+add_subdirectory(${NSHVC_ROOT} nshvc)
+include(${NSHVC_ROOT}/cmake/NshvcGame.cmake)
+file(GLOB_RECURSE fx_sources CONFIGURE_DEPENDS ../../stuntracefx/src/fx/*.c)
+nshvc_game(fx_view SOURCES ${fx_sources} fx_view.c ../fx_check/entries.c ../fx_check/stubs.c TITLE "fx view")
+target_include_directories(fx_view PRIVATE ../../stuntracefx/src ../fx_check)
+target_compile_options(fx_view PRIVATE -std=gnu11 -w -DFX_COUNT_PLOTS)
