@@ -31,7 +31,8 @@ enum { RACE_MENU_STEP_UPDATES = 4 };
      program, for panel 0 and then (two players) panel 1; the caller runs
      FxFrameProgram after each. Writes g, objects (tied objects' facing on
      the course menu), the draw list and fx_ram only. 0: no such panel.
-   - race_steps_end: the race's screen handed back. */
+   - race_steps_end: the race's screen handed back, or the course menu's
+     race over (the race session begins); the kept step ends dropped. */
 float race_step_progress(float between);
 int RaceViewForPicture(int panel);
 void race_steps_end(void);

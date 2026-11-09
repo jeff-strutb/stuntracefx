@@ -20,8 +20,8 @@
  * The steps' clock for the pictures drawn between steps (plan stage 10, the
  * fx session's in-between pictures): the kind of the last step that handed
  * a picture over, the update it was taken in, the updates a step covers
- * there, and the steps taken since the screen's set-up (every one of them
- * ends in step_end, so each has its state kept).
+ * there, and how many such steps the screen has had since its set-up (each
+ * has its state kept by fx_tween_step_end).
  */
 enum { STEP_NONE, STEP_COURSE_MENU, STEP_ONE_PLAYER, STEP_TWO_PLAYERS };
 
@@ -32,18 +32,23 @@ static struct {
     unsigned steps;
 } step_clock;
 
-/* A new screen's steps: none before them to draw between. */
+/* A new screen's steps: none before them to draw between; the fx session's
+   kept step ends dropped too. */
 static void step_clock_restart(void)
 {
     memset(&step_clock, 0, sizeof step_clock);
+    fx_tween_reset();
 }
 
-/* The end of a step, after its picture (if any) is handed over. */
+/* The end of a step that handed a picture over: the state and the pictures
+   it drew kept for the pictures between (fx_tween), then the clock. A step
+   with no picture (RaceStart's two) keeps nothing. */
 static void step_end(int kind, uint8_t pace)
 {
-    step_clock.steps++;
     if (kind == STEP_NONE)
         return;
+    fx_tween_step_end();
+    step_clock.steps++;
     step_clock.kind = kind;
     step_clock.at = nshvc_updates();
     step_clock.pace = pace;

@@ -586,6 +586,7 @@ void SoftResetCheck(void)
 
 void race_session_begin(void)
 {
+    race_steps_end();                   /* the course menu's race is over */
     flow.state = FLOW_RACE_SETUP;
     flow.wait = WAIT_NONE;
     flow.stopped = 0;
