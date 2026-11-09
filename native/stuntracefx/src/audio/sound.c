@@ -29,7 +29,6 @@ static int battle;
 uint8_t sound_muted;
 uint8_t sound_hold_a, sound_hold_b;
 uint8_t sound_alt_set_loaded;
-uint8_t sound_port2, sound_port3, sound_mute_engines;
 
 void sound_init(void)
 {
@@ -99,8 +98,10 @@ void sound_set_port0(uint8_t value)
 /*
  * @routine 7E:B112 SoundPortsSend (the game's half)
  * WHAT IT DOES: The frame's end for the sound: whether this is an odd frame,
- * whether a hold stops the sends, and ports 2 and 3's values (0 while the
- * engine sounds are muted). The sends themselves are in music.c. The
+ * whether a hold stops the sends, and ports 2 and 3's values: the bytes at
+ * $0E47 and $0E49 (player 2's gauge, or the nearest car in one-player, and
+ * player 1's gauge, the engine's speed), 0 while $0E4B is set at a race's
+ * end. The sends themselves are in music.c. The
  * original's direct bytes $10E2 and $10E3 are never written anywhere, so that
  * path does not exist here.
  */
@@ -108,7 +109,7 @@ void sound_frame(void)
 {
     frame++;
     music_frame(frame & 1, sound_hold_a || sound_hold_b,
-                sound_mute_engines ? 0 : sound_port2, sound_mute_engines ? 0 : sound_port3);
+                g.end_ready ? 0 : g.speed_gauge[1], g.end_ready ? 0 : g.speed_gauge[0]);
 }
 
 /* ---- the driver's memory ---- */

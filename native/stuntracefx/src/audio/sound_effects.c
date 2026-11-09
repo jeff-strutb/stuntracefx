@@ -237,7 +237,7 @@ void PlayerSound35(void)
 
 static void engine_sounds(int which, uint8_t player, uint16_t pressed, uint16_t held)
 {
-    if (sound_mute_engines || g.player_phase[which] != 0x06)
+    if (g.end_ready || g.player_phase[which] != 0x06)
         return;
     SoundIfFlag40(pressed, player);
     SoundHoldByFlags(held, player);
@@ -333,7 +333,7 @@ void NearCarSoundUpdate(void)
 {
     uint16_t level, band;
 
-    if (sound_mute_engines)
+    if (g.end_ready)
         return;
     level = fx_word(FX_NEAR_LEVEL);
     if (level & 0x8000) {
@@ -341,7 +341,7 @@ void NearCarSoundUpdate(void)
         Sound0E1AStop();
         return;
     }
-    sound_port2 = (uint8_t)(level >> 4 | fx_word(FX_NEAR_SIDE) << 4);
+    g.speed_gauge[1] = (uint8_t)(level >> 4 | fx_word(FX_NEAR_SIDE) << 4);     /* $0E47, port 2's byte */
     band = (uint16_t)(0x0031 - fx_word(FX_NEAR_BAND));
     if (band == near_band_sent)
         return;
