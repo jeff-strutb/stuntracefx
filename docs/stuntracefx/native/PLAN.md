@@ -9,7 +9,7 @@ register-shaped state, translation layer or imitated hardware anywhere between t
 
 ## Progress (updated as work lands)
 
-Not done: most of the game. Of about 120,000 lines to convert, about 3,500 lines of new code exist so far.
+Not done: most of the game. Of about 120,000 lines to convert, about 3,900 lines of new code exist so far.
 
 | Stage | State |
 |---|---|
@@ -142,8 +142,10 @@ driver is structured C written from the record: sequencer, voice state, vibrato,
 bank's samples with `nshvc_sample_load`, then sends a message saying it is ready; commands go by `nshvc_music_send`. Both drivers
 convert; they share code only where reading shows the behaviour is the same.
 
-**Data.** A tool reads the player's own ROM at build time, verified by checksum, and writes named typed tables into the game's
-assets, read through `nshvc_asset_*`. No ROM image and no SNES-address lookup remains in the game. `ports/stuntracefx/assets.csv`
+**Data.** A tool reads the player's own ROM at build time, verified by checksum, and writes the game's data (not its code) to one
+asset, read through `nshvc_asset_*`. Correction to the first version of this plan, which promised no address lookup would remain: the
+game's tables, models and scripts refer to each other by bank and address in their own format, so that data stays in that format,
+read through one accessor (`data/cart.h`). Named tables replace addresses in the game's C where the code names them. `ports/stuntracefx/assets.csv`
 (2,052 ranges) is the starting inventory.
 
 **Saves and input.** `save/records.c`'s data as the game's own struct through `nshvc_save_*`, written where the SRAM was written.
