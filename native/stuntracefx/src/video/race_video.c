@@ -40,9 +40,6 @@ static uint16_t backdrop_rows[2][0x220];   /* $7F:E3D7 and $7F:E817: the rows fo
 void race_video_init(void)
 {
     race_video.tiles = nshvc_tiles_create(4, 1024, 1);
-    race_video.frame_tiles = nshvc_tiles_create(8, 1024, 1);
-    race_video.frame_map[0] = nshvc_map_create(32, 32);
-    race_video.frame_map[1] = nshvc_map_create(32, 32);
     race_video.backdrop_one = nshvc_map_create(32, 64);
     race_video.backdrop_two = nshvc_map_create(64, 128);
     race_video.course_tiles = nshvc_tiles_create(4, 1024, 1);
@@ -51,22 +48,21 @@ void race_video_init(void)
     sprites_use_tiles(race_video.tiles, 0x200, 0x300);
 }
 
+static void frame_art_clear(void);
+
 /* every tile and map zero, as the original cleared VRAM */
 static void clear_all(void)
 {
     static const uint8_t tile_zero[32];
-    static const uint8_t tile8_zero[64];
     static const uint16_t zero_words[32 * 32];
     int i, p;
 
     for (i = 0; i < 1024; i++) {
         nshvc_tiles_write(race_video.tiles, (uint32_t)i, tile_zero, 1, NSHVC_TILES_PLANAR);
-        nshvc_tiles_write(race_video.frame_tiles, (uint32_t)i, tile8_zero, 1, NSHVC_TILES_PLANAR);
     }
-    for (p = 0; p < 2; p++) {
-        nshvc_map_write_snes(race_video.frame_map[p], 0, 0, 32, 32, zero_words);
+    frame_art_clear();
+    for (p = 0; p < 2; p++)
         nshvc_map_write_snes(race_video.backdrop_one, 0, (uint32_t)p * 32u, 32, 32, zero_words);
-    }
     for (p = 0; p < 4; p++)
         nshvc_map_write_snes(race_video.backdrop_two, (p & 1) ? 32 : 0, (p & 2) ? 32 : 0, 32, 32, zero_words);
     for (p = 0; p < 4; p++)
@@ -87,9 +83,17 @@ static uint16_t frame_words_2p[32 * 32];     /* the two-player BG1 map */
 static uint16_t frame_words_1p[32 * 32];     /* the one-player BG1 map, first buffer's */
 static int frame_image_stale = 1;
 
+static void frame_art_clear(void)
+{
+    memset(frame_art_8, 0, sizeof frame_art_8);
+    memset(frame_art_4, 0, sizeof frame_art_4);
+    memset(frame_words_1p, 0, sizeof frame_words_1p);
+    memset(frame_words_2p, 0, sizeof frame_words_2p);
+    frame_image_stale = 1;
+}
+
 void race_frame_art_write(uint16_t word, const uint8_t *data, uint32_t bytes)
 {
-    nshvc_tiles_write(race_video.frame_tiles, word / 32u, data, bytes / 64u, NSHVC_TILES_PLANAR);
     memcpy(frame_art_8 + (uint32_t)word * 2u, data, bytes);
     frame_image_stale = 1;
 }
@@ -198,7 +202,6 @@ static void chip_to_frame_art(uint16_t at, uint16_t word, uint32_t bytes)
 /* A frame row's word and a picture's words to the first (buffer 0) or second page. */
 void race_map_page_write(int page, const uint16_t *words)
 {
-    nshvc_map_write_snes(race_video.frame_map[page], 0, 0, 32, 32, words);
     if (page == 0) {
         memcpy(frame_words_1p, words, sizeof frame_words_1p);
         frame_image_stale = 1;
@@ -462,9 +465,11 @@ void race_backdrop_rows_upload(int buffer)
     uint16_t adjusted[0x220];
     int i;
 
-    /* the one-player backdrop's tiles are those at $200 on in the shared set */
+    /* the one-player backdrop's tiles are those at $200 on in the shared set;
+       its priority bit goes, because a draw list composes as priority 0 and
+       the 3D has to stay in front of it (see race_screen_layers) */
     for (i = 0; i < 0x220; i++)
-        adjusted[i] = (uint16_t)((backdrop_rows[buffer][i] & 0xFC00) | (((backdrop_rows[buffer][i] & 0x3FF) + 0x200) & 0x3FF));
+        adjusted[i] = (uint16_t)((backdrop_rows[buffer][i] & 0xDC00) | (((backdrop_rows[buffer][i] & 0x3FF) + 0x200) & 0x3FF));
     nshvc_map_write_snes(race_video.backdrop_one, 0, buffer ? 47 : 30, 32, 17, adjusted);
 }
 
@@ -503,7 +508,6 @@ void race_picture_shown(int buffer)
     pic.race.backdrop_y[0] = (int16_t)g.backdrop_y[buffer];
     pic.bg[1].scroll_x = pic.race.backdrop_x[0];
     pic.bg[1].scroll_y = pic.race.backdrop_y[0];
-    pic.bg[0].map = race_video.frame_map[buffer];
     race_backdrop_rows_upload(buffer);
 }
 
@@ -623,18 +627,14 @@ void TimesKeepAndAdvance(void)
     windows.bands_state = 2;
 }
 
-/* VRAM word 0 to $3FF filled with random tiles $20-$3F, the noise behind the
-   results; one 32 x 32 map for that screen. */
+/* The static's random tiles: the static itself is drawn with the chip's
+   picture, so only the random numbers it took are kept in step. */
 void VramNoiseTiles(void)
 {
-    uint16_t w[32 * 32];
     int i;
 
-    for (i = 0; i < 0x400; i++) {
+    for (i = 0; i < 0x400; i++)
         RandomWordStep();
-        w[i] = (uint16_t)((g.random_word & 0x1F) | 0x20);
-    }
-    race_map_page_write(0, w);
 }
 
 /* ---- what the screen's lines take ---- */
@@ -655,18 +655,23 @@ static uint16_t fixed_from(const uint8_t *c)
     return (uint16_t)(r | gc << 5 | b << 10);
 }
 
-/* The layers of a race screen: one player mode 3 (the frame over the backdrop),
-   two players mode 1 with the backdrop's own map. The 3D picture goes in
-   bg[0].draw_list where the race's draw list is ready. */
+/* The layers of a race screen: the 3D picture and the frame around it are one
+   draw list on BG1, the backdrop on BG2. The engine composes a draw list as
+   priority 0, so both screens use mode 1 with the backdrop at priority 0:
+   the order is then the original's, sprites of priority 3 over the picture,
+   the backdrop behind it and over sprites of priority 0 and 1. (The original's
+   one-player screen is mode 3; in mode 3 the backdrop could not sit between
+   the draw list and those sprites.) */
 static void race_screen_layers(void)
 {
     pic.race.on = 1;
     pic.race.course_screen = 0;
     pic.race.split = g.split_screen != 0;
     pic.bg3_priority = 0;
-    pic.mode = pic.race.split ? 1 : 3;
-    pic.bg[0].tiles = race_video.frame_tiles;
-    pic.bg[0].map = race_video.frame_map[0];
+    pic.mode = 1;
+    pic.bg[0].tiles.id = 0;
+    pic.bg[0].map.id = 0;
+    pic.bg[0].draw_list = fx_draw_picture(0);
     pic.bg[1].tiles = race_video.tiles;
     pic.bg[1].map = pic.race.split ? race_video.backdrop_two : race_video.backdrop_one;
     pic.bg[2].tiles.id = 0;

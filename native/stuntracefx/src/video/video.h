@@ -26,8 +26,6 @@ static inline uint16_t ram_code_7f16(uint16_t a) { const uint8_t *p = ram_code_7
 /* The race screen's engine objects, by role. */
 typedef struct {
     nshvc_tiles tiles;                  /* the 4bpp art the backdrop and sprites share */
-    nshvc_tiles frame_tiles;            /* the frame around the 3D and the HUD art, 8bpp */
-    nshvc_map frame_map[2];             /* one per picture buffer */
     nshvc_map backdrop_one;             /* 32 x 64 */
     nshvc_map backdrop_two;             /* 64 x 128: four pages, then the panel repeated */
     nshvc_tiles course_tiles;           /* the course screen's backdrop art */
