@@ -39,6 +39,9 @@ extern RaceVideo race_video;
 
 void race_video_init(void);
 void race_vram_write(uint16_t word, const uint8_t *data, uint32_t bytes); /* by the word address the original sent it to */
+void race_course_vram_write(uint16_t word, const uint8_t *data, uint32_t bytes); /* the one-screen destinations, always */
+void race_course_maps_keep(void);              /* the unpacked course picture to both maps */
+void race_course_preview_reset(void);          /* $7F:C3D7 to $7F:9BD7, $800 bytes */
 void race_frame_art_draw(nshvc_draw_list list);    /* the frame and panels, at screen positions, after the list is cleared */
 void race_backdrop_two_pages_write(int first, const uint16_t *words, uint32_t n);
 void VideoRegsReset(void);

@@ -124,6 +124,15 @@ void race_vram_write(uint16_t word, const uint8_t *data, uint32_t bytes)
         }
         return;
     }
+    race_course_vram_write(word, data, bytes);
+}
+
+/* The one-screen destinations, whatever the screen to come: the course
+   screen's art ($2000-$4FFF) and map ($5000), the frame art, the frame maps
+   and the shared art. The course screen loads before the battle's two-player
+   flag is cleared, so its loads come here directly. */
+void race_course_vram_write(uint16_t word, const uint8_t *data, uint32_t bytes)
+{
     if (word >= 0x2000 && word < 0x5000) {
         nshvc_tiles_write(race_video.course_tiles, (uint32_t)(word - 0x2000u) / 16u, data, bytes / 32u, NSHVC_TILES_PLANAR);
     } else if (word == 0x5000) {
@@ -136,9 +145,8 @@ void race_vram_write(uint16_t word, const uint8_t *data, uint32_t bytes)
         race_art_write(word, data, bytes);
 }
 
-/* The finished player's panel map, kept in the two-player backdrop's map
-   below its own four pages, repeated in x and y so scrolling never wraps
-   out of it. Its art is the same tile set from tile $300. */
+/* The finished player's panel map; drawn as an image into the list, from the
+   shared art at tile $300 on. */
 void race_panel_map_write(const uint16_t *words)
 {
     memcpy(panel_words, words, sizeof panel_words);
@@ -802,6 +810,21 @@ void RaceVideoSplit2P(void)
 uint16_t *race_map_buffer(void)
 {
     return backdrop_map(0);
+}
+
+/* The unpacked course picture ($1000 bytes at the chip RAM's $3000) kept as
+   both maps, $7F:93D7 and $7F:BBD7. */
+void race_course_maps_keep(void)
+{
+    memcpy(backdrop_map(0), fx_ram + 0x3000, 0x1000);
+    memcpy(backdrop_map(1), fx_ram + 0x3000, 0x1000);
+}
+
+/* The preview's half of the first map put back from the second: $800 bytes
+   from $7F:C3D7 to $7F:9BD7. */
+void race_course_preview_reset(void)
+{
+    memcpy(backdrop_map(0) + 0x400, backdrop_map(1) + 0x400, 0x800);
 }
 
 /* The per-line BG2 scroll table's values, from the two scrolls; a table of
