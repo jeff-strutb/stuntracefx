@@ -20,6 +20,8 @@ static void init(void)
 
 static void update(const nshvc_input *input)
 {
+    if (system_stopped())
+        return;
     input_read(input);
     session_update();
 }

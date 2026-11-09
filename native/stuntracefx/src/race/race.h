@@ -10,6 +10,8 @@
 
 void CameraFollowStep(Camera *cam);
 
+enum { RASTER_NONE, RASTER_ONE_PLAYER, RASTER_TWO_PLAYERS, RASTER_COURSE };
+
 /* The race the course menu shows behind it. RaceStart sets it up; each
    RaceFrameStep is one step of it, with no waiting inside. It draws the
    picture into fx_draw_picture(0) unless step_only is set. */
@@ -35,8 +37,34 @@ void RaceClockStep(void);
 void LapSplit(int offset);
 void LapSplitTimes(int offset);
 void RaceTimeKeep(void);
+uint16_t BcdAdd16(uint16_t a, uint16_t b, unsigned *carry);
+uint16_t BcdSub16(uint16_t a, uint16_t b, unsigned *carry);
 void TimeUnpackBcd(uint16_t packed, uint16_t *minutes, uint16_t *seconds, uint16_t *hundredths);
 void ChampionshipFinish(void);
+
+/* race_frame.c */
+void RaceFrameRun(void);
+void RaceFrameRunTwoPlayers(void);
+void RaceVarsReset(void);
+void RaceModeSetup(void);
+void Set7EFFA6Sequence(void);
+void AttractCourseSetup(void);
+void ViewSetupTail(void);
+
+/* flow.c */
+void race_session_begin(void);
+int race_session_update(void);
+int DemoRun(int which);
+int race_flow_stopped(void);
+void race_wait_overlay(void (*after)(void));
+void race_wait_champion(void (*after)(void));
+void race_go_on(void);
+void OverlayFrameStep(void);
+void PauseFrameStep(void);
+int ChampionshipScreenFrame(void);
+void race_frame_upload(void);
+void SoftResetCheck(void);
+void session_race_ended(int to_course_menu);
 
 /* phases.c */
 void PhaseNothing(void);
@@ -90,10 +118,29 @@ void RaceEndCountdownFade(void);
 
 /* hud_setup.c */
 uint16_t RecordOffsetAllCourses(void);
-void HudBestTimeDigits(void);
+void HudBestTimeDigits(uint16_t packed);
 uint16_t TimePackBcd(uint8_t hundredths, uint8_t seconds, uint8_t minutes);
 
 /* misc.c */
 void Countdown0DF8(void);
+
+/* player_stats.c */
+void SpeedSampleAdd(uint16_t speed, int player);
+void PlayerStatsFromRecord(uint16_t rec, int player);
+void PlayerStatsAndPaletteAnimate(void);
+void RaceSoundsPlayer1(void);
+void RaceSoundsPlayer2(void);
+void RaceSoundsAndHud(void);
+void TimeUpPhaseStep(void);
+
+/* time_bonus.c */
+void TimeBonusTally(void);
+void TimeBonusTransfer(void);
+void TimeLeftDigits(void);
+void GsuDigitPair0E74At(uint16_t x);
+
+/* hud_setup.c */
+void RaceHudSetup(void);
+void RaceHudSetupTwoPlayers(void);
 
 #endif

@@ -166,7 +166,7 @@ void RaceStartTimerSteps(void)
         return;
     case 2:
         if (v < 0x21) {
-            g.flash_0d65 = (uint8_t)(g.flash_0d65 + 2);
+            g.tally_state = (uint8_t)(g.tally_state + 2);
             g.start_substate = 4;
         }
         return;
@@ -395,7 +395,7 @@ static void lap_override(void)
     best = fx16((uint16_t)(0xFC5E + entry));
     if (packed < best) {
         fx16_set((uint16_t)(0xFC5E + entry), packed);
-        HudBestTimeDigits();
+        HudBestTimeDigits(packed);
         fx16_set((uint16_t)(0xFC60 + entry), g.player_name);
         fx8_set((uint16_t)(0xFC62 + entry), g.car[0]);
         SaveSumsRecordsB();
@@ -716,13 +716,13 @@ void RaceEndWindowSteps(void)
         window_up();
     }
     if (v == 0x58) {
-        g.flash_0d65 = 0x0A;
+        g.tally_state = 0x0A;
         GlyphSlideThree();
     } else if (v < 0x58) {
         GlyphSlideThree();
     }
-    if (v == 0x2B && g.flash_0d65)
-        g.flash_0d65 = 0x10;
+    if (v == 0x2B && g.tally_state)
+        g.tally_state = 0x10;
     g.end_timer--;
 }
 

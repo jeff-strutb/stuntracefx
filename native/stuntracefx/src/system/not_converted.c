@@ -5,6 +5,8 @@
 #include <stdio.h>
 
 #include "object/object.h"
+#include "audio/sound.h"
+#include "menu/menu.h"
 #include "race/race.h"
 #include "save/save.h"
 #include "video/video.h"
@@ -27,6 +29,9 @@ NOT_YET(ObjectGroupsActivate)
 NOT_YET(PlayerControlsFrame)
 NOT_YET(SpriteSlot1Countdown)
 NOT_YET(ChampionshipFinish)
+NOT_YET(OverlayFrameStep)
+NOT_YET(PauseFrameStep)
+NOT_YET(MenuCourseScreenSetup)
 NOT_YET(OamHide75Up)
 NOT_YET(OamHideForHudMode)
 NOT_YET(OamStagePause)
@@ -45,7 +50,6 @@ NOT_YET(RaceEndToAttract)
 NOT_YET(RaceEndVideoReset)
 NOT_YET(SoftResetToBootWarm)
 NOT_YET(race_leave_to_champion)
-NOT_YET(HudBestTimeDigits)
 NOT_YET(Countdown0DF8)
 
 __attribute__((weak)) void CourseScriptRun(uint8_t bank, uint16_t addr)
@@ -109,3 +113,14 @@ __attribute__((weak)) uint8_t SpriteYOnScreen(uint8_t y)
 {
     return y >= 0xB0 ? 0xF0 : y;
 }
+
+__attribute__((weak)) int ChampionshipScreenFrame(void)
+{
+    static int said;
+
+    if (!said) { said = 1; fprintf(stderr, "not converted yet: ChampionshipScreenFrame\n"); }
+    return 1;
+}
+
+NOT_YET_ARGS(race_unpacked_to_art, (uint16_t out, uint16_t in), (void)out; (void)in;)
+NOT_YET_ARGS(SoundPort0QueuePushRawDecimal, (uint8_t command), (void)command;)

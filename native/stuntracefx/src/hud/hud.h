@@ -31,6 +31,7 @@ void HudPanelsStep(void);
 void SlideStep(void);
 void OamClassName(void);
 
+void GsuParam216A(uint16_t digit);
 void GsuF441Player1(void);
 void GsuF441Player2(void);
 void GsuF0A5OrF0B4(uint16_t input);

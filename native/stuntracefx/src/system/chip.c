@@ -146,7 +146,7 @@ void ViewReset(void)
 
 /* The setup's tail: the random numbers seeded, the view state cleared,
    ViewReset and the parameters to the renderer. */
-static void view_setup_tail(void)
+void ViewSetupTail(void)
 {
     g.random_state[0] = (uint8_t)cameras[0].x;     /* $1A6C */
     g.random_state[1] = 0xA7;
@@ -176,7 +176,7 @@ void ViewDefaults(void)
     g.view_centre_y = 0x002C;
     g.view_scale_34 = 0x5D17;
     g.view_scale_32 = 0x9D89;
-    view_setup_tail();
+    ViewSetupTail();
 }
 
 /*

@@ -7,7 +7,7 @@
 #include "system/state.h"
 
 /* Decimal add of two four-digit values and a carry in; *carry is the carry out. */
-static uint16_t bcd_add16(uint16_t a, uint16_t b, unsigned *carry)
+uint16_t BcdAdd16(uint16_t a, uint16_t b, unsigned *carry)
 {
     uint16_t r = 0;
     unsigned c = *carry;
@@ -25,7 +25,7 @@ static uint16_t bcd_add16(uint16_t a, uint16_t b, unsigned *carry)
 }
 
 /* Decimal subtract, a - b - (1 - carry); *carry = 1 when there was no borrow. */
-static uint16_t bcd_sub16(uint16_t a, uint16_t b, unsigned *carry)
+uint16_t BcdSub16(uint16_t a, uint16_t b, unsigned *carry)
 {
     uint16_t r = 0;
     unsigned borrow = !*carry;
@@ -53,14 +53,14 @@ void RaceTimeAddD815(void)
 {
     unsigned c = 0;
 
-    g.time_left = bcd_add16(cart8(0x03, (uint16_t)(0xD815 + course_index_12(g.car[0]))), g.time_left, &c);
+    g.time_left = BcdAdd16(cart8(0x03, (uint16_t)(0xD815 + course_index_12(g.car[0]))), g.time_left, &c);
 }
 
 void RaceTimeAddD814(void)
 {
     unsigned c = 0;
 
-    g.time_left = bcd_add16(cart8(0x03, (uint16_t)(0xD814 + course_index_12(g.car[0]))), g.time_left, &c);
+    g.time_left = BcdAdd16(cart8(0x03, (uint16_t)(0xD814 + course_index_12(g.car[0]))), g.time_left, &c);
 }
 
 /*
@@ -99,13 +99,13 @@ void RaceClockStep(void)
     if (!g.finish_mark)
         return;
     c = 0;
-    g.clock_fraction = bcd_add16(g.clock_fraction, g.clock_step, &c);
-    a = bcd_add16(g.clock_seconds, 0, &c);
+    g.clock_fraction = BcdAdd16(g.clock_fraction, g.clock_step, &c);
+    a = BcdAdd16(g.clock_seconds, 0, &c);
     g.clock_seconds = a;
     if (a >= 0x0060) {
         g.clock_seconds = 0;
         c = 0;
-        a = bcd_add16(g.clock_minutes, 1, &c);
+        a = BcdAdd16(g.clock_minutes, 1, &c);
         g.clock_minutes = a;
         if (a >= 0x0010) {
             g.clock_minutes = 0x0009;
@@ -114,11 +114,11 @@ void RaceClockStep(void)
         }
     }
     c = 1;
-    g.countdown_fraction = bcd_sub16(g.countdown_fraction, g.clock_step, &c);
+    g.countdown_fraction = BcdSub16(g.countdown_fraction, g.clock_step, &c);
     if (!c) {
         if (g.time_left) {
             c = 1;
-            g.time_left = bcd_sub16(g.time_left, 1, &c);
+            g.time_left = BcdSub16(g.time_left, 1, &c);
         } else {
             g.countdown_fraction = 0;
             g.time_left = 0;
@@ -140,17 +140,17 @@ void LapSplitTimes(int offset)
     unsigned c = 1;
     uint16_t v;
 
-    v = bcd_sub16(frac, g.lap_mark[0], &c);
+    v = BcdSub16(frac, g.lap_mark[0], &c);
     g.lap_splits[offset] = (uint8_t)v;
-    v = bcd_sub16(secs, g.lap_mark[1], &c);
+    v = BcdSub16(secs, g.lap_mark[1], &c);
     if (!c) {
         c = 0;
-        v = bcd_add16(v, 0x60, &c);
+        v = BcdAdd16(v, 0x60, &c);
         minutes--;
     }
     g.lap_splits[offset + 1] = (uint8_t)v;
     c = 1;
-    g.lap_splits[offset + 2] = (uint8_t)bcd_sub16(minutes, g.lap_mark[2], &c);
+    g.lap_splits[offset + 2] = (uint8_t)BcdSub16(minutes, g.lap_mark[2], &c);
 }
 
 void LapSplit(int offset)

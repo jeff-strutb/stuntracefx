@@ -4,6 +4,7 @@
  */
 #include "audio/sound.h"
 #include "system/game.h"
+#include "system/state.h"
 #include "video/picture.h"
 
 FrameState frame_state;
@@ -12,8 +13,12 @@ void input_read(const nshvc_input *input)
 {
     int i;
 
+    for (i = 0; i < 2; i++)
+        frame_state.pad_now[i] = input->pad[i];
+    if (g.raster_chain)
+        return;                         /* the race's raster reads them */
     for (i = 0; i < 2; i++) {
-        uint16_t now = input->pad[i];
+        uint16_t now = frame_state.pad_now[i];
 
         frame_state.pressed[i] = (uint16_t)((now ^ frame_state.held[i]) & now);
         frame_state.held[i] = now;

@@ -64,7 +64,28 @@ typedef struct {
     uint8_t start_substate;             /* $0D5A */
     uint8_t panel_state;                /* $0D56 */
     uint8_t panel_delay;                /* $0D5F */
-    uint8_t flash_0d65;                 /* $0D65 */
+    uint16_t tally_state;               /* $0D65: the time bonus tally's state */
+    uint8_t raster_chain;               /* $0D3F: which per-frame raster work runs */
+    uint16_t time_taken_from;           /* $0E76 */
+    uint16_t time_left_shown;           /* $0E78 */
+    uint16_t bonus_step;                /* $0E7C */
+    uint8_t countdown_df8;              /* $0DF8 */
+    uint8_t stunt_seen;                 /* $1A2D */
+    uint8_t status_df6[2];              /* $0DF6 */
+    uint32_t speed_total[2];            /* $0DDC, $0DE0 */
+    uint16_t speed_count[2];            /* $0DE4, $0DE6 */
+    uint8_t byte_e80, byte_e81;         /* $0E80, $0E81 */
+    uint8_t byte_0d58;                  /* $0D58 */
+    uint16_t picture_flip_0d81;         /* $0D81: a picture has been flipped to */
+    uint16_t hud_1ae8, hud_1aea;        /* $1AE8, $1AEA */
+    uint8_t time_1f3e, time_sum_06d5, time_count_06d6, time_fps_06d7; /* $1F3E, $06D5-$06D7 */
+    uint8_t reset_state;                /* $0D51: a soft reset is under way */
+    uint8_t frame_stage_00;             /* $00: 2 while a step runs, cleared when its picture is shown */
+    uint8_t byte_1a32, byte_0713;       /* $1A32, $0713 */
+    uint16_t view_angle_06cf;           /* $06CF */
+    uint8_t course_high, byte_0d63, byte_0d44, byte_0d25; /* $0E3E, $0D63, $0D44, $0D25 */
+    uint8_t byte_0f05[12];              /* $0F05 */
+    uint16_t course_intro_scroll;       /* $0E37 */
     uint8_t champ_stage;                /* $0D48: the championship's stage */
     uint8_t byte_0d24;                  /* $0D24 */
     uint8_t race_ended_d55;             /* $0D55 */

@@ -31,6 +31,8 @@ void GlyphColours(uint8_t b1, uint8_t b2, uint8_t b3)
 static void param_216_a(uint16_t index) { fx16_set(FXIN_PIECE, cart16(0x07, (uint16_t)(0x8E3E + index))); }
 static void param_216_b(uint16_t index) { fx16_set(FXIN_PIECE, cart16(0x07, (uint16_t)(0x8E52 + index))); }
 
+void GsuParam216A(uint16_t digit) { param_216_a((uint16_t)(digit << 1)); }
+
 /* @routine 07:8B9B GsuF329Entry: a digit (low four bits) through the table to program $07:F329. */
 static void f329_entry(uint16_t digit)
 {
