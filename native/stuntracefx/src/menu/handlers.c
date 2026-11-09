@@ -279,6 +279,8 @@ static void select_arrive(Actor *a)
         pic.windows.layer_use[5] = NSHVC_WIN1 | NSHVC_WIN1_INVERT;
         pic.windows.w[0].left = 0x20;
         pic.windows.w[0].right = 0x88;
+        pic.windows.w[1].left = 0x20;
+        pic.windows.w[1].right = 0x87;
         pic.windows.mask_main[0] = 1;
         pic.windows.mask_sub[0] = 1;
         pic.sub_screen = SHOW_BG1;

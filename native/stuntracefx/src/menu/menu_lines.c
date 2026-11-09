@@ -19,6 +19,9 @@ static uint8_t channels_now;
 
 void menu_lines_set(int set, uint8_t channels)
 {
+    /* the window-mask channel going off leaves the last value it wrote: 0 */
+    if (set_now == MENU_LINES_PREVIEW && (channels_now & 0x20) && !(channels & 0x20))
+        memset(pic.windows.mask_main, 0, sizeof pic.windows.mask_main);
     set_now = set;
     channels_now = channels;
     pic.line_tables = channels;
@@ -161,9 +164,41 @@ static void preview_lines(void)
         send(NSHVC_LINE_PREVENT, b);
         send(NSHVC_LINE_CLIP, c);
     }
-    if (channels_now & 0x20) {          /* the window masks on the main screen */
-        table_bytes(0x1348, a, 0, 1);
-        send_tmw(a);
+    {
+        /* The original's BG1 picture has high priority and sits over BG2's
+           panel. The engine shows a draw list at the lowest priority, so
+           BG2 is masked inside the window on the picture's rows. */
+        int under_picture = pic.bg[2].draw_list.id && pic.windows.layer_use[1] == NSHVC_WIN1;
+
+        if ((channels_now & 0x20) || under_picture) {
+            int v;
+
+            if (channels_now & 0x20) {
+                table_bytes(0x1348, a, 0, 1);
+            } else {
+                int32_t bits = 0;
+                int l;
+
+                for (l = 0; l < 5; l++)
+                    bits |= (int32_t)(pic.windows.mask_main[l] != 0) << l;
+                for (v = 0; v < LINES; v++)
+                    a[v] = bits;
+            }
+            if (under_picture) {
+                int32_t use[LINES];
+
+                /* window 2 is the picture's 104 columns, one short of window 1 */
+                for (v = 0; v < LINES; v++)
+                    use[v] = NSHVC_WIN1;
+                for (v = 97; v <= 184; v++) {
+                    if (!(a[v] & 2))
+                        use[v] = NSHVC_WIN2;
+                    a[v] |= 2;
+                }
+                send((nshvc_line_field)(NSHVC_LINE_WIN_USE + 1), use);
+            }
+            send_tmw(a);
+        }
     }
     if (channels_now & 0x10) {          /* window 1's left edge */
         table_bytes(0x1353, a, 0, 1);
