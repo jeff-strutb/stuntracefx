@@ -47,6 +47,8 @@ typedef struct {
     nshvc_sprite sprites[128];
     uint32_t sprite_count;
     uint8_t line_tables;                /* LINES_ bits */
+    uint8_t fills_window;               /* a menu screen over the whole window, the original's picture at the origin */
+    uint8_t layer_clip[5];              /* and its layers kept to that picture: BG1-4, sprites */
     RacePicture race;
 } Picture;
 

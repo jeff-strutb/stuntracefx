@@ -145,3 +145,113 @@ int screen_bottom_shift(void)
 {
     return shape.height - 224 - shape.safe[3];
 }
+
+/* ---- two players ---- */
+
+/*
+ * Each player's rectangle: side by side from 288 across, each (W - 2) / 2
+ * wide and the screen's height; above and below otherwise, each the
+ * screen's width and (H - 2) / 2 high. Two pixels between them stay clear.
+ */
+enum { TWO_SEAM = 2, TWO_SIDE_W = 288 };
+
+int screen_two_side(void)
+{
+    return shape.width >= TWO_SIDE_W;
+}
+
+void screen_two_rect(int player, int *x, int *y, int *w, int *h)
+{
+    if (screen_two_side()) {
+        *w = (shape.width - TWO_SEAM) / 2;
+        *h = shape.height;
+        *x = player ? shape.width - *w : 0;
+        *y = 0;
+    } else {
+        *w = shape.width;
+        *h = (shape.height - TWO_SEAM) / 2;
+        *x = 0;
+        *y = player ? shape.height - *h : 0;
+    }
+}
+
+/* the safe area's insets on a player's rectangle: only where it meets the screen's edges */
+static void two_margins(int player, int m[4])
+{
+    int x, y, w, h;
+
+    screen_two_rect(player, &x, &y, &w, &h);
+    m[0] = x == 0 ? shape.safe[0] : 0;
+    m[1] = y == 0 ? shape.safe[1] : 0;
+    m[2] = x + w == shape.width ? shape.safe[2] : 0;
+    m[3] = y + h == shape.height ? shape.safe[3] : 0;
+}
+
+/*
+ * A player's boxes (DAMAGE, the map, the speed, TIME: TWO_BOX_W x TWO_BOX_H
+ * of the original's screen) float in its rectangle at one scale, in 256ths:
+ * at most 0.6; side by side, a row along the bottom within 70% of the
+ * rectangle's width; above and below, a column down the right within 80% of
+ * its height and 30% of its width; never under a window pixel a source
+ * pixel while that fits. The window pixels per screen pixel come from the
+ * window (1 with none).
+ */
+enum { TWO_BOX_W = 80, TWO_BOX_H = 96, TWO_MAP_H = 35, TWO_BOX_GAP = 2, TWO_ROW_W = 240 + 3 * TWO_BOX_GAP };
+
+int screen_two_scale(int player)
+{
+    nshvc_display d = nshvc_display_info();
+    int x, y, w, h, q = 154, a, fit, least = 256;
+
+    screen_two_rect(player, &x, &y, &w, &h);
+    if (d.width > 0 && d.height > 0 && !checking) {
+        float k = fminf((float)d.width / (float)shape.width, (float)d.height / (float)shape.height);
+
+        least = k > 1.0f ? (int)(256.0f / k) : 256;
+    }
+    if (screen_two_side()) {
+        a = 256 * 7 * w / (10 * TWO_ROW_W);
+        fit = 256 * w / TWO_ROW_W;
+    } else {
+        a = 256 * 8 * h / (10 * TWO_BOX_H);
+        if (a > 256 * 3 * w / (10 * TWO_BOX_W))
+            a = 256 * 3 * w / (10 * TWO_BOX_W);
+        fit = 256 * h / TWO_BOX_H;
+    }
+    q = q < a ? q : a;
+    q = q > least ? q : least;
+    q = q < fit ? q : fit;
+    return q > 256 ? 256 : q;
+}
+
+/* the rows the boxes take at a rectangle's bottom, side by side */
+static int two_band(int player)
+{
+    return screen_two_side() ? (TWO_MAP_H * screen_two_scale(player) + 255) / 256 + TWO_BOX_GAP : 0;
+}
+
+/*
+ * Where the original's 144 x 80 view of a player goes for a piece of it
+ * spanning x0 to x1 and y0 to y1 on that view: by the piece's middle, to
+ * the near side of the rectangle or about its middle, inside the safe
+ * area; side by side a low piece goes above the boxes' row; above and
+ * below, a piece the boxes' column would cover moves to its left.
+ */
+void screen_two_anchor(int player, int x0, int x1, int y0, int y1, int *dx, int *dy)
+{
+    int x, y, w, h, m[4], cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+
+    screen_two_rect(player, &x, &y, &w, &h);
+    two_margins(player, m);
+    *dx = cx < 64 ? x + m[0] : cx > 80 ? x + w - 144 - m[2] : x + (w - 144) / 2;
+    *dy = cy < 32 ? y + m[1] : cy > 48 ? y + h - 80 - m[3] : y + (h - 80) / 2;
+    if (screen_two_side()) {
+        if (cy > 48)
+            *dy -= two_band(player);
+    } else {
+        int q = screen_two_scale(player), bx = x + w - m[2] - TWO_BOX_W * q / 256, by = y + m[1];
+
+        if (*dy + y0 < by + TWO_BOX_H * q / 256 && *dy + y1 >= by && *dx + x1 >= bx)
+            *dx = bx - 2 - x1;
+    }
+}

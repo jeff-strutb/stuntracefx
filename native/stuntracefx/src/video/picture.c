@@ -390,21 +390,31 @@ void video_draw(void)
 {
     nshvc_screen s;
     const ScreenShape *sh;
-    int i, full;
+    int i, full, menu_full;
 
     screen_update();
     sh = screen_shape();
     full = race_full_window();
+    menu_full = pic.fills_window && !pic.race.on;
     memset(&s, 0, sizeof s);
-    s.width = full ? sh->width : 256;
-    s.height = full ? sh->height : 224;
-
+    s.width = full || menu_full ? sh->width : 256;
+    s.height = full || menu_full ? sh->height : 224;
+    s.origin_x = menu_full ? sh->origin_x : 0;   /* the race places its own (full_window_draw) */
+    s.origin_y = menu_full ? sh->origin_y : 0;
     s.brightness = pic.brightness;
     s.blank = pic.blank;
     nshvc_screen_set(&s);
     if (pic.blank)
         return;
     nshvc_mode_set(pic.mode, pic.bg3_priority, 0);
+    {
+        nshvc_limits l;
+
+        memset(&l, 0, sizeof l);
+        if (menu_full)
+            memcpy(l.layer_clip, pic.layer_clip, sizeof l.layer_clip);
+        nshvc_limits_set(&l);
+    }
     if (full) {
         full_window_draw(sh);
         return;
@@ -417,7 +427,18 @@ void video_draw(void)
     nshvc_blend_set(&pic.blend);
     nshvc_palette_write(0, 256, pic.palette);
     nshvc_sprites_show((pic.main_screen >> 4) & 1, (pic.sub_screen >> 4) & 1);
-    nshvc_sprites_set(pic.sprites, pic.sprite_count, 0);
+    if (menu_full) {
+        static nshvc_sprite moved[128];
+        uint32_t k, n = pic.sprite_count > 128 ? 128 : pic.sprite_count;
+
+        for (k = 0; k < n; k++) {
+            moved[k] = pic.sprites[k];
+            moved[k].x += sh->origin_x;
+            moved[k].y += sh->origin_y;
+        }
+        nshvc_sprites_set(moved, n, 0);
+    } else
+        nshvc_sprites_set(pic.sprites, pic.sprite_count, 0);
     if (pic.line_tables)
         menu_lines_send();
     if (pic.race.on)

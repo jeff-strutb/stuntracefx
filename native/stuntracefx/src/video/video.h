@@ -38,6 +38,10 @@ int screen_anchor_x(int x0, int x1);           /* columns to add to a piece of t
 int screen_view_anchor_x(int x0, int x1);      /* the same for a piece inside the original's view */
 int screen_anchor_y(int y0, int y1);           /* lines to add, by the piece's middle */
 int screen_bottom_shift(void);                 /* lines the panels' band moves down by */
+int screen_two_side(void);                     /* two players side by side (else above and below) */
+void screen_two_rect(int player, int *x, int *y, int *w, int *h); /* a player's rectangle of the screen */
+int screen_two_scale(int player);              /* its boxes' scale, 256ths */
+void screen_two_anchor(int player, int x0, int x1, int y0, int y1, int *dx, int *dy); /* where its original 144 x 80 view goes for a piece */
 int race_full_window(void);                    /* the one-player race fills the window */
 void race_hills_full(void);                    /* its hills and sky for the picture shown, or one between steps */
 uint16_t sky_colour_at(int at);                /* colour 1 at place `at` of the day and night lists */
