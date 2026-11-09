@@ -159,11 +159,14 @@ static void frame_side0(void)
 
 /* The step's clock: the frames since the last step taken, and what the
    original kept as time counters; the Super FX is told the frames too. */
+static void view_words_follow(void);
+
 static void frame_start(void)
 {
     g.frames_last_step = RACE_STEP_UPDATES;
     g.frames_since_step = 0;
     g.frame_stage_00 = 0x02;
+    view_words_follow();
 }
 
 static void frame_time(void)
@@ -586,6 +589,20 @@ static void view_params_by_players(void)
         g.view_centre_y = 0x0028;
         g.view_scale_34 = 0x6666;
         g.view_scale_32 = 0x71C7;
+    } else if (race_full_window()) {
+        /* the full window (plan stage 10, step B): the whole screen, the
+           horizon at the original's screen line 96 */
+        const ScreenShape *s = screen_shape();
+        FxViewWords w = fx_view_words(0, 0, s->width, s->height, 96 + s->origin_y);
+
+        g.view_left = w.left;
+        g.view_right = w.right;
+        g.view_top = w.top;
+        g.view_bottom = w.bottom;
+        g.view_centre_x = w.centre_x;
+        g.view_centre_y = w.centre_y;
+        g.view_scale_34 = w.scale_34;
+        g.view_scale_32 = w.scale_32;
     } else {
         g.view_left = 0;
         g.view_right = 0x00CF;
@@ -596,6 +613,22 @@ static void view_params_by_players(void)
         g.view_scale_34 = 0x4000;
         g.view_scale_32 = 0x4EC4;
     }
+}
+
+/* The view's words follow the screen at each step: the full window turned
+   on or off, the window's shape changed. Only the renderer reads them (the
+   frame program's projection and clips, the particles' drawing), so this
+   changes no game state the race plays on. */
+static void view_words_follow(void)
+{
+    uint16_t was[8] = { g.view_left, g.view_right, g.view_top, g.view_bottom,
+                        g.view_centre_x, g.view_centre_y, g.view_scale_34, g.view_scale_32 };
+
+    view_params_by_players();
+    if (was[0] != g.view_left || was[1] != g.view_right || was[2] != g.view_top || was[3] != g.view_bottom
+        || was[4] != g.view_centre_x || was[5] != g.view_centre_y || was[6] != g.view_scale_34
+        || was[7] != g.view_scale_32)
+        GsuParamsFromDp();
 }
 
 /* @routine 7E:F29F AttractViewStart: the race view's parameters, the setup tail. */
