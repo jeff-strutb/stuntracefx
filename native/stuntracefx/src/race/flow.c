@@ -12,6 +12,7 @@
 
 #include "audio/sound.h"
 #include "data/cart.h"
+#include "fx/fx.h"
 #include "fx/fx_draw.h"
 #include "hud/hud.h"
 #include "menu/menu.h"
@@ -747,8 +748,10 @@ static int demo_commands(void)
             flow.demo_at = (uint16_t)(at + 3);
             continue;
         case 0x02:
+            /* the text's address and its bank (the original's second word
+               store, at $2733, puts the bank at $2734) */
             fx16_set(FXIN_TEXT_NOTICE, cart16(0x03, (uint16_t)(0x8005 + at)));
-            fx8_set(FXIN_TEXT_NOTICE + 1, cart8(0x03, (uint16_t)(0x8006 + at)));
+            fx8_set(FX_TEXT_BANK, cart8(0x03, (uint16_t)(0x8007 + at)));
             flow.demo_at = (uint16_t)(at + 4);
             continue;
         case 0x03:
