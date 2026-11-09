@@ -9,7 +9,7 @@ register-shaped state, translation layer or imitated hardware anywhere between t
 
 ## Progress (updated as work lands)
 
-Not done: most of the game. Of about 120,000 lines to convert, about 5,100 lines of new code exist so far, plus the Super FX logic below brought over unchanged from the generator's output.
+Not done: most of the game. Since decision 4 (2026-11-09) the native game is the Enhanced game; stage 10 says what that means. Of about 120,000 lines to convert, about 5,100 lines of new code exist so far, plus the Super FX logic below brought over unchanged from the generator's output.
 
 | Stage | State |
 |---|---|
@@ -228,20 +228,31 @@ polygons byte identical; 3D frames differ on polygon edges only (section 1, item
 `race/`, the rest of `object/`, HUD logic. **Check:** the game state compared with the recording at each race step under the recorded
 pacing (section 6); then `nshvc-check` on race plays. Expected: state identical at every step; pictures differ on polygon edges only.
 
-### Stage 8. Pacing
-Method fixed now, value set from evidence. Record `$0306` per step across every race play in bsnes, by course and by one or two
-players. Existing recordings (not all confirmed to be the original's) show steps of 4 to 7 video frames, most often 5 and 6, with
-courses differing. The race runs one whole step every N updates, N a constant of the game chosen by view mode from that record's
-median, and the sim is given N. Expected result: the game's speed in real time is as the original's, without its slowdown; the median
-for a one-player race is 5 or 6. The approved whole-step design of 2026-10-28 used 6. **Check:** elapsed race time and distance per
-real second against the recording, per course.
+### Stage 8. Pacing (decision 4)
+The game is processor-speed independent. The race runs one whole step of the original's code every 6 updates at 60 updates a
+second, with the step's frame count given as 6 (the approved whole-step design of 2026-10-28), so the race's speed in real time
+is fixed and there is no slowdown. Every picture between two steps is drawn from the state between them (`draw(between)` and
+the updates in between), so the 3D moves at the display's rate. The recordings' medians (6 one player, 7 two players, 5 demos)
+are no longer a target. **Check:** steady 60 updates a second in every mode; distance per real second the same in every run.
 
 ### Stage 9. Input, options and platform glue
 **Delete:** `ports/stuntracefx/front`, `ports/stuntracefx/runtime`, `ports/common`.
 
-### Stage 10. The game's own features (decision 2)
-Frame rate 60 by `draw(between)`, the wide picture, solid tyres, the pause screen, each rebuilt on the API as the game's choice. There
-is no Original or Enhanced mode. `fullwindow.c`'s CPU span generator is not brought over.
+### Stage 10. The Enhanced game (decisions 2 and 4)
+This is the game now, not an option beside an original mode. Matching the original's pictures and pace is no longer the bar; the
+game's own logic (its physics, objects, menus, rules) stays the game's, and recordings are kept only to find bugs.
+- The race fills the window at any size and shape, the view's width following the window's aspect; the HUD and panels float at
+  the screen's edges and corners; the sky and hills reach any width; view distance unlimited.
+- High-resolution 3D: the frame's shapes projected at the output's resolution (the view's words scaled, sub-pixel vertices) and
+  filled by the GPU with the smooth rule. The exact rule and the 256 x 224 Super FX screen are not kept.
+- Frame rate: whole steps every 6 updates, the 3D drawn between them from interpolated cameras and objects, and pictures between
+  updates on displays faster than 60 Hz.
+- Menus in the whole window.
+- Solid shapes for the sprites that show solid things: the cars' tyres, the 4WD's eyes, the bonus trucks' wheels, the trees
+  (faceted, as approved); effects stay sprites. No filtered or upscaled art.
+- The pause screen with the controller panel and key remapping on every host, the options (auto-accelerate), and typing the
+  initials on a keyboard.
+`fullwindow.c`'s CPU span generator is not brought over; its decisions (view words, anchors, sky) are the reference.
 
 ### Stage 11. Whole game
 Finder zero on `native/stuntracefx`; section 8's criteria; every play through `nshvc-check`; every reachable platform.
@@ -331,6 +342,7 @@ Settled by the maintainer, 2026-11-09:
 | 1 | May the physics and `model.c` start from the generated `fxgen-w` output, then be renamed and restructured by hand? | Yes |
 | 2 | Are Frame rate 60, the wide picture, solid tyres, the pause screen and the other remaster features part of this conversion? | Yes, all of them, as stage 10 |
 | 3 | Polygon edges: accept the engine's exact rule, with edges measured against bsnes? | Yes |
+| 4 | Race pacing: a fixed step length from the recordings' median makes races 0.8-1.8% slow; which way? (asked 2026-11-09) | Jeff: "We can abandon matching the original and go all in on the enhanced. This isn't an emulation effort at all anymore." |
 
 ## 10. What is not known
 
