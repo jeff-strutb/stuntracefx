@@ -2461,7 +2461,7 @@ void ObjectSlideMeter(Object *o)
 }
 
 /* @routine 09:E581 ObjectTrailZoneStep */
-void ObjectTrailZoneStep(Object *o) { g.byte_19e7 = hit(o) ? 0x01 : 0x00; }
+void ObjectTrailZoneStep(Object *o) { g.trail_zone_on = hit(o) ? 0x01 : 0x00; }
 
 /* @routine 09:E53C ObjectTrailZone, 09:E55A ObjectTrailZoneRecord */
 GATE(ObjectTrailZone, ObjectTrailZoneRecord, ObjectTrailZoneStep, H9_TRAIL_ZONE_RECORD, H9_TRAIL_ZONE_STEP, 0x1680)
@@ -2469,7 +2469,7 @@ GATE(ObjectTrailZone, ObjectTrailZoneRecord, ObjectTrailZoneStep, H9_TRAIL_ZONE_
 /* A trail's frame: in the zone it follows the player */
 static void trail_frame(Object *o, uint16_t dz, uint16_t dx, uint16_t drift)
 {
-    if (g.byte_19e7) {
+    if (g.trail_zone_on) {
         const Object *p = obj_at(g.player_car);
         int moved;
 

@@ -52,7 +52,7 @@ typedef struct {
     uint8_t byte_0e92;                  /* $0E92 */
 
     /* ---- the race: its flow, cars, laps and times ---- */
-    uint8_t byte_19e6, byte_19e7, byte_19e8, byte_19e9, byte_19ea, byte_19ec, byte_19f0, byte_19f2; /* $19E6-$19F2: cleared with the windows */
+    uint8_t byte_19e6, trail_zone_on, byte_19e8, byte_19e9, byte_19ea, byte_19ec, byte_19f0, byte_19f2; /* $19E6-$19F2: cleared with the windows */
     uint8_t byte_1a04, byte_1a06, byte_1a07, byte_1a29; /* $1A04, $1A06, $1A07, $1A29 */
     uint8_t hud_mode;                   /* $0D2B: 0 speed, 1 stunt, 2 two-player, 3 demo */
     uint8_t split_screen;               /* $0D62: 0 one player, else the two-player split */
@@ -187,7 +187,6 @@ typedef struct {
     uint16_t director[2];               /* $1ADA, $1ADC: the two bare objects that move the cameras */
     uint16_t trigger_list[0x104][2];    /* $1AF5: code and bucket number per entry, ended by 0 */
     uint16_t pace_z;                    /* $1F73 */
-    uint16_t word_1176;                 /* $1176 */
     uint8_t lamp_lights;                /* $1A5B: the start lamps' bits */
     uint16_t control_held, control_prev; /* $1AF0, $1AF2: the buttons the controls code is reading */
     uint16_t race_last[2];              /* $1F23, $1F25: last race step's buttons */
@@ -197,7 +196,7 @@ typedef struct {
     uint16_t selection_out[4];          /* $18D3: each racer's model (words) */
     uint16_t selection_handler[4];      /* $18DB: each racer's control word */
     uint16_t selection_derived[4];      /* $18E3 */
-    uint8_t script_byte_1f71, script_byte_1f72;
+    uint8_t script_byte_1f71;
     uint8_t course;                     /* $0E3D */
     uint16_t frame_record_count;        /* $0CEE: the records built for the renderer this frame */
     uint8_t frame_records[64 * 30];     /* $7E:F77F: those records, 30 bytes each */

@@ -1,0 +1,223 @@
+NOTES: the routines of src/stuntracefx/object that are not converted, and
+where the Enhanced calls were left out.
+
+Nothing in native/stuntracefx/src/object has been run. It compiles; the
+race flow that would run it is not finished.
+
+Dead routines
+-------------
+Proof, for each below: no call or jump to it from the game's code in asm/ or
+src/ other than from another routine on this list, its address stored by no
+live routine, and no three-byte pointer to it in the ROM (scanned over
+assets/cart.dat). Routines the original's unit scripts reach count as dead
+when that is all that reaches them. Sign-store entries (the "XSign" and
+"YSign" entries of the shard, ring and fan routines) are inner entries no
+live pointer names; their logic is in the converted routine.
+
+ROM bytes that happen to spell a pointer to a routine do not make it live.
+Those seen: 08:D808 ObjectFallerRecord (inside a run of 08 D8), 09:CE30
+LapSignStep1, 09:D030 ObjectWheelStepXSign, 03:D289 ObjectSet39To4Continue,
+03:C870 ObjectPointDistanceXZ, 03:D2F0 ObjectChildFindTagY. None has a
+caller or setter among the live routines. Should the race ever run one, the
+handler table reports it once on stderr.
+
+car_parts.c (1)
+  08:B0B1 ObjectRivalCarB
+
+draw_list.c (1)
+  7E:F0D3 ObjectDrawListClear08
+
+flags_record.c (6)
+  08:CA2D ObjectStopMarked, 08:CA56 ObjectFrameCycleSetup, 08:CA6F
+  ObjectFrameCycleStep, 08:CAA2 ObjectFrameCycleBackSetup, 08:CAC3
+  ObjectFrameCycleBackStep, 08:CD25 ObjectFlagsRecordSetup20
+
+gsu_record.c (14)
+  08:B467 GsuRecordListFlag80, 08:C096 ReturnLongC096, 08:C097
+  ObjectRecordChildrenMark, 08:CBFF GsuRecordNew424Zero, 08:CC31
+  GsuRecordNew424B, 08:CD84 ObjectRecordMarkSetup, 08:CDA4
+  ObjectRecordMarkStep, 08:CDAD ObjectSyncFallStep, 08:CDB2 ObjectSpinSetup,
+  08:CDD0 ObjectSpinRecord, 08:CDDE ObjectSpinStep, 08:CE79
+  ObjectSyncFromRecordFall, 08:CF0B ObjectSyncAngles, 08:D8C2
+  GsuRecordPositionFromObject
+
+lamps_08.c (26)
+  08:843C ObjectCameraPad, 08:844F ObjectCameraPadStep, 08:8472
+  ObjectCameraPadB, 08:8485 ObjectCameraPadStepB, 08:84A8
+  ObjectCameraPadSetup, 08:84B7 ObjectCameraPadRecord, 08:84DF
+  ObjectContactsCameraPoint, 08:D09E ObjectSpin8Kind0, 08:D0AC
+  ObjectSpin8Kind1, 08:D0BA ObjectSpin8Kind2, 08:D0C8 ObjectSpin8Kind3,
+  08:D0DE ObjectSpin8Step, 08:D0E8 ObjectRecordMatch, 08:D0F7
+  ObjectRecordMatchStep, 08:D61B ObjectBreakOffBurst15, 08:D654
+  ObjectLampPair08, 08:D6D0 ObjectLampStack, 08:D7A2 ObjectLampLow08,
+  08:D7BC ObjectFaller, 08:D7BE ObjectFallerB, 08:D808 ObjectFallerRecord,
+  08:D816 ObjectFallerStep, 08:D8E4 ObjectSpray8, 08:DB7A
+  ObjectSprayPieceStart, 08:DB90 ObjectSprayPieceStep, 08:DBD9
+  ObjectPlayerPassCount
+
+object.c (17)
+  08:B296 ObjectCarRecordSetup, 08:B2DE ObjectCarPoseStep, 08:B36F
+  ObjectMoveForwardXSign, 08:B394 ObjectMoveForwardZSign, 08:B48A
+  ObjectSet5DByKindLong, 08:B680 ObjectReleaseWhenPassed, 08:B6B8
+  ObjectReleaseWhenPassedBehind, 08:B782 ObjectListRemove, 08:B7C6
+  ObjectListClear, 08:B846 PlayerLinkSet27, 08:B9DD ObjectCarRecordRestart,
+  08:E96A ObjectTrailSignX, 08:E982 ObjectTrailSignY, 08:EBF5
+  ObjectAttachedSignX, 08:EC77 ObjectTimedSetup, 08:EC8B ObjectTimedStep,
+  7E:F141 ObjectGroupsActivateClear08
+
+object_continue.c (10)
+  03:D25F ObjectStep39Continue, 03:D269 ObjectSet39To0Continue, 03:D271
+  ObjectSet39To1Continue, 03:D279 ObjectSet39To2Continue, 03:D281
+  ObjectSet39To3Continue, 03:D289 ObjectSet39To4Continue, 03:D291
+  ObjectSet39To5Continue, 03:D29D ObjectStubReturn, 03:D29E
+  ObjectContinue1A, 03:D2BC ObjectContinue1D
+
+object_fields.c (8)
+  03:CBE0 ObjectStubZero, 03:CBE8 ObjectStubZeroCopy, 03:CBF0
+  ObjectPlaceAtOffset, 03:CD8F ObjectStepByte17, 03:D1B2 ObjectStubNothing,
+  03:D1B7 ObjectStubSwapTwice, 03:D23A ObjectStopX, 03:D24B ObjectStopY
+
+object_find.c (18)
+  03:C08F ObjectAtPoint, 03:C0D6 ObjectNextOfKind, 03:C115
+  ObjectNextFlagged, 03:C175 ObjectNearestOfKind, 03:C1EC ObjectFirstWithin,
+  03:C251 ObjectFirstOfKind, 03:C265 ObjectCountOfKind, 03:C81F
+  ObjectPointGsu81E3, 03:C836 ObjectOffsetDistanceXZ, 03:C870
+  ObjectPointDistanceXZ, 03:C8A2 ObjectPointDistanceXY, 03:C8D3
+  ObjectVelocityAddFrom, 03:C90C ObjectPairGsu81E3, 03:C929
+  ObjectPairPitchGsu81E3, 03:C948 ObjectPairOffsetGsu81E3, 03:C976
+  ObjectPairOffsetPitchGsu81E3, 03:CA19 ObjectDistanceApprox, 03:CA85
+  ObjectDistanceXY
+
+object_handlers.c (22)
+  08:8A59 CameraDirectorFixedStart, 08:8A75 CameraDirectorFixed, 08:8A8A
+  CameraNearestCar, 08:8B5B CameraDirectorNext, 08:8BD7 CameraDirectorHold,
+  08:8BFB CameraDirectorSkip3, 08:8C43 CameraDirectorSkip5, 08:8EB1
+  CameraDirectorReset, 08:9ECD ObjectHandlerEmptyC, 08:9ECE
+  ObjectMarkerStart, 08:9EFD ObjectMarkerFollow, 08:9FEC CameraOnCarNear,
+  08:A02F DataBank7E, 08:A033 DataBank7EEnd, 08:BBA2 ObjectChildLooseBack,
+  08:D29B ObjectBreakOffC, 08:D428 ObjectPieceFallStart, 08:D4B9
+  ObjectPieceSprayXSign, 08:D4CB ObjectPieceSprayYSign, 08:D4E6
+  ObjectPieceSprayZSign, 08:EDDB ObjectHandlerEmptyA, 08:EDDC
+  ObjectHandlerEmptyB
+
+object_links.c (7)
+  03:B8E7 ObjectListTableFirst, 03:CBB0 ObjectListFreeAll, 03:CBC8
+  ObjectListFreeAllCopy, 03:CCEB ObjectLinkChild, 03:D2DA
+  ObjectChildFindTagX, 03:D2F0 ObjectChildFindTagY, 03:D365 ObjectSpawnA040
+
+objects_09.c (80)
+  09:8D34 ObjectScoreCounterTick, 09:8DB1 ObjectScoreCounterSlide, 09:8E0A
+  ObjectFlyingPieceRelease, 09:8EAF ObjectFireworkBurst, 09:90C3
+  ObjectFireworkShellPair, 09:931C ObjectClear25Bit0, 09:9325
+  ObjectPlatform, 09:934D ObjectPlatformRecord, 09:937A ObjectPlatformStep,
+  09:9496 ObjectSkyBallLaunch, 09:9599 ObjectBallFollowPlayer, 09:95D1
+  ObjectSkyBallFall, 09:95FC ObjectSkyBallRise, 09:9793
+  ObjectCannonBallsLeft, 09:992F ObjectCannonBallsRight, 09:9B05
+  ObjectCannonBallFlyLeft, 09:9B39 ObjectCannonBallFlyRight, 09:9B6D
+  ObjectCannonBallHome, 09:9CE4 ObjectWaveBallLaunchA, 09:9D76
+  ObjectWaveBallLaunchB, 09:9E08 ObjectWaveBallLaunchC, 09:9EA6
+  ObjectWaveBallHome, 09:9FE1 ObjectStarSparkleSpawn, 09:B351
+  ObjectShatterShard1XSign, 09:B364 ObjectShatterShard1YSign, 09:B438
+  ObjectShatterShard2XSign, 09:B44B ObjectShatterShard2YSign, 09:B519
+  ObjectShatterShard3XSign, 09:B532 ObjectShatterShard3YSign, 09:B600
+  ObjectShatterShard4XSign, 09:B619 ObjectShatterShard4YSign, 09:B6E7
+  ObjectShatterShard5XSign, 09:B700 ObjectShatterShard5YSign, 09:B7CE
+  ObjectShatterShard6XSign, 09:B7E1 ObjectShatterShard6YSign, 09:B8BC
+  ObjectShatter2Shard1XSign, 09:B8CF ObjectShatter2Shard1YSign, 09:B9A3
+  ObjectShatter2Shard2XSign, 09:B9B6 ObjectShatter2Shard2YSign, 09:BA84
+  ObjectShatter2Shard3XSign, 09:BA9D ObjectShatter2Shard3YSign, 09:BB6B
+  ObjectShatter2Shard4XSign, 09:BB84 ObjectShatter2Shard4YSign, 09:BC52
+  ObjectShatter2Shard5XSign, 09:BC6B ObjectShatter2Shard5YSign, 09:BD39
+  ObjectShatter2Shard6XSign, 09:BD4C ObjectShatter2Shard6YSign, 09:C0BE
+  ObjectRiderSpawn, 09:C0FE ObjectRiderStep, 09:C17C MarkerBounceX, 09:C1D9
+  ObjectShatterMarker, 09:C217 ObjectShatterMarkerRecord, 09:C225
+  ObjectShatterMarkerStep, 09:C3ED ObjectPuffFollow, 09:C455 ObjectBob,
+  09:C5B6 ObjectColour0, 09:C5BF ObjectColour1, 09:C9FD ObjectRingStepXSign,
+  09:CA0F ObjectRingStepYSign, 09:CA22 ObjectRingStepZSign, 09:CB05
+  ObjectSpinnerStepXSign, 09:CB17 ObjectSpinnerStepYSign, 09:CB2A
+  ObjectSpinnerStepZSign, 09:CC53 ObjectLapSignGate, 09:CC76
+  ObjectLapSignGateRecord, 09:CC9D ObjectLapSignGateStep, 09:CCEF
+  LapSignSpawn0, 09:CD46 LapSignSpawn1, 09:CD9D LapSignSpawn2, 09:CDF4
+  LapSignStep0, 09:CE30 LapSignStep1, 09:CE6C LapSignStep2, 09:CEF5
+  ObjectFanStepXSign, 09:CF07 ObjectFanStepYSign, 09:CF1A
+  ObjectFanStepZSign, 09:D030 ObjectWheelStepXSign, 09:D042
+  ObjectWheelStepYSign, 09:D055 ObjectWheelStepZSign, 09:D4EA
+  ObjectScaleUp6, 09:D695 BreakablePairB
+
+replay_camera.c (34)
+  08:90D9 CameraSnapToTable, 08:9176 CameraTableStep, 08:928A
+  CameraFixedAhead, 08:92DC CameraHoldStep, 08:937E CameraFixedSide, 08:93D4
+  CameraHoldStep2, 08:95A0 CameraFollowCar, 08:95C7 CameraFollowCarStep,
+  08:96A3 CameraLiftOff, 08:96D1 CameraLiftOffStep, 08:9702 CameraBeside,
+  08:9711 CameraBesideStep, 08:9787 CameraBesideWait, 08:9797
+  CameraTrackHalf, 08:9825 CameraTrackHalfStep, 08:9833 CameraReturn,
+  08:9847 CameraReturnStep, 08:9861 CameraPathFollow, 08:9888
+  CameraPathFollowStep, 08:9896 CameraPath8603, 08:98B1 CameraPath8643,
+  08:98CC CameraPath8679, 08:98E7 CameraPath869B, 08:9902 CameraPath86B3,
+  08:991D CameraPath86CB, 08:9938 CameraPath8709, 08:9946 CameraPath86E3,
+  08:9961 CameraPath86FB, 08:9992 CameraLowBehind, 08:99DC
+  CameraPathLow87B7, 08:99E6 CameraPathLow875B, 08:9A0D CameraPathLowStep,
+  08:9A16 CameraLowHold, 08:9A25 CameraLowHoldStep
+
+Original paths that are not reproduced
+--------------------------------------
+09:EC2A ObjectSlideGateUpStep, a hit with the fog colour at $7FFF: the
+original runs operand bytes as code and ends in ROM data at $CA:E7EC. Here
+the frame ends. Direct page $5C and $0DA7 are written by these objects and
+read by nothing, so those writes are left out; $1A05 likewise (only the
+unreached SlideOutWobble reads it).
+Direct page $00 (the rails' colour, the shards' third axis) and $80 (the
+burst gate's pitch) are read as 0: no label-addressed store writes other
+than 0 to them in the game's code. An indexed store landing there was not
+ruled out.
+Stray stores to low RAM on paths that need a missing record or an empty
+list are skipped, with a comment where each is: ring_spawn, the track
+director with no entry, ObjectFree with no next, the sky ball when the spawn
+fails, ObjectPlaceAll and GsuRecordWords88 with a count of 0.
+
+Enhanced calls left out (stage 10 brings them back), by original function
+-------------------------------------------------------------------------
+car_parts.c rm_eased16: rm_eased16, rm_share_by, rm_sharing
+car_parts.c rm_eased8: rm_eased8, rm_share_by, rm_sharing
+car_parts.c return_frame: rm_eased16, rm_eased8
+draw_list.c parked_child: rm_enhanced, rm_redrawing
+draw_list.c draw_record: rm_gaze_of, rm_record_look
+draw_list.c far_record: rm_look_dy
+draw_list.c far_records: rm_far_left_out
+draw_list.c ObjectDrawListBuild: rm_enhanced, rm_whole_steps
+object.c apply_velocity: rm_share
+object.c ObjectInit: rm_object_made
+object.c ObjectNearFocus: rm_enhanced
+object.c ObjectGroupsActivate: rm_objects_keep_running
+object.c ObjectsRunHandlers: rm_object_turn, rm_share
+object_handlers.c rm_eased16: rm_eased16, rm_share_by, rm_sharing
+object_handlers.c rm_eased8: rm_eased8, rm_share_by, rm_sharing
+object_handlers.c count_down: rm_step_due
+object_handlers.c ObjectBlinkerFade: rm_step_due
+object_handlers.c ObjectChildReturn: rm_eased16
+object_handlers.c ObjectPieceFall: rm_step_due
+object_handlers.c PlayerCarEvents: rm_step_due
+object_handlers.c ObjectLampDrop: rm_step_due
+object_handlers.c CameraApproachTarget: rm_eased16, rm_share, rm_step_due
+object_handlers.c CameraDirectorWait: rm_step_due
+objects_09.c counter_tick: rm_step_due
+objects_09.c add8s: rm_share
+objects_09.c add16s: rm_share
+objects_09.c add16_vias: rm_share, rm_sharing
+objects_09.c dec8s: rm_step_due
+objects_09.c inc8s: rm_step_due
+objects_09.c ease8s: rm_share_by, rm_sharing
+objects_09.c bob_frame: rm_step_due
+objects_09.c swing_frame: rm_step_due
+objects_09.c ObjectFloaterStep: rm_step_due
+objects_09.c fan_frame: rm_object_kept
+objects_09.c colour_cycle6: rm_step_due
+objects_09.c rail_slide: rm_share
+objects_09.c rail_drop_frame: rm_step_due
+objects_09.c GateSlideStep: rm_share
+objects_09.c colour_cycle: rm_step_due
+objects_09.c bounce_colour: rm_step_due
+objects_09.c ObjectShardStep: rm_share
+orient.c ease_half: rm_share_by
+orient.c ObjectFaceTied: rm_share_by
+replay_camera.c zoom_frame: rm_share_by, rm_sharing

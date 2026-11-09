@@ -1870,7 +1870,7 @@ void CameraOnMarkedCar(Object *o)
     Camera *c = &cameras[0];
 
     (void)o;
-    c->object = g.word_1176;
+    c->object = 0;                      /* $1176: only the unreached ObjectMarkerFollow writes it */
     c->place[0] = 0x0000;
     c->place[1] = 0xFF38;
     c->place[2] = 0x02BC;

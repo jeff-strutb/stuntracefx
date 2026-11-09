@@ -97,7 +97,6 @@ typedef struct {
     };
     uint16_t bucket_head[0x400];        /* $7F:0000: the object at the head of each map cell */
     ObjRef used_head, used_last, free_head; /* $0329, $032B, $032D */
-    ObjRef list_0325;                   /* $0325 */
     uint16_t place_table[8][4];         /* $7E:FF66: a course's start places: x, y, z, heading */
     uint16_t place_entries[4];          /* $7E:FFA6 */
     ObjRef place_objects[5];            /* $7E:FFAE, ended by 0 */

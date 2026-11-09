@@ -82,7 +82,6 @@ void CourseScriptRun(uint8_t bank, uint16_t at)
             g.frame_record_count = 0;
             g.course_options = 0;
             g.script_byte_1f71 = 0;
-            g.script_byte_1f72 = 0;
             ObjectPoolInit();
             x = (uint16_t)(y + 1);
             break;
