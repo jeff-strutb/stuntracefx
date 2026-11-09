@@ -34,6 +34,26 @@ static uint16_t voice_pitch[8];
 static int8_t voice_left[8], voice_right[8];
 static uint32_t pass_now;
 
+/* every pitch and volume told to a voice, the original's and the native's */
+enum { SET_PITCH, SET_LEFT, SET_RIGHT, SET_KINDS };
+#define SET_UNKNOWN 0x7FFF
+typedef struct { uint32_t t; uint8_t voice, kind; int16_t value; } Set;
+static Set *native_sets, *original_sets;
+static size_t n_native, n_original;
+static uint32_t time_now;
+#define SETS_MAX 40000000u
+
+static void set_add(Set *list, size_t *n, uint32_t v, int kind, int value)
+{
+    if (*n < SETS_MAX) {
+        list[*n].t = time_now;
+        list[*n].voice = (uint8_t)v;
+        list[*n].kind = (uint8_t)kind;
+        list[*n].value = (int16_t)value;
+        (*n)++;
+    }
+}
+
 static void add_event(int kind, uint32_t v, uint8_t source)
 {
     Event *e;
@@ -54,8 +74,14 @@ static void add_event(int kind, uint32_t v, uint8_t source)
 
 void nshvc_voice_key_on(uint32_t v, nshvc_sample s) { add_event(EV_KEY_ON, v, (uint8_t)(s.id - 1)); }
 void nshvc_voice_key_off(uint32_t v) { add_event(EV_KEY_OFF, v, 0); }
-void nshvc_voice_pitch(uint32_t v, uint16_t p) { voice_pitch[v] = p; }
-void nshvc_voice_volume(uint32_t v, int8_t l, int8_t r) { voice_left[v] = l; voice_right[v] = r; }
+void nshvc_voice_pitch(uint32_t v, uint16_t p) { voice_pitch[v] = p; set_add(native_sets, &n_native, v, SET_PITCH, p); }
+void nshvc_voice_volume(uint32_t v, int8_t l, int8_t r)
+{
+    voice_left[v] = l;
+    voice_right[v] = r;
+    set_add(native_sets, &n_native, v, SET_LEFT, l);
+    set_add(native_sets, &n_native, v, SET_RIGHT, r);
+}
 void nshvc_voice_adsr(uint32_t v, uint8_t a, uint8_t b, uint8_t c, uint8_t e) { (void)v; (void)a; (void)b; (void)c; (void)e; }
 void nshvc_voice_gain(uint32_t v, nshvc_gain_mode m, uint8_t x) { (void)v; (void)m; (void)x; }
 void nshvc_voice_options(uint32_t v, uint8_t a, uint8_t b, uint8_t c) { (void)v; (void)a; (void)b; (void)c; }
@@ -123,16 +149,57 @@ static void bank_from_machine(void)
 }
 
 static uint8_t port_wire[4];
+static uint32_t trace_frame;
+#define PASSES_MAX 4000000u
+static uint32_t *pass_ends;
+static size_t n_passes;
 static FILE *trace_f;
 
 void nshvc_music_send(const void *m, uint32_t size) { (void)m; (void)size; }
 uint32_t nshvc_music_receive(void *b, uint32_t max) { (void)b; (void)max; return 0; }
 nshvc_sample nshvc_sample_load(const void *d_, uint32_t size, nshvc_sample_format f, uint32_t loop) { nshvc_sample r; (void)d_; (void)size; (void)f; (void)loop; r.id = 0; return r; }
 
-static void pass(void)
+/* A pass in its two halves, with the original's pacing: the tick's work with
+   the timer periods it covers, and the DSP writes the next loop opens with. The
+   accumulators are 8-bit adds of the product's low byte, so a pass of many
+   periods can lose a carry, as the original's does. */
+static int output_due, latch_due;
+
+static void pass_work(uint8_t periods)
 {
-    memcpy(s.port_latch, port_wire, 0);
-    music_pass_with_wire(port_wire);
+    uint8_t add = (uint8_t)(periods * 0x20), tempo;
+
+    d.sfx_acc = (uint8_t)(d.sfx_acc + add);
+    if (d.sfx_acc < add) {
+        if (s.battle)
+            battle_sound_tick();
+        else
+            race_sound_tick();
+        if (d.echo_delay_wait != d.echo_delay)
+            d.echo_delay_wait++;
+    }
+    tempo = (uint8_t)((d.tempo >> 8) * periods);
+    d.music_acc = (uint8_t)(d.music_acc + tempo);
+    if (d.music_acc < tempo) {
+        driver_music_tick();
+        latch_due = 1;          /* the original reads its ports as the tick ends */
+    } else {
+        driver_between_ticks();
+    }
+    output_due = 1;
+}
+
+static int pass_output(void)
+{
+    if (!output_due)
+        return 0;
+    output_due = 0;
+    if (latch_due) {
+        memcpy(s.port_latch, port_wire, 4);
+        latch_due = 0;
+    }
+    driver_output();
+    return 1;
 }
 
 static void on_alarm(int sig)
@@ -184,6 +251,9 @@ int main(int argc, char **argv)
     bank = (SoundBank *)calloc(1, sizeof *bank);
 
     /* the original's DSP writes, and each time the driver started */
+    native_sets = (Set *)malloc(SETS_MAX * sizeof *native_sets);
+    original_sets = (Set *)malloc(SETS_MAX * sizeof *original_sets);
+    pass_ends = (uint32_t *)malloc(PASSES_MAX * sizeof *pass_ends);
     w = (DspWrite *)malloc((napu - 65536) / 8 * sizeof *w + 1);
     ko = (KeyOn *)malloc((napu - 65536) / 8 * sizeof *ko + 1);
     {
@@ -202,6 +272,14 @@ int main(int argc, char **argv)
                 reset_sample[nresets] = sample;
                 stop_sample[nresets] = 0xFFFFFFFFu;
                 nresets++;
+                time_now = sample;
+                {
+                    int vv, kk;
+
+                    for (vv = 0; vv < 8; vv++)
+                        for (kk = 0; kk < SET_KINDS; kk++)
+                            set_add(original_sets, &n_original, (uint32_t)vv, kk, SET_UNKNOWN);
+                }
             } else if (addr == 0x00F4 && v == 0xAA && nresets && stop_sample[nresets - 1] == 0xFFFFFFFFu) {
                 stop_sample[nresets - 1] = sample;      /* back in the upload protocol */
             } else if (addr == 0x00F3) {
@@ -212,10 +290,11 @@ int main(int argc, char **argv)
                 w[n_writes].value = v;
                 n_writes++;
                 if (dsp_reg < 0x80) {
-                    if (r == 0) left[voice] = (int8_t)v;
-                    else if (r == 1) right[voice] = (int8_t)v;
-                    else if (r == 2) pitch[voice] = (uint16_t)((pitch[voice] & 0x3F00) | v);
-                    else if (r == 3) pitch[voice] = (uint16_t)((pitch[voice] & 0xFF) | (v & 0x3F) << 8);
+                    time_now = sample;
+                    if (r == 0) { left[voice] = (int8_t)v; set_add(original_sets, &n_original, voice, SET_LEFT, (int8_t)v); }
+                    else if (r == 1) { right[voice] = (int8_t)v; set_add(original_sets, &n_original, voice, SET_RIGHT, (int8_t)v); }
+                    else if (r == 2) { pitch[voice] = (uint16_t)((pitch[voice] & 0x3F00) | v); set_add(original_sets, &n_original, voice, SET_PITCH, pitch[voice]); }
+                    else if (r == 3) { pitch[voice] = (uint16_t)((pitch[voice] & 0xFF) | (v & 0x3F) << 8); set_add(original_sets, &n_original, voice, SET_PITCH, pitch[voice]); }
                     else if (r == 4) srcn[voice] = v;
                 }
                 if (dsp_reg == 0x4C) {
@@ -237,47 +316,96 @@ int main(int argc, char **argv)
     }
     printf("driver starts %d; DSP writes %zu; key-ons %zu\n", nresets, n_writes, n_ko);
     {
-        size_t at_spc = 0;
-        int start = 0;
-        uint32_t now = reset_sample[0];
-        uint32_t end = now + max_pass * 64;
+        int start = -1, running = 0;
+        size_t at;
+        uint32_t limit = reset_sample[0] + max_pass * 64;
 
-        state_to_frame(now / 534 + 2);
-        bank_from_machine();
-        driver_reset();
-        s.battle = bank_byte(0x10E3) != 0xC4;
-        for (; now < end; now += 64) {
-            /* the driver is out of its main loop during an upload */
-            if (now >= stop_sample[start]) {
-                if (start + 1 >= nresets)
-                    break;
+        for (at = 0; at + 8 <= nspc; at += 8) {
+            uint32_t now = ((uint32_t)spc[at] | (uint32_t)spc[at + 1] << 8 | (uint32_t)spc[at + 2] << 16 | (uint32_t)spc[at + 3] << 24) / 64;
+            uint16_t addr = (uint16_t)(spc[at + 5] | spc[at + 6] << 8);
+            uint8_t value = spc[at + 7];
+            int v, k;
+
+            if (now >= limit)
+                break;
+            time_now = now;
+            pass_now = now / 64;
+            while (start + 1 < nresets && now >= reset_sample[start + 1]) {
                 start++;
-                state_to_frame(reset_sample[start] / 534 + 2);
+                state_to_frame(reset_sample[start] / 534 + 6);
                 bank_from_machine();
                 driver_reset();
                 s.battle = bank_byte(0x10E3) != 0xC4;
-                now = reset_sample[start];
+                running = 1;
+                output_due = latch_due = 0;
+                for (v = 0; v < 8; v++)
+                    for (k = 0; k < SET_KINDS; k++)
+                        set_add(native_sets, &n_native, (uint32_t)v, k, SET_UNKNOWN);
             }
-            pass_now = now / 64;
-            /* the ports as the SPC700 saw them up to now */
-            while (at_spc + 8 <= nspc) {
-                uint32_t t = (uint32_t)spc[at_spc] | (uint32_t)spc[at_spc + 1] << 8 | (uint32_t)spc[at_spc + 2] << 16 | (uint32_t)spc[at_spc + 3] << 24;
-                uint16_t addr = (uint16_t)(spc[at_spc + 5] | spc[at_spc + 6] << 8);
-
-                if (t / 64 > now)
-                    break;
-                if (!spc[at_spc + 4] && addr >= 0xF4 && addr <= 0xF7)
-                    port_wire[addr - 0xF4] = spc[at_spc + 7];
-                at_spc += 8;
-            }
-            pass();
-            if (trace_f && (now - reset_sample[0]) % 534 < 64) {
-                int c;
-                fprintf(trace_f, "%u", now / 534);
-                for (c = 0; c < 8; c++) fprintf(trace_f, " %02X:%02X:%02X:%02X", s.ch[c].command, s.ch[c].number, s.ch[c].active, s.ch[c].state);
-                fprintf(trace_f, " sfx %02X flags %02X loop %02X game %02X\n", d.sfx_voices, d.flags, s.loop_flags, s.game_flags);
+            if (start < 0)
+                continue;
+            if (now >= stop_sample[start])
+                running = 0;
+            if (spc[at + 4])
+                continue;
+            if (addr >= 0xF4 && addr <= 0xF7)
+                port_wire[addr - 0xF4] = value;
+            if (addr == 0xFD && running) {
+                if (pass_output() && n_passes < PASSES_MAX)
+                    pass_ends[n_passes++] = now;
+                if (trace_f && now / 534 != trace_frame) {
+                    trace_frame = now / 534;
+                    fprintf(trace_f, "%u", now);
+                    for (v = 0; v < 8; v++)
+                        fprintf(trace_f, " %d:%02X,%02X,%u,%u,a%u,f%u", v, s.ch[v].command, s.ch[v].number, s.ch[v].vol[0], s.ch[v].vol[1], s.ch[v].active, s.ch[v].fade_count[0]);
+                    fprintf(trace_f, " vol");
+                    for (v = 0; v < 8; v++)
+                        fprintf(trace_f, " %d,%d", voice_left[v], voice_right[v]);
+                    fprintf(trace_f, " sfxv %02X song %u\n", d.sfx_voices, d.song);
+                }
+                if (value)
+                    pass_work(value);
             }
         }
+    }
+    /* each voice's pitch and volumes at the end of every pass (strictly before the
+       timer read that ends it: the next pass's work carries that read's time) */
+    {
+        static const char *const names[SET_KINDS] = { "pitch", "left", "right" };
+        int v, k;
+        long total[SET_KINDS] = { 0 }, equal[SET_KINDS] = { 0 };
+
+        for (v = 0; v < 8; v++)
+            for (k = 0; k < SET_KINDS; k++) {
+                size_t a_n = 0, a_o = 0, e;
+                int nv = SET_UNKNOWN, ov = SET_UNKNOWN;
+                long v_total = 0, v_equal = 0;
+                int shown = 0;
+
+                for (e = 0; e < n_passes; e++) {
+                    uint32_t end = pass_ends[e];
+
+                    for (; a_n < n_native && native_sets[a_n].t < end; a_n++)
+                        if (native_sets[a_n].voice == v && native_sets[a_n].kind == k)
+                            nv = native_sets[a_n].value;
+                    for (; a_o < n_original && original_sets[a_o].t < end; a_o++)
+                        if (original_sets[a_o].voice == v && original_sets[a_o].kind == k)
+                            ov = original_sets[a_o].value;
+                    if (nv == SET_UNKNOWN || ov == SET_UNKNOWN)
+                        continue;
+                    v_total++;
+                    if (nv == ov)
+                        v_equal++;
+                    else if (shown++ < 5)
+                        printf("  sample %u voice %d %s: native %d original %d\n", end, v, names[k], nv, ov);
+                }
+                total[k] += v_total;
+                equal[k] += v_equal;
+                if (v_equal != v_total)
+                    printf("voice %d %s: %ld of %ld passes equal\n", v, names[k], v_equal, v_total);
+            }
+        for (k = 0; k < SET_KINDS; k++)
+            printf("%s: %ld of %ld voice-passes equal\n", names[k], equal[k], total[k]);
     }
     /* compare the two lists of key-ons in order, allowing small slips: the
        comparison finds the longest runs; only fields that define the note
@@ -308,7 +436,7 @@ int main(int argc, char **argv)
                 for (;;) {
                     while (ee < non && (on[ee].voice != v)) ee++;
                     while (kk < n_ko && ko[kk].voice != v) kk++;
-                    if (ee >= non || kk >= n_ko || on[ee].pass > last_pass)
+                    if (ee >= non || kk >= n_ko || on[ee].pass > last_pass + 8)
                         break;
                     if (on[ee].source == ko[kk].source && on[ee].pitch == ko[kk].pitch) {
                         v_same++;

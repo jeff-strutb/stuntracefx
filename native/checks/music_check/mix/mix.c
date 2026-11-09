@@ -67,8 +67,8 @@ static uint8_t *load(const char *dir, const char *name, size_t *n)
     return data;
 }
 
-static uint8_t *spc;
-static size_t nspc, spc_at;
+static uint8_t *spc, *apu;
+static size_t nspc, spc_at, napu;
 static uint32_t reset_sample[MAX_STARTS], stop_sample[MAX_STARTS];
 static int nresets, current = -1, running;
 static SoundBank *banks;
@@ -114,16 +114,19 @@ static void silence(void)
         nshvc_voice_key_off((uint32_t)v);
 }
 
-/* music_pass, for the key-on log (MIX_KEYLOG=FILE): each key-on with its pass's time */
+/* music_pass in its two halves, for the log and the recorded pacing: the tick's
+   work with the timer periods it covers, and the DSP writes the next loop opens
+   with. The accumulators are 8-bit adds of the product's low byte, so a pass of
+   many periods can lose a carry, as the original's does. */
 static FILE *keylog, *tempolog;
+static int output_due, latch_due, recorded_passes;
 
-static void pass(void)
+static void pass_work(uint8_t periods)
 {
-    uint8_t tempo;
-    int v;
+    uint8_t add = (uint8_t)(periods * 0x20), tempo;
 
-    d.sfx_acc = (uint8_t)(d.sfx_acc + 0x20);
-    if (d.sfx_acc < 0x20) {
+    d.sfx_acc = (uint8_t)(d.sfx_acc + add);
+    if (d.sfx_acc < add) {
         if (s.battle)
             battle_sound_tick();
         else
@@ -131,13 +134,30 @@ static void pass(void)
         if (d.echo_delay_wait != d.echo_delay)
             d.echo_delay_wait++;
     }
-    tempo = (uint8_t)(d.tempo >> 8);
+    tempo = (uint8_t)((d.tempo >> 8) * periods);
     d.music_acc = (uint8_t)(d.music_acc + tempo);
     if (d.music_acc < tempo) {
         driver_music_tick();
-        memcpy(s.port_latch, wire, 4);
+        if (recorded_passes)
+            latch_due = 1;      /* the original reads its ports as the tick ends */
+        else
+            memcpy(s.port_latch, wire, 4);
     } else {
         driver_between_ticks();
+    }
+    output_due = 1;
+}
+
+static void pass_output(void)
+{
+    int v;
+
+    if (!output_due)
+        return;
+    output_due = 0;
+    if (latch_due) {
+        memcpy(s.port_latch, wire, 4);
+        latch_due = 0;
     }
     if (keylog)
         for (v = 0; v < DRIVER_VOICES; v++)
@@ -146,27 +166,14 @@ static void pass(void)
     driver_output();
 }
 
-/* one pass of the driver with the recorded ports, every 64 samples from the
-   driver's start, as its timer runs */
-static void tick(void)
-{
-    uint32_t now = (uint32_t)ticks++;
+/* MIX_RECORDED_PASSES: the passes where the original's were: its reads of the
+   timer's counter give each pass's start and periods, and its next read comes
+   just after that pass's DSP writes. Otherwise one pass every 64 samples from
+   the driver's start, as the game runs it. */
+static size_t fd_at;
 
-    while (current + 1 < nresets && now >= reset_sample[current + 1]) {
-        current++;
-        d.bank = &banks[current];
-        driver_reset();
-        s.battle = battle_flag[current];
-        running = 1;
-    }
-    if (current < 0 || ((now - reset_sample[current]) & 63))
-        return;
-    if (now >= stop_sample[current]) {
-        if (running)
-            silence();
-        running = 0;
-        return;
-    }
+static void ports_up_to(uint32_t now)
+{
     while (spc_at + 8 <= nspc) {
         uint32_t t = (uint32_t)spc[spc_at] | (uint32_t)spc[spc_at + 1] << 8 | (uint32_t)spc[spc_at + 2] << 16 | (uint32_t)spc[spc_at + 3] << 24;
         uint16_t addr = (uint16_t)(spc[spc_at + 5] | spc[spc_at + 6] << 8);
@@ -177,8 +184,162 @@ static void tick(void)
             wire[addr - 0xF4] = spc[spc_at + 7];
         spc_at += 8;
     }
-    if (running)
-        pass();
+}
+
+static void recorded_pass_events(uint32_t now)
+{
+    while (fd_at + 8 <= nspc) {
+        uint32_t t = (uint32_t)spc[fd_at] | (uint32_t)spc[fd_at + 1] << 8 | (uint32_t)spc[fd_at + 2] << 16 | (uint32_t)spc[fd_at + 3] << 24;
+        uint16_t addr = (uint16_t)(spc[fd_at + 5] | spc[fd_at + 6] << 8);
+        uint8_t v = spc[fd_at + 7];
+
+        if (t / 64 > now)
+            break;
+        fd_at += 8;
+        if (spc[fd_at - 4] || addr != 0xFD || t / 64 < reset_sample[current])
+            continue;
+        if (running)
+            pass_output();
+        if (v && running)
+            pass_work(v);
+    }
+}
+
+/* MIX_DSP_REPLAY: no driver at all: the original's own DSP writes, each at its
+   sample, through the engine's voice calls. What is left against sound.raw is
+   the engine's mixer itself. */
+static int dsp_replay;
+static size_t apu_at = 65536;
+static uint8_t dsp_reg, dsp[256];
+
+static void options_send(void)
+{
+    int v;
+
+    for (v = 0; v < DRIVER_VOICES; v++)
+        nshvc_voice_options((uint32_t)v, (dsp[0x3D] >> v) & 1, (dsp[0x4D] >> v) & 1, (dsp[0x2D] >> v) & 1);
+}
+
+static void echo_send(void)
+{
+    int8_t fir[8];
+    int i;
+
+    for (i = 0; i < 8; i++)
+        fir[i] = (int8_t)dsp[(i << 4) | 0x0F];
+    nshvc_echo(dsp[0x7D] & 15, (int8_t)dsp[0x0D], (int8_t)dsp[0x2C], (int8_t)dsp[0x3C], fir);
+}
+
+static void dsp_write(uint8_t reg, uint8_t value)
+{
+    int v = reg >> 4, i;
+
+    dsp[reg] = value;
+    if (reg < 0x80 && (reg & 15) <= 7) {
+        switch (reg & 15) {
+        case 0: case 1:
+            nshvc_voice_volume((uint32_t)v, (int8_t)dsp[v << 4], (int8_t)dsp[v << 4 | 1]);
+            break;
+        case 2: case 3:
+            nshvc_voice_pitch((uint32_t)v, (uint16_t)((dsp[v << 4 | 3] & 0x3F) << 8 | dsp[v << 4 | 2]));
+            break;
+        case 5: case 6: case 7: {
+            uint8_t a1 = dsp[v << 4 | 5], a2 = dsp[v << 4 | 6], g = dsp[v << 4 | 7];
+
+            if (a1 & 0x80)
+                nshvc_voice_adsr((uint32_t)v, a1 & 15, (a1 >> 4) & 7, a2 >> 5, a2 & 31);
+            else if (g & 0x80)
+                nshvc_voice_gain((uint32_t)v, (nshvc_gain_mode)((g >> 5) & 7), g & 31);
+            else
+                nshvc_voice_gain((uint32_t)v, NSHVC_GAIN_DIRECT, g & 127);
+            break;
+        }
+        default:
+            break;
+        }
+        return;
+    }
+    switch (reg) {
+    case 0x0C: case 0x1C:
+        nshvc_sound_volume((int8_t)dsp[0x0C], (int8_t)dsp[0x1C]);
+        break;
+    case 0x2D: case 0x3D: case 0x4D:
+        options_send();
+        break;
+    case 0x4C:
+        for (i = 0; i < DRIVER_VOICES; i++)
+            if ((value >> i) & 1)
+                nshvc_voice_key_on((uint32_t)i, banks[current].samples[dsp[i << 4 | 4]]);
+        break;
+    case 0x5C:
+        for (i = 0; i < DRIVER_VOICES; i++)
+            if ((value >> i) & 1)
+                nshvc_voice_key_off((uint32_t)i);
+        break;
+    case 0x6C:
+        nshvc_sound_noise_rate(value & 31);
+        nshvc_echo_writes(!(value & 0x20));
+        nshvc_sound_mute((value & 0x40) != 0);
+        break;
+    case 0x0D: case 0x2C: case 0x3C: case 0x7D:
+    case 0x0F: case 0x1F: case 0x2F: case 0x3F: case 0x4F: case 0x5F: case 0x6F: case 0x7F:
+        echo_send();
+        break;
+    default:
+        break;
+    }
+}
+
+static void dsp_writes_up_to(uint32_t now)
+{
+    while (apu_at + 8 <= napu) {
+        uint32_t t = (uint32_t)apu[apu_at] | (uint32_t)apu[apu_at + 1] << 8 | (uint32_t)apu[apu_at + 2] << 16 | (uint32_t)apu[apu_at + 3] << 24;
+        uint16_t addr = (uint16_t)(apu[apu_at + 5] | apu[apu_at + 6] << 8);
+        uint8_t v = apu[apu_at + 7];
+
+        if (t > now)
+            break;
+        if (addr == 0xF2)
+            dsp_reg = v;
+        else if (addr == 0xF3 && current >= 0)
+            dsp_write(dsp_reg, v);
+        apu_at += 8;
+    }
+}
+
+static void tick(void)
+{
+    uint32_t now = (uint32_t)ticks++;
+
+    while (current + 1 < nresets && now >= reset_sample[current + 1]) {
+        current++;
+        d.bank = &banks[current];
+        if (dsp_replay)
+            continue;
+        driver_reset();
+        s.battle = battle_flag[current];
+        running = 1;
+        output_due = latch_due = 0;
+    }
+    if (current < 0)
+        return;
+    if (now >= stop_sample[current] && !dsp_replay) {
+        if (running)
+            silence();
+        running = 0;
+        return;
+    }
+    ports_up_to(now);
+    if (dsp_replay) {
+        dsp_writes_up_to(now);
+        return;
+    }
+    if (recorded_passes) {
+        recorded_pass_events(now);
+    } else if (!((now - reset_sample[current]) & 63) && running) {
+        pass_work(1);
+        pass_output();
+    }
     if (tempolog && (now % 534) < 64 && running)
         fprintf(tempolog, "%u %u %u %u %u %u %u\n", now, d.tempo, d.music_acc, d.sfx_acc, d.song, d.flags, d.pattern);
 }
@@ -186,8 +347,7 @@ static void tick(void)
 int main(int argc, char **argv)
 {
     static nshvc_game game;
-    uint8_t *apu;
-    size_t napu, i;
+    size_t i;
     char p[4096];
 
     if (argc < 2) {
@@ -210,6 +370,8 @@ int main(int argc, char **argv)
         }
     }
     snprintf(p, sizeof p, "%s/state.bin", argv[1]);
+    recorded_passes = getenv("MIX_RECORDED_PASSES") != NULL;
+    dsp_replay = getenv("MIX_DSP_REPLAY") != NULL;
     if (getenv("MIX_TEMPOLOG"))
         tempolog = fopen(getenv("MIX_TEMPOLOG"), "w");
     if (getenv("MIX_KEYLOG"))

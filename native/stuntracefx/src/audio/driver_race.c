@@ -139,11 +139,12 @@ void sfx_release(int x)
     else
         d.echo_voices &= (uint8_t)~bit;
     d.sfx_voices &= (uint8_t)~bit;
-    d.current_bit |= bit;
-    d.volume_dirty |= (uint8_t)(x + 1);
     d.current = (uint8_t)x;
     d.current_bit = bit;
-    driver_volume_write(v);
+    /* The original ORs a count it has just run down to 0 into the changed
+       voices, so the volume goes out only if this tick had already changed it. */
+    if (d.volume_dirty & bit)
+        driver_volume_write(v);
 }
 
 /* Takes a voice from the music and keys it off. */
@@ -481,13 +482,13 @@ static uint8_t engine_damp(uint8_t a)
 static void engine_volume(int x, uint8_t divisor, uint8_t floor_value)
 {
     Channel *c = &s.ch[x];
-    uint8_t a = spc_div_quotient((uint8_t)~s.port_in[3], divisor);
+    uint16_t sum = (uint16_t)(floor_value + spc_div_quotient((uint8_t)~s.port_in[3], divisor));
+    uint8_t a = (uint8_t)sum;
 
-    a = (uint8_t)(floor_value + a);
     if (s.effect_flags & 1)
         a = (uint8_t)(((uint16_t)a * (uint8_t)(s.engine_echo_scale - 1)) >> 8);
     if (d.flags & 4)
-        a = (uint8_t)(a + 3);
+        a = (uint8_t)(a + 3 + (sum > 0xFF));    /* the original's add keeps the carry of the sum above */
     a = engine_damp(a);
     a = (uint8_t)(((uint16_t)a * s.song5_scale) >> 8);
     if (s.game_flags & 0x10)
@@ -574,8 +575,7 @@ static void engine_pitch(int x, uint8_t index)
     }
     pitch = (uint16_t)(((uint16_t)multiple_lo[index] * s.engine_speed) + (uint16_t)(multiple_hi[index] << 8));
     pitch = (uint16_t)(pitch + s.ramp_a_pitch + s.ramp_b_pitch + s.engine_table);
-    if ((pitch >> 8) >= 0x3F)
-        pitch = (uint16_t)(0x3F00 | (pitch & 0xFF));
+    pitch = engine_pitch_top(pitch);
     s.port3_last = s.port_in[3];
     c->dsp_pitch = pitch;
 }

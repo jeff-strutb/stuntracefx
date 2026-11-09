@@ -20,12 +20,6 @@ typedef struct {
 static uint8_t wire[4];
 static uint32_t samples;
 
-void music_pass_with_wire(const uint8_t *w)
-{
-    memcpy(wire, w, 4);
-    music_pass();
-}
-
 void music_pass(void)
 {
     uint8_t tempo;

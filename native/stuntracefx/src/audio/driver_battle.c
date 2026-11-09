@@ -570,8 +570,7 @@ void battle_special(int x)
         pitch = (uint16_t)((uint16_t)multiple_lo[index] * s.b_speed[port] + (uint16_t)(multiple_hi[index] << 8));
         table = s.b_table[port];
         pitch = (uint16_t)(pitch + (port ? s.ramp_a_pitch : s.ramp_a2_pitch) + (port ? s.ramp_b_pitch : s.ramp_b2_pitch) + table);
-        if ((pitch >> 8) >= 0x3F)
-            pitch = (uint16_t)(0x3F00 | (pitch & 0xFF));
+        pitch = engine_pitch_top(pitch);
         s.bports_last[port] = speed;
         c->dsp_pitch = pitch;
     } else if (command == 0x17 || command == 0x25) {

@@ -18,6 +18,5 @@ void music_stop(void);                          /* the driver leaves, and waits 
 /* audio thread */
 void music_tick(void);
 void music_pass(void);                          /* one 64-sample pass of the driver */
-void music_pass_with_wire(const uint8_t *wire); /* the same with the given ports (the checks) */
 
 #endif

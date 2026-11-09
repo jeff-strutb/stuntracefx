@@ -68,6 +68,19 @@ typedef struct {
 
 extern Sfx s;
 
+/* The top of an engine sound's pitch: the original subtracts $3F from the high
+   byte in place and only replaces it with $3F if that came out positive, so a
+   lower pitch keeps the difference. The DSP reads six bits of it, which is one
+   more than the byte was. */
+static inline uint16_t engine_pitch_top(uint16_t pitch)
+{
+    uint8_t top = (uint8_t)((pitch >> 8) - 0x3F);
+
+    if (!(top & 0x80))
+        top = 0x3F;
+    return (uint16_t)(top << 8 | (pitch & 0xFF));
+}
+
 void race_sound_tick(void);
 void battle_sound_tick(void);
 void battle_special(int x);
