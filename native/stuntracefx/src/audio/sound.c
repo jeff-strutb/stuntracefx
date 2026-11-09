@@ -2,9 +2,11 @@
  * sound.c: the game's side of the sound.
  *
  * Commands queue for the driver and go out on odd frames. The original read
- * the driver's echo of a port and sent 0 while it showed a command; the
- * driver always answers within two frames (it looks at the ports every
- * 16 ms or sooner), so here the game knows the echo from what it sent.
+ * the driver's echo of a port and sent 0 while it showed a command, so a
+ * command stays on its port until the driver has taken it, however long that
+ * is. The queues and the sends therefore live with the driver on the audio
+ * thread (music.c), where the echo is; the game pushes commands and says when
+ * each frame ends.
  *
  * A load builds one image of the driver's memory on the game thread and hands
  * it over whole. The original's settling delays were time for the sound CPU
@@ -19,12 +21,6 @@
 #include "data/unpack.h"
 #include "system/state.h"
 
-typedef struct {
-    uint8_t ring[16], head, count, shown;
-} Queue;
-
-static Queue queue[2];
-static uint8_t ports[4];
 static uint8_t frame;
 static uint8_t image[0x10000];
 static uint8_t packed[0x8000];
@@ -43,71 +39,36 @@ void sound_init(void)
 /*
  * @routine 04:D6E1 SoundReset
  * WHAT IT DOES: Empties both sound queues, unmutes, and puts 0 on ports 3
- * and 2. A port's shown command stays shown, as a port the driver has not
- * answered does. (The original also cleared $0DD0, $0DD2, $0E1B and $0E1C,
- * which nothing reads.)
+ * and 2. (The original also cleared $0DD0, $0DD2, $0E1B and $0E1C, which
+ * nothing reads.)
  */
 void SoundReset(void)
 {
-    int q;
-
     sound_muted = 0;
-    for (q = 0; q < 2; q++)
-        queue[q].head = queue[q].count = 0;
-    ports[2] = ports[3] = 0;
-    music_ports(ports);
-}
-
-/* Append a byte to a ring, unless sound is muted or the ring is full. */
-static void push(Queue *q, uint8_t value)
-{
-    if (sound_muted || q->count >= 16)
-        return;
-    q->ring[(q->head + q->count) & 15] = value;
-    q->count++;
+    music_queues_reset();
 }
 
 /*
  * @routine 04:D649 SoundPort0QueuePushRaw
- * WHAT IT DOES: Queues a sound command for port 0 exactly as given.
+ * WHAT IT DOES: Queues a sound command for port 0 exactly as given, unless
+ * sound is muted (a full queue drops it too).
  */
 void SoundPort0QueuePushRaw(uint8_t command)
 {
-    push(&queue[0], command);
-}
-
-/* The slot after `count` queued bytes as the original works it out with the
-   CPU in decimal mode: its add of the count to the head is then a BCD add of
-   two binary numbers, so a low digit past 9 carries early (count 1 on head 9
-   gives slot 0, not 10). The 16 it takes off after comes out as a binary
-   subtraction for every sum it can make. */
-static uint8_t slot_decimal(uint8_t count, uint8_t head)
-{
-    unsigned low = (unsigned)(count & 15) + (head & 15), sum;
-
-    if (low > 9)
-        low += 6;
-    sum = (unsigned)(count & 0xF0) + (head & 0xF0) + (low > 15 ? 0x10u : 0u) + (low & 15);
-    if (sum > 0x9F)
-        sum += 0x60;
-    sum &= 0xFF;
-    return (uint8_t)(sum >= 0x10 ? sum - 0x10 : sum);
+    if (!sound_muted)
+        music_push(0, command, 0);
 }
 
 /*
  * @routine 04:D649 SoundPort0QueuePushRaw (called in decimal mode)
  * WHAT IT DOES: SoundPort0QueuePushRaw as the time bonus calls it, with the
- * CPU left in decimal mode: the byte goes to the slot the decimal add makes.
- * An empty ring takes it at its head either way.
+ * CPU left in decimal mode, which puts the byte in a different slot of the
+ * ring (music.c, slot_decimal).
  */
 void SoundPort0QueuePushRawDecimal(uint8_t command)
 {
-    Queue *q = &queue[0];
-
-    if (sound_muted || q->count >= 16)
-        return;
-    q->ring[q->count ? slot_decimal(q->count, q->head) : q->head] = command;
-    q->count++;
+    if (!sound_muted)
+        music_push(0, command, 1);
 }
 
 /*
@@ -116,7 +77,8 @@ void SoundPort0QueuePushRawDecimal(uint8_t command)
  */
 void SoundPort0QueuePush(uint8_t command)
 {
-    push(&queue[0], g.current_player ? (uint8_t)(command | 0x80) : command);
+    if (!sound_muted)
+        music_push(0, g.current_player ? (uint8_t)(command | 0x80) : command, 0);
 }
 
 /*
@@ -125,51 +87,28 @@ void SoundPort0QueuePush(uint8_t command)
  */
 void SoundPort1QueuePush(uint8_t command)
 {
-    push(&queue[1], command);
+    if (!sound_muted)
+        music_push(1, command, 0);
 }
 
 void sound_set_port0(uint8_t value)
 {
-    ports[0] = value;
-    queue[0].shown = value;
-    music_ports(ports);
-}
-
-/* One ring to its port: 0 while the port still shows a command, else the
-   oldest byte (the head steps on unless that was the last). */
-static void ring_send(Queue *q, uint8_t *port)
-{
-    if (q->shown) {
-        q->shown = 0;
-        *port = 0;
-        return;
-    }
-    if (!q->count)
-        return;
-    *port = q->shown = q->ring[q->head];
-    q->count--;
-    if (q->count)
-        q->head = (q->head + 1) & 15;
+    music_port0(value);
 }
 
 /*
- * @routine 7E:B112 SoundPortsSend
- * WHAT IT DOES: The frame's sound output: unless a hold is set, on odd frames
- * each port gets 0 while it still shows the last command, else the next byte
- * of its queue, then ports 2 and 3 get their values (0 while the engine
- * sounds are muted). The original's direct bytes $10E2 and $10E3 are never
- * written anywhere, so that path does not exist here.
+ * @routine 7E:B112 SoundPortsSend (the game's half)
+ * WHAT IT DOES: The frame's end for the sound: whether this is an odd frame,
+ * whether a hold stops the sends, and ports 2 and 3's values (0 while the
+ * engine sounds are muted). The sends themselves are in music.c. The
+ * original's direct bytes $10E2 and $10E3 are never written anywhere, so that
+ * path does not exist here.
  */
 void sound_frame(void)
 {
     frame++;
-    if (sound_hold_a || sound_hold_b || !(frame & 1))
-        return;
-    ring_send(&queue[0], &ports[0]);
-    ring_send(&queue[1], &ports[1]);
-    ports[2] = sound_mute_engines ? 0 : sound_port2;
-    ports[3] = sound_mute_engines ? 0 : sound_port3;
-    music_ports(ports);
+    music_frame(frame & 1, sound_hold_a || sound_hold_b,
+                sound_mute_engines ? 0 : sound_port2, sound_mute_engines ? 0 : sound_port3);
 }
 
 /* ---- the driver's memory ---- */
@@ -234,13 +173,6 @@ void sound_upload_packed(uint16_t which, uint8_t bank)
 
 void sound_upload_end(void)
 {
-    int q;
-
-    /* the driver starts by clearing what its ports show and what they read */
-    memset(ports, 0, sizeof ports);
-    for (q = 0; q < 2; q++)
-        queue[q].shown = 0;
-    music_ports(ports);
     music_bank_set(image, battle);
 }
 

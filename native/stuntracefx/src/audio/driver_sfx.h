@@ -38,6 +38,8 @@ typedef struct {
 typedef struct {
     Channel ch[8];
     uint8_t port_latch[4], port_in[4], port_seen;
+    uint8_t port_copy[4];       /* ports 1-3 as the last tick took them, shown back on them */
+    uint8_t port_out[4];        /* what the four ports show the game: the kept bytes at the last exchange */
     uint8_t port1_last, port3_last;
     uint8_t command, command_kept, hold_last, hold_index, hold_time;
     uint8_t queue[9];

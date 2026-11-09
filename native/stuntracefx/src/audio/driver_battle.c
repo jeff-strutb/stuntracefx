@@ -601,9 +601,9 @@ void battle_sound_tick(void)
     } else {
         s.port_in[0] = 0;
     }
-    s.port_in[1] = s.port_latch[1];
-    s.port_in[2] = s.port_latch[2];
-    s.port_in[3] = s.port_latch[3];
+    s.port_in[1] = s.port_copy[1] = s.port_latch[1];
+    s.port_in[2] = s.port_copy[2] = s.port_latch[2];
+    s.port_in[3] = s.port_copy[3] = s.port_latch[3];
     if (d.flags & 2)
         d.flags &= (uint8_t)~3;
     if (s.port_in[0] == 0x88)

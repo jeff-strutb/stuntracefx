@@ -9,16 +9,101 @@
 #include "driver_sfx.h"
 #include "music.h"
 
-enum { MESSAGE_PORTS, MESSAGE_BANK, MESSAGE_STOP };
+enum { MESSAGE_BANK, MESSAGE_STOP, MESSAGE_PUSH, MESSAGE_QUEUES_RESET, MESSAGE_PORT0, MESSAGE_FRAME };
 
 typedef struct {
     uint8_t kind, battle;
-    uint8_t ports[4];
+    uint8_t port, value, decimal;       /* a push, or port 0's byte */
+    uint8_t odd, held, port2, port3;    /* a frame */
     const SoundBank *bank;
 } Message;
 
-static uint8_t wire[4];
+/*
+ * The original's two command rings and its frame's sends to the ports live
+ * here, beside the driver, because the sends wait on the driver's echo of each
+ * port: a port showing a command gets 0 only once the driver shows that it
+ * has taken it. The game thread pushes commands and says when a frame ends.
+ */
+typedef struct {
+    uint8_t ring[16], head, count;
+} Queue;
+
+static Queue queue[2];
+static uint8_t wire[4];                 /* what the game has on the four ports */
 static uint32_t samples;
+
+/* The slot after `count` queued bytes as the original works it out with the
+   CPU in decimal mode: its add of the count to the head is then a BCD add of
+   two binary numbers, so a low digit past 9 carries early (count 1 on head 9
+   gives slot 0, not 10). The 16 it takes off after comes out as a binary
+   subtraction for every sum it can make. */
+static uint8_t slot_decimal(uint8_t count, uint8_t head)
+{
+    unsigned low = (unsigned)(count & 15) + (head & 15), sum;
+
+    if (low > 9)
+        low += 6;
+    sum = (unsigned)(count & 0xF0) + (head & 0xF0) + (low > 15 ? 0x10u : 0u) + (low & 15);
+    if (sum > 0x9F)
+        sum += 0x60;
+    sum &= 0xFF;
+    return (uint8_t)(sum >= 0x10 ? sum - 0x10 : sum);
+}
+
+/* Append a byte unless the ring is full. An empty ring takes it at its head. */
+static void queue_push(Queue *q, uint8_t value, int decimal)
+{
+    if (q->count >= 16)
+        return;
+    if (!q->count)
+        q->ring[q->head] = value;
+    else
+        q->ring[decimal ? slot_decimal(q->count, q->head) : (q->head + q->count) & 15] = value;
+    q->count++;
+}
+
+/* One ring to its port: 0 while the driver still shows a command there, else
+   the oldest byte (the head steps on unless that was the last). */
+static void ring_send(Queue *q, uint8_t echo, uint8_t *port)
+{
+    if (echo) {
+        *port = 0;
+        return;
+    }
+    if (!q->count)
+        return;
+    *port = q->ring[q->head];
+    q->count--;
+    if (q->count)
+        q->head = (q->head + 1) & 15;
+}
+
+/*
+ * @routine 7E:B112 SoundPortsSend
+ * WHAT IT DOES: The frame's sound output: unless a hold is set, on odd frames
+ * each port gets 0 while the driver still shows its last command, else the
+ * next byte of its queue, then ports 2 and 3 get their values.
+ */
+static void ports_send(const Message *m)
+{
+    if (m->held || !m->odd)
+        return;
+    ring_send(&queue[0], s.port_out[0], &wire[0]);
+    ring_send(&queue[1], s.port_out[1], &wire[1]);
+    wire[2] = m->port2;
+    wire[3] = m->port3;
+}
+
+/* The four port exchanges after a music tick: the driver shows the bytes it
+   keeps for the ports and reads what the game has put there. */
+static void port_exchange(void)
+{
+    s.port_out[0] = s.port_seen;
+    s.port_out[1] = s.port_copy[1];
+    s.port_out[2] = s.port_copy[2];
+    s.port_out[3] = s.port_copy[3];
+    memcpy(s.port_latch, wire, 4);
+}
 
 void music_pass(void)
 {
@@ -37,7 +122,7 @@ void music_pass(void)
     d.music_acc = (uint8_t)(d.music_acc + tempo);
     if (d.music_acc < tempo) {
         driver_music_tick();
-        memcpy(s.port_latch, wire, 4);          /* the four port exchanges after a music tick */
+        port_exchange();
     } else {
         driver_between_ticks();
     }
@@ -48,19 +133,38 @@ void music_pass(void)
 void music_tick(void)
 {
     Message m;
+    int q;
 
     if (++samples < 64)
         return;
     samples = 0;
     while (nshvc_music_receive(&m, sizeof m)) {
-        if (m.kind == MESSAGE_PORTS) {
-            memcpy(wire, m.ports, 4);
-        } else if (m.kind == MESSAGE_BANK) {
+        switch (m.kind) {
+        case MESSAGE_BANK:              /* the driver starts: its ports read 0 and show 0 */
             d.bank = m.bank;
             driver_reset();
             s.battle = m.battle;
-        } else {
+            memset(wire, 0, sizeof wire);
+            break;
+        case MESSAGE_STOP:
             driver_leave();
+            break;
+        case MESSAGE_PUSH:
+            queue_push(&queue[m.port & 1], m.value, m.decimal);
+            break;
+        case MESSAGE_QUEUES_RESET:
+            for (q = 0; q < 2; q++)
+                queue[q].head = queue[q].count = 0;
+            wire[2] = wire[3] = 0;
+            break;
+        case MESSAGE_PORT0:
+            wire[0] = m.value;
+            break;
+        case MESSAGE_FRAME:
+            ports_send(&m);
+            break;
+        default:
+            break;
         }
     }
     if (d.bank)
@@ -71,13 +175,47 @@ void music_tick(void)
 
 static void send(const Message *m) { nshvc_music_send(m, sizeof *m); }
 
-void music_ports(const uint8_t ports[4])
+void music_push(int port, uint8_t value, int decimal)
 {
     Message m;
 
     memset(&m, 0, sizeof m);
-    m.kind = MESSAGE_PORTS;
-    memcpy(m.ports, ports, 4);
+    m.kind = MESSAGE_PUSH;
+    m.port = (uint8_t)port;
+    m.value = value;
+    m.decimal = (uint8_t)(decimal != 0);
+    send(&m);
+}
+
+void music_queues_reset(void)
+{
+    Message m;
+
+    memset(&m, 0, sizeof m);
+    m.kind = MESSAGE_QUEUES_RESET;
+    send(&m);
+}
+
+void music_port0(uint8_t value)
+{
+    Message m;
+
+    memset(&m, 0, sizeof m);
+    m.kind = MESSAGE_PORT0;
+    m.value = value;
+    send(&m);
+}
+
+void music_frame(int odd, int held, uint8_t port2, uint8_t port3)
+{
+    Message m;
+
+    memset(&m, 0, sizeof m);
+    m.kind = MESSAGE_FRAME;
+    m.odd = (uint8_t)(odd != 0);
+    m.held = (uint8_t)(held != 0);
+    m.port2 = port2;
+    m.port3 = port3;
     send(&m);
 }
 
