@@ -16,6 +16,7 @@ enum { SHOW_BG1 = 1, SHOW_BG2 = 2, SHOW_BG3 = 4, SHOW_SPRITES = 16 };
 typedef struct {
     nshvc_tiles tiles;
     nshvc_map map;
+    nshvc_draw_list draw_list;          /* in place of tiles and map: the 3D layer */
     int32_t scroll_x, scroll_y;
 } Background;
 

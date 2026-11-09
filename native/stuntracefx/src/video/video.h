@@ -13,6 +13,7 @@
 #include <stdint.h>
 
 #include "data/cart.h"
+#include "nshvc/nshvc.h"
 
 /* tables in the code the original copied to work RAM ($7E:A2D9 up from ROM
    $01:0000, $7F:0800 up from $05:8000), by the address they ran at */
@@ -21,6 +22,29 @@ static inline uint16_t ram_code_7e16(uint16_t a) { const uint8_t *p = ram_code_7
 static inline uint8_t ram_code_7e8(uint16_t a) { return *ram_code_7e(a); }
 static inline const uint8_t *ram_code_7f(uint16_t a) { return &cart[0x58000u + (uint32_t)(a - 0x0800u)]; }
 static inline uint16_t ram_code_7f16(uint16_t a) { const uint8_t *p = ram_code_7f(a); return (uint16_t)(p[0] | p[1] << 8); }
+
+/* The race screen's engine objects, by role. */
+typedef struct {
+    nshvc_tiles tiles;                  /* the 4bpp art the backdrop and sprites share */
+    nshvc_tiles frame_tiles;            /* the frame around the 3D and the HUD art, 8bpp */
+    nshvc_map frame_map[2];             /* one per picture buffer */
+    nshvc_map backdrop_one;             /* 32 x 64 */
+    nshvc_map backdrop_two;             /* 64 x 128: four pages, then the panel repeated */
+} RaceVideo;
+
+extern RaceVideo race_video;
+
+void race_video_init(void);
+void race_art_write(uint16_t word, const uint8_t *data, uint32_t bytes);
+void race_frame_art_write(uint16_t word, const uint8_t *data, uint32_t bytes);
+void race_map_page_write(int page, const uint16_t *words);
+void race_panel_map_write(const uint16_t *words);
+void race_backdrop_two_write(int page, const uint16_t *words);
+void race_picture_shown(int buffer);
+void race_backdrop_rows_upload(int buffer);
+void race_panel_show(int half, uint8_t sign_of_y, uint8_t y_low, uint8_t y_high_when_plus, uint8_t y_when_minus, uint8_t x_low);
+void RaceVideoSetup(void);
+void RaceScreenSetup(void);
 
 /* ---- palettes ---- */
 
@@ -47,6 +71,7 @@ typedef struct {
     uint16_t hud_colours[6];            /* $0E21: the HUD's colours, blended */
     uint8_t cycle_phase[3];             /* $7E:FD5B, $FD5D, $FD5F: 0-15 */
     uint8_t course_cycle;               /* $0D30 */
+    uint8_t tile_cycle;                 /* $0DD5 */
 } Palettes;
 
 extern Palettes palettes;
@@ -210,7 +235,10 @@ void OamBufferHideLarge(void);
 void SpriteSlot1Countdown(void);
 
 /* wanted by the race (race/phases.c, the lap and results panels) */
-void OamBufferByteSet(uint16_t at, uint8_t value);  /* the byte at $0375-based `at` of the sprite buffer */
+void OamByteSet(uint16_t offset, uint8_t value);   /* a byte of the sprite table, 0-$21F */
+uint8_t SpriteYOnScreen(uint8_t y);                /* 7E:B005 */
+void SpriteBar4WithMarker(uint8_t value, uint16_t pos, uint16_t slot);
+void SpriteBar6WithMarker(uint8_t value, uint16_t pos, uint16_t slot);
 void OamHide75Up(void);
 void OamHideForHudMode(void);
 void OamStagePause(void);
