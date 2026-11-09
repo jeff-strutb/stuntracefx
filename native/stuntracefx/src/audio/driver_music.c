@@ -790,20 +790,27 @@ void driver_music_tick(void)
         if (!pattern_next())
             return;
     }
-restart:
-    d.volume_dirty = 0;
-    for (i = 0; i < DRIVER_VOICES; i++) {
-        Voice *v = &d.voice[i];
+    /* every voice steps; a voice finishing its pattern starts the next and the
+       voices step again */
+    for (;;) {
+        int finished = 0;
 
-        d.current = (uint8_t)i;
-        d.current_bit = (uint8_t)(1u << i);
-        if (!(v->track >> 8))
-            continue;
-        if (!voice_step(v)) {
-            if (!pattern_next())
-                return;
-            goto restart;
+        d.volume_dirty = 0;
+        for (i = 0; i < DRIVER_VOICES && !finished; i++) {
+            Voice *v = &d.voice[i];
+
+            d.current = (uint8_t)i;
+            d.current_bit = (uint8_t)(1u << i);
+            if (!(v->track >> 8))
+                continue;
+            if (!voice_step(v)) {
+                if (!pattern_next())
+                    return;
+                finished = 1;
+            }
         }
+        if (!finished)
+            break;
     }
     if (d.tempo_fade) {
         d.tempo_fade--;
@@ -917,7 +924,8 @@ void driver_output(void)
     }
     for (i = 0; i < DRIVER_VOICES; i++)
         if ((d.key_on & (1u << i)) && d.bank)
-            nshvc_voice_key_on((uint32_t)i, d.bank->samples[d.voice[i].source]);
+            nshvc_voice_key_on((uint32_t)i, d.voice[i].source == 0x23 && s.noise_header ?
+                               d.bank->noise[s.noise_header >> 1] : d.bank->samples[d.voice[i].source]);
     if (flg_ok && d.flg != d.sent_flg) {
         if ((d.flg ^ d.sent_flg) & 0x1F)
             nshvc_sound_noise_rate(d.flg & 0x1F);

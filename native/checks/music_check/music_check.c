@@ -117,6 +117,8 @@ static void bank_from_machine(void)
     memcpy(bank->bytes, machine + APU_AT, 0x10000);
     for (i = 0; i < DRIVER_SAMPLES; i++)
         bank->samples[i].id = (uint32_t)i + 1;
+    for (i = 0; i < 128; i++)
+        bank->noise[i].id = 0x23 + 1;   /* any noise variant is source $23 here */
     d.bank = bank;
 }
 

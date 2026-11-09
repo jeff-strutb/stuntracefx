@@ -30,6 +30,7 @@ enum {
 typedef struct {
     uint8_t bytes[0x10000];
     nshvc_sample samples[DRIVER_SAMPLES];
+    nshvc_sample noise[128];    /* source $23, by its block header's bits 1-7 */
 } SoundBank;
 
 typedef struct {

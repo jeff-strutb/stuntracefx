@@ -126,13 +126,64 @@ static nshvc_sample sample_of(const uint8_t *data, uint32_t size, uint32_t loop)
     return sample;
 }
 
-void music_bank_set(const uint8_t image[0x10000], int battle)
+/*
+ * The original's source $23 is 28 blocks at $FF00 that the driver rewrites
+ * with its noise generator while they play. Samples here do not change once
+ * made, so each header the sound effects ask for ($FD) gets one long noise
+ * made once, from the same generator and the same masks, at the original's
+ * four steps a block. A header without the loop flag keeps the 28 blocks, so
+ * that the voice stops when the original's would. One period of the
+ * generator (32,767 steps, about 8,192 blocks).
+ */
+#define NOISE_LONG_BLOCKS 8192
+#define NOISE_SHORT_BLOCKS 28
+static uint8_t noise_data[NOISE_LONG_BLOCKS * 9];
+
+static nshvc_sample noise_make(uint8_t header)
 {
-    int next = bank_in_use == 0 ? 1 : 0, e;
-    SoundBank *b = &banks[next];
-    Message m;
+    uint32_t blocks = (header & 2) ? NOISE_LONG_BLOCKS : NOISE_SHORT_BLOCKS;
+    uint32_t b, at = 0;
+    uint16_t lfsr = (uint16_t)(header << 8 | 1);
+    int step;
+
+    for (b = 0; b < blocks; b++) {
+        noise_data[at++] = b + 1 == blocks ? (uint8_t)(header | 1) : header;
+        for (step = 0; step < 4; step++) {
+            uint8_t hi = (uint8_t)(lfsr >> 8), lo = (uint8_t)lfsr;
+            uint8_t in = (uint8_t)(((hi >> 6) ^ (hi >> 5)) & 1);
+
+            lfsr = (uint16_t)((uint16_t)(hi << 1 | lo >> 7) << 8 | (uint8_t)(lo << 1 | in));
+            noise_data[at++] = (uint8_t)(((lfsr >> 8) & 0xD0) | 0x11);
+            noise_data[at++] = (uint8_t)((lfsr & 0xFF) | 0x11);
+        }
+    }
+    return sample_of(noise_data, at, 0);
+}
+
+/* The headers the bank's sound effects use: each script sets sample $23 and
+   then its header. */
+static void noise_samples_make(SoundBank *b, const uint8_t *image)
+{
+    uint32_t i;
+
+    memset(b->noise, 0, sizeof b->noise);
+    for (i = 0; i + 3 < 0x10000; i++) {
+        if (image[i] == 0xE3 && image[i + 1] == 0x23 && image[i + 2] == 0xFD) {
+            uint8_t header = (uint8_t)(image[i + 3] & 0xFE);
+
+            if (!b->noise[header >> 1].id)
+                b->noise[header >> 1] = noise_make(header);
+        }
+    }
+}
+
+/* A sound memory image and its samples as a bank the driver can use. */
+void music_bank_fill(SoundBank *b, const uint8_t image[0x10000])
+{
+    int e;
 
     memcpy(b->bytes, image, 0x10000);
+    noise_samples_make(b, image);
     for (e = 0; e < DRIVER_SAMPLES; e++) {
         uint16_t start = (uint16_t)(image[BANK_SAMPLE_DIRECTORY + e * 4] | image[BANK_SAMPLE_DIRECTORY + e * 4 + 1] << 8);
         uint16_t loop = (uint16_t)(image[BANK_SAMPLE_DIRECTORY + e * 4 + 2] | image[BANK_SAMPLE_DIRECTORY + e * 4 + 3] << 8);
@@ -151,6 +202,15 @@ void music_bank_set(const uint8_t image[0x10000], int battle)
         if (size)
             b->samples[e] = sample_of(image + start, size, loop >= start ? (uint32_t)(loop - start) : 0);
     }
+}
+
+void music_bank_set(const uint8_t image[0x10000], int battle)
+{
+    int next = bank_in_use == 0 ? 1 : 0;
+    SoundBank *b = &banks[next];
+    Message m;
+
+    music_bank_fill(b, image);
     memset(&m, 0, sizeof m);
     m.kind = MESSAGE_BANK;
     m.battle = (uint8_t)battle;

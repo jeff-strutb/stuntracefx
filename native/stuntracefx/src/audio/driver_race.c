@@ -832,6 +832,21 @@ static void stop_accepted(int x, int keep_loop)
     c->loop_side = 0;
 }
 
+/* The channel's sound keys on and reads on, unless a new one is starting. */
+static void channel_key_on(int x)
+{
+    Channel *c = &s.ch[x];
+
+    if (c->fresh) {
+        channel_begin(x, c->fresh);
+        return;
+    }
+    c->state = 2;
+    d.key_on |= voice_mask(x);
+    c->key_request = 0;
+    channel_read(x);
+}
+
 static void channel_step(int x)
 {
     Channel *c = &s.ch[x];
@@ -842,7 +857,8 @@ static void channel_step(int x)
         channel_begin(x, c->fresh);
         return;
     case 1:
-        goto key_on;
+        channel_key_on(x);
+        return;
     case 2:
         c->key_request = 0;
         /* fall through */
@@ -852,11 +868,14 @@ static void channel_step(int x)
             return;
         }
         c->state = 3;
-        if (c->key_request == 1)
-            goto key_on;
+        if (c->key_request == 1) {
+            channel_key_on(x);
+            return;
+        }
         if (c->key_request) {
             c->age = 0;
-            goto key_on;
+            channel_key_on(x);
+            return;
         }
         break;
     default:
@@ -900,16 +919,6 @@ static void channel_step(int x)
         return;
     }
     c->stop_request = 0;
-    channel_read(x);
-    return;
-key_on:
-    if (c->fresh) {
-        channel_begin(x, c->fresh);
-        return;
-    }
-    c->state = 2;
-    d.key_on |= voice_mask(x);
-    c->key_request = 0;
     channel_read(x);
 }
 
