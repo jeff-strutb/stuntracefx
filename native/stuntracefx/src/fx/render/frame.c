@@ -205,6 +205,7 @@ FxObjectsDrawResult FxObjectsDraw(uint16_t draw_list_end, uint16_t *stack)
             angle_y_ptr = (uint16_t)(angle_x_ptr + 1);
             angle_y_byte = fx_ldb(angle_y_ptr);
             fx_stw(0x0024, angle_y_byte);
+            fx_angle_record(object_ptr);
             flags_ptr = (uint16_t)(angle_y_ptr + 1);
             draw_flags = fx_ldb(flags_ptr);
             model_field_ptr = (uint16_t)(flags_ptr + 1);

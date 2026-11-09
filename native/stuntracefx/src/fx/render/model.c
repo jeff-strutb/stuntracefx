@@ -314,14 +314,16 @@ FxModelDrawWithFlagsResult FxModelDrawWithFlags(uint16_t model_flags, uint16_t d
         }
     }
     fx_stw(0x0030, scale_bit);
+    /* each angle byte made a word, negated; in a picture between steps the
+       byte's 256ths come with it (fx_tween.c) */
     object_angle_x = fx_ldw(0x0020);
-    fx_sbk((uint16_t)((uint16_t)~(uint16_t)((uint16_t)(object_angle_x & 0xFF) << 8 | (uint16_t)(object_angle_x & 0xFF) >> 8) + 1));
+    fx_sbk((uint16_t)((uint16_t)~(uint16_t)((uint16_t)(object_angle_x & 0xFF) << 8 | fx_angle_fraction(0)) + 1));
     object_angle_y = fx_ldw(0x0022);
-    fx_sbk((uint16_t)((uint16_t)~(uint16_t)((uint16_t)(object_angle_y & 0xFF) << 8 | (uint16_t)(object_angle_y & 0xFF) >> 8) + 1));
+    fx_sbk((uint16_t)((uint16_t)~(uint16_t)((uint16_t)(object_angle_y & 0xFF) << 8 | fx_angle_fraction(1)) + 1));
     object_angle_z = fx_ldw(0x0024);
-    fx_sbk((uint16_t)((uint16_t)~(uint16_t)((uint16_t)(object_angle_z & 0xFF) << 8 | (uint16_t)(object_angle_z & 0xFF) >> 8) + 1));
+    fx_sbk((uint16_t)((uint16_t)~(uint16_t)((uint16_t)(object_angle_z & 0xFF) << 8 | fx_angle_fraction(2)) + 1));
     angle_xz_or = (object_angle_x | object_angle_z);
-    if (angle_xz_or == 0) {
+    if (angle_xz_or == 0 && !fx_angle_fraction(0) && !fx_angle_fraction(1) && !fx_angle_fraction(2)) {
         if ((angle_xz_or | object_angle_y) != 0) {
             angle_y_minus_quarter = (uint16_t)(object_angle_y - 0x0040);
             if (angle_y_minus_quarter != 0) {

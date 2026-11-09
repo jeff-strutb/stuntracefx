@@ -135,6 +135,7 @@ void fx_draw_begin(int picture)
     if (tweening)
         tween_drawn[picture] = 1;
     else {
+        between_on[picture] = 0;        /* the game's own picture, until one between replaces it */
         panels_now.picture[0] = panels_now.picture[1];
         panels_now.picture[1] = picture;
         if (panels_now.n < 2)

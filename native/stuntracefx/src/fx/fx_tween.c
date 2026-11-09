@@ -102,11 +102,68 @@ static uint16_t angle_between(uint16_t a, uint16_t b, float t)
     return (uint16_t)(a + (int)((float)d * t + (d < 0 ? -0.5f : 0.5f)));
 }
 
-static uint8_t angle8_between(uint8_t a, uint8_t b, float t)
+/* An angle byte t of the way, the short way round, in 256ths of a byte:
+   the byte, and its fraction in *frac. */
+static uint8_t angle8_between(uint8_t a, uint8_t b, float t, uint8_t *frac)
 {
     int d = (int8_t)(uint8_t)(b - a);
+    int v = a * 256 + (int)((float)d * 256.0f * t + (d < 0 ? -0.5f : 0.5f));
 
-    return (uint8_t)(a + (int)((float)d * t + (d < 0 ? -0.5f : 0.5f)));
+    *frac = (uint8_t)v;
+    return (uint8_t)(v >> 8);
+}
+
+/* the objects' angle fractions in the picture between drawn now, and those
+   of the draw records the picture's part made from them */
+static uint8_t object_frac[OBJECT_COUNT][3];
+static uint8_t record_frac[64][3], current_frac[3];
+static int fractions_on;
+
+void fx_angle_record(uint16_t record)
+{
+    unsigned i = (uint16_t)(record - 0x0AAA) / 30u;
+
+    if (!fractions_on || (uint16_t)(record - 0x0AAA) % 30u || i >= 64) {
+        current_frac[0] = current_frac[1] = current_frac[2] = 0;
+        return;
+    }
+    memcpy(current_frac, record_frac[i], 3);
+}
+
+uint8_t fx_angle_fraction(int axis)
+{
+    return fractions_on ? current_frac[axis] : 0;
+}
+
+static uint16_t get16(const uint8_t *p) { return (uint16_t)(p[0] | p[1] << 8); }
+
+/* Each draw record the picture's part built (ObjectDrawListBuild: the
+   model at +$08, the angle bytes at +$04, the place at +$12/+$10/+$14, as
+   the view sees it unless bit 7 of the object's +$24) given its object's
+   fractions: the object of the same model, angles and place. */
+static void records_take_fractions(void)
+{
+    int i, k;
+
+    memset(record_frac, 0, sizeof record_frac);
+    for (i = 0; i < g.frame_record_count && i < 64; i++) {
+        const uint8_t *r = g.frame_records + 30 * i;
+
+        for (k = 0; k < OBJECT_COUNT; k++) {
+            const Object *o = &objects.object[k];
+            int absolute = (o->flags24 & 0x80) != 0;
+
+            if (!(object_frac[k][0] | object_frac[k][1] | object_frac[k][2]))
+                continue;
+            if (get16(r + 0x08) != o->model || r[0x04] != o->pitch || r[0x05] != o->heading || r[0x06] != o->roll)
+                continue;
+            if (get16(r + 0x12) != (uint16_t)(absolute ? o->x : o->x - g.view_pos[0])
+                || get16(r + 0x14) != (uint16_t)(absolute ? o->z : o->z - g.view_pos[2]))
+                continue;
+            memcpy(record_frac[i], object_frac[k], 3);
+            break;
+        }
+    }
 }
 
 static uint16_t rd(const uint8_t *m, uint16_t a) { return (uint16_t)(m[a] | m[(uint16_t)(a + 1)] << 8); }
@@ -155,14 +212,15 @@ static void objects_between(const ObjectTable *was, float t)
         Object *o = &objects.object[k];
         const Object *w = &was->object[k];
 
+        object_frac[k][0] = object_frac[k][1] = object_frac[k][2] = 0;
         if (o->model != w->model || o->handler != w->handler || o->handler_bank != w->handler_bank || o->record != w->record)
             continue;
         o->x = place_between(w->x, o->x, t);
         o->y = place_between(w->y, o->y, t);
         o->z = place_between(w->z, o->z, t);
-        o->pitch = angle8_between(w->pitch, o->pitch, t);
-        o->heading = angle8_between(w->heading, o->heading, t);
-        o->roll = angle8_between(w->roll, o->roll, t);
+        o->pitch = angle8_between(w->pitch, o->pitch, t, &object_frac[k][0]);
+        o->heading = angle8_between(w->heading, o->heading, t, &object_frac[k][1]);
+        o->roll = angle8_between(w->roll, o->roll, t, &object_frac[k][2]);
     }
 }
 
@@ -235,9 +293,12 @@ void fx_tween_draw(float between)
 
         if (picture < 0 || !RaceViewForPicture(panel))
             break;
+        records_take_fractions();
+        fractions_on = 1;
         fx_draw_begin(picture);
         (void)FxFrameProgram(0);
         fx_draw_flush();
+        fractions_on = 0;
     }
     fx_tween_end();
 }
