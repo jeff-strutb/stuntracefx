@@ -47,9 +47,8 @@ void menu_page_write(int page, const void *words)
     }
 }
 
-static void set_background(int n)
+static void layer_send(int n, const Background *b)
 {
-    const Background *b = &pic.bg[n];
     nshvc_layer l;
 
     memset(&l, 0, sizeof l);
@@ -64,6 +63,11 @@ static void set_background(int n)
     l.mosaic = 1;
     l.wrap = 1;
     nshvc_layer_set((uint8_t)n, &l);
+}
+
+static void set_background(int n)
+{
+    layer_send(n, &pic.bg[n]);
 }
 
 /* ---- the race screen's lines ---- */
@@ -288,20 +292,114 @@ static void race_lines_send(void)
         split_half_send();
 }
 
+/* ---- the one-player race in the whole window ---- */
+
+/* The sky (colour 1) on a line of the original's numbering: the gradient's
+   list by line through the view, its top line's colour above the view and
+   its last line's below, so each line has the colour the original showed at
+   the same height above the horizon. */
+static int32_t full_sky_at(int line)
+{
+    if (line < 32)
+        line = 32;
+    if (line > 158)
+        line = 158;
+    return (int32_t)gradient_colour((uint32_t)pic.race.gradient_start[0] + (uint32_t)(line - 32));
+}
+
+/* Every line from the origin down; the rows above it take the frame's
+   colour 1, which video_draw sets to the top line's. */
+static void full_sky_lines(int lines)
+{
+    static int32_t v[1024];
+    int r;
+
+    for (r = 0; r < lines; r++)
+        v[r] = full_sky_at(r);
+    nshvc_lines(0, (uint32_t)lines, (nshvc_line_field)(NSHVC_LINE_PALETTE + 1), v);
+}
+
+/* Whether each window of the band table covers any of the screen: the
+   original's windows were the view's opening (or nothing), and with no
+   bezel the view is the whole screen, so a window of the view covers
+   everything and one of nothing covers nothing. */
+static void full_windows(nshvc_windows *w, int width)
+{
+    int band, line = 0, cover[2] = { 0, 0 }, i;
+
+    for (band = 0; band < WINDOW_BANDS_MAX && windows.band[band].lines && line < 224; band++) {
+        uint8_t c = windows.band[band].lines;
+        int repeat = c >= 0x81, n = repeat ? c - 0x80 : c, k;
+        const WindowEdges *e = window_edges_at(windows.band[band].edges);
+
+        for (k = 0; k < n && line < 224; k++, line++) {
+            cover[0] |= e->left1 <= e->right1;
+            cover[1] |= e->left2 <= e->right2;
+            if (repeat)
+                e = window_edges_at((uint16_t)(windows.band[band].edges + (uint16_t)(4 * (k + 1))));
+        }
+    }
+    for (i = 0; i < 2; i++) {
+        w->w[i].left = cover[i] ? 0 : 1;
+        w->w[i].right = cover[i] ? width - 1 : 0;
+    }
+}
+
+static void full_window_draw(const ScreenShape *sh)
+{
+    static uint16_t palette[256];
+    nshvc_windows w = pic.windows;
+    Background hills = pic.bg[1];
+    static nshvc_sprite placed[128];
+    int sky = (g.hdma_enable & 0x0C) == 0x0C;
+
+    layer_send(0, &pic.bg[0]);
+    hills.map = race_video.backdrop_wide;
+    hills.scroll_x = pic.race.wide_x;
+    hills.scroll_y = pic.race.wide_y;
+    layer_send(1, &hills);
+    layer_send(2, &pic.bg[2]);
+    if (g.hdma_enable & 0x10)
+        full_windows(&w, sh->width);
+    nshvc_windows_set(&w);
+    nshvc_blend_set(&pic.blend);
+    memcpy(palette, pic.palette, sizeof palette);
+    if (sky)
+        palette[1] = (uint16_t)full_sky_at(0);
+    nshvc_palette_write(0, 256, palette);
+    nshvc_sprites_show((pic.main_screen >> 4) & 1, (pic.sub_screen >> 4) & 1);
+    sprites_place_full(placed, pic.sprites, pic.sprite_count);
+    nshvc_sprites_set(placed, pic.sprite_count, 0);
+    if (sky)
+        full_sky_lines(sh->height - sh->origin_y);
+    if (g.hdma_enable & 0x20)
+        fixed_lines_send(pic.blend.fixed_bgr15);
+}
+
 void video_draw(void)
 {
     nshvc_screen s;
-    int i;
+    const ScreenShape *sh;
+    int i, full;
 
+    screen_update();
+    sh = screen_shape();
+    full = race_full_window();
     memset(&s, 0, sizeof s);
-    s.width = 256;
-    s.height = 224;
+    s.width = full ? sh->width : 256;
+    s.height = full ? sh->height : 224;
+    s.origin_x = full ? sh->origin_x : 0;
+    s.origin_y = full ? sh->origin_y : 0;
     s.brightness = pic.brightness;
     s.blank = pic.blank;
     nshvc_screen_set(&s);
     if (pic.blank)
         return;
     nshvc_mode_set(pic.mode, pic.bg3_priority, 0);
+    if (full) {
+        full_window_draw(sh);
+        return;
+    }
     if (pic.race.on && pic.race.split && !pic.race.course_screen)
         race_two_player_list();
     for (i = 0; i < 3; i++)

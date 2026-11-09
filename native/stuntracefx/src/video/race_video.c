@@ -33,12 +33,31 @@ static uint16_t bank7f_words[2 * 0x1400 + 2 * 0x220];
 #define backdrop_map(n) (bank7f_words + (n) * 0x1400)
 #define backdrop_rows(n) (bank7f_words + 2 * 0x1400 + (n) * 0x220)
 
+/* The full window's hills. A course's backdrop map is 160 tiles a row, 32
+   rows: four screens of 32 tiles and the first again (course_map_rows), so
+   its round is 128 tiles, 1024 pixels, and the heading turns it once. The
+   wide map holds that round whole, so it wraps where the heading does; the
+   17 rows the view looks at go 64 rows lower than on the original's map,
+   with the sky tile above and below them, so a tall screen shows sky and
+   ground (colour 1 by line) and the band once. */
+enum { WIDE_COLUMNS = 128, WIDE_ROWS = 192, WIDE_DROP = 64, SKY_TILE = 0x20C0 };
+static struct { int map, row, column; } wide_band[2];   /* what BackdropRowsUpdate took, by buffer */
+static void wide_hills_shown(int buffer);
+
+/* The one-player race fills the window: its screen, not the course
+   screen's, the split screen's or the results' (their map at $5C00). */
+int race_full_window(void)
+{
+    return pic.race.on && !pic.race.split && !pic.race.course_screen && g.bg2_map_reg != 0x5C;
+}
+
 /* ---- the objects ---- */
 
 void race_video_init(void)
 {
     race_video.tiles = nshvc_tiles_create(4, 1024, 1);
     race_video.backdrop_one = nshvc_map_create(32, 64);
+    race_video.backdrop_wide = nshvc_map_create(WIDE_COLUMNS, WIDE_ROWS);
     race_video.frame_tiles_two = nshvc_tiles_create(4, 512, 1);
     race_video.frame_map_two = nshvc_map_create(32, 32);
     race_video.backdrop_image = nshvc_image_create(512, 512, NSHVC_IMAGE_INDEXED);
@@ -475,6 +494,9 @@ void BackdropRowsUpdate(void)
     g.backdrop_x[buf] = (uint16_t)(((g.view_heading_06cf >> 1) & 7) - 0x18);
     row_step = (unsigned)(((uint16_t)(h + g.backdrop_row_adjust) >> 3) & 0x3F) * 0x140u;
     x = ((g.view_heading_06cf >> 3) & 0xFE) + row_step;
+    wide_band[buf].map = (g.picture_effects & 0x40) ? 1 : 0;
+    wide_band[buf].row = (int)(row_step / 0x140u);
+    wide_band[buf].column = (int)(((g.view_heading_06cf >> 3) & 0xFE) / 2);
     for (n = 0; n < 17; n++) {
         if (x >= 0x2800) {
             while (at < 0x220)
@@ -539,6 +561,33 @@ void race_picture_shown(int buffer)
     pic.bg[1].scroll_x = pic.race.backdrop_x[0];
     pic.bg[1].scroll_y = pic.race.backdrop_y[0];
     race_backdrop_rows_upload(buffer);
+    wide_hills_shown(buffer);
+}
+
+/* The full window's hills for the picture shown: the panorama's 17 rows the
+   view looks at, its whole round across, at the band's place for this
+   buffer; sky everywhere else, the other buffer's band too. Across, the
+   wide map's column 0 is the panorama's, so the scroll is the original's
+   column (the heading's) and its fine scroll; down, the original's scroll
+   over the rows dropped. */
+static void wide_hills_shown(int buffer)
+{
+    static uint16_t map[WIDE_COLUMNS * WIDE_ROWS];
+    const uint16_t *panorama = backdrop_map(wide_band[buffer].map);
+    int first = WIDE_DROP + (buffer ? 47 : 30), r, c;
+
+    for (r = 0; r < WIDE_ROWS; r++) {
+        int n = r - first, from = wide_band[buffer].row + n;
+
+        for (c = 0; c < WIDE_COLUMNS; c++) {
+            uint16_t w = n >= 0 && n < 17 && from < 32 ? panorama[from * 160 + c] : SKY_TILE;
+
+            map[r * WIDE_COLUMNS + c] = (uint16_t)((w & 0xDC00) | (((w & 0x3FF) + 0x200) & 0x3FF));
+        }
+    }
+    nshvc_map_write_snes(race_video.backdrop_wide, 0, 0, WIDE_COLUMNS, WIDE_ROWS, map);
+    pic.race.wide_x = (wide_band[buffer].column * 8 + (int16_t)g.backdrop_x[buffer]) & (WIDE_COLUMNS * 8 - 1);
+    pic.race.wide_y = (int16_t)g.backdrop_y[buffer] + WIDE_DROP * 8;
 }
 
 /* The race screen handed back: the next screen sets its own layers, and
@@ -1030,6 +1079,106 @@ static void plot_tile(uint8_t *image, int w, int h, int x, int y, const uint8_t 
         }
 }
 
+/* The full window's panels: the one-player panel row's boxes (SPEED,
+   DAMAGE, RANK, REST), each a joined patch of the frame's pixels in the
+   row's lines that the row's own background does not reach from its edges;
+   a patch that runs to the screen's side is the bezel's, not a box. Their
+   pixels alone go into the boxes' image, so a box drawn on its own shows
+   none of the bezel around it. */
+enum { PANEL_TOP = 161, PANEL_END = 208, PANEL_ROWS = PANEL_END - PANEL_TOP };
+static PanelBoxes panel_boxes;
+static nshvc_image boxes_image;
+
+const PanelBoxes *race_panel_boxes(void)
+{
+    return &panel_boxes;
+}
+
+static void panel_boxes_find(const uint8_t *image)
+{
+    static const int step[4][2] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } };
+    static uint8_t keep[PANEL_ROWS][256], out[PANEL_ROWS * 256];
+    static int16_t stack[PANEL_ROWS * 256][2], part[PANEL_ROWS * 256][2];
+    const uint8_t *px = image + PANEL_TOP * 256;
+    uint8_t bg = px[(PANEL_ROWS / 2) * 256];
+    int x, y, n = 0, k;
+
+    if (!boxes_image.id)
+        boxes_image = nshvc_image_create(256, PANEL_ROWS, NSHVC_IMAGE_INDEXED);
+    for (y = 0; y < PANEL_ROWS; y++)
+        for (x = 0; x < 256; x++)
+            keep[y][x] = px[y * 256 + x] != 0;
+    /* the background, from the row's edges */
+    for (y = 0; y < PANEL_ROWS; y++)
+        for (x = 0; x < 256; x++)
+            if ((x == 0 || x == 255 || y == 0 || y == PANEL_ROWS - 1) && keep[y][x] && px[y * 256 + x] == bg) {
+                keep[y][x] = 0;
+                stack[n][0] = (int16_t)x;
+                stack[n++][1] = (int16_t)y;
+            }
+    while (n) {
+        n--;
+        x = stack[n][0];
+        y = stack[n][1];
+        for (k = 0; k < 4; k++) {
+            int a = x + step[k][0], b = y + step[k][1];
+
+            if (a < 0 || a > 255 || b < 0 || b >= PANEL_ROWS || !keep[b][a] || px[b * 256 + a] != bg)
+                continue;
+            keep[b][a] = 0;
+            stack[n][0] = (int16_t)a;
+            stack[n++][1] = (int16_t)b;
+        }
+    }
+    /* the patches left */
+    memset(out, 0, sizeof out);
+    panel_boxes.count = 0;
+    for (y = 0; y < PANEL_ROWS; y++)
+        for (x = 0; x < 256; x++) {
+            int x0 = x, x1 = x, y0 = y, y1 = y, edge = 0, m = 0, q;
+
+            if (keep[y][x] != 1)
+                continue;
+            keep[y][x] = 2;
+            stack[0][0] = (int16_t)x;
+            stack[0][1] = (int16_t)y;
+            n = 1;
+            while (n) {
+                int a0, b0;
+
+                n--;
+                a0 = stack[n][0];
+                b0 = stack[n][1];
+                part[m][0] = (int16_t)a0;
+                part[m++][1] = (int16_t)b0;
+                x0 = a0 < x0 ? a0 : x0;
+                x1 = a0 > x1 ? a0 : x1;
+                y0 = b0 < y0 ? b0 : y0;
+                y1 = b0 > y1 ? b0 : y1;
+                edge |= a0 == 0 || a0 == 255;
+                for (k = 0; k < 4; k++) {
+                    int a = a0 + step[k][0], b = b0 + step[k][1];
+
+                    if (a < 0 || a > 255 || b < 0 || b >= PANEL_ROWS || keep[b][a] != 1)
+                        continue;
+                    keep[b][a] = 2;
+                    stack[n][0] = (int16_t)a;
+                    stack[n++][1] = (int16_t)b;
+                }
+            }
+            if (edge || panel_boxes.count == 16)
+                continue;
+            k = panel_boxes.count++;
+            panel_boxes.x0[k] = x0;
+            panel_boxes.x1[k] = x1;
+            panel_boxes.y0[k] = PANEL_TOP + y0;
+            panel_boxes.y1[k] = PANEL_TOP + y1;
+            for (q = 0; q < m; q++)
+                out[part[q][1] * 256 + part[q][0]] = px[part[q][1] * 256 + part[q][0]];
+        }
+    nshvc_image_write(boxes_image, out);
+}
+
 /* The one-player frame and panels: the art tiles from $2B0 on, the map
    scrolled so that its row 0 is at line 16. */
 static void frame_image_build(void)
@@ -1047,6 +1196,7 @@ static void frame_image_build(void)
                 plot_tile(image, 256, 224, x * 8, y * 8 + 16, frame_art_8 + t * 64u, 8, 0, (w >> 14) & 1, (w >> 15) & 1);
         }
     nshvc_image_write(race_video.frame_image, image);
+    panel_boxes_find(image);
     frame_image_stale = 0;
 }
 
@@ -1079,13 +1229,16 @@ static void two_images_build(void)
     two_images_stale = 0;
 }
 
-/* A rectangle of the screen from texels (u0, v0), pixel for pixel. */
+/* A rectangle of the screen from texels (u0, v0), pixel for pixel. The
+   corners take the texels' edges, as nshvc_draw_image's do: a pixel's
+   centre then falls inside its texel, never on the edge between two,
+   where rounding could take the one beside it. */
 static void image_quad(nshvc_draw_list list, nshvc_image image, int x0, int y0, int w, int h, int u0, int v0)
 {
     nshvc_vertex v[6];
     nshvc_material m;
-    float ul = (float)u0 - (0.5f - 1.0f / 64), ur = (float)u0 + ((float)w - 0.5f + 1.0f / 64);
-    float vt = (float)v0 - (0.5f - 1.0f / 128), vb = (float)v0 + ((float)h - 0.5f + 1.0f / 128);
+    float ul = (float)u0, ur = (float)(u0 + w);
+    float vt = (float)v0, vb = (float)(v0 + h);
 
     memset(&m, 0, sizeof m);
     m.image = image;
@@ -1128,6 +1281,8 @@ static void half_draw(nshvc_draw_list list, int half, int first, int last)
    two players each half's backdrop or panel. */
 void race_frame_art_draw(nshvc_draw_list list)
 {
+    if (!pic.race.on || pic.race.course_screen)
+        return;                         /* another screen's picture (the course menu's car) */
     if (g.split_screen) {
         if (two_images_stale)
             two_images_build();
@@ -1139,9 +1294,30 @@ void race_frame_art_draw(nshvc_draw_list list)
 
         if (frame_image_stale)
             frame_image_build();
+        if (race_full_window())
+            return;                     /* no bezel: the 3D fills the screen, the boxes go over it */
         memset(&m, 0, sizeof m);
         m.image = race_video.frame_image;
         nshvc_draw_image(list, race_video.frame_image, &to, &m);
+    }
+}
+
+/* What goes over the 3D in its list: in the full window, the panel row's
+   boxes, each at the bottom by its own anchor. */
+void race_frame_art_draw_over(nshvc_draw_list list)
+{
+    int k, down;
+
+    if (!race_full_window())
+        return;
+    if (frame_image_stale)
+        frame_image_build();
+    down = screen_bottom_shift();
+    for (k = 0; k < panel_boxes.count; k++) {
+        int x0 = panel_boxes.x0[k], y0 = panel_boxes.y0[k];
+
+        image_quad(list, boxes_image, x0 + screen_anchor_x(x0, panel_boxes.x1[k]), y0 + down,
+                   panel_boxes.x1[k] - x0 + 1, panel_boxes.y1[k] - y0 + 1, x0, y0 - PANEL_TOP);
     }
 }
 

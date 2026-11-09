@@ -891,3 +891,99 @@ int SpriteSlotFirst(void)
             return i + 1;
     return 0;
 }
+
+/* ---- the one-player race's sprites in the whole window ---- */
+
+/* The original's 9-bit character number of a sprite */
+static unsigned sprite_name(const nshvc_sprite *s)
+{
+    return s->tile >= page_second ? 0x100u + (unsigned)(s->tile - page_second) : (unsigned)(s->tile - page_first);
+}
+
+static int piece_root(int *up, int i)
+{
+    while (up[i] != i)
+        i = up[i] = up[up[i]];
+    return i;
+}
+
+/*
+ * The sprites placed on the larger screen (fullwindow.c's sprites_place):
+ * - left out, what the original's screen kept out of sight: the bezel's
+ *   sides (characters $40-$47, palette 3); its start lamps (characters
+ *   $A0-$AF, palette 3) once the race runs (player 1's phase $0DD6 from 6);
+ *   those wholly in the lines it blanked (above 16, from 208, or wrapped
+ *   into the top); those off its 256 columns; the 3D's (below priority 3)
+ *   wholly outside the view, which the bezel covered; the HUD's on the
+ *   view's rows but beside it (parked there to slide in);
+ * - the 3D's keep their place on the original's picture, the view's centre
+ *   staying the screen's;
+ * - the HUD's (priority 3) move by piece: the sprites that touch, and those
+ *   that touch them, go together. In the panels' band a piece goes with the
+ *   box under it (or by its own columns) and down to the bottom; inside the
+ *   view, by the view's edges across and by its middle down.
+ */
+void sprites_place_full(nshvc_sprite *out, const nshvc_sprite *in, uint32_t count)
+{
+    enum { VIEW_X = 24, VIEW_W = 208, VIEW_Y = 32, VIEW_H = 128, PANEL_TOP = 161, PANEL_END = 208, ROW0 = 16 };
+    const ScreenShape *sh = screen_shape();
+    const PanelBoxes *boxes = race_panel_boxes();
+    int up[128], shown[128], hud[128], x0[128], x1[128], y0[128], y1[128];
+    int i, b, n = count > 128 ? 128 : (int)count, lamps_gone = g.player_phase[0] >= 6;
+
+    for (i = 0; i < n; i++) {
+        const nshvc_sprite *s = &in[i];
+        int x = s->x, y = s->y, h = s->height * 8, w = s->width * 8;
+        unsigned t = sprite_name(s);
+
+        up[i] = i;
+        hud[i] = s->priority == 3;
+        shown[i] = !(((t & 0x1F8) == 0x40 && s->palette == 3) ||
+                     ((t & 0x1F0) == 0xA0 && s->palette == 3 && lamps_gone) ||
+                     y < 0 || y >= PANEL_END || y + h <= ROW0 || x + w <= 0 || x >= 256 ||
+                     (!hud[i] && (x + w <= VIEW_X || x >= VIEW_X + VIEW_W || y + h <= VIEW_Y || y >= VIEW_Y + VIEW_H)) ||
+                     (hud[i] && y >= VIEW_Y && y + h <= VIEW_Y + VIEW_H && (x + w <= VIEW_X || x >= VIEW_X + VIEW_W)));
+        if (!shown[i])
+            continue;
+        for (b = 0; b < i; b++)
+            if (shown[b] && hud[b] == hud[i] && in[b].x <= x + w && x <= in[b].x + in[b].width * 8 &&
+                in[b].y <= y + h && y <= in[b].y + in[b].height * 8)
+                up[piece_root(up, b)] = piece_root(up, i);
+    }
+    for (i = 0; i < n; i++) {
+        x0[i] = y0[i] = 0x7FFF;
+        x1[i] = y1[i] = -0x7FFF;
+    }
+    for (i = 0; i < n; i++)
+        if (shown[i]) {
+            int p = piece_root(up, i);
+
+            x0[p] = in[i].x < x0[p] ? in[i].x : x0[p];
+            x1[p] = in[i].x + in[i].width * 8 - 1 > x1[p] ? in[i].x + in[i].width * 8 - 1 : x1[p];
+            y0[p] = in[i].y < y0[p] ? in[i].y : y0[p];
+            y1[p] = in[i].y + in[i].height * 8 - 1 > y1[p] ? in[i].y + in[i].height * 8 - 1 : y1[p];
+        }
+    for (i = 0; i < n; i++) {
+        int p = piece_root(up, i), dx = sh->origin_x, dy = sh->origin_y;
+
+        out[i] = in[i];
+        if (!shown[i]) {
+            out[i].y = sh->height + 64;          /* below any screen */
+            continue;
+        }
+        if (hud[i] && in[i].y + in[i].height * 8 > PANEL_TOP) {
+            int centre = in[i].x + in[i].width * 4;
+
+            dx = screen_anchor_x(x0[p], x1[p]);
+            for (b = 0; b < boxes->count; b++)
+                if (centre >= boxes->x0[b] && centre <= boxes->x1[b])
+                    dx = screen_anchor_x(boxes->x0[b], boxes->x1[b]);
+            dy = screen_bottom_shift();
+        } else if (hud[i]) {
+            dx = screen_view_anchor_x(x0[p], x1[p]);
+            dy = screen_anchor_y(y0[p], y1[p]);
+        }
+        out[i].x = in[i].x + dx;
+        out[i].y = in[i].y + dy;
+    }
+}

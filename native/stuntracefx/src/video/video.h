@@ -23,10 +23,29 @@ static inline uint8_t ram_code_7e8(uint16_t a) { return *ram_code_7e(a); }
 static inline const uint8_t *ram_code_7f(uint16_t a) { return &cart[0x58000u + (uint32_t)(a - 0x0800u)]; }
 static inline uint16_t ram_code_7f16(uint16_t a) { const uint8_t *p = ram_code_7f(a); return (uint16_t)(p[0] | p[1] << 8); }
 
+/* ---- the screen (screen.c): its size from the window, the HUD's places ---- */
+
+typedef struct {
+    int width, height;                  /* the screen, from the window's shape */
+    int origin_x, origin_y;             /* where the original's 256 x 224 sits in it */
+    int safe[4];                        /* the window's safe area in screen pixels: left, top, right, bottom */
+} ScreenShape;
+
+void screen_update(void);                      /* from the window, once a picture */
+const ScreenShape *screen_shape(void);
+void screen_window_set(const float *values, int count); /* a check's window: width, height, safe area */
+int screen_anchor_x(int x0, int x1);           /* columns to add to a piece of the original's screen */
+int screen_view_anchor_x(int x0, int x1);      /* the same for a piece inside the original's view */
+int screen_anchor_y(int y0, int y1);           /* lines to add, by the piece's middle */
+int screen_bottom_shift(void);                 /* lines the panels' band moves down by */
+int race_full_window(void);                    /* the one-player race fills the window */
+void sprites_place_full(nshvc_sprite *out, const nshvc_sprite *in, uint32_t count); /* the race's sprites on the larger screen */
+
 /* The race screen's engine objects, by role. */
 typedef struct {
     nshvc_tiles tiles;                  /* the 4bpp art the backdrop and sprites share */
     nshvc_map backdrop_one;             /* 32 x 64 */
+    nshvc_map backdrop_wide;            /* the full window's hills: 128 x 192, the panorama's whole round */
     nshvc_tiles frame_tiles_two;        /* the two-player frame and panels, 4bpp */
     nshvc_map frame_map_two;            /* and its map */
     nshvc_image backdrop_image, panel_image; /* the two-player backdrop and panel, drawn into the list */
@@ -43,6 +62,9 @@ void race_course_vram_write(uint16_t word, const uint8_t *data, uint32_t bytes);
 void race_course_maps_keep(void);              /* the unpacked course picture to both maps */
 void race_course_preview_reset(void);          /* $7F:C3D7 to $7F:9BD7, $800 bytes */
 void race_frame_art_draw(nshvc_draw_list list);    /* the frame and panels, at screen positions, after the list is cleared */
+void race_frame_art_draw_over(nshvc_draw_list list); /* the full window's panel boxes, after the 3D */
+typedef struct { int count, x0[16], x1[16], y0[16], y1[16]; } PanelBoxes;
+const PanelBoxes *race_panel_boxes(void);          /* the one-player panel row's boxes, on the original's screen */
 void race_backdrop_two_pages_write(int first, const uint16_t *words, uint32_t n);
 void VideoRegsReset(void);
 void race_art_write(uint16_t word, const uint8_t *data, uint32_t bytes);

@@ -1,6 +1,9 @@
 /*
  * main.c: the game on the engine. The engine owns the loop and calls these.
  */
+#include <stdio.h>
+#include <string.h>
+
 #include "audio/music.h"
 #include "audio/sound.h"
 #include "data/cart.h"
@@ -8,6 +11,7 @@
 #include "nshvc/nshvc.h"
 #include "system/game.h"
 #include "video/picture.h"
+#include "video/video.h"
 
 static void init(void)
 {
@@ -35,6 +39,25 @@ static void draw(float between)
 int main(int argc, char **argv)
 {
     static nshvc_game game;
+    int i, n = 0;
+
+    /* --window W,H[,LEFT,TOP,RIGHT,BOTTOM]: for a check, the window's shape
+       and safe area in window pixels (a headless run has no window of its
+       own); taken out before the engine's options */
+    for (i = 0; i < argc; i++) {
+        if (!strcmp(argv[i], "--window") && i + 1 < argc) {
+            float v[6] = { 0, 0, 0, 0, 0, 0 };
+            int k = sscanf(argv[++i], "%f,%f,%f,%f,%f,%f", &v[0], &v[1], &v[2], &v[3], &v[4], &v[5]);
+
+            if (k >= 2)
+                screen_window_set(v, k);
+            else
+                fprintf(stderr, "--window needs WIDTH,HEIGHT\n");
+            continue;
+        }
+        argv[n++] = argv[i];
+    }
+    argc = n;
 
     game.title = "Stunt Race FX";
     game.id = "stunt-race-fx";
