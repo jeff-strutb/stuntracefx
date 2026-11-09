@@ -325,6 +325,12 @@ void FadeValueStep(void)
     palettes.weather = (uint16_t)(palettes.weather_value >> 8);
 }
 
+/* Called each race frame; the count that starts it ($0CFA) is written only by
+   code the game never runs, so it has nothing to do. */
+void PaletteFadeStep(void)
+{
+}
+
 /* The courses that cycle colours 12 to 15 (course 3 in the buffer, 7 in the
    night set, $0B only colour 15's low byte). */
 void CoursePaletteCycle(void)

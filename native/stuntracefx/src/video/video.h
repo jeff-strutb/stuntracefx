@@ -30,11 +30,16 @@ typedef struct {
     nshvc_map frame_map[2];             /* one per picture buffer */
     nshvc_map backdrop_one;             /* 32 x 64 */
     nshvc_map backdrop_two;             /* 64 x 128: four pages, then the panel repeated */
+    nshvc_image frame_image;            /* the frame and panels around the 3D, at screen positions */
 } RaceVideo;
 
 extern RaceVideo race_video;
 
 void race_video_init(void);
+void race_vram_write(uint16_t word, const uint8_t *data, uint32_t bytes); /* by the word address the original sent it to */
+void race_frame_art_draw(nshvc_draw_list list);    /* the frame and panels, at screen positions, after the list is cleared */
+void race_backdrop_two_pages_write(int first, const uint16_t *words, uint32_t n);
+void VideoRegsReset(void);
 void race_art_write(uint16_t word, const uint8_t *data, uint32_t bytes);
 void race_frame_art_write(uint16_t word, const uint8_t *data, uint32_t bytes);
 void race_map_page_write(int page, const uint16_t *words);
@@ -99,6 +104,7 @@ void PalettesStep(void);
 void CoursePaletteCycle(void);
 void HudColourStep(void);
 void FadeValueStep(void);
+void PaletteFadeStep(void);
 void CgramDmaAll(void);                 /* the whole buffer to the screen */
 void CgramUploadAll(void);              /* the same, and notes the player's offset */
 void palette_shown_all(void);
@@ -239,6 +245,10 @@ void TimesKeepAndAdvance(void);
 /* ---- sprites ---- */
 
 extern nshvc_sprite sprites[128];
+/* the tile set and page starts sprite tile numbers count in: each screen sets its own */
+void sprites_use_tiles(nshvc_tiles set, uint16_t first_page, uint16_t second_page);
+uint8_t OamByte(uint16_t offset);                 /* a byte of the table, 0-$21F */
+void OamBufferByteSet(uint16_t offset, uint8_t value);
 void OamDmaAll(void);
 void OamDirectStage(void);
 void OamHideRange(int first, int count);
@@ -279,7 +289,7 @@ void OamLargeColumns(void);
 void OamPlaceRows75And112(void);
 void SpriteStrip4(uint16_t selector, int first, uint16_t pos);
 void SpriteStrip6(uint16_t selector, int first, uint16_t pos);
-void MetaspriteDraw(uint16_t group, int slot);
+int MetaspriteDraw(uint16_t group, int slot);              /* returns the sprites used */
 void FlashingMetaspriteDraw(void);
 void FlashingMetaspriteDraw0(void);
 void FlashingMetaspriteDrawByMode(void);

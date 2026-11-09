@@ -15,20 +15,37 @@
 
 nshvc_sprite sprites[128];
 
-enum { TILE_PAGE_1 = 0x200, TILE_PAGE_2 = 0x300 };
+/* the tile set the table's tile numbers count in, and where its two pages
+   start in it: set by each screen; the race's art by default */
+static nshvc_tiles sprite_set;
+static uint16_t page_first = 0x200, page_second = 0x300;
+
+void sprites_use_tiles(nshvc_tiles set, uint16_t first_page, uint16_t second_page)
+{
+    int n;
+
+    sprite_set = set;
+    page_first = first_page;
+    page_second = second_page;
+    for (n = 0; n < 128; n++)
+        sprites[n].tiles = set;
+}
+
+static int on_second_page(int n)
+{
+    return sprites[n].tile >= page_second;
+}
 
 /* A sprite's fields as the original's table bytes hold them. */
 static void set_tile_byte(int n, uint8_t t)
 {
-    uint16_t name = (uint16_t)((sprites[n].tile - TILE_PAGE_1) & 0x100);
-
-    sprites[n].tile = (uint16_t)(TILE_PAGE_1 + name + t);
-    sprites[n].tiles = race_video.tiles;
+    sprites[n].tile = (uint16_t)((on_second_page(n) ? page_second : page_first) + t);
+    sprites[n].tiles = sprite_set;
 }
 
 static uint8_t tile_byte(int n)
 {
-    return (uint8_t)(sprites[n].tile - TILE_PAGE_1);
+    return (uint8_t)(sprites[n].tile - (on_second_page(n) ? page_second : page_first));
 }
 
 /* The attribute byte: name page, palette, priority, flips */
@@ -36,17 +53,17 @@ static void set_attr(int n, uint8_t a)
 {
     uint8_t t = tile_byte(n);
 
-    sprites[n].tile = (uint16_t)((a & 1) ? TILE_PAGE_2 + t : TILE_PAGE_1 + t);
+    sprites[n].tile = (uint16_t)(((a & 1) ? page_second : page_first) + t);
     sprites[n].palette = (a >> 1) & 7;
     sprites[n].priority = (a >> 4) & 3;
     sprites[n].hflip = (a >> 6) & 1;
     sprites[n].vflip = (a >> 7) & 1;
-    sprites[n].tiles = race_video.tiles;
+    sprites[n].tiles = sprite_set;
 }
 
 static uint8_t attr_byte(int n)
 {
-    return (uint8_t)((((sprites[n].tile - TILE_PAGE_1) >> 8) & 1) | sprites[n].palette << 1 | sprites[n].priority << 4 |
+    return (uint8_t)(on_second_page(n) | sprites[n].palette << 1 | sprites[n].priority << 4 |
                      sprites[n].hflip << 6 | sprites[n].vflip << 7);
 }
 
@@ -141,7 +158,7 @@ void OamDirectStage(void)
             pic.sprites[n] = sprites[n];
             pic.sprites[n].x = 0xF0;
             pic.sprites[n].y = 0xF0 - 256;
-            pic.sprites[n].tile = TILE_PAGE_1 + 0xF0;
+            pic.sprites[n].tile = (uint16_t)(page_first + 0xF0);
             pic.sprites[n].palette = 0;
             pic.sprites[n].priority = 3;
             pic.sprites[n].hflip = 1;
@@ -198,7 +215,7 @@ void OamBufferClear(void)
     int n;
 
     for (n = 0; n < 128; n++) {
-        sprites[n].tiles = race_video.tiles;
+        sprites[n].tiles = sprite_set;
         set_x_byte(n, 0xF0);
         set_y(n, 0xF0);
         set_x_high(n, 0);
@@ -211,7 +228,7 @@ void OamBufferHideLarge(void)
     int n;
 
     for (n = 0; n < 128; n++) {
-        sprites[n].tiles = race_video.tiles;
+        sprites[n].tiles = sprite_set;
         set_y(n, 0xF0);
         set_x_high(n, 0);
         set_large(n, 1);
@@ -522,6 +539,37 @@ void SpriteBar6WithMarker(uint8_t value, uint16_t pos, uint16_t slot)
     bar_marker(n, value, pos, 0x08, 0x3C1F, 0x3C1E);
 }
 
+/* The bytes of the table as the original addressed them: 512 four to a
+   sprite, then the 32 high bytes. */
+uint8_t OamByte(uint16_t offset)
+{
+    if (offset >= 0x200) {
+        int i, b = offset - 0x200;
+        uint8_t v = 0;
+
+        for (i = 0; i < 4; i++) {
+            int n = b * 4 + i;
+
+            if (sprites[n].x < 0)
+                v |= (uint8_t)(1 << (i * 2));
+            if (sprites[n].width > 1)
+                v |= (uint8_t)(2 << (i * 2));
+        }
+        return v;
+    }
+    switch (offset & 3) {
+    case 0: return (uint8_t)sprites[offset / 4].x;
+    case 1: return y_byte(offset / 4);
+    case 2: return tile_byte(offset / 4);
+    default: return attr_byte(offset / 4);
+    }
+}
+
+void OamBufferByteSet(uint16_t offset, uint8_t value)
+{
+    OamByteSet(offset, value);
+}
+
 /* A byte of the table as the original addressed it: 512 bytes four to a
    sprite, then the 32 high bytes. */
 void OamByteSet(uint16_t offset, uint8_t value)
@@ -540,10 +588,10 @@ void OamByteSet(uint16_t offset, uint8_t value)
 
 /* ---- metasprites ---- */
 
-void MetaspriteDraw(uint16_t group, int slot)
+int MetaspriteDraw(uint16_t group, int slot)
 {
     uint16_t at = cart16(0x04, (uint16_t)(0xEDCB + group * 4));
-    int n = (uint8_t)cart16(0x04, (uint16_t)(0xEDCD + group * 4));
+    int n = (uint8_t)cart16(0x04, (uint16_t)(0xEDCD + group * 4)), count = n;
 
     do {
         set_x_byte(slot, (uint8_t)(cart8(0x04, (uint16_t)(0xEE4B + at)) + g.sprite_origin[0]));
@@ -555,6 +603,7 @@ void MetaspriteDraw(uint16_t group, int slot)
         at = (uint16_t)(at + 5);
         slot++;
     } while (--n);
+    return count;
 }
 
 static uint8_t cycled_attr(uint8_t attr, uint8_t phase)
@@ -623,6 +672,15 @@ static void sprite_pieces3(int slot)
         i = (uint16_t)(i + 5);
         slot++;
     }
+}
+
+void SpritePieces3(uint16_t x, uint8_t y, uint16_t set, uint16_t palette, int slot)
+{
+    g.piece_set = set;
+    g.piece_x = (uint8_t)x;
+    g.piece_y = y;
+    g.piece_palette = (uint8_t)palette;
+    sprite_pieces3(slot);
 }
 
 static void pieces_at(uint16_t set, uint8_t x, uint8_t y, int slot)
