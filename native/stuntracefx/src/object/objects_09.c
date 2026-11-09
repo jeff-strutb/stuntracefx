@@ -2038,9 +2038,12 @@ void ObjectWheelCentreStep(Object *o)
     ObjectRebucket(o);
 }
 
+/* The rails take their first colour from work RAM $00: the race step's
+   flag (2 while a step runs). */
+static uint8_t rail_colour(void) { return (uint8_t)(g.frame_stage_00 | 0x80); }
+
 /* The rail's slide: its Z stepped toward the target +$27; 1 when already
-   there. (Direct page $00, which the rails take their colour from, is only
-   ever written 0, so their first colour is $80.) */
+   there. */
 static int rail_slide(Object *o, uint16_t step)
 {
     if (o->z == o->link27)
@@ -2070,7 +2073,7 @@ void RailRiseStep(Object *o)
 void RailRise(Object *o)
 {
     o->link27 = (uint16_t)(o->z + 0x0500);
-    o->frame5a = 0x80;
+    o->frame5a = rail_colour();
     o->model = 0xB2D8;
     handler(o, H9_RAIL_RISE_STEP);
     RailRiseStep(o);
@@ -2094,7 +2097,7 @@ void RailDropStep(Object *o)
 /* @routine 09:D40C RailDrop */
 void RailDrop(Object *o)
 {
-    o->frame5a = 0x80;
+    o->frame5a = rail_colour();
     o->model = 0xB2F4;
     handler(o, H9_RAIL_DROP_STEP);
     RailDropStep(o);
@@ -2106,7 +2109,7 @@ static void rail(Object *o, uint16_t dx, uint16_t dz, uint16_t travel)
 
     if (!n)
         return;
-    n->frame5a = 0x80;
+    n->frame5a = rail_colour();
     n->heading = 0x80;
     ObjectCopyPosition(n, o);
     n->x = (uint16_t)(n->x + dx);
@@ -2643,8 +2646,8 @@ void ObjectSlideGateUpStep(Object *o)
 /* @routine 09:EBE5 ObjectSlideGateUp, 09:EC03 ObjectSlideGateUpRecord */
 GATE(ObjectSlideGateUp, ObjectSlideGateUpRecord, ObjectSlideGateUpStep, H9_SLIDE_GATE_UP_RECORD, H9_SLIDE_GATE_UP_STEP, 0x0780)
 
-/* One shard: at 4 times (x, y, 0) turned by the object's angles; direct
-   page $00, the vector's third part, is only ever written 0 */
+/* One shard: at 4 times (x, y, z) turned by the object's angles, z the
+   byte at work RAM $00 (the race step's flag) */
 static void shard(Object *o, uint16_t kind, uint8_t s48, uint8_t s49, uint8_t s4a, int8_t x, int8_t y)
 {
     Object *n = ObjectSpawn(kind);
@@ -2657,7 +2660,7 @@ static void shard(Object *o, uint16_t kind, uint8_t s48, uint8_t s49, uint8_t s4
     n->byte4a = s4a;
     ObjectCopyPosition(n, o);
     ObjectCopyAnglesFrom(n, o);
-    v = ObjectTurnVector(o, x, y, 0);
+    v = ObjectTurnVector(o, x, y, (int8_t)g.frame_stage_00);
     n->x = (uint16_t)(o->x + (uint16_t)(v.x * 4));
     n->z = (uint16_t)(o->z + (uint16_t)(v.z * 4));
     n->y = (uint16_t)(o->y + (uint16_t)(v.y * 4));
@@ -2703,7 +2706,7 @@ static void object_shatter2(Object *o)
    by pitch then heading, times 4 */
 void ObjectShardStep(Object *o)
 {
-    Vec16 v = {(int8_t)o->count48, (int8_t)o->byte49, 0};
+    Vec16 v = {(int8_t)o->count48, (int8_t)o->byte49, (int8_t)g.frame_stage_00};
 
     RotateXZFrom08((int8_t)v.y, (int8_t)v.z, o->pitch, &v.y, &v.z);
     RotateXZ((int8_t)v.x, (int8_t)v.z, o->heading, &v.x, &v.z);

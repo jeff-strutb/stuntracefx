@@ -164,10 +164,19 @@ original runs operand bytes as code and ends in ROM data at $CA:E7EC. Here
 the frame ends. Direct page $5C and $0DA7 are written by these objects and
 read by nothing, so those writes are left out; $1A05 likewise (only the
 unreached SlideOutWobble reads it).
-Direct page $00 (the rails' colour, the shards' third axis) and $80 (the
-burst gate's pitch) are read as 0: no label-addressed store writes other
-than 0 to them in the game's code. An indexed store landing there was not
-ruled out.
+Work RAM $0000 is the race step's flag (g.frame_stage_00, 2 while a step
+runs): the rails' first colour and the shards' third axis read it. The
+burst gate's pitch reads direct page $80; nothing names a writer of it, and
+it is read as 0 until the trace of the all-courses play (course 2 has the
+only burst gate) settles it.
+A link of 0 (a race's first step, before the cars are linked) leads the
+original to read a camera record at work RAM $0000. Traced in race1: its
+mode is the step flag, its object ObjectPlaceAll's count (0), its X
+ObjectPlaceAll's starter number, its Y the last worked Y, the rest only the
+power-on clear; the view routine then reads the object again after its own
+rescaling left the rescaled X there. camera_at_link() gives that record;
+the native first step's view position and origins equal the recording's
+((5, $F2CE, 0), ($420, $20, $400) twice).
 Course entries with flag bit 9 and no model record (+$20 = 0), 35 to 67
 per course, add work RAM $000A/$000C/$000E to their offsets. Traced in the
 original (sfxbox access log) before each course load of the four
