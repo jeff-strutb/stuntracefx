@@ -1,0 +1,202 @@
+NOTES: the routines of the race session's areas (src/stuntracefx race/, hud/,
+math/, input/, system/, gsu/ outside fx_*.c) that have no function of their
+own here, and why. Everything else in those areas has a function whose
+comment names its @routine.
+
+Folded into other converted code
+--------------------------------
+  02:DF79 RandomStepLong -> math/math.c RandomStep
+  02:DF95 MulWordByteLong -> MulWordByte, dead (math/math.c)
+  02:E016 Gsu81E3Long -> system/chip.c Gsu81E3
+  02:E3F1 CourseScreenWindowStep -> race/course.c state tables (WindowEdgesStep)
+  02:E7E8 LevelColumnsSet4 -> race/course.c SpeedCourseSelectStep
+  03:863D DemoRunFirst -> race/flow.c DemoRun(0)
+  03:8648 DemoRunSecond -> race/flow.c DemoRun(1)
+  03:8653 DemoRunFourth -> race/flow.c DemoRun(2)
+  03:8AA9 BootColdStart -> system/main.c init and the menus' session start
+  03:8B34 BootStart -> the menus' session start, reached by race/flow.c soft_reset_finish (session_race_ended(0))
+  03:8BAA BootWarm -> race/flow.c race_session_begin/update (its race part) and the menus' session_update (its course menu)
+  03:8CF2 WramFillZeroLong -> race/flow.c soft_reset_finish (memset)
+  03:8CF6 WramFillZero -> race/flow.c soft_reset_finish (memset)
+  03:EBEF GsuCF42ToC000 -> data/unpack.c unpack, called where the picture is wanted
+  03:EBF8 GsuCF42To4000 -> race/results.c picture_unpack
+  03:EC01 GsuCF42To3000 -> race/results.c picture_unpack, race/course.c unpacked
+  04:D7BF GsuBytes200_BFB7B6 -> hud/glyphs.c GlyphColours, with its three bytes
+  04:D7DC GsuBytes200_BFB5BB -> hud/glyphs.c GlyphColours, with its three bytes
+  04:D7F9 GsuBytes200_BFBCBD -> hud/glyphs.c GlyphColours, with its three bytes
+  04:D816 GsuBytes200_BFBAB9 -> hud/glyphs.c GlyphColours, with its three bytes
+  04:D833 GsuBytes200_BFB3BE -> hud/glyphs.c GlyphColours, with its three bytes
+  04:D850 GsuBytes200_BFB2B3 -> hud/glyphs.c GlyphColours, with its three bytes
+  04:D86D GsuBytes200_BF12B6 -> hud/glyphs.c GlyphColours, with its three bytes
+  04:D88A GsuBytes200_BF11BD -> hud/glyphs.c GlyphColours, with its three bytes
+  04:D8A7 GsuBytes200_BF10B9 -> hud/glyphs.c GlyphColours, with its three bytes
+  04:D8C4 GsuBytes200_BFB7B6_D8C4 -> hud/glyphs.c GlyphColours, with its three bytes
+  04:D8E1 GsuBytes200_BFBAB9_D8E1 -> hud/glyphs.c GlyphColours, with its three bytes
+  04:D8FE GsuBytes200_BFB3BE_D8FE -> hud/glyphs.c GlyphColours, with its three bytes
+  04:D91B GsuBytes200_BFBBBE -> hud/glyphs.c GlyphColours, with its three bytes
+  04:D938 GsuBytes200_0F060E -> hud/glyphs.c GlyphColours, with its three bytes
+  04:D955 GsuBytes200_0F010B -> hud/glyphs.c GlyphColours, with its three bytes
+  04:D972 GsuBytes200_0F0405 -> hud/glyphs.c GlyphColours, with its three bytes
+  04:D98F GsuBytes200_0F0708 -> hud/glyphs.c GlyphColours, with its three bytes
+  04:D9AC GsuBytes200_0F090A -> hud/glyphs.c GlyphColours, with its three bytes
+  04:D9C9 GsuBytes200_0F0D03 -> hud/glyphs.c GlyphColours, with its three bytes
+  04:D9E6 GsuBytes200_0F050E -> hud/glyphs.c GlyphColours, with its three bytes
+  04:DD6E GlyphRowY60From1 -> hud/glyphs.c GlyphRowY60From0's entries
+  04:DD7B GlyphRowY60From2 -> hud/glyphs.c GlyphRowY60From0's entries
+  04:DD88 GlyphRowY60From3 -> hud/glyphs.c GlyphRowY60From0's entries
+  04:DD95 GlyphRowY60From4 -> hud/glyphs.c GlyphRowY60From0's entries
+  04:DDA2 GlyphRowY60From5 -> hud/glyphs.c GlyphRowY60From0's entries
+  07:8E34 GsuParam216B -> hud/glyphs.c param_216_b
+  07:AACE SoftResetLong -> race/flow.c SoftResetCheck
+  07:AB88 SoftResetApuLong -> audio SoftResetApu
+  07:B93C RecordSlotCopy0 -> hud/lap_time.c record_move_down
+  07:B948 RecordSlotCopy3 -> hud/lap_time.c record_move_down
+  07:DBB8 TimeUpPhaseSlideIn -> race/player_stats.c TimeUpPhaseStep, phase 2
+  07:DBBC TimeUpPhaseSlideOut -> race/player_stats.c TimeUpPhaseStep, phase 4
+  07:E22B PhaseDispatchE232 -> race/player_stats.c phase_table_e232
+  07:E246 PhaseDispatchE24F -> race/player_stats.c phase_table_e24f
+  07:E9C1 LapBannerGrow -> race/phases.c lap_banner (with GsuF0A5OrF0B4)
+  07:E9E1 LapBannerGrowLast -> race/phases.c lap_banner (with GsuEEF5OrEFCD)
+  07:EBDC PhaseNothingEBDC -> PhaseNothing (an RTS other phases' tables name)
+  07:ECF3 PhaseNothingECF3 -> PhaseNothing
+  08:83E8 ScaleDp02Dp94Long -> math/math.c ScaleDp02Dp94
+  0B:E2C5 ApproachTargetFull -> frame_state.brightness_target = 15 where the menus set it
+  0B:E2CF ApproachTargetZero -> frame_state.brightness_target = 0 where the menus set it
+  7E:A467 WindowTable7FLong -> video WindowTable7F
+  7E:E1E1 FrameObjectsWhileGsuRuns -> race/race_frame.c, the objects' work beside the frame program
+  7F:0FDC HalfRateApproach -> system/frame.c brightness_step
+
+Replaced by the engine or by the design (no counterpart by intent)
+------------------------------------------------------------------
+  00:0108 NmiStub -> no interrupts on the engine
+  00:010C IrqStub -> no interrupts on the engine
+  00:FE88 ResetVector -> the engine starts the game (system/main.c)
+  00:FE90 InterruptReturn -> no interrupts on the engine
+  02:D53D WordCopyStep -> copies only while $0CF6 is set; its only setter is itself counting down, so it never copies
+  02:D65A Set7EBC2BTrio -> its bytes ($7E:BC2B-BC2F) are read only by the unused screen (video/unused_screen.c, dead)
+  02:D7AB WaitScanline -> a wait for a line (in AttractCourseSetup): no timing model
+  03:89B4 HardwareRegsInit -> the engine's state starts cleared; the picture is set up by video
+  03:AEEE ReadTable9022 -> reads a table and keeps nothing but a scratch byte ($64): no state
+  03:F329 ReturnOnly -> changes no state (an empty handler; where named, nothing is called)
+  0B:E3F7 FrameByteWritePush -> as OamDmaIfPending
+  7E:A2FD WaitHBlank -> no lines to wait for: a frame's per-line changes go through nshvc_lines
+  7E:A305 RasterStage -> race/flow.c raster_frame and race/course.c CourseScreenRaster*: the stages as each update's work
+  7E:A7A3 FrameSoundAndJoypads -> system/frame.c input_read and audio sound_frame
+  7E:E18B DataBankTest -> changes no state (N and Z only)
+  7E:E1CB GsuWait -> as GsuRun: a program has finished when its function returns
+  7E:E1F5 GsuRun -> the Super FX programs are direct calls of src/fx functions
+  7E:F217 KeepRegisters -> changes no state
+  7F:0D2B VblankUpdates -> the menus' vertical blank: their stages are menu/ and system/frame.c work (menus session)
+  7F:0EC9 OamDmaIfPending -> the menus' frame queue: the menus write the picture's objects directly
+  7F:0F03 CgramDmaIfPending -> as OamDmaIfPending
+  7F:0F3A ByteWritesIfPending -> as OamDmaIfPending
+  7F:0F77 VramDmaQueueFlush -> as OamDmaIfPending
+  7F:1007 VramDmaQueueAdd -> as OamDmaIfPending
+  7F:1042 FrameCountAndPortsEnd -> the main loop's frame end: the counts and the Multitap test (as JoypadPortCheck)
+  7F:1072 FrameInputAndCountEnd -> the menus' frame end: system/frame.c input_read (presses kept for the menus) and the counts
+  7F:10A1 WordListAAppend -> as OamDmaIfPending
+  7F:10B7 WordListBAppend -> as OamDmaIfPending
+  7F:10CD JoypadPortCheck -> the Super Multitap test: sets a flag nothing reads
+  7F:10E2 JoypadPortCheckBit -> as JoypadPortCheck
+  7F:10F6 JoypadPortCheckLatchOff -> as JoypadPortCheck
+  7F:1107 JoypadPortCheckBit2 -> as JoypadPortCheck
+
+Dead
+----
+Proof, for each: the original's own record says nothing reaches it (its
+source comment: "nothing reaches", "Nothing calls it", "Reached only by
+unit_...", a lone RTS after a jump, or debug code no build calls), or no call
+to it in src/ from live code and no JSR, JMP, JSL or JML to its address in
+the ROM (assets/cart.dat; the count is given). Debug panels, prints and
+halts: debug code the shipped game never calls.
+  02:DA14 GsuClearScreenIfSet  (ROM calls: 1)
+  02:DA24 GsuClear6000IfSet  (ROM calls: 0)
+  02:DF99 MulWordByte  (ROM calls: 0)
+  03:AE70 ViewSetup  (ROM calls: 0)
+  03:AF9D Gsu8277  (ROM calls: 0)
+  03:B079 ScaledOffsetPair  (ROM calls: 0)
+  03:B0CC ScaledOffset  (ROM calls: 0)
+  03:B17E ViewFromAnglesGsu8277  (ROM calls: 0)
+  03:B367 ViewToGsuParams  (ROM calls: 0)
+  03:BCB6 HeadingPitchedVia1F7C  (ROM calls: 0)
+  03:C034 ObjectMoveByVectorTimes4  (ROM calls: 0)
+  03:C044 ObjectMoveByVectorTimes2  (ROM calls: 0)
+  03:C04C ObjectMoveByVector  (ROM calls: 0)
+  03:C6F4 RotateXZWide  (ROM calls: 0)
+  03:C788 RotateXZWideFrom08  (ROM calls: 0)
+  03:C9D2 VectorGsu81E3  (ROM calls: 0)
+  03:CD1D ObjectVelocityFromHeading  (ROM calls: 0)
+  03:CD35 ObjectVelocityFromHeadingTimes2  (ROM calls: 0)
+  03:CD50 ObjectVelocityFromHeadingTimes4  (ROM calls: 0)
+  03:CD6E ObjectVelocityFromHeadingTimes8  (ROM calls: 0)
+  03:D1C2 ObjectVelocityLevelFromDp  (ROM calls: 0)
+  03:D40A DebugByteHalt  (ROM calls: 0)
+  03:D465 DebugPrint  (ROM calls: 0)
+  03:D499 DebugPrintHexWord  (ROM calls: 0)
+  03:D4A6 DebugPrintDecimalByte  (ROM calls: 0)
+  03:D4C2 DebugPrintSignedByte  (ROM calls: 0)
+  03:D4DE DebugPrintHexByte  (ROM calls: 0)
+  03:D4FA DebugPrintDecimalWord  (ROM calls: 0)
+  03:D584 DebugSignedByte  (ROM calls: 0)
+  03:D59E DebugDecimalByte  (ROM calls: 0)
+  03:D651 DebugDrawChar  (ROM calls: 0)
+  03:D782 DebugHexByte  (ROM calls: 0)
+  03:D7C1 DebugPrintBinaryByte  (ROM calls: 0)
+  07:8188 GsuPiecesFromRecord  (ROM calls: 0)
+  07:81C2 GsuPiecesListFAF2  (ROM calls: 0)
+  07:81EC GsuPiecesReturn  (ROM calls: 0)
+  07:81ED GsuPiecesListF6DF  (ROM calls: 0)
+  07:8219 GsuPieceOffsetFromView  (ROM calls: 0)
+  07:825F GsuPieceScaleFromView  (ROM calls: 0)
+  07:82B4 GsuReciprocal  (ROM calls: 0)
+  07:82D6 GsuReciprocalReturn  (ROM calls: 0)
+  07:82D7 GsuPiecesFromBytes  (ROM calls: 0)
+  07:8A47 HudTimesDrawEven  (ROM calls: 0)
+  07:8B22 HudTimesPackedEven  (ROM calls: 0)
+  07:917D TimeBonusPiecesMirrored  (ROM calls: 0)
+  07:9238 GsuBonusDigitsBounce  (ROM calls: 0)
+  07:9241 GsuBonusDigitsFull  (ROM calls: 0)
+  07:AB82 SoftResetWarmBoot  (ROM calls: 0)
+  07:DA44 RaceXPressPlayer1  (ROM calls: 0)
+  07:DA86 RaceXPressPlayer2  (ROM calls: 0)
+  07:E08E PlayerOnePhaseReturn  (ROM calls: 0)
+  07:E3E6 RaceStartTimerStepsRts  (ROM calls: 0)
+  07:E556 ResultsPanelStepsRts  (ROM calls: 0)
+  07:E998 RaceEndWaitRow6BRts  (ROM calls: 0)
+  07:E9BB RaceEndWaitBigSpritesRts  (ROM calls: 0)
+  07:E9C0 LapBannerNone  (ROM calls: 0)
+  07:EB0F RaceEndWindowStepsRts  (ROM calls: 0)
+  08:F10D DebugTimersPanel  (ROM calls: 0)
+  08:F171 DebugMatchSpeedPanel  (ROM calls: 0)
+  08:F18E DebugLastCarPanel  (ROM calls: 0)
+  08:F1A9 DebugPanelNone  (ROM calls: 0)
+  08:F1AA DebugCarsPanel  (ROM calls: 0)
+  08:F337 DebugFxTestPanel  (ROM calls: 0)
+  08:F362 DebugModelNamesPanel  (ROM calls: 0)
+  08:F3B1 DebugModelChainPanel  (ROM calls: 0)
+  08:F431 DebugLastCarMotionPanel  (ROM calls: 0)
+  08:F4CF DebugTrafficHexPanel  (ROM calls: 0)
+  08:F54B DebugWorkBytesPanel  (ROM calls: 0)
+  08:F5CD DebugViewRecordPanel  (ROM calls: 0)
+  08:F61B DebugViewSpeedPanel  (ROM calls: 0)
+  08:F668 DebugBucketsPanel  (ROM calls: 0)
+  08:F7C5 DebugFxWordsPanel  (ROM calls: 0)
+  08:F7F5 DebugCounterPanel  (ROM calls: 0)
+  08:F8F3 DebugPanelSep  (ROM calls: 0)
+  08:F8F6 DebugFxTestWordPanel  (ROM calls: 0)
+  08:FEB4 DebugShowErrors  (ROM calls: 0)
+  0B:E21F Hang  (ROM calls: 0)
+  7E:D2BA DelayLoop13  (ROM calls: 0)
+  7E:F14F TimeMarkStart  (ROM calls: 0)
+  7E:F18F TimeMarkEnd  (ROM calls: 0)
+  7E:F2CD RaceFrameStepPause  (ROM calls: 0)
+  7E:F6F2 ViewParamsSpeedLong  (ROM calls: 0)
+  7E:F737 ViewParamsBobLong  (ROM calls: 0)
+  7F:0D20 FrameQueuesFlush  (ROM calls: 0)
+
+Owned by other sessions (shared helpers only their code calls)
+---------------------------------------------------------------
+  03:C998 ObjectGsu80BCThen81E3 -> objects (object/orient.c, replay_camera.c)
+  03:C9B4 ObjectGsu81E3 -> objects (object/orient.c, replay_camera.c)
+  7E:E6BA PpuMultiplierSetLowByteTimes8 -> video: only ColourBlendBy (7E:E6D1) calls it, the set-up of that routine's product
+  08:83EC ScaleObjectXZ -> objects (object/object.c calls it)
