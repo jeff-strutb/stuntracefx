@@ -25,12 +25,24 @@
 #include "video/picture.h"
 #include "video/video.h"
 
-/* Video frames a race step takes (section 6 of the plan): the median of the
-   frames since the last step ($0306) at each step's start in the original's
-   recordings made for the checks: a one-player race 6 (1,640 steps, 4 to 9
-   frames), two players 7 (979 steps of a battle, 4 to 9), the attract demos
-   5 (670 steps, 4 to 7). */
-enum { PACE_ONE_PLAYER = 6, PACE_TWO_PLAYERS = 7, PACE_DEMO = 5 };
+/* Video frames a race step takes (section 6 of the plan). Interim, until a
+   step's length comes from its work priced by the refitted job-duration
+   model: each mode's mean from the original's recordings made for the
+   checks, the frames since the last step ($0306) at each RaceFrameRun or
+   RaceFrameRunTwoPlayers, loads (over 12 frames) left out, held exactly over
+   time by an accumulator: a one-player race 9,540 frames in 1,585 steps
+   (race1, 4 to 9 frames a step), two players 6,405 in 897 (battle), the
+   attract demos 3,289 in 670. */
+typedef enum { PACE_ONE_PLAYER, PACE_TWO_PLAYERS, PACE_DEMO } PaceMode;
+
+static const struct { uint32_t frames, steps; } pace_mean[3] = {
+    {9540, 1585}, {6405, 897}, {3289, 670}
+};
+
+static struct {
+    uint32_t carry[3];                  /* frames owed, in steps' parts */
+    uint8_t wait;                       /* the next step's frames; 0 not yet worked out */
+} pace;
 
 /* The check-only recorded pacing: each step's frame count from a recording
    of the original, in place of the constant (race_pacing_record). */
@@ -69,18 +81,27 @@ int race_pacing_record(const char *path)
     return 1;
 }
 
-/* The frames the next step waits; the step taken moves the record on. */
-static uint8_t pace_for(uint8_t constant)
+/* The frames the next step waits: from the recording when one is given,
+   else the mode's mean, each step the whole frames its share has reached. */
+static uint8_t pace_for(PaceMode mode)
 {
     if (recorded.at < recorded.n)
         return recorded.count[recorded.at];
-    return constant;
+    if (!pace.wait) {
+        uint32_t c = pace.carry[mode] + pace_mean[mode].frames;
+
+        pace.wait = (uint8_t)(c / pace_mean[mode].steps);
+        pace.carry[mode] = c % pace_mean[mode].steps;
+    }
+    return pace.wait;
 }
 
+/* The step taken: the record moves on, the next step's wait is worked out anew. */
 static void pace_taken(void)
 {
     if (recorded.at < recorded.n)
         recorded.at++;
+    pace.wait = 0;
 }
 
 /* What the race is doing while no step runs. */
@@ -636,6 +657,7 @@ void SoftResetCheck(void)
 
 void race_session_begin(void)
 {
+    pace.wait = 0;
     flow.state = FLOW_RACE_SETUP;
     flow.wait = WAIT_NONE;
     flow.stopped = 0;
@@ -857,6 +879,7 @@ static int demo_step(void)
    ended it, -1 when it ran out. */
 static void demo_start(uint16_t offset)
 {
+    pace.wait = 0;
     g.fx_screen_mode = 1;
     demo_setup(offset);
     flow.pace_count = 0;
