@@ -32,7 +32,7 @@ static void update(const nshvc_input *input)
 
 static void draw(float between)
 {
-    (void)between;
+    fx_tween_draw(between);             /* the race's 3D at the step's progress, between steps */
     video_draw();
 }
 

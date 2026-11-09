@@ -39,7 +39,6 @@ int screen_view_anchor_x(int x0, int x1);      /* the same for a piece inside th
 int screen_anchor_y(int y0, int y1);           /* lines to add, by the piece's middle */
 int screen_bottom_shift(void);                 /* lines the panels' band moves down by */
 int race_full_window(void);                    /* the one-player race fills the window */
-void race_full_window_ready(int on);           /* interim: the 3D's side turns the full window on once its list is the screen's size */
 void sprites_place_full(nshvc_sprite *out, const nshvc_sprite *in, uint32_t count); /* the race's sprites on the larger screen */
 
 /* The race screen's engine objects, by role. */
@@ -217,8 +216,12 @@ typedef struct {
     uint8_t wipe_table[36];             /* $7F:3410 */
     uint8_t wipe_left, wipe_a, wipe_top, wipe_right, wipe_b, wipe_bottom; /* $7F:3433, $3434, $3435, $3437, $3438, $3439 */
     uint8_t wipe_width, wipe_middle;    /* $7F:3402, $3406 */
-    /* the colour maths */
-    uint8_t maths;                      /* $0D47, as the original's CGADSUB */
+    /* the course screen's colour maths ($0D47): the fixed colour taken from
+       (or added to) these layers, halved or not */
+    struct {
+        uint8_t subtract, half;
+        uint8_t layers;                 /* bits: BG1-4, sprites, backdrop */
+    } maths;
     uint8_t fixed_step;                 /* $7F:3408 */
     uint8_t fixed_level;                /* $7F:340D */
 } Windows;

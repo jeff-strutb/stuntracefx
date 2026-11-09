@@ -450,7 +450,7 @@ static void ResultsChampionScreen(void)
 {
     champion_palette();
     results_bg2();
-    g.bg2_map_reg = 0x5C;
+    g.results_page_shown = 1;
     step_next();
 }
 
@@ -917,7 +917,7 @@ void ChampionshipStagePicture(void)
 void ChampionshipStageMap(void)
 {
     results_bg2();
-    g.bg2_map_reg = 0x5C;
+    g.results_page_shown = 1;
     step_next();
     windows.bands_kind = 0;
 }

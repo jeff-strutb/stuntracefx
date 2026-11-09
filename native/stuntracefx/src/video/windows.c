@@ -804,21 +804,27 @@ void WindowsSetupSelect(void)
 
 /* ---- the colour maths and fixed colour ---- */
 
+/* the fixed colour taken from BG1, BG2 and the backdrop */
 void ColourMathA3(void)
 {
-    windows.maths = 0xA3;
+    windows.maths.subtract = 1;
+    windows.maths.half = 0;
+    windows.maths.layers = 0x23;
 }
 
+/* the same and BG3, the fade from its first step */
 void ColourMathA7Start(void)
 {
     sound_port1_push(0x04);
-    windows.maths = 0xA7;
+    windows.maths.subtract = 1;
+    windows.maths.half = 0;
+    windows.maths.layers = 0x27;
     windows.fixed_step = 0;
 }
 
 void ColourMathOff(void)
 {
-    windows.maths = 0;
+    memset(&windows.maths, 0, sizeof windows.maths);
 }
 
 uint8_t FixedColourFromStep(void)

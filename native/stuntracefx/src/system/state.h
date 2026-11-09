@@ -96,7 +96,7 @@ typedef struct {
     uint8_t pause_choice;               /* $0D3D: 0 continue, otherwise quit */
     uint8_t records_state, records_timer; /* $0D43, $0D42: the course screen's records panel and its count */
     uint16_t results_at;                /* $0E43: where the results' next character goes in the map buffer */
-    uint8_t bg2_map_reg;                /* BG2SC as the race code sets it: $5C for the results' and championship's map at $5C00 */
+    uint8_t results_page_shown;         /* BG2 shows the results' and championship's page of the backdrop map ($5C00), not the race's hills */
     uint8_t quit_cars_shown;            /* $10BA */
     uint8_t race_again;                 /* $0DD4 */
     uint8_t laps_done[2];               /* $0DE8: laps the physics has counted */

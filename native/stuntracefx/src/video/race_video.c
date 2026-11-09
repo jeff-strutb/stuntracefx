@@ -45,21 +45,10 @@ static struct { int map, row, column; } wide_band[2];   /* what BackdropRowsUpda
 static void wide_hills_shown(int buffer);
 
 /* The one-player race fills the window: its screen, not the course
-   screen's, the split screen's or the results' (their map at $5C00).
-   Interim: on only once the 3D draws its list at the screen's size, with
-   race_frame_art_draw_over after its shapes and the view over the whole
-   screen (the Enhanced 3D session's side); until then the race keeps the
-   original's layout. */
-static int full_window_ready;
-
-void race_full_window_ready(int on)
-{
-    full_window_ready = on;
-}
-
+   screen's, the split screen's or the results' page. */
 int race_full_window(void)
 {
-    return full_window_ready && pic.race.on && !pic.race.split && !pic.race.course_screen && g.bg2_map_reg != 0x5C;
+    return pic.race.on && !pic.race.split && !pic.race.course_screen && !g.results_page_shown;
 }
 
 /* ---- the objects ---- */
@@ -308,6 +297,7 @@ void VideoRegsReset(void)
     pic.blend.use_fixed = 1;
     pic.palette[0] = 0;
     pic.line_tables = 0;
+    g.results_page_shown = 0;           /* BG2 on the race's hills again */
     fx16_set(0x021A, 0x2C00);
     g.screen_start = 0x2C00;
 }
@@ -957,7 +947,7 @@ void RaceScreenSetup(void)
         windows.wipe_table[ones[i]] = 1;
     for (i = 0; i < 4; i++)
         windows.wipe_table[zeros[i]] = 0;
-    windows.maths = 0;
+    memset(&windows.maths, 0, sizeof windows.maths);
     memset(&pic.windows, 0, sizeof pic.windows);
     pic.windows.layer_use[5] = NSHVC_WIN1 | NSHVC_WIN1_INVERT;
     for (i = 0; i < 3; i++)
@@ -1002,9 +992,9 @@ void RaceCourseUpload(void)
     uint8_t level = windows.fixed_level & 31;
 
     OamDmaAll();
-    pic.blend.subtract = windows.maths >> 7;
-    pic.blend.half = (windows.maths >> 6) & 1;
-    pic.blend.layers = windows.maths & 0x3F;
+    pic.blend.subtract = windows.maths.subtract;
+    pic.blend.half = windows.maths.half;
+    pic.blend.layers = windows.maths.layers;
     pic.blend.fixed_bgr15 = (uint16_t)(level | level << 5 | level << 10);
     pic.bg[1].scroll_y = g.course_scroll_top;
     nshvc_map_write_snes(race_video.course_map, 0, 0, 32, 64, backdrop_map(0));
@@ -1240,26 +1230,34 @@ static void two_images_build(void)
     two_images_stale = 0;
 }
 
-/* A rectangle of the screen from texels (u0, v0), pixel for pixel. The
-   corners take the texels' edges, as nshvc_draw_image's do: a pixel's
-   centre then falls inside its texel, never on the edge between two,
-   where rounding could take the one beside it. */
+/* A rectangle of the screen from texels (u0, v0), a texel a screen pixel,
+   in the list's own pixels (fx_draw_list_scale: the list may be at the
+   output's resolution). The corners take the texels' edges, as
+   nshvc_draw_image's do: a pixel's centre then falls inside its texel,
+   never on the edge between two, where rounding could take the one beside
+   it. */
 static void image_quad(nshvc_draw_list list, nshvc_image image, int x0, int y0, int w, int h, int u0, int v0)
 {
     nshvc_vertex v[6];
     nshvc_material m;
+    float sx, sy, l, t, r, b;
     float ul = (float)u0, ur = (float)(u0 + w);
     float vt = (float)v0, vb = (float)(v0 + h);
 
+    fx_draw_list_scale(&sx, &sy);
+    l = (float)x0 * sx;
+    r = (float)(x0 + w) * sx;
+    t = (float)y0 * sy;
+    b = (float)(y0 + h) * sy;
     memset(&m, 0, sizeof m);
     m.image = image;
     memset(v, 0, sizeof v);
-    v[0].x = (float)x0; v[0].y = (float)y0; v[0].u = ul; v[0].v = vt; v[0].colour = 1;
-    v[1].x = (float)(x0 + w); v[1].y = (float)y0; v[1].u = ur; v[1].v = vt; v[1].colour = 1;
-    v[2].x = (float)(x0 + w); v[2].y = (float)(y0 + h); v[2].u = ur; v[2].v = vb; v[2].colour = 1;
+    v[0].x = l; v[0].y = t; v[0].u = ul; v[0].v = vt; v[0].colour = 1;
+    v[1].x = r; v[1].y = t; v[1].u = ur; v[1].v = vt; v[1].colour = 1;
+    v[2].x = r; v[2].y = b; v[2].u = ur; v[2].v = vb; v[2].colour = 1;
     v[3] = v[0];
     v[4] = v[2];
-    v[5].x = (float)x0; v[5].y = (float)(y0 + h); v[5].u = ul; v[5].v = vb; v[5].colour = 1;
+    v[5].x = l; v[5].y = b; v[5].u = ul; v[5].v = vb; v[5].colour = 1;
     nshvc_draw_tris(list, v, 6, &m);
 }
 
@@ -1300,13 +1298,17 @@ void race_frame_art_draw(nshvc_draw_list list)
         half_draw(list, 0, 0, 112);
         half_draw(list, 1, 112, 224);
     } else {
-        static const nshvc_rect to = { 0, 0, 256, 224 };
+        nshvc_rect to = { 0, 0, 256, 224 };
         nshvc_material m;
+        float sx, sy;
 
         if (frame_image_stale)
             frame_image_build();
         if (race_full_window())
             return;                     /* no bezel: the 3D fills the screen, the boxes go over it */
+        fx_draw_list_scale(&sx, &sy);
+        to.x1 = 256.0f * sx;
+        to.y1 = 224.0f * sy;
         memset(&m, 0, sizeof m);
         m.image = race_video.frame_image;
         nshvc_draw_image(list, race_video.frame_image, &to, &m);

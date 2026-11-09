@@ -277,7 +277,7 @@ static void race_lines_send(void)
         nshvc_line(32, NSHVC_LINE_MAIN + 0, 0);
         nshvc_line(160, NSHVC_LINE_MAIN + 0, 1);
     }
-    if (one && g.bg2_map_reg == 0x5C) {
+    if (one && g.results_page_shown) {
         /* BG2's map is the 32 x 32 page at $5C00: the backdrop map's second
            page, wrapping at 256 lines and columns */
         int32_t y[224];
