@@ -45,6 +45,7 @@ void race_video_init(void)
     race_video.panel_image = nshvc_image_create(256, 256, NSHVC_IMAGE_INDEXED);
     race_video.course_tiles = nshvc_tiles_create(4, 1024, 1);
     race_video.course_map = nshvc_map_create(32, 64);
+    race_video.results_map = nshvc_map_create(32, 32);
     race_video.frame_image = nshvc_image_create(256, 224, NSHVC_IMAGE_INDEXED);
     sprites_use_tiles(race_video.tiles, 0x200, 0x300);
 }
@@ -818,6 +819,22 @@ void RaceVideoSplit2P(void)
 uint16_t *race_map_buffer(void)
 {
     return backdrop_map(0);
+}
+
+/* The results' and championship's BG2 map: 17 rows of 26 entries copied
+   from the map buffer ($7F:93D7, rows $40 bytes apart) to the map at $5C00,
+   one row apart, as they stand now; then BG2's scroll from the first half. */
+void TilemapRowsTo5C00(void)
+{
+    uint16_t rows[17 * 32];
+    int r, i;
+
+    memset(rows, 0, sizeof rows);
+    for (r = 0; r < 17; r++)
+        for (i = 0; i < 26; i++)
+            rows[r * 32 + i] = backdrop_map(0)[r * 32 + i];
+    nshvc_map_write_snes(race_video.results_map, 0, 0, 26, 17, rows);
+    Bg2ScrollFromTable(0);
 }
 
 /* The unpacked course picture ($1000 bytes at the chip RAM's $3000) kept as
