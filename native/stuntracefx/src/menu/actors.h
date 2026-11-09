@@ -28,9 +28,23 @@ typedef struct {
 
 /* the handlers, by the numbers the spawn data stores */
 enum {
+    HANDLER_IDLE_C47B = 0xC47B,
+    HANDLER_IDLE_CE89 = 0xCE89,
     HANDLER_ANIMATE_THEN_EXIT = 0xCD6C,
+    HANDLER_DROP_START = 0xCD7C,
+    HANDLER_DROP_BOUNCE = 0xCE19,
+    HANDLER_RISE_AWAY = 0xCE8A,
+    HANDLER_COUNTDOWN = 0xCF9C,
+    HANDLER_CROSS_FADE_IN = 0xCFAB,
+    HANDLER_DROP_AWAY = 0xCF27,
+    HANDLER_AWAY_CHECK = 0xD068,
+    HANDLER_CROSS_FADE_OUT = 0xD14A,
+    HANDLER_LOAD_FIRST = 0xD1F7,
     HANDLER_WAIT_THEN_ANIMATE = 0xD5EC,
     HANDLER_ANIMATE_ONLY = 0xD5F6,
+    HANDLER_WAIT_THEN_SEQUENCE = 0xD5FA,
+    HANDLER_BUTTON_SEQUENCE = 0xD606,
+    HANDLER_ERASE_CONFIRM = 0xD71B,
     HANDLER_IDLE = 0xD8A8
 };
 
@@ -55,5 +69,8 @@ void actors_run(void);
 void actors_build_sprites(void);
 Actor *actor_find(uint16_t kind);
 void actor_animate_frame(Actor *a);
+void menu_palette_scale(int first, int count, uint16_t factor);
+extern uint16_t menu_idle;
+uint8_t *menu_tables_at(void);
 
 #endif

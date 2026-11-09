@@ -30,15 +30,24 @@ typedef struct {
     uint16_t palette_saved[256];
     nshvc_sprite sprites[128];
     uint32_t sprite_count;
+    uint8_t line_tables;                /* LINES_ bits */
 } Picture;
+
+/* tables of per-line changes the menu screens turn on and off, by channel */
+enum { LINES_TM_C = 0x10, LINES_TM_B = 0x20, LINES_WINDOW = 0x40, LINES_TM_A = 0x80 };
 
 extern Picture pic;
 
 /* The menu screens' tile sets and maps. */
 typedef struct {
-    nshvc_tiles bg1_4, bg2_4, bg3_2, sprites;
-    nshvc_map bg1, bg2, bg3;
+    nshvc_tiles tiles_a, tiles_b, tiles_text, sprites;  /* 0 and $2000 in the original's layout, BG3's, the sprites' */
+    /* the maps: four 32 x 32 pages, seen one or two at a time */
+    nshvc_map page_0, pages_0_1, pages_1_2, pages_2_3;
+    nshvc_map text;
 } MenuVideo;
+
+/* a map page, 32 x 32 words, to every map that shows it */
+void menu_page_write(int page, const void *words);
 
 extern MenuVideo menu_video;
 

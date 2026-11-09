@@ -18,6 +18,8 @@ typedef struct {
 
 extern FrameState frame_state;
 
+uint16_t frame_menu_pressed(void);              /* player 1's presses since the screen last cleared them */
+void frame_menu_pressed_clear(int player);
 void input_read(const nshvc_input *input);
 void frame_end(void);
 

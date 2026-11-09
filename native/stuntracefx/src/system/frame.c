@@ -21,6 +21,9 @@ void input_read(const nshvc_input *input)
     }
 }
 
+uint16_t frame_menu_pressed(void) { return frame_state.menu_pressed[0]; }
+void frame_menu_pressed_clear(int player) { frame_state.menu_pressed[player] = 0; }
+
 /* Every other call the brightness moves one step toward its target. */
 static void brightness_step(void)
 {

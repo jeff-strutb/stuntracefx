@@ -54,6 +54,11 @@ void sound_port0_push(uint8_t command)
     push(&queue[0], sound_player2 ? command | 0x80 : command);
 }
 
+void sound_port0_push_raw(uint8_t command)
+{
+    push(&queue[0], command);
+}
+
 void sound_port1_push(uint8_t command)
 {
     push(&queue[1], command);

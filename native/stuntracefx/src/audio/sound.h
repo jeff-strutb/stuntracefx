@@ -10,6 +10,7 @@
 void sound_init(void);
 void sound_queue_reset(void);
 void sound_port0_push(uint8_t command);
+void sound_port0_push_raw(uint8_t command);     /* without player 2's mark */
 void sound_port1_push(uint8_t command);
 void sound_set_port0(uint8_t value);            /* a byte the driver is told at once */
 void sound_frame(void);                         /* once a frame */

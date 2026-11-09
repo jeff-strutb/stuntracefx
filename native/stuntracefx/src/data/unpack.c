@@ -62,7 +62,7 @@ uint32_t unpack(uint32_t end, uint8_t *out, uint32_t room)
     Bits s;
     uint32_t size, left;
 
-    s.at = end;
+    s.at = cart_offset((uint8_t)(end >> 16), (uint16_t)end);
     size = back_word(&s);
     left = size;
     (void)back_word(&s);
