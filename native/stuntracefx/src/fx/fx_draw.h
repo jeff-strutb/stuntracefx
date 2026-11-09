@@ -10,7 +10,11 @@
 #include "nshvc/nshvc.h"
 
 void fx_draw_init(void);
-/* The list the Super FX's frame draws into: its size in pixels. */
+/* Which of the two pictures the Super FX's next drawing goes into. */
+void fx_draw_begin(int picture);
+/* A picture, to be shown as a layer. */
+nshvc_draw_list fx_draw_picture(int picture);
+/* The list drawn into, by size in pixels (the checks). */
 void fx_draw_set_target(nshvc_draw_list list, uint32_t width, uint32_t height);
 
 #endif

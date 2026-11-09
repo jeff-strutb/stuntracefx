@@ -17,13 +17,6 @@ static inline uint16_t fx_div2(uint16_t a)
 _Noreturn void fx_bad_dispatch(uint16_t at);
 
 /* the port's renderer calls (render/fx_ops.c, fxhooks.txt) */
-void fx_row_open(uint8_t kind, uint16_t x, uint16_t y, uint16_t tu, uint16_t du, uint16_t tv, uint16_t base, uint16_t dv);
-void fx_row_close(uint16_t x);
-void fx_flat_row(uint16_t x, uint16_t y, uint16_t n);
-void fx_bitmap_row(uint16_t x, uint16_t y, uint16_t n, uint16_t palette, uint16_t base);
-void fx_scaled_row_start(void);
-void fx_scaled_row(uint16_t x, uint16_t y, uint16_t n, uint16_t tu, uint16_t du, uint16_t base, uint16_t palette);
-void fx_noise_row(uint16_t x, uint16_t y, uint16_t n, uint16_t seed, uint16_t ramp);
 
 #define FXCAR_0A 0x000A
 #define FXCAR_44 0x0044

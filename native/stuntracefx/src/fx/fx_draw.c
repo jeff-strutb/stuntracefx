@@ -24,6 +24,25 @@ void fx_draw_set_target(nshvc_draw_list list, uint32_t width, uint32_t height)
     target_h = height;
 }
 
+/* The two pictures, drawn in turn as the original's two buffers were. */
+static nshvc_draw_list pictures[2];
+
+void fx_draw_init(void)
+{
+    pictures[0] = nshvc_draw_list_create();
+    pictures[1] = nshvc_draw_list_create();
+}
+
+void fx_draw_begin(int picture)
+{
+    fx_draw_set_target(pictures[picture & 1], 256, 224);
+}
+
+nshvc_draw_list fx_draw_picture(int picture)
+{
+    return pictures[picture & 1];
+}
+
 void fx_list_begin(void) {}
 void fx_list_end(void) {}
 
@@ -82,6 +101,8 @@ static nshvc_image texture(uint8_t bank, uint16_t base, uint16_t mask, uint8_t c
 
 /* ---- quads ---- */
 
+static void blocks_flush(void);
+
 /* The vertices of a textured quad over the pixels [x0, x1) x [y0, y1), with
    u = u0 + i du and v = v0 + j dv at the centre of column i and row j. The
    exact rule puts a whole-pixel vertex 1/64 and 1/128 past its place. */
@@ -94,6 +115,7 @@ static void quad(nshvc_image image, int x0, int x1, int y0, int y1, double u0, d
 
     if (!target.id || x1 <= x0 || y1 <= y0)
         return;
+    blocks_flush();
     memset(&m, 0, sizeof m);
     m.image = image;
     memset(v, 0, sizeof v);
@@ -114,6 +136,7 @@ void fx_flat_row(uint16_t x, uint16_t y, uint16_t n)
 
     if (!target.id || !colour)
         return;
+    blocks_flush();
     memset(v, 0, sizeof v);
     v[0].x = x; v[0].y = y;
     v[1].x = (float)(x + n); v[1].y = y;
@@ -219,6 +242,164 @@ uint16_t fx_sprite_magnify(uint16_t c8, uint16_t step, uint16_t left, uint16_t t
     return (uint16_t)(0 - (uint32_t)j1 * step);
 }
 
+/* ---- glyphs: two bits a pixel, through a table of four colours ---- */
+
+typedef struct {
+    uint8_t bank;
+    uint16_t base;
+    uint16_t width, rows, stride;
+    uint8_t colours[4];
+    nshvc_image image;
+} GlyphKey;
+
+#define KNOWN_GLYPHS 4096
+#define GLYPH_ROWS 128
+static GlyphKey glyph_known[KNOWN_GLYPHS];
+static int glyph_count;
+
+static nshvc_image glyph_image(uint8_t bank, uint16_t base, uint16_t width, uint16_t rows, uint16_t stride, const uint8_t colours[4])
+{
+    static uint8_t t[256 * 256];
+    int k, x, y;
+
+    rows = GLYPH_ROWS;
+    for (k = 0; k < glyph_count; k++)
+        if (glyph_known[k].bank == bank && glyph_known[k].base == base && glyph_known[k].width == width
+            && glyph_known[k].rows == rows && glyph_known[k].stride == stride
+            && !memcmp(glyph_known[k].colours, colours, 4))
+            return glyph_known[k].image;
+    for (y = 0; y < rows; y++)
+        for (x = 0; x < width; x++) {
+            uint8_t b = fx_rom_read(bank, (uint16_t)(base + y * stride + x / 4));
+
+            t[y * width + x] = colours[(b >> (2 * (x & 3))) & 3];
+        }
+    if (glyph_count == KNOWN_GLYPHS)
+        glyph_count = 0;
+    glyph_known[glyph_count].bank = bank;
+    glyph_known[glyph_count].base = base;
+    glyph_known[glyph_count].width = width;
+    glyph_known[glyph_count].rows = rows;
+    glyph_known[glyph_count].stride = stride;
+    memcpy(glyph_known[glyph_count].colours, colours, 4);
+    glyph_known[glyph_count].image = nshvc_image_create(width, rows, NSHVC_IMAGE_INDEXED);
+    nshvc_image_write(glyph_known[glyph_count].image, t);
+    return glyph_known[glyph_count++].image;
+}
+
+/* The block being gathered from consecutive rows of a glyph. */
+static struct {
+    int open;
+    uint8_t bank, colours[4];
+    uint16_t x, y, width, rows, base, stride;
+} block;
+
+static void blocks_flush(void)
+{
+    if (block.open) {
+        nshvc_image image = glyph_image(block.bank, block.base, block.width, block.rows, block.rows > 1 ? block.stride : 32, block.colours);
+
+        block.open = 0;
+        quad(image, block.x, block.x + block.width, block.y, block.y + block.rows, 0, 1, 0, 1);
+    }
+}
+
+void fx_draw_flush(void) { blocks_flush(); }
+
+void fx_bitmap_row(uint16_t x, uint16_t y, uint16_t n, uint16_t palette, uint16_t base)
+{
+    uint8_t colours[4];
+    uint16_t next;
+    int i;
+
+    for (i = 0; i < 4; i++)
+        colours[i] = fx_ram[(uint16_t)(palette + i)];
+    if (block.open && block.x == x && block.width == n && block.bank == fxs.rombr
+        && !memcmp(block.colours, colours, 4) && y == (uint16_t)(block.y + block.rows)) {
+        next = (uint16_t)(base - block.base);
+        if (block.rows == 1)
+            block.stride = next;
+        if (next == (uint16_t)(block.stride * block.rows)) {
+            block.rows++;
+            return;
+        }
+    }
+    blocks_flush();
+    block.open = 1;
+    block.bank = fxs.rombr;
+    memcpy(block.colours, colours, 4);
+    block.x = x;
+    block.y = y;
+    block.width = n;
+    block.rows = 1;
+    block.base = base;
+    block.stride = 0;
+}
+
+void fx_scaled_row_start(void) {}
+
+/* One row of a glyph drawn scaled: pixel k shows column ((tu + k) du) / 256 of the row at base. */
+void fx_scaled_row(uint16_t x, uint16_t y, uint16_t n, uint16_t tu, uint16_t du, uint16_t base, uint16_t palette)
+{
+    uint8_t colours[4];
+    uint16_t start = (uint16_t)(fx_ram[0x0216] | fx_ram[0x0217] << 8);
+    int i, row;
+    nshvc_image image;
+
+    if (!target.id || !n)
+        return;
+    blocks_flush();
+    for (i = 0; i < 4; i++)
+        colours[i] = fx_ram[(uint16_t)(palette + i)];
+    row = (uint16_t)(base - start) / 32;
+    image = glyph_image(fxs.rombr, start, 128, GLYPH_ROWS, 32, colours);
+    quad(image, x, x + n, y, y + 1, (double)((uint32_t)tu * du) / 256.0, du / 256.0, row + 0.5, 0);
+}
+
+/* The static: rows from a square of noise, the original's own generator's,
+   made once. */
+static nshvc_image noise_image;
+
+static uint16_t noise_step(uint16_t s)
+{
+    uint16_t t = (uint16_t)(s ^ (s << 8)), r;
+
+    t = (uint16_t)(t >> 8 | t << 8);
+    r = (uint16_t)(((uint16_t)((uint16_t)(s & 0xFF) << 1) ^ t) >> 1);
+    r ^= 0xFF00;
+    if ((((s & 0xFF) << 1) ^ t) & 1)
+        r ^= 0x8180;
+    else if (r == 0xAA55)
+        r = 0;
+    return r;
+}
+
+void fx_noise_row(uint16_t x, uint16_t y, uint16_t n, uint16_t seed, uint16_t ramp)
+{
+    (void)ramp;
+    if (!noise_image.id) {
+        static uint8_t t[256 * 256];
+        uint16_t s = 0x1234;
+        int i;
+
+        for (i = 0; i < 256 * 256; i++) {
+            s = noise_step(s);
+            t[i] = (uint8_t)(0x80 + 0x10 * (s & 7));
+        }
+        noise_image = nshvc_image_create(256, 256, NSHVC_IMAGE_INDEXED);
+        nshvc_image_write(noise_image, t);
+    }
+    quad(noise_image, x, x + n, y, y + 1, seed & 0xFF, 1, (seed >> 8) + 0.5, 0);
+}
+
+/* The rows of an object sprite are sent whole by fx_sprite_shrink and
+   fx_sprite_magnify. */
+void fx_row_open(uint8_t kind, uint16_t x, uint16_t y, uint16_t tu, uint16_t du, uint16_t tv, uint16_t base, uint16_t dv) {}
+void fx_row_close(uint16_t x) {}
+
+void fx_plot(uint8_t x, uint8_t y) { fx_flat_row(x, y, 1); }
+uint8_t fx_rpix(uint8_t x, uint8_t y) { (void)x; (void)y; return 0; }
+
 /* ---- the queue ---- */
 
 enum { QUEUE = 0x08AA };
@@ -306,12 +487,15 @@ static void textured_polygon(uint16_t p, int n)
     uint16_t word = rd((uint16_t)(p + 1)), base = rd((uint16_t)(p + 3)), mask = rd((uint16_t)(p + 5));
     uint16_t at = (uint16_t)(p + 7);
     uint8_t colour = (uint8_t)word, options = (uint8_t)((word >> 8) & 0x1F);
+    double u_off, v_off;
     int i, out = 0;
 
     fxs.por = options;
     fxs.colr = colour;
     if (!target.id)
         return;
+    u_off = (int16_t)rd(0x00C0) / 256.0;
+    v_off = (int16_t)rd(0x00C2) / 256.0;
     memset(&m, 0, sizeof m);
     m.image = texture(bank, base, mask, colour, options);
     memset(v, 0, sizeof v);
@@ -321,8 +505,8 @@ static void textured_polygon(uint16_t p, int n)
         for (j = 0; j < 3; j++) {
             v[out].x = fx_ram[(uint16_t)(at + t[j] * 8)];
             v[out].y = fx_ram[(uint16_t)(at + t[j] * 8 + 2)];
-            v[out].u = fx_ram[(uint16_t)(at + t[j] * 8 + 4)];
-            v[out].v = fx_ram[(uint16_t)(at + t[j] * 8 + 6)];
+            v[out].u = (float)(fx_ram[(uint16_t)(at + t[j] * 8 + 5)] + u_off);
+            v[out].v = (float)(fx_ram[(uint16_t)(at + t[j] * 8 + 7)] + v_off);
             v[out].colour = 1;
             out++;
         }
@@ -336,6 +520,7 @@ FxDrawListResult FxDrawList(uint16_t caller_list_end, uint16_t caller_write_ptr,
     uint16_t list_end = fx_ldw(FX_LIST_END), at = QUEUE;
 
     if (list_end != QUEUE) {
+        blocks_flush();
         fx_spill(stack);
         fx_stw(0x005E, *stack);
         fx_stw(list_end, 0);

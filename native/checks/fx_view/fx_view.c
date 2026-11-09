@@ -74,42 +74,87 @@ static void write_reference(void)
     }
 }
 
+static int is_drawing_job(uint32_t pc)
+{
+    return pc == 0x01AB13 || pc == 0x07F441 || pc == 0x07F121 || pc == 0x07F15B || pc == 0x07F6DF
+        || pc == 0x07FA88 || pc == 0x07FAF2 || pc == 0x07F0A5 || pc == 0x07F0B4 || pc == 0x07EFCD;
+}
+
+static void run_job(uint32_t pc)
+{
+    const FxEntry *job = NULL, *e;
+
+    for (e = fx_entries; e->run; e++)
+        if (e->pc == pc)
+            job = e;
+    if (!job)
+        return;
+    memcpy(fx_ram, machine + AT_FX, 0x10000);
+    memset(&fxs, 0, sizeof fxs);
+    memcpy(gsu.r, regs, 32);
+    fxs.rombr = regs[35];
+    fxs.rambr = regs[36];
+    fxs.scmr = regs[38];
+    fxs.colr = regs[39];
+    fxs.por = regs[40];
+    job->run();
+    fx_draw_flush();
+}
+
+static void frame_start(void)
+{
+    int i;
+
+    for (i = 0; i < 256; i++)
+        palette[i] = (uint16_t)(machine[AT_CG + i * 2] | machine[AT_CG + i * 2 + 1] << 8);
+    nshvc_draw_list_clear(list, 256, 224);
+    nshvc_draw_rule(list, NSHVC_FILL_EXACT);
+    fx_draw_set_target(list, 256, 224);
+}
+
+/* A picture is the frame program and whatever else draws into its buffer,
+   up to the next frame program. */
 static void next_frame(void)
 {
     uint32_t h[3], jh[3];
-    const FxEntry *job = NULL, *e;
-    int i;
+    static int have_frame, pending;
+    static uint8_t frame_regs[64];
+    uint8_t keep[64];
 
+    if (pending) {
+        pending = 0;
+        frame_start();
+        memcpy(frame_regs, regs, 64);
+        have_frame = 1;
+        run_job(0x01AB13);
+    }
     while (fread(h, 4, 3, st) == 3) {
         apply(st);
-        if (h[1] == 2) {
-            if (fread(jh, 4, 3, jo) != 3 || fread(regs, 1, 64, jo) != 64)
-                exit(2);
-            job = NULL;
-            if (h[2] != 0x01AB13)
-                continue;
-            for (e = fx_entries; e->run; e++)
-                if (e->pc == h[2])
-                    job = e;
-            memcpy(fx_ram, machine + AT_FX, 0x10000);
-            memset(&fxs, 0, sizeof fxs);
-            memcpy(gsu.r, regs, 32);
-            fxs.rombr = regs[35];
-            fxs.rambr = regs[36];
-            fxs.scmr = regs[38];
-            fxs.colr = regs[39];
-            fxs.por = regs[40];
-            for (i = 0; i < 256; i++)
-                palette[i] = (uint16_t)(machine[AT_CG + i * 2] | machine[AT_CG + i * 2 + 1] << 8);
-            nshvc_draw_list_clear(list, 256, 224);
-            nshvc_draw_rule(list, NSHVC_FILL_EXACT);
-            fx_draw_set_target(list, 256, 224);
-            job->run();
-        } else if (h[1] == 3 && job) {
+        if (h[1] != 2)
+            continue;
+        if (fread(jh, 4, 3, jo) != 3 || fread(regs, 1, 64, jo) != 64)
+            exit(2);
+        if (!is_drawing_job(h[2]))
+            continue;
+        if (h[2] != 0x01AB13) {
+            if (have_frame)
+                run_job(h[2]);
+            continue;
+        }
+        if (have_frame) {
+            memcpy(keep, regs, 64);
+            memcpy(regs, frame_regs, 64);
             write_reference();
+            memcpy(regs, keep, 64);
             number++;
+            have_frame = 0;
+            pending = 1;
             return;
         }
+        frame_start();
+        memcpy(frame_regs, regs, 64);
+        have_frame = 1;
+        run_job(0x01AB13);
     }
     nshvc_quit();
 }
