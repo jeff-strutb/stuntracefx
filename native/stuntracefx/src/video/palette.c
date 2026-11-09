@@ -7,6 +7,7 @@
  */
 #include <string.h>
 
+#include "audio/sound.h"
 #include "data/cart.h"
 #include "system/game.h"
 #include "system/state.h"
@@ -149,7 +150,7 @@ void PaletteCourseLoad(int course)
 
         memcpy(palettes.hud_colours, hud, sizeof hud);
     }
-    if (g.clear_colours_b0)
+    if (sound_hold_b)
         for (c = 0xB0; c < 0xC0; c++)
             palettes.buffer[c] = palettes.blended[c] = palettes.day[c] = palettes.night[c] = 0;
 }

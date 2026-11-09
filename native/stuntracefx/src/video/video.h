@@ -245,6 +245,12 @@ void TilemapLevelColumns(void);
 void DigitTiles1184(void);
 void VramNoiseTiles(void);
 void TimesKeepAndAdvance(void);
+void ChampionshipStageStart(void);
+void ChampionshipStageWaitOpen(void);
+void ChampionshipStagePicture(void);
+void ChampionshipStageMap(void);
+void ChampionshipStageWaitClosed(void);
+int WindowClosedDigitStep(void);
 
 /* ---- sprites ---- */
 

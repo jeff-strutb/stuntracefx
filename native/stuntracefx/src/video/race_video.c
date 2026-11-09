@@ -804,7 +804,7 @@ void RaceScreenSetup(void)
     t[6] = t[9] = t[12] = 1;
     g.hdma_enable = 0x02;
     g.cursor_column_x = 0xF0;
-    g.cursor_column_x2 = 0xF0;
+    g.byte_0e92 = 0xF0;
     pic.race.on = 1;
     pic.race.split = 0;
     pic.race.course_screen = 1;
@@ -968,4 +968,78 @@ void race_frame_art_draw(nshvc_draw_list list)
     memset(&m, 0, sizeof m);
     m.image = race_video.frame_image;
     nshvc_draw_image(list, race_video.frame_image, &to, &m);
+}
+
+/* ---- the championship screen, one frame's picture step each ---- */
+
+static void championship_scroll_corner(void)
+{
+    g.backdrop_y[0] = 0xFFE0;
+    g.backdrop_x[0] = 0xFFE8;
+}
+
+/* stage 0: the race's colours off, the split stages from their first, the panels away */
+void ChampionshipStageStart(void)
+{
+    g.palette_animate = 0;
+    g.split_stage_on = 6;
+    g.split_stage = 0;
+    windows.bands_kind = 0;
+    g.overlay_state = 0;
+    WindowSlideUpSound();
+    g.overlay_d59++;
+    OamHide36And96();
+}
+
+/* stage 1: waits for the split window to have opened */
+void ChampionshipStageWaitOpen(void)
+{
+    if (windows.bands_state != 5)
+        return;
+    g.overlay_d59++;
+    championship_scroll_corner();
+}
+
+/* stage 4: the picture and its digits into the map; the screen's colours */
+void ChampionshipStagePicture(void)
+{
+    int i;
+
+    g.race_again = 0;
+    palettes.tile_cycle = 0;
+    chip_unpack(0x1F << 16 | 0xFB99, 0x3000);
+    memcpy(backdrop_map[0], fx_ram + 0x3000, 0x440);
+    DigitTiles1184();
+    g.overlay_d59++;
+    g.hdma_enable = (uint8_t)((g.hdma_enable | 0x02) & 0xF3);
+    for (i = 0; i < 256; i++)
+        palettes.buffer[i] = cart16(0x1F, (uint16_t)(0x8600 + i * 2));
+}
+
+/* stage 7: the corner scroll and the screen's own BG2 map */
+void ChampionshipStageMap(void)
+{
+    championship_scroll_corner();
+    g.overlay_d59++;
+    windows.bands_kind = 0;
+}
+
+/* stage 8: waits for the split window to have closed */
+void ChampionshipStageWaitClosed(void)
+{
+    if (!windows.bands_state)
+        g.overlay_d59++;
+}
+
+/* With the split window closed: 0 nothing yet; 1 the override was set, it is
+   cleared and the race restarts at $07:EC6B; 2 it ends at $07:EBDD. */
+int WindowClosedDigitStep(void)
+{
+    if (windows.bands_state != 5)
+        return 0;
+    if (!g.time_override)
+        return 2;
+    g.time_override = 0;
+    g.champ_stage = 2;
+    return 1;
 }

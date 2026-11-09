@@ -183,7 +183,6 @@ typedef struct {
     uint8_t frame_records[64 * 30];     /* $7E:F77F: those records, 30 bytes each */
 
     /* ---- the picture: palettes, windows, tile maps, the HUD ---- */
-    uint8_t clear_colours_b0;           /* $10DC: the course keeps no colours $B0-$BF */
     uint8_t split_stage_on;             /* $0D22: the split screen's upload stages run */
     uint8_t split_stage;                /* $0D23: which of them */
     uint16_t view_heading_06cf;         /* $06CF: the view's heading for the backdrop */
@@ -206,7 +205,6 @@ typedef struct {
     uint8_t oam_upload_wanted;          /* $0D28: the sprites go out with the next stage that has room */
     uint16_t course_scroll_top;         /* $0E33 (its high byte $0E34 also the low band's): the course screen's upper BG2 scroll */
     uint16_t course_scroll_low;         /* $0E37 */
-    uint8_t cursor_column_x2;           /* $0E92 */
     uint8_t course_scroll_table[16];    /* $10AA: its per-line table, a line count and two scroll bytes an entry */
     uint8_t panel_top, panel_bottom;    /* $0D5C, $0D5D: the half shows the finished player's panel; bit 7 its other scroll */
     uint16_t backdrop_x[2], backdrop_y[2]; /* $0D92, $0D8E: BG2's scroll by picture buffer or half */
