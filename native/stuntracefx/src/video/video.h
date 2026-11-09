@@ -230,9 +230,67 @@ void TimesKeepAndAdvance(void);
 
 /* ---- sprites ---- */
 
+extern nshvc_sprite sprites[128];
+void OamDmaAll(void);
+void OamDirectStage(void);
+void OamHideRange(int first, int count);
 void OamBufferClear(void);
 void OamBufferHideLarge(void);
 void SpriteSlot1Countdown(void);
+int SpriteSlotFirst(void);
+void OamFromList(uint8_t bank, int *slot, uint16_t *list);
+void OamSprite0AddY(uint8_t lines);
+void oam_attr_fill(int first, int count, uint8_t attr);
+void OamAttr36x4(int first);
+void OamAttr36x6(int first);
+void OamAttr36x7(int first);
+void OamAttr38x4(int first);
+void OamAttr38x6(int first);
+void OamAttr38x7(int first);
+void OamHideEntries3And9(int first);
+void OamHideEntries0To2(int first);
+void OamSetPalette(uint8_t bits, int count, int first);
+void OamPaletteFromTableE30F(void);
+void OamPaletteFromTableE26A(void);
+void OamPaletteFromTableE26AByMode(void);
+void OamPalettesE28D(void);
+void OamPaletteForD75(void);
+void OamBlock52Left(void);
+void OamBlock52Right(void);
+void OamBlock59Left(void);
+void OamBlock59Right(void);
+void OamBlock123Left(void);
+void OamBlock123Right(void);
+void OamColumn8(int first, uint16_t pos, uint16_t tile);
+void OamHighBits18(void);
+void OamHighBits58(void);
+void OamHighBits18Park48(void);
+void OamHighBits58Park112(void);
+void OamHide36And96(void);
+void OamLargeColumns(void);
+void OamPlaceRows75And112(void);
+void SpriteStrip4(uint16_t selector, int first, uint16_t pos);
+void SpriteStrip6(uint16_t selector, int first, uint16_t pos);
+void MetaspriteDraw(uint16_t group, int slot);
+void FlashingMetaspriteDraw(void);
+void FlashingMetaspriteDraw0(void);
+void FlashingMetaspriteDrawByMode(void);
+void SpritePiecesAtLeft(uint16_t set, int slot);
+void SpritePiecesAtRight(uint16_t set, int slot);
+void SpritePiecesAt46Y71(uint16_t set, int slot);
+void SpritePiecesAt46Y82(uint16_t set, int slot);
+void SpritePiecesAt46Y93(uint16_t set, int slot);
+void SpritePiecesAt62Y71(uint16_t set, int slot);
+void SpritePiecesAt62Y83(uint16_t set, int slot);
+void SpritePiecesAt62Y95(uint16_t set, int slot);
+void SpritePiecesCarAt51(uint16_t car, int slot);
+void SpritePiecesTwoCars(void);
+void SpritePiecesTwoCarsTop(void);
+void OverlaySpritesStep(void);
+void OamTextLine(int slot, uint8_t tile_base, uint8_t x, uint8_t y, uint8_t attr);
+void SpriteTextAt895E(void);
+void SpriteTextAt8152(void);
+void SpriteTextAt8952(void);
 
 /* wanted by the race (race/phases.c, the lap and results panels) */
 void OamByteSet(uint16_t offset, uint8_t value);   /* a byte of the sprite table, 0-$21F */

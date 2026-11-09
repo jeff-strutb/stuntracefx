@@ -184,6 +184,18 @@ typedef struct {
     uint8_t level_columns[12];          /* $0F05: the screen's level columns */
     uint16_t time_shown_2;              /* $0E6E */
     uint8_t race_time_best[3];          /* $0EEA-$0EEC */
+    uint16_t sprite_row_d75, sprite_row_d79; /* $0D75, $0D79: the sprite rows the race's palettes run from */
+    uint8_t sprite_origin[2];           /* $0D3B, $0D3C: a metasprite's origin */
+    uint16_t metasprite_set;            /* $0D35 */
+    uint16_t flash_sprite_pos;          /* $0D37-$0D38 as a word, the flashing metasprite's position */
+    uint16_t flash_phase;               /* $0D39 */
+    uint8_t piece_selector, piece_tile, piece_palette; /* $10BB, $10C1, $10C5 */
+    uint8_t piece_x, piece_y;           /* $10BD, $10BF */
+    uint16_t piece_set;                 /* $10C3 */
+    uint8_t overlay_state, overlay_attr; /* $10A2, $10A8 */
+    uint16_t overlay_x, overlay_y, overlay_picture; /* $10A4, $10A6, $10A0 */
+    uint8_t slot_mask, slot_count, slot1_finished; /* $05D5, $08FB, $7E:FF65 */
+    struct { uint8_t first, unused1, unused2, unused3, unused4, unused5, unused6, value; } slot[8]; /* $0595: colour-flash records */
     uint16_t backdrop_x[2], backdrop_y[2]; /* $0D92, $0D8E: BG2's scroll by picture buffer or half */
     uint8_t hdma_enable;                /* $0D45: the per-line effects on; bit 5 the fixed colour's bands */
     uint8_t palette_animate;            /* $0E5F: the animated colours are in use */
