@@ -53,6 +53,8 @@ int fx_tween_view(uint16_t *heading, uint16_t *pitch);
 void fx_draw_tween_on(void);
 void fx_draw_tween_shown(void);
 void fx_draw_tween_off(void);
+void fx_draw_recompose(void);
+int fx_draw_shown_picture(void);
 /* The step's end; the picture the last step drew its panel n into (-1:
    none). */
 void fx_draw_step_end(void);

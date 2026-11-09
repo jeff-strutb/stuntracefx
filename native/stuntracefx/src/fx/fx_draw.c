@@ -63,7 +63,7 @@ static int palette_row;         /* the 16 colours a 4-bit picture's tiles show i
    layer's), and whether the screen's list may be at the output's pixels:
    the frame art drawn into it (race_frame_art_draw) must scale too. */
 static float target_sx = 1, target_sy = 1, screen_sx = 1, screen_sy = 1;
-static int output_pixels;
+static int output_pixels = 1;   /* the frame art scales with the list (video, 7973cf1a) */
 
 void fx_draw_list_scale(float *sx, float *sy)
 {
@@ -184,6 +184,23 @@ void fx_draw_tween_shown(void)
     recording = before_tween.recording;
     offset_x = before_tween.offset_x;
     offset_y = before_tween.offset_y;
+}
+
+/* The screen's list made again for what it shows, with the pictures
+   between in it: the screen sets its layer to the list only when a picture
+   is shown (race_picture_shown), not at every draw. */
+/* The one picture the screen shows (one player: the buffer whose upload
+   stages finished last, race_picture_shown), or -1 (two players show both;
+   nothing composed yet). */
+int fx_draw_shown_picture(void)
+{
+    return composed_split ? -1 : composed_picture;
+}
+
+void fx_draw_recompose(void)
+{
+    if (composed_picture >= 0)
+        (void)fx_draw_picture(composed_picture);
 }
 
 void fx_draw_tween_off(void)

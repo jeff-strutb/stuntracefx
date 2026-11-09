@@ -289,7 +289,11 @@ void fx_tween_draw(float between)
     if (!fx_tween_begin(race_step_progress(between)))
         return;
     for (panel = 0; panel < 2; panel++) {
-        int picture = fx_draw_step_picture(panel);
+        /* one player: into the picture shown, whichever buffer it is; the
+           original shows a step's picture only once its uploads are done,
+           a few updates after the step, and the 3D between replaces the
+           whole of either */
+        int picture = !panel && fx_draw_shown_picture() >= 0 ? fx_draw_shown_picture() : fx_draw_step_picture(panel);
 
         if (picture < 0 || !RaceViewForPicture(panel))
             break;
@@ -301,4 +305,5 @@ void fx_tween_draw(float between)
         fractions_on = 0;
     }
     fx_tween_end();
+    fx_draw_recompose();
 }
