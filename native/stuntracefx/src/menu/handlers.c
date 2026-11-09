@@ -919,7 +919,9 @@ static void initials_step(uint16_t press)
 /*
  * The initials typed on a keyboard (plan stage 10). While the initials
  * screen runs, the engine's text input is on (a touch screen with no
- * keyboard shows the system's). Each letter typed sets the letter at the
+ * keyboard shows the system's), and the keys that type press no pad button
+ * meanwhile (nativeshvc 4.5), so Enter (Start) ends the screen and a letter
+ * bound to B does not. Each letter typed sets the letter at the
  * marker, with the up and down press's sound, and moves the marker on as a
  * right press does; Backspace moves it back as a left press does. What was
  * typed before the screen opened is dropped. The letters come before the
