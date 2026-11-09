@@ -524,7 +524,7 @@ static void slide_to_preview(Actor *a)
         actor_start_animation(k, 0x008A);
     g.sel[0] = 0;
     show_choice(g.choice_p1);
-    menu_race_step();
+    RaceFrameStep(0);
     menu.shown_3d = 1;
     actors.fast_animation = 1;
     menu.press_count[0] = 0;
@@ -952,7 +952,7 @@ static void kinds67_animate(uint16_t anim6, uint16_t anim7)
 
 static void show_race_frame(void)
 {
-    menu_race_step();
+    RaceFrameStep(0);
     menu.shown_3d = 1;
     actors.fast_animation = 1;
 }
@@ -1196,7 +1196,7 @@ static void preview_idle(Actor *a)
     choice_repeat();
     cameras[0].object = car_object(g.choice_p2);
     set_pair_animations(g.choice_p2);
-    menu_race_step();
+    RaceFrameStep(0);
     menu.shown_3d = 1;
 }
 
@@ -1288,7 +1288,7 @@ static void preview_back_out(Actor *a)
     a->handler = HANDLER_PREVIEW_BACK_WAIT;
     g.sel[0] = 0;
     show_choice(g.choice_p1);
-    menu_race_step();
+    RaceFrameStep(0);
     menu.shown_3d = 1;
 }
 

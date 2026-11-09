@@ -260,10 +260,41 @@ void group_palette_set(Actor *a, uint16_t palette_bits)
 }
 
 /*
+ * @routine 7F:1007 VramDmaQueueAdd (the sprite art rows the objects queue)
+ * @routine 7F:0F77 VramDmaQueueFlush (as the menus' frame end runs it)
+ * WHAT IT DOES: The rows of sprite art the objects ask for wait for the
+ * frame's end, as the original's VRAM queue waited for the vertical blank:
+ * a picture a screen loads after its objects run does not cover them. The
+ * queue holds 64; more are dropped, as the original's were. The rows go
+ * last first, so of two for the same tiles the first asked for stays.
+ */
+enum { ROWS_QUEUED = 64 };
+static struct { uint16_t tile, src; } rows[ROWS_QUEUED];
+static int rows_n;
+
+static void row_queue(uint16_t tile, uint16_t src)
+{
+    if (rows_n == ROWS_QUEUED)
+        return;
+    rows[rows_n].tile = tile;
+    rows[rows_n].src = src;
+    rows_n++;
+}
+
+void actors_rows_flush(void)
+{
+    while (rows_n > 0) {
+        rows_n--;
+        nshvc_tiles_write(menu_video.sprites, rows[rows_n].tile, menu_frame_data(rows[rows_n].src), 2,
+                          NSHVC_TILES_PLANAR);
+    }
+}
+
+/*
  * @routine 0B:CBC3 MenuActorUploadFrames
  * WHAT IT DOES: Shows animation frame `frame` on every sprite of the
  * object's group: each sprite's graphics (two rows of two tiles, from the
- * frames in menu_frames) go to its slot in the sprite tile set, and bit 15
+ * frames in menu_frames) are queued for its slot in the sprite tile set, and bit 15
  * of the frame word becomes the sprite's vertical flip.
  */
 void actors_upload_frames(Actor *a, uint16_t frame, uint16_t first)
@@ -279,8 +310,8 @@ void actors_upload_frames(Actor *a, uint16_t frame, uint16_t first)
         uint16_t src = (uint16_t)((v & 0x7FFF) + base);
 
         group_word_set((uint16_t)(e + 4), (uint16_t)((group_word((uint16_t)(e + 4)) & 0x7FFF) | (v & 0x8000)));
-        nshvc_tiles_write(menu_video.sprites, tile, menu_frame_data(src), 2, NSHVC_TILES_PLANAR);
-        nshvc_tiles_write(menu_video.sprites, (uint32_t)tile + 0x10, menu_frame_data((uint16_t)(src + 0x0200)), 2, NSHVC_TILES_PLANAR);
+        row_queue(tile, src);
+        row_queue((uint16_t)(tile + 0x10), (uint16_t)(src + 0x0200));
     }
 }
 

@@ -4,7 +4,6 @@
  * the update returns.
  */
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 #include "audio/sound.h"
@@ -21,8 +20,6 @@
 #include "video/picture.h"
 
 MenuState menu;
-
-static void menu_race_start(void);
 
 /* tile sets only the course menu and the championship use */
 static nshvc_tiles tiles_8bpp;          /* word 0 in mode 3 */
@@ -330,6 +327,9 @@ static void window_open_close_step(void)
    windows and colour maths. */
 static void menu_3d_layer_follow(void)
 {
+    /* the picture is put together from the race's last drawing when asked for */
+    if (pic.bg[2].draw_list.id)
+        pic.bg[2].draw_list = fx_draw_picture(0);
     pic.main_screen = (uint8_t)((pic.main_screen & ~SHOW_BG3) | ((pic.main_screen & SHOW_BG1) << 2));
     pic.sub_screen = (uint8_t)((pic.sub_screen & ~SHOW_BG3) | ((pic.sub_screen & SHOW_BG1) << 2));
     pic.windows.layer_use[2] = pic.windows.layer_use[0];
@@ -375,6 +375,7 @@ static void menu_frame_end(int stage20)
         }
         pic.palette[0xD9] = (uint16_t)(t[0x0DA8 + menu.blink_phase * 2] | t[0x0DA9 + menu.blink_phase * 2] << 8);
     }
+    actors_rows_flush();
     frame_end();
 }
 
@@ -445,7 +446,7 @@ static void preview_open(void)
     actors_reset();
     actors_spawn_list(0x10);
     fx_draw_set_origin(32, 96);
-    menu_race_start();
+    RaceStart();
     actors_run();
     actors_build_sprites();
     menu_scroll_reset();
@@ -485,7 +486,7 @@ static void preview_fade_begin(void)
     for (i = 0; i < 12; i++)
         pic.palette_saved[i] = cart16(0x1C, (uint16_t)(0xE3AC + i * 2));
     fx_draw_set_origin(32, 96);
-    menu_race_start();
+    RaceStart();
     menu.slide_top = menu.slide_top_next = 0;
     menu.slide_low = menu.slide_low_next = 0x00A8;
     actors.groups[0x1354 - 0x0800] = 0xFF;
@@ -519,62 +520,9 @@ enum {
 
 static int state = S_SOUND_START;
 
-/* The menu's race steps: the original waits inside each for the last
-   picture's upload, 4 frames, or 5 when the chip's work runs long; the game
-   waits the 4, or a recording's own counts in checks. */
+/* The course menu's race steps every 4 updates, the original's usual pace;
+   each step is told the updates since the last (RaceFrameStep). */
 enum { MENU_STEP_FRAMES = 4 };
-static uint8_t *paced;                  /* each step's frames since the one before */
-static size_t paced_n;
-static size_t steps_taken;              /* RaceFrameStep calls since power on, RaceStart's two among them */
-
-int menu_pacing_record(const char *path)
-{
-    FILE *f = fopen(path, "r");
-    char line[128];
-    size_t cap = 0;
-
-    if (!f)
-        return 0;
-    while (fgets(line, sizeof line, f)) {
-        long frame;
-        unsigned at, count;
-
-        if (sscanf(line, "%ld %x %u", &frame, &at, &count) != 3 || at != 0x03B7D1)
-            continue;
-        if (paced_n == cap) {
-            uint8_t *more = realloc(paced, cap ? cap * 2 : 256);
-
-            if (!more)
-                break;
-            paced = more;
-            cap = cap ? cap * 2 : 256;
-        }
-        paced[paced_n++] = (uint8_t)(count > 255 ? 255 : count);
-    }
-    fclose(f);
-    return 1;
-}
-
-void menu_race_step(void)
-{
-    RaceFrameStep(0);
-    steps_taken++;
-}
-
-static void menu_race_start(void)
-{
-    RaceStart();
-    steps_taken += 2;
-}
-
-/* Updates to wait after a run of the objects that showed a race frame: the
-   next step's frames since this one, less this update. */
-static int menu_step_wait(void)
-{
-    if (steps_taken < paced_n)
-        return paced[steps_taken] - 1;
-    return MENU_STEP_FRAMES - 1;
-}
 static int fade_level;
 static int step_wait;
 static int preview_mode_fade;
@@ -777,15 +725,11 @@ int CourseMenuRun(void)
         actors.fast_animation = 0;
         menu.blink_counter++;
         menu.shown_3d = 0;
-        /* the original shows a step's picture once its upload is done, which
-           is when the next step starts: take it before drawing the next */
-        if (pic.bg[2].draw_list.id)
-            pic.bg[2].draw_list = fx_draw_picture(0);
         objects_frame();
         frame_state.menu_pressed[0] = 0;
         frame_state.menu_pressed[1] = 0;
         if (menu.shown_3d)
-            step_wait = menu_step_wait();
+            step_wait = MENU_STEP_FRAMES - 1;
         if (actors.exit_request) {
             sound_port1_push(0x04);
             frame_state.brightness_target = 0;

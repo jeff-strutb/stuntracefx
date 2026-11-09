@@ -56,12 +56,6 @@ extern MenuState menu;
 /* the per-line changes the current screen has switched on */
 void menu_lines_send(void);
 
-/* one race step behind a menu screen, its picture drawn (RaceFrameStep) */
-void menu_race_step(void);
-/* check only: the course menu's race steps' lengths from a recording of the
-   original (its pacing lines for 03:B7D1), in place of the constant 4 */
-int menu_pacing_record(const char *path);
-
 void SelectionTables18CB(void);
 void SelectionCommit(void);
 void SelectionSave(void);

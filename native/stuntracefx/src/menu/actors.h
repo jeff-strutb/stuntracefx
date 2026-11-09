@@ -155,5 +155,7 @@ extern uint16_t menu_idle;
 
 /* the frame's end, for the handlers that need it */
 void actors_upload_frames(Actor *a, uint16_t frame, uint16_t first);
+/* the sprite art rows queued this frame, copied (the menus' frame end) */
+void actors_rows_flush(void);
 
 #endif
