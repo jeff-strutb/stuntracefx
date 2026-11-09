@@ -29,10 +29,7 @@ extern uint8_t sound_muted;                     /* $0E4E: nothing is queued whil
 extern uint8_t sound_hold_a, sound_hold_b;      /* $10DA, $10DC: the frame's sends are held; also pick the sets loaded */
 extern uint8_t sound_alt_set_loaded;            /* $10DE: the other set has been loaded (the soft reset clears it) */
 /* Ports 2 and 3 get the bytes at $0E47 and $0E49 each frame, g.speed_gauge[1]
-   and [0], and 0 while $0E4B (g.end_ready) is set. The two names below are
-   only for race_frame.c's reset until it names the fields itself. */
-#define sound_port2 (g.speed_gauge[1])
-#define sound_port3 (g.speed_gauge[0])
+   and [0], and 0 while $0E4B (g.end_ready) is set. */
 
 /* ---- loading (sound.c) ----
    The block lists build one image of the driver's memory. A load is
