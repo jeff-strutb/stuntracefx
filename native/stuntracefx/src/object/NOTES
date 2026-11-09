@@ -166,9 +166,11 @@ read by nothing, so those writes are left out; $1A05 likewise (only the
 unreached SlideOutWobble reads it).
 Work RAM $0000 is the race step's flag (g.frame_stage_00, 2 while a step
 runs): the rails' first colour and the shards' third axis read it. The
-burst gate's pitch reads direct page $80; nothing names a writer of it, and
-it is read as 0 until the trace of the all-courses play (course 2 has the
-only burst gate) settles it.
+burst gate's pitch reads direct page $80 (course 2 has the only burst gate):
+taken as 0. In the all-courses play (27,500 frames traced) only the
+power-on clear wrote $7F or $80, and no label in the code names $80; the
+play never drives far enough to set up the burst gate, so its own read was
+not seen.
 A link of 0 (a race's first step, before the cars are linked) leads the
 original to read a camera record at work RAM $0000. Traced in race1: its
 mode is the step flag, its object ObjectPlaceAll's count (0), its X

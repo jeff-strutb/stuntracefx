@@ -2302,7 +2302,7 @@ void ObjectBurstGateRecord(Object *o)
 }
 
 /* @routine 09:E097 ObjectBurstGate: +$14 is direct page $80's byte, which
-   nothing in the game writes */
+   only the power-on clear writes (traced over the all-courses play) */
 void ObjectBurstGate(Object *o)
 {
     handlers2(o, H9_BURST_GATE_RECORD, H9_BURST_GATE_STEP);
