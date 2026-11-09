@@ -9,7 +9,7 @@ register-shaped state, translation layer or imitated hardware anywhere between t
 
 ## Progress (updated as work lands)
 
-Not done: most of the game. Of about 120,000 lines to convert, about 5,100 lines of new code exist so far.
+Not done: most of the game. Of about 120,000 lines to convert, about 5,100 lines of new code exist so far, plus the Super FX logic below brought over unchanged from the generator's output.
 
 | Stage | State |
 |---|---|
@@ -18,7 +18,8 @@ Not done: most of the game. Of about 120,000 lines to convert, about 5,100 lines
 | 3 Sound | Mostly: the sequencer, the race and battle rules and the music module are written. Checked with `native/checks/music_check` against bsnes: attract 2,445 of 2,445 key-ons match in voice, sample and pitch (2,442 in volume); a race play 4,176 of 4,420; a battle play 4,912 of 5,032. Channel state per frame matches the original apart from a one-frame offset; the remaining key-on differences are all on voice 5 and follow that offset, not proved to. Not done: the game-side loaders (uploads and packed sound data), and a run through the engine's own mixer |
 | 2 Game state | Under way, a screen at a time: the menu objects (`menu/actors.c`), the frame's input, brightness and sound sides (`system/frame.c`, `audio/sound.c`) |
 | 4 Boot to title | Logo and title run on the engine with no VRAM imitation, the objects and the per-line tables ported. Against bsnes: 6 logo frames and 19 title frames (fade in, the drop, the idle screen) exact in 5-bit colour. The original is 60 frames slower to reach the logo (sound upload) and about 127 frames to reach the title (picture unpacking on the Super FX while blanked); the native game does that work in one update. Not done: leaving the title (course menu), the attract demos, the rest of the menus |
-| 5 to 11 | Not started |
+| 5 Super FX logic | Under way, interim: the physics, model and list-building routines from `fxgen-w` (41,700 lines in `src/fx`, 33 files) compile against a small runtime, their chip timing removed. Not run yet. Not done: the fill and plot routines (the draw list at $08AA, 882 PLOT sites, the HUD and sprites) still have to become draw-list calls; the S-CPU code that calls this logic is not converted |
+| 6 to 11 | Not started. The course menu's background is a live race, so the race and its 3D now come before the rest of the menus |
 
 Known differences so far, for the final report: sound $23's noise sample is rewritten while it plays in the original; here it is one long noise made once, at the same rates, because samples do not change on the audio thread.
 
