@@ -21,8 +21,35 @@ typedef struct {
     uint8_t current_player;             /* $1A5D: the player whose car is being processed */
 
     /* ---- menus and saves ---- */
+    uint16_t menu_mode;                 /* $18C3: the mode menu's selection */
+    uint16_t choice_p1, choice_p2;      /* $18CB, $18C9: the players' choices */
+    uint16_t choices[3];                /* $18CD-$18D1: the three car settings, 0-2 each */
+    uint16_t sel[12];                   /* $18D3-$18E9: derived from the choices; sel[4]-[7] are the handler addresses $18DB-$18E1, sel[8] $18E3, sel[9] $18E5 */
+    uint16_t settings_row[3];           /* $18EF-$18F3: the settings also shown as initials */
+    uint8_t car_settings[3];            /* $1184-$1186 */
+    uint16_t word_1168;                 /* $1168 */
+    uint16_t word_116e[3];              /* $116E-$1173: the objects after the one at $116C */
+    uint16_t course_menu_seen;          /* $1917 */
+    uint16_t demo_number;               /* $1915: the next attract demo */
+    uint16_t record_times[12];          /* $0F2B: sorted times; the first is best_lap_time */
+    uint16_t record_names[12];          /* $0F43 */
+    uint16_t record_tags[12];           /* $0F13 */
+    uint8_t record_bcd[3][3];           /* $0F5B, $0F5E, $0F61: hundredths, seconds, minutes */
+    uint8_t times_bcd[12][3];           /* $0F76: unpacked times */
+    uint8_t names_bytes[9];             /* $10CF */
+    uint8_t best_digits[5];             /* $0F69: minutes, seconds, hundredths as digits */
+    uint16_t word_0f6e[4];              /* $0F6E */
+    uint16_t record_tag, record_place;  /* $10C7, $10C9 */
+    uint8_t race_time[3];               /* $0EED: hundredths, seconds, minutes */
+    uint8_t stunt_score_high, stunt_score_add; /* $19EC, $19F0 */
+    uint8_t leader_place;               /* $0FAC */
+    uint16_t panel_row, panel_place, panel_char; /* $0FA8, $0FAA, $0FA6: where the records panel is being drawn */
+    uint16_t player_name;               /* $0F11: three 5-bit letters */
+    uint8_t cursor_x, cursor_column_x;  /* $0D37, $0E91 */
 
     /* ---- the race: its flow, cars, laps and times ---- */
+    uint8_t byte_19e6, byte_19e8, byte_19e9, byte_19ea, byte_19ec, byte_19f0, byte_19f2; /* $19E6-$19F2: cleared with the windows */
+    uint8_t byte_1a04, byte_1a06, byte_1a07, byte_1a29; /* $1A04, $1A06, $1A07, $1A29 */
     uint8_t hud_mode;                   /* $0D2B: 0 speed, 1 stunt, 2 two-player, 3 demo */
     uint8_t split_screen;               /* $0D62: 0 one player, else the two-player split */
     uint8_t frames_since_step;          /* $0306: video frames since the last race step */
@@ -78,7 +105,7 @@ typedef struct {
     uint8_t race_skipped;               /* $10CD: $FF when the mode runs no race */
     uint8_t lead;                       /* $0FA3: player 1's lead, signed */
     uint16_t best_lap_time;             /* $0F2B: $FFFF for none */
-    uint8_t best_times[3][3];           /* $0EF9, $0EFC, $0EFF */
+    uint8_t best_times[4][3];           /* $0EF9, $0EFC, $0EFF */
     uint16_t packed_time_a, packed_time_b; /* $1163, $1161 */
     uint8_t split_window_state;         /* $19D8 */
     uint8_t split_window_count;         /* $19DF */
@@ -147,9 +174,10 @@ typedef struct {
 
     /* ---- the picture: palettes, windows, tile maps, the HUD ---- */
     uint8_t clear_colours_b0;           /* $10DC: the course keeps no colours $B0-$BF */
-    uint8_t palette_animate;            /* $0E5F: the animated colours are in use */
     uint8_t split_stage_on;             /* $0D22: the split screen's upload stages run */
     uint8_t split_stage;                /* $0D23: which of them */
+    uint8_t hdma_enable;                /* $0D45: the per-line effects on; bit 5 the fixed colour's bands */
+    uint8_t palette_animate;            /* $0E5F: the animated colours are in use */
     uint8_t picture_effects;            /* $0DA5: bits 0 slide check, 1-2 slide, 3 oscillate/gradient off, 4 sweep, 5 weather ease, 6 alternate backdrop, 7 stops the ease */
     uint8_t status_level[2];            /* $0DDA, by player */
     uint16_t status_flags[2];           /* $0DF0 (low bytes) and $0DF2 (high bytes), by player */

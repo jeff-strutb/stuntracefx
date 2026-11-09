@@ -19,6 +19,18 @@ typedef struct {
     int32_t scroll_x, scroll_y;
 } Background;
 
+/* What the race screen shows beyond the layers: per half and per line. */
+typedef struct {
+    uint8_t on;                         /* a race screen is up */
+    uint8_t split;                      /* two halves, one above the other */
+    uint16_t gradient_start[2];         /* colour numbers into the gradient block */
+    int32_t backdrop_x[2], backdrop_y[2]; /* BG2's scroll for each half */
+    uint8_t panel[2];                   /* the finished player's panel shows in the half */
+    uint16_t colours_kept[2][3];        /* colours $E1-$E3 in each half */
+    uint16_t colour_0[2];               /* colour 0 in each half */
+    uint16_t fixed[2];                  /* the fixed colour in each half, in BGR */
+} RacePicture;
+
 typedef struct {
     uint8_t blank, brightness;
     uint8_t mode, bg3_priority;
@@ -31,6 +43,7 @@ typedef struct {
     nshvc_sprite sprites[128];
     uint32_t sprite_count;
     uint8_t line_tables;                /* LINES_ bits */
+    RacePicture race;
 } Picture;
 
 /* tables of per-line changes the menu screens turn on and off, by channel */
