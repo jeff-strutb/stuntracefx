@@ -29,6 +29,7 @@
 static void screen_handed_back(void)
 {
     g.raster_chain = RASTER_NONE;
+    race_steps_end();
     race_screen_end();
 }
 

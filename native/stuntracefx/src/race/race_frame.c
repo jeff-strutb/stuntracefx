@@ -17,6 +17,55 @@
 #include "video/video.h"
 
 /*
+ * The steps' clock for the pictures drawn between steps (plan stage 10, the
+ * fx session's in-between pictures): the kind of the last step that handed
+ * a picture over, the update it was taken in, the updates a step covers
+ * there, and the steps taken since the screen's set-up (every one of them
+ * ends in step_end, so each has its state kept).
+ */
+enum { STEP_NONE, STEP_COURSE_MENU, STEP_ONE_PLAYER, STEP_TWO_PLAYERS };
+
+static struct {
+    int kind;
+    uint64_t at;                        /* nshvc_updates() during that step's update */
+    uint8_t pace;
+    unsigned steps;
+} step_clock;
+
+/* A new screen's steps: none before them to draw between. */
+static void step_clock_restart(void)
+{
+    memset(&step_clock, 0, sizeof step_clock);
+}
+
+/* The end of a step, after its picture (if any) is handed over. */
+static void step_end(int kind, uint8_t pace)
+{
+    step_clock.steps++;
+    if (kind == STEP_NONE)
+        return;
+    step_clock.kind = kind;
+    step_clock.at = nshvc_updates();
+    step_clock.pace = pace;
+}
+
+/* How far a picture drawn now lies from the last step's end to the next:
+   (updates since that step + between) / the step's updates, in [0, 1]. The
+   engine counts an update once update() returns, so in a draw after the
+   step's own update the count is one past `at`. */
+float race_step_progress(float between)
+{
+    float t;
+
+    if (step_clock.kind == STEP_NONE)
+        return 0.0f;
+    if (step_clock.steps < 2)
+        return 1.0f;                    /* the screen's first step: nothing before it */
+    t = ((float)((int64_t)(nshvc_updates() - step_clock.at) - 1) + between) / (float)step_clock.pace;
+    return t < 0.0f ? 0.0f : t > 1.0f ? 1.0f : t;
+}
+
+/*
  * @routine 03:B7C5 RaceFrameStep
  * WHAT IT DOES: One step of the race the course menu shows: the frames
  * since the last one go to frames_last_step; the objects run; the camera
@@ -49,6 +98,7 @@ void RaceFrameStep(int step_only)
         GsuScreenFlip();
         g.picture_uploaded = 0;
     }
+    step_end(step_only ? STEP_NONE : STEP_COURSE_MENU, RACE_MENU_STEP_UPDATES);
 }
 
 /*
@@ -73,6 +123,7 @@ void RaceStart(void)
     fx16_set(FXIN_NOT_MENU, 0);
     FxInit();
     g.word_116a = 0;
+    step_clock_restart();
     CourseScriptRun(0x05, 0x0000);
     RaceFrameStep(1);
     RaceFrameStep(1);
@@ -181,7 +232,8 @@ static void frame_run_ab13_a(void)
     MapMarkersPanelA();
 }
 
-/* The picture is handed over at the step's end. */
+/* The picture is handed over at the step's end. A step a pause holds ends
+   here when it is resumed. */
 static void one_player_finish(void)
 {
     fx_draw_flush();
@@ -190,6 +242,7 @@ static void one_player_finish(void)
     GsuScreenToggle();
     g.picture_uploaded = 0;
     frame_time();
+    step_end(STEP_ONE_PLAYER, RACE_STEP_UPDATES);
 }
 
 /*
@@ -212,7 +265,7 @@ void RaceFrameRun(void)
     g.hud_1ae8 = 0;
     fx_draw_begin(g.fx_buffer);
     frame_run_ab13_b();
-    SpeedGaugeUpdate(0x2143);
+    SpeedGaugeUpdate(fx16(FXIN_PLAYER1_RECORD));
     NearCarSoundUpdate();
     g.hud_1aea = g.hud_1ae8;
     if (fx16(FXIN_TEXT_NOTICE))
@@ -229,7 +282,7 @@ void RaceFrameRunResume(void)
     one_player_finish();
 }
 
-/* From player 2's sounds to the step's end. */
+/* From player 2's sounds to the step's end (a held step's too, resumed). */
 static void two_players_second_half(void)
 {
     RaceSoundsPlayer2();
@@ -239,6 +292,7 @@ static void two_players_second_half(void)
     GsuScreenFlipMenu();
     g.picture_uploaded = 0;
     frame_time();
+    step_end(STEP_TWO_PLAYERS, RACE_STEP_UPDATES);
 }
 
 /* From player 1's sounds through player 2's picture. */
@@ -255,7 +309,7 @@ static void two_players_first_half(void)
     g.view_heading_06cf = (uint16_t)(g.view_heading_06cf - 0x0140);
     fx_draw_begin(g.fx_buffer);
     frame_run_ab13_a();
-    SpeedGaugeUpdate(0x2142);
+    SpeedGauge2Update(fx16(FXIN_PLAYER2_RECORD));
     two_players_second_half();
 }
 
@@ -278,7 +332,7 @@ void RaceFrameRunTwoPlayers(void)
     g.hud_1ae8 = 0;
     fx_draw_begin(g.fx_buffer);
     frame_run_ab13_b();
-    SpeedGaugeUpdate(0x2143);
+    SpeedGaugeUpdate(fx16(FXIN_PLAYER1_RECORD));
     two_players_first_half();
 }
 
@@ -289,6 +343,82 @@ void RaceFrameRunTwoPlayersResume(int second_half)
         two_players_second_half();
     else
         two_players_first_half();
+}
+
+/* The race's screen goes: no steps to draw between until the next set-up. */
+void race_steps_end(void)
+{
+    step_clock_restart();
+}
+
+/* The draw list and its records, as FrameRunGsu8FCA and FrameRunGsuAB13B's
+   object work make them, without the trigger lists and object groups. */
+static void picture_objects(void)
+{
+    ObjectDrawListBuild();
+    GsuRecordsUpload();
+}
+
+/*
+ * The picture's part of the last step that handed a picture over, for the
+ * pictures drawn between steps (plan stage 10): what that step had set when
+ * it ran FxFrameProgram for `panel`, in the step's own order; the caller
+ * then runs the frame program. Panel 0 is the step's first picture; panel 1
+ * is a two-player step's second, and follows panel 0's frame program as in
+ * the step (its view is the one panel 0 left: player 2's). Left out: the
+ * physics, the controls, the objects' handlers, the trigger lists, the
+ * object groups, the camera's own moves, and what the step draws after the
+ * frame program (the text notice, the HUD's chip-drawn pieces). Returns 0
+ * when the last step has no such panel.
+ */
+int RaceViewForPicture(int panel)
+{
+    switch (step_clock.kind) {
+    case STEP_COURSE_MENU:
+        if (panel)
+            return 0;
+        g.draw_side = 0;
+        fx16_set(GSU_VIEW_246C, 0xFFFF);
+        ObjectFaceTied(&cameras[0]);
+        ViewFromRecord(&cameras[0]);
+        picture_objects();
+        ViewUpdateAndGsuAEF8();
+        GsuParamsUpdate();
+        return 1;
+    case STEP_ONE_PLAYER:
+        if (panel)
+            return 0;
+        ViewFromRecord(view_camera(g.player_car));
+        g.draw_side = 0;
+        fx16_set(GSU_VIEW_246C, 0xFFFF);
+        picture_objects();
+        ViewUpdateAndGsuAEF8();
+        BackdropAnglesFromView();
+        g.draw_side = 1;
+        GsuParamsUpdate();
+        return 1;
+    case STEP_TWO_PLAYERS:
+        if (panel == 0) {
+            ViewFromRecord(view_camera(g.player_car));
+            g.draw_side = 0;
+            fx16_set(GSU_VIEW_246C, 0xFFFF);
+            picture_objects();
+            ViewUpdateAndGsuAEF8();
+            BackdropAnglesFromView();
+            ViewFromRecord(view_camera(g.player2_car));
+            g.draw_side = 1;
+            GsuParamsUpdate();
+            return 1;
+        }
+        picture_objects();
+        ViewUpdateAndGsuAEF8();
+        BackdropAnglesFromView();
+        g.view_heading_06cf = (uint16_t)(g.view_heading_06cf - 0x0140);
+        GsuParamsUpdate();
+        return 1;
+    default:
+        return 0;
+    }
 }
 
 /* RaceFinishPhasesTail: $0E58 = $30, the mark and palette work cleared, sound 2. */
@@ -482,6 +612,7 @@ static void attract_view_start(void)
  */
 void AttractCourseSetup(void)
 {
+    step_clock_restart();
     frame_state.held[0] = 0;
     attract_view_start();
     (void)SpriteSlotFirst();

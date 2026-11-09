@@ -17,6 +17,25 @@ enum { RASTER_NONE, RASTER_ONE_PLAYER, RASTER_TWO_PLAYERS, RASTER_COURSE };
    slowdown. */
 enum { RACE_STEP_UPDATES = 6 };
 
+/* The course menu's race steps every 4 updates (the menus' pace,
+   MENU_STEP_FRAMES in menu/screens.c). */
+enum { RACE_MENU_STEP_UPDATES = 4 };
+
+/* For the pictures drawn between steps (plan stage 10, fx session):
+   - race_step_progress: how far a picture drawn now lies from the last
+     step's end (0) to the next step's (1): (updates since that step +
+     between) / its pace (6, or 4 for the course menu's), clamped; 1 after
+     a screen's first step, 0 when no step has handed a picture over since
+     the screen's set-up.
+   - RaceViewForPicture: the last step's picture part before its frame
+     program, for panel 0 and then (two players) panel 1; the caller runs
+     FxFrameProgram after each. Writes g, objects (tied objects' facing on
+     the course menu), the draw list and fx_ram only. 0: no such panel.
+   - race_steps_end: the race's screen handed back. */
+float race_step_progress(float between);
+int RaceViewForPicture(int panel);
+void race_steps_end(void);
+
 /* The race the course menu shows behind it. RaceStart sets it up; each
    RaceFrameStep is one step of it, with no waiting inside. It draws the
    picture into fx_draw_picture(0) unless step_only is set. */
