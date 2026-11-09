@@ -963,6 +963,7 @@ void driver_reset(void)
         const SoundBank *b = d.bank;
 
         memset(&d, 0, sizeof d);
+        memset(&s, 0, sizeof s);
         d.bank = b;
     }
     d.echo_delay = 1;
