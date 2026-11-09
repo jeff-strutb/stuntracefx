@@ -327,6 +327,9 @@ static void window_open_close_step(void)
    windows and colour maths. */
 static void menu_3d_layer_follow(void)
 {
+    /* the picture is put together from the race's last drawing when asked for */
+    if (pic.bg[2].draw_list.id)
+        pic.bg[2].draw_list = fx_draw_picture(0);
     pic.main_screen = (uint8_t)((pic.main_screen & ~SHOW_BG3) | ((pic.main_screen & SHOW_BG1) << 2));
     pic.sub_screen = (uint8_t)((pic.sub_screen & ~SHOW_BG3) | ((pic.sub_screen & SHOW_BG1) << 2));
     pic.windows.layer_use[2] = pic.windows.layer_use[0];
