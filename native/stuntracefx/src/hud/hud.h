@@ -6,6 +6,31 @@
 
 #include <stdint.h>
 
+#include "object/object.h"
+
+/* the frame's HUD work (hud_frame.c) */
+void HudDrawTime(void);
+void HudDrawDigits19EC(void);
+void HudDrawNumber3(uint8_t n, int sprite);
+void HudDrawValueA(void);
+void HudDrawValueB(void);
+void HudDrawValueC(void);
+void HudDigitSprites62(void);
+void HudCountUp19EC(Object *o);
+void HudCountMove19EE(uint16_t rec);
+void HudCountMove19EECopy(void);
+void HudGaugesPanelA(void);
+void HudGaugesPanelB(void);
+void MapMarkersPanelA(void);
+void MapMarkersPanelB(void);
+void HudSlideIn(void);
+void HudSlideOut(void);
+void HudPanelASlide(void);
+void HudPanelBSlide(void);
+void HudPanelsStep(void);
+void SlideStep(void);
+void OamClassName(void);
+
 void GsuF441Player1(void);
 void GsuF441Player2(void);
 void GsuF0A5OrF0B4(uint16_t input);
@@ -51,5 +76,12 @@ void HudLeadWordDraw(void);
 void HudLapDigitsDraw(void);
 void HudBlankDraw(void);
 void TimeDigitsStore(uint8_t minutes, uint8_t seconds, uint8_t hundredths);
+
+/* wanted (from the records, menu/save): */
+uint16_t BinaryToBcd(uint16_t value);
+void TimeUnpackBcd(uint16_t packed, uint16_t *minutes, uint16_t *seconds, uint16_t *hundredths);
+uint16_t TimePackBcd(uint8_t hundredths, uint8_t seconds, uint8_t minutes);
+void TimeTotalsSum(void);
+void TimeRunningTotals(void);
 
 #endif

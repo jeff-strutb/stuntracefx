@@ -1,33 +1,44 @@
 /*
- * screens.c: the game from its start. Each state's code runs in one update;
- * where the original waited for the frame, the update returns.
+ * screens.c: the menu screens from the logo to the course menu's end. Each
+ * state's code runs in one update; where the original waited for the frame,
+ * the update returns.
  */
+#include <stdio.h>
 #include <string.h>
 
 #include "audio/sound.h"
 #include "data/cart.h"
-#include "menu/actors.h"
-#include "system/game.h"
-#include "video/picture.h"
 #include "data/unpack.h"
+#include "menu/actors.h"
+#include "menu/menu.h"
+#include "menu/menu_tables.h"
+#include "race/race.h"
+#include "save/save.h"
+#include "system/game.h"
+#include "system/state.h"
+#include "video/picture.h"
 
-enum {
-    STATE_SOUND_START, STATE_LOGO_OPEN, STATE_LOGO_SOUND, STATE_LOGO_SHOW, STATE_LOGO_RUN,
-    STATE_TITLE_OPEN, STATE_TITLE_SHOW, STATE_TITLE_FADE, STATE_TITLE_RUN, STATE_NOT_CONVERTED
-};
+MenuState menu;
+nshvc_draw_list menu_3d_list;
 
-static int state;
+/* tile sets only the course menu and the championship use */
+static nshvc_tiles tiles_8bpp;          /* word 0 in mode 3 */
+static nshvc_tiles tiles_menu;          /* word $3000: BG2's in the course menu */
+static nshvc_tiles tiles_load;          /* word $7000 as 4bpp: the loading screen's */
 
-static void palette_load(uint8_t bank, uint16_t addr)
-{
-    int i;
-
-    for (i = 0; i < 256; i++)
-        pic.palette[i] = cart16(bank, (uint16_t)(addr + i * 2));
-}
-
-/* The packed pictures: the data's own end address names one. */
 static uint8_t picture[0x8000];
+/* the animated pictures: the $7F:3FD7 and $7F:A7D7 copies of the original */
+static uint8_t frames_sprites[0x6800];
+static uint8_t frames_tiles[0x2000];
+/* the championship's selection frames, from $04:EBCB */
+static uint8_t champion_frames[0x800];
+
+const uint8_t *menu_frame_data(uint16_t address)
+{
+    if (address >= 0xA7D7)
+        return &frames_tiles[address - 0xA7D7];
+    return &frames_sprites[address - 0x3FD7];
+}
 
 static uint32_t picture_unpack(uint8_t bank, uint16_t end)
 {
@@ -48,6 +59,27 @@ static void pages_from_picture(int first, uint32_t bytes)
         menu_page_write(first + (int)i, picture + i * 0x800);
 }
 
+static void palette_load(uint8_t bank, uint16_t addr)
+{
+    int i;
+
+    for (i = 0; i < 256; i++)
+        pic.palette[i] = cart16(bank, (uint16_t)(addr + i * 2));
+}
+
+/*
+ * @routine 0B:F4B2 MenuScrollReset
+ * WHAT IT DOES: The layers' scrolls back to 0.
+ */
+static void menu_scroll_reset(void)
+{
+    int i;
+
+    for (i = 0; i < 3; i++)
+        pic.bg[i].scroll_x = pic.bg[i].scroll_y = 0;
+    actors.scroll_x = actors.scroll_y = 0;
+}
+
 static void menu_common_mode(void)
 {
     pic.mode = 1;
@@ -58,19 +90,10 @@ static void menu_common_mode(void)
     pic.bg[1].map = menu_video.pages_1_2;
     pic.bg[2].tiles = menu_video.tiles_text;
     pic.bg[2].map = menu_video.text;
-    pic.line_tables = 0;
+    menu_lines_set(MENU_LINES_TITLE, 0);
     memset(&pic.blend, 0, sizeof pic.blend);
     pic.blend.use_fixed = 1;
     memset(&pic.windows, 0, sizeof pic.windows);
-}
-
-static void menu_scroll_reset(void)
-{
-    int i;
-
-    for (i = 0; i < 3; i++)
-        pic.bg[i].scroll_x = pic.bg[i].scroll_y = 0;
-    actors.scroll_x = actors.scroll_y = 0;
 }
 
 /* The objects made and placed before the screen first shows. */
@@ -82,7 +105,10 @@ static void menu_objects_start(uint16_t list)
     actors_build_sprites();
 }
 
-/* The first screen: the logo, drawn with sprites alone. */
+/*
+ * @routine 0B:F33C MenuScreenOpen0
+ * WHAT IT DOES: Opens the first screen: the logo, drawn with sprites alone.
+ */
 static void logo_open(void)
 {
     pic.blank = 1;
@@ -99,7 +125,10 @@ static void logo_open(void)
     menu_objects_start(0);
 }
 
-/* The title screen, with its music. */
+/*
+ * @routine 0B:EE24 MenuScreenOpen6
+ * WHAT IT DOES: Opens the title screen, with its music.
+ */
 static void title_open(void)
 {
     uint32_t n;
@@ -136,86 +165,943 @@ static void title_open(void)
     frame_state.menu_pressed[0] = 0;
     actors.fast_animation = 0;
     actors.exit_request = 0;
+    menu.blink_on = 0;
+    menu.window_mode = 0;
     menu_objects_start(6);
 }
 
-void menu_load_start(Actor *a)
+/* --- leaving the title: the loader and the course menu's pictures ------ */
+
+/*
+ * @routine 0B:D14A MenuCrossFadeOut (its end)
+ * WHAT IT DOES: The screen set up for the loader: mode 3, only BG2 on, BG2
+ * on the loading tiles and the text map.
+ */
+void menu_load_screen_open(void)
 {
-    (void)a;
-    state = STATE_NOT_CONVERTED;
+    nshvc_tiles_write(tiles_load, 0, cart_at(0x0B, 0xD56C), 4, NSHVC_TILES_PLANAR);
+    pic.mode = 3;
+    pic.bg[1].tiles = tiles_load;
+    pic.bg[1].map = menu_video.text;
+    pic.main_screen = SHOW_BG2;
+    menu_lines_set(MENU_LINES_TITLE, 0);
+}
+
+/*
+ * @routine 0B:F6EA MenuPictureInsetGrid
+ * @routine 0B:F6B6 MenuPictureDC8CGrid0
+ * @routine 0B:F6D0 MenuPictureDC8CGrid58
+ * WHAT IT DOES: The course menu's BG1 map: the picture at $DC8C with its tile
+ * numbers raised by $100 and an 11 x 13 block over it numbered from
+ * `first_tile`, columns $0B apart.
+ */
+void menu_grid_load(uint16_t first_tile, int page)
+{
+    uint16_t w[0x400];
+    int x, y;
+
+    memset(w, 0, sizeof w);
+    picture_unpack(0x1C, 0xDC8C);
+    memcpy(w, picture, 0x700);
+    for (y = 0; y < 28; y++)
+        for (x = 0; x < 32; x++)
+            w[y * 32 + x] = (uint16_t)(w[y * 32 + x] + 0x0100);
+    if (page == 0) {
+        menu_page_write(1, w);
+        menu_page_write(0, w);
+    }
+    for (y = 12; y < 23; y++)
+        for (x = 4; x < 17; x++)
+            w[y * 32 + x] = (uint16_t)((first_tile + (y - 12) + (x - 4) * 0x0B) | 0x2000);
+    menu_page_write(page, w);
+}
+
+/*
+ * @routine 0B:D1F7 MenuLoadPictureCC78 .. @routine 0B:D476 MenuLoadBlank1800
+ * WHAT IT DOES: The course menu's graphics, one step a frame: BG2's tiles,
+ * its map, BG1's map, the sprites, the animated pictures and blank tiles.
+ */
+void menu_load_step(Actor *a)
+{
+    uint32_t n;
+
+    switch (a->count++) {
+    case 0:                             /* D1F7 */
+        tiles_from_picture(tiles_menu, 0, picture_unpack(0x17, 0xCC78), 32);
+        break;
+    case 1:                             /* D234 */
+        n = picture_unpack(0x17, 0xCE78);
+        pages_from_picture(2, n);
+        break;
+    case 2:                             /* D26F */
+        menu_grid_load(0x0000, 0);
+        break;
+    case 3:                             /* D2C9, and the next three steps upload it */
+        n = picture_unpack(0x17, 0xDD8C);
+        tiles_from_picture(menu_video.sprites, 0, n < 0x4000 ? n : 0x4000, 32);
+        break;
+    case 4: case 5: case 6:             /* D304, D333, D362 */
+        break;
+    case 7:                             /* D391 */
+        n = picture_unpack(0x1D, 0x9068);
+        memcpy(frames_tiles, picture, sizeof frames_tiles);
+        n = picture_unpack(0x17, 0xF8E8);
+        memcpy(frames_sprites, picture, sizeof frames_sprites);
+        (void)n;
+        break;
+    case 8: case 9: case 10: case 11:   /* D3D8 .. D476: blank tiles under the 3D picture */
+        break;
+    default:
+        a->handler = HANDLER_SET_EXIT;
+        break;
+    }
+}
+
+/*
+ * @routine 7F:0CDF AnimTilesQueueNext
+ * WHAT IT DOES: The next $400-byte frame of the animated tiles, stepping
+ * through eight frames: 16 tiles of 8 bits at tile $100 of mode 3's BG1.
+ */
+void menu_frames_vram_tick(void)
+{
+    menu.animated_offset = (uint16_t)((menu.animated_offset + 0x0400) & 0x1FFF);
+    nshvc_tiles_write(tiles_8bpp, 0x100, &frames_tiles[menu.animated_offset], 16, NSHVC_TILES_PLANAR);
+}
+
+/*
+ * @routine 7F:0DAC WindowOpenCloseStep
+ * WHAT IT DOES: Steps the window over the screen: opening shrinks the size
+ * by 4 a frame, closing grows it to $2C, then clears colour 0; each step
+ * rewrites the window table's line counts. Mode 3, the championship's,
+ * sets the panel's line counts.
+ */
+static void window_table(void)
+{
+    uint8_t *t = menu_tables_at() - 0x0800;
+    uint8_t c = (uint8_t)(0x2C - menu.window_size), d = (uint8_t)(menu.window_size << 1);
+
+    t[0x134A] = c;
+    t[0x134E] = c;
+    if (d) {
+        t[0x134C] = d;
+        t[0x134D] = 0x00;
+    } else {
+        t[0x134C] = 0x02;
+        t[0x134D] = 0x03;
+        t[0x134E] = (uint8_t)(t[0x134E] - 2);
+    }
+}
+
+static void window_open_close_step(void)
+{
+    if (menu.window_mode == 3) {
+        uint8_t *t = menu_tables_at() - 0x0800;
+        uint8_t n = (uint8_t)(menu.panel_rise + 1);
+
+        t[0x12DB] = t[0x12E8] = t[0x12F6] = t[0x1301] = n;
+        menu.panel_b191b = (uint16_t)(0x0016 - menu.panel_rise + menu.panel_b1925);
+        menu.panel_b191d = (uint16_t)(0x0045 - menu.panel_rise + menu.panel_b1927);
+        return;
+    }
+    if (menu.window_mode == 1) {
+        window_table();
+        menu.window_size = (uint16_t)(menu.window_size - 4);
+        if (menu.window_size & 0x8000) {
+            menu.window_size = 0;
+            menu.window_mode = 0;
+        }
+    } else if (menu.window_mode == 2) {
+        window_table();
+        menu.window_size = (uint16_t)(menu.window_size + 4);
+        if (menu.window_size == 0x2C) {
+            menu.window_mode = 0;
+            pic.palette[0] = 0;
+        }
+    }
+}
+
+/* What the menu's vertical blank code did, ordered as it did it. `stage20`:
+   the course menu and championship stage, which also steps the animated
+   tiles, queues the presses and takes the positions the objects wrote. */
+static void menu_frame_end(int stage20)
+{
+    if (stage20) {
+        int i;
+
+        menu_frames_vram_tick();
+        menu.slide_top = menu.slide_top_next;
+        menu.slide_low = menu.slide_low_next;
+        for (i = 0; i < 2; i++)
+            if (menu.press_count[i] < 8)
+                menu.press_list[i][menu.press_count[i]++] = frame_state.pressed[i];
+    }
+    window_open_close_step();
+    if (menu.blink_on) {
+        const uint8_t *t = menu_tables_at() - 0x0800;
+
+        if (++menu.blink_count == 5) {
+            menu.blink_count = 0;
+            menu.blink_phase = (uint16_t)((menu.blink_phase + 1) & 1);
+        }
+        pic.palette[0xD9] = (uint16_t)(t[0x0DA8 + menu.blink_phase * 2] | t[0x0DA9 + menu.blink_phase * 2] << 8);
+    }
+    frame_end();
+}
+
+/* --- the course menu's screens ----------------------------------------- */
+
+/* Clears the menu's lists and state as a screen opens. */
+static void menu_state_clear(void)
+{
+    menu.press_count[0] = menu.press_count[1] = 0;
+    menu.press_current = 0;
+    actors.exit_request = 0;
+    actors.fast_animation = 0;
+    actors.scroll_x = actors.scroll_y = 0;
+    menu.window_mode = 0;
+    menu.window_size = 0;
+}
+
+/* BG1 and BG2 for the course menu's full mode. */
+static void preview_full_mode(void)
+{
+    pic.mode = 3;
+    pic.bg3_priority = 0;
+    pic.bg[0].tiles = tiles_8bpp;
+    pic.bg[0].map = menu_video.pages_0_1;
+    pic.bg[1].tiles = tiles_menu;
+    pic.bg[1].map = menu_video.pages_2_3;
+    memset(&pic.blend, 0, sizeof pic.blend);
+    pic.blend.use_fixed = 1;
+    pic.bg[1].scroll_x = (int16_t)0xFF00;
+    pic.windows.w[0].left = 0;
+    pic.windows.w[0].right = 0xFF;
+    memset(pic.windows.layer_use, 0, sizeof pic.windows.layer_use);
+    pic.windows.layer_use[1] = NSHVC_WIN1 | NSHVC_WIN1_INVERT;
+    pic.windows.layer_use[4] = NSHVC_WIN1 | NSHVC_WIN1_INVERT;
+    memset(pic.windows.mask_main, 0, sizeof pic.windows.mask_main);
+    pic.windows.mask_main[1] = 1;
+    pic.windows.mask_main[4] = 1;
+    pic.main_screen = SHOW_BG1 | SHOW_BG2 | SHOW_SPRITES;
+    pic.sub_screen = 0;
+    menu.slide_top = menu.slide_top_next = 0;
+    menu.slide_low = menu.slide_low_next = 0x00A8;
+    actors.groups[0x1354 - 0x0800] = 0xFF;
+    menu_lines_set(MENU_LINES_PREVIEW, 0x90);
+}
+
+/* The palette and its full colours for the course menu. */
+static void preview_palette(void)
+{
+    palette_load(0x1C, 0xE3AC);
+    pic.palette[0] = 0;
+    memcpy(pic.palette_saved, pic.palette, sizeof pic.palette);
+    menu_palette_scale(0x90, 8, 0x20);
+    menu_palette_scale(0xD0, 8, 0x20);
+}
+
+/*
+ * @routine 0B:F784 MenuScreenOpenPreview
+ * WHAT IT DOES: Opens the menu screen with the course preview behind it, the
+ * race started, the screen blank until its first frames.
+ */
+static void preview_open(void)
+{
+    pic.blank = 1;
+    frame_state.brightness = 0;
+    menu_state_clear();
+    actors_reset();
+    actors_spawn_list(0x10);
+    RaceStart();
+    actors_run();
+    actors_build_sprites();
+    menu_scroll_reset();
+    preview_full_mode();
+    preview_palette();
+    tiles_from_picture(tiles_menu, 0, picture_unpack(0x17, 0xCC78), 32);
+    pages_from_picture(2, picture_unpack(0x17, 0xCE78));
+    menu_grid_load(0x0000, 0);
+    {
+        uint32_t n = picture_unpack(0x17, 0xDD8C);
+
+        tiles_from_picture(menu_video.sprites, 0, n < 0x4000 ? n : 0x4000, 32);
+        picture_unpack(0x1D, 0x9068);
+        memcpy(frames_tiles, picture, sizeof frames_tiles);
+        picture_unpack(0x17, 0xF8E8);
+        memcpy(frames_sprites, picture, sizeof frames_sprites);
+    }
+    sound_queue_reset();
+}
+
+/*
+ * @routine 0B:F09F MenuScreenOpenPreviewFade (its opening)
+ * WHAT IT DOES: The first part of opening the course preview from the title:
+ * no blanking; the objects made, the race started, the colours black and the
+ * cross fade's mode set: BG1 of the new screen adds to the title's text.
+ */
+static void preview_fade_begin(void)
+{
+    int i;
+
+    menu_state_clear();
+    actors_reset();
+    actors_spawn_list(0x10);
+    memset(pic.palette, 0, 12 * 2);
+    for (i = 0; i < 12; i++)
+        pic.palette_saved[i] = cart16(0x1C, (uint16_t)(0xE3AC + i * 2));
+    RaceStart();
+    menu.slide_top = menu.slide_top_next = 0;
+    menu.slide_low = menu.slide_low_next = 0x00A8;
+    actors.groups[0x1354 - 0x0800] = 0xFF;
+    actors_run();
+    actors_build_sprites();
+    pic.bg[0].tiles = tiles_8bpp;
+    pic.bg[0].map = menu_video.pages_0_1;
+    pic.bg[1].tiles = tiles_load;
+    memset(&pic.blend, 0, sizeof pic.blend);
+    pic.blend.layers = 1;
+    pic.blend.use_fixed = 0;
+    pic.sub_screen = SHOW_BG2;
+    memset(pic.windows.mask_main, 0, sizeof pic.windows.mask_main);
+    memset(pic.windows.mask_sub, 0, sizeof pic.windows.mask_sub);
+    pic.main_screen = SHOW_BG1 | SHOW_BG2;
+    pic.bg[1].scroll_x = 1;
+    pic.bg[1].scroll_x = 0;
+}
+
+/* --- the flow, frame by frame ------------------------------------------ */
+
+enum {
+    S_SOUND_START, S_LOGO_OPEN, S_LOGO_SOUND, S_LOGO_SHOW, S_LOGO_RUN, S_BOOT_DONE,
+    S_COURSE_START, S_TITLE_OPEN, S_TITLE_SHOW, S_TITLE_FADE, S_TITLE_RUN,
+    S_TITLE_FADEOUT, S_DEMO, S_PREVIEW_OPEN, S_PREVIEW_SHOW, S_PREVIEW_READY,
+    S_FADE_OPEN1, S_FADE_OPEN2, S_FADE_STEPS, S_FADE_FULL, S_FADE_SET, S_FADE_LAST,
+    S_MENU_LOOP, S_MENU_FADEOUT, S_COURSE_DONE
+};
+
+static int state = S_SOUND_START;
+static int fade_level;
+static int step_wait;
+static int preview_mode_fade;
+
+static void objects_frame(void)
+{
+    actors_run();
+    actors_build_sprites();
+}
+
+/*
+ * @routine 0B:AE0A MenuScreen0Run
+ * WHAT IT DOES: The logo screen, opened again while buttons are held; then
+ * the logo's end.
+ * @routine 0B:AE47 MenuRegionCheck: the console's region is not modelled
+ * here: the port runs as an NTSC console, so it passes.
+ */
+int MenuScreen0Run(void)
+{
+    switch (state) {
+    case S_SOUND_START:
+        sound_upload_begin();
+        sound_upload_cart(0x19, 0xC27C);
+        sound_upload_end();
+        state = S_LOGO_OPEN;
+        /* fall through */
+    case S_LOGO_OPEN:
+        logo_open();
+        pic.blank = 0;
+        state = S_LOGO_SOUND;
+        break;
+    case S_LOGO_SOUND:
+        sound_port0_push(0x39);
+        state = S_LOGO_SHOW;
+        break;
+    case S_LOGO_SHOW:
+        frame_state.brightness = frame_state.brightness_target = 15;
+        pic.main_screen = SHOW_SPRITES;
+        state = S_LOGO_RUN;
+        break;
+    case S_LOGO_RUN:
+        objects_frame();
+        if (actors.exit_request)
+            state = S_BOOT_DONE;
+        break;
+    default:
+        return 1;
+    }
+    return state == S_BOOT_DONE;
+}
+
+/*
+ * @routine 0B:AF10 TitleScreenLoop
+ * WHAT IT DOES: The title screen's frames: while the sequence object is
+ * idle the count goes up, and at $400 the screen fades out and an attract
+ * demo runs; the menu's exit leaves.
+ */
+static void title_run(void)
+{
+    Actor *a;
+
+    objects_frame();
+    a = actor_find(0x0012);
+    if (a && a->handler == HANDLER_BUTTON_SEQUENCE && a->count == 0) {
+        menu_idle++;
+        if (menu_idle == 0x0400) {
+            frame_state.brightness_target = 0;
+            state = S_TITLE_FADEOUT;
+        }
+    }
+    frame_state.menu_pressed[0] = 0;
+    frame_state.menu_pressed[1] = 0;
+    if (actors.exit_request && state == S_TITLE_RUN) {
+        preview_mode_fade = 1;
+        state = S_FADE_OPEN1;
+    }
+}
+
+/*
+ * @routine 03:B3DA CourseMenuRun
+ * WHAT IT DOES: The course menu before a race: the title screen first when
+ * it has not been shown, then the course preview, faded in when the title
+ * led straight to it; the selection kept in the save at the end.
+ */
+int CourseMenuRun(void)
+{
+    switch (state) {
+    case S_BOOT_DONE:
+    case S_COURSE_START:
+        g.draw_side = 0;
+        g.menu_mode = 0;
+        g.word_1168 = 0;
+        if (!g.course_menu_seen) {
+            state = S_TITLE_OPEN;
+        } else {
+            preview_mode_fade = 0;
+            state = S_PREVIEW_OPEN;
+        }
+        break;
+    case S_TITLE_OPEN:
+        title_open();
+        pic.blank = 0;
+        state = S_TITLE_SHOW;
+        break;
+    case S_TITLE_SHOW:
+        pic.main_screen = SHOW_BG1 | SHOW_BG2 | SHOW_BG3 | SHOW_SPRITES;
+        sound_hold_a = 0;
+        state = S_TITLE_FADE;
+        break;
+    case S_TITLE_FADE:
+        frame_state.brightness_target = 15;
+        menu_idle = 0;
+        state = S_TITLE_RUN;
+        break;
+    case S_TITLE_RUN:
+        title_run();
+        break;
+    case S_TITLE_FADEOUT:
+        objects_frame();
+        if (frame_state.brightness == frame_state.brightness_target) {
+            g.demo_number = (uint16_t)((g.demo_number + 1) & 3);
+            if (g.demo_number == 3)
+                g.demo_number = 0;
+            state = S_DEMO;
+        }
+        break;
+    case S_DEMO: {
+        int r = DemoRun(g.demo_number);
+
+        if (r == 0)
+            return 0;
+        if (r > 0) {                    /* a button pressed: back to the course menu */
+            preview_mode_fade = 0;
+            state = S_PREVIEW_OPEN;
+        } else {                        /* BootWarm */
+            state = S_COURSE_START;
+        }
+        return 0;
+    }
+    case S_PREVIEW_OPEN:
+        preview_open();
+        pic.blank = 0;
+        state = S_PREVIEW_SHOW;
+        break;
+    case S_PREVIEW_SHOW:
+        state = S_PREVIEW_READY;
+        break;
+    case S_PREVIEW_READY:
+        objects_frame();
+        frame_state.brightness_target = 15;
+        state = S_MENU_LOOP;
+        break;
+
+    /* the route from the title, cross-fading */
+    case S_FADE_OPEN1:
+        preview_fade_begin();
+        state = S_FADE_OPEN2;
+        break;
+    case S_FADE_OPEN2:
+        fade_level = 0x20;
+        state = S_FADE_STEPS;
+        break;
+    case S_FADE_STEPS: {
+        int i;
+
+        for (i = 0; i < 8; i++) {
+            /* colours 0-7 by (32 - level) / 32, colours 12-15 by level / 32 */
+        }
+        menu_palette_scale(0, 8, (uint16_t)(0x20 - fade_level));
+        menu_palette_scale(0x0C, 4, (uint16_t)fade_level);
+        fade_level -= 2;
+        if (fade_level < 0)
+            state = S_FADE_FULL;
+        break;
+    }
+    case S_FADE_FULL:
+        preview_full_mode();
+        preview_palette();
+        state = S_FADE_SET;
+        break;
+    case S_FADE_SET:
+        objects_frame();
+        state = S_FADE_LAST;
+        break;
+    case S_FADE_LAST:
+        frame_state.brightness = frame_state.brightness_target = 15;
+        state = S_MENU_LOOP;
+        break;
+
+    /* the menu's loop, shared by both openings */
+    case S_MENU_LOOP:
+        if (step_wait > 0) {
+            step_wait--;
+            break;
+        }
+        actors.fast_animation = 0;
+        menu.blink_counter++;
+        menu.shown_3d = 0;
+        objects_frame();
+        frame_state.menu_pressed[0] = 0;
+        frame_state.menu_pressed[1] = 0;
+        if (menu.shown_3d)
+            step_wait = 3;
+        if (actors.exit_request) {
+            sound_port1_push(0x04);
+            frame_state.brightness_target = 0;
+            state = S_MENU_FADEOUT;
+        }
+        break;
+    case S_MENU_FADEOUT:
+        objects_frame();
+        if (frame_state.brightness == frame_state.brightness_target)
+            state = S_COURSE_DONE;
+        break;
+    case S_COURSE_DONE:
+        g.hud_mode = (uint8_t)g.menu_mode;
+        g.course_menu_seen = 1;
+        if (g.menu_mode == 2)
+            SelectionCommit();
+        else
+            SelectionSave();
+        for (int i = 0; i < 3; i++) {
+            g.car_settings[i] = (uint8_t)g.settings_row[i];
+            save.settings[i] = (uint8_t)g.settings_row[i];
+        }
+        SaveChecksum();
+        pic.blank = 1;
+        return 1;
+    default:
+        return 1;
+    }
+    return 0;
+}
+
+/* --- selection results, kept in the save ------------------------------- */
+
+static uint16_t handler_table_a(uint16_t i) { return cart16(0x03, (uint16_t)(0xB6F1 + i * 2)); }
+static uint16_t handler_table_b(uint16_t i) { return cart16(0x03, (uint16_t)(0xB704 + i * 2)); }
+
+/*
+ * @routine 03:B548 SelectionCommit
+ * WHAT IT DOES: Records the two players' choices: their handler addresses,
+ * both packed as a byte into the save with the checksum renewed, and the
+ * derived values.
+ */
+void SelectionCommit(void)
+{
+    uint16_t v;
+
+    g.sel[4] = handler_table_a(g.choice_p1);    /* $18DB */
+    g.sel[5] = handler_table_a(g.choice_p2);    /* $18DD */
+    v = (uint16_t)((cart16(0x03, (uint16_t)(0xB540 + ((g.choice_p2 & 3) << 1))) << 4)
+                   | cart16(0x03, (uint16_t)(0xB540 + ((g.choice_p1 & 3) << 1))));
+    save.cars_battle = (uint8_t)v;
+    SaveChecksum();
+    g.sel[0] = 0;
+    g.sel[1] = 0;
+    if (g.choice_p1 == g.choice_p2)
+        g.sel[1] = cart16(0x03, (uint16_t)(0xB464 + g.choice_p2 * 2));
+    g.sel[8] = cart16(0x03, (uint16_t)(0xB46C + ((g.choice_p1 << 2) + g.sel[0]) * 2));
+    g.sel[9] = cart16(0x03, (uint16_t)(0xB46C + ((g.choice_p2 << 2) + g.sel[1]) * 2));
+}
+
+/*
+ * @routine 03:B48C SelectionSave
+ * WHAT IT DOES: Records the choices: the handler addresses, the values
+ * derived from them, and the choice packed into the save by the mode.
+ */
+void SelectionSave(void)
+{
+    uint16_t entry = cart16(0x03, (uint16_t)(0xB540 + ((g.choice_p1 & 3) << 1)));
+
+    g.sel[4] = handler_table_a(g.choice_p1);
+    g.sel[5] = handler_table_b(g.choices[0]);
+    g.sel[6] = handler_table_b(g.choices[1]);
+    g.sel[7] = handler_table_b(g.choices[2]);
+    SelectionTables18CB();
+    if (g.menu_mode == 3)
+        save.car_mode3 = (uint8_t)cart16(0x03, (uint16_t)(0xB540 + ((g.choice_p1 & 3) << 1)));
+    else if (g.menu_mode == 1)
+        save.cars_mode01 = (uint8_t)((save.cars_mode01 & 0x03) | (entry << 4));
+    else
+        save.cars_mode01 = (uint8_t)((save.cars_mode01 & 0x30) | entry);
+    SaveChecksum();
+}
+
+/*
+ * @routine 07:C0CA CarSelectTwoPlayers
+ * WHAT IT DOES: The two players' car choices at a two-player screen: Right
+ * or Left pressed on a pad steps its car (3 only in HUD mode 3 or with bit 2
+ * of the progress), each with sound $45; then both are recorded.
+ * (The race screen in race/pause calls it; it writes the record here.)
+ */
+static void car_step(uint8_t *car, uint16_t pressed)
+{
+    int four;
+
+    if (pressed & 0x0100) {
+        sound_port0_push(0x45);
+        *car = (uint8_t)(*car + 1);
+        if (*car == 3) {
+            four = g.hud_mode == 3 || (save.progress & 0x04);
+            if (!four)
+                *car = 0;
+        } else if (*car > 3) {
+            *car = 0;
+        }
+    } else if (pressed & 0x0200) {
+        sound_port0_push(0x45);
+        *car = (uint8_t)(*car - 1);
+        if (*car & 0x80) {
+            four = g.hud_mode == 3 || (save.progress & 0x04);
+            *car = four ? 3 : 2;
+        }
+    }
+}
+
+void CarSelectTwoPlayers(void)
+{
+    static const uint8_t map_car[4] = {2, 0, 1, 3};
+
+    car_step(&g.car[0], frame_state.pressed[0]);
+    car_step(&g.car[1], frame_state.pressed[1]);
+    g.choice_p2 = map_car[g.car[1] & 3];
+    SelectionCommit();
+    g.choice_p1 = map_car[g.car[0] & 3];
+    SelectionCommit();
+}
+
+/*
+ * @routine 02:EA53 MenuCursorFourWay
+ * WHAT IT DOES: Moves the course screen's cursor by the pad's buttons; each
+ * move plays sound $45. (race/course.c owns the screen; it calls this.)
+ */
+void MenuCursorFourWay(void)
+{
+    uint16_t pad = frame_state.pressed[0];
+    uint8_t v = g.time_override;
+
+    if (v) {
+        if (pad & 0x0100) {
+            g.champ_stage = 2;
+            g.time_override = 0;
+            sound_port0_push(0x45);
+        } else if (pad & 0x0200) {
+            g.champ_stage = 1;
+            g.time_override = 0;
+            sound_port0_push(0x45);
+        }
+    } else {
+        switch (g.champ_stage) {
+        case 0:
+            if (pad & 0x0100) { g.champ_stage++; sound_port0_push(0x45); }
+            break;
+        case 1:
+            if (pad & 0x0200) { g.champ_stage--; sound_port0_push(0x45); }
+            else if (pad & 0x0100) { g.time_override = (uint8_t)(g.time_override - 1); sound_port0_push(0x45); }
+            break;
+        case 2:
+            if (pad & 0x0100) { g.champ_stage++; sound_port0_push(0x45); }
+            else if (pad & 0x0200) { g.time_override = (uint8_t)(g.time_override - 1); sound_port0_push(0x45); }
+            break;
+        default:
+            if (pad & 0x0200) { g.champ_stage--; sound_port0_push(0x45); }
+            break;
+        }
+    }
+    if (g.time_override)
+        g.cursor_x = 0x88;
+    else
+        g.cursor_x = g.cursor_column_x = cart8(0x02, (uint16_t)(0xEB49 + g.champ_stage));
+}
+
+/* --- the championship's closing screen --------------------------------- */
+
+enum { C_OPEN, C_WAIT_SHOW, C_RUN, C_FADE, C_DONE };
+static int champion_state = C_OPEN;
+
+/*
+ * @routine 0B:DF7C (its frames) MenuSelectionFramesCycle
+ * WHAT IT DOES: One frame of the selection's picture, for the class, on
+ * four of BG2's tiles.
+ */
+void menu_champion_frames_tile(uint16_t step)
+{
+    uint16_t off = (uint16_t)(cart16(0x0B, (uint16_t)(0xDFCB + step * 2))
+                              + cart16(0x0B, (uint16_t)(0xDFD3 + (g.choice_p1 & 3) * 2)));
+
+    nshvc_tiles_write(menu_video.tiles_a, 0x15C, &champion_frames[off], 4, NSHVC_TILES_PLANAR);
+}
+
+/* A cell's attributes in the picture: `word` over the tile number. */
+static void cell_attributes(uint8_t *map, uint16_t at, uint16_t word)
+{
+    uint16_t off[4];
+    int i;
+
+    off[0] = at;
+    off[1] = (uint16_t)(at + 2);
+    off[2] = (uint16_t)(at + 0x40);
+    off[3] = (uint16_t)(at + 0x42);
+    for (i = 0; i < 4; i++) {
+        uint16_t v = (uint16_t)(map[off[i]] | map[off[i] + 1] << 8);
+
+        v = (uint16_t)((v & 0x01FF) | word);
+        map[off[i]] = (uint8_t)v;
+        map[off[i] + 1] = (uint8_t)(v >> 8);
+    }
+}
+
+/*
+ * @routine 0B:EA3B ChampionScreenOpen
+ * WHAT IT DOES: Opens the championship's closing screen with the display
+ * off: mode 3, the sound, the win recorded in the save, the pictures drawn,
+ * the panel coloured for the class, and the screen's objects made.
+ */
+static void champion_open(void)
+{
+    uint32_t n;
+    uint8_t *map;
+    int x, rows, rowi;
+
+    pic.blank = 1;
+    frame_state.brightness = 0;
+    pic.mode = 3;
+    pic.bg3_priority = 0;
+    pic.bg[0].tiles = tiles_8bpp;
+    pic.bg[0].map = menu_video.page_0;
+    pic.bg[1].tiles = menu_video.tiles_a;
+    pic.bg[1].map = menu_video.pages_1_2;
+    memset(&pic.blend, 0, sizeof pic.blend);
+    pic.blend.use_fixed = 1;
+    pic.sub_screen = 0;
+    memset(&pic.windows, 0, sizeof pic.windows);
+    pic.windows.mask_main[4] = 1;
+    pic.windows.layer_use[4] = NSHVC_WIN1 | NSHVC_WIN1_INVERT;
+    pic.windows.w[0].left = 0;
+    pic.windows.w[0].right = 0;
+    menu_lines_set(MENU_LINES_CHAMPION, 0);
+
+    sound_upload_begin();
+    sound_upload_packed(0xF884, 0x1D);
+    sound_upload_cart(0x1B, 0x85F8);
+    sound_upload_cart(0x19, 0x9A98);
+    sound_upload_end();
+    sound_queue_reset();
+    sound_set_port0(1);
+    menu_scroll_reset();
+
+    if (g.player_phase[0] == 8 && g.course_class <= 2)
+        save.progress = (uint8_t)(save.progress | (1 << g.course_class));
+    SaveChecksum();
+
+    palette_load(0x04, 0xEBCB);
+    memcpy(pic.palette_saved, pic.palette, sizeof pic.palette);
+
+    /* the table entries the window step and the blink change, as they start */
+    actors_load();
+    menu_tables_at()[0x130D - 0x0800] = 0;
+    menu_tables_at()[0x130F - 0x0800] = 0;
+
+    picture_unpack(0x1D, 0x9068);
+    memcpy(frames_tiles, picture, sizeof frames_tiles);
+    n = picture_unpack(0x1C, 0xDC8C);
+    {
+        uint16_t w[0x400];
+
+        memcpy(w, picture, n < sizeof w ? n : sizeof w);
+        for (x = 0; x < 0x400; x++)
+            w[x] = (uint16_t)(w[x] + 0x0100);
+        menu_page_write(0, w);
+    }
+    tiles_from_picture(menu_video.sprites, 0, picture_unpack(0x18, 0xC770), 32);
+    tiles_from_picture(tiles_8bpp, 0x100, picture_unpack(0x18, 0x998C), 64);
+    tiles_from_picture(menu_video.tiles_a, 0, picture_unpack(0x1C, 0x989C), 32);
+
+    n = picture_unpack(0x04, 0xE87B);
+    map = picture;
+    {
+        uint16_t tbl_off = (uint16_t)(g.course_class << 4);
+
+        /* the four panel entries, coloured for the class */
+        for (rowi = 3, rows = 0; rowi >= 0; rowi--, rows++) {
+            uint16_t base = cart16(0x0B, (uint16_t)(0xED9F + tbl_off));
+            uint16_t attr = cart16(0x0B, (uint16_t)(0xED9F + 2 + tbl_off));
+            uint16_t at = cart16(0x0B, (uint16_t)(0xEDCF + 8 + rowi * 2));
+            uint16_t cells = cart16(0x0B, (uint16_t)(0xEDCF + rowi * 2));
+            int y, c;
+
+            for (y = 0; y <= 4; y++) {
+                for (c = 0; c <= 0x0B; c++) {
+                    uint16_t a2 = (uint16_t)(at + c * 2);
+                    uint16_t v = (uint16_t)(map[a2] | map[a2 + 1] << 8);
+
+                    v = (uint16_t)((v & 0x03FF) | attr);
+                    map[a2] = (uint8_t)v;
+                    map[a2 + 1] = (uint8_t)(v >> 8);
+                }
+                at = (uint16_t)(at + 0x40);
+            }
+            {
+                uint16_t v = (uint16_t)(base | attr);
+                int i;
+
+                for (i = 0; i < 4; i++) {
+                    uint16_t u = v;
+
+                    map[cells + i * 2] = (uint8_t)u;
+                    map[cells + i * 2 + 1] = (uint8_t)(u >> 8);
+                    u = (uint16_t)(u + 0x10);
+                    map[cells + i * 2 + 0x40] = (uint8_t)u;
+                    map[cells + i * 2 + 0x41] = (uint8_t)(u >> 8);
+                    u = (uint16_t)(u + 0x10);
+                    map[cells + i * 2 + 0x80] = (uint8_t)u;
+                    map[cells + i * 2 + 0x81] = (uint8_t)(u >> 8);
+                    v++;
+                }
+            }
+            tbl_off = (uint16_t)(tbl_off + 4);
+        }
+    }
+    cell_attributes(map, 0x0628, cart16(0x0B, (uint16_t)(0xEDDF + (g.choice_p1 & 3) * 2)));
+    cell_attributes(map, 0x052E, cart16(0x0B, (uint16_t)(0xEDDF + (g.choice_p1 & 3) * 2)));
+    for (x = 0; x < 2; x++)
+        menu_page_write(1 + x, map + x * 0x800);
+
+    picture_unpack(0x04, 0xEBCB);
+    memcpy(champion_frames, picture, sizeof champion_frames);
+
+    menu_state_clear();
+    menu.window_mode = 3;
+    menu.panel_rise = 0;
+    menu.panel_b1925 = 0;
+    menu.panel_b1919 = (uint16_t)(g.course_class << 5);
+    menu.panel_b1927 = g.player_phase[0] == 8 ? 0x0000 : 0x0020;
+    menu.panel_b191f = 0;
+    actors.scroll_y = 0x0066;
+    actors_reset();
+    actors_spawn_list(0x0036);
+    actors_run();
+    actors_build_sprites();
+    menu_lines_set(MENU_LINES_CHAMPION, 0xF0);
+    pic.main_screen = 0;
+}
+
+/*
+ * @routine 0B:ADD4 ChampionScreenRun
+ * WHAT IT DOES: The championship's closing screen until the menu asks to
+ * leave.
+ */
+int ChampionScreenRun(void)
+{
+    switch (champion_state) {
+    case C_OPEN:
+        champion_open();
+        pic.blank = 0;
+        champion_state = C_WAIT_SHOW;
+        break;
+    case C_WAIT_SHOW:
+        pic.main_screen = SHOW_BG1 | SHOW_BG2;
+        frame_state.brightness_target = 15;
+        champion_state = C_RUN;
+        break;
+    case C_RUN:
+        objects_frame();
+        frame_state.menu_pressed[0] = 0;
+        frame_state.menu_pressed[1] = 0;
+        if (actors.exit_request) {
+            frame_state.brightness_target = 0;
+            champion_state = C_FADE;
+        }
+        break;
+    case C_FADE:
+        objects_frame();
+        if (frame_state.brightness == frame_state.brightness_target)
+            champion_state = C_DONE;
+        break;
+    default:
+        champion_state = C_OPEN;
+        return 1;
+    }
+    return 0;
+}
+
+/* --- the frame's end, and until the boot's state machine takes over ---- */
+
+void menu_video_more_init(void)
+{
+    tiles_8bpp = nshvc_tiles_create(8, 1024, 1);
+    tiles_menu = nshvc_tiles_create(4, 512, 1);
+    tiles_load = nshvc_tiles_create(4, 64, 1);
+    menu_3d_list = nshvc_draw_list_create();
+}
+
+/* What the menu's stage does with the frame: which vblank stage is on. */
+int menu_on_stage20(void)
+{
+    return state == S_MENU_LOOP || state == S_MENU_FADEOUT || (state >= S_FADE_OPEN2 && state <= S_FADE_LAST);
 }
 
 void session_start(void)
 {
-    state = STATE_SOUND_START;
+    state = S_SOUND_START;
     actors_load();
+    menu_video_more_init();
+    save_load();
 }
 
+/* Logo, title, course menu; the race's flow takes over from here (race/boot). */
 void session_update(void)
 {
-    switch (state) {
-    case STATE_SOUND_START:
-        sound_upload_begin();
-        sound_upload_cart(0x19, 0xC27C);
-        sound_upload_end();
-        state = STATE_LOGO_OPEN;
-        /* fall through */
-    case STATE_LOGO_OPEN:
-        logo_open();
-        pic.blank = 0;
-        state = STATE_LOGO_SOUND;
-        break;
-    case STATE_LOGO_SOUND:
-        sound_port0_push(0x39);
-        state = STATE_LOGO_SHOW;
-        break;
-    case STATE_LOGO_SHOW:
-        frame_state.brightness = frame_state.brightness_target = 15;
-        pic.main_screen = SHOW_SPRITES;
-        state = STATE_LOGO_RUN;
-        break;
-    case STATE_LOGO_RUN:
-        actors_run();
-        actors_build_sprites();
-        if (actors.exit_request)
-            state = STATE_TITLE_OPEN;
-        break;
-    case STATE_TITLE_OPEN:
-        title_open();
-        pic.blank = 0;
-        state = STATE_TITLE_SHOW;
-        break;
-    case STATE_TITLE_SHOW:
-        pic.main_screen = SHOW_BG1 | SHOW_BG2 | SHOW_BG3 | SHOW_SPRITES;
-        sound_hold_a = 0;
-        state = STATE_TITLE_FADE;
-        break;
-    case STATE_TITLE_FADE:
-        frame_state.brightness_target = 15;
-        menu_idle = 0;
-        state = STATE_TITLE_RUN;
-        break;
-    case STATE_TITLE_RUN: {
-        Actor *a;
+    if (state <= S_BOOT_DONE && !MenuScreen0Run())
+        goto done;
+    if (state >= S_BOOT_DONE)
+        if (CourseMenuRun()) {
+            static int said;
 
-        actors_run();
-        actors_build_sprites();
-        a = actor_find(0x0012);
-        if (a && a->handler == HANDLER_BUTTON_SEQUENCE && a->count == 0) {
-            menu_idle++;
-            if (menu_idle == 0x0400) {
-                frame_state.brightness_target = 0;
-                state = STATE_NOT_CONVERTED;
-            }
+            if (!said)
+                fprintf(stderr, "stuntracefx: the course menu's end: the race's flow is not converted yet\n");
+            said = 1;
+            state = S_COURSE_DONE;
         }
-        frame_state.menu_pressed[0] = 0;
-        frame_state.menu_pressed[1] = 0;
-        if (actors.exit_request)
-            state = STATE_NOT_CONVERTED;
-        break;
-    }
-    default:
-        break;
-    }
-    frame_end();
+done:
+    menu_frame_end(menu_on_stage20());
 }

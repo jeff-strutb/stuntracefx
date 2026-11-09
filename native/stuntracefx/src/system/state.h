@@ -80,9 +80,7 @@ typedef struct {
     uint8_t end_timer;                  /* $0E58 */
     uint8_t time_up_timer;              /* $0E5A */
     uint16_t time_shown;                /* $0E6C */
-    uint16_t level_colour;              /* $0F11: BGR */
     uint16_t time_bonus, time_bonus_2;  /* $0D67, $0D69 */
-    uint16_t hits_bcd_2;                /* $19F0 */
     uint8_t save_bad_flag;              /* $1FFE */
     uint16_t clock_step;                /* $0D29: BCD added to the clock each frame */
     uint16_t clock_fraction;            /* $0E62: BCD; its high byte is the hundredths */
@@ -194,6 +192,16 @@ typedef struct {
     uint8_t flash_count[2];             /* $0E1F */
     uint16_t player_palette_offset[2];  /* $0D83: each player's first colour, counted from $E4 */
     uint16_t hud_hold;                  /* $0E5D: the HUD's hold, bit 15 and low byte used apart */
+    uint16_t time_sprite_base;          /* $0E60: table offset of the time's first sprite */
+    uint8_t hud_slide;                  /* $0D57: the sliding panel's offset, $10 fully shown */
+    uint8_t hud_panel_b_y;              /* $0E0B */
+    uint8_t hud_map_origin_x[2];        /* $0E09 panel B, $0E0A panel A */
+    uint8_t hud_map_y_b, hud_map_y_a;   /* $0E0C, $0E0D */
+    uint8_t gauge_place[8];             /* $0E0E-$0E15: the gauges' X and Y bytes */
+    uint8_t gauge_one[2];               /* $0DF9, $0DFA: each panel's four-sprite gauge value */
+    uint8_t hud_marker_y;               /* $0E16 */
+    uint16_t slide_value, slide_step, slide_target, slide_direction; /* $19F6, $19F8, $19FA, $19FC */
+    uint16_t oam_first_free;            /* $0D7B */
     uint16_t hud_point_index;           /* $0D6B */
     uint16_t hud_point_x, hud_point_y;  /* $0D6D, $0D6F */
     uint16_t digit_pair;                /* $0E74 */
@@ -202,7 +210,6 @@ typedef struct {
     uint8_t sprites_counted;            /* $0E5C */
     uint16_t glyphs_extended;           /* $0FAE */
     uint8_t time_digits_a[5];           /* $0F64 */
-    uint8_t time_digits_b[5];           /* $0F69 */
     uint16_t glyph_sprite_x[16];        /* $0FB0 */
     uint16_t glyph_sprite_y[16];        /* $0FE0 */
     uint16_t glyph_sprite_glyph[16];    /* $1010 */

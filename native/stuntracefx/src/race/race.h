@@ -16,6 +16,14 @@ void CameraFollowStep(Camera *cam);
 void RaceStart(void);
 void RaceFrameStep(int show);
 
+/* wanted (from the menus and saves): */
+/* one update of attract demo `which` (0, 1, 2); 0 while it runs, 1 when it
+   returned with a button pressed, -1 for the restart (BootWarm) */
+int DemoRun(int which);
+/* the records panel's map buffer: one tile byte at a byte offset */
+void RecordsPanelTile(uint16_t offset, uint8_t tile);
+void PlayerSound35(void);
+
 void RaceTimeInit(void);
 void RaceTimeAddD814(void);
 void RaceTimeAddD815(void);
