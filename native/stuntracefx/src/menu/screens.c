@@ -463,6 +463,7 @@ static void preview_open(void)
         picture_unpack(0x17, 0xF8E8);
         memcpy(frames_sprites, picture, sizeof frames_sprites);
     }
+    sound_hold_a = 0;
     sound_queue_reset();
 }
 
@@ -641,6 +642,7 @@ int CourseMenuRun(void)
             g.demo_number = (uint16_t)((g.demo_number + 1) & 3);
             if (g.demo_number == 3)
                 g.demo_number = 0;
+            sound_hold_a = 0xFF;        /* $10DA: the demo keeps the title's music */
             state = S_DEMO;
         }
         break;

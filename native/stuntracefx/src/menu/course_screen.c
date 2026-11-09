@@ -9,6 +9,7 @@
 #include "data/cart.h"
 #include "data/unpack.h"
 #include "menu/menu.h"
+#include "race/race.h"
 #include "system/chip.h"
 #include "system/state.h"
 #include "video/video.h"
@@ -79,7 +80,7 @@ void MenuCourseScreenSetup(void)
     unpack((uint32_t)0x1D << 16 | 0xD970, fx_ram + 0x3000, 0xC000);
     course_picture_to_art();
     sprites_use_tiles(race_video.tiles, 0x200, 0x300);
-    g.raster_chain = 0x08;
+    g.raster_chain = RASTER_TWO_PLAYERS;    /* the original's stage $08 */
     g.fx_upload_stage = 0x000C;
     g.gauge_place[0] = 0xB0;            /* $0E0E */
     g.gauge_place[2] = 0x1C;            /* $0E10 */
