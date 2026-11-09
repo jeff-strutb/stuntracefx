@@ -84,7 +84,6 @@ typedef struct {
     uint8_t frame_stage_00;             /* $00: 2 while a step runs, cleared when its picture is shown */
     uint8_t byte_1a32, byte_0713;       /* $1A32, $0713 */
     uint8_t course_high, byte_0d63, byte_0d44, byte_0d25; /* $0E3E, $0D63, $0D44, $0D25 */
-    uint16_t course_intro_scroll;       /* $0E37 */
     uint8_t champ_stage;                /* $0D48: the championship's stage */
     uint8_t byte_0d24;                  /* $0D24 */
     uint8_t race_ended_d55;             /* $0D55 */

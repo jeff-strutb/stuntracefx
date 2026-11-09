@@ -509,7 +509,7 @@ void RaceModeSetup(void)
         g.course_class = 0;
     }
     g.race_skipped = 0;
-    g.course_intro_scroll = 0;
+    g.course_scroll_low = 0;
     RaceModeSetupPickSound();
     g.time_override = 0;
     g.hud_blank = 0;

@@ -163,7 +163,7 @@ static int mode_all(void)
         flags();
         return 0;
     }
-    if (g.best_lap_time == 0xFFFF) {
+    if (g.record_times[0] == 0xFFFF) {
         no_time();
         flags();
         return 0;

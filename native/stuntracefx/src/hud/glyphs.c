@@ -948,7 +948,7 @@ void HudTimesDraw(void)
         HudTimesPackedDraw();
         return;
     }
-    if (g.best_lap_time == 0xFFFF) {
+    if (g.record_times[0] == 0xFFFF) {
         GlyphColours(0xBF, 0xB3, 0xBE);
         times_at(0x006C);
         f329_sequence(g.best_digits);
