@@ -396,8 +396,7 @@ void RaceVarsReset(void)
     g.quit_cars_shown = 0;
     g.pause_choice = 0;
     g.start_light = 0;
-    sound_port2 = 0;
-    sound_port3 = 0;
+    g.speed_gauge[0] = g.speed_gauge[1] = 0;     /* $0E49, $0E47: also what the sound sends on ports 3 and 2 */
     g.panel_top = 0;
     g.panel_bottom = 0;
     g.lap_mark[0] = g.lap_mark[1] = g.lap_mark[2] = 0;
