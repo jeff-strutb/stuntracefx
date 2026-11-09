@@ -68,13 +68,13 @@ void ObjectBurstSpawn(Object *o)
  */
 void ObjectBurstPieceStep(Object *o)
 {
-    uint8_t a = ObjectSyncFromRecord(o);
+    int touching = ObjectSyncFromRecord(o);
 
     if (record_contacts.no_record) {
         ObjectRelease(o);
         return;
     }
-    if (!(a & 0x01) && (RecordContactSummary(o) & 0x80)) {
+    if (!touching && (RecordContactSummary(o) & 0x80)) {
         ObjectBreakOffContact(o);
         return;
     }
@@ -533,7 +533,7 @@ void ObjectChildFlying(Object *o)
 {
     Object *p;
 
-    if (!(ObjectSyncFromRecord(o) & 0x01)) {
+    if (!ObjectSyncFromRecord(o)) {
         p = obj_at(o->parent);
         if ((p->flags25 & 0x10) && (RecordContactSummary(o) & 0x80)) {
             ObjectBreakOffContact(o);

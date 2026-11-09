@@ -168,7 +168,7 @@ void PartFlyStep(Object *o)
     uint8_t v;
 
     o->timer = 3;
-    if (!(ObjectSyncFromRecord(o) & 0x01)) {
+    if (!ObjectSyncFromRecord(o)) {
         car = obj_at(o->parent);
         if ((car->flags25 & 0x10) && (RecordContactSummary(o) & 0x80)) {
             ObjectBreakOffContact(o);

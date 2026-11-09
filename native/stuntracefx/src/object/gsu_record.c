@@ -296,24 +296,19 @@ void ObjectTurnFromRecord(uint16_t rec, Object *o)
     ObjectBillboardTilt(o);
 }
 
-/* The result every Sync routine leaves: the low byte of A: 1 when the
-   record's contact list is not empty, else what the routine had left in A
-   (callers test bit 0). */
-static uint8_t sync_tail(uint16_t a)
-{
-    return record_contacts.next ? 0x01 : (uint8_t)a;
-}
-
 /*
  * @routine 08:CE02 ObjectSyncFromRecord
  * WHAT IT DOES: Rebuckets the object, marks its record, and takes its place
  * back from the record after giving the record its heading and frame; bit 1
- * of +$24 follows bit 1 of the record's +$1C. Returns the low byte of A (see sync_tail); the
- * record's contact list is in record_contacts.next. 0 with no record.
+ * of +$24 follows bit 1 of the record's +$1C. Returns 1 when the record's
+ * contact list (record_contacts.next) is not empty, and also when that +$1C
+ * bit and +$24 bit 0 are both set: the callers' test of the original's
+ * result reads that bit too. 0 with no record.
  */
-uint8_t ObjectSyncFromRecord(Object *o)
+int ObjectSyncFromRecord(Object *o)
 {
-    uint16_t rec, a;
+    uint16_t rec;
+    int odd = 0;
 
     ObjectRebucket(o);
     GsuRecordFlag4(o);
@@ -330,20 +325,21 @@ uint8_t ObjectSyncFromRecord(Object *o)
     o->x = rec_get(rec, FXREC_POS_X);
     o->y = rec_get(rec, FXREC_POS_Y);
     o->z = rec_get(rec, FXREC_POS_Z);
-    a = rec_get(rec, FXREC_FLAGS1C) & 0x0002;
-    if (a) {
+    if (rec_get(rec, FXREC_FLAGS1C) & 0x0002) {
         o->flags24 |= 0x02;
-        a = o->flags24;
+        odd = o->flags24 & 0x01;
     }
-    return sync_tail(a);
+    return record_contacts.next != 0 || odd;
 }
 
 /*
  * @routine 08:CEC3 ObjectSyncToRecord
  * WHAT IT DOES: As ObjectSyncFromRecord the other way: after the heading and
- * frame, the object's place goes to the record; +$24 is left alone.
+ * frame, the object's place goes to the record; +$24 is left alone. Returns
+ * 1 when the contact list is not empty, and also when the object's Z is odd
+ * (what the callers' test of the original's result reads). 0 with no record.
  */
-uint8_t ObjectSyncToRecord(Object *o)
+int ObjectSyncToRecord(Object *o)
 {
     uint16_t rec;
 
@@ -361,7 +357,7 @@ uint8_t ObjectSyncToRecord(Object *o)
     rec_put(rec, FXREC_POS_X, o->x);
     rec_put(rec, FXREC_POS_Y, o->y);
     rec_put(rec, FXREC_POS_Z, o->z);
-    return sync_tail(o->z);
+    return record_contacts.next != 0 || (o->z & 0x0001);
 }
 
 /*

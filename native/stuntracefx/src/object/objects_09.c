@@ -95,7 +95,7 @@ void ObjectScale40(Object *o)
    sync and the contact summary have bit 0 */
 void ObjectScoreGateStep(Object *o)
 {
-    if ((ObjectSyncFromRecord(o) & 0x01) && (RecordContactSummary(o) & 0x01))
+    if (ObjectSyncFromRecord(o) && (RecordContactSummary(o) & 0x01))
         o->flags25 |= 0x01;
     else
         o->flags25 &= 0xFE;
@@ -262,7 +262,7 @@ void ObjectFireworkShellStep(Object *o)
     add_word_at(&o->pitch, 0x000C);
     add_word_at(&o->heading, 0x000C);
     add_word_at(&o->roll, 0x000C);
-    if (!(ObjectSyncFromRecord(o) & 0x01))
+    if (!ObjectSyncFromRecord(o))
         return;
     if (!(RecordContactSummary(o) & 0x01))
         return;
@@ -313,7 +313,7 @@ static void shell(Object *o, uint16_t dx, uint8_t s14, uint8_t s15, uint8_t s16)
 /* the record's sync and its contact summary both with bit 0 */
 static int hit(Object *o)
 {
-    return (ObjectSyncFromRecord(o) & 0x01) && (RecordContactSummary(o) & 0x01);
+    return ObjectSyncFromRecord(o) && (RecordContactSummary(o) & 0x01);
 }
 
 /* @routine 09:908D ObjectFinishGateStep: when hit on the second lap, the
@@ -598,7 +598,7 @@ void ObjectBallDropStep(Object *o)
 
     o->heading = (uint8_t)(o->heading + 0x10);
     o->pitch = (uint8_t)(o->pitch + 0x10);
-    if (!(ObjectSyncFromRecord(o) & 0x01))
+    if (!ObjectSyncFromRecord(o))
         return;
     for (;;) {
         r = RecordNextContact();
@@ -734,7 +734,7 @@ void ObjectCannonBallRight(Object *o) { cannon_ball_frame(o, 0xFC80); }
 /* As hit(), the object's place given to its record instead */
 static int hit_to(Object *o)
 {
-    return (ObjectSyncToRecord(o) & 0x01) && (RecordContactSummary(o) & 0x01);
+    return ObjectSyncToRecord(o) && (RecordContactSummary(o) & 0x01);
 }
 
 static void wave_ball(Object *o, uint16_t h, uint16_t dx, uint16_t dy, uint16_t dz, uint8_t s,
@@ -935,7 +935,7 @@ void ObjectLantern(Object *o)
 }
 
 /* the record's contacts (bit 0 of the sync's result) */
-static int synced(Object *o) { return (ObjectSyncFromRecord(o) & 0x01) != 0; }
+static int synced(Object *o) { return ObjectSyncFromRecord(o) != 0; }
 
 /* the next contact with bit 0; its touched record, or 0 when none */
 static uint16_t next_contact(void)
@@ -1806,7 +1806,7 @@ void ObjectLapCrowdGateStep(Object *o)
 {
     uint8_t lap = g.laps_counted[0];
 
-    if (!(ObjectSyncToRecord(o) & 0x01) || !(RecordContactSummary(o) & 0x01) || lap == o->count48)
+    if (!ObjectSyncToRecord(o) || !(RecordContactSummary(o) & 0x01) || lap == o->count48)
         return;
     o->count48 = lap;
     if (lap == 0x00)
@@ -2413,7 +2413,7 @@ static void gate_slide_step(Object *o)
 /* @routine 09:E441 ObjectSlideLapGateStep */
 void ObjectSlideLapGateStep(Object *o)
 {
-    if (!(ObjectSyncToRecord(o) & 0x01) || !(RecordContactSummary(o) & 0x01))
+    if (!ObjectSyncToRecord(o) || !(RecordContactSummary(o) & 0x01))
         return;
     if (g.laps_counted[0] == 0x01)
         gate_slide_step(o);
@@ -2790,7 +2790,7 @@ static void bonus_marker_frame(Object *o, void (*shatter_it)(Object *), uint16_t
     Object *n;
 
     marker_bounce_y(o);
-    if (!(ObjectSyncToRecord(o) & 0x01) || !next_contact())
+    if (!ObjectSyncToRecord(o) || !next_contact())
         return;
     HudCountUp19EC(o);
     shatter_it(o);
