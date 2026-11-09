@@ -163,6 +163,10 @@ typedef struct {
     uint16_t spawn_counter;             /* $1ADE: the spawn counter */
     uint16_t director[2];               /* $1ADA, $1ADC: the two bare objects that move the cameras */
     uint16_t trigger_list[0x104][2];    /* $1AF5: code and bucket number per entry, ended by 0 */
+    uint16_t race_held[2];              /* $0309, $030D: buttons held since the last race step (ORed by the frame) */
+    uint16_t race_last[2];              /* $1F23, $1F25: last race step's buttons */
+    uint16_t player_flags[2];           /* $1A5E, $1A60 */
+    uint16_t seq_count, seq_stage;      /* $1A33, $1A35: the button sequence */
     uint16_t bucket_origin[3];          /* $1F01, $1F03, $1F05: the bucket trigger window */
     uint16_t selection_out[4];          /* $18D3: each racer's model (words) */
     uint16_t selection_handler[4];      /* $18DB: each racer's control word */
