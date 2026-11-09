@@ -155,13 +155,12 @@ static void window_lines_send(void)
 
 /* The fixed colour by line from its table: each entry a line count and a
    byte naming colour channels, added on top of what the rows above left. */
-static void fixed_lines_send(uint16_t start)
+static void fixed_line_values(uint16_t start, int32_t *v)
 {
-    int32_t v[224];
     int i = 0, line = 0;
     int r = start & 31, gc = (start >> 5) & 31, b = (start >> 10) & 31;
 
-    memset(v, 0, sizeof v);
+    memset(v, 0, 224 * sizeof *v);
     while (i + 1 < windows.level_table_bytes && windows.level_table[i] && line < 224) {
         int n = windows.level_table[i];
         uint8_t d = windows.level_table[i + 1];
@@ -178,6 +177,13 @@ static void fixed_lines_send(uint16_t start)
     }
     for (; line < 224; line++)
         v[line] = line ? v[line - 1] : (r | gc << 5 | b << 10);
+}
+
+static void fixed_lines_send(uint16_t start)
+{
+    int32_t v[224];
+
+    fixed_line_values(start, v);
     nshvc_lines(0, 224, NSHVC_LINE_FIXED, v);
 }
 
@@ -294,29 +300,19 @@ static void race_lines_send(void)
 
 /* ---- the one-player race in the whole window ---- */
 
-/* The sky (colour 1) on a line of the original's numbering: the gradient's
-   list by line through the view, its top line's colour above the view and
-   its last line's below, so each line has the colour the original showed at
-   the same height above the horizon. */
-static int32_t full_sky_at(int line)
-{
-    if (line < 32)
-        line = 32;
-    if (line > 158)
-        line = 158;
-    return (int32_t)gradient_colour((uint32_t)pic.race.gradient_start[0] + (uint32_t)(line - 32));
-}
+/* The engine's origin stays at the screen's top left: the original's 256 x
+   224 is placed here, in the layers' scrolls and the lines' numbers, so
+   that every row of the screen can take its own sky. */
 
-/* Every line from the origin down; the rows above it take the frame's
-   colour 1, which video_draw sets to the top line's. */
-static void full_sky_lines(int lines)
+/* The sky (colour 1) on a screen row: the colour at the same height above
+   the horizon, read from the day and night lists as a band reads them,
+   from the band's start at the original's line 32; black while the
+   tunnel's black list is up. */
+static int32_t full_sky_at(int row, int origin_y)
 {
-    static int32_t v[1024];
-    int r;
-
-    for (r = 0; r < lines; r++)
-        v[r] = full_sky_at(r);
-    nshvc_lines(0, (uint32_t)lines, (nshvc_line_field)(NSHVC_LINE_PALETTE + 1), v);
+    if (pic.race.gradient_start[0] >= GRADIENT_AT_BLACK)
+        return 0;
+    return (int32_t)sky_colour_at(pic.race.sky_offset / 2 + (row - origin_y) - 32);
 }
 
 /* Whether each window of the band table covers any of the screen: the
@@ -348,15 +344,17 @@ static void full_windows(nshvc_windows *w, int width)
 static void full_window_draw(const ScreenShape *sh)
 {
     static uint16_t palette[256];
+    static int32_t rows[1024];
     nshvc_windows w = pic.windows;
     Background hills = pic.bg[1];
     static nshvc_sprite placed[128];
-    int sky = (g.hdma_enable & 0x0C) == 0x0C;
+    int sky = (g.hdma_enable & 0x0C) == 0x0C, r;
 
+    race_hills_full();
     layer_send(0, &pic.bg[0]);
     hills.map = race_video.backdrop_wide;
-    hills.scroll_x = pic.race.wide_x;
-    hills.scroll_y = pic.race.wide_y;
+    hills.scroll_x = pic.race.wide_x - sh->origin_x;
+    hills.scroll_y = pic.race.wide_y - sh->origin_y;
     layer_send(1, &hills);
     layer_send(2, &pic.bg[2]);
     if (g.hdma_enable & 0x10)
@@ -365,15 +363,27 @@ static void full_window_draw(const ScreenShape *sh)
     nshvc_blend_set(&pic.blend);
     memcpy(palette, pic.palette, sizeof palette);
     if (sky)
-        palette[1] = (uint16_t)full_sky_at(0);
+        palette[1] = (uint16_t)full_sky_at(0, sh->origin_y);
     nshvc_palette_write(0, 256, palette);
     nshvc_sprites_show((pic.main_screen >> 4) & 1, (pic.sub_screen >> 4) & 1);
     sprites_place_full(placed, pic.sprites, pic.sprite_count);
     nshvc_sprites_set(placed, pic.sprite_count, 0);
-    if (sky)
-        full_sky_lines(sh->height - sh->origin_y);
-    if (g.hdma_enable & 0x20)
-        fixed_lines_send(pic.blend.fixed_bgr15);
+    if (sky) {
+        for (r = 0; r < sh->height; r++)
+            rows[r] = full_sky_at(r, sh->origin_y);
+        nshvc_lines(0, (uint32_t)sh->height, (nshvc_line_field)(NSHVC_LINE_PALETTE + 1), rows);
+    }
+    if (g.hdma_enable & 0x20) {
+        int32_t lines[224];
+
+        fixed_line_values(pic.blend.fixed_bgr15, lines);
+        for (r = 0; r < sh->height; r++) {
+            int line = r - sh->origin_y;
+
+            rows[r] = lines[line < 0 ? 0 : line > 223 ? 223 : line];
+        }
+        nshvc_lines(0, (uint32_t)sh->height, NSHVC_LINE_FIXED, rows);
+    }
 }
 
 void video_draw(void)
@@ -388,8 +398,7 @@ void video_draw(void)
     memset(&s, 0, sizeof s);
     s.width = full ? sh->width : 256;
     s.height = full ? sh->height : 224;
-    s.origin_x = full ? sh->origin_x : 0;
-    s.origin_y = full ? sh->origin_y : 0;
+
     s.brightness = pic.brightness;
     s.blank = pic.blank;
     nshvc_screen_set(&s);

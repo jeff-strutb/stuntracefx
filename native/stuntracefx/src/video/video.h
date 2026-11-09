@@ -39,6 +39,8 @@ int screen_view_anchor_x(int x0, int x1);      /* the same for a piece inside th
 int screen_anchor_y(int y0, int y1);           /* lines to add, by the piece's middle */
 int screen_bottom_shift(void);                 /* lines the panels' band moves down by */
 int race_full_window(void);                    /* the one-player race fills the window */
+void race_hills_full(void);                    /* its hills and sky for the picture shown, or one between steps */
+uint16_t sky_colour_at(int at);                /* colour 1 at place `at` of the day and night lists */
 void sprites_place_full(nshvc_sprite *out, const nshvc_sprite *in, uint32_t count); /* the race's sprites on the larger screen */
 
 /* The race screen's engine objects, by role. */

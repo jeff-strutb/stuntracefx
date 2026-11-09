@@ -28,6 +28,7 @@ typedef struct {
     uint16_t gradient_start[2];         /* colour numbers into the gradient block */
     int32_t backdrop_x[2], backdrop_y[2]; /* BG2's scroll for each half */
     int32_t wide_x, wide_y;             /* the full window's hills: their scroll on the wide map */
+    uint16_t sky_offset;                /* and the sky's: byte offset into the day and night lists at line 32 */
     uint8_t panel[2];                   /* the finished player's panel shows in the half */
     uint16_t colours_kept[2][3];        /* colours $E1-$E3 in each half */
     uint16_t colour_0[2];               /* colour 0 in each half */

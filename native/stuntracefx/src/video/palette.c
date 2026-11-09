@@ -404,6 +404,24 @@ static void amount_step(void)
     }
 }
 
+/* The sky's colour (colour 1) at place `at` of the day and night lists, as
+   a band takes it: the two blended by the weather, then toward the fog's
+   colour. The full window reads it a line at a time, past the 128 a band
+   holds. */
+uint16_t sky_colour_at(int at)
+{
+    uint16_t c;
+
+    if (at < 0)
+        at = 0;
+    if (at > 511)
+        at = 511;
+    c = colour_blend(gradient.day[at], gradient.night[at], palettes.weather);
+    if (!(palettes.target & 0x8000))
+        c = colour_blend(c, palettes.target, palettes.amount);
+    return c;
+}
+
 /* One gradient band rebuilt from the day and night lists at `offset` bytes:
    a repeated colour in both lists repeats the last result. */
 static void gradient_band_rebuild(void)

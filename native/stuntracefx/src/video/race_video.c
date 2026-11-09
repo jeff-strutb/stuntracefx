@@ -41,8 +41,8 @@ static uint16_t bank7f_words[2 * 0x1400 + 2 * 0x220];
    with the sky tile above and below them, so a tall screen shows sky and
    ground (colour 1 by line) and the band once. */
 enum { WIDE_COLUMNS = 128, WIDE_ROWS = 192, WIDE_DROP = 64, SKY_TILE = 0x20C0 };
-static struct { int map, row, column; } wide_band[2];   /* what BackdropRowsUpdate took, by buffer */
-static void wide_hills_shown(int buffer);
+static struct { int map; uint16_t heading, pitch, row_adjust; } wide_band[2];   /* what BackdropRowsUpdate took, by buffer */
+static int shown_buffer;
 
 /* The one-player race fills the window: its screen, not the course
    screen's, the split screen's or the results' page. */
@@ -496,8 +496,9 @@ void BackdropRowsUpdate(void)
     row_step = (unsigned)(((uint16_t)(h + g.backdrop_row_adjust) >> 3) & 0x3F) * 0x140u;
     x = ((g.view_heading_06cf >> 3) & 0xFE) + row_step;
     wide_band[buf].map = (g.picture_effects & 0x40) ? 1 : 0;
-    wide_band[buf].row = (int)(row_step / 0x140u);
-    wide_band[buf].column = (int)(((g.view_heading_06cf >> 3) & 0xFE) / 2);
+    wide_band[buf].heading = g.view_heading_06cf;
+    wide_band[buf].pitch = h;
+    wide_band[buf].row_adjust = g.backdrop_row_adjust;
     for (n = 0; n < 17; n++) {
         if (x >= 0x2800) {
             while (at < 0x220)
@@ -562,33 +563,56 @@ void race_picture_shown(int buffer)
     pic.bg[1].scroll_x = pic.race.backdrop_x[0];
     pic.bg[1].scroll_y = pic.race.backdrop_y[0];
     race_backdrop_rows_upload(buffer);
-    wide_hills_shown(buffer);
+    shown_buffer = buffer;
 }
 
-/* The full window's hills for the picture shown: the panorama's 17 rows the
-   view looks at, its whole round across, at the band's place for this
-   buffer; sky everywhere else, the other buffer's band too. Across, the
-   wide map's column 0 is the panorama's, so the scroll is the original's
-   column (the heading's) and its fine scroll; down, the original's scroll
-   over the rows dropped. */
-static void wide_hills_shown(int buffer)
+/* The full window's hills and sky from the view's angles, as
+   BackdropRowsUpdate works them out: the panorama's 17 rows the pitch
+   looks at, its whole round across, at the band's place for this buffer
+   and sky everywhere else (the other buffer's band too), written when
+   those rows change; across, the heading's column and fine scroll; down,
+   the pitch's scroll over the rows dropped; the sky's place in the day and
+   night lists. */
+static void hills_from_angles(int buffer, uint16_t heading, uint16_t pitch)
 {
     static uint16_t map[WIDE_COLUMNS * WIDE_ROWS];
-    const uint16_t *panorama = backdrop_map(wide_band[buffer].map);
+    static int written_map = -1, written_row = -1, written_buffer = -1;
+    int row = (int)(((uint16_t)(pitch + wide_band[buffer].row_adjust) >> 3) & 0x3F);
     int first = WIDE_DROP + (buffer ? 47 : 30), r, c;
+    uint16_t s = (uint16_t)((uint16_t)(pitch << 1) + 0x42 + (pitch >> 15));
 
-    for (r = 0; r < WIDE_ROWS; r++) {
-        int n = r - first, from = wide_band[buffer].row + n;
+    if (wide_band[buffer].map != written_map || row != written_row || buffer != written_buffer) {
+        const uint16_t *panorama = backdrop_map(wide_band[buffer].map);
 
-        for (c = 0; c < WIDE_COLUMNS; c++) {
-            uint16_t w = n >= 0 && n < 17 && from < 32 ? panorama[from * 160 + c] : SKY_TILE;
+        for (r = 0; r < WIDE_ROWS; r++) {
+            int n = r - first, from = row + n;
 
-            map[r * WIDE_COLUMNS + c] = (uint16_t)((w & 0xDC00) | (((w & 0x3FF) + 0x200) & 0x3FF));
+            for (c = 0; c < WIDE_COLUMNS; c++) {
+                uint16_t w = n >= 0 && n < 17 && from < 32 ? panorama[from * 160 + c] : SKY_TILE;
+
+                map[r * WIDE_COLUMNS + c] = (uint16_t)((w & 0xDC00) | (((w & 0x3FF) + 0x200) & 0x3FF));
+            }
         }
+        nshvc_map_write_snes(race_video.backdrop_wide, 0, 0, WIDE_COLUMNS, WIDE_ROWS, map);
+        written_map = wide_band[buffer].map;
+        written_row = row;
+        written_buffer = buffer;
     }
-    nshvc_map_write_snes(race_video.backdrop_wide, 0, 0, WIDE_COLUMNS, WIDE_ROWS, map);
-    pic.race.wide_x = (wide_band[buffer].column * 8 + (int16_t)g.backdrop_x[buffer]) & (WIDE_COLUMNS * 8 - 1);
-    pic.race.wide_y = (int16_t)g.backdrop_y[buffer] + WIDE_DROP * 8;
+    pic.race.wide_x = (((heading >> 3) & 0xFE) * 4 + ((heading >> 1) & 7) - 0x18) & (WIDE_COLUMNS * 8 - 1);
+    pic.race.wide_y = (int16_t)(uint16_t)((pitch & 7) - 0x20 + ram_code_7e16((uint16_t)(0xE811 + buffer * 2))) + WIDE_DROP * 8;
+    pic.race.sky_offset = s < 0x0300 ? s : 0x0300;
+}
+
+/* The hills of the picture shown: its step's angles, or those of a picture
+   drawn between steps. */
+void race_hills_full(void)
+{
+    uint16_t heading[2], pitch[2];
+
+    if (fx_tween_backdrop_angles(heading, pitch))
+        hills_from_angles(shown_buffer, heading[0], pitch[0]);
+    else
+        hills_from_angles(shown_buffer, wide_band[shown_buffer].heading, wide_band[shown_buffer].pitch);
 }
 
 /* The race screen handed back: the next screen sets its own layers, and
