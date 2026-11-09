@@ -125,7 +125,8 @@ typedef struct {
     uint16_t fast_animation;
     uint16_t exit_request;
     uint16_t next_group;                /* $120B: where the next copied group goes */
-    uint8_t groups[0x2C00];             /* $7F:0800-$7F:33FF, the sprite groups and line tables, changed as the objects run */
+    uint8_t groups[0x3800];             /* $7F:0800-$7F:3FFF: the sprite groups and line tables from the cartridge
+                                           ($0800-$33FF), and from $3BD7 the groups the objects copy for themselves */
 } Actors;
 
 extern Actors actors;

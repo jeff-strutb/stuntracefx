@@ -2,6 +2,7 @@
  * actors.c: the menu screens' objects: 22 records run once a frame through
  * a handler number, drawn as sprite groups from a table the handlers change.
  */
+#include <stdio.h>
 #include <string.h>
 
 #include "data/cart.h"
@@ -27,7 +28,7 @@ uint8_t *menu_tables_at(void) { return actors.groups; }
 
 void actors_load(void)
 {
-    memcpy(actors.groups, cart_at(GROUPS_BANK, GROUPS_FROM), sizeof actors.groups);
+    memcpy(actors.groups, cart_at(GROUPS_BANK, GROUPS_FROM), 0x2C00);
 }
 
 uint16_t group_word(uint16_t at)
@@ -222,6 +223,11 @@ void actor_copy_group(Actor *a)
     uint16_t dst = actors.next_group;
     int i;
 
+    if ((uint16_t)(dst + size) >= 0x2C81) {
+        /* the original stops the game here (Hang); no play gets there */
+        fprintf(stderr, "stuntracefx: the menu objects' sprite groups are full\n");
+        return;
+    }
     a->group = dst;
     actors.next_group = (uint16_t)(actors.next_group + size);
     for (i = 0; i < size; i += 2)
