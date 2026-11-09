@@ -607,20 +607,19 @@ void WindowSplitAnimate(void)
     }
 }
 
-/* The fifth setup, the wipe that opens a course: the band table the channel
-   carries rebuilt from its four scaled values, each byte a window edge. */
+/* The wipe that opens a course: its table of counts and edges rebuilt from
+   the scaled edges, each band one step in on both sides. */
 void WindowTable7F(void)
 {
     uint8_t *t = windows.wipe_table;
-    uint8_t a, carry;
-    const uint8_t *z = windows.wipe_scaled;
+    uint8_t a;
 
-    windows.wipe_width = (uint8_t)(z[5] - z[1]);
-    windows.wipe_middle = (uint8_t)((windows.wipe_width >> 1) + z[1]);
-    a = (uint8_t)(z[2] >> 1);
-    t[0] = a;
-    t[3] = (uint8_t)(a + 1);
-    a = z[0];
+    windows.wipe_width = (uint8_t)(windows.wipe_b - windows.wipe_a);
+    windows.wipe_middle = (uint8_t)((windows.wipe_width >> 1) + windows.wipe_a);
+    a = (uint8_t)(windows.wipe_top >> 1);
+    t[0x00] = a;
+    t[0x03] = (uint8_t)(a + 1);
+    a = windows.wipe_left;
     t[0x10] = a;
     t[0x13] = a;
     a++;
@@ -632,7 +631,7 @@ void WindowTable7F(void)
     a++;
     t[0x07] = a;
     t[0x1C] = a;
-    a = z[4];
+    a = windows.wipe_right;
     t[0x11] = a;
     t[0x14] = a;
     a--;
@@ -644,60 +643,59 @@ void WindowTable7F(void)
     a--;
     t[0x08] = a;
     t[0x1D] = a;
-    carry = z[6] >= z[2];
-    a = (uint8_t)(z[6] - z[2]);
-    a = (uint8_t)(a - 6 - (carry ? 0 : 1));
+    a = (uint8_t)(windows.wipe_bottom - windows.wipe_top);
+    a = (uint8_t)(a - 6 - (windows.wipe_bottom >= windows.wipe_top ? 0 : 1));
     a >>= 1;
     t[0x0F] = a;
     t[0x12] = a;
 }
 
-/* One step of the wipe: the level to $1F, the edges closing together, the
-   fade starting when two of them have stopped. */
+/* One step of the wipe: the colour to $1F, the four edges moving out; when
+   two have stopped the fade starts. */
 void WindowEdgesStep(void)
 {
-    uint8_t stops = 0, *z = windows.wipe_scaled;
-    uint8_t x;
+    uint8_t stops = 0, opposite;
+    unsigned s;
+    int left_by;
 
     if (windows.fixed_level < 0x1F)
         windows.fixed_level++;
-    x = (uint8_t)(0 - z[4]);
-    {
-        unsigned s = z[4] + 2u;
-
-        if (x != z[0] && x >= z[0])
-            s = z[4] + 3u;
-        if (s > 0xFF) {
-            stops++;
-            z[4] = 0xFF;
-        } else {
-            z[4] = (uint8_t)s;
-        }
+    opposite = (uint8_t)(0 - windows.wipe_right);
+    if (opposite == windows.wipe_left) {
+        s = windows.wipe_right + 2u;
+        left_by = 2;
+    } else if (opposite < windows.wipe_left) {
+        s = windows.wipe_right + 2u;
+        left_by = 3;
+    } else {
+        s = windows.wipe_right + 3u;
+        left_by = 2;
+    }
+    if (s > 0xFF) {
+        stops++;
+        s = 0xFF;
+    }
+    windows.wipe_right = (uint8_t)s;
+    if (windows.wipe_left < left_by) {
+        stops++;
+        windows.wipe_left = 1;
+    } else {
+        windows.wipe_left = (uint8_t)(windows.wipe_left - left_by);
     }
     {
-        int by = (x == z[0] || x > z[0]) ? 2 : 3;
-
-        if (z[0] < by) {
-            stops++;
-            z[0] = 1;
-        } else {
-            z[0] = (uint8_t)(z[0] - by);
-        }
-    }
-    {
-        uint8_t r = (uint8_t)(z[6] + 1);
+        uint8_t r = (uint8_t)(windows.wipe_bottom + 1);
 
         if (r >= 0xE0) {
             stops++;
             r = 0xE0;
         }
-        z[6] = r;
+        windows.wipe_bottom = r;
     }
-    if (z[2] < 3) {
+    if (windows.wipe_top < 3) {
         stops++;
-        z[2] = 1;
+        windows.wipe_top = 1;
     } else {
-        z[2] = (uint8_t)(z[2] - 3);
+        windows.wipe_top = (uint8_t)(windows.wipe_top - 3);
     }
     if (stops >= 2) {
         g.fade_level = 0x80;

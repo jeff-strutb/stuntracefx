@@ -44,6 +44,11 @@ void race_picture_shown(int buffer);
 void race_backdrop_rows_upload(int buffer);
 void race_panel_show(int half, uint8_t sign_of_y, uint8_t y_low, uint8_t y_high_when_plus, uint8_t y_when_minus, uint8_t x_low);
 void RaceVideoSetup(void);
+void race_screen_start(void);
+void RaceVideoUpload1P(void);
+void RaceVideoWindows1P(void);
+void RaceVideoUpload2P(void);
+void RaceVideoSplit2P(void);
 void RaceScreenSetup(void);
 
 /* ---- palettes ---- */
@@ -166,7 +171,7 @@ typedef struct {
     uint8_t player_raised;              /* $19D3 */
     /* the wipe that opens the race */
     uint8_t wipe_table[32];             /* $7F:3410 */
-    uint8_t wipe_scaled[8];             /* $7F:3432-$3439 */
+    uint8_t wipe_left, wipe_a, wipe_top, wipe_right, wipe_b, wipe_bottom; /* $7F:3433, $3434, $3435, $3437, $3438, $3439 */
     uint8_t wipe_width, wipe_middle;    /* $7F:3402, $3406 */
     /* the colour maths */
     uint8_t maths;                      /* $0D47, as the original's CGADSUB */

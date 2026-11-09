@@ -196,6 +196,7 @@ typedef struct {
     uint16_t overlay_x, overlay_y, overlay_picture; /* $10A4, $10A6, $10A0 */
     uint8_t slot_mask, slot_count, slot1_finished; /* $05D5, $08FB, $7E:FF65 */
     struct { uint8_t first, unused1, unused2, unused3, unused4, unused5, unused6, value; } slot[8]; /* $0595: colour-flash records */
+    uint8_t panel_top, panel_bottom;    /* $0D5C, $0D5D: the half shows the finished player's panel; bit 7 its other scroll */
     uint16_t backdrop_x[2], backdrop_y[2]; /* $0D92, $0D8E: BG2's scroll by picture buffer or half */
     uint8_t hdma_enable;                /* $0D45: the per-line effects on; bit 5 the fixed colour's bands */
     uint8_t palette_animate;            /* $0E5F: the animated colours are in use */

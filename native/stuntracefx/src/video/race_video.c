@@ -255,6 +255,8 @@ static void course_maps(int course_3)
 
 /* The course's art and palette; with two players the shared art of the split
    picture, else the frames, HUD art and the course map. */
+static void race_screen_layers(void);
+
 void RaceVideoSetup(void)
 {
     int k3 = g.course * 3;
@@ -274,6 +276,7 @@ void RaceVideoSetup(void)
         chip_unpack(0x18 << 16 | 0xC770, 0x3000);
         race_art_write(0x7C00, fx_ram + 0x3000, 0x800);
         race_art_write(0x6600, fx_ram + 0x3600, 0x400);
+        race_screen_layers();
         return;
     }
     unpacked_to_art(0xF853, (uint16_t)(0xF4F9 + k3));
@@ -321,6 +324,7 @@ void RaceVideoSetup(void)
     }
     screen_frame_and_pictures();
     course_maps(k3);
+    race_screen_layers();
 }
 
 void RaceVideoInit(void)
@@ -571,4 +575,119 @@ void VramNoiseTiles(void)
         w[i] = (uint16_t)((g.random_word & 0x1F) | 0x20);
     }
     race_map_page_write(0, w);
+}
+
+/* ---- what the screen's lines take ---- */
+
+/* The fixed colour from three bytes each naming its channels (bit 7 blue, 6 green, 5 red). */
+static uint16_t fixed_from(const uint8_t *c)
+{
+    int i, r = 0, gc = 0, b = 0;
+
+    for (i = 0; i < 3; i++) {
+        if (c[i] & 0x80)
+            b = c[i] & 31;
+        if (c[i] & 0x40)
+            gc = c[i] & 31;
+        if (c[i] & 0x20)
+            r = c[i] & 31;
+    }
+    return (uint16_t)(r | gc << 5 | b << 10);
+}
+
+/* The layers of a race screen: one player mode 3 (the frame over the backdrop),
+   two players mode 1 with the backdrop's own map. The 3D picture goes in
+   bg[0].draw_list where the race's draw list is ready. */
+static void race_screen_layers(void)
+{
+    pic.race.on = 1;
+    pic.race.split = g.split_screen != 0;
+    pic.bg3_priority = 0;
+    pic.mode = pic.race.split ? 1 : 3;
+    pic.bg[0].tiles = race_video.frame_tiles;
+    pic.bg[0].map = race_video.frame_map[0];
+    pic.bg[1].tiles = race_video.tiles;
+    pic.bg[1].map = pic.race.split ? race_video.backdrop_two : race_video.backdrop_one;
+    pic.bg[2].tiles.id = 0;
+    pic.bg[2].map.id = 0;
+    pic.line_tables = 0;
+    pic.main_screen = SHOW_BG1 | SHOW_BG2 | SHOW_SPRITES;
+    pic.sub_screen = 0;
+    GradientSetup();
+}
+
+void race_screen_start(void)
+{
+    race_screen_layers();
+}
+
+/* What the one-player screen's blank lines before each picture did: the
+   sprites straight to the screen, the cycling colours, the main screen, the
+   fixed colour and the window setup. */
+void RaceVideoUpload1P(void)
+{
+    OamDirectStage();
+    RasterColoursUnless0D22();
+    pic.main_screen = SHOW_BG1 | SHOW_BG2 | SHOW_SPRITES;
+    pic.blend.fixed_bgr15 = fixed_from(windows.colours);
+    WindowsSetupSelect();
+}
+
+/* The one-player screen's window work, run while the picture before was shown. */
+void RaceVideoWindows1P(void)
+{
+    WindowHdmaNormal();
+    WindowLayoutStepForScreen();
+    WindowSlideOrOscillate();
+    WindowSweepIfOn();
+    WindowSlideCheck();
+    BobWindowsRun();
+    WindowBandsAnimate();
+    WindowSplitAnimate();
+}
+
+/* The two-player screen's work before the picture: the sprites and colours,
+   the windows, each half's fixed colour and the top half's backdrop. */
+void RaceVideoUpload2P(void)
+{
+    OamDmaAll();
+    WindowLayoutStepForScreen();
+    RasterPaletteUpload();
+    WindowHdmaBands();
+    WindowLayoutStepForScreen();
+    BobWindowsRun();
+    WindowBandsAnimate();
+    if (g.panel_top) {
+        pic.race.panel[0] = 1;
+        pic.race.backdrop_x[0] = 0xF0;
+        pic.race.backdrop_y[0] = (g.panel_top & 0x80) ? 0x68 : 0xE8;
+    } else {
+        Bg2ScrollFromTable(0);
+    }
+    pic.main_screen = SHOW_BG1 | SHOW_BG2;
+    pic.blend.fixed_bgr15 = fixed_from(windows.colours);
+    WindowsSetupSelect();
+    GradientPointersToBank7F();
+}
+
+/* The two-player screen's work at the split: the lower half's backdrop or
+   panel, fixed colour and colours as they then stand. */
+void RaceVideoSplit2P(void)
+{
+    if (g.panel_bottom) {
+        pic.race.panel[1] = 1;
+        pic.race.backdrop_x[1] = 0xA0;
+        pic.race.backdrop_y[1] = (g.panel_bottom & 0x80) ? 0x00 : 0x80;
+    } else {
+        Bg2ScrollFromTable(1);
+    }
+    pic.race.fixed[1] = fixed_from(windows.colours + 3);
+    pic.race.colours_kept[1][0] = palettes.buffer[0xE1];
+    pic.race.colours_kept[1][1] = palettes.buffer[0xE2];
+    pic.race.colours_kept[1][2] = palettes.buffer[0xE3];
+    pic.race.colour_0[1] = palettes.buffer[0];
+}
+
+void ScrollHdmaSet(void)
+{
 }
