@@ -58,16 +58,6 @@ void SoundPort0QueuePushRaw(uint8_t command)
 }
 
 /*
- * The time bonus's push. The original made it with the CPU left in decimal
- * mode, which put the byte in the wrong slot of the ring; here it queues as
- * any other. Kept until time_bonus.c calls SoundPort0QueuePushRaw itself.
- */
-void SoundPort0QueuePushRawDecimal(uint8_t command)
-{
-    SoundPort0QueuePushRaw(command);
-}
-
-/*
  * WHAT IT DOES: Queues a sound command for port 0 for the player whose car
  * is being processed: player 2's commands have bit 7 set.
  */
