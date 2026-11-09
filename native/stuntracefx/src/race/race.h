@@ -34,10 +34,6 @@ int CourseScreenUpdate(void);           /* 1: its fade out is done, the race goe
 void CourseScreenRasterLine55(void);
 void CourseScreenStep(void);
 uint8_t CourseFromSelection(void);
-/* wanted from video (race_video.c): the course screen's VRAM and maps */
-void race_course_vram_write(uint16_t word, const uint8_t *data, uint32_t bytes);
-void race_course_maps_keep(void);
-void race_course_preview_reset(void);
 /* the race after the course menu: begin once, then each update until nonzero */
 void race_session_begin(void);
 int race_session_update(void);
