@@ -11,10 +11,10 @@
 void CameraFollowStep(Camera *cam);
 
 /* The race the course menu shows behind it. RaceStart sets it up; each
-   RaceFrameStep is one step of it, with no waiting inside. show = 0 draws
-   the picture, show = 1 runs the step alone. */
+   RaceFrameStep is one step of it, with no waiting inside. It draws the
+   picture into fx_draw_picture(0) unless step_only is set. */
 void RaceStart(void);
-void RaceFrameStep(int show);
+void RaceFrameStep(int step_only);
 
 /* wanted (from the menus and saves): */
 /* one update of attract demo `which` (0, 1, 2); 0 while it runs, 1 when it

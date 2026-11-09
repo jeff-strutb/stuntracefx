@@ -4,6 +4,7 @@
 #include "audio/music.h"
 #include "audio/sound.h"
 #include "data/cart.h"
+#include "fx/fx_draw.h"
 #include "nshvc/nshvc.h"
 #include "system/game.h"
 #include "video/picture.h"
@@ -13,6 +14,7 @@ static void init(void)
     cart_load();
     sound_init();
     video_init();
+    fx_draw_init();
     session_start();
 }
 

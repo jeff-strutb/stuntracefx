@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "fx/fx.h"
+#include "fx/fx_draw.h"
 #include "object/object.h"
 #include "race/race.h"
 #include "system/chip.h"
@@ -15,11 +16,12 @@
  * since the last one go to frames_last_step; the objects run; the camera
  * moves on (+$37 += $400, CameraFollowStep) and the tied objects face it;
  * then the view, the physics program with the object work, and the view
- * update. With show = 0 it then draws the screen and flips it.
+ * update. Unless step_only is set it then draws the screen and flips it.
  * The original waited here for the vertical blank to take the last
- * picture; here the caller paces the steps.
+ * picture; here the caller paces the steps. This path's screen base never
+ * changes, so its drawing always goes into picture 0.
  */
-void RaceFrameStep(int show)
+void RaceFrameStep(int step_only)
 {
     Camera *cam = &cameras[0];
 
@@ -34,8 +36,10 @@ void RaceFrameStep(int show)
     ViewFromRecord(cam);
     FrameRunGsu8FCA();
     ViewUpdateAndGsuAEF8();
-    if (show == 0) {
+    if (!step_only) {
+        fx_draw_begin(0);
         GsuAB13WithParams();
+        fx_draw_flush();
         GsuScreenFlip();
         g.picture_uploaded = 0;
     }
