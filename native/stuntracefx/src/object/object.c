@@ -1065,6 +1065,22 @@ void ObjectPlaceOnParent(Object *parent, Object *o)
     g.last_worked_y = (uint16_t)(v.y * 2);
 }
 
+/* The mode word of the record a director links to: its camera's. In a
+   race's first frames the cars are not linked yet (a link of 0), and the
+   original reads the word at $0000, which only the power-on clear writes. */
+static uint16_t linked_mode(uint16_t link)
+{
+    static int reported;
+
+    if (link == LINK_CAMERA_1 || link == LINK_CAMERA_2)
+        return camera_of(link)->mode;
+    if (link && !reported) {
+        reported = 1;
+        fprintf(stderr, "stuntracefx: a director linked to $%04X, not a camera; its mode taken as 0\n", link);
+    }
+    return 0;
+}
+
 /* the view bob a car's cue starts, for one of the two cameras */
 static void view_event_trigger(int i, ObjRef car)
 {
@@ -1073,7 +1089,7 @@ static void view_event_trigger(int i, ObjRef car)
     if (g.view_event[i] & 0x80)
         return;
     director = obj_at(obj_at(car)->link);
-    if (!(camera_of(director->link)->mode & 0x4000) || !g.bob_trigger[i])
+    if (!(linked_mode(director->link) & 0x4000) || !g.bob_trigger[i])
         return;
     g.bob_trigger[i] = 0;
     g.view_event[i] = 0x80;
@@ -1085,7 +1101,7 @@ static void view_event_trigger(int i, ObjRef car)
 
 /*
  * @routine 7E:D397 ObjectLinkEventTrigger
- * WHAT IT DOES: Starts player 1's view bob when his car's camera has bit 14
+ * WHAT IT DOES: Starts player 1's view bob when player 1's camera has bit 14
  * of its mode set and $1A24 is set.
  */
 void ObjectLinkEventTrigger(void)
