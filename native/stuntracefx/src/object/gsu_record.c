@@ -14,6 +14,7 @@
 #include "object/handlers.h"
 #include "object/object.h"
 #include "system/chip.h"
+#include "system/game.h"
 #include "system/state.h"
 
 RecordContacts record_contacts;
@@ -624,14 +625,14 @@ void PlayerControlsFrame(void)
         Object *car = obj_at(p ? g.player2_car : g.player_car);
 
         g.current_player = (uint8_t)p;
-        g.control_held = g.race_held[p];
+        g.control_held = frame_state.held[p];
         g.control_prev = g.race_last[p];
         CarControlsToRecord(car, g.control_held, g.control_prev, p);
         ObjectLinkedHandlerByState(car, g.player_phase[p]);
     }
     for (int p = 0; p < 2; p++) {
-        g.race_last[p] = g.race_held[p];
-        g.race_held[p] = 0;
+        g.race_last[p] = frame_state.held[p];
+        frame_state.held[p] = 0;
     }
 }
 

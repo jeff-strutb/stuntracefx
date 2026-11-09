@@ -13,6 +13,7 @@
 #include "object/handlers.h"
 #include "object/object.h"
 #include "system/chip.h"
+#include "system/game.h"
 #include "system/state.h"
 
 /* the life byte of a flying part, in the low byte of +$27 */
@@ -317,7 +318,7 @@ void PlayerCar1(Object *o)
 void PlayerCar2Step(Object *o)
 {
     g.current_player = 1;
-    g.control_held = g.race_held[1];
+    g.control_held = frame_state.held[1];
     g.control_prev = g.race_last[1];
     player_drive(o);
 }

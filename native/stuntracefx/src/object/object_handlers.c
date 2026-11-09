@@ -333,6 +333,51 @@ static int ObjectBreakOffChance(Object *child)
     return 1;
 }
 
+/* The break-off a car's knock gives a child, if any */
+static void child_break_off(Object *o, const Object *p, uint16_t own)
+{
+    uint16_t d, f4c, w;
+
+    if (p->flags24 & 0x40)
+        return;
+    f4c = rec_get(p->record, FXREC_FLAGS40);
+    if (!(rec_get(p->record, FXREC_FLAGS64) & 0x0003))
+        return;
+    w = rec_get(own, FXREC_FACE_46);
+    if (!(w & 0x0001) || !(w & 0x0010))
+        return;
+    d = rec_get(own, 0x002C);
+    if (d & 0x0080) {
+        if (ObjectBreakOffChance(o))
+            ObjectSetHandler(o, record_fast(own) ? H_BREAK_OFF_F : H_BREAK_OFF_E);
+        return;
+    }
+    if (d & 0x2000) {
+        if (record_fast(own) && ObjectBreakOffChance(o))
+            ObjectSetHandler(o, H_BREAK_OFF_D);
+        return;
+    }
+    if (d & 0x0800) {
+        if (record_fast(own) && ObjectBreakOffChance(o))
+            ObjectSetHandler(o, H_BREAK_OFF_B);
+        return;
+    }
+    if (d & 0x1000) {
+        if (record_fast(own) && ObjectBreakOffChance(o))
+            ObjectSetHandler(o, H_BREAK_OFF_A);
+        return;
+    }
+    if (d & 0x0060) {
+        if (record_fast(own) && ObjectBreakOffChance(o))
+            ObjectSetHandler(o, H_BREAK_OFF_G);
+        return;
+    }
+    if (!(f4c & 0x0800) && !(rec_get(own, FXREC_FACE_46) & 0x0020))
+        return;
+    if (ObjectBreakOffChance(o))
+        ObjectSetHandler(o, H_BREAK_OFF_H);
+}
+
 /*
  * @routine 08:BD22 ObjectChildFollow
  * WHAT IT DOES: Keeps a child on its parent: rebucketed; hidden while the
@@ -342,7 +387,7 @@ static int ObjectBreakOffChance(Object *child)
 void ObjectChildFollow(Object *o)
 {
     Object *p;
-    uint16_t own, d, f4c;
+    uint16_t own;
 
     ObjectRebucket(o);
     p = obj_at(o->parent);
@@ -354,48 +399,7 @@ void ObjectChildFollow(Object *o)
     o->flags24 &= 0xDF;
     rec_and(o->record, FXREC_FLAGS16, 0xFB7F);
     own = o->record;
-    if (p->flags24 & 0x40)
-        goto place;
-    f4c = rec_get(p->record, FXREC_FLAGS40);
-    if (!(rec_get(p->record, FXREC_FLAGS64) & 0x0003))
-        goto place;
-    {
-        uint16_t w = rec_get(own, FXREC_FACE_46);
-
-        if (!(w & 0x0001) || !(w & 0x0010))
-            goto place;
-    }
-    d = rec_get(own, 0x002C);
-    if (d & 0x0080) {
-        if (ObjectBreakOffChance(o))
-            ObjectSetHandler(o, record_fast(own) ? H_BREAK_OFF_F : H_BREAK_OFF_E);
-        goto place;
-    }
-    if (d & 0x2000) {
-        if (record_fast(own) && ObjectBreakOffChance(o))
-            ObjectSetHandler(o, H_BREAK_OFF_D);
-        goto place;
-    }
-    if (d & 0x0800) {
-        if (record_fast(own) && ObjectBreakOffChance(o))
-            ObjectSetHandler(o, H_BREAK_OFF_B);
-        goto place;
-    }
-    if (d & 0x1000) {
-        if (record_fast(own) && ObjectBreakOffChance(o))
-            ObjectSetHandler(o, H_BREAK_OFF_A);
-        goto place;
-    }
-    if (d & 0x0060) {
-        if (record_fast(own) && ObjectBreakOffChance(o))
-            ObjectSetHandler(o, H_BREAK_OFF_G);
-        goto place;
-    }
-    if (!(f4c & 0x0800) && !(rec_get(own, FXREC_FACE_46) & 0x0020))
-        goto place;
-    if (ObjectBreakOffChance(o))
-        ObjectSetHandler(o, H_BREAK_OFF_H);
-place:
+    child_break_off(o, p, own);
     o->x = (uint16_t)(rec_get(own, FXREC_POS_X) + rec_get(own, 0x004A));
     o->y = (uint16_t)(0xFFEC - o->byte5f + rec_get(own, FXREC_POS_Y) + rec_get(own, 0x004C));
     o->z = (uint16_t)(rec_get(own, FXREC_POS_Z) + rec_get(own, 0x004E));
@@ -1007,23 +1011,19 @@ void ObjectExhaustStep(Object *o)
             o->byte49 = 0x08;
         }
         v = (uint8_t)GsuRecordWord58(o, &clear);
-        if (!clear) {
+        {
             uint8_t w = (uint8_t)(v - o->byte4a);
+            int small_drop = !clear && (w & 0x80) && ((uint8_t)(0 - w - 0x02) & 0x80);
 
-            if (w & 0x80) {
-                w = (uint8_t)-w;
-                if ((uint8_t)(w - 0x02) & 0x80)
-                    goto state2;
-                if ((uint8_t)(w - 0x0A) & 0x80) {
-                    o->byte39 = 0x03;
-                    o->byte49 = 0x08;
-                    SoundPort0QueuePush(0x3B);
-                }
+            if (!clear && (w & 0x80) && !small_drop && ((uint8_t)(0 - w - 0x0A) & 0x80)) {
+                o->byte39 = 0x03;
+                o->byte49 = 0x08;
+                SoundPort0QueuePush(0x3B);
             }
+            if (!small_drop)
+                o->byte4a = v;
         }
-        o->byte4a = v;
     }
-state2:
     if (o->byte39 == 0x02)
         o->sprite_turn[0] = (uint8_t)((uint8_t)GsuRecordWord88(o) | 0x80);
     if (o->byte39 == 0x03) {
@@ -1477,17 +1477,14 @@ void CameraPointFromTable(Object *o)
 static const uint16_t ring_model[4] = {0xA660, 0xA6D0, 0xA67C, 0xA5D4};
 static const uint16_t ring_vx[4] = {0xFF90, 0xFFDB, 0x0025, 0x0070};
 
-/* In phase 8 with a record in hand: the ring's Y, its parts, spin or idle. */
-static void ring_spawn(Object *o)
+/* The ring's Y, its parts, spin or idle. Returns 1 if the ring spins. */
+static int ring_parts(Object *o)
 {
-    uint16_t rec;
+    uint16_t rec = fxram_get(FXIN_PLAYER1_RECORD);
     unsigned made = 0;
 
-    if (g.player_phase[0] != 0x08)
-        goto done;
-    rec = fxram_get(FXIN_PLAYER1_RECORD);
     if (!rec)                           /* the original then runs off an 8-bit store as 16 bits */
-        return;
+        return 0;
     o->y = (uint16_t)(rec_get(rec, FXREC_POS_Y) + 0xE4A8);
     o->link27 = (uint16_t)(rec_get(rec, FXREC_POS_Y) + 0xFE0C);
     for (int i = 0; i < 4; i++) {
@@ -1502,12 +1499,19 @@ static void ring_spawn(Object *o)
     }
     if (made != 4) {
         ObjectSetHandler(o, H_RING_IDLE);
-        return;
+        return 0;
     }
     o->roll = 0x40;
     o->heading = (uint8_t)(o->heading + 0x20);
     ObjectSetHandler(o, H_RING_SPIN);
-done:
+    return 1;
+}
+
+/* In phase 8 the ring is made; then its timer. */
+static void ring_spawn(Object *o)
+{
+    if (g.player_phase[0] == 0x08 && !ring_parts(o))
+        return;
     o->timer = 3;
 }
 
