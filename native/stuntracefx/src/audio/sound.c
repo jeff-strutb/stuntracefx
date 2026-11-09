@@ -76,6 +76,40 @@ void SoundPort0QueuePushRaw(uint8_t command)
     push(&queue[0], command);
 }
 
+/* The slot after `count` queued bytes as the original works it out with the
+   CPU in decimal mode: its add of the count to the head is then a BCD add of
+   two binary numbers, so a low digit past 9 carries early (count 1 on head 9
+   gives slot 0, not 10). The 16 it takes off after comes out as a binary
+   subtraction for every sum it can make. */
+static uint8_t slot_decimal(uint8_t count, uint8_t head)
+{
+    unsigned low = (unsigned)(count & 15) + (head & 15), sum;
+
+    if (low > 9)
+        low += 6;
+    sum = (unsigned)(count & 0xF0) + (head & 0xF0) + (low > 15 ? 0x10u : 0u) + (low & 15);
+    if (sum > 0x9F)
+        sum += 0x60;
+    sum &= 0xFF;
+    return (uint8_t)(sum >= 0x10 ? sum - 0x10 : sum);
+}
+
+/*
+ * @routine 04:D649 SoundPort0QueuePushRaw (called in decimal mode)
+ * WHAT IT DOES: SoundPort0QueuePushRaw as the time bonus calls it, with the
+ * CPU left in decimal mode: the byte goes to the slot the decimal add makes.
+ * An empty ring takes it at its head either way.
+ */
+void SoundPort0QueuePushRawDecimal(uint8_t command)
+{
+    Queue *q = &queue[0];
+
+    if (sound_muted || q->count >= 16)
+        return;
+    q->ring[q->count ? slot_decimal(q->count, q->head) : q->head] = command;
+    q->count++;
+}
+
 /*
  * WHAT IT DOES: Queues a sound command for port 0 for the player whose car
  * is being processed: player 2's commands have bit 7 set.
