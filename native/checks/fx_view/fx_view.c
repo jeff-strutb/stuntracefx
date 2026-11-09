@@ -11,6 +11,7 @@
 #include "data/cart.h"
 #include "fx/fx.h"
 #include "fx/fx_draw.h"
+#include "system/state.h"
 #include "fx_check.h"
 #include "nshvc/nshvc.h"
 
@@ -97,6 +98,7 @@ static void run_job(uint32_t pc)
     fxs.scmr = regs[38];
     fxs.colr = regs[39];
     fxs.por = regs[40];
+    g.fx_screen_mode = regs[38] & 3;
     job->run();
     fx_draw_flush();
 }

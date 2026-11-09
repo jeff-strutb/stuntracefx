@@ -39,6 +39,31 @@ static uint32_t target_w, target_h;
 static Recording recordings[2], *recording;
 static int offset_x, offset_y;
 static int origin_x, origin_y;  /* where a screen other than the race's puts the picture; 0, 0: none */
+static int palette_row;         /* the 16 colours a 4-bit picture's tiles show it in */
+
+void fx_draw_set_palette_row(int row)
+{
+    palette_row = row;
+}
+
+/* The bits a pixel keeps at the screen's depth (the screen mode's low two
+   bits: 3 eight, 1 four, 0 two), and the palette entry they show. A pixel
+   whose kept bits are 0 is not plotted. */
+static uint8_t depth_mask(void)
+{
+    int depth = g.fx_screen_mode & 3;
+
+    return depth == 3 ? 0xFF : depth == 1 ? 0x0F : 0x03;
+}
+
+static uint8_t ink(uint8_t c)
+{
+    uint8_t mask = depth_mask();
+
+    if (!(c & mask))
+        return 0;
+    return mask == 0xFF ? c : (uint8_t)(palette_row * 16 + (c & mask));
+}
 static uint32_t generation[2], composed_generation[2];
 static nshvc_draw_list screen_list;
 static int composed_picture = -1, composed_split = -1;
@@ -194,7 +219,7 @@ void fx_op_clear(void)
 /* ---- the textures: a block of the cartridge seen as 256 x 256 texels ---- */
 
 typedef struct {
-    uint8_t bank, colour, options;
+    uint8_t bank, colour, options, ink_mask, ink_row;
     uint16_t base, mask;
     nshvc_image image;
 } TexKey;
@@ -210,7 +235,8 @@ static nshvc_image texture(uint8_t bank, uint16_t base, uint16_t mask, uint8_t c
 
     for (k = 0; k < known_count; k++)
         if (known[k].bank == bank && known[k].base == base && known[k].mask == mask
-            && known[k].colour == colour && known[k].options == options)
+            && known[k].colour == colour && known[k].options == options
+            && known[k].ink_mask == depth_mask() && known[k].ink_row == palette_row)
             return known[k].image;
     for (y = 0; y < 256; y++)
         for (x = 0; x < 256; x++) {
@@ -222,7 +248,7 @@ static nshvc_image texture(uint8_t bank, uint16_t base, uint16_t mask, uint8_t c
                 c = (uint8_t)((colour & 0xF0) | (v & 0x0F));
             if (!(options & 0x01) && ((options & 0x08) ? !(c & 0x0F) : !c))
                 c = 0;
-            t[y << 8 | x] = c;
+            t[y << 8 | x] = ink(c);
         }
     if (known_count == KNOWN_TEX)
         known_count = 0;
@@ -231,6 +257,8 @@ static nshvc_image texture(uint8_t bank, uint16_t base, uint16_t mask, uint8_t c
     known[known_count].mask = mask;
     known[known_count].colour = colour;
     known[known_count].options = options;
+    known[known_count].ink_mask = depth_mask();
+    known[known_count].ink_row = (uint8_t)palette_row;
     known[known_count].image = nshvc_image_create(256, 256, NSHVC_IMAGE_INDEXED);
     nshvc_image_write(known[known_count].image, t);
     return known[known_count++].image;
@@ -268,7 +296,7 @@ static void quad(nshvc_image image, int x0, int x1, int y0, int y1, double u0, d
 void fx_flat_row(uint16_t x, uint16_t y, uint16_t n)
 {
     nshvc_vertex v[6];
-    uint8_t colour = fxs.colr;
+    uint8_t colour = ink(fxs.colr);
     int i;
 
     if ((!target.id && !recording) || !colour)
@@ -385,7 +413,7 @@ typedef struct {
     uint8_t bank;
     uint16_t base;
     uint16_t width, rows, stride;
-    uint8_t colours[4];
+    uint8_t colours[4], ink_mask, ink_row;
     nshvc_image image;
 } GlyphKey;
 
@@ -403,13 +431,14 @@ static nshvc_image glyph_image(uint8_t bank, uint16_t base, uint16_t width, uint
     for (k = 0; k < glyph_count; k++)
         if (glyph_known[k].bank == bank && glyph_known[k].base == base && glyph_known[k].width == width
             && glyph_known[k].rows == rows && glyph_known[k].stride == stride
-            && !memcmp(glyph_known[k].colours, colours, 4))
+            && !memcmp(glyph_known[k].colours, colours, 4)
+            && glyph_known[k].ink_mask == depth_mask() && glyph_known[k].ink_row == palette_row)
             return glyph_known[k].image;
     for (y = 0; y < rows; y++)
         for (x = 0; x < width; x++) {
             uint8_t b = fx_rom_read(bank, (uint16_t)(base + y * stride + x / 4));
 
-            t[y * width + x] = colours[(b >> (2 * (x & 3))) & 3];
+            t[y * width + x] = ink(colours[(b >> (2 * (x & 3))) & 3]);
         }
     if (glyph_count == KNOWN_GLYPHS)
         glyph_count = 0;
@@ -419,6 +448,8 @@ static nshvc_image glyph_image(uint8_t bank, uint16_t base, uint16_t width, uint
     glyph_known[glyph_count].rows = rows;
     glyph_known[glyph_count].stride = stride;
     memcpy(glyph_known[glyph_count].colours, colours, 4);
+    glyph_known[glyph_count].ink_mask = depth_mask();
+    glyph_known[glyph_count].ink_row = (uint8_t)palette_row;
     glyph_known[glyph_count].image = nshvc_image_create(width, rows, NSHVC_IMAGE_INDEXED);
     nshvc_image_write(glyph_known[glyph_count].image, t);
     return glyph_known[glyph_count++].image;
@@ -564,6 +595,7 @@ static void flat_polygon(uint16_t p, int n)
     }
     fxs.por = 0;
     fxs.colr = colour;
+    colour = ink(colour);
     if ((!target.id && !recording) || !colour)
         return;
     if (ymax - ymin < 2) {
@@ -605,6 +637,7 @@ static void line(uint16_t p)
 
     fxs.por = 0;
     fxs.colr = colour;
+    colour = ink(colour);
     if ((!target.id && !recording) || !colour)
         return;
     memset(v, 0, sizeof v);
