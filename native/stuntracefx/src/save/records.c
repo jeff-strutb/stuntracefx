@@ -12,8 +12,6 @@
 #include "save/save.h"
 #include "system/state.h"
 
-SaveFile save;
-
 static const char SAVE_NAME[] = "save";
 
 void save_commit(void)

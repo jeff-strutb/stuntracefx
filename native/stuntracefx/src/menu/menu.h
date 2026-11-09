@@ -59,6 +59,8 @@ void SelectionCommit(void);
 void SelectionSave(void);
 void CarSelectTwoPlayers(void);
 void MenuCursorFourWay(void);
+void SpeedGaugeUpdate(uint16_t offset);
+void SpeedGauge2Update(uint16_t offset);
 
 /* the course screens' records pages */
 void SpeedRecordsScreen(void);
