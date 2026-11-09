@@ -11,6 +11,7 @@
 #include "data/unpack.h"
 #include "fx/fx_rt.h"
 #include "math/math.h"
+#include "race/race.h"
 #include "object/object.h"
 #include "system/chip.h"
 #include "system/game.h"
@@ -688,6 +689,88 @@ void RaceVideoSplit2P(void)
     pic.race.colour_0[1] = palettes.buffer[0];
 }
 
-void ScrollHdmaSet(void)
+/* not converted yet: the course screen before a race (RaceScreenSetup) and its scroll table */
+__attribute__((weak)) void RaceScreenSetup(void)
 {
+    static int said;
+    if (!said) { said = 1; fprintf(stderr, "not converted yet: RaceScreenSetup\n"); }
+}
+
+__attribute__((weak)) void ScrollHdmaSet(void)
+{
+    static int said;
+    if (!said) { said = 1; fprintf(stderr, "not converted yet: ScrollHdmaSet\n"); }
+}
+
+/* ---- what the race loads before its first frame ---- */
+
+uint8_t race_pictures[0x3000];          /* $7F:63D7: the three art pictures the results screens switch between */
+
+__attribute__((weak)) void RaceHudSetup(void)
+{
+    static int said;
+    if (!said) { said = 1; fprintf(stderr, "not converted yet: RaceHudSetup\n"); }
+}
+
+__attribute__((weak)) void RaceHudSetupTwoPlayers(void)
+{
+    static int said;
+    if (!said) { said = 1; fprintf(stderr, "not converted yet: RaceHudSetupTwoPlayers\n"); }
+}
+
+static void hud_tile(uint16_t from, uint16_t tile, uint16_t word)
+{
+    race_art_write(word, fx_ram + (uint16_t)(from + (uint16_t)(tile << 5)), 32);
+}
+
+/* The race's sound and HUD art: tiles of the unpacked HUD picture, its big picture for the results, the race time, then the HUD's setup. */
+void RaceHudLoad(void)
+{
+    SoundReset();
+    if (g.time_override && g.hud_mode == 0)
+        g.car[0] = 4;
+    else
+        SoundIndicesFromHandlers();
+    CourseSoundLoad();
+    chip_unpack(0x1D << 16 | 0x8078, 0x3000);
+    switch (g.hud_mode) {
+    case 0:
+        hud_tile(0x30A0, g.selection_derived[1], 0x62F0);
+        hud_tile(0x30A0, g.selection_derived[2], 0x63E0);
+        hud_tile(0x30A0, g.selection_derived[3], 0x63F0);
+        /* fall through */
+    case 1:
+        if (g.hud_blank)
+            race_art_write(0x63F0, fx_ram + 0x3080, 0x20);
+        break;
+    case 2:
+        hud_tile(0x3000, g.selection_derived[1], 0x62F0);
+        break;
+    default:
+        race_art_write(0x63F0, fx_ram + 0x3080, 0x20);
+        break;
+    }
+    hud_tile(0x3000, g.selection_derived[0], 0x62E0);
+    unpacked_to_art(0xF845, 0xF804);
+    chip_unpack(0x18 << 16 | 0xD920, 0x3000);
+    memcpy(race_pictures, fx_ram + 0x3000, sizeof race_pictures);
+    SoundReset();
+    RaceTimeInit();
+    fx16_set(0x0050, cart16(0x03, (uint16_t)(0xF799 + g.course * 2)));
+    if (g.split_screen)
+        RaceHudSetupTwoPlayers();
+    else
+        RaceHudSetup();
+}
+
+/* The stage with no picture to upload: the sprites out once a step when the
+   count allows, then the colours. */
+void NmiFrameUploadSprites(void)
+{
+    if (g.oam_upload_wanted) {
+        g.oam_upload_wanted = 0;
+        if (!g.start_light)
+            OamDmaAll();
+    }
+    CgramUploadAll();
 }
