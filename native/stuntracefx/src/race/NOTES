@@ -119,17 +119,9 @@ halts: debug code the shipped game never calls.
   03:B17E ViewFromAnglesGsu8277  (ROM calls: 0)
   03:B367 ViewToGsuParams  (ROM calls: 0)
   03:BCB6 HeadingPitchedVia1F7C  (ROM calls: 0)
-  03:C034 ObjectMoveByVectorTimes4  (ROM calls: 0)
-  03:C044 ObjectMoveByVectorTimes2  (ROM calls: 0)
-  03:C04C ObjectMoveByVector  (ROM calls: 0)
   03:C6F4 RotateXZWide  (ROM calls: 0)
   03:C788 RotateXZWideFrom08  (ROM calls: 0)
   03:C9D2 VectorGsu81E3  (ROM calls: 0)
-  03:CD1D ObjectVelocityFromHeading  (ROM calls: 0)
-  03:CD35 ObjectVelocityFromHeadingTimes2  (ROM calls: 0)
-  03:CD50 ObjectVelocityFromHeadingTimes4  (ROM calls: 0)
-  03:CD6E ObjectVelocityFromHeadingTimes8  (ROM calls: 0)
-  03:D1C2 ObjectVelocityLevelFromDp  (ROM calls: 0)
   03:D40A DebugByteHalt  (ROM calls: 0)
   03:D465 DebugPrint  (ROM calls: 0)
   03:D499 DebugPrintHexWord  (ROM calls: 0)
@@ -198,5 +190,13 @@ Owned by other sessions (shared helpers only their code calls)
 ---------------------------------------------------------------
   03:C998 ObjectGsu80BCThen81E3 -> objects (object/orient.c, replay_camera.c)
   03:C9B4 ObjectGsu81E3 -> objects (object/orient.c, replay_camera.c)
+  03:C04C ObjectMoveByVector -> objects
+  03:C044 ObjectMoveByVectorTimes2 -> objects
+  03:C034 ObjectMoveByVectorTimes4 -> objects
+  03:CD1D ObjectVelocityFromHeading -> objects
+  03:CD35 ObjectVelocityFromHeadingTimes2 -> objects
+  03:CD50 ObjectVelocityFromHeadingTimes4 -> objects
+  03:CD6E ObjectVelocityFromHeadingTimes8 -> objects
+  03:D1C2 ObjectVelocityLevelFromDp -> objects
   7E:E6BA PpuMultiplierSetLowByteTimes8 -> video: only ColourBlendBy (7E:E6D1) calls it, the set-up of that routine's product
   08:83EC ScaleObjectXZ -> objects (object/object.c calls it)

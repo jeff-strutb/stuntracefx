@@ -3,9 +3,10 @@
  * vectors from speeds and angles.
  *
  * Not converted, no caller in the game: MulWordByte, RotateXZWide,
- * RotateXZWideFrom08 and PpuMultiplier* (03:C6F4, 03:C788, 02:DF99, 7E:E6BA,
- * 7E:E7A1). ObjectMoveByVector and ObjectVelocityFromHeading go with the
- * objects' records.
+ * RotateXZWideFrom08 (02:DF99, 03:C6F4, 03:C788) and 7E:E7A1. Not here:
+ * PpuMultiplierSetLowByteTimes8 (7E:E6BA) goes with video's ColourBlendBy, its
+ * only caller; ObjectMoveByVector and ObjectVelocityFromHeading are the
+ * objects'. race/NOTES lists them all.
  */
 #include "data/cart.h"
 #include "math/math.h"
