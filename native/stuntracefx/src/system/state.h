@@ -165,6 +165,9 @@ typedef struct {
     uint16_t spawn_counter;             /* $1ADE: the spawn counter */
     uint16_t director[2];               /* $1ADA, $1ADC: the two bare objects that move the cameras */
     uint16_t trigger_list[0x104][2];    /* $1AF5: code and bucket number per entry, ended by 0 */
+    uint16_t pace_z;                    /* $1F73 */
+    uint16_t word_1176;                 /* $1176 */
+    uint8_t lamp_lights;                /* $1A5B: the start lamps' bits */
     uint16_t race_held[2];              /* $0309, $030D: buttons held since the last race step (ORed by the frame) */
     uint16_t control_held, control_prev; /* $1AF0, $1AF2: the buttons the controls code is reading */
     uint16_t race_last[2];              /* $1F23, $1F25: last race step's buttons */

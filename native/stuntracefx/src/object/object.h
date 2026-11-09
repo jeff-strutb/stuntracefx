@@ -131,7 +131,7 @@ enum {
     FXREC_WORD_3A = 0x003A, FXREC_WORD_5E = 0x005E, FXREC_FLAGS64 = 0x0064,
     FXREC_WORD_72 = 0x0072, FXREC_FLAGS8A = 0x008A, FXREC_6A_ALIAS = 0x006A,
     FX_CAR_2396 = 0x2396,
-    FX_LANDED_2482 = 0x2482,
+    FX_LANDED_2482 = 0x2482, FXREC_FACE_46 = 0x0046, FX_REPLAY_FLAGS = 0x273C,
     FX_COURSE_FLAGS = 0x26F2, FX_TRACK_TABLE = 0x1092, FX_TRACK_TABLE_BANK = 0x1094
 };
 
@@ -248,6 +248,101 @@ void ObjectFlagsRecordSetup(Object *o);
 void ObjectFlagsRecordFrame(Object *o);
 void ObjectFrameSwingStep(Object *o);
 void ObjectFrameSwingSetup(Object *o);
+
+/* object_handlers.c */
+void ObjectBurstSpawn(Object *o);
+void ObjectBurstPieceStep(Object *o);
+void ObjectBurstPieceStart(Object *o);
+void ObjectBlinkerFade(Object *o);
+void ObjectBlinkerRise(Object *o);
+void ObjectBlinkerStart(Object *o);
+void ObjectPaceCarStep(Object *o);
+void ObjectPaceCarStart(Object *o);
+void ObjectSignalStep(Object *o);
+void ObjectPaceCarSetup(Object *o);
+void ObjectChildFollow(Object *o);
+void ObjectChildStep(Object *o);
+void ObjectChildStart(Object *o);
+void ObjectChildReturn(Object *o);
+void ObjectChildFlying(Object *o);
+void ObjectChildLoose(Object *o);
+void ObjectPieceFall(Object *o);
+void ObjectBreakOffA(Object *o);
+void ObjectBreakOffB(Object *o);
+void ObjectBreakOffD(Object *o);
+void ObjectBreakOffE(Object *o);
+void ObjectBreakOffF(Object *o);
+void ObjectBreakOffG(Object *o);
+void ObjectBreakOffH(Object *o);
+void ObjectPieceSpray(Object *o);
+void ObjectAttachFollow(Object *o);
+void ObjectAttachStart(Object *o);
+void ObjectAttachTurned(Object *o);
+void ObjectSparksStart(Object *o);
+void ObjectSparkStep(Object *o);
+void ObjectSparkStart(Object *o);
+void ObjectCarAttachedStep(Object *o);
+void ObjectCarAttachedStart(Object *o);
+void ObjectExhaustStep(Object *o);
+void ObjectExhaustStart(Object *o);
+void ObjectOffsetOnParent2(Object *o);
+void ObjectLampOnParent(Object *o);
+void ObjectLampAnimate(Object *o);
+void ObjectLampWait(Object *o);
+void ObjectLampStart(Object *o);
+void ObjectLampDrop(Object *o);
+void ObjectLampDropB(Object *o);
+void ObjectLampDropBStart(Object *o);
+void CameraPointFromTable(Object *o);
+void ObjectRingStartZ(Object *o);
+void ObjectRingStartX(Object *o);
+void ObjectRingStartBackZ(Object *o);
+void ObjectRingStartBackX(Object *o);
+void ObjectRingIdle(Object *o);
+void ObjectRingSpin(Object *o);
+void ObjectRingPartStep(Object *o);
+void ObjectRingPartStart(Object *o);
+void ObjectDemoCarStep(Object *o);
+void ObjectDemoCarStart(Object *o);
+int CameraApproachTarget(Object *o);
+void CameraFollowLink(Object *o);
+void CameraDirectorTrack(Object *o);
+void CameraDirectorSkip2(Object *o);
+void CameraDirectorTableStart(Object *o);
+void CameraDirectorTable(Object *o);
+void CameraDirectorPath(Object *o);
+void CameraDirectorPathStart(Object *o);
+void CameraDirectorWait(Object *o);
+void CameraDirectorBehind(Object *o);
+void CameraOnMarkedCar(Object *o);
+uint16_t GsuTableEntryNext(uint16_t entry);
+void GsuTableEntryTo1F4C(uint16_t entry, uint16_t out[3]);
+
+/* replay_camera.c */
+void CameraSnapToCar(Object *o);
+void CameraOverheadStep(Object *o);
+void CameraOverhead(Object *o);
+void CameraPathStep(Object *o);
+void CameraPathA(Object *o);
+void CameraPathB(Object *o);
+void CameraDriftStep(Object *o);
+void CameraDrift(Object *o);
+void CameraDriftLongStep(Object *o);
+void CameraDriftLong(Object *o);
+void CameraZoomInStep(Object *o);
+void CameraZoomIn(Object *o);
+void CameraRiseStep(Object *o);
+void CameraRise(Object *o);
+void CameraZoomOutStep(Object *o);
+void CameraZoomOut(Object *o);
+void CameraOrbitStep(Object *o);
+void CameraOrbit(Object *o);
+void CameraEndStep(Object *o);
+void CameraEnd(Object *o);
+void CameraStillStep(Object *o);
+void CameraStill(Object *o);
+void CameraPathGoStep(Object *o);
+void CameraPathGo(Object *o);
 
 /* gsu_record.c */
 void GsuRecordMode2(Object *o);
