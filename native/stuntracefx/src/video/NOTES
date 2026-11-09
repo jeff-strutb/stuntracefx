@@ -1,0 +1,139 @@
+NOTES: the routines of the video area (src/stuntracefx/video, without
+unused_screen.c) that have no function of their own here, and why.
+Everything else in that area has a function here or in the file named
+below.
+
+Folded into other converted code
+--------------------------------
+  7F:1278 PlayerVehicleRaised -> race_video.c player_vehicle_raised
+  7E:E011 ColourMathSub83Windowed -> windows.c WindowsSetupSelect, setup 2
+  7E:E048 WindowsColourSubtract3 -> windows.c WindowsSetupSelect, setup 4 (its table entry)
+  03:FE53 ColourMathA3Long -> windows.c ColourMathA3
+  03:FE5F ColourMathOffLong -> windows.c ColourMathOff
+  03:ED34 GradientExpandFirst -> gradient.c expand_runs (GradientBuildColours)
+  03:ED46 GradientExpandSecond -> gradient.c expand_runs (GradientBuildColours)
+  0B:FB1C GradientFillCgaddB -> gradient.c GradientSetup
+  7E:ADFD OamWriteSprites36To46 -> sprites.c OamDirectStage
+  03:FEF5 OamBufferHideLargeLong -> sprites.c OamBufferHideLarge
+  07:AC08 OamFillEvery4 -> sprites.c OamHideForHudMode
+  04:E06E OverlaySpritesState0 -> sprites.c OverlaySpritesStep, state 0 (its jump table's entry)
+  7E:B31E RasterColoursCycling -> palette.c raster_colours_cycling
+  7E:B39A RasterColoursE4 -> palette.c RasterColoursUnless0D22
+  03:EDC6 PaletteCopy16To7F39D7 -> palette.c PaletteCourseLoad
+  7E:E6E9 ColourBlend -> palette.c colour_blend
+  7E:E6A2 ColourBlendToTarget -> palette.c HudColourStep (buffer_from_blend)
+  09:EFFB Records7FFromF634 -> windows.c records_two_players (WindowsInit)
+  09:EF52 Records7FFromF170 -> windows.c records_one_player (WindowsInit)
+  03:EC6D VideoStartUploads -> race_video.c clear_all (its two transfers fill
+         VRAM $0000-$5FFF and $7C00-$7FFF with zero, from $03:F881)
+  02:D928 SpriteSlotFirstLong -> sprites.c SpriteSlotFirst
+  07:AA60 OamTextLineLong -> sprites.c OamTextLine
+  02:FBFA SpriteTextAt8152B -> sprites.c SpriteTextAt8152 (the same entry)
+  03:ED89 TilemapRowFromGsuRam -> race_video.c course_map_rows
+  03:EAF3 VramFillGradient -> race_video.c screen_frame_and_pictures
+  03:EA76 VramFrameRows2B0 -> race_video.c screen_frame_and_pictures
+  03:EA7E VramFrameRows1B0 -> race_video.c screen_frame_and_pictures
+  03:EA86 VramPictureRows2B0 -> race_video.c screen_frame_and_pictures
+  03:EA91 VramPictureRows1B0 -> race_video.c screen_frame_and_pictures
+  03:EA2E ScreenFrameAndPictures -> race_video.c screen_frame_and_pictures
+  03:DCC0 VramDmaTileFromGsuRam -> race_video.c hud_tile (RaceHudLoad)
+  7E:E8F4 TilemapRowToE3D7 -> race_video.c BackdropRowsUpdate
+  7E:B2B6 TilemapDmaE817 -> race_video.c race_backdrop_rows_upload
+  7E:B2CF TilemapDmaE3D7 -> race_video.c race_backdrop_rows_upload
+  7E:B236 Bg2Band2TilemapE817 -> race_video.c RaceVideoUpload1P
+  7E:B241 Bg2Band0TilemapE3D7 -> race_video.c RaceVideoUpload1P
+  03:FE06 WindowStep3437 -> windows.c WindowEdgesStep
+  03:FE44 WindowStep3435 -> windows.c WindowEdgesStep
+  03:FE15 WindowStep3439 -> windows.c WindowEdgesStep
+  03:FE26 WindowStep3433By2 -> windows.c WindowEdgesStep
+  03:FE35 WindowStep3433By3 -> windows.c WindowEdgesStep
+  03:FDF7 WindowStep3437By3 -> windows.c WindowEdgesStep
+  7E:DB10 WindowHdmaFromTable -> windows.c window_hdma_from_table
+  7E:D85C WindowHdmaAt -> windows.c window_hdma_at
+  7E:D6E8 WindowHdmaFromList -> windows.c window_hdma_from_list
+  7E:D718 WindowHdmaPreset -> windows.c window_hdma_preset
+  7E:DB47 WindowHdmaLayout -> windows.c window_hdma_layout
+  09:F065 WindowEdgesFromPair -> windows.c edges_from_pair
+  09:F0B2 WindowEdgesFromList -> windows.c edges_from_list
+  7E:DDD9 WindowSlideStep -> windows.c slide_step
+  7E:DDF0 WindowSlideDown -> windows.c slide_step
+  7E:DE27 WindowSlideUp -> windows.c slide_step
+  7E:DA75 WindowLayoutStep -> windows.c WindowLayoutStepForScreen
+  7E:D4F6 ColdataTopBandStep -> windows.c band_step (WindowSlideCheck)
+  7E:D514 ColdataLowBandStep -> windows.c band_step (WindowSlideCheck)
+  7E:D572 ColdataLevelStep -> windows.c level_step (WindowSlideCheck)
+  7E:DF61 BobStep -> windows.c bob_step
+  7E:DEFE BobWindow0 -> windows.c bob_window (BobWindowsRun)
+  7E:DF35 BobWindow1 -> windows.c bob_window (BobWindowsRun)
+  7E:DE88 WindowSweepStep -> windows.c sweep_step
+  7E:DE5E WindowSweep -> windows.c WindowSweepIfOn
+  7E:DD43 OscillatorStep -> windows.c oscillator_step
+  7E:DD12 OscillatorWindow -> windows.c oscillator_window
+
+Replaced by the engine or by the design (no counterpart by intent)
+------------------------------------------------------------------
+The DMA routines and the VRAM queue: what they carried goes to the engine's
+tiles, maps, palette and sprite table directly (race_vram_write routes a
+VRAM destination to its role).
+  7E:ABB6 VramDmaFromBank7F -> race_vram_write
+  7E:ABD7 VramDmaFromGsuRam -> race_vram_write
+  7E:AC08 VramDmaRowsFromGsuRam -> race_vram_write
+  7E:ACF7 OamDma -> sprites.c OamDmaAll (the sprite table is the engine's)
+  7E:B0F6 CgramDma -> palette.c CgramDmaAll, RasterPaletteUpload
+  03:ECA8 DmaFromDescriptor -> race_video.c clear_all (its only use, VideoStartUploads)
+  7F:08C7 VramDmaWideRowsFromGsuRam -> none: the two-player pictures' rows;
+         both pictures are in the engine's draw list (race_two_player_list),
+         race/flow.c two_player_rows keeps only the stages' order
+  7E:A7C9 NmiFrameUploadRace -> race/flow.c race_frame_upload (the race
+         session's), the stages by role
+  0B:F567 WindowHdmaChannelsSetup -> menu/screens.c ChampionScreenOpen (the
+         menus session's per-line tables)
+  03:ED7F GradientFillCgadd -> picture.c race_lines_send: the gradient is a
+         per-line table of colour 0, so the CGADD table it fills has no
+         counterpart (its caller RaceHudSetup leaves it to the video side)
+
+Converted by other sessions, with the code that drives them
+------------------------------------------------------------
+  7E:A7BE NmiFrameUpload -> race/flow.c race_frame_upload (the race session's)
+  07:C683 OverlayFramesUntilFaded -> race/results.c, one frame of it per
+         update (the race session's)
+
+Dead
+----
+Proof, for each: the original's own record says nothing reaches it ("Nothing
+in the game calls it", "Nothing jumps to it or calls it", "nothing branches
+to", "Nothing reaches it", "No caller found", "Nothing calls it in the
+traces"), and the cartridge (assets/cart.dat) holds no JSR or JMP to its
+address in its bank or the RAM code's block, no JSL or JML to it, and no
+pointer word to it (the counts are all 0). The routine catalog lists most of
+them as run: the unit scripts call them directly, which the game never does.
+  7E:A7F3 VramRowsCopyUnused
+  03:ECBE VramClearWords
+  02:FD6B SpritePiecesAt59Y87
+  07:C484 OamHide55To63
+  07:C494 OamHide119To127
+  7E:B5E3 PlayerColoursFlashRts
+  7E:E4E4 HudColourRowsRest
+  7E:E50B HudColourStepFrom14
+  7E:B6CB PaletteCycleFourth
+  7E:F33C SpriteSlot4Brighten
+  7E:F371 SpriteSlot4Darken
+  7E:F3B5 SpriteSlot4Full
+  02:E046 SpriteSlot2Brighten
+  02:E042 SpriteSlot2BrightenLong (two words of its value in bank 2 are data, no call)
+  02:E07B SpriteSlot1Start
+  02:E117 SpriteSlot6Yellow
+  02:E147 SpriteSlot6DimYellow
+  02:E177 SpriteSlot6Red
+  02:E1A7 SpriteSlot5DimRed
+  02:E1D7 SpriteSlot5Off
+  02:E215 SpriteSlot2Darken
+  02:E211 SpriteSlot2DarkenLong
+  02:E1EE SpriteSlot2FadeOut
+  02:E259 SpriteSlot5Yellow
+  02:FC0C SpriteTextAt8152C
+  02:FC15 SpriteTextAt8952B
+  09:F04D WindowEdgesFillOnes
+  02:FB27 TilemapRowFrom7FBBD7 (no caller in the record but its call entry
+         for the unit scripts)
+  02:FAFE TilemapRowFromFB4E (as TilemapRowFrom7FBBD7)

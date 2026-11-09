@@ -951,18 +951,6 @@ void RaceCourseUpload(void)
 
 uint8_t race_pictures[0x3000];          /* $7F:63D7: the three art pictures the results screens switch between */
 
-__attribute__((weak)) void RaceHudSetup(void)
-{
-    static int said;
-    if (!said) { said = 1; fprintf(stderr, "not converted yet: RaceHudSetup\n"); }
-}
-
-__attribute__((weak)) void RaceHudSetupTwoPlayers(void)
-{
-    static int said;
-    if (!said) { said = 1; fprintf(stderr, "not converted yet: RaceHudSetupTwoPlayers\n"); }
-}
-
 static void hud_tile(uint16_t from, uint16_t tile, uint16_t word)
 {
     race_art_write(word, fx_ram + (uint16_t)(from + (uint16_t)(tile << 5)), 32);
