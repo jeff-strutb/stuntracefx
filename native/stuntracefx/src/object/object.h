@@ -11,7 +11,7 @@
 
 #include <stdint.h>
 
-#include "fx/fx_rt.h"
+#include "fx/fx.h"
 #include "math/math.h"
 
 typedef uint16_t ObjRef;
@@ -119,6 +119,7 @@ static inline Camera *camera_of(uint16_t link) { return &cameras[link - LINK_CAM
    ($1F3A) and flags ($1F36) and their summary ($1F38). */
 typedef struct {
     uint16_t next, word, flags, summary;
+    int no_record;                      /* the last Sync found no record */
 } RecordContacts;
 
 extern RecordContacts record_contacts;

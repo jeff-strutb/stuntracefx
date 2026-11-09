@@ -318,6 +318,7 @@ uint8_t ObjectSyncFromRecord(Object *o)
     GsuRecordFlag4(o);
     o->flags24 &= 0xFD;
     rec = o->record;
+    record_contacts.no_record = !rec;
     if (!rec) {
         record_contacts.next = 0;
         return 0;
@@ -348,6 +349,7 @@ uint8_t ObjectSyncToRecord(Object *o)
     ObjectRebucket(o);
     GsuRecordFlag4(o);
     rec = o->record;
+    record_contacts.no_record = !rec;
     if (!rec) {
         record_contacts.next = 0;
         return 0;
@@ -372,6 +374,7 @@ uint8_t ObjectSyncAngles(Object *o)
     ObjectRebucket(o);
     GsuRecordFlag4(o);
     rec = o->record;
+    record_contacts.no_record = !rec;
     if (!rec) {
         record_contacts.next = 0;
         return 0;
@@ -727,6 +730,7 @@ uint8_t ObjectSyncFromRecordFall(Object *o)
     ObjectRebucket(o);
     GsuRecordFlag4(o);
     rec = o->record;
+    record_contacts.no_record = 0;
     rec_put(rec, FXREC_ANGLE, (uint16_t)(o->heading << 8));
     rec_put(rec, 0x0012, o->frame5a & 0x7F);
     record_contacts.next = rec_get(rec, FXREC_LIST);
