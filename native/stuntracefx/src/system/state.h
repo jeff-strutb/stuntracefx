@@ -83,7 +83,6 @@ typedef struct {
     uint8_t reset_state;                /* $0D51: a soft reset is under way */
     uint8_t frame_stage_00;             /* $00: 2 while a step runs, cleared when its picture is shown */
     uint8_t byte_1a32, byte_0713;       /* $1A32, $0713 */
-    uint16_t view_angle_06cf;           /* $06CF */
     uint8_t course_high, byte_0d63, byte_0d44, byte_0d25; /* $0E3E, $0D63, $0D44, $0D25 */
     uint16_t course_intro_scroll;       /* $0E37 */
     uint8_t champ_stage;                /* $0D48: the championship's stage */

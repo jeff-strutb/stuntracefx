@@ -249,7 +249,7 @@ static void two_players_first_half(void)
     g.picture_uploaded = 0;
     ViewUpdateAndGsuAEF8();
     BackdropAnglesFromView();
-    g.view_angle_06cf = (uint16_t)(g.view_angle_06cf - 0x0140);
+    g.view_heading_06cf = (uint16_t)(g.view_heading_06cf - 0x0140);
     fx_draw_begin(g.fx_buffer);
     frame_run_ab13_a();
     SpeedGaugeUpdate(0x2142);
