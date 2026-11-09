@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 3.20)
+project(srfx_replay C)
+add_subdirectory(${NSHVC_ROOT} nshvc)
+include(${NSHVC_ROOT}/cmake/NshvcGame.cmake)
+nshvc_game(srfx_replay SOURCES replay.c TITLE "SRFX replay")
+target_compile_options(srfx_replay PRIVATE -std=gnu11 -Wall -Wextra)

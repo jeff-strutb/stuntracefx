@@ -115,6 +115,8 @@ static void state_loaded(void)
     spc_state_loaded();
 }
 
+static void native_mark(uint32_t kind, uint32_t pc);
+enum { NATIVE_FRAME_END, NATIVE_STEP, NATIVE_JOB_START, NATIVE_JOB_STOP, NATIVE_PICTURE };
 static const char *outdir;
 static char sysdir[4096];
 static unsigned pixfmt = RETRO_PIXEL_FORMAT_0RGB1555;
@@ -147,10 +149,13 @@ static void gsurun_insn(uint32_t pc, uint32_t prev_end, uint8_t opcode)
     gsurun_kind = 0;
     if (gsurun_halted) { gsurun_halted = 0; gsurun_starting = 1; }
     else if (gsurun_starting) {
+        native_mark(NATIVE_JOB_START, pc);
         gsurun_starting = 0; gsurun_on = 1; gsurun_clk = 0; gsurun_ram_n = 0; memset(gsurun_ram_by, 0, sizeof gsurun_ram_by); memset(gsurun_by, 0, sizeof gsurun_by); gsurun_pc = pc; gsurun_frame = frames + 1;
     }
     if (opcode == 0x00) {
-        if (gsurun_on) {
+        if (gsurun_on && !gsurun_f) native_mark(NATIVE_JOB_STOP, gsurun_pc);
+        if (gsurun_on && gsurun_f) {
+            native_mark(NATIVE_JOB_STOP, gsurun_pc);
             fprintf(gsurun_f, "g %ld %06X %llu", gsurun_frame, gsurun_pc, gsurun_clk);
             for (int k = 0; k < 7; k++) fprintf(gsurun_f, " %llu", gsurun_by[k]);
             fprintf(gsurun_f, " %llu %llu %llu %llu %llu\n", gsurun_ram_n,
@@ -324,6 +329,48 @@ static void cyclog_timing(int kind, int clocks, uint32_t addr)
         fputs("x\n", cyclog_f);
 }
 
+/* --native DIR: what native/checks compares the converted game with.
+   ppu.bin holds every write that reaches a PPU register, 12 bytes each: the
+   frame (32 bits), the line and the dot (16 bits each), the register's low
+   byte, the value, two zero bytes. state.bin holds the machine at each mark,
+   as changes from the last mark: frame, kind and PC (32 bits each), then for
+   each 64-byte block that changed its offset (32 bits) and bytes, ended by
+   FFFFFFFF. The machine is sfxbox_core_snapshot's: work RAM, Super FX RAM,
+   VRAM, OAM, CGRAM, APU RAM. shots.txt names each shot's frame. */
+#define NATIVE_STATE (0x20000 + 0x10000 + 0x10000 + 544 + 512 + 0x10000)
+static FILE *native_ppu_f, *native_state_f, *native_shots_f;
+static void (*native_snapshot)(uint8_t *);
+static uint8_t native_now[NATIVE_STATE], native_last[NATIVE_STATE];
+
+static void native_ppu_write(uint16_t address, uint8_t data, int line, int dot)
+{
+    uint32_t f = (uint32_t)frames;
+    uint8_t rec[12] = { (uint8_t)f, (uint8_t)(f >> 8), (uint8_t)(f >> 16), (uint8_t)(f >> 24),
+                        (uint8_t)line, (uint8_t)(line >> 8), (uint8_t)dot, (uint8_t)(dot >> 8),
+                        (uint8_t)address, data, 0, 0 };
+    fwrite(rec, 1, 12, native_ppu_f);
+}
+
+static void native_mark(uint32_t kind, uint32_t pc)
+{
+    uint32_t head[3] = { (uint32_t)frames, kind, pc }, end = 0xFFFFFFFFu, at;
+
+    if (!native_state_f) return;
+    native_snapshot(native_now);
+    fwrite(head, 4, 3, native_state_f);
+    for (at = 0; at < NATIVE_STATE; at += 64) {
+        uint32_t n = NATIVE_STATE - at < 64 ? NATIVE_STATE - at : 64;
+        if (memcmp(native_now + at, native_last + at, n)) {
+            fwrite(&at, 4, 1, native_state_f);
+            fwrite(native_now + at, 1, n, native_state_f);
+            memcpy(native_last + at, native_now + at, n);
+        }
+    }
+    fwrite(&end, 4, 1, native_state_f);
+}
+
+static void native_picture(void) { native_mark(NATIVE_PICTURE, 0); }
+
 static void run(long n)
 {
     while (n-- > 0) {
@@ -335,6 +382,7 @@ static void run(long n)
         retro_run_p();
         if (lockstep) lockstep_after_frame(frames);
         frames++;
+        native_mark(NATIVE_FRAME_END, 0);
     }
 }
 
@@ -501,6 +549,7 @@ static int staged_line[64], nstaged;
    count, and hashes of work RAM (the stack, $0100-$02FF, left out) and of
    the Super FX's RAM. The native port writes the same lines. */
 static FILE *pacing_f;
+static int native_state_f_on;
 
 static uint32_t fnv(const uint8_t *p, size_t n, uint32_t h)
 {
@@ -514,12 +563,13 @@ static void pacing(uint32_t pc)
     if (at != 0x02D7D8 && at != 0x03B7D1 && at != 0x0BFB31) return;
     size_t n, g; uint8_t *w = sfxbox_memory_p("wram", &n), *r = sfxbox_memory_p("gsuram", &g);
     uint32_t hw = fnv(w + 0x300, n - 0x300, fnv(w, 0x100, 2166136261u));
-    fprintf(pacing_f, "%ld %06X %u %08x %08x\n", frames, at, w[0x306], hw, fnv(r, g, 2166136261u));
+    native_mark(NATIVE_STEP, at);
+    if (pacing_f) fprintf(pacing_f, "%ld %06X %u %08x %08x\n", frames, at, w[0x306], hw, fnv(r, g, 2166136261u));
 }
 
 static int call_exec(uint32_t pc)
 {
-    if (pacing_f) pacing(pc);
+    if (pacing_f || native_state_f_on) pacing(pc);
     /* Not while the Super FX runs: it may hold the ROM and its RAM, and the
        S-CPU reads neither then (the game waits in work RAM). Nor in the
        vertical blank, where the NMI would land between the JSR and the
@@ -833,7 +883,7 @@ static void exec_range(int from, int to) {
         else if (!strcmp(a, "wait") && k >= 2) { buttons = 0; run(atol(b)); }
         else if (!strcmp(a, "hold") && k >= 3) { buttons = parse_buttons(b); run(atol(c)); buttons = 0; }
         else if (!strcmp(a, "press") && k >= 2) { buttons = parse_buttons(b); run(k >= 3 ? atol(c) : 2); buttons = 0; run(2); }
-        else if (!strcmp(a, "shot") && k >= 2) shot(b);
+        else if (!strcmp(a, "shot") && k >= 2) { shot(b); if (native_shots_f) fprintf(native_shots_f, "%s %ld\n", b, frames); }
         else if (!strcmp(a, "dump") && k >= 2) {
             size_t n; uint8_t *p = sfxbox_memory_p("wram", &n); write_file(b, ".wram", p, n);
             p = sfxbox_memory_p("gsuram", &n); write_file(b, ".gsuram", p, n);
@@ -886,6 +936,7 @@ static void script(const char *path) {
 int main(int argc, char **argv) {
     const char *rom = NULL, *scr = NULL, *corepath = "tools/toolchains/bsnes/bsnes_libretro.dylib";
     int trace = 0;
+    const char *native_dir = NULL;
     const char *checklib = NULL, *only = NULL, *locklib = NULL;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--rom") && i + 1 < argc) rom = argv[++i];
@@ -914,6 +965,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--cyclog-frames") && i + 1 < argc) {
             if (sscanf(argv[++i], "%ld-%ld", &cyclog_lo, &cyclog_hi) != 2) die("--cyclog-frames A-B");
         }
+        else if (!strcmp(argv[i], "--native") && i + 1 < argc) native_dir = argv[++i];
         else if (!strcmp(argv[i], "--pacing") && i + 1 < argc) {
             if (!(pacing_f = fopen(argv[++i], "w"))) die("cannot write %s", argv[i]);
         }
@@ -949,6 +1001,27 @@ int main(int argc, char **argv) {
         if (!set_cb) die("missing symbol sfxbox_smp_set_callbacks");
         if (checklib || locklib) die("SFXBOX_SPCLOG is for a plain run");
         if (!(spclog_f = fopen(getenv("SFXBOX_SPCLOG"), "wb"))) die("cannot write %s", getenv("SFXBOX_SPCLOG"));
+        set_cb(&cb, NULL);
+    }
+    if (native_dir) {
+        char p[4096];
+        void (**tap)(uint16_t, uint8_t, int, int) = dlsym(core, "sfxbox_ppu_write");
+        *(void **)&native_snapshot = dlsym(core, "sfxbox_core_snapshot");
+        if (!tap || !native_snapshot) die("the core predates patch 0014");
+        snprintf(p, sizeof p, "%s/ppu.bin", native_dir);
+        if (!(native_ppu_f = fopen(p, "wb"))) die("cannot write %s", p);
+        snprintf(p, sizeof p, "%s/state.bin", native_dir);
+        if (!(native_state_f = fopen(p, "wb"))) die("cannot write %s", p);
+        snprintf(p, sizeof p, "%s/shots.txt", native_dir);
+        if (!(native_shots_f = fopen(p, "w"))) die("cannot write %s", p);
+        *tap = native_ppu_write;
+        { void (**pic)(void) = dlsym(core, "sfxbox_ppu_picture"); if (!pic) die("the core predates patch 0014"); *pic = native_picture; }
+        native_state_f_on = 1;
+    }
+    if (native_dir && !getenv("SFXBOX_GSURUN")) {
+        void (*set_cb)(const struct GsuRunCb *, int (*)(uint32_t, uint32_t)) = dlsym(core, "sfxbox_gsu_set_callbacks");
+        static const struct GsuRunCb cb = {gsurun_insn, gsurun_step, gsurun_ram, NULL};
+        if (!set_cb) die("missing symbol sfxbox_gsu_set_callbacks");
         set_cb(&cb, NULL);
     }
     if (getenv("SFXBOX_GSURUN")) {
@@ -1014,6 +1087,9 @@ int main(int argc, char **argv) {
     if (lockstep) lockstep_end(frames);
     if (trace && sfxbox_trace_write_p(outdir)) die("trace write failed");
     if (pacing_f) fclose(pacing_f);
+    if (native_ppu_f) fclose(native_ppu_f);
+    if (native_state_f) fclose(native_state_f);
+    if (native_shots_f) fclose(native_shots_f);
     if (cyclog_f) fclose(cyclog_f);
     if (rows_f) fclose(rows_f);
     if (sound_f) fclose(sound_f);

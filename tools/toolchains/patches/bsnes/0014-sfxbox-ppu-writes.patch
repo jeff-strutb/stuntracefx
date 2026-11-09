@@ -1,0 +1,51 @@
+--- a/bsnes/emulator/sfxbox.hpp
++++ b/bsnes/emulator/sfxbox.hpp
+@@ -22,6 +22,10 @@
+ // The DSP's output, each stereo sample as the chip makes it (before the
+ // core's resampler), when set.
+ extern void (*sfxbox_dsp_sample)(int16_t left, int16_t right);
++// Each write that reaches a PPU register, by the CPU, DMA or HDMA, with the
++// line and dot it lands on, when set; and the start of each picture (line 0).
++extern void (*sfxbox_ppu_write)(uint16_t address, uint8_t data, int line, int dot);
++extern void (*sfxbox_ppu_picture)(void);
+ // Each write the SPC700 makes (APU RAM, its I/O registers and so the DSP's
+ // through $F2/$F3), with the DSP's clock cycle within its sample (0-31,
+ // the next it runs) at that moment, when set.
+--- a/bsnes/sfc/ppu/io.cpp
++++ b/bsnes/sfc/ppu/io.cpp
+@@ -199,6 +199,7 @@
+ 
+ auto PPU::writeIO(uint addr, uint8 data) -> void {
+   cpu.synchronizePPU();
++  if(sfxbox_ppu_write) sfxbox_ppu_write(addr, data, vcounter(), hcounter());
+ 
+   switch(addr & 0xffff) {
+ 
+--- a/bsnes/sfc/ppu/main.cpp
++++ b/bsnes/sfc/ppu/main.cpp
+@@ -1,5 +1,6 @@
+ auto PPU::main() -> void {
+   if(vcounter() == 0) {
++    if(sfxbox_ppu_picture) sfxbox_ppu_picture();
+     if(display.overscan && !io.overscan) {
+       //when disabling overscan, clear the overscan area that won't be rendered to:
+       for(uint y = 1; y <= 240; y++) {
+--- a/bsnes/sfc/ppu/ppu.cpp
++++ b/bsnes/sfc/ppu/ppu.cpp
+@@ -1,4 +1,5 @@
+ #include <sfc/sfc.hpp>
++#include <emulator/sfxbox.hpp>
+ 
+ namespace SuperFamicom {
+ 
+--- a/bsnes/target-libretro/sfxbox.cpp
++++ b/bsnes/target-libretro/sfxbox.cpp
+@@ -14,6 +14,8 @@
+ int sfxbox_cpu_irq = 0;
+ int (*sfxbox_cpu_exec)(uint32_t pc) = nullptr;
+ void (*sfxbox_dsp_sample)(int16_t left, int16_t right) = nullptr;
++void (*sfxbox_ppu_write)(uint16_t address, uint8_t data, int line, int dot) = nullptr;
++void (*sfxbox_ppu_picture)(void) = nullptr;
+ void (*sfxbox_apu_write)(uint16_t address, uint8_t data, int dsp_phase) = nullptr;
+ void (*sfxbox_dsp_voices)(const int32_t *state) = nullptr;
+ SfxboxGsuCallbacks sfxbox_gsu_cb = {};
