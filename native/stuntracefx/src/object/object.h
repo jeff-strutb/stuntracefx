@@ -112,6 +112,8 @@ extern Camera cameras[2];                /* $1A64, $1A9F */
 static inline Object *obj_at(ObjRef ref) { return (Object *)(objects.bytes + ref - 1); }
 static inline ObjRef obj_ref(const Object *o) { return (ObjRef)((const uint8_t *)o - objects.bytes + 1); }
 static inline Camera *camera_of(uint16_t link) { return &cameras[link - LINK_CAMERA_1]; }
+Camera *camera_at_link(uint16_t link);   /* a camera link's camera, or the record a link of 0 reads */
+int camera_in_low_ram(const Camera *c);
 
 /* The contact list being walked (object/gsu_record.c): the next entry
    ($1F3C) and, for the entry taken, its touched record's contact word

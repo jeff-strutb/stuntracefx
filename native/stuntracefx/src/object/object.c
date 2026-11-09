@@ -288,14 +288,17 @@ void ObjectPlaceAll(void)
     uint8_t list = 1;
     unsigned i = 0;
 
-    if (!n)                             /* no course places none; the original would run on 65,536 times */
+    if (!n) {                           /* no course places none; the original would run on 65,536 times */
+        g.place_list_next = 1;          /* and end with its count back at 1 */
         return;
+    }
     do {
         ObjectPlaceFromTable(list++, (uint8_t)objects.place_entries[i], g.selection_out[i],
                              g.selection_handler[i], g.selection_derived[i]);
         i++;
         n--;
     } while (n);
+    g.place_list_next = list;
 }
 
 /*
@@ -1065,21 +1068,35 @@ void ObjectPlaceOnParent(Object *parent, Object *o)
     g.last_worked_y = (uint16_t)(v.y * 2);
 }
 
-/* The mode word of the record a director links to: its camera's. In a
-   race's first frames the cars are not linked yet (a link of 0), and the
-   original reads the word at $0000, which only the power-on clear writes. */
-static uint16_t linked_mode(uint16_t link)
+/*
+ * The camera record the original reads at work RAM $0000, where a link of 0
+ * leads: in a race's first step, before the cars are linked. Its words are
+ * what was last left there (traced in race1): $0000 the race step's flag
+ * ($00, high byte never written), $0002 ObjectPlaceAll's count (0 when it
+ * ends), $0008 ObjectPlaceAll's starter number, $000A the last worked Y,
+ * $000C-$0013 only the power-on clear.
+ */
+static Camera low_ram_camera;
+
+Camera *camera_at_link(uint16_t link)
 {
     static int reported;
 
     if (link == LINK_CAMERA_1 || link == LINK_CAMERA_2)
-        return camera_of(link)->mode;
+        return camera_of(link);
     if (link && !reported) {
         reported = 1;
-        fprintf(stderr, "stuntracefx: a director linked to $%04X, not a camera; its mode taken as 0\n", link);
+        fprintf(stderr, "stuntracefx: a link to $%04X read as a camera; the work RAM camera used\n", link);
     }
-    return 0;
+    memset(&low_ram_camera, 0, sizeof low_ram_camera);
+    low_ram_camera.mode = g.frame_stage_00;
+    low_ram_camera.object = 0;
+    low_ram_camera.x = g.place_list_next;
+    low_ram_camera.y = g.last_worked_y;
+    return &low_ram_camera;
 }
+
+int camera_in_low_ram(const Camera *c) { return c == &low_ram_camera; }
 
 /* the view bob a car's cue starts, for one of the two cameras */
 static void view_event_trigger(int i, ObjRef car)
@@ -1089,7 +1106,7 @@ static void view_event_trigger(int i, ObjRef car)
     if (g.view_event[i] & 0x80)
         return;
     director = obj_at(obj_at(car)->link);
-    if (!(linked_mode(director->link) & 0x4000) || !g.bob_trigger[i])
+    if (!(camera_at_link(director->link)->mode & 0x4000) || !g.bob_trigger[i])
         return;
     g.bob_trigger[i] = 0;
     g.view_event[i] = 0x80;

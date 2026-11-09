@@ -80,5 +80,9 @@ void ViewFromRecord(const Camera *cam)
         g.view_fixed_origin[2] = g.view_area_origin[2];
         return;
     }
+    /* the camera's object is read again here; for the record in low work
+       RAM that word ($0002) is the rescaled X the line above left there */
+    if (camera_in_low_ram(cam))
+        o = obj_at(g.view_area_origin[1]);
     area_origin(g.view_fixed_origin, o->x, o->z);
 }
