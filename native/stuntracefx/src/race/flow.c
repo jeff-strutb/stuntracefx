@@ -7,6 +7,7 @@
  * every `race_pace` updates; between steps only the raster's work runs.
  */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "audio/sound.h"
@@ -23,10 +24,63 @@
 #include "video/picture.h"
 #include "video/video.h"
 
-/* Video frames a race step takes; section 6 of the plan. The original's step
-   took 4 to 9 frames, most often 5 and 6; a one-player race uses 6, the
-   approved whole-step design's value, until the recorded medians say. */
-enum { PACE_ONE_PLAYER = 6, PACE_TWO_PLAYERS = 6 };
+/* Video frames a race step takes (section 6 of the plan): the median of the
+   frames since the last step ($0306) at each step's start in the original's
+   recordings made for the checks: a one-player race 6 (1,640 steps, 4 to 9
+   frames), two players 7 (979 steps of a battle, 4 to 9), the attract demos
+   5 (670 steps, 4 to 7). */
+enum { PACE_ONE_PLAYER = 6, PACE_TWO_PLAYERS = 7, PACE_DEMO = 5 };
+
+/* The check-only recorded pacing: each step's frame count from a recording
+   of the original, in place of the constant (race_pacing_record). */
+static struct {
+    uint8_t *count;
+    size_t n, at;
+} recorded;
+
+/* Reads a recording's pacing lines (video frame, routine, $0306, hashes):
+   the steps of RaceFrameRun (02:D7D8) and RaceFrameRunTwoPlayers (0B:FB31). */
+int race_pacing_record(const char *path)
+{
+    FILE *f = fopen(path, "r");
+    char line[128];
+    size_t cap = 0;
+
+    if (!f)
+        return 0;
+    while (fgets(line, sizeof line, f)) {
+        long frame;
+        unsigned at, count;
+
+        if (sscanf(line, "%ld %x %u", &frame, &at, &count) != 3 || (at != 0x02D7D8 && at != 0x0BFB31))
+            continue;
+        if (recorded.n == cap) {
+            uint8_t *more = realloc(recorded.count, cap ? cap * 2 : 1024);
+
+            if (!more)
+                break;
+            recorded.count = more;
+            cap = cap ? cap * 2 : 1024;
+        }
+        recorded.count[recorded.n++] = (uint8_t)(count > 255 ? 255 : count);
+    }
+    fclose(f);
+    return 1;
+}
+
+/* The frames the next step waits; the step taken moves the record on. */
+static uint8_t pace_for(uint8_t constant)
+{
+    if (recorded.at < recorded.n)
+        return recorded.count[recorded.at];
+    return constant;
+}
+
+static void pace_taken(void)
+{
+    if (recorded.at < recorded.n)
+        recorded.at++;
+}
 
 /* What the race is doing while no step runs. */
 typedef enum {
@@ -420,7 +474,7 @@ void race_pause_over(int second_half)
 
 static uint8_t race_pace(void)
 {
-    return g.split_screen ? PACE_TWO_PLAYERS : PACE_ONE_PLAYER;
+    return pace_for(g.split_screen ? PACE_TWO_PLAYERS : PACE_ONE_PLAYER);
 }
 
 /* @routine 03:EC24 CourseDataPointer: the course script's start. */
@@ -621,6 +675,7 @@ int race_session_update(void)
             wait_step();
         } else if (++flow.pace_count >= race_pace()) {
             flow.pace_count = 0;
+            pace_taken();
             race_step();
         }
         break;
@@ -786,7 +841,7 @@ static int demo_step(void)
         return 1;
     if (r == 2) {
         /* $0B: waiting for a button held, no race step taken */
-        flow.pace_count = (uint8_t)(PACE_ONE_PLAYER - 1);
+        flow.pace_count = (uint8_t)(pace_for(PACE_DEMO) - 1);
         return 0;
     }
     if (flow.demo_mode == DEMO_WAIT_FADE)
@@ -824,10 +879,11 @@ static int demo_frame(void)
     } else if (flow.demo_mode == DEMO_WAIT_FADE) {
         if (!demo_fade_done())
             return 0;
-    } else if (++flow.pace_count < PACE_ONE_PLAYER) {
+    } else if (++flow.pace_count < pace_for(PACE_DEMO)) {
         return 0;
     } else {
         flow.pace_count = 0;
+        pace_taken();
         if (!demo_step())
             return 0;
     }
