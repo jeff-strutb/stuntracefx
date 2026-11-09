@@ -45,10 +45,21 @@ static struct { int map, row, column; } wide_band[2];   /* what BackdropRowsUpda
 static void wide_hills_shown(int buffer);
 
 /* The one-player race fills the window: its screen, not the course
-   screen's, the split screen's or the results' (their map at $5C00). */
+   screen's, the split screen's or the results' (their map at $5C00).
+   Interim: on only once the 3D draws its list at the screen's size, with
+   race_frame_art_draw_over after its shapes and the view over the whole
+   screen (the Enhanced 3D session's side); until then the race keeps the
+   original's layout. */
+static int full_window_ready;
+
+void race_full_window_ready(int on)
+{
+    full_window_ready = on;
+}
+
 int race_full_window(void)
 {
-    return pic.race.on && !pic.race.split && !pic.race.course_screen && g.bg2_map_reg != 0x5C;
+    return full_window_ready && pic.race.on && !pic.race.split && !pic.race.course_screen && g.bg2_map_reg != 0x5C;
 }
 
 /* ---- the objects ---- */
