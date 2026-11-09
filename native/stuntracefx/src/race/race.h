@@ -16,4 +16,7 @@ void CameraFollowStep(Camera *cam);
 void RaceStart(void);
 void RaceFrameStep(int show);
 
+void TimeUnpackBcd(uint16_t packed, uint16_t *minutes, uint16_t *seconds, uint16_t *hundredths);
+void ChampionshipFinish(void);
+
 #endif

@@ -5,6 +5,7 @@
 #include <stdio.h>
 
 #include "object/object.h"
+#include "race/race.h"
 
 #define NOT_YET(name) \
     __attribute__((weak)) void name(void) \
@@ -23,6 +24,7 @@ NOT_YET(BucketTriggersFixedArea)
 NOT_YET(ObjectGroupsActivate)
 NOT_YET(PlayerControlsFrame)
 NOT_YET(SpriteSlot1Countdown)
+NOT_YET(ChampionshipFinish)
 
 __attribute__((weak)) void CourseScriptRun(uint8_t bank, uint16_t addr)
 {
@@ -33,5 +35,17 @@ __attribute__((weak)) void CourseScriptRun(uint8_t bank, uint16_t addr)
     if (!said) {
         said = 1;
         fprintf(stderr, "not converted yet: CourseScriptRun\n");
+    }
+}
+
+__attribute__((weak)) void TimeUnpackBcd(uint16_t packed, uint16_t *minutes, uint16_t *seconds, uint16_t *hundredths)
+{
+    static int said;
+
+    (void)packed;
+    *minutes = *seconds = *hundredths = 0;
+    if (!said) {
+        said = 1;
+        fprintf(stderr, "not converted yet: TimeUnpackBcd\n");
     }
 }

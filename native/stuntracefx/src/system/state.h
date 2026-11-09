@@ -23,6 +23,21 @@ typedef struct {
     uint8_t frames_since_step;          /* $0306: video frames since the last race step */
     uint8_t frames_last_step;           /* $06D4: the frames the step now running covers */
     uint8_t frame_count;                /* $0E3B: video frames, free running */
+    uint8_t course_class;               /* $0D4A: the championship class */
+    uint8_t player_mode[2];             /* $0DF4, $0DF5 */
+    uint8_t player_phase[2];            /* $0DD6, $0DD7: each player's race phase */
+    uint8_t race_timer;                 /* $0E55: the phases' countdown */
+    uint8_t lap_shown;                  /* $0E57 */
+    uint8_t finish_mark;                /* $0E5B */
+    uint8_t finish_lines;               /* $0D5B: meaning not settled yet */
+    uint8_t time_override;              /* $0D4C */
+    uint8_t race_skipped;               /* $10CD: $FF when the mode runs no race */
+    uint8_t lead;                       /* $0FA3: player 1's lead, signed */
+    uint16_t best_lap_time;             /* $0F2B: $FFFF for none */
+    uint8_t best_times[3][3];           /* $0EF9, $0EFC, $0EFF */
+    uint16_t packed_time_a, packed_time_b; /* $1163, $1161 */
+    uint8_t split_window_state;         /* $19D8 */
+    uint8_t split_window_count;         /* $19DF */
     uint8_t draw_side;                  /* $1F07: 0 the near side of a frame, 1 the far */
     uint8_t fade_level;                 /* $0D61: the race's brightness, bit 7 when it is over */
     uint8_t fade_out;                   /* $0E3A: the fade out has started */
@@ -56,10 +71,55 @@ typedef struct {
     uint16_t random_word;               /* $0D18: the 16-bit generator */
 
     /* ---- the objects ---- */
+    uint16_t player_car, player2_car;   /* $0346, $034A: the players' cars */
+    uint16_t handler_object;            /* $034C: the object whose handler is running */
+    uint16_t object_frames;             /* $05E9: frames the objects have run */
+    uint16_t view_angle_06cd;           /* $06CD: the view angle a car's cue moves */
+    uint8_t freeze;                     /* $0D53: the race is frozen */
+    uint8_t flag_0e59, flag_19ed;       /* $0E59, $19ED */
+    uint16_t hits_bcd;                  /* $19EE: a decimal count of hits */
+    uint8_t hits;                       /* $1A28 */
+    uint8_t view_event[2];              /* $0DA4, $0DA6: bit 7 while a view bob runs */
+    uint8_t bob_kind[2];                /* $1A1C, $1A1D */
+    uint8_t bob_phase[2];               /* $1A1E, $1A1F */
+    uint8_t bob_speed[2];               /* $1A20, $1A21 */
+    uint8_t bob_22[2];                  /* $1A22, $1A23 */
+    uint16_t bob_trigger[2];            /* $1A24, $1A26 */
+    uint16_t course_flags;              /* $1AEC */
+    uint16_t course_options;            /* $1AEE: bit 0 keeps the cars where they are */
+    uint8_t spawn_mirror;               /* $1AF4: the heading a course script spawns objects with */
+    uint16_t spawn_counter;             /* $1ADE: the spawn counter */
+    uint16_t trigger_list[0x104][2];    /* $1AF5: code and bucket number per entry, ended by 0 */
+    uint16_t bucket_origin[3];          /* $1F01, $1F03, $1F05: the bucket trigger window */
+    uint16_t selection_out[4];          /* $18D3: each racer's model (words) */
+    uint16_t selection_handler[4];      /* $18DB: each racer's control word */
+    uint16_t selection_derived[4];      /* $18E3 */
+    uint8_t script_byte_1f71, script_byte_1f72;
+    uint8_t course;                     /* $0E3D */
     uint16_t frame_record_count;        /* $0CEE: the records built for the renderer this frame */
     uint8_t frame_records[64 * 30];     /* $7E:F77F: those records, 30 bytes each */
 
     /* ---- the picture: palettes, windows, tile maps, the HUD ---- */
+    uint16_t hud_hold;                  /* $0E5D: the HUD's hold, bit 15 and low byte used apart */
+    uint16_t hud_point_index;           /* $0D6B */
+    uint16_t hud_point_x, hud_point_y;  /* $0D6D, $0D6F */
+    uint16_t digit_pair;                /* $0E74 */
+    uint16_t piece_step;                /* $10CB */
+    uint8_t sprite_count;               /* $1160: the counted sprite rows */
+    uint8_t sprites_counted;            /* $0E5C */
+    uint16_t glyphs_extended;           /* $0FAE */
+    uint8_t time_digits_a[5];           /* $0F64 */
+    uint8_t time_digits_b[5];           /* $0F69 */
+    uint16_t glyph_sprite_x[16];        /* $0FB0 */
+    uint16_t glyph_sprite_y[16];        /* $0FE0 */
+    uint16_t glyph_sprite_glyph[16];    /* $1010 */
+    uint16_t glyph_sprite_step[16];     /* $1040 */
+    uint16_t glyph_sprite_target[16];   /* $1070 */
+    uint16_t glyph_first_end, glyph_end; /* $10E4, $10E6 */
+    uint16_t glyph_word[19];            /* $10E8 */
+    uint16_t glyph_on[19];              /* $110E */
+    uint8_t glyph_x_y[38];              /* $1134: x and y of each entry */
+    uint16_t times_step, times_timer, times_entry; /* $10D8, $115A, $115C */
 
     /* ---- sound ---- */
 
