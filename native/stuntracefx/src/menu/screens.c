@@ -872,10 +872,12 @@ void MenuCursorFourWay(void)
             break;
         }
     }
-    if (g.time_override)
-        g.cursor_x = 0x88;
-    else
-        g.cursor_x = g.cursor_column_x = cart8(0x02, (uint16_t)(0xEB49 + g.champ_stage));
+    if (g.time_override) {
+        g.flash_sprite_pos = (uint16_t)((g.flash_sprite_pos & 0xFF00) | 0x88);
+    } else {
+        g.cursor_column_x = cart8(0x02, (uint16_t)(0xEB49 + g.champ_stage));
+        g.flash_sprite_pos = (uint16_t)((g.flash_sprite_pos & 0xFF00) | g.cursor_column_x);
+    }
 }
 
 /* --- the championship's closing screen --------------------------------- */

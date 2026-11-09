@@ -14,6 +14,7 @@
 int MenuScreen0Run(void);
 int CourseMenuRun(void);
 int ChampionScreenRun(void);
+void MenuCourseScreenSetup(void);       /* wanted by the race (two-player HUD setup) */
 
 /* the race has ended: back to the course menu, or (0) to the start of the game */
 void session_race_ended(int to_course_menu);

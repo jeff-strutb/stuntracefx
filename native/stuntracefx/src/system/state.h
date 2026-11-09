@@ -46,7 +46,7 @@ typedef struct {
     uint8_t leader_place;               /* $0FAC */
     uint16_t panel_row, panel_place, panel_char; /* $0FA8, $0FAA, $0FA6: where the records panel is being drawn */
     uint16_t player_name;               /* $0F11: three 5-bit letters */
-    uint8_t cursor_x, cursor_column_x;  /* $0D37, $0E91 */
+    uint8_t cursor_column_x;            /* $0E91; the cursor's X itself is flash_sprite_pos's low byte, $0D37 */
     uint8_t speed_gauge[2];             /* $0E49, $0E47: the two players' speed gauges */
     uint8_t course_screen_state;        /* $0D40 */
     uint8_t records_wait, records_cursor; /* $0D41, $0D50 */
