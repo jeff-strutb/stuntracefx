@@ -4,6 +4,7 @@
  * fixed colour by line, and the five window and colour maths setups the
  * frames switch between.
  */
+#include <stdio.h>
 #include <string.h>
 
 #include "audio/sound.h"
@@ -16,11 +17,13 @@
 Windows windows;
 
 /* The edge rows the band table's entries name by address: the normal edges,
-   the named ones, the shapes built by WindowsInit and their copy. */
-#define EDGE_SHAPES_ADDR 0xF883u
-#define EDGE_COPY_ADDR 0xFB03u
-#define EDGE_ROWS 160
-static WindowEdges edge_shapes[EDGE_ROWS], edge_copy[EDGE_ROWS];
+   the named ones, and the shapes WindowsInit builds. The seven lists fill
+   rows 0 to 447 ($7F:F883-$FF82); with two players rows 160 on start with a
+   copy of the first 160, moved. */
+#define EDGE_ROWS_ADDR 0xF883u
+#define EDGE_ROWS 448
+#define EDGE_COPY_ROW 160               /* $7F:FB03 */
+static WindowEdges edge_rows[EDGE_ROWS];
 
 const WindowEdges *window_edges_at(uint16_t addr)
 {
@@ -32,10 +35,8 @@ const WindowEdges *window_edges_at(uint16_t addr)
     case 0xFFDD: return &windows.ffdd;
     default: break;
     }
-    if (addr >= EDGE_SHAPES_ADDR && addr < EDGE_SHAPES_ADDR + EDGE_ROWS * 4)
-        return &edge_shapes[(addr - EDGE_SHAPES_ADDR) / 4];
-    if (addr >= EDGE_COPY_ADDR && addr < EDGE_COPY_ADDR + EDGE_ROWS * 4)
-        return &edge_copy[(addr - EDGE_COPY_ADDR) / 4];
+    if (addr >= EDGE_ROWS_ADDR && addr < EDGE_ROWS_ADDR + EDGE_ROWS * 4)
+        return &edge_rows[(addr - EDGE_ROWS_ADDR) / 4];
     return &windows.normal;
 }
 
@@ -377,7 +378,7 @@ static void level_step(void)
 
         if (v == 0xFF)
             break;
-        if (v >= whole)
+        if (v >= whole && x + 3 < (int)sizeof windows.level_table)
             windows.level_table[x + 3] = whole;
     }
 }
@@ -825,7 +826,14 @@ uint8_t FixedColourFromStep(void)
 static void edges_from_pair(uint16_t pair, int row)
 {
     uint8_t v0 = cart8(0x09, pair), v1 = cart8(0x09, (uint16_t)(pair + 1));
-    WindowEdges *e = &edge_shapes[row];
+    WindowEdges *e;
+
+    if (row >= EDGE_ROWS) {             /* the lists end at row 447 */
+        static int said;
+        if (!said) { said = 1; fprintf(stderr, "window edge row %d past the table\n", row); }
+        return;
+    }
+    e = &edge_rows[row];
 
     e->left1 = v0;
     e->right1 = (uint8_t)(0x100 - v0);
@@ -878,23 +886,24 @@ void WindowsInit(void)
     }
     for (sel = 0; sel != 0x000E; )
         sel = edges_from_list(sel);
-    for (i = 0; (w = cart16(0x09, (uint16_t)(0xFB74 + i))) != 0xFFFF; i += 2) {
+    for (i = 0; i + 1 < (int)sizeof windows.level_table && (w = cart16(0x09, (uint16_t)(0xFB74 + i))) != 0xFFFF; i += 2) {
         windows.level_table[i] = (uint8_t)w;
         windows.level_table[i + 1] = (uint8_t)(w >> 8);
     }
     windows.level_table_bytes = (uint8_t)i;
     if (g.split_screen) {
-        for (i = 0; i < EDGE_ROWS; i++) {
-            WindowEdges *e = &edge_shapes[i];
+        /* each of the first $280 bytes moved by -$28, and a copy of it +$50 $280 bytes on */
+        for (i = 0; i < EDGE_COPY_ROW; i++) {
+            WindowEdges *e = &edge_rows[i], *c = &edge_rows[EDGE_COPY_ROW + i];
 
             e->left1 = (uint8_t)(e->left1 + 0xD8);
             e->right1 = (uint8_t)(e->right1 + 0xD8);
             e->left2 = (uint8_t)(e->left2 + 0xD8);
             e->right2 = (uint8_t)(e->right2 + 0xD8);
-            edge_copy[i].left1 = (uint8_t)(e->left1 + 0x50);
-            edge_copy[i].right1 = (uint8_t)(e->right1 + 0x50);
-            edge_copy[i].left2 = (uint8_t)(e->left2 + 0x50);
-            edge_copy[i].right2 = (uint8_t)(e->right2 + 0x50);
+            c->left1 = (uint8_t)(e->left1 + 0x50);
+            c->right1 = (uint8_t)(e->right1 + 0x50);
+            c->left2 = (uint8_t)(e->left2 + 0x50);
+            c->right2 = (uint8_t)(e->right2 + 0x50);
         }
     }
     windows.layout = -2;

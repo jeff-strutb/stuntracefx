@@ -26,8 +26,12 @@
 RaceVideo race_video;
 
 /* the course backdrop's map, as the course data unpacks it */
-static uint16_t backdrop_map[2][0x1400];   /* $7F:93D7 and $7F:BBD7 */
-static uint16_t backdrop_rows[2][0x220];   /* $7F:E3D7 and $7F:E817: the rows for each picture buffer */
+/* $7F:93D7 on, as one block: the course's two backdrop maps ($93D7, $BBD7),
+   then the rows for each picture buffer ($E3D7, $E817). A row read past the
+   end of a map goes on into what follows, as the original's did. */
+static uint16_t bank7f_words[2 * 0x1400 + 2 * 0x220];
+#define backdrop_map(n) (bank7f_words + (n) * 0x1400)
+#define backdrop_rows(n) (bank7f_words + 2 * 0x1400 + (n) * 0x220)
 
 /* ---- the objects ---- */
 
@@ -291,7 +295,7 @@ static void course_map_rows(int which)
     for (x = 0; x < 0x800; x = (uint16_t)(x + 0x40))
         for (n = 0; n < 5; n++)
             for (r = 0; r < 32; r++) {
-                backdrop_map[which][y] = (uint16_t)(fx16((uint16_t)(0x3000 + src[n] + x + 2 * r)) | 0x2000);
+                backdrop_map(which)[y] = (uint16_t)(fx16((uint16_t)(0x3000 + src[n] + x + 2 * r)) | 0x2000);
                 y++;
             }
     }
@@ -358,7 +362,7 @@ void RaceVideoSetup(void)
     if (g.split_screen) {
         two_player_art(k3);
         unpacked_to_art(0xF84C, 0xF7E3);
-        memcpy(backdrop_map[0], fx_ram + 0x3000, 0x800);
+        memcpy(backdrop_map(0), fx_ram + 0x3000, 0x800);
         chip_unpack(0x18 << 16 | 0xC770, 0x3000);
         race_art_write(0x7C00, fx_ram + 0x3000, 0x800);
         race_art_write(0x6600, fx_ram + 0x3600, 0x400);
@@ -460,8 +464,8 @@ void BackdropRowsUpdate(void)
     int buf = g.fx_buffer, n;
     uint16_t h = g.view_angle_06cd, s;
     uint32_t x;
-    const uint16_t *map = backdrop_map[(g.picture_effects & 0x40) ? 1 : 0];
-    uint16_t *out = backdrop_rows[buf];
+    const uint16_t *map = backdrop_map((g.picture_effects & 0x40) ? 1 : 0);
+    uint16_t *out = backdrop_rows(buf);
     unsigned at = 0, row_step;
 
     ObjectLinkFlag4000Step();
@@ -493,7 +497,7 @@ void race_backdrop_rows_upload(int buffer)
        its priority bit goes, because a draw list composes as priority 0 and
        the 3D has to stay in front of it (see race_screen_layers) */
     for (i = 0; i < 0x220; i++)
-        adjusted[i] = (uint16_t)((backdrop_rows[buffer][i] & 0xDC00) | (((backdrop_rows[buffer][i] & 0x3FF) + 0x200) & 0x3FF));
+        adjusted[i] = (uint16_t)((backdrop_rows(buffer)[i] & 0xDC00) | (((backdrop_rows(buffer)[i] & 0x3FF) + 0x200) & 0x3FF));
     nshvc_map_write_snes(race_video.backdrop_one, 0, buffer ? 47 : 30, 32, 17, adjusted);
 }
 
@@ -553,7 +557,7 @@ void race_panel_show(int half, uint8_t sign_of_y, uint8_t y_low, uint8_t y_high_
    course's map, as the screens above the race have it. */
 static uint16_t *status_rows(void)
 {
-    return backdrop_map[0];
+    return backdrop_map(0);
 }
 
 /* each entry's palette field, keeping the rest */
@@ -617,7 +621,7 @@ void TilemapLevelColumns(void)
             int c;
 
             for (c = 0; c < 4; c++)
-                backdrop_map[0][(x + 2 * c) / 2] = cart16(0x02, (uint16_t)(0xFB4E + y + 2 * c));
+                backdrop_map(0)[(x + 2 * c) / 2] = cart16(0x02, (uint16_t)(0xFB4E + y + 2 * c));
             y = (uint16_t)(y + 8);
             x = (uint16_t)(x + 0x40);
         }
@@ -625,7 +629,7 @@ void TilemapLevelColumns(void)
             int c;
 
             for (c = 0; c < 4; c++)
-                backdrop_map[0][(x + 2 * c) / 2] = backdrop_map[1][(x + 2 * c) / 2];
+                backdrop_map(0)[(x + 2 * c) / 2] = backdrop_map(1)[(x + 2 * c) / 2];
             x = (uint16_t)(x + 0x40);
         }
     }
@@ -637,7 +641,7 @@ void DigitTiles1184(void)
     int i;
 
     for (i = 0; i < 3; i++)
-        backdrop_map[0][(0x0AA + i * 2) / 2] = (uint16_t)(0x20CA + g.car_settings[i]);
+        backdrop_map(0)[(0x0AA + i * 2) / 2] = (uint16_t)(0x20CA + g.car_settings[i]);
 }
 
 void TimesKeepAndAdvance(void)
@@ -797,7 +801,7 @@ void RaceVideoSplit2P(void)
 
 uint16_t *race_map_buffer(void)
 {
-    return backdrop_map[0];
+    return backdrop_map(0);
 }
 
 /* The per-line BG2 scroll table's values, from the two scrolls; a table of
@@ -879,7 +883,7 @@ void RaceCourseUpload(void)
     pic.blend.layers = windows.maths & 0x3F;
     pic.blend.fixed_bgr15 = (uint16_t)(level | level << 5 | level << 10);
     pic.bg[1].scroll_y = g.course_scroll_top;
-    nshvc_map_write_snes(race_video.course_map, 0, 0, 32, 64, backdrop_map[0]);
+    nshvc_map_write_snes(race_video.course_map, 0, 0, 32, 64, backdrop_map(0));
     WindowTable7F();
 }
 
