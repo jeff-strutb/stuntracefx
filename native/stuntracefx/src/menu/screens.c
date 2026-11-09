@@ -83,6 +83,7 @@ static void menu_scroll_reset(void)
 
 static void menu_common_mode(void)
 {
+    race_steps_end();                   /* no race steps drawn between behind this screen */
     race_screen_end();                  /* none of the race's layers left behind this screen */
     pic.mode = 1;
     pic.bg3_priority = 1;
@@ -955,6 +956,7 @@ static void champion_open(void)
 
     pic.blank = 1;
     frame_state.brightness = 0;
+    race_steps_end();                   /* no race steps drawn between behind this screen */
     race_screen_end();                  /* none of the race's layers left behind this screen */
     pic.mode = 3;
     pic.bg3_priority = 0;
