@@ -295,22 +295,24 @@ void ObjectTurnFromRecord(uint16_t rec, Object *o)
     ObjectBillboardTilt(o);
 }
 
-static int sync_tail(void)
+/* The result every Sync routine leaves: the low byte of A: 1 when the
+   record's contact list is not empty, else what the routine had left in A
+   (callers test bit 0). */
+static uint8_t sync_tail(uint16_t a)
 {
-    return record_contacts.next ? SYNC_TOUCHING : SYNC_CLEAR;
+    return record_contacts.next ? 0x01 : (uint8_t)a;
 }
 
 /*
  * @routine 08:CE02 ObjectSyncFromRecord
  * WHAT IT DOES: Rebuckets the object, marks its record, and takes its place
  * back from the record after giving the record its heading and frame; bit 1
- * of +$24 follows bit 1 of the record's +$1C. Returns SYNC_NO_RECORD,
- * SYNC_CLEAR or SYNC_TOUCHING (the record's contact list in
- * record_contacts.next).
+ * of +$24 follows bit 1 of the record's +$1C. Returns the low byte of A (see sync_tail); the
+ * record's contact list is in record_contacts.next. 0 with no record.
  */
-int ObjectSyncFromRecord(Object *o)
+uint8_t ObjectSyncFromRecord(Object *o)
 {
-    uint16_t rec;
+    uint16_t rec, a;
 
     ObjectRebucket(o);
     GsuRecordFlag4(o);
@@ -318,7 +320,7 @@ int ObjectSyncFromRecord(Object *o)
     rec = o->record;
     if (!rec) {
         record_contacts.next = 0;
-        return SYNC_NO_RECORD;
+        return 0;
     }
     record_contacts.next = rec_get(rec, FXREC_LIST);
     rec_put(rec, FXREC_ANGLE, (uint16_t)(o->heading << 8));
@@ -326,9 +328,12 @@ int ObjectSyncFromRecord(Object *o)
     o->x = rec_get(rec, FXREC_POS_X);
     o->y = rec_get(rec, FXREC_POS_Y);
     o->z = rec_get(rec, FXREC_POS_Z);
-    if (rec_get(rec, FXREC_FLAGS1C) & 0x0002)
+    a = rec_get(rec, FXREC_FLAGS1C) & 0x0002;
+    if (a) {
         o->flags24 |= 0x02;
-    return sync_tail();
+        a = o->flags24;
+    }
+    return sync_tail(a);
 }
 
 /*
@@ -336,7 +341,7 @@ int ObjectSyncFromRecord(Object *o)
  * WHAT IT DOES: As ObjectSyncFromRecord the other way: after the heading and
  * frame, the object's place goes to the record; +$24 is left alone.
  */
-int ObjectSyncToRecord(Object *o)
+uint8_t ObjectSyncToRecord(Object *o)
 {
     uint16_t rec;
 
@@ -345,7 +350,7 @@ int ObjectSyncToRecord(Object *o)
     rec = o->record;
     if (!rec) {
         record_contacts.next = 0;
-        return SYNC_NO_RECORD;
+        return 0;
     }
     rec_put(rec, FXREC_ANGLE, (uint16_t)(o->heading << 8));
     rec_put(rec, 0x0012, o->frame5a & 0x7F);
@@ -353,14 +358,14 @@ int ObjectSyncToRecord(Object *o)
     rec_put(rec, FXREC_POS_X, o->x);
     rec_put(rec, FXREC_POS_Y, o->y);
     rec_put(rec, FXREC_POS_Z, o->z);
-    return sync_tail();
+    return sync_tail(o->z);
 }
 
 /*
  * @routine 08:CF0B ObjectSyncAngles
  * WHAT IT DOES: As ObjectSyncToRecord without the place.
  */
-int ObjectSyncAngles(Object *o)
+uint8_t ObjectSyncAngles(Object *o)
 {
     uint16_t rec;
 
@@ -369,12 +374,12 @@ int ObjectSyncAngles(Object *o)
     rec = o->record;
     if (!rec) {
         record_contacts.next = 0;
-        return SYNC_NO_RECORD;
+        return 0;
     }
     rec_put(rec, FXREC_ANGLE, (uint16_t)(o->heading << 8));
     rec_put(rec, 0x0012, o->frame5a & 0x7F);
     record_contacts.next = rec_get(rec, FXREC_LIST);
-    return sync_tail();
+    return sync_tail(record_contacts.next);
 }
 
 /*
@@ -638,7 +643,9 @@ void PlayerControlsFrame(void)
         Object *car = obj_at(p ? g.player2_car : g.player_car);
 
         g.current_player = (uint8_t)p;
-        CarControlsToRecord(car, g.race_held[p], g.race_last[p], p);
+        g.control_held = g.race_held[p];
+        g.control_prev = g.race_last[p];
+        CarControlsToRecord(car, g.control_held, g.control_prev, p);
         ObjectLinkedHandlerByState(car, g.player_phase[p]);
     }
     for (int p = 0; p < 2; p++) {
@@ -713,7 +720,7 @@ void ObjectRecordMarkSetup(Object *o)
  * WHAT IT DOES: As ObjectSyncFromRecord for an object whose record is
  * there, with its Y speed added to the height taken back.
  */
-int ObjectSyncFromRecordFall(Object *o)
+uint8_t ObjectSyncFromRecordFall(Object *o)
 {
     uint16_t rec;
 
@@ -726,7 +733,7 @@ int ObjectSyncFromRecordFall(Object *o)
     o->x = rec_get(rec, FXREC_POS_X);
     o->y = (uint16_t)(rec_get(rec, FXREC_POS_Y) + o->vy);
     o->z = rec_get(rec, FXREC_POS_Z);
-    return sync_tail();
+    return sync_tail(o->z);
 }
 
 /*

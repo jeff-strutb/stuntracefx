@@ -883,7 +883,7 @@ void ObjectSparkleStart(Object *o)
 }
 
 /* three-step turn by an object's angles: roll, pitch, heading */
-static Vec16 turn_by_angles(const Object *o, int8_t x, int8_t y, int8_t z)
+Vec16 ObjectTurnVector(const Object *o, int8_t x, int8_t y, int8_t z)
 {
     Vec16 v = {x, y, z};
 
@@ -902,7 +902,7 @@ static Vec16 turn_by_angles(const Object *o, int8_t x, int8_t y, int8_t z)
 void ObjectMoveForward(Object *o)
 {
     uint8_t speed = cart8(0x08, (uint16_t)(0xB32B + rec_get(o->record, FXREC_WORD_5E)));
-    Vec16 v = turn_by_angles(o, 0, (int8_t)speed, 0);
+    Vec16 v = ObjectTurnVector(o, 0, (int8_t)speed, 0);
 
     o->x = (uint16_t)(o->x + (uint16_t)(v.x * 4));
     o->z = (uint16_t)(o->z + (uint16_t)(v.z * 4));
@@ -1061,7 +1061,7 @@ void ObjectPlaceOnParent(Object *parent, Object *o)
         for (int i = 0; i < 2; i++)
             o->sprite_turn[i] = (uint8_t)(ObjectTableE8AF(parent, base, (uint8_t)(cameras[i].turn >> 8)) | 0x80);
     }
-    v = turn_by_angles(parent, (int8_t)(uint8_t)o->vx, (int8_t)(uint8_t)o->vy, (int8_t)(uint8_t)o->vz);
+    v = ObjectTurnVector(parent, (int8_t)(uint8_t)o->vx, (int8_t)(uint8_t)o->vy, (int8_t)(uint8_t)o->vz);
     o->x = (uint16_t)(parent->x + (uint16_t)(v.x * 2));
     o->z = (uint16_t)(parent->z + (uint16_t)(v.z * 2));
     o->y = (uint16_t)(parent->y + (uint16_t)(v.y * 2));

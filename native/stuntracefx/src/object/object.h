@@ -123,9 +123,6 @@ typedef struct {
 
 extern RecordContacts record_contacts;
 
-/* what the Sync routines say: no record, not touching, touching */
-enum { SYNC_NO_RECORD = -1, SYNC_CLEAR = 0, SYNC_TOUCHING = 1 };
-
 /* the Super FX record fields the object code uses that fx.h does not name */
 enum {
     FXREC_POS_X = 0x001E, FXREC_POS_Y = 0x0020, FXREC_POS_Z = 0x0022, FXREC_ANGLE = 0x0024,
@@ -202,6 +199,7 @@ void ObjectCarSpawn(Object *o);
 void ObjectCarRecordNew(Object *o, uint16_t amount);
 void ObjectSpawnD460UnlessFlag(Object *o);
 void ObjectSetHandler(Object *o, uint16_t handler);
+Vec16 ObjectTurnVector(const Object *o, int8_t x, int8_t y, int8_t z);
 void ObjectSparkleStart(Object *o);
 void ObjectSparkleStep(Object *o);
 void ObjectTrailStart(Object *o);
@@ -217,6 +215,38 @@ void ObjectTimedSetup(Object *o);
 /* object_handlers.c */
 void ObjectChildrenSpawn(Object *o);
 void ObjectAttachSpawn(Object *o);
+
+/* car_parts.c */
+void PartDetach(Object *o);
+void PartDetachStep(Object *o);
+void PartReturn(Object *o);
+void PartReturnStep(Object *o);
+void PartFlyStep(Object *o);
+void PartKnockOff(Object *o);
+void PartHit(Object *o);
+void PlayerCar1(Object *o);
+void PlayerCar1Step(Object *o);
+void PlayerCar2(Object *o);
+void PlayerCar2Step(Object *o);
+void ObjectCarSpawnListed(Object *o);
+void ObjectCarKind3(Object *o);
+void ObjectCarKind4(Object *o);
+void ObjectCarKind5(Object *o);
+int CarCrashParts(Object *o, uint8_t flags);
+void ObjectRivalCar(Object *o);
+void ObjectRivalCarStep(Object *o);
+
+/* object_handlers.c, wanted */
+void ObjectBreakOffContact(Object *o);
+void PlayerCarEvents(Object *o);
+
+/* flags_record.c */
+void ObjectRecordFlag4Step(Object *o);
+void ObjectFlagsRecord(Object *o);
+void ObjectFlagsRecordSetup(Object *o);
+void ObjectFlagsRecordFrame(Object *o);
+void ObjectFrameSwingStep(Object *o);
+void ObjectFrameSwingSetup(Object *o);
 
 /* gsu_record.c */
 void GsuRecordMode2(Object *o);
@@ -245,9 +275,9 @@ void GsuRecordFlags8ASet(uint16_t rec, uint8_t bits);
 void GsuRecordFlags8AClear(uint16_t rec, uint8_t bits);
 void GsuRecordRaise6A(uint16_t rec, uint8_t amount);
 void ObjectTurnFromRecord(uint16_t rec, Object *o);
-int ObjectSyncFromRecord(Object *o);
-int ObjectSyncToRecord(Object *o);
-int ObjectSyncAngles(Object *o);
+uint8_t ObjectSyncFromRecord(Object *o);
+uint8_t ObjectSyncToRecord(Object *o);
+uint8_t ObjectSyncAngles(Object *o);
 uint16_t RecordContactFlags(void);
 void GsuRecordLand(Object *o);
 uint16_t RecordNextContact(void);
@@ -258,7 +288,7 @@ void ObjectPoseFromRecord(Object *o);
 void GsuRecordSet2AHigh(Object *o, uint8_t value);
 void ObjectRecordMarkStep(Object *o);
 void ObjectRecordMarkSetup(Object *o);
-int ObjectSyncFromRecordFall(Object *o);
+uint8_t ObjectSyncFromRecordFall(Object *o);
 void ObjectSyncFallStep(Object *o);
 void ObjectSpinStep(Object *o);
 void ObjectSpinRecord(Object *o);

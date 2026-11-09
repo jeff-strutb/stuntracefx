@@ -9,6 +9,15 @@
 enum {
     MODEL_COMMON = 0xA158,              /* the model the spawned effects use */
 
+    H_PART_DETACH = 0xAC04,
+    H_PART_DETACH_STEP = 0xAC27,
+    H_PART_HIT = 0xAC97,
+    H_PART_KNOCK_OFF = 0xACB9,
+    H_PART_FLY_STEP = 0xAD70,
+    H_PART_RETURN_STEP = 0xAE0F,
+    H_PLAYER_CAR_1_STEP = 0xAF93,
+    H_PLAYER_CAR_2_STEP = 0xB049,
+    H_RIVAL_CAR_STEP = 0xB0F4,
     H_CAR_FRAME = 0xB23D,
     H_CAR_POSE_STEP = 0xB2DE,
     H_SPAWNED_D460 = 0xD460,
@@ -20,6 +29,9 @@ enum {
     H_ATTACHED_STEP = 0xEBB9,
     H_TIMED_STEP = 0xEC8B,
     H_RELEASE = 0xF927,
+    H_FLAGS_RECORD = 0xCD55,
+    H_RECORD_FLAG4_STEP = 0xCD7E,
+    H_FRAME_SWING_STEP = 0xCB15,
     H_RECORD_MARK_STEP = 0xCDA4,
     H_SPIN_RECORD = 0xCDD0,
     H_SPIN_STEP = 0xCDDE,

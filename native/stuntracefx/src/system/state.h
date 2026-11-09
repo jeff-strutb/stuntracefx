@@ -162,6 +162,7 @@ typedef struct {
     uint16_t director[2];               /* $1ADA, $1ADC: the two bare objects that move the cameras */
     uint16_t trigger_list[0x104][2];    /* $1AF5: code and bucket number per entry, ended by 0 */
     uint16_t race_held[2];              /* $0309, $030D: buttons held since the last race step (ORed by the frame) */
+    uint16_t control_held, control_prev; /* $1AF0, $1AF2: the buttons the controls code is reading */
     uint16_t race_last[2];              /* $1F23, $1F25: last race step's buttons */
     uint16_t player_flags[2];           /* $1A5E, $1A60 */
     uint16_t seq_count, seq_stage;      /* $1A33, $1A35: the button sequence */
@@ -178,6 +179,12 @@ typedef struct {
     uint8_t clear_colours_b0;           /* $10DC: the course keeps no colours $B0-$BF */
     uint8_t split_stage_on;             /* $0D22: the split screen's upload stages run */
     uint8_t split_stage;                /* $0D23: which of them */
+    uint16_t view_heading_06cf;         /* $06CF: the view's heading for the backdrop */
+    uint16_t backdrop_row_adjust;       /* $0DA2: added to the view angle when the backdrop's map row is chosen */
+    uint8_t level_columns[12];          /* $0F05: the screen's level columns */
+    uint16_t time_shown_2;              /* $0E6E */
+    uint8_t race_time_best[3];          /* $0EEA-$0EEC */
+    uint16_t backdrop_x[2], backdrop_y[2]; /* $0D92, $0D8E: BG2's scroll by picture buffer or half */
     uint8_t hdma_enable;                /* $0D45: the per-line effects on; bit 5 the fixed colour's bands */
     uint8_t palette_animate;            /* $0E5F: the animated colours are in use */
     uint8_t picture_effects;            /* $0DA5: bits 0 slide check, 1-2 slide, 3 oscillate/gradient off, 4 sweep, 5 weather ease, 6 alternate backdrop, 7 stops the ease */
