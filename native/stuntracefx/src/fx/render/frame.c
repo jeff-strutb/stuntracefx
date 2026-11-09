@@ -441,6 +441,7 @@ FxObjectsDrawResult FxObjectsDraw(uint16_t draw_list_end, uint16_t *stack)
 FxObjectSpriteResult FxObjectSprite(uint16_t sprite_scale, uint16_t draw_list_end, uint16_t *stack)
 {
     int run_lB14C = 0;
+    uint16_t place_x = 0, place_y = 0, place_size = 0;  /* the place projected, for fx_sprite_place */
     uint16_t x;
     uint16_t y;
     uint16_t ba;
@@ -526,6 +527,8 @@ FxObjectSpriteResult FxObjectSprite(uint16_t sprite_scale, uint16_t draw_list_en
             x = fx_ldw(0x0026);
             y = fx_ldw(0x0028);
             { FxProjectScaledResult r_ = FxProjectScaled(x, y, depth_positive, sprite_scale); screen_position_x = r_.screen_position_x; screen_position_y = r_.screen_position_y; scale = r_.scale; };
+            place_x = x;
+            place_y = y;
             fx_stw(FX_MODEL_BA, screen_position_x);
             fx_stw(FX_MODEL_BC, screen_position_y);
             pulled_size = fx_pull(stack);
@@ -564,6 +567,9 @@ FxObjectSpriteResult FxObjectSprite(uint16_t sprite_scale, uint16_t draw_list_en
             x_2 = fx_ldw(0x0026);
             y_2 = fx_ldw(0x0028);
             { FxProjectScaledResult r_ = FxProjectScaled(x_2, y_2, depth_positive, projection_scale); screen_position_x_2 = r_.screen_position_x; screen_position_y = r_.screen_position_y; size_1 = r_.size_1; scale = r_.scale; };
+            place_x = x_2;
+            place_y = y_2;
+            place_size = projection_scale;
             fx_stw(FX_MODEL_BA, screen_position_x_2);
             fx_stw(FX_MODEL_BC, screen_position_y);
             ce_2 = size_1;
@@ -580,6 +586,8 @@ FxObjectSpriteResult FxObjectSprite(uint16_t sprite_scale, uint16_t draw_list_en
             ce_2 = (uint16_t)(size_headroom + ce_2);
         }
         fx_stw(FX_MODEL_CE, ce_2);
+        fx_sprite_place(place_x, place_y, depth_positive, place_size, (uint16_t)(fx_ram[fx_ram_at(FX_MODEL_BA)] | fx_ram[fx_ram_at(FX_MODEL_BA ^ 1)] << 8),
+                        (uint16_t)(fx_ram[fx_ram_at(FX_MODEL_BC)] | fx_ram[fx_ram_at(FX_MODEL_BC ^ 1)] << 8), ce_2);
         sprite_material = fx_ldw(FX_SPRITE_MATERIAL);
         FxSpriteMaterial(sprite_material, screen_position_y, scale);
         sprite_visible = fx_ldw(0x0042);

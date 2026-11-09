@@ -1369,6 +1369,7 @@ FxModelProjectResult FxModelProject(uint16_t *stack, uint16_t rom_at)
             vertex_x_raw = fx_ldw(vertex_x_ptr);
             recip_scale = (uint16_t)((recip_low_byte & 0xFF) | fx_getb() << 8);
             screen_x = (uint16_t)((uint16_t)((uint32_t)((int32_t)(int16_t)(uint16_t)(vertex_x_raw + cam_offset_x) * (int16_t)recip_scale) >> 16) + center_x);
+            fx_face_point(next_out_ptr, (uint16_t)(vertex_x_raw + cam_offset_x), view_y, view_depth);
             fx_stw(next_out_ptr, screen_x);
             rom_at_2 = 0;
             fx_r14(rom_at_2);
@@ -1431,6 +1432,7 @@ FxModelProjectResult FxModelProject(uint16_t *stack, uint16_t rom_at)
                 vertex_z_addr = (uint16_t)(vertex_y_addr + 2);
                 vertex_z = fx_ldw(vertex_z_addr);
                 next_vertex_ptr = (uint16_t)(vertex_z_addr + 2);
+                fx_face_point(next_out_ptr, (uint16_t)(vertex_x + view_offset_x), (uint16_t)(vertex_y + view_offset_y), (uint16_t)(vertex_z + view_offset_z));
                 { FxProjectVertexResult r_ = FxProjectVertex((uint16_t)(vertex_x + view_offset_x), (uint16_t)(vertex_y + view_offset_y), view_offset_x, (uint16_t)(vertex_z + view_offset_z), view_offset_z, stack, points_total, view_offset_y); outcode_word_2 = r_.outcode_word; screen_x_2 = r_.screen_x; screen_y_2 = r_.screen_y; view_offset_x = r_.exit_aux_a; view_offset_z = r_.exit_aux_c; view_offset_y = r_.exit_aux_b; };
                 fx_stw(next_out_ptr, screen_x_2);
                 screen_y_addr = (uint16_t)(next_out_ptr + 2);
@@ -1538,6 +1540,7 @@ FxModelProjectEachResult FxModelProjectEach(uint16_t *stack, uint16_t rom_at)
         vertex_z_ptr = (uint16_t)(vertex_y_ptr + 2);
         vertex_z = fx_ldw(vertex_z_ptr);
         vertex_src_ptr = (uint16_t)(vertex_z_ptr + 2);
+        fx_face_point(projected_out_ptr, (uint16_t)(vertex_x + origin_x), (uint16_t)(vertex_y + origin_y), (uint16_t)(vertex_z + origin_z));
         { FxProjectVertexResult r_ = FxProjectVertex((uint16_t)(vertex_x + origin_x), (uint16_t)(vertex_y + origin_y), origin_x, (uint16_t)(vertex_z + origin_z), origin_z, stack, points_total, origin_y); outcode_word = r_.outcode_word; screen_x = r_.screen_x; screen_y = r_.screen_y; origin_x = r_.exit_aux_a; origin_z = r_.exit_aux_c; origin_y = r_.exit_aux_b; };
         fx_stw(projected_out_ptr, screen_x);
         projected_y_ptr = (uint16_t)(projected_out_ptr + 2);
@@ -2739,6 +2742,7 @@ FxModelFacesResult FxModelFaces(uint16_t divisor_made, uint16_t list_write_ptr, 
             }
             material_result = FxModelMaterial(rom_at_2);
             list_end_2 = fx_ldw(FX_LIST_END);
+            fx_face_begin(list_end_2, (material_result & 0x8000) != 0);
             rom_at = (uint16_t)(rom_at_2 + 4);
             fx_r14(rom_at);
             point_count = fx_ldw(FX_POINT_COUNT);
@@ -2778,6 +2782,7 @@ FxModelFacesResult FxModelFaces(uint16_t divisor_made, uint16_t list_write_ptr, 
                 material_word_copy = material_word;
                 material_word = material_word_copy;
                 if (!(material_word_copy & 0x8000)) {
+                    fx_face_vertex((uint8_t)point_index, 0, 0);
                 } else {
                     fx_stw(0x001A, rom_at);
                     fx_romb(3);
@@ -2792,6 +2797,7 @@ FxModelFacesResult FxModelFaces(uint16_t divisor_made, uint16_t list_write_ptr, 
                     uv_rom_ptr_next = (uint16_t)(uv_rom_ptr_v + 1);
                     fx_r14(uv_rom_ptr_next);
                     fx_stw(list_ptr_after_u, (uint16_t)(uv_v_byte << 8 | uv_v_byte >> 8));
+                    fx_face_vertex((uint8_t)point_index, (uint8_t)uv_u_byte, (uint8_t)uv_v_byte);
                     divisor_made = (uint16_t)(list_ptr_after_u + 2);
                     rom_bank_saved = fx_ldw(0x001C);
                     fx_stw(0x0088, uv_rom_ptr_next);

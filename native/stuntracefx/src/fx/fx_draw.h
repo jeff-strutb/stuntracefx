@@ -20,6 +20,12 @@ void fx_draw_set_origin(int x, int y);
 void fx_draw_set_palette_row(int row);
 /* The layer showing picture n (with two players, both). */
 nshvc_draw_list fx_draw_picture(int picture);
+/* The screen's list's pixels per screen pixel: what race_frame_art_draw
+   scales its art by. */
+void fx_draw_list_scale(float *sx, float *sy);
+/* Whether the screen's list is at the output's pixels (on once the frame
+   art scales with it) or at the screen's 256 x 224. */
+void fx_draw_output_pixels(int on);
 /* The list drawn into, by size in pixels (the checks). */
 void fx_draw_set_target(nshvc_draw_list list, uint32_t width, uint32_t height);
 

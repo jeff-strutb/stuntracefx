@@ -104,4 +104,13 @@ void fx_row_open(uint8_t kind, uint16_t x, uint16_t y, uint16_t tu, uint16_t du,
 void fx_row_close(uint16_t x);
 void fx_draw_flush(void);
 
+/* The race's shapes in floats (fx/fx_face.c): what the frame program
+   projects and queues, noted as it goes. A model point's view-space sum
+   with its projected record's address; a queued face's entry, then each of
+   its points with its texel; a scaled sprite's place. */
+void fx_face_point(uint16_t record, uint16_t x, uint16_t y, uint16_t z);
+void fx_face_begin(uint16_t entry, int textured);
+void fx_face_vertex(uint8_t point, uint8_t u, uint8_t v);
+void fx_sprite_place(uint16_t x, uint16_t y, uint16_t depth, uint16_t size, uint16_t centre_x, uint16_t centre_y, uint16_t screen_size);
+
 #endif

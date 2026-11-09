@@ -11,6 +11,7 @@
 #include "data/cart.h"
 #include "fx/fx.h"
 #include "fx/fx_draw.h"
+#include "fx/fx_face.h"
 #include "system/state.h"
 #include "fx_check.h"
 #include "nshvc/nshvc.h"
@@ -27,6 +28,10 @@ static uint8_t regs[64];
 static nshvc_draw_list list;
 static uint16_t palette[256];
 static int number;
+/* SCALE: the list's pixels per screen pixel; HIRES=1: the shapes in floats
+   with the smooth rule (else the chip's entries with the exact rule);
+   FACECHECK=1: the faces' vertices counted against the chip's. */
+static int scale = 1;
 
 static void apply(FILE *f)
 {
@@ -109,9 +114,9 @@ static void frame_start(void)
 
     for (i = 0; i < 256; i++)
         palette[i] = (uint16_t)(machine[AT_CG + i * 2] | machine[AT_CG + i * 2 + 1] << 8);
-    nshvc_draw_list_clear(list, 256, 224);
-    nshvc_draw_rule(list, NSHVC_FILL_EXACT);
-    fx_draw_set_target(list, 256, 224);
+    nshvc_draw_list_clear(list, 256 * scale, 224 * scale);
+    nshvc_draw_rule(list, fx_face_on() ? NSHVC_FILL_SMOOTH : NSHVC_FILL_EXACT);
+    fx_draw_set_target(list, 256 * scale, 224 * scale);
 }
 
 /* A picture is the frame program and whatever else draws into its buffer,
@@ -158,6 +163,14 @@ static void next_frame(void)
         have_frame = 1;
         run_job(0x01AB13);
     }
+    if (getenv("FACECHECK")) {
+        FxFaceCheck c = fx_face_check();
+
+        fprintf(stderr, "facecheck: %d pictures, %u faces, %u vertices on the screen, %u more than 1.02 apart, worst %.3f (face %u)\n",
+                number, c.faces, c.vertices, c.apart, c.worst, c.worst_face);
+        fprintf(stderr, "facecheck: near points (depth below $100): %u, %u more than 1.02 apart; past the chip's own error: %u\n",
+                c.near, c.near_apart, c.past_bound);
+    }
     nshvc_quit();
 }
 
@@ -175,6 +188,10 @@ static void init(void)
     if (!st || !jo)
         exit(3);
     list = nshvc_draw_list_create();
+    if (getenv("SCALE"))
+        scale = atoi(getenv("SCALE")) > 0 ? atoi(getenv("SCALE")) : 1;
+    fx_face_set_on(getenv("HIRES") && atoi(getenv("HIRES")));
+    fx_face_check_on(getenv("FACECHECK") != NULL);
 }
 
 static void update(const nshvc_input *in) { (void)in; next_frame(); }
@@ -190,6 +207,7 @@ static void draw(float between)
     s.width = 256;
     s.height = 224;
     s.brightness = 15;
+    s.aspect = 8.0f / 7.0f;             /* square pixels: a window of 256k x 224k shows the screen k times */
     nshvc_screen_set(&s);
     nshvc_mode_set(1, 0, 0);
     memset(&l, 0, sizeof l);
