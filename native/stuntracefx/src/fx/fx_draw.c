@@ -6,41 +6,160 @@
  * each shape in the queue is sent to a draw list with the engine's exact
  * fill rule, so the GPU decides the pixels.
  */
+#include <stdlib.h>
 #include <string.h>
 
 #include "fx/fx.h"
 #include "fx/fx_draw.h"
+#include "system/state.h"
+#include "video/video.h"
 
 uint8_t fx_ram[0x20000];
 FxState fxs;
 
-static nshvc_draw_list target;
+/*
+ * A picture is kept as its list of shapes, so that what is on the screen
+ * can be put together from it whenever it is wanted: one player shows one
+ * picture, two players show both at once in one layer.
+ */
+typedef struct {
+    uint32_t first, count;
+    uint32_t image;             /* 0: the vertices' colours */
+    uint8_t lines;
+} Shape;
+
+typedef struct {
+    nshvc_vertex *v;
+    Shape *s;
+    uint32_t nv, ns, cap_v, cap_s;
+} Recording;
+
+static nshvc_draw_list target;  /* a list drawn into directly (the checks) */
 static uint32_t target_w, target_h;
+static Recording recordings[2], *recording;
+static int offset_x, offset_y;
+static uint32_t generation[2], composed_generation[2];
+static nshvc_draw_list screen_list;
+static int composed_picture = -1, composed_split = -1;
 
 void fx_draw_set_target(nshvc_draw_list list, uint32_t width, uint32_t height)
 {
     target = list;
     target_w = width;
     target_h = height;
+    recording = NULL;
+    offset_x = offset_y = 0;
 }
-
-/* The two pictures, drawn in turn as the original's two buffers were. */
-static nshvc_draw_list pictures[2];
 
 void fx_draw_init(void)
 {
-    pictures[0] = nshvc_draw_list_create();
-    pictures[1] = nshvc_draw_list_create();
+    screen_list = nshvc_draw_list_create();
 }
 
+/* Where each picture's pixel (x, y) goes on the screen. */
 void fx_draw_begin(int picture)
 {
-    fx_draw_set_target(pictures[picture & 1], 256, 224);
+    picture &= 1;
+    target.id = 0;
+    recording = &recordings[picture];
+    if (!g.split_screen) {
+        offset_x = 24;
+        offset_y = 32;
+    } else if (!picture) {
+        offset_x = 16;
+        offset_y = 23;
+    } else {
+        offset_x = 96;
+        offset_y = 127;
+    }
+    generation[picture]++;
 }
 
+static void emit(const nshvc_vertex *v, uint32_t count, uint32_t image, int lines)
+{
+    Recording *r = recording;
+    nshvc_material m;
+    uint32_t i;
+
+    if (!r) {
+        if (!target.id)
+            return;
+        memset(&m, 0, sizeof m);
+        m.image.id = image;
+        if (lines)
+            nshvc_draw_lines(target, v, count, image ? &m : NULL);
+        else
+            nshvc_draw_tris(target, v, count, image ? &m : NULL);
+        return;
+    }
+    if (r->nv + count > r->cap_v) {
+        r->cap_v = r->cap_v ? r->cap_v * 2 : 4096;
+        while (r->nv + count > r->cap_v)
+            r->cap_v *= 2;
+        r->v = realloc(r->v, r->cap_v * sizeof *r->v);
+    }
+    if (r->ns == r->cap_s) {
+        r->cap_s = r->cap_s ? r->cap_s * 2 : 1024;
+        r->s = realloc(r->s, r->cap_s * sizeof *r->s);
+    }
+    if (!r->v || !r->s)
+        abort();
+    r->s[r->ns].first = r->nv;
+    r->s[r->ns].count = count;
+    r->s[r->ns].image = image;
+    r->s[r->ns].lines = (uint8_t)lines;
+    r->ns++;
+    for (i = 0; i < count; i++) {
+        r->v[r->nv + i] = v[i];
+        r->v[r->nv + i].x += (float)offset_x;
+        r->v[r->nv + i].y += (float)offset_y;
+    }
+    r->nv += count;
+    generation[r - recordings]++;
+}
+
+static void compose_recording(const Recording *r)
+{
+    uint32_t i;
+    nshvc_material m;
+
+    memset(&m, 0, sizeof m);
+    for (i = 0; i < r->ns; i++) {
+        const Shape *s = &r->s[i];
+
+        m.image.id = s->image;
+        if (s->lines)
+            nshvc_draw_lines(screen_list, r->v + s->first, s->count, s->image ? &m : NULL);
+        else
+            nshvc_draw_tris(screen_list, r->v + s->first, s->count, s->image ? &m : NULL);
+    }
+}
+
+/* The screen's layer: picture n, or with two players both. */
 nshvc_draw_list fx_draw_picture(int picture)
 {
-    return pictures[picture & 1];
+    int split = g.split_screen != 0, two = split;
+
+    picture &= 1;
+    if (composed_picture != picture || composed_split != split
+        || composed_generation[picture] != generation[picture]
+        || (two && composed_generation[!picture] != generation[!picture])) {
+        nshvc_draw_list_clear(screen_list, 256, 224);
+        nshvc_draw_rule(screen_list, NSHVC_FILL_EXACT);
+        race_frame_art_draw(screen_list);
+        if (two) {
+            compose_recording(&recordings[0]);
+            compose_recording(&recordings[1]);
+            composed_generation[0] = generation[0];
+            composed_generation[1] = generation[1];
+        } else {
+            compose_recording(&recordings[picture]);
+            composed_generation[picture] = generation[picture];
+        }
+        composed_picture = picture;
+        composed_split = split;
+    }
+    return screen_list;
 }
 
 void fx_list_begin(void) {}
@@ -48,10 +167,13 @@ void fx_list_end(void) {}
 
 void fx_op_clear(void)
 {
-    if (target.id)
+    if (recording) {
+        recording->nv = recording->ns = 0;
+        generation[recording - recordings]++;
+    } else if (target.id) {
         nshvc_draw_list_clear(target, target_w, target_h);
-    if (target.id)
         nshvc_draw_rule(target, NSHVC_FILL_EXACT);
+    }
 }
 
 /* ---- the textures: a block of the cartridge seen as 256 x 256 texels ---- */
@@ -113,7 +235,7 @@ static void quad(nshvc_image image, int x0, int x1, int y0, int y1, double u0, d
     double ul = u0 - (0.5 - 1.0 / 64) * du, ur = u0 + ((x1 - x0) - 0.5 + 1.0 / 64) * du;
     double vt = v0 - (0.5 - 1.0 / 128) * dv, vb = v0 + ((y1 - y0) - 0.5 + 1.0 / 128) * dv;
 
-    if (!target.id || x1 <= x0 || y1 <= y0)
+    if ((!target.id && !recording) || x1 <= x0 || y1 <= y0)
         return;
     blocks_flush();
     memset(&m, 0, sizeof m);
@@ -125,7 +247,7 @@ static void quad(nshvc_image image, int x0, int x1, int y0, int y1, double u0, d
     v[3] = v[0];
     v[4] = v[2];
     v[5].x = (float)x0; v[5].y = (float)y1; v[5].u = (float)ul; v[5].v = (float)vb; v[5].colour = 1;
-    nshvc_draw_tris(target, v, 6, &m);
+    emit(v, 6, m.image.id, 0);
 }
 
 void fx_flat_row(uint16_t x, uint16_t y, uint16_t n)
@@ -134,7 +256,7 @@ void fx_flat_row(uint16_t x, uint16_t y, uint16_t n)
     uint8_t colour = fxs.colr;
     int i;
 
-    if (!target.id || !colour)
+    if ((!target.id && !recording) || !colour)
         return;
     blocks_flush();
     memset(v, 0, sizeof v);
@@ -146,7 +268,7 @@ void fx_flat_row(uint16_t x, uint16_t y, uint16_t n)
     v[5].x = x; v[5].y = (float)(y + 1);
     for (i = 0; i < 6; i++)
         v[i].colour = colour;
-    nshvc_draw_tris(target, v, 6, NULL);
+    emit(v, 6, 0, 0);
 }
 
 /* A sprite smaller than its texture: size x size pixels, the texel at
@@ -346,7 +468,7 @@ void fx_scaled_row(uint16_t x, uint16_t y, uint16_t n, uint16_t tu, uint16_t du,
     int i, row;
     nshvc_image image;
 
-    if (!target.id || !n)
+    if ((!target.id && !recording) || !n)
         return;
     blocks_flush();
     for (i = 0; i < 4; i++)
@@ -427,7 +549,7 @@ static void flat_polygon(uint16_t p, int n)
     }
     fxs.por = 0;
     fxs.colr = colour;
-    if (!target.id || !colour)
+    if ((!target.id && !recording) || !colour)
         return;
     if (ymax - ymin < 2) {
         /* the original's single row: from the smallest x up to the largest */
@@ -442,7 +564,7 @@ static void flat_polygon(uint16_t p, int n)
             q[5].x = (float)xmin; q[5].y = (float)ymin + 1;
             for (i = 0; i < 6; i++)
                 q[i].colour = colour;
-            nshvc_draw_tris(target, q, 6, NULL);
+            emit(q, 6, 0, 0);
         }
         return;
     }
@@ -458,7 +580,7 @@ static void flat_polygon(uint16_t p, int n)
         }
     }
     if (out)
-        nshvc_draw_tris(target, v, (uint32_t)out, NULL);
+        emit(v, (uint32_t)out, 0, 0);
 }
 
 static void line(uint16_t p)
@@ -468,7 +590,7 @@ static void line(uint16_t p)
 
     fxs.por = 0;
     fxs.colr = colour;
-    if (!target.id || !colour)
+    if ((!target.id && !recording) || !colour)
         return;
     memset(v, 0, sizeof v);
     v[0].x = fx_ram[(uint16_t)(p + 1)];
@@ -476,7 +598,7 @@ static void line(uint16_t p)
     v[1].x = fx_ram[(uint16_t)(p + 5)];
     v[1].y = fx_ram[(uint16_t)(p + 7)];
     v[0].colour = v[1].colour = colour;
-    nshvc_draw_lines(target, v, 2, NULL);
+    emit(v, 2, 0, 1);
 }
 
 static void textured_polygon(uint16_t p, int n)
@@ -492,7 +614,7 @@ static void textured_polygon(uint16_t p, int n)
 
     fxs.por = options;
     fxs.colr = colour;
-    if (!target.id)
+    if (!target.id && !recording)
         return;
     u_off = (int16_t)rd(0x00C0) / 256.0;
     v_off = (int16_t)rd(0x00C2) / 256.0;
@@ -512,7 +634,7 @@ static void textured_polygon(uint16_t p, int n)
         }
     }
     if (out)
-        nshvc_draw_tris(target, v, (uint32_t)out, &m);
+        emit(v, (uint32_t)out, m.image.id, 0);
 }
 
 FxDrawListResult FxDrawList(uint16_t caller_list_end, uint16_t caller_write_ptr, uint16_t *stack, uint16_t rom_at)
