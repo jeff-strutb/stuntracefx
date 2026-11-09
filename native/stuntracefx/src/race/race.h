@@ -131,11 +131,12 @@ void race_leave_to_champion(void);       /* the championship's closing screen, t
 void race_champion_screen(void (*after)(void));   /* the champion's screen (the menus' ChampionScreenRun), then `after` */
 void BootSoftRestart(void);             /* the ending: three demos, then the game from its start */
 void ResultsScreenStep(void);
-/* wanted from video (race_video.c): the palette field of `count` entries of
-   the map buffer from byte offset `at` (odd: the attribute bytes) */
+/* from video (race_video.c): the palette field of `count` entries of the
+   map buffer from byte offset `at` (odd: the attribute bytes), and the map's
+   rows to BG2 at $5C00 */
 void TilemapPaletteCycle(unsigned at, int count);   /* 07:CEDF, every fourth frame */
 void TilemapPaletteFill(unsigned at, int count, uint8_t bits);  /* 07:CF14 */
-void TilemapRowsTo5C00(void);           /* 7E:B24C: the map buffer's 17 rows of 26 to BG2's map at $5C00, then BG2's scroll */
+void TilemapRowsTo5C00(void);           /* 7E:B24C */
 
 /* time_bonus.c, player_stats.c */
 void GsuTimeDigits(void);

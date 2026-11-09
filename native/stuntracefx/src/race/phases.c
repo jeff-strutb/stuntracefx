@@ -478,7 +478,7 @@ panel:
     if (g.clock_minutes >= 0x0008)
         return;
     SpecialRecordInsert(TimePackBcd((uint8_t)(g.clock_fraction >> 8), (uint8_t)g.clock_seconds, (uint8_t)g.clock_minutes));
-    RecordsLoadCourseLong();
+    RecordsLoadCourse();
 }
 
 /*
