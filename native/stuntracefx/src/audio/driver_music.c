@@ -7,11 +7,24 @@
 #include <string.h>
 
 #include "driver.h"
+#include "driver_sfx.h"
 
 Driver d;
 
 uint8_t bank_byte(uint16_t at) { return d.bank ? d.bank->bytes[at] : 0; }
 uint16_t bank_word(uint16_t at) { return (uint16_t)(bank_byte(at) | bank_byte((uint16_t)(at + 1)) << 8); }
+
+/* The sound processor's DIV: its quotient for any divisor, zero included. */
+uint8_t spc_div(uint16_t ya, uint8_t x)
+{
+    uint32_t big = (uint32_t)x << 9;
+
+    if (ya < big)
+        return (uint8_t)(x ? ya / x : 0xFF);
+    return (uint8_t)(0xFF - (ya - big) / (0x100u - x));
+}
+
+uint8_t spc_div_quotient(uint8_t numerator, uint8_t x) { return spc_div(numerator, x); }
 
 static uint8_t held_by_sfx(void) { return d.sfx_voices & d.current_bit; }
 
@@ -124,6 +137,11 @@ static void volume_send(const Voice *v, uint16_t pan)
         d.sent_left[i] = l;
         d.sent_right[i] = r;
     }
+}
+
+void driver_volume_write(Voice *v)
+{
+    volume_send(v, v->pan);
 }
 
 /*

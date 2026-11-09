@@ -113,6 +113,8 @@ void driver_set_echo_delay(uint8_t delay);
 void driver_set_instrument(Voice *v, uint8_t instrument);
 void driver_music_pause(void);
 void driver_keys_release(void);
+uint8_t spc_div(uint16_t ya, uint8_t x);
+uint8_t spc_div_quotient(uint8_t numerator, uint8_t x);
 uint8_t bank_byte(uint16_t at);
 uint16_t bank_word(uint16_t at);
 
