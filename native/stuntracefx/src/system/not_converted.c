@@ -80,7 +80,11 @@ __attribute__((weak)) void TimeUnpackBcd(uint16_t packed, uint16_t *minutes, uin
         if (!said) { said = 1; fprintf(stderr, "not converted yet: %s\n", #name); } \
     }
 
-NOT_YET_ARGS(OamBufferByteSet, (uint16_t at, uint8_t value), (void)at; (void)value;)
+NOT_YET_ARGS(OamByteSet, (uint16_t offset, uint8_t value), (void)offset; (void)value;)
+NOT_YET_ARGS(SpriteBar4WithMarker, (uint8_t value, uint16_t pos, uint16_t slot), (void)value; (void)pos; (void)slot;)
+NOT_YET_ARGS(SpriteBar6WithMarker, (uint8_t value, uint16_t pos, uint16_t slot), (void)value; (void)pos; (void)slot;)
+NOT_YET_ARGS(GsuRecordRaise6A, (uint16_t rec, uint8_t amount), (void)rec; (void)amount;)
+NOT_YET_ARGS(GsuRecordLower82, (uint16_t rec, uint8_t amount), (void)rec; (void)amount;)
 NOT_YET_ARGS(RaceFinishSplit, (int player), (void)player;)
 NOT_YET_ARGS(RaceFinishPhases, (int player, uint8_t phase), (void)player; (void)phase;)
 
@@ -99,4 +103,9 @@ __attribute__((weak)) uint16_t TimePackBcd(uint8_t hundredths, uint8_t seconds, 
     (void)hundredths; (void)seconds; (void)minutes;
     if (!said) { said = 1; fprintf(stderr, "not converted yet: TimePackBcd\n"); }
     return 0;
+}
+
+__attribute__((weak)) uint8_t SpriteYOnScreen(uint8_t y)
+{
+    return y >= 0xB0 ? 0xF0 : y;
 }

@@ -501,7 +501,7 @@ void HudHoldDraw(void)
         return;
     GlyphColours(0xBF, 0xB3, 0xBE);
     times_at(0x006C);
-    f329_sequence(g.time_digits_b);
+    f329_sequence(g.best_digits);
 }
 
 /* @routine 04:DDB0 GlyphAtY60: a glyph at (x, 96). */
@@ -948,7 +948,7 @@ void HudTimesDraw(void)
     if (g.best_lap_time == 0xFFFF) {
         GlyphColours(0xBF, 0xB3, 0xBE);
         times_at(0x006C);
-        f329_sequence(g.time_digits_b);
+        f329_sequence(g.best_digits);
         return;
     }
     if (g.lap_shown) {
@@ -965,7 +965,7 @@ void HudTimesDraw(void)
     f329_sequence(g.time_digits_a);
     lead_colours((int8_t)g.lead);
     times_at(0x006C);
-    f329_sequence(g.time_digits_b);
+    f329_sequence(g.best_digits);
 }
 
 /* @routine 07:A7AE HudLeadWordDraw */
@@ -1000,15 +1000,15 @@ void HudLapDigitsDraw(void)
     GlyphColours(0xBF, 0xB3, 0xBE);
     fx16_set(FXIN_PIECE_X, 0x0030);
     fx16_set(FXIN_PIECE_Y, 0x0028);
-    lap_digit(g.time_digits_b[0]);
+    lap_digit(g.best_digits[0]);
     fx16_set(FXIN_PIECE, 0x9014);
     FxSprite16x32(0);
-    lap_digit(g.time_digits_b[1]);
-    lap_digit(g.time_digits_b[2]);
+    lap_digit(g.best_digits[1]);
+    lap_digit(g.best_digits[2]);
     fx16_set(FXIN_PIECE, 0x9018);
     FxSprite16x32(0);
-    lap_digit(g.time_digits_b[3]);
-    lap_digit(g.time_digits_b[4]);
+    lap_digit(g.best_digits[3]);
+    lap_digit(g.best_digits[4]);
 }
 
 /* @routine 07:A6DD HudBlankDraw: Stunt Trax's three marks and the used ones over them. */

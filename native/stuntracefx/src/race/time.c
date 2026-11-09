@@ -161,15 +161,15 @@ void LapSplit(int offset)
     LapSplitTimes(offset);
     g.lap_mark[0] = frac;
     g.lap_clock[offset] = frac;
-    g.time_digits_b[4] = frac & 0x0F;
-    g.time_digits_b[3] = frac >> 4;
+    g.best_digits[4] = frac & 0x0F;
+    g.best_digits[3] = frac >> 4;
     g.lap_mark[1] = secs;
     g.lap_clock[offset + 1] = secs;
-    g.time_digits_b[2] = secs & 0x0F;
-    g.time_digits_b[1] = secs >> 4;
+    g.best_digits[2] = secs & 0x0F;
+    g.best_digits[1] = secs >> 4;
     g.lap_mark[2] = mins;
     g.lap_clock[offset + 2] = mins;
-    g.time_digits_b[0] = mins;
+    g.best_digits[0] = mins;
 }
 
 /* @routine 07:D5B2 RaceTimeKeep */

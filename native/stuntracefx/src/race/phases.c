@@ -36,7 +36,7 @@ static void race_start(void)
     g.time_bonus = 0;
     g.time_bonus_2 = 0;
     g.hits_bcd = 0;
-    g.hits_bcd_2 = 0;
+    g.stunt_score_add = 0;
     g.digit_pair = 0;
     sound_port0_push_raw(0x05);
 }
@@ -204,10 +204,10 @@ static void panel_next_delay(uint8_t d)
 static void panel_line(uint16_t at)
 {
     if (g.split_screen) {
-        OamBufferByteSet((uint16_t)(0x0420 + at), 0x20);
-        OamBufferByteSet((uint16_t)(0x0520 + at), 0x88);
+        OamByteSet((uint16_t)(0x00AB + at), 0x20);
+        OamByteSet((uint16_t)(0x01AB + at), 0x88);
     } else {
-        OamBufferByteSet((uint16_t)(0x0400 + at), 0x28);
+        OamByteSet((uint16_t)(0x008B + at), 0x28);
     }
     panel_next_delay(0x32);
     sound_port0_push(0x49);
@@ -247,15 +247,15 @@ void ResultsPanelSteps(void)
         if (!panel_delay_out())
             return;
         if (g.split_screen) {
-            static const uint16_t marks_split[6] = {0x0427, 0x0527, 0x042B, 0x052B, 0x042F, 0x052F};
+            static const uint16_t marks_split[6] = {0x00B2, 0x01B2, 0x00B6, 0x01B6, 0x00BA, 0x01BA};
 
             for (int i = 0; i < 6; i++)
-                OamBufferByteSet(marks_split[i], 0xA2);
+                OamByteSet(marks_split[i], 0xA2);
         } else {
-            static const uint16_t marks[3] = {0x0407, 0x040B, 0x040F};
+            static const uint16_t marks[3] = {0x0092, 0x0096, 0x009A};
 
             for (int i = 0; i < 3; i++)
-                OamBufferByteSet(marks[i], 0xA2);
+                OamByteSet(marks[i], 0xA2);
         }
         panel_next_delay(0x32);
         sound_port0_push(0x4A);
@@ -396,7 +396,7 @@ static void lap_override(void)
     if (packed < best) {
         fx16_set((uint16_t)(0xFC5E + entry), packed);
         HudBestTimeDigits();
-        fx16_set((uint16_t)(0xFC60 + entry), g.level_colour);
+        fx16_set((uint16_t)(0xFC60 + entry), g.player_name);
         fx8_set((uint16_t)(0xFC62 + entry), g.car[0]);
         SaveSumsRecordsB();
         g.lead = 0x01;
