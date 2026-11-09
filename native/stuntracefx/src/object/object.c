@@ -550,6 +550,7 @@ ObjRef ObjectAlloc(void)
  */
 void ObjectInit(Object *o)
 {
+    objects.slot_changes[obj_slot(o)]++;
     memset(&o->model, 0, sizeof(Object) - offsetof(Object, model));
     ObjectBucketInsert(o);
     o->byte59 = 0x69;
@@ -587,6 +588,7 @@ void ObjectFree(Object *o)
 {
     ObjRef r = obj_ref(o), prev = o->prev, next = o->next;
 
+    objects.slot_changes[obj_slot(o)]++;
     ObjectBucketRemove(o);
     if (!prev) {
         objects.used_head = next;

@@ -104,12 +104,16 @@ typedef struct {
     ObjRef list[33];                    /* $7E:FFBD: the list drawn specially, ended by 0 */
     uint16_t list_length;               /* $7E:FFFD: bytes in list */
     uint8_t free_requests;              /* $035C: the running handler asked for its own release */
+    uint16_t slot_changes[OBJECT_COUNT]; /* each slot's count of objects made in it and freed from it
+                                            (ObjectInit, ObjectFree): a slot whose count moved during a
+                                            step holds an object that was not there at its start */
 } ObjectTable;
 
 extern ObjectTable objects;
 extern Camera cameras[2];                /* $1A64, $1A9F */
 
 static inline Object *obj_at(ObjRef ref) { return (Object *)(objects.bytes + ref - 1); }
+static inline unsigned obj_slot(const Object *o) { return (unsigned)(o - objects.object); }
 static inline ObjRef obj_ref(const Object *o) { return (ObjRef)((const uint8_t *)o - objects.bytes + 1); }
 static inline Camera *camera_of(uint16_t link) { return &cameras[link - LINK_CAMERA_1]; }
 Camera *camera_at_link(uint16_t link);   /* a camera link's camera, or the record a link of 0 reads */
