@@ -568,18 +568,26 @@ static uint16_t *status_rows(void)
     return backdrop_map(0);
 }
 
-/* each entry's palette field, keeping the rest */
-static void palette_fill(unsigned at, int count, uint8_t bits)
+/* `count` entries from the attribute byte at `at` (odd: the high byte of an
+   entry): each keeps its other bits, with `bits` ORed in where the palette
+   field was cleared. */
+void TilemapPaletteFill(unsigned at, int count, uint8_t bits)
 {
-    uint16_t *m = status_rows();
+    uint8_t *m = (uint8_t *)status_rows();
 
     while (count--) {
-        m[at / 2] = (uint16_t)((m[at / 2] & 0xE3FF) | (uint16_t)(bits & 0x1C) << 8);
+        m[at] = (uint8_t)((m[at] & 0xE3) | bits);
         at += 2;
     }
 }
 
-static void tilemap_palette_cycle(unsigned at, int count)
+static void palette_fill(unsigned at, int count, uint8_t bits)
+{
+    TilemapPaletteFill(at, count, bits);
+}
+
+/* Every fourth frame the phase steps 0-5 and its palette goes into the entries. */
+void TilemapPaletteCycle(unsigned at, int count)
 {
     if (g.frame_count & 3)
         return;
@@ -594,16 +602,16 @@ static void tilemap_palette_cycle(unsigned at, int count)
     }
 }
 
-void TilemapPaletteCycle87(void) { tilemap_palette_cycle(0x87, 9); }
-void TilemapPaletteCycle107(void) { tilemap_palette_cycle(0x107, 13); }
-void TilemapPaletteCycle187(void) { tilemap_palette_cycle(0x187, 10); }
+void TilemapPaletteCycle87(void) { TilemapPaletteCycle(0x87, 9); }
+void TilemapPaletteCycle107(void) { TilemapPaletteCycle(0x107, 13); }
+void TilemapPaletteCycle187(void) { TilemapPaletteCycle(0x187, 10); }
 
 static void row_mark(unsigned at, int count, uint8_t bits, unsigned mark, uint8_t mark_bits)
 {
-    uint16_t *m = status_rows();
+    uint8_t *m = (uint8_t *)status_rows();
 
     palette_fill(at, count, bits);
-    m[mark / 2] = (uint16_t)((m[mark / 2] & 0xE3FF) | (uint16_t)(mark_bits & 0x1C) << 8);
+    m[mark] = (uint8_t)((m[mark] & 0xE3) | mark_bits);
 }
 
 void TilemapRow87Palette5(void) { row_mark(0x87, 9, 0x14, 0x8D, 0x10); }
