@@ -13,8 +13,8 @@ enum { MESSAGE_BANK, MESSAGE_STOP, MESSAGE_PUSH, MESSAGE_QUEUES_RESET, MESSAGE_P
 
 typedef struct {
     uint8_t kind, battle;
-    uint8_t port, value, decimal;       /* a push, or port 0's byte */
-    uint8_t odd, held, port2, port3;    /* a frame */
+    uint8_t port, value;                /* a push, or port 0's byte */
+    uint8_t held, port2, port3;         /* a frame */
     const SoundBank *bank;
 } Message;
 
@@ -49,33 +49,12 @@ static void wire_set(int q, uint8_t value)
     wire[q] = value;
 }
 
-/* The slot after `count` queued bytes as the original works it out with the
-   CPU in decimal mode: its add of the count to the head is then a BCD add of
-   two binary numbers, so a low digit past 9 carries early (count 1 on head 9
-   gives slot 0, not 10). The 16 it takes off after comes out as a binary
-   subtraction for every sum it can make. */
-static uint8_t slot_decimal(uint8_t count, uint8_t head)
-{
-    unsigned low = (unsigned)(count & 15) + (head & 15), sum;
-
-    if (low > 9)
-        low += 6;
-    sum = (unsigned)(count & 0xF0) + (head & 0xF0) + (low > 15 ? 0x10u : 0u) + (low & 15);
-    if (sum > 0x9F)
-        sum += 0x60;
-    sum &= 0xFF;
-    return (uint8_t)(sum >= 0x10 ? sum - 0x10 : sum);
-}
-
 /* Append a byte unless the ring is full. An empty ring takes it at its head. */
-static void queue_push(Queue *q, uint8_t value, int decimal)
+static void queue_push(Queue *q, uint8_t value)
 {
     if (q->count >= 16)
         return;
-    if (!q->count)
-        q->ring[q->head] = value;
-    else
-        q->ring[decimal ? slot_decimal(q->count, q->head) : (q->head + q->count) & 15] = value;
+    q->ring[(q->head + q->count) & 15] = value;
     q->count++;
 }
 
@@ -101,13 +80,15 @@ static void ring_send(int port)
 
 /*
  * @routine 7E:B112 SoundPortsSend
- * WHAT IT DOES: The frame's sound output: unless a hold is set, on odd frames
- * each port gets 0 while the driver still shows its last command, else the
- * next byte of its queue, then ports 2 and 3 get their values.
+ * WHAT IT DOES: The frame's sound output: unless a hold is set, each port
+ * gets 0 while the driver still shows its last command, else the next byte of
+ * its queue, then ports 2 and 3 get their values. (The original sent on odd
+ * frames only, its interrupt's pace; here every frame, each send still waiting
+ * on the driver's echo.)
  */
 static void ports_send(const Message *m)
 {
-    if (m->held || !m->odd)
+    if (m->held)
         return;
     ring_send(0);
     ring_send(1);
@@ -179,7 +160,7 @@ void music_tick(void)
             driver_leave();
             break;
         case MESSAGE_PUSH:
-            queue_push(&queue[m.port & 1], m.value, m.decimal);
+            queue_push(&queue[m.port & 1], m.value);
             break;
         case MESSAGE_QUEUES_RESET:
             for (q = 0; q < 2; q++)
@@ -204,7 +185,7 @@ void music_tick(void)
 
 static void send(const Message *m) { nshvc_music_send(m, sizeof *m); }
 
-void music_push(int port, uint8_t value, int decimal)
+void music_push(int port, uint8_t value)
 {
     Message m;
 
@@ -212,7 +193,6 @@ void music_push(int port, uint8_t value, int decimal)
     m.kind = MESSAGE_PUSH;
     m.port = (uint8_t)port;
     m.value = value;
-    m.decimal = (uint8_t)(decimal != 0);
     send(&m);
 }
 
@@ -235,13 +215,12 @@ void music_port0(uint8_t value)
     send(&m);
 }
 
-void music_frame(int odd, int held, uint8_t port2, uint8_t port3)
+void music_frame(int held, uint8_t port2, uint8_t port3)
 {
     Message m;
 
     memset(&m, 0, sizeof m);
     m.kind = MESSAGE_FRAME;
-    m.odd = (uint8_t)(odd != 0);
     m.held = (uint8_t)(held != 0);
     m.port2 = port2;
     m.port3 = port3;

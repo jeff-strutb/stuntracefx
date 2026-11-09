@@ -15,7 +15,7 @@ void SoundReset(void);
 void SoundPort0QueuePush(uint8_t command);      /* with player 2's mark */
 void SoundPort0QueuePushRaw(uint8_t command);   /* exactly as given */
 void SoundPort1QueuePush(uint8_t command);
-void SoundPort0QueuePushRawDecimal(uint8_t command);   /* as Raw, called with the CPU in decimal mode (the time bonus) */
+void SoundPort0QueuePushRawDecimal(uint8_t command);   /* the same as Raw; until time_bonus.c calls Raw itself */
 void sound_set_port0(uint8_t value);            /* a byte the driver is told at once */
 void sound_frame(void);                         /* once a frame (the original's SoundPortsSend) */
 

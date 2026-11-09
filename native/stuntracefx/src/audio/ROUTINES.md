@@ -104,11 +104,12 @@ The other 41 driver routines carry their `@routine` tag in `driver_music.c`, `dr
 ## The game side (37 in the record's audio files)
 
 All but the three in the "no counterpart" table carry their tag in `sound.c` or `sound_effects.c`. `SoundPortsSend` is split: the game's half in
-`sound.c` (`sound_frame`), the sends beside the driver in `music.c` (`ports_send`), because they wait on the driver's echo.
+`sound.c` (`sound_frame`), the sends beside the driver in `music.c` (`ports_send`), because they wait on the driver's echo. They
+run every frame, not on the original's odd frames, and change a port only on an echo of what it carries.
 
 Sound parts of routines in other areas, converted here: RaceLoad (`RaceLoadSound`), RaceModeSetup (`RaceModeSetupPickSound`,
-`RaceModeSetupBattleSound`), SoftResetApu and SoftResetApuLong (`SoftResetApu`), SoftResetToBootWarm (`SoftResetToBootWarmSound`), the time bonus's
-decimal-mode push (`SoundPort0QueuePushRawDecimal`). Converted by their own areas: RaceSoundsPlayer1/2, RaceSoundsAndHud, CarFinishSound/P2,
+`RaceModeSetupBattleSound`), SoftResetApu and SoftResetApuLong (`SoftResetApu`), SoftResetToBootWarm (`SoftResetToBootWarmSound`). The time bonus's push, which the original made in decimal mode and so
+put in the wrong slot of the ring, queues as any other. Converted by their own areas: RaceSoundsPlayer1/2, RaceSoundsAndHud, CarFinishSound/P2,
 RaceFinishSounds (race), RaceHudLoad (video). FrameSoundAndJoypads (7E:A7A3) has no native routine of that name: the frame's sound is `sound_frame`
 in `frame_end`.
 

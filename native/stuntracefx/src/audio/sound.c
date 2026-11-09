@@ -1,7 +1,7 @@
 /*
  * sound.c: the game's side of the sound.
  *
- * Commands queue for the driver and go out on odd frames. The original read
+ * Commands queue for the driver and go out a frame at a time. The original read
  * the driver's echo of a port and sent 0 while it showed a command, so a
  * command stays on its port until the driver has taken it, however long that
  * is. The queues and the sends therefore live with the driver on the audio
@@ -21,7 +21,6 @@
 #include "data/unpack.h"
 #include "system/state.h"
 
-static uint8_t frame;
 static uint8_t image[0x10000];
 static uint8_t packed[0x8000];
 static int battle;
@@ -55,19 +54,17 @@ void SoundReset(void)
 void SoundPort0QueuePushRaw(uint8_t command)
 {
     if (!sound_muted)
-        music_push(0, command, 0);
+        music_push(0, command);
 }
 
 /*
- * @routine 04:D649 SoundPort0QueuePushRaw (called in decimal mode)
- * WHAT IT DOES: SoundPort0QueuePushRaw as the time bonus calls it, with the
- * CPU left in decimal mode, which puts the byte in a different slot of the
- * ring (music.c, slot_decimal).
+ * The time bonus's push. The original made it with the CPU left in decimal
+ * mode, which put the byte in the wrong slot of the ring; here it queues as
+ * any other. Kept until time_bonus.c calls SoundPort0QueuePushRaw itself.
  */
 void SoundPort0QueuePushRawDecimal(uint8_t command)
 {
-    if (!sound_muted)
-        music_push(0, command, 1);
+    SoundPort0QueuePushRaw(command);
 }
 
 /*
@@ -77,7 +74,7 @@ void SoundPort0QueuePushRawDecimal(uint8_t command)
 void SoundPort0QueuePush(uint8_t command)
 {
     if (!sound_muted)
-        music_push(0, g.current_player ? (uint8_t)(command | 0x80) : command, 0);
+        music_push(0, g.current_player ? (uint8_t)(command | 0x80) : command);
 }
 
 /*
@@ -87,7 +84,7 @@ void SoundPort0QueuePush(uint8_t command)
 void SoundPort1QueuePush(uint8_t command)
 {
     if (!sound_muted)
-        music_push(1, command, 0);
+        music_push(1, command);
 }
 
 void sound_set_port0(uint8_t value)
@@ -97,8 +94,8 @@ void sound_set_port0(uint8_t value)
 
 /*
  * @routine 7E:B112 SoundPortsSend (the game's half)
- * WHAT IT DOES: The frame's end for the sound: whether this is an odd frame,
- * whether a hold stops the sends, and ports 2 and 3's values: the bytes at
+ * WHAT IT DOES: The frame's end for the sound: whether a hold stops the
+ * sends, and ports 2 and 3's values: the bytes at
  * $0E47 and $0E49 (player 2's gauge, or the nearest car in one-player, and
  * player 1's gauge, the engine's speed), 0 while $0E4B is set at a race's
  * end. The sends themselves are in music.c. The
@@ -107,8 +104,7 @@ void sound_set_port0(uint8_t value)
  */
 void sound_frame(void)
 {
-    frame++;
-    music_frame(frame & 1, sound_hold_a || sound_hold_b,
+    music_frame(sound_hold_a || sound_hold_b,
                 g.end_ready ? 0 : g.speed_gauge[1], g.end_ready ? 0 : g.speed_gauge[0]);
 }
 
