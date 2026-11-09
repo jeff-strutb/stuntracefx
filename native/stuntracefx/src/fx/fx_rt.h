@@ -82,7 +82,10 @@ static inline void fx_color(uint8_t v)
 
 static inline void fx_cmode(uint16_t a) { fxs.por = (uint8_t)(a & 0x1F); }
 
-/* Drawing: to be replaced by draw-list work. */
+/* The drawing the Super FX does: going over to draw lists (fx/fx_draw.c). */
+void fx_list_begin(void);
+void fx_list_end(void);
+void fx_op_clear(void);
 void fx_plot(uint8_t x, uint8_t y);
 uint8_t fx_rpix(uint8_t x, uint8_t y);
 

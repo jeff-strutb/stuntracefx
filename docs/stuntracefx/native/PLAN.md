@@ -23,6 +23,28 @@ Not done: most of the game. Of about 120,000 lines to convert, about 5,100 lines
 
 Known differences so far, for the final report: sound $23's noise sample is rewritten while it plays in the original; here it is one long noise made once, at the same rates, because samples do not change on the audio thread.
 
+## How the conversion is shared between sessions
+
+Several sessions convert different areas at once, all in this worktree and on this branch. The rules every one of them follows:
+
+**The goal and its bar.** Section 8 is the definition of done. The game's C calls `nshvc_*` directly. No bridge, no imitated PPU, DMA, DSP, APU, bus or clock, and no `cpu.`, `abi_`, carried registers, flag helpers, computed goto or SNES addresses in code. Real parameters and return values. `tools/nshvc-find-hardware` must end at zero and that alone is not enough. Dead routines (section 1 item 7) are not converted; list them.
+
+**The source.** Read the C in `src/stuntracefx` (the proven record, never edited) and `asm/stuntracefx` where the C is unclear. Write new C in `native/stuntracefx/src`. Do not copy register-style code across and tidy it later: write what it means. `native/stuntracefx/src/menu/actors.c`, `menu/screens.c` and `audio/driver_music.c` are examples of the form.
+
+**The frame.** Each `update` is one video frame of the original. A blocking loop becomes an explicit state machine; a wait becomes returning from `update`. Hardware writes queued for the vertical blank become changes to the fields of `pic` (`video/picture.h`) or object writes (`nshvc_tiles_write`, `nshvc_map_write_snes`). HDMA tables become `nshvc_lines` calls.
+
+**The state.** Shared variables live in `src/system/state.h` as fields of `g`, under the section of the code that mostly writes them, each with its original address in a comment. Search that file for the address before adding a field. Use the Edit tool with a small exact match, never rewrite the whole file, because others are editing it too. Variables only one file uses stay `static` in that file. Super FX RAM is `fx_ram`, named through the `FX...` constants in `src/fx/fx.h`.
+
+**Cross-area calls.** A converted routine keeps its original name (`ObjectsRunHandlers`) with real parameters, declared in its area's header (`object/object.h`, `race/race.h`, `hud/hud.h`, `video/video.h`, `menu/menu.h`, `save/save.h`, `audio/sound.h`). If you need a routine from another area and its prototype is not there yet, add the prototype you need under a `/* wanted */` comment in that header; its owner implements it or corrects it. An unconverted routine is never replaced by a silent stub. If you must leave one, make it print its name once to stderr and list it in your report.
+
+**Your files.** Each session owns the directories named in its brief. Do not edit another session's files apart from the two cases above. Save a file only when it compiles: other sessions build the same tree. Commit often with `git commit -- <your paths>`, never `git add -A` or a bare commit, because the index is shared. Never push. Commit messages and comments describe the work and nothing else.
+
+**Building.** Use absolute paths, the shell's working folder does not persist. Check your own files with `clang -std=gnu11 -Wall -I native/stuntracefx/src -I <nativeshvc>/include -c FILE -o /dev/null`, where `<nativeshvc>` is `/Users/jeffreywilbur/projects/strutb/nativeshvc`. For a full build use your own build folder so that sessions do not collide: `cmake -S native/stuntracefx -B <your scratch folder>/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DNSHVC_ROOT=<nativeshvc> -DNSHVC_HOST=macos -DNSHVC_RENDER=metal && cmake --build <your scratch folder>/build`.
+
+**Checks.** `build/stuntracefx/native` holds `sfxbox` and the core. `native/checks/record.sh PLAY OUT` records a play of the original (plays in `tools/stuntracefx/plays`); `sfxbox --script FILE` with your own `wait N` / `shot NAME` script records any frames you want. `native/checks/compare.py BSNES_DIR SHOTS_DIR OFFSET` compares pictures exactly. The game takes `--headless --updates N --shots DIR --input FILE`. Do not change `nativeshvc`; if the engine seems wrong, get the evidence and tell the session that started you.
+
+**Reporting.** Lead with what is not done. Never call a stepping stone finished. Update your row of the Progress table when something lands.
+
 ## 1. What this plan cannot promise
 
 Read these first.
