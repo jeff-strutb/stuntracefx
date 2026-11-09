@@ -56,6 +56,10 @@ extern MenuState menu;
 /* the per-line changes the current screen has switched on */
 void menu_lines_send(void);
 
+/* after a run of the objects: the keyboard's text input off once the
+   initials screen no longer runs */
+void menu_typing_run_end(void);
+
 void SelectionTables18CB(void);
 void SelectionCommit(void);
 void SelectionSave(void);

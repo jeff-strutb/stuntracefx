@@ -9,6 +9,7 @@
 #include "menu/actors.h"
 #include "menu/menu.h"
 #include "menu/menu_tables.h"
+#include "nshvc/nshvc.h"
 #include "object/object.h"
 #include "race/race.h"
 #include "save/save.h"
@@ -916,6 +917,62 @@ static void initials_step(uint16_t press)
 }
 
 /*
+ * The initials typed on a keyboard (plan stage 10). While the initials
+ * screen runs, the engine's text input is on (a touch screen with no
+ * keyboard shows the system's). Each letter typed sets the letter at the
+ * marker, with the up and down press's sound, and moves the marker on as a
+ * right press does; Backspace moves it back as a left press does. What was
+ * typed before the screen opened is dropped. The letters come before the
+ * frame's pad presses.
+ */
+static int typing_on, typing_ran;
+
+static void typed_letters(void)
+{
+    char typed[32];
+    uint32_t n, i;
+
+    typing_ran = 1;
+    if (!typing_on) {
+        while (nshvc_text_read(typed, sizeof typed) == sizeof typed)
+            ;
+        nshvc_text_input(1);
+        typing_on = 1;
+    }
+    n = nshvc_text_read(typed, sizeof typed);
+    for (i = 0; i < n; i++) {
+        char c = typed[i];
+
+        if (c == 0x08) {
+            if (menu.position) {
+                sound_port0_push(0x46);
+                row_palette5();
+                menu.position--;
+            }
+            continue;
+        }
+        if (c < 'A' || c > 'Z' || menu.position > 2)
+            continue;
+        sound_port0_push(0x45);
+        g.settings_row[menu.position] = (uint16_t)(c - 'A');
+        if (menu.position < 2) {
+            sound_port0_push(0x46);
+            row_palette5();
+            menu.position++;
+        }
+    }
+}
+
+void menu_typing_run_end(void)
+{
+    if (typing_on && !typing_ran) {
+        nshvc_text_input(0);
+        typing_on = 0;
+    }
+    typing_ran = 0;
+}
+
+/*
  * @routine 0B:C34F MenuInitialsPresses
  * WHAT IT DOES: Works through player 1's queued presses, applying each to
  * the initials, then blinks the marker and shows the letters.
@@ -925,6 +982,7 @@ static void initials_presses(void)
     int i;
     Actor *row;
 
+    typed_letters();
     frame_state.menu_pressed[0] = 0;
     for (i = menu.press_count[0] - 1; i >= 0; i--) {
         uint16_t press = menu.press_list[0][i];

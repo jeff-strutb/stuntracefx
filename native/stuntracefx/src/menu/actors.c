@@ -359,6 +359,7 @@ void actors_run(void)
         actors.current = (uint8_t)i;
         menu_actor_run(&actors.actor[actors.live[i]]);
     }
+    menu_typing_run_end();
 }
 
 /* Adds a sprite if it is on the screen: X from -16 to 255, Y from -16 to 223. */
