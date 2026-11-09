@@ -19,9 +19,22 @@
 
 static uint16_t pad(void) { return frame_state.pressed[0]; }
 
-/* The slots of the metasprite groups the page has drawn: the first is 0. */
-static int slot[6];                     /* $0D71-$0D7B */
+/* The slots of the metasprite groups the page has drawn, the words at
+   $0D71-$0D7B (the first is 0); the sprite palette routines read $0D75,
+   $0D79 and $0D7B. */
 enum { S_71, S_73, S_75, S_77, S_79, S_7B };
+
+static uint16_t *slot_at(int s)
+{
+    switch (s) {
+    case S_71: return &g.sprite_slot_d71;
+    case S_73: return &g.sprite_slot_d73;
+    case S_75: return &g.sprite_row_d75;
+    case S_77: return &g.sprite_slot_d77;
+    case S_79: return &g.sprite_row_d79;
+    default:   return &g.oam_first_free;
+    }
+}
 
 /* A slot's sprite buffer offset for the OamByteSet calls. */
 static uint16_t y_of(int s) { return (uint16_t)(s * 4); }
@@ -34,7 +47,7 @@ static void origin(uint8_t x, uint8_t y)
 
 static void md_first(uint16_t id)
 {
-    slot[S_71] = 0;
+    *slot_at(S_71) = 0;
     MetaspriteDraw(id, 0);
 }
 
@@ -45,8 +58,8 @@ static void md_next(uint32_t at, int prev, int here, uint16_t id)
     int v = cart16((uint8_t)(at >> 16), (uint16_t)at);
 
     if (prev >= 0)
-        v += slot[prev];
-    slot[here] = v;
+        v += *slot_at(prev);
+    *slot_at(here) = (uint16_t)v;
     MetaspriteDraw(id, v);
 }
 
@@ -233,7 +246,7 @@ static void menu_stunt_three(void)
 /* Sprites 0, 2 and 4 of the group from slot $0D73: tile $F0, flipped. */
 static void page_mark_flip(void)
 {
-    uint16_t y = y_of(slot[S_73]);
+    uint16_t y = y_of(*slot_at(S_73));
     int i;
 
     for (i = 0; i < 3; i++) {
@@ -250,7 +263,7 @@ static void page_mark_flip(void)
  */
 static void page_mark_flip_hide(void)
 {
-    uint16_t y = y_of(slot[S_73]);
+    uint16_t y = y_of(*slot_at(S_73));
     int i;
 
     for (i = 0; i < 3; i++)
@@ -394,7 +407,7 @@ static void special_row(int row_slot, int k, int stunt, void (*place)(uint16_t s
 static void best_time(const SaveBest *table, int first, int d_time, int d_rest)
 {
     const SaveBest *r = &table[g.course - first];
-    int s_time = slot[S_75] + d_time, s_rest = slot[S_75] + d_rest;
+    int s_time = *slot_at(S_75) + d_time, s_rest = *slot_at(S_75) + d_rest;
 
     if (r->time != 0xFFFF) {
         time_digits_large(r->time, s_time);
@@ -458,7 +471,7 @@ void SpeedRecordsScreen(void)
         md_first(0x001A);
         md_next(0x04EE31 + 4, -1, S_73, 0x0019);
         md_next(0x04EE31, S_73, S_75, 0x0000);
-        g.oam_first_free = (uint16_t)slot[S_75];
+        g.oam_first_free = g.sprite_row_d75;
         OamClassName();
         SpriteTextAt895E();
         OamPaletteForD75();
@@ -519,9 +532,9 @@ void StuntRecordsScreen(void)
     md_next(0x04EDED, S_75, S_77, 0x0009);
     md_next(0x04EDED + 4, S_77, S_79, 0x0006);
     SpriteTextAt8152();
-    special_row(slot[S_77], 2, 1, SpritePiecesAt46Y93);
-    special_row(slot[S_75], 1, 1, SpritePiecesAt46Y82);
-    special_row(slot[S_73], 0, 1, SpritePiecesAt46Y71);
+    special_row(*slot_at(S_77), 2, 1, SpritePiecesAt46Y93);
+    special_row(*slot_at(S_75), 1, 1, SpritePiecesAt46Y82);
+    special_row(*slot_at(S_73), 0, 1, SpritePiecesAt46Y71);
     OamPaletteFromTableE30F();
     menu_stunt_three();
 }
@@ -536,8 +549,8 @@ void BattleRecordsScreen(void)
     md_first(0x000D);
     md_next(0x04EDFD + 4, -1, S_73, 0x000C);
     md_next(0x04EDFD, S_73, S_75, 0x000B);
-    SpritePiecesAtLeft((uint16_t)((g.car[0] * 3) & 0xFF), slot[S_73]);
-    SpritePiecesAtRight((uint16_t)((g.car[1] * 3) & 0xFF), slot[S_73] + 3);
+    SpritePiecesAtLeft((uint16_t)((g.car[0] * 3) & 0xFF), *slot_at(S_73));
+    SpritePiecesAtRight((uint16_t)((g.car[1] * 3) & 0xFF), *slot_at(S_73) + 3);
     SpriteTextAt8152();
     OamPalettesE28D();
     menu_two();
@@ -567,9 +580,9 @@ void AllRecordsScreen(void)
     md_next(0x04EE0D + 4, S_77, S_79, 0x000E);
     SpriteTextAt8952();
     OamPaletteFromTableE26AByMode();
-    special_row(slot[S_77], 2, 0, SpritePiecesAt62Y95);
-    special_row(slot[S_75], 1, 0, SpritePiecesAt62Y83);
-    special_row(slot[S_73], 0, 0, SpritePiecesAt62Y71);
+    special_row(*slot_at(S_77), 2, 0, SpritePiecesAt62Y95);
+    special_row(*slot_at(S_75), 1, 0, SpritePiecesAt62Y83);
+    special_row(*slot_at(S_73), 0, 0, SpritePiecesAt62Y71);
     menu_all();
 }
 
@@ -609,7 +622,7 @@ static void record_row(int n, uint8_t page_offset, uint8_t time_offset)
     name[0] = g.names_bytes[n * 3];
     name[1] = g.names_bytes[n * 3 + 1];
     name[2] = g.names_bytes[n * 3 + 2];
-    record_row_draw(n == 0 ? slot[S_75] : n == 1 ? slot[S_77] : slot[S_79], name, page_offset, time_offset, (uint8_t)(0x7C + n * 0x11));
+    record_row_draw(n == 0 ? *slot_at(S_75) : n == 1 ? *slot_at(S_77) : *slot_at(S_79), name, page_offset, time_offset, (uint8_t)(0x7C + n * 0x11));
 }
 
 /*

@@ -217,6 +217,7 @@ typedef struct {
     uint16_t time_shown_2;              /* $0E6E */
     uint8_t race_time_best[3];          /* $0EEA-$0EEC */
     uint16_t sprite_row_d75, sprite_row_d79; /* $0D75, $0D79: the sprite rows the race's palettes run from */
+    uint16_t sprite_slot_d71, sprite_slot_d73, sprite_slot_d77; /* $0D71, $0D73, $0D77: the records pages' other metasprite slots */
     uint8_t sprite_origin[2];           /* $0D3B, $0D3C: a metasprite's origin */
     uint16_t metasprite_set;            /* $0D35 */
     uint16_t flash_sprite_pos;          /* $0D37-$0D38 as a word, the flashing metasprite's position */
