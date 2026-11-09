@@ -24,7 +24,21 @@
  * Exit: (at the STOP) as the last part leaves the registers, flags and
  * RAM; R14 and the ROM buffer move as on the Super FX.
  */
+static FxFrameProgramResult frame_program(uint16_t draw_list_end);
+
+/* The frame program's drawing is the picture's 3D; the HUD's programs that
+   follow it draw the HUD (fx_draw_part). */
 FxFrameProgramResult FxFrameProgram(uint16_t draw_list_end)
+{
+    FxFrameProgramResult r;
+
+    fx_draw_part(0);
+    r = frame_program(draw_list_end);
+    fx_draw_part(1);
+    return r;
+}
+
+static FxFrameProgramResult frame_program(uint16_t draw_list_end)
 {
     int up_ = 0;                       /* levels a callee returned past us */
     uint16_t stack_top;

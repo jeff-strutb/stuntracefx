@@ -34,11 +34,28 @@ typedef struct {
     nshvc_vertex *v;
     Shape *s;
     uint32_t nv, ns, cap_v, cap_s;
+    uint32_t gen;               /* moves on with every change of its shapes */
+    uint32_t hud_from;          /* its shapes from here on came after the frame program: the HUD's */
 } Recording;
 
 static nshvc_draw_list target;  /* a list drawn into directly (the checks) */
 static uint32_t target_w, target_h;
 static Recording recordings[2], *recording;
+/* The pictures between two steps (fx_tween.c): picture n's 3D drawn again
+   from the state between, shown with the step's own HUD; on while a race
+   draws them. */
+static Recording between[2];
+static int between_on[2], tweening, tween_drawn[2];
+/* the pictures a step drew its panels into: the last two pictures begun
+   (a step's panels are its last), and at a step's end its own, in order */
+static struct {
+    int n, picture[2];
+} panels_now, panels_last;
+static void blocks_flush(void);
+static struct {
+    Recording *recording;
+    int offset_x, offset_y;
+} before_tween;
 static int offset_x, offset_y;
 static int origin_x, origin_y;  /* where a screen other than the race's puts the picture; 0, 0: none */
 static int palette_row;         /* the 16 colours a 4-bit picture's tiles show it in */
@@ -89,7 +106,7 @@ static uint8_t ink(uint8_t c)
         return 0;
     return mask == 0xFF ? c : (uint8_t)(palette_row * 16 + (c & mask));
 }
-static uint32_t generation[2], composed_generation[2];
+static uint64_t composed_key[2];
 static nshvc_draw_list screen_list;
 static int composed_picture = -1, composed_split = -1;
 
@@ -114,8 +131,20 @@ void fx_draw_begin(int picture)
 {
     picture &= 1;
     target.id = 0;
-    recording = &recordings[picture];
-    if (!g.split_screen) {
+    recording = tweening ? &between[picture] : &recordings[picture];
+    if (tweening)
+        tween_drawn[picture] = 1;
+    else {
+        panels_now.picture[0] = panels_now.picture[1];
+        panels_now.picture[1] = picture;
+        if (panels_now.n < 2)
+            panels_now.n++;
+    }
+    if (race_full_window()) {
+        /* the view's words are the screen's (fx_view_words): its pixels */
+        offset_x = 0;
+        offset_y = 0;
+    } else if (!g.split_screen) {
         offset_x = 24;
         offset_y = 32;
     } else if (!picture) {
@@ -129,11 +158,71 @@ void fx_draw_begin(int picture)
         offset_x = origin_x;
         offset_y = origin_y;
     }
-    generation[picture]++;
+    recording->gen++;
+}
+
+/* fx_tween.c's picture between two steps: drawn into its own recording */
+void fx_draw_tween_on(void)
+{
+    before_tween.recording = recording;
+    before_tween.offset_x = offset_x;
+    before_tween.offset_y = offset_y;
+    tween_drawn[0] = tween_drawn[1] = 0;
+    tweening = 1;
+}
+
+void fx_draw_tween_shown(void)
+{
+    int p;
+
+    blocks_flush();
+    tweening = 0;
+    for (p = 0; p < 2; p++)
+        if (tween_drawn[p])
+            between_on[p] = 1;
+    recording = before_tween.recording;
+    offset_x = before_tween.offset_x;
+    offset_y = before_tween.offset_y;
+}
+
+void fx_draw_tween_off(void)
+{
+    between_on[0] = between_on[1] = 0;
+    panels_now.n = panels_last.n = 0;
+}
+
+/* A step's end: one panel (one player, the course menu), the last picture
+   begun; two players' two, the last two in order. */
+void fx_draw_step_end(void)
+{
+    int two = g.split_screen != 0;
+
+    panels_last.n = 0;
+    if (panels_now.n >= 1 + two) {
+        panels_last.n = 1 + two;
+        panels_last.picture[0] = panels_now.picture[two ? 0 : 1];
+        panels_last.picture[1] = panels_now.picture[1];
+    }
+    panels_now.n = 0;
+}
+
+int fx_draw_step_picture(int panel)
+{
+    return panel < panels_last.n ? panels_last.picture[panel] : -1;
+}
+
+/* The frame program's shapes are the picture's 3D; what is drawn after it
+   (the HUD's programs) is the HUD, which a picture between steps keeps. */
+void fx_draw_part(int hud)
+{
+    if (recording && hud)
+        recording->hud_from = recording->ns;
 }
 
 void fx_draw_set_origin(int x, int y)
 {
+    if (x != origin_x || y != origin_y)
+        fx_draw_tween_off();            /* another screen: no picture between */
     origin_x = x;
     origin_y = y;
     if (recording && (x || y)) {
@@ -195,14 +284,100 @@ static void emit(const nshvc_vertex *v, uint32_t count, uint32_t image, int line
         r->v[r->nv + i].y += (float)offset_y;
     }
     r->nv += count;
-    generation[r - recordings]++;
+    r->gen++;
 }
 
-static void compose_recording(const Recording *r)
+/* The full window's HUD pieces: the shapes drawn after the frame program
+   (the HUD's programs), in the original's picture places, are grouped into
+   pieces (shapes whose boxes touch, so a message's glyphs stay one piece)
+   and each piece moved from the original's screen to the full window's by
+   the screen's anchors (video/screen.c): the original's view offset (24,
+   32), then sideways by where the piece lay against the view's middle and
+   down by its middle. A piece larger than the original's view (a screen
+   of static) stays where it was drawn. */
+enum { PIECES = 1024 };
+
+static void hud_pieces(const Recording *r, uint32_t from, uint32_t to, float *dx, float *dy)
+{
+    static float box[PIECES][4];
+    static int group[PIECES];
+    uint32_t n = to - from, i, j, k;
+
+    if (n > PIECES)
+        n = PIECES;
+    for (i = 0; i < n; i++) {
+        const Shape *sh = &r->s[from + i];
+
+        box[i][0] = box[i][2] = 1e9f;
+        box[i][1] = box[i][3] = -1e9f;
+        for (k = 0; k < sh->count; k++) {
+            const nshvc_vertex *v = &r->v[sh->first + k];
+
+            box[i][0] = v->x < box[i][0] ? v->x : box[i][0];
+            box[i][1] = v->x > box[i][1] ? v->x : box[i][1];
+            box[i][2] = v->y < box[i][2] ? v->y : box[i][2];
+            box[i][3] = v->y > box[i][3] ? v->y : box[i][3];
+        }
+        group[i] = (int)i;
+    }
+    for (i = 0; i < n; i++)
+        for (j = i + 1; j < n; j++)
+            if (box[i][0] <= box[j][1] + 1 && box[j][0] <= box[i][1] + 1 && box[i][2] <= box[j][3] + 1 && box[j][2] <= box[i][3] + 1) {
+                int a = group[i], b = group[j];
+
+                while (group[a] != a)
+                    a = group[a];
+                while (group[b] != b)
+                    b = group[b];
+                if (a != b)
+                    group[b > a ? b : a] = a < b ? a : b;
+            }
+    for (i = 0; i < n; i++) {
+        int root = (int)i;
+        float x0, x1, y0, y1;
+
+        while (group[root] != root)
+            root = group[root];
+        group[i] = root;
+        if (root != (int)i)
+            continue;
+        x0 = box[i][0];
+        x1 = box[i][1];
+        y0 = box[i][2];
+        y1 = box[i][3];
+        for (j = i + 1; j < n; j++) {
+            int rj = (int)j;
+
+            while (group[rj] != rj)
+                rj = group[rj];
+            if (rj != root)
+                continue;
+            x0 = box[j][0] < x0 ? box[j][0] : x0;
+            x1 = box[j][1] > x1 ? box[j][1] : x1;
+            y0 = box[j][2] < y0 ? box[j][2] : y0;
+            y1 = box[j][3] > y1 ? box[j][3] : y1;
+        }
+        if (x1 - x0 > 208 || y1 - y0 > 128) {
+            dx[i] = dy[i] = 0;
+        } else {
+            dx[i] = 24.0f + (float)screen_view_anchor_x((int)x0 + 24, (int)x1 + 24 - 1);
+            dy[i] = 32.0f + (float)screen_anchor_y((int)y0 + 32, (int)y1 + 32 - 1);
+        }
+    }
+    for (i = 0; i < n; i++) {
+        dx[i] = dx[group[i]];
+        dy[i] = dy[group[i]];
+    }
+}
+
+/* Shapes [from, to) of a recording into the screen's list, scaled to its
+   pixels; anchored: as the full window's HUD pieces. */
+static void compose_recording(const Recording *r, uint32_t from, uint32_t to, int anchored)
 {
     static nshvc_vertex *scaled;
     static uint32_t cap;
-    uint32_t i;
+    static float dx[PIECES], dy[PIECES];
+    uint32_t i, k;
     nshvc_material m;
 
     if (r->nv > cap) {
@@ -211,46 +386,65 @@ static void compose_recording(const Recording *r)
         if (!scaled)
             abort();
     }
-    for (i = 0; i < r->nv; i++) {
-        scaled[i] = r->v[i];
-        scaled[i].x *= screen_sx;
-        scaled[i].y *= screen_sy;
+    if (to > r->ns)
+        to = r->ns;
+    if (from >= to)
+        return;
+    if (anchored)
+        hud_pieces(r, from, to, dx, dy);
+    for (i = from; i < to; i++) {
+        const Shape *sh = &r->s[i];
+        float ox = 0, oy = 0;
+
+        if (anchored && i - from < PIECES) {
+            ox = dx[i - from];
+            oy = dy[i - from];
+        }
+        for (k = sh->first; k < sh->first + sh->count; k++) {
+            scaled[k] = r->v[k];
+            scaled[k].x = (scaled[k].x + ox) * screen_sx;
+            scaled[k].y = (scaled[k].y + oy) * screen_sy;
+        }
     }
     memset(&m, 0, sizeof m);
-    for (i = 0; i < r->ns; i++) {
-        const Shape *s = &r->s[i];
+    for (i = from; i < to; i++) {
+        const Shape *sh = &r->s[i];
 
-        m.image.id = s->image;
-        if (s->lines)
-            nshvc_draw_lines(screen_list, scaled + s->first, s->count, s->image ? &m : NULL);
+        m.image.id = sh->image;
+        if (sh->lines)
+            nshvc_draw_lines(screen_list, scaled + sh->first, sh->count, sh->image ? &m : NULL);
         else
-            nshvc_draw_tris(screen_list, scaled + s->first, s->count, s->image ? &m : NULL);
+            nshvc_draw_tris(screen_list, scaled + sh->first, sh->count, sh->image ? &m : NULL);
     }
 }
 
-/* The screen's list: at the window's pixels the 256 x 224 screen covers at
-   4:3 (4 times it when no window is known, as in a headless run), or at the
-   screen's own pixels until the frame art scales with it. */
+/* The screen's list: over the whole screen (the full window's W x H, else
+   the original's 256 x 224), at the window's pixels the screen covers (its
+   pixels shown 7:6 wide, the engine's shape; 4 times the screen when no
+   window is known, as in a headless run), or at the screen's own pixels
+   until the frame art scales with it. */
 static void screen_list_size(uint32_t *w, uint32_t *h)
 {
     nshvc_display d;
-    double pw = 1024, ph = 896;
+    const ScreenShape *sh = screen_shape();
+    int sw = race_full_window() ? sh->width : 256, shh = race_full_window() ? sh->height : 224;
+    double pw = 4.0 * sw, ph = 4.0 * shh, k;
 
-    if (!output_pixels || !fx_face_on()) {
-        *w = 256;
-        *h = 224;
+    /* another screen's picture (the course menu's car) has no frame art:
+       always at the output's pixels */
+    if ((!output_pixels && !origin_x && !origin_y) || !fx_face_on()) {
+        *w = (uint32_t)sw;
+        *h = (uint32_t)shh;
         screen_sx = screen_sy = 1;
         return;
     }
     d = nshvc_display_info();
     if (d.width > 0 && d.height > 0) {
-        if ((double)d.width * 3 > (double)d.height * 4) {
-            ph = d.height;
-            pw = ph * 4 / 3;
-        } else {
-            pw = d.width;
-            ph = pw * 3 / 4;
-        }
+        k = (double)d.height / shh;
+        if ((double)d.width / (sw * 7.0 / 6.0) < k)
+            k = (double)d.width / (sw * 7.0 / 6.0);
+        pw = sw * 7.0 / 6.0 * k;
+        ph = shh * k;
     }
     if (pw > 16384)
         pw = 16384;
@@ -258,12 +452,30 @@ static void screen_list_size(uint32_t *w, uint32_t *h)
         ph = 16384;
     *w = (uint32_t)lround(pw);
     *h = (uint32_t)lround(ph);
-    if (*w < 256)
-        *w = 256;
-    if (*h < 224)
-        *h = 224;
-    screen_sx = *w / 256.0f;
-    screen_sy = *h / 224.0f;
+    if (*w < (uint32_t)sw)
+        *w = (uint32_t)sw;
+    if (*h < (uint32_t)shh)
+        *h = (uint32_t)shh;
+    screen_sx = (float)*w / (float)sw;
+    screen_sy = (float)*h / (float)shh;
+}
+
+/* Picture n: the step's own, or the 3D between steps with the step's HUD. */
+static void compose_picture(int p)
+{
+    const Recording *r = &recordings[p];
+    int full = race_full_window() && !origin_x && !origin_y;
+
+    if (between_on[p])
+        compose_recording(&between[p], 0, between[p].ns, 0);
+    else
+        compose_recording(r, 0, r->hud_from, 0);
+    compose_recording(r, r->hud_from, r->ns, full);
+}
+
+static uint64_t picture_key(int p)
+{
+    return (uint64_t)recordings[p].gen << 33 ^ (uint64_t)between[p].gen << 1 ^ (uint64_t)between_on[p];
 }
 
 /* The screen's layer: picture n, or with two players both. */
@@ -279,8 +491,8 @@ nshvc_draw_list fx_draw_picture(int picture)
     picture &= 1;
     screen_list_size(&w, &h);
     if (composed_picture != picture || composed_split != split || composed_w != w || composed_h != h || composed_origin != origin
-        || composed_generation[picture] != generation[picture]
-        || (two && composed_generation[!picture] != generation[!picture])) {
+        || composed_key[picture] != picture_key(picture)
+        || (two && composed_key[!picture] != picture_key(!picture))) {
         composed_w = w;
         composed_h = h;
         composed_origin = origin;
@@ -290,14 +502,17 @@ nshvc_draw_list fx_draw_picture(int picture)
         if (!origin_x && !origin_y)
             race_frame_art_draw(screen_list);
         if (two) {
-            compose_recording(&recordings[0]);
-            compose_recording(&recordings[1]);
-            composed_generation[0] = generation[0];
-            composed_generation[1] = generation[1];
+            compose_picture(0);
+            compose_picture(1);
+            composed_key[0] = picture_key(0);
+            composed_key[1] = picture_key(1);
         } else {
-            compose_recording(&recordings[picture]);
-            composed_generation[picture] = generation[picture];
+            compose_picture(picture);
+            composed_key[picture] = picture_key(picture);
         }
+        /* the panels over the 3D in the full window */
+        if (!origin_x && !origin_y)
+            race_frame_art_draw_over(screen_list);
         composed_picture = picture;
         composed_split = split;
     }
@@ -311,7 +526,8 @@ void fx_op_clear(void)
 {
     if (recording) {
         recording->nv = recording->ns = 0;
-        generation[recording - recordings]++;
+        recording->hud_from = 0;
+        recording->gen++;
     } else if (target.id) {
         nshvc_draw_list_clear(target, target_w, target_h);
         nshvc_draw_rule(target, fill_rule());

@@ -4,3 +4,14 @@
 
 Game g;
 void race_frame_art_draw(nshvc_draw_list l) { (void)l; }
+void race_frame_art_draw_over(nshvc_draw_list l) { (void)l; }
+int race_full_window(void) { return 0; }
+#include "object/object.h"
+ObjectTable objects;
+Camera cameras[2];
+float race_step_progress(float between) { (void)between; return 0; }
+int RaceViewForPicture(int panel) { (void)panel; return 0; }
+int screen_view_anchor_x(int x0, int x1) { (void)x0; (void)x1; return 0; }
+int screen_anchor_y(int y0, int y1) { (void)y0; (void)y1; return 0; }
+#include "video/video.h"
+const ScreenShape *screen_shape(void) { static const ScreenShape s = { 256, 224, 0, 0, { 0, 0, 0, 0 } }; return &s; }

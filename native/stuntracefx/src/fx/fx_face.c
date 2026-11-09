@@ -27,6 +27,7 @@
 #include <string.h>
 
 #include "fx/fx.h"
+#include "fx/fx_draw.h"
 #include "fx/fx_face.h"
 
 enum {
@@ -114,6 +115,40 @@ static void place(const View *v, double x, double y, double z, double *sx, doubl
 {
     *sx = v->cx + FOCAL * x / z;
     *sy = v->cy + FOCAL * y / z;
+}
+
+/* The view's words for a rectangle of the screen: the edges as the chip
+   has them (the right one its last column, the bottom one past its last
+   row), the centre, and the frustum's planes as the original's are made
+   (view.c): $92 = 128 * 2^14 / the half-width, $94 = 128 * 2^13 / the
+   larger part above or below the centre (0x4EC4 and 0x4000 for the
+   original's 208 x 128; 0x71C7 and 0x6666 for its 144 x 80). */
+FxViewWords fx_view_words(int x, int y, int width, int height, int centre_y)
+{
+    FxViewWords w;
+    int cx = x + width / 2, half_w = cx - x, half_h;
+    long a, b;
+
+    if (width - half_w > half_w)
+        half_w = width - half_w;
+    half_h = centre_y - y;
+    if (y + height - centre_y > half_h)
+        half_h = y + height - centre_y;
+    if (half_w < 33)
+        half_w = 33;
+    if (half_h < 17)
+        half_h = 17;
+    a = (128L << 14) / half_w;
+    b = (128L << 13) / half_h;
+    w.left = (uint16_t)x;
+    w.right = (uint16_t)(x + width - 1);
+    w.top = (uint16_t)y;
+    w.bottom = (uint16_t)(y + height);
+    w.centre_x = (uint16_t)cx;
+    w.centre_y = (uint16_t)centre_y;
+    w.scale_32 = (uint16_t)(a > 0xFFFF ? 0xFFFF : a);
+    w.scale_34 = (uint16_t)(b > 0xFFFF ? 0xFFFF : b);
+    return w;
 }
 
 /* ---- the checks' count ---- */
