@@ -19,6 +19,8 @@
     }
 
 NOT_YET(ObjectsRunHandlers)
+NOT_YET(race_course_maps_keep)
+NOT_YET(race_course_preview_reset)
 NOT_YET(ObjectPoolInit)
 NOT_YET(CourseDataPointer)
 NOT_YET(ObjectPlaceAll)
@@ -94,5 +96,5 @@ __attribute__((weak)) int ChampionshipScreenFrame(void)
     return 1;
 }
 
-NOT_YET_ARGS(race_unpacked_to_art, (uint16_t out, uint16_t in), (void)out; (void)in;)
+NOT_YET_ARGS(race_course_vram_write, (uint16_t word, const uint8_t *data, uint32_t bytes), (void)word; (void)data; (void)bytes;)
 NOT_YET_ARGS(SoundPort0QueuePushRawDecimal, (uint8_t command), (void)command;)

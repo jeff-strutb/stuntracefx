@@ -26,6 +26,18 @@ int DemoRun(int which);
 void RecordsPanelTile(uint16_t offset, uint8_t tile);
 void PlayerSound35(void);
 void CourseScreenState8(void);
+/* the course screen before a race (course.c) */
+void RaceLoad(void);
+int CourseScreenBegin(void);            /* 0: the mode runs no race, no screen */
+void CourseScreenRasterBlank(void);
+int CourseScreenUpdate(void);           /* 1: its fade out is done, the race goes on */
+void CourseScreenRasterLine55(void);
+void CourseScreenStep(void);
+uint8_t CourseFromSelection(void);
+/* wanted from video (race_video.c): the course screen's VRAM and maps */
+void race_course_vram_write(uint16_t word, const uint8_t *data, uint32_t bytes);
+void race_course_maps_keep(void);
+void race_course_preview_reset(void);
 /* the race after the course menu: begin once, then each update until nonzero */
 void race_session_begin(void);
 int race_session_update(void);

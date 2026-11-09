@@ -520,7 +520,7 @@ void RaceModeSetup(void)
     memset(g.race_time, 0, sizeof g.race_time);
     g.byte_0d24 = 0;
     g.byte_0d25 = 0;
-    memset(g.byte_0f05, g.hud_mode ? 0x00 : 0x04, sizeof g.byte_0f05);
+    memset(g.level_columns, g.hud_mode ? 0x00 : 0x04, sizeof g.level_columns);
     g.time_shown = 0;
     g.time_shown_2 = 0;
     if (g.hud_mode == 0x00) {

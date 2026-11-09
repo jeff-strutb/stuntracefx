@@ -85,7 +85,6 @@ typedef struct {
     uint8_t byte_1a32, byte_0713;       /* $1A32, $0713 */
     uint16_t view_angle_06cf;           /* $06CF */
     uint8_t course_high, byte_0d63, byte_0d44, byte_0d25; /* $0E3E, $0D63, $0D44, $0D25 */
-    uint8_t byte_0f05[12];              /* $0F05 */
     uint16_t course_intro_scroll;       /* $0E37 */
     uint8_t champ_stage;                /* $0D48: the championship's stage */
     uint8_t byte_0d24;                  /* $0D24 */
@@ -94,6 +93,7 @@ typedef struct {
     uint8_t player_mode_kept;           /* $0D5E */
     uint8_t pause_stage_b, pause_player, pause_stage; /* $0D2D, $0D2E, $0D2F */
     uint8_t pause_choice;               /* $0D3D: 0 continue, otherwise quit */
+    uint8_t records_state, records_timer; /* $0D43, $0D42: the course screen's records panel and its count */
     uint8_t quit_cars_shown;            /* $10BA */
     uint8_t race_again;                 /* $0DD4 */
     uint8_t laps_done[2];               /* $0DE8: laps the physics has counted */

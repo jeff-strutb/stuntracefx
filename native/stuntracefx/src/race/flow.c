@@ -35,7 +35,7 @@ typedef enum {
 } RaceWait;
 
 typedef enum {
-    FLOW_OFF, FLOW_RACE_SETUP, FLOW_RACE_LOAD, FLOW_INTRO, FLOW_VIDEO_INIT, FLOW_ATTRACT_SETUP,
+    FLOW_OFF, FLOW_RACE_SETUP, FLOW_RACE_LOAD, FLOW_COURSE, FLOW_VIDEO_INIT, FLOW_ATTRACT_SETUP,
     FLOW_RACE_RUN, FLOW_DEMO
 } FlowState;
 
@@ -349,26 +349,33 @@ static void attract_setup(void)
     g.picture_uploaded = 1;
 }
 
-/* @routine 02:E289 RaceLoop's setup: the colours packed, the split-screen
-   setting, the sounds. The course screen it goes on to show is not converted
-   yet: the race starts directly. */
+/* @routine 03:8BCD BootWarmRace: the screen blanked, sound on, the course
+   screen before the race (RaceLoop). */
 static void race_load(void)
 {
-    static int said;
+    pic.blank = 1;
+    sound_muted = 0;                    /* $0E4E */
+    flow.state = CourseScreenBegin() ? FLOW_COURSE : FLOW_VIDEO_INIT;
+}
 
-    sound_muted = 0;                    /* $0E4E, as BootWarm clears it */
-    g.player_name = (uint16_t)((g.car_settings[0] & 0x1F)
-                               | ((uint16_t)(g.car_settings[1] & 0x1F) << 5)
-                               | ((uint16_t)(g.car_settings[2] & 0x1F) << 10));
-    g.split_screen = cart8(0x02, (uint16_t)(0xE338 + g.hud_mode));
-    RaceLoadSound();
-    SoundReset();
-    sound_set_port0(0x01);
-    g.fx_screen_mode = 0x03;
-    if (!said) {
-        said = 1;
-        fprintf(stderr, "not converted yet: the course screen before a race (RaceLoad, RaceLoop)\n");
+/* One update of the course screen: its blank lines, its loop's frame, then
+   the work at line 55; once its fade out is done the race's video is set up. */
+static void course_update(void)
+{
+    CourseScreenRasterBlank();
+    if (flow.wait != WAIT_NONE) {
+        wait_step();
+    } else {
+        flow.stopped = 0;
+        if (CourseScreenUpdate()) {
+            g.raster_chain = RASTER_NONE;
+            pic.blank = 1;
+            flow.state = FLOW_VIDEO_INIT;
+            return;
+        }
     }
+    if (flow.state == FLOW_COURSE && !flow.finished)
+        CourseScreenRasterLine55();
 }
 
 void RaceRestart(void)
@@ -469,7 +476,9 @@ int race_session_update(void)
         /* fall through */
     case FLOW_RACE_LOAD:
         race_load();
-        flow.state = FLOW_VIDEO_INIT;
+        break;
+    case FLOW_COURSE:
+        course_update();
         break;
     case FLOW_VIDEO_INIT:
         RaceVideoInit();

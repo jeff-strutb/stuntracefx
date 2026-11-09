@@ -26,6 +26,7 @@ void input_read(const nshvc_input *input);
 void frame_end(void);
 int system_stopped(void);                /* crash.c */
 void JoypadAccumulate(void);
+void JoypadRead(void);
 
 /* menu/screens.c */
 void session_start(void);
