@@ -315,6 +315,7 @@ static void race_load(void)
 {
     static int said;
 
+    sound_muted = 0;                    /* $0E4E, as BootWarm clears it */
     g.player_name = (uint16_t)((g.car_settings[0] & 0x1F)
                                | ((uint16_t)(g.car_settings[1] & 0x1F) << 5)
                                | ((uint16_t)(g.car_settings[2] & 0x1F) << 10));
