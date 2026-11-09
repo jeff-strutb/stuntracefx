@@ -622,6 +622,8 @@ int race_session_update(void)
         flow.pace_count = 0;
         break;
     case FLOW_RACE_RUN:
+        if (flow.wait == WAIT_NONE)
+            JoypadAutoAccelerate();     /* the player drives: the race reads their pad */
         raster_frame();
         if (flow.wait != WAIT_NONE) {
             wait_step();

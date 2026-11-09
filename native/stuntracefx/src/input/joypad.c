@@ -5,8 +5,27 @@
  * Not converted, no use on the engine: JoypadPortCheck and its inner entries
  * (the Super Multitap test, which only sets a flag nothing else reads).
  */
+#include "save/save.h"
 #include "system/game.h"
 #include "system/state.h"
+
+enum { PAD_A = 0x0080, PAD_B = 0x8000 };
+
+/*
+ * Auto-accelerate (an option, on unless the player turns it off; the
+ * menus' option_auto_accelerate): on a touch screen, player 1's gas (B) is
+ * held while they drive, let go while the brake (A) is held, as the touch
+ * scheme of the earlier front end had it (a touch screen has no button to
+ * keep a thumb on). The race calls it before it folds in the pads, only
+ * while it is reading the player's controls: not in a demo, not paused.
+ */
+void JoypadAutoAccelerate(void)
+{
+    if (!option_auto_accelerate() || nshvc_control_source(0).kind != NSHVC_SOURCE_TOUCH)
+        return;
+    if (!(frame_state.pad_now[0] & PAD_A))
+        frame_state.pad_now[0] |= PAD_B;
+}
 
 /*
  * @routine 7E:B1AE JoypadRead

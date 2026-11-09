@@ -27,6 +27,7 @@ void frame_end(void);
 int system_stopped(void);                /* crash.c */
 void JoypadAccumulate(void);
 void JoypadRead(void);
+void JoypadAutoAccelerate(void);        /* touch: player 1's gas held while driving (input/joypad.c) */
 
 /* menu/screens.c */
 void session_start(void);
