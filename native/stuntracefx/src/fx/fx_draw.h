@@ -38,13 +38,14 @@ FxViewWords fx_view_words(int x, int y, int width, int height, int centre_y);
    objects' draw records, the sort, fx_draw_begin and the frame program),
    then fx_tween_end, which puts every byte of the state back. The picture
    shown is then that 3D with the step's HUD. fx_tween_reset when a race
-   starts or ends. fx_tween_view: the hills' angles ($06CF heading, $06CD
-   pitch) of the picture between shown, 0 when none is. */
+   starts or ends. fx_tween_backdrop_angles: while a picture between steps
+   is shown (1), its hills' angles as BackdropAnglesFromView made them, each
+   player's ($06CF heading, $06CD pitch; one player's in both places). */
 void fx_tween_step_end(void);
 void fx_tween_reset(void);
 int fx_tween_begin(float t);
 void fx_tween_end(void);
-int fx_tween_view(uint16_t *heading, uint16_t *pitch);
+int fx_tween_backdrop_angles(uint16_t heading[2], uint16_t pitch[2]);
 /* fx_tween.c's side of fx_draw: the picture between drawn into its own
    recording, then shown; and none shown. */
 void fx_draw_tween_on(void);

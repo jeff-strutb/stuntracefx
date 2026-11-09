@@ -44,19 +44,21 @@ static struct {
     FxState fxs;
 } kept;
 static int drawing;
-/* the in-between view's backdrop angles (BackdropAnglesFromView's $06CF and
-   $06CD), for the hills under the picture shown */
+/* the pictures between's backdrop angles, each panel's (BackdropAnglesFromView's
+   $06CF and $06CD as the picture's part left them), for the hills under them */
 static struct {
     int on;
-    uint16_t heading, pitch;
+    uint16_t heading[2], pitch[2];
 } view;
 
-int fx_tween_view(uint16_t *heading, uint16_t *pitch)
+int fx_tween_backdrop_angles(uint16_t heading[2], uint16_t pitch[2])
 {
     if (!view.on)
         return 0;
-    *heading = view.heading;
-    *pitch = view.pitch;
+    heading[0] = view.heading[0];
+    heading[1] = view.heading[1];
+    pitch[0] = view.pitch[0];
+    pitch[1] = view.pitch[1];
     return 1;
 }
 
@@ -281,9 +283,6 @@ void fx_tween_end(void)
     if (!drawing)
         return;
     fx_draw_tween_shown();
-    view.on = 1;
-    view.heading = g.view_heading_06cf;
-    view.pitch = g.view_angle_06cd;
     memcpy(&g, &kept.g, sizeof g);
     memcpy(&objects, &kept.objects, sizeof objects);
     memcpy(cameras, kept.cameras, sizeof kept.cameras);
@@ -294,7 +293,8 @@ void fx_tween_end(void)
 
 void fx_tween_draw(float between)
 {
-    int panel;
+    int panel, panels = 0;
+    uint16_t heading[2], pitch[2];
 
     if (!fx_tween_begin(race_step_progress(between)))
         return;
@@ -307,6 +307,9 @@ void fx_tween_draw(float between)
 
         if (picture < 0 || !RaceViewForPicture(panel))
             break;
+        heading[panel] = g.view_heading_06cf;
+        pitch[panel] = g.view_angle_06cd;
+        panels = panel + 1;
         records_take_fractions();
         fractions_on = 1;
         fx_draw_begin(picture);
@@ -315,5 +318,13 @@ void fx_tween_draw(float between)
         fractions_on = 0;
     }
     fx_tween_end();
+    if (panels) {
+        /* one player's or each player's; one player's in both places */
+        view.on = 1;
+        view.heading[0] = heading[0];
+        view.pitch[0] = pitch[0];
+        view.heading[1] = heading[panels - 1];
+        view.pitch[1] = pitch[panels - 1];
+    }
     fx_draw_recompose();
 }
