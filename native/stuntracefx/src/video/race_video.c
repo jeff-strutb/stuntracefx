@@ -200,18 +200,7 @@ static void unpacked_to_art(uint16_t out, uint16_t in)
     uint16_t word = cart16(0x03, (uint16_t)(out + 1)), bytes = cart16(0x03, (uint16_t)(out + 5));
 
     unpack_record(in);
-    if (word >= 0x4000 && word < 0x7800)
-        race_art_write(word, fx_ram + 0x3000, bytes);
-    else if (word >= 0x7800) {
-        const uint16_t *w = (const uint16_t *)(const void *)(fx_ram + 0x3000);
-
-        if (g.split_screen)
-            race_panel_map_write(w);
-        else
-            race_map_page_write((word - 0x7800) / 0x400, w);
-    } else {
-        race_frame_art_write(word, fx_ram + 0x3000, bytes);
-    }
+    race_vram_write(word, fx_ram + 0x3000, bytes);
 }
 
 /* The frame and HUD art from the chip RAM by bytes. */
@@ -547,6 +536,22 @@ void race_picture_shown(int buffer)
     pic.bg[1].scroll_x = pic.race.backdrop_x[0];
     pic.bg[1].scroll_y = pic.race.backdrop_y[0];
     race_backdrop_rows_upload(buffer);
+}
+
+/* The race screen handed back: the next screen sets its own layers, and
+   none of the race's are left behind it. */
+void race_screen_end(void)
+{
+    int i;
+
+    pic.race.on = 0;
+    pic.race.split = 0;
+    pic.race.course_screen = 0;
+    for (i = 0; i < 3; i++) {
+        pic.bg[i].draw_list.id = 0;
+        pic.bg[i].tiles.id = 0;
+        pic.bg[i].map.id = 0;
+    }
 }
 
 /* the half shows the finished player's panel: scrolls as the original set them */

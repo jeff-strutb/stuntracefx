@@ -64,6 +64,7 @@ void RaceHudLoad(void);
 void NmiFrameUploadSprites(void);
 extern uint8_t race_pictures[0x3000];
 void race_screen_start(void);
+void race_screen_end(void);                    /* the race hands the screen back: its layers cleared */
 void RaceVideoUpload1P(void);
 void RaceVideoWindows1P(void);
 void RaceVideoUpload2P(void);
