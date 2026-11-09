@@ -7,6 +7,16 @@ run was `tools/nshvc-find-hardware`.
 How this meets the direction in one line: the game's own typed C calls `nshvc_*` directly from `update` and `draw`, with no
 register-shaped state, translation layer or imitated hardware anywhere between them.
 
+> **Read this first (Jeff, 2026-11-09, decision 4 and its repeat).** "Enhanced IS the native game. We are abandoning
+> 'original' mode entirely. This isn't an emulation project." So, everywhere in this plan and in the code:
+> - There is no original mode, and no option, flag or check-only path that runs the game the original's way: no recorded
+>   pacing (`--pacing`), no exact fill rule, no picture held to the original's 256 x 224 screen, no work spent lining frames up
+>   with bsnes or matching its timing.
+> - The game's own logic (physics, objects, menus, rules, sound commands) is still the game's: a crash, a wrong value, an object
+>   in the wrong place or a missing sound is a bug. Recordings of the original are kept only to find such bugs, never as a target.
+> - Where the rest of this plan speaks of matching the original, lining frames up, edges against bsnes, `nshvc-check` frame
+>   reports or recorded pacing, that part is superseded by this.
+
 ## Progress (updated as work lands)
 
 Not done: most of the game. Since decision 4 (2026-11-09) the native game is the Enhanced game; stage 10 says what that means. Of about 120,000 lines to convert, about 5,100 lines of new code exist so far, plus the Super FX logic below brought over unchanged from the generator's output.
@@ -343,6 +353,7 @@ Settled by the maintainer, 2026-11-09:
 | 2 | Are Frame rate 60, the wide picture, solid tyres, the pause screen and the other remaster features part of this conversion? | Yes, all of them, as stage 10 |
 | 3 | Polygon edges: accept the engine's exact rule, with edges measured against bsnes? | Yes |
 | 4 | Race pacing: a fixed step length from the recordings' median makes races 0.8-1.8% slow; which way? (asked 2026-11-09) | Jeff: "We can abandon matching the original and go all in on the enhanced. This isn't an emulation effort at all anymore." |
+| 5 | (Jeff, unasked, the same day) | "Enhanced IS the native game. we are abandoning 'original' mode entirely. This isn't an emulation project. Be sure." |
 
 ## 10. What is not known
 
