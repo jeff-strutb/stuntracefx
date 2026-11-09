@@ -12,6 +12,11 @@ void CameraFollowStep(Camera *cam);
 
 enum { RASTER_NONE, RASTER_ONE_PLAYER, RASTER_TWO_PLAYERS, RASTER_COURSE };
 
+/* The race's pacing (plan stage 8, decisions 4 and 5): one whole step every
+   6 updates in every mode, the step's work told it took 6 frames, with no
+   slowdown. */
+enum { RACE_STEP_UPDATES = 6 };
+
 /* The race the course menu shows behind it. RaceStart sets it up; each
    RaceFrameStep is one step of it, with no waiting inside. It draws the
    picture into fx_draw_picture(0) unless step_only is set. */
@@ -35,8 +40,6 @@ void CourseScreenRasterLine55(void);
 void CourseScreenStep(void);
 uint8_t CourseFromSelection(void);
 /* the race after the course menu: begin once, then each update until nonzero */
-int race_pacing_record(const char *path);
-uint8_t race_step_frames(void);         /* the frames the step being run tells its work it took */   /* check only: each step's frames from a recording */
 void race_session_begin(void);
 int race_session_update(void);
 

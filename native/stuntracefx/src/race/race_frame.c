@@ -105,7 +105,7 @@ static void frame_side0(void)
    original kept as time counters; the Super FX is told the frames too. */
 static void frame_start(void)
 {
-    g.frames_last_step = race_step_frames();
+    g.frames_last_step = RACE_STEP_UPDATES;
     g.frames_since_step = 0;
     g.frame_stage_00 = 0x02;
 }
