@@ -160,12 +160,95 @@ static void raster_frame(void)
 /* forward */
 static void soft_reset_finish(void);
 
+/* @routine 7E:A9B1, A9D3, A9FA, AA1C (the two-player rows stages): with the
+   buffer as `want` the next stage, the rows up. Both players' pictures are
+   in the engine's draw list (race_two_player_list), so only the stages'
+   order is kept. */
+static void two_player_rows(int want, uint8_t next)
+{
+    if ((g.fx_buffer != 0) != want)
+        return;
+    g.fx_upload_stage = next;
+    g.picture_uploaded = 1;
+}
+
+/* A block of bank $7F (the map buffer from byte `from`) to VRAM word `word`. */
+static void map_buffer_to_vram(uint16_t word, uint16_t from, uint32_t bytes)
+{
+    race_vram_write(word, (const uint8_t *)(const void *)race_map_buffer() + from, bytes);
+}
+
+/* 7E:AA91, AA9A: the map buffer's $9BD7 part to VRAM word `word`, stage $10,
+   colour 0 = $1CC4. */
+static void split_picture(uint16_t word)
+{
+    map_buffer_to_vram(word, 0x0800, 0x1680);
+    g.split_stage = 0x10;
+    palettes.buffer[0] = 0x1CC4;
+    pic.palette[0] = 0x1CC4;            /* CGRAM's colour 0 written with it */
+    g.palette_animate = 0;
+}
+
+/*
+ * @routine 7E:AA4B (the split screen's stages, NmiFrameUpload with $0D22 set)
+ * WHAT IT DOES: The results', championship's and pause's uploads by the stage
+ * $0D23: the map rows, sprites, BG2's scroll and the palette; the results'
+ * big picture; the turning picture; the menu's map; the car's picture.
+ */
+static void split_upload(void)
+{
+    switch (g.split_stage) {
+    case 0x02:
+        TilemapRowsTo5C00();
+        /* fall through */
+    case 0x08:
+        OamDmaAll();
+        Bg2ScrollFromTable(0);
+        CgramUploadAll();
+        break;
+    case 0x04:
+        race_vram_write(0x6C00, fx_ram + 0x4000, 0x0A00);
+        race_vram_write(0x6240, fx_ram + 0x4600, 0x0140);
+        race_vram_write(0x6340, fx_ram + 0x4800, 0x0140);
+        g.split_stage = 0x00;
+        break;
+    case 0x0A:
+        VramUploadGsuBuffer();
+        OamDmaAll();
+        /* fall through */
+    case 0x06:
+        CgramUploadAll();
+        break;
+    case 0x0C:
+        split_picture(0x0000);
+        break;
+    case 0x0E:
+        split_picture(0x0B40);
+        break;
+    case 0x10:
+        map_buffer_to_vram(0x7800, 0x0000, 0x0800);
+        break;
+    case 0x12:
+        race_vram_write(0x6600, race_pictures + (uint16_t)(g.overlay_picture - 0x63D7), 0x0C00);
+        g.split_stage = 0x02;
+        break;
+    default:
+        break;                          /* 0: nothing; past $12 not reached */
+    }
+}
+
 /* The upload of the finished picture, three stages a picture: the race's
-   part of the vertical blank's frame upload. */
+   part of the vertical blank's frame upload (NmiFrameUpload); the split
+   screen's stages instead while $0D22 is set. Stage $1C (CgramUploadAll)
+   and $1E (stage 6's copy) are never set by the game. */
 void race_frame_upload(void)
 {
     int shown;
 
+    if (g.split_stage_on) {
+        split_upload();
+        return;
+    }
     switch (g.fx_upload_stage) {
     case 0x00:
         if (!g.fx_buffer) {
@@ -197,8 +280,12 @@ void race_frame_upload(void)
         g.fx_upload_stage = 0x00;
         shown = 1;
         break;
+    case 0x0C: two_player_rows(1, 0x10); return;
+    case 0x10: two_player_rows(0, 0x14); return;
+    case 0x14: two_player_rows(1, 0x18); return;
+    case 0x18: two_player_rows(0, 0x0C); return;
     default:
-        return;
+        return;                         /* $0E, $12, $16, $1A: nothing */
     }
     race_picture_shown(shown);
     g.picture_flip_0d81 = 0xFFFF;

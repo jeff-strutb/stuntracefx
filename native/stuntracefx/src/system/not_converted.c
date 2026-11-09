@@ -88,3 +88,4 @@ NOT_YET_ARGS(SoundPort0QueuePushRawDecimal, (uint8_t command), (void)command;)
 /* wanted from video (race_video.c): the palette rows of the map buffer */
 NOT_YET_ARGS(TilemapPaletteCycle, (unsigned at, int count), (void)at; (void)count;)
 NOT_YET_ARGS(TilemapPaletteFill, (unsigned at, int count, uint8_t bits), (void)at; (void)count; (void)bits;)
+NOT_YET(TilemapRowsTo5C00)

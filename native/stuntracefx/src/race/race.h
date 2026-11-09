@@ -135,6 +135,7 @@ void ResultsScreenStep(void);
    the map buffer from byte offset `at` (odd: the attribute bytes) */
 void TilemapPaletteCycle(unsigned at, int count);   /* 07:CEDF, every fourth frame */
 void TilemapPaletteFill(unsigned at, int count, uint8_t bits);  /* 07:CF14 */
+void TilemapRowsTo5C00(void);           /* 7E:B24C: the map buffer's 17 rows of 26 to BG2's map at $5C00, then BG2's scroll */
 
 /* time_bonus.c, player_stats.c */
 void GsuTimeDigits(void);
