@@ -128,6 +128,13 @@ void RaceEndToAttract(void);
 void RaceEndVideoReset(void);
 void SoftResetToBootWarm(void);
 void race_leave_to_champion(void);       /* the championship's closing screen, then the restart */
+void race_champion_screen(void (*after)(void));   /* the champion's screen (the menus' ChampionScreenRun), then `after` */
+void BootSoftRestart(void);             /* the ending: three demos, then the game from its start */
+void ResultsScreenStep(void);
+/* wanted from video (race_video.c): the palette field of `count` entries of
+   the map buffer from byte offset `at` (odd: the attribute bytes) */
+void TilemapPaletteCycle(unsigned at, int count);   /* 07:CEDF, every fourth frame */
+void TilemapPaletteFill(unsigned at, int count, uint8_t bits);  /* 07:CF14 */
 
 /* time_bonus.c, player_stats.c */
 void GsuTimeDigits(void);

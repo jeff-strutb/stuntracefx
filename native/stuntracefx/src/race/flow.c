@@ -31,12 +31,12 @@ enum { PACE_ONE_PLAYER = 6, PACE_TWO_PLAYERS = 6 };
 /* What the race is doing while no step runs. */
 typedef enum {
     WAIT_NONE, WAIT_OVERLAY, WAIT_CHAMPION, WAIT_END_FADE, WAIT_END_COUNT,
-    WAIT_SOFT_RESET, WAIT_PAUSE, WAIT_PAUSE_LOOP
+    WAIT_SOFT_RESET, WAIT_PAUSE, WAIT_PAUSE_LOOP, WAIT_CHAMPION_RUN
 } RaceWait;
 
 typedef enum {
     FLOW_OFF, FLOW_RACE_SETUP, FLOW_RACE_LOAD, FLOW_COURSE, FLOW_VIDEO_INIT, FLOW_ATTRACT_SETUP,
-    FLOW_RACE_RUN, FLOW_DEMO
+    FLOW_RACE_RUN, FLOW_DEMO, FLOW_ENDING
 } FlowState;
 
 /* The demo's mode: its commands, or running to the fade's end. */
@@ -54,6 +54,7 @@ static struct {
     uint16_t demo_at, demo_frame, demo_flags;
     int demo_mode;
     int demo_ended;                     /* the step a pause held ended the demo */
+    int ending_at, ending_running;      /* the ending's demo and whether it has started */
 } flow;
 
 int race_flow_stopped(void) { return flow.stopped; }
@@ -243,11 +244,13 @@ static void wait_step(void)
                 flow.after();
             return;
         }
+        flow.stopped = 0;
         OverlayFrameStep();
         frame_state.pressed_copy[0] = frame_state.pressed_copy[1] = 0;
         frame_state.held[0] = frame_state.held[1] = 0;
         return;
     case WAIT_CHAMPION:
+        flow.stopped = 0;
         if (ChampionshipScreenFrame()) {
             flow.wait = WAIT_NONE;
             if (flow.after)
@@ -262,6 +265,13 @@ static void wait_step(void)
     case WAIT_PAUSE:
     case WAIT_PAUSE_LOOP:
         PauseFrameStep();
+        return;
+    case WAIT_CHAMPION_RUN:
+        if (ChampionScreenRun()) {
+            flow.wait = WAIT_NONE;
+            if (flow.after)
+                flow.after();
+        }
         return;
     default:
         return;
@@ -289,6 +299,7 @@ static void race_step(void)
 
 /* forward */
 static int demo_after_step(void);
+static void ending_step(void);
 
 void race_pause_begin(int leaves)
 {
@@ -312,7 +323,7 @@ void race_pause_over(int second_half)
     else
         RaceFrameRunResume();
     flow.resuming = 0;
-    if (flow.state == FLOW_DEMO) {
+    if (flow.state == FLOW_DEMO || flow.state == FLOW_ENDING) {
         if (!flow.stopped && demo_after_step())
             flow.demo_ended = 1;
     } else {
@@ -413,12 +424,37 @@ void SoftResetToBootWarm(void)
     session_race_ended(1);
 }
 
+/* The champion's screen, a frame an update (ChampionScreenRun, the
+   menus'), then `after`; the race's raster work is off meanwhile. */
+void race_champion_screen(void (*after)(void))
+{
+    g.raster_chain = RASTER_NONE;
+    flow.wait = WAIT_CHAMPION_RUN;
+    flow.after = after;
+    flow.stopped = 1;
+}
+
+/* 07:EBDD RaceEndLeave's championship: the champion's screen, then SoftResetToBootWarm. */
 void race_leave_to_champion(void)
 {
+    race_champion_screen(SoftResetToBootWarm);
+}
+
+/*
+ * @routine 03:8C86 BootSoftRestart
+ * WHAT IT DOES: The ending after the last class: the sound holds set
+ * ($10DC = $FFFF, $10DE = 0), the three demos of DemoRunThird
+ * (03:865E, 03:866A), then the game from its start.
+ */
+void BootSoftRestart(void)
+{
+    sound_hold_b = 0xFF;
+    sound_alt_set_loaded = 0;
     flow.wait = WAIT_NONE;
     flow.stopped = 1;
-    flow.finished = 1;
-    session_race_ended(1);
+    flow.state = FLOW_ENDING;
+    flow.ending_at = 0;
+    flow.ending_running = 0;
 }
 
 /* @routine 07:AADC SoftResetCheck's finish: the game restarted from the start. */
@@ -479,6 +515,9 @@ int race_session_update(void)
         break;
     case FLOW_COURSE:
         course_update();
+        break;
+    case FLOW_ENDING:
+        ending_step();
         break;
     case FLOW_VIDEO_INIT:
         RaceVideoInit();
@@ -671,28 +710,27 @@ static int demo_step(void)
 
 /* One update of attract demo `which`; 0 while it runs, 1 when a button
    ended it, -1 when it ran out. */
-int DemoRun(int which)
+static void demo_start(uint16_t offset)
 {
-    static const uint16_t offsets[3] = {0x0000, 0x006B, 0x00FC};
+    g.fx_screen_mode = 1;
+    demo_setup(offset);
+    flow.pace_count = 0;
+    flow.wait = WAIT_NONE;
+    flow.demo_mode = DEMO_COMMANDS;
+    flow.finished = 0;
+    flow.demo_ended = 0;
+}
 
-    if (flow.state != FLOW_DEMO) {
-        g.fx_screen_mode = 1;
-        demo_setup(offsets[which & 3]);
-        flow.state = FLOW_DEMO;
-        flow.pace_count = 0;
-        flow.wait = WAIT_NONE;
-        flow.demo_mode = DEMO_COMMANDS;
-        flow.finished = 0;
-        flow.demo_ended = 0;
-        return 0;
-    }
+/* One update of a running demo: 0 while it runs, 1 when a button ended it,
+   -1 when it ran out, -2 when a soft reset left the game's session. */
+static int demo_frame(void)
+{
     raster_frame();
     if (flow.wait != WAIT_NONE) {
         wait_step();
         if (flow.finished) {
-            flow.state = FLOW_OFF;
             g.raster_chain = RASTER_NONE;
-            return -1;
+            return -2;
         }
         if (!flow.demo_ended)
             return 0;
@@ -710,9 +748,47 @@ int DemoRun(int which)
         int button = (flow.demo_flags & 0x0040) != 0;
 
         pic.blank = 1;
-        flow.state = FLOW_OFF;
         flow.demo_flags = 0;
         g.raster_chain = RASTER_NONE;
         return button ? 1 : -1;
     }
+}
+
+int DemoRun(int which)
+{
+    static const uint16_t offsets[3] = {0x0000, 0x006B, 0x00FC};
+    int r;
+
+    if (flow.state != FLOW_DEMO) {
+        demo_start(offsets[which & 3]);
+        flow.state = FLOW_DEMO;
+        return 0;
+    }
+    r = demo_frame();
+    if (r)
+        flow.state = FLOW_OFF;
+    return r == -2 ? -1 : r;
+}
+
+/* The ending's demos, one after another (03:865E DemoRunThird, 03:866A
+   DemoRunThirdRest), then 03:8C95's restart: the port 1 command 6 the
+   original sends first is followed at once by the sound's reset. */
+static void ending_step(void)
+{
+    static const uint16_t offsets[3] = {0x0159, 0x01FA, 0x0287};
+    int r;
+
+    if (!flow.ending_running) {
+        demo_start(offsets[flow.ending_at]);
+        flow.ending_running = 1;
+        return;
+    }
+    r = demo_frame();
+    if (!r || r == -2)
+        return;
+    flow.ending_running = 0;
+    if (++flow.ending_at < 3)
+        return;
+    pic.blank = 1;
+    soft_reset_finish();
 }

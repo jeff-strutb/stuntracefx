@@ -28,8 +28,6 @@ NOT_YET(BucketTriggersFixedArea)
 NOT_YET(ObjectGroupsActivate)
 NOT_YET(PlayerControlsFrame)
 NOT_YET(SpriteSlot1Countdown)
-NOT_YET(ChampionshipFinish)
-NOT_YET(OverlayFrameStep)
 NOT_YET(MenuCourseScreenSetup)
 NOT_YET(OamHide75Up)
 NOT_YET(OamHideForHudMode)
@@ -42,7 +40,6 @@ NOT_YET(RaceRestart)
 NOT_YET(RaceEndToAttract)
 NOT_YET(RaceEndVideoReset)
 NOT_YET(SoftResetToBootWarm)
-NOT_YET(race_leave_to_champion)
 NOT_YET(Countdown0DF8)
 
 __attribute__((weak)) void CourseScriptRun(uint8_t bank, uint16_t addr)
@@ -86,12 +83,8 @@ __attribute__((weak)) uint8_t SpriteYOnScreen(uint8_t y)
     return y >= 0xB0 ? 0xF0 : y;
 }
 
-__attribute__((weak)) int ChampionshipScreenFrame(void)
-{
-    static int said;
-
-    if (!said) { said = 1; fprintf(stderr, "not converted yet: ChampionshipScreenFrame\n"); }
-    return 1;
-}
-
 NOT_YET_ARGS(SoundPort0QueuePushRawDecimal, (uint8_t command), (void)command;)
+
+/* wanted from video (race_video.c): the palette rows of the map buffer */
+NOT_YET_ARGS(TilemapPaletteCycle, (unsigned at, int count), (void)at; (void)count;)
+NOT_YET_ARGS(TilemapPaletteFill, (unsigned at, int count, uint8_t bits), (void)at; (void)count; (void)bits;)
