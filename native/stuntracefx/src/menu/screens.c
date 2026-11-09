@@ -430,6 +430,7 @@ static void preview_open(void)
     menu_state_clear();
     actors_reset();
     actors_spawn_list(0x10);
+    fx_draw_set_origin(32, 96);
     RaceStart();
     actors_run();
     actors_build_sprites();
@@ -467,6 +468,7 @@ static void preview_fade_begin(void)
     memset(pic.palette, 0, 12 * 2);
     for (i = 0; i < 12; i++)
         pic.palette_saved[i] = cart16(0x1C, (uint16_t)(0xE3AC + i * 2));
+    fx_draw_set_origin(32, 96);
     RaceStart();
     menu.slide_top = menu.slide_top_next = 0;
     menu.slide_low = menu.slide_low_next = 0x00A8;
@@ -717,6 +719,7 @@ int CourseMenuRun(void)
             state = S_COURSE_DONE;
         break;
     case S_COURSE_DONE:
+        fx_draw_set_origin(0, 0);
         g.hud_mode = (uint8_t)g.menu_mode;
         g.course_menu_seen = 1;
         if (g.menu_mode == 2)
