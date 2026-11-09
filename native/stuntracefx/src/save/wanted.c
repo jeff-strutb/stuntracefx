@@ -38,9 +38,6 @@ __attribute__((weak)) uint16_t TimePackBcd(uint8_t hundredths, uint8_t seconds, 
 
 __attribute__((weak)) void TimeTotalsSum(void) { NOT_YET("TimeTotalsSum"); }
 __attribute__((weak)) void TimeRunningTotals(void) { NOT_YET("TimeRunningTotals"); }
-__attribute__((weak)) int DemoRun(int which) { (void)which; NOT_YET("DemoRun"); return -1; }
 __attribute__((weak)) void RecordsPanelTile(uint16_t offset, uint8_t tile) { (void)offset; (void)tile; NOT_YET("RecordsPanelTile"); }
 __attribute__((weak)) void CourseScreenState8(void) { NOT_YET("CourseScreenState8"); }
-__attribute__((weak)) void race_session_begin(void) { NOT_YET("race_session_begin"); }
-__attribute__((weak)) int race_session_update(void) { return 0; }
 __attribute__((weak)) void PlayerSound35(void) { NOT_YET("PlayerSound35"); }
