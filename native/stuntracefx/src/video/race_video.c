@@ -358,6 +358,9 @@ void RaceVideoSetup(void)
     GradientBuildColours(g.course);
     if (g.split_screen) {
         two_player_art(k3);
+        /* $7F:9BD7-$BBD7 cleared: what the results and the quit menu put
+           in a half's 3D place (split_picture) is this, a blank picture */
+        memset((uint8_t *)bank7f_words + 0x800, 0, 0x2001);
         unpacked_to_art(0xF84C, 0xF7E3);
         memcpy(backdrop_map(0), fx_ram + 0x3000, 0x800);
         chip_unpack(0x18 << 16 | 0xC770, 0x3000);
