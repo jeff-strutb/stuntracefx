@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.20)
+project(srfx_music_mix C)
+add_subdirectory(${NSHVC_ROOT} nshvc)
+include(${NSHVC_ROOT}/cmake/NshvcGame.cmake)
+set(a ../../../stuntracefx/src/audio)
+nshvc_game(srfx_music_mix SOURCES mix.c ${a}/driver_music.c ${a}/driver_race.c ${a}/driver_battle.c ${a}/music.c TITLE "SRFX music mix")
+target_include_directories(srfx_music_mix PRIVATE ../../../stuntracefx/src)
+target_compile_options(srfx_music_mix PRIVATE -std=gnu11 -Wall -Wextra)
