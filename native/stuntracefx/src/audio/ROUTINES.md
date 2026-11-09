@@ -114,6 +114,6 @@ in `frame_end`.
 
 ## Not reached by any recording, so shown only by reading
 
-The second course set (`CourseSoundLoad` with $10DC set), `SoundDataLoad`'s copies of $91BC and $AFC6, the noise samples for source $23 (sounds $08,
-$4C, $66: no recorded play triggers them), and the game-side effect routines in the running game (their logic matches the record's C over 3 million
+The second course set (`CourseSoundLoad` with $10DC set), `SoundDataLoad`'s copies of $91BC and $AFC6, the noise samples for source $23 (sounds $09,
+$4D and $67: no recorded play triggers them; queued straight into the driver, each keys on its own variant, headers $C2, $A6 and $96), and the game-side effect routines in the running game (their logic matches the record's C over 3 million
 random states, a one-off check).
