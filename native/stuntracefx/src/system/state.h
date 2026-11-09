@@ -24,7 +24,14 @@ typedef struct {
     uint16_t menu_mode;                 /* $18C3: the mode menu's selection */
     uint16_t choice_p1, choice_p2;      /* $18CB, $18C9: the players' choices */
     uint16_t choices[3];                /* $18CD-$18D1: the three car settings, 0-2 each */
-    uint16_t sel[12];                   /* $18D3-$18E9: derived from the choices; sel[4]-[7] are the handler addresses $18DB-$18E1, sel[8] $18E3, sel[9] $18E5 */
+    union {                             /* the same twelve words by two names */
+        uint16_t sel[12];               /* $18D3-$18E9: derived from the choices; sel[4]-[7] are the handler addresses $18DB-$18E1, sel[8] $18E3, sel[9] $18E5 */
+        struct {
+            uint16_t selection_out[4];      /* $18D3: each racer's model (words), sel[0]-[3] */
+            uint16_t selection_handler[4];  /* $18DB: each racer's control word, sel[4]-[7] */
+            uint16_t selection_derived[4];  /* $18E3: sel[8]-[11] */
+        };
+    };
     uint16_t settings_row[3];           /* $18EF-$18F3: the settings also shown as initials */
     uint8_t car_settings[3];            /* $1184-$1186 */
     uint16_t word_1168;                 /* $1168 */
@@ -196,9 +203,6 @@ typedef struct {
     uint16_t player_flags[2];           /* $1A5E, $1A60 */
     uint16_t seq_count, seq_stage;      /* $1A33, $1A35: the button sequence */
     uint16_t bucket_origin[3];          /* $1F01, $1F03, $1F05: the bucket trigger window */
-    uint16_t selection_out[4];          /* $18D3: each racer's model (words) */
-    uint16_t selection_handler[4];      /* $18DB: each racer's control word */
-    uint16_t selection_derived[4];      /* $18E3 */
     uint8_t script_byte_1f71;
     uint8_t course;                     /* $0E3D */
     uint16_t frame_record_count;        /* $0CEE: the records built for the renderer this frame */
