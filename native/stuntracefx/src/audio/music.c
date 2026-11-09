@@ -148,7 +148,8 @@ void music_bank_set(const uint8_t image[0x10000], int battle)
             if (header & 1)
                 break;
         }
-        b->samples[e] = sample_of(image + start, size, loop >= start ? (uint32_t)(loop - start) : 0);
+        if (size)
+            b->samples[e] = sample_of(image + start, size, loop >= start ? (uint32_t)(loop - start) : 0);
     }
     memset(&m, 0, sizeof m);
     m.kind = MESSAGE_BANK;

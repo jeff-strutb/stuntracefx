@@ -1,29 +1,31 @@
 /*
  * main.c: the game on the engine. The engine owns the loop and calls these.
  */
-#include <string.h>
-
+#include "audio/music.h"
+#include "audio/sound.h"
+#include "data/cart.h"
 #include "nshvc/nshvc.h"
+#include "system/game.h"
+#include "video/picture.h"
 
 static void init(void)
 {
+    cart_load();
+    sound_init();
+    video_init();
+    session_start();
 }
 
 static void update(const nshvc_input *input)
 {
-    (void)input;
+    input_read(input);
+    session_update();
 }
 
 static void draw(float between)
 {
-    nshvc_screen screen;
-
     (void)between;
-    memset(&screen, 0, sizeof screen);
-    screen.width = 256;
-    screen.height = 224;
-    screen.blank = 1;
-    nshvc_screen_set(&screen);
+    video_draw();
 }
 
 int main(int argc, char **argv)
@@ -36,5 +38,8 @@ int main(int argc, char **argv)
     game.init = init;
     game.update = update;
     game.draw = draw;
+    game.music.hz = 32040;
+    game.music.tick = music_tick;
+    game.music.queue_bytes = 4096;
     return nshvc_run(&game, argc, argv);
 }
