@@ -21,11 +21,6 @@ typedef struct {
     uint32_t first, count;
 } FxShape;
 
-/* Whether faces are made in floats (the Enhanced picture) or the chip's
-   whole-pixel entries are drawn (the exact picture, for the checks). */
-void fx_face_set_on(int on);
-int fx_face_on(void);
-
 /* The faces committed since the queue was last drawn are made into shapes. */
 void fx_face_settle(void);
 /* The shape standing for the entry at `entry`, or NULL. */

@@ -30,6 +30,11 @@
  * negative or |X| - radius is not below |Z|. Otherwise its key is the
  * old key + Z + the shape's bias (+$05), stored at +$02, and it is linked
  * in before the first slot whose key is not above it (+$00). Then STOP.
+ * The sides' test is the chip's 45 degrees, 128 pixels from the centre at
+ * the focal length 128: wider than the original's view (104 each side).
+ * A view wider than that (the full window, plan stage 10) takes its sides
+ * from its words instead: |X| - radius below |Z| * the half-width / 128.
+ * Only the frame program reads the list.
  * Entry: started by the S-CPU. Exit: (at the STOP) R9 past the last slot;
  * R12 = 0; R13 = $AF0F (the slot loop); the other registers, the flags
  * and the last RAM address as the last slot left them; the ROM bank 0.
@@ -87,6 +92,11 @@ void FxSortObjectsProgram(void)
     uint16_t pool_radius_ptr;
     uint16_t record_flags_byte;
 
+    /* the view's half-width in pixels, the larger side of its centre */
+    int32_t centre = (int16_t)fx_ldw(0x0034), half = centre - (int16_t)fx_ldw(0x0038);
+
+    if ((int16_t)fx_ldw(0x003A) + 1 - centre > half)
+        half = (int16_t)fx_ldw(0x003A) + 1 - centre;
     fx_romb(0);
     fx_stw(GSU_DRAW_LIST, 0);
     draw_list = 0x0AAA;
@@ -143,7 +153,8 @@ void FxSortObjectsProgram(void)
                 } else {
                     view_x_abs = (uint16_t)((uint16_t)~view_x_abs + 1);
                 }
-                if ((uint16_t)((uint16_t)(view_x_abs - radius) - view_z_abs) & 0x8000) {
+                if (half > 128 ? (int32_t)(int16_t)(uint16_t)(view_x_abs - radius) < (int32_t)view_z_abs * half / 128
+                               : ((uint16_t)((uint16_t)(view_x_abs - radius) - view_z_abs) & 0x8000) != 0) {
                     pool_2 = fx_ldw((uint16_t)(draw_list + FXREC_POOL));
                     pool_depth_ptr = (uint16_t)(pool_2 + 5);
                     fx_r14(pool_depth_ptr);

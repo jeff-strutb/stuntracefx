@@ -174,77 +174,86 @@ static void wr(uint8_t *m, uint16_t a, uint16_t v)
     m[(uint16_t)(a + 1)] = (uint8_t)(v >> 8);
 }
 
+/* The places and angles are set from the last two kept step ends, not
+   from the state as it stands: while a pause holds a step, the state has
+   gone on into the held step (its physics, objects and frame program have
+   run before PauseOnStart), and the picture must stay the last step's. At
+   a step's end the two are the same. */
+
 /* The Super FX records (the list at $2332, by +$04) and a car's parts (+$3E,
    by +$34): places +$1E-$22, a record's angles +$24-$28. A record is the
    same thing at both ends when it is in the list at the same address. */
-static void records_between(const uint8_t *was, float t)
+static void records_between(const uint8_t *was, const uint8_t *end, float t)
 {
     uint16_t rec;
     int n;
 
-    for (rec = rd(fx_ram, FX_RECORDS), n = 0; rec >= 0x1000 && rec < 0x2400 && n < 96; rec = rd(fx_ram, (uint16_t)(rec + FXREC_ALL_NEXT)), n++) {
+    for (rec = rd(end, FX_RECORDS), n = 0; rec >= 0x1000 && rec < 0x2400 && n < 96; rec = rd(end, (uint16_t)(rec + FXREC_ALL_NEXT)), n++) {
         uint16_t part;
         int i, m;
 
         for (i = 0; i < 3; i++) {
             uint16_t a = (uint16_t)(rec + FXREC_HALF_X + 2 * i), b = (uint16_t)(rec + FXCAR_PITCH + 2 * i);
 
-            wr(fx_ram, a, place_between(rd(was, a), rd(fx_ram, a), t));
-            wr(fx_ram, b, angle_between(rd(was, b), rd(fx_ram, b), t));
+            wr(fx_ram, a, place_between(rd(was, a), rd(end, a), t));
+            wr(fx_ram, b, angle_between(rd(was, b), rd(end, b), t));
         }
-        for (part = rd(fx_ram, (uint16_t)(rec + FXCAR_PARTS)), m = 0; part >= 0x1000 && part < 0x2400 && m < 8;
-             part = rd(fx_ram, (uint16_t)(part + FXPART_NEXT)), m++)
+        for (part = rd(end, (uint16_t)(rec + FXCAR_PARTS)), m = 0; part >= 0x1000 && part < 0x2400 && m < 8;
+             part = rd(end, (uint16_t)(part + FXPART_NEXT)), m++)
             for (i = 0; i < 3; i++) {
                 uint16_t a = (uint16_t)(part + FXREC_HALF_X + 2 * i);
 
-                wr(fx_ram, a, place_between(rd(was, a), rd(fx_ram, a), t));
+                wr(fx_ram, a, place_between(rd(was, a), rd(end, a), t));
             }
     }
 }
 
-/* An object is the same thing at both ends when its slot holds the same
-   model, handler and record. */
-static void objects_between(const ObjectTable *was, float t)
+/* An object is the same thing at both ends, and still now, when its slot
+   has had no object made in it or freed from it between (the objects'
+   count of each slot's changes) and holds the same model and record. An
+   object made during the step is drawn at its place as it stands. */
+static void objects_between(const ObjectTable *was, const ObjectTable *end, float t)
 {
     int k;
 
     for (k = 0; k < OBJECT_COUNT; k++) {
         Object *o = &objects.object[k];
-        const Object *w = &was->object[k];
+        const Object *w = &was->object[k], *e = &end->object[k];
 
         object_frac[k][0] = object_frac[k][1] = object_frac[k][2] = 0;
-        if (o->model != w->model || o->handler != w->handler || o->handler_bank != w->handler_bank || o->record != w->record)
+        if (was->slot_changes[k] != end->slot_changes[k] || end->slot_changes[k] != objects.slot_changes[k]
+            || w->model != e->model || w->record != e->record || o->model != e->model)
             continue;
-        o->x = place_between(w->x, o->x, t);
-        o->y = place_between(w->y, o->y, t);
-        o->z = place_between(w->z, o->z, t);
-        o->pitch = angle8_between(w->pitch, o->pitch, t, &object_frac[k][0]);
-        o->heading = angle8_between(w->heading, o->heading, t, &object_frac[k][1]);
-        o->roll = angle8_between(w->roll, o->roll, t, &object_frac[k][2]);
+        o->x = place_between(w->x, e->x, t);
+        o->y = place_between(w->y, e->y, t);
+        o->z = place_between(w->z, e->z, t);
+        o->pitch = angle8_between(w->pitch, e->pitch, t, &object_frac[k][0]);
+        o->heading = angle8_between(w->heading, e->heading, t, &object_frac[k][1]);
+        o->roll = angle8_between(w->roll, e->roll, t, &object_frac[k][2]);
     }
 }
 
-static void cameras_between(const Camera *was, float t)
+static void cameras_between(const Camera *was, const Camera *end, float t)
 {
     int c;
 
     for (c = 0; c < 2; c++) {
         Camera *cam = &cameras[c];
 
-        if (cam->object != was[c].object)
+        if (end[c].object != was[c].object || cam->object != end[c].object)
             continue;
-        cam->x = place_between(was[c].x, cam->x, t);
-        cam->y = place_between(was[c].y, cam->y, t);
-        cam->z = place_between(was[c].z, cam->z, t);
-        cam->pitch = angle_between(was[c].pitch, cam->pitch, t);
-        cam->turn = angle_between(was[c].turn, cam->turn, t);
-        cam->roll = angle_between(was[c].roll, cam->roll, t);
+        cam->x = place_between(was[c].x, end[c].x, t);
+        cam->y = place_between(was[c].y, end[c].y, t);
+        cam->z = place_between(was[c].z, end[c].z, t);
+        cam->pitch = angle_between(was[c].pitch, end[c].pitch, t);
+        cam->turn = angle_between(was[c].turn, end[c].turn, t);
+        cam->roll = angle_between(was[c].roll, end[c].roll, t);
     }
 }
 
 int fx_tween_begin(float t)
 {
-    const Ends *was;
+    const Ends *was, *end;
 
     if (drawing || steps < 2)
         return 0;
@@ -253,15 +262,16 @@ int fx_tween_begin(float t)
     if (t > 1)
         t = 1;
     was = &ends[!last];
+    end = &ends[last];
     memcpy(&kept.g, &g, sizeof g);
     memcpy(&kept.objects, &objects, sizeof objects);
     memcpy(kept.cameras, cameras, sizeof kept.cameras);
     memcpy(kept.fx, fx_ram, sizeof fx_ram);
     kept.fxs = fxs;
     drawing = 1;
-    cameras_between(was->cameras, t);
-    objects_between(&was->objects, t);
-    records_between(was->fx, t);
+    cameras_between(was->cameras, end->cameras, t);
+    objects_between(&was->objects, &end->objects, t);
+    records_between(was->fx, end->fx, t);
     fx_draw_tween_on();
     return 1;
 }

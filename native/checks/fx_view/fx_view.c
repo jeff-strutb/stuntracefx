@@ -1,6 +1,7 @@
 /*
- * fx_view.c: recorded Super FX frames drawn by the GPU, for measuring the
- * picture. fx_view --headless --updates N --shots DIR with REC and REF in the
+ * fx_view.c: recorded Super FX frames drawn by the GPU, for finding bugs in
+ * the race's drawing (the original's picture is not a target, decision 5).
+ * fx_view --headless --updates N --shots DIR with REC and REF in the
  * environment: each picture is one recorded frame program, and REF gets the
  * original's bitmap for the same frame as DIR's file of the same number.
  */
@@ -28,9 +29,8 @@ static uint8_t regs[64];
 static nshvc_draw_list list;
 static uint16_t palette[256];
 static int number;
-/* SCALE: the list's pixels per screen pixel; HIRES=1: the shapes in floats
-   with the smooth rule (else the chip's entries with the exact rule);
-   FACECHECK=1: the faces' vertices counted against the chip's. */
+/* SCALE: the list's pixels per screen pixel; FACECHECK=1: the faces'
+   vertices counted against the chip's (a finder of projection bugs). */
 static int scale = 1;
 
 static void apply(FILE *f)
@@ -115,7 +115,7 @@ static void frame_start(void)
     for (i = 0; i < 256; i++)
         palette[i] = (uint16_t)(machine[AT_CG + i * 2] | machine[AT_CG + i * 2 + 1] << 8);
     nshvc_draw_list_clear(list, 256 * scale, 224 * scale);
-    nshvc_draw_rule(list, fx_face_on() ? NSHVC_FILL_SMOOTH : NSHVC_FILL_EXACT);
+    nshvc_draw_rule(list, NSHVC_FILL_SMOOTH);
     fx_draw_set_target(list, 256 * scale, 224 * scale);
 }
 
@@ -190,7 +190,6 @@ static void init(void)
     list = nshvc_draw_list_create();
     if (getenv("SCALE"))
         scale = atoi(getenv("SCALE")) > 0 ? atoi(getenv("SCALE")) : 1;
-    fx_face_set_on(getenv("HIRES") && atoi(getenv("HIRES")));
     fx_face_check_on(getenv("FACECHECK") != NULL);
 }
 

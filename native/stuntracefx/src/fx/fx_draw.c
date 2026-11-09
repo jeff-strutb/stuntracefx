@@ -60,10 +60,8 @@ static int offset_x, offset_y;
 static int origin_x, origin_y;  /* where a screen other than the race's puts the picture; 0, 0: none */
 static int palette_row;         /* the 16 colours a 4-bit picture's tiles show it in */
 /* The list's pixels per screen pixel (target: the checks' list; screen: the
-   layer's), and whether the screen's list may be at the output's pixels:
-   the frame art drawn into it (race_frame_art_draw) must scale too. */
+   layer's, which the frame art drawn into it scales by too). */
 static float target_sx = 1, target_sy = 1, screen_sx = 1, screen_sy = 1;
-static int output_pixels = 1;   /* the frame art scales with the list (video, 7973cf1a) */
 
 void fx_draw_list_scale(float *sx, float *sy)
 {
@@ -71,17 +69,6 @@ void fx_draw_list_scale(float *sx, float *sy)
     *sy = screen_sy;
 }
 
-void fx_draw_output_pixels(int on)
-{
-    output_pixels = on;
-}
-
-/* The rule the lists are filled with: the smooth one for the shapes in
-   floats, the exact one for the chip's whole-pixel entries (the checks). */
-static nshvc_fill_rule fill_rule(void)
-{
-    return fx_face_on() ? NSHVC_FILL_SMOOTH : NSHVC_FILL_EXACT;
-}
 
 void fx_draw_set_palette_row(int row)
 {
@@ -437,10 +424,9 @@ static void compose_recording(const Recording *r, uint32_t from, uint32_t to, in
 }
 
 /* The screen's list: over the whole screen (the full window's W x H, else
-   the original's 256 x 224), at the window's pixels the screen covers (its
-   pixels shown 7:6 wide, the engine's shape; 4 times the screen when no
-   window is known, as in a headless run), or at the screen's own pixels
-   until the frame art scales with it. */
+   256 x 224), at the window's pixels the screen covers (its pixels shown
+   7:6 wide, the engine's shape; 4 times the screen when no window is known,
+   as in a headless run). */
 static void screen_list_size(uint32_t *w, uint32_t *h)
 {
     nshvc_display d;
@@ -448,14 +434,6 @@ static void screen_list_size(uint32_t *w, uint32_t *h)
     int sw = race_full_window() ? sh->width : 256, shh = race_full_window() ? sh->height : 224;
     double pw = 4.0 * sw, ph = 4.0 * shh, k;
 
-    /* another screen's picture (the course menu's car) has no frame art:
-       always at the output's pixels */
-    if ((!output_pixels && !origin_x && !origin_y) || !fx_face_on()) {
-        *w = (uint32_t)sw;
-        *h = (uint32_t)shh;
-        screen_sx = screen_sy = 1;
-        return;
-    }
     d = nshvc_display_info();
     if (d.width > 0 && d.height > 0) {
         k = (double)d.height / shh;
@@ -515,7 +493,7 @@ nshvc_draw_list fx_draw_picture(int picture)
         composed_h = h;
         composed_origin = origin;
         nshvc_draw_list_clear(screen_list, w, h);
-        nshvc_draw_rule(screen_list, fill_rule());
+        nshvc_draw_rule(screen_list, NSHVC_FILL_SMOOTH);
         /* the race's frame and panels, not on another screen's picture */
         if (!origin_x && !origin_y)
             race_frame_art_draw(screen_list);
@@ -548,7 +526,7 @@ void fx_op_clear(void)
         recording->gen++;
     } else if (target.id) {
         nshvc_draw_list_clear(target, target_w, target_h);
-        nshvc_draw_rule(target, fill_rule());
+        nshvc_draw_rule(target, NSHVC_FILL_SMOOTH);
     }
 }
 
@@ -612,16 +590,15 @@ static struct {
 } sprite_map;
 
 /* The vertices of a textured quad over the pixels [x0, x1) x [y0, y1), with
-   u = u0 + i du and v = v0 + j dv at the centre of column i and row j. The
-   exact rule puts a whole-pixel vertex 1/64 and 1/128 past its place; the
-   smooth rule takes the quad's edges where they are. */
+   u = u0 + i du and v = v0 + j dv at the centre of column i and row j: the
+   corners take the texels' edges, half a step out from the first and last
+   centres. */
 static void quad(nshvc_image image, int x0, int x1, int y0, int y1, double u0, double du, double v0, double dv)
 {
     nshvc_vertex v[6];
     nshvc_material m;
-    double e = fx_face_on() ? 0 : 1.0 / 64, f = fx_face_on() ? 0 : 1.0 / 128;
-    double ul = u0 - (0.5 - e) * du, ur = u0 + ((x1 - x0) - 0.5 + e) * du;
-    double vt = v0 - (0.5 - f) * dv, vb = v0 + ((y1 - y0) - 0.5 + f) * dv;
+    double ul = u0 - 0.5 * du, ur = u0 + ((x1 - x0) - 0.5) * du;
+    double vt = v0 - 0.5 * dv, vb = v0 + ((y1 - y0) - 0.5) * dv;
     double l = x0, r = x1, t = y0, b = y1;
 
     if ((!target.id && !recording) || x1 <= x0 || y1 <= y0)

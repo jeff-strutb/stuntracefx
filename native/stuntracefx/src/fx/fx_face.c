@@ -45,11 +45,6 @@ enum {
 #define CUT 1.25                /* a textured piece's far over near depth */
 #define CHIP_FAR 17406.0        /* $43FE: the depth FxModelProject's far table stops at */
 
-static int on = 1;
-
-void fx_face_set_on(int o) { on = o != 0; }
-int fx_face_on(void) { return on; }
-
 /* A word of the chip's RAM, read without moving its last RAM address. */
 static uint16_t word(uint16_t a)
 {
@@ -238,8 +233,6 @@ static void settle_face(void)
 void fx_face_begin(uint16_t entry, int textured)
 {
     settle_face();
-    if (!on)
-        return;
     face.open = 1;
     face.entry = entry;
     face.textured = textured != 0;
@@ -539,7 +532,7 @@ void fx_sprite_place(uint16_t x, uint16_t y, uint16_t depth, uint16_t size, uint
     View v = view_now();
     double d = depth ? depth : 1, half = (screen_size >> 1) + (screen_size & 1);
 
-    sprite.set = on && screen_size != 0;
+    sprite.set = screen_size != 0;
     sprite.cx = v.cx + FOCAL * (int16_t)x / d;
     sprite.cy = v.cy + FOCAL * (int16_t)y / d;
     sprite.k = size ? (FOCAL * size / d) / screen_size : 1.0;
