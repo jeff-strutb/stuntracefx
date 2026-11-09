@@ -53,14 +53,14 @@ void RaceTimeAddD815(void)
 {
     unsigned c = 0;
 
-    g.time_left = bcd_add16(cart8(0x03, (uint16_t)(0xD815 + course_index_12(g.car_kind[0]))), g.time_left, &c);
+    g.time_left = bcd_add16(cart8(0x03, (uint16_t)(0xD815 + course_index_12(g.car[0]))), g.time_left, &c);
 }
 
 void RaceTimeAddD814(void)
 {
     unsigned c = 0;
 
-    g.time_left = bcd_add16(cart8(0x03, (uint16_t)(0xD814 + course_index_12(g.car_kind[0]))), g.time_left, &c);
+    g.time_left = bcd_add16(cart8(0x03, (uint16_t)(0xD814 + course_index_12(g.car[0]))), g.time_left, &c);
 }
 
 /*
@@ -76,11 +76,11 @@ void RaceTimeInit(void)
     g.countdown_fraction_2 = 0x9999;
     if (g.hud_mode == 0) {
         if (g.time_override == 0)
-            v = cart8(0x03, (uint16_t)(0xD813 + course_index_12(g.car_kind[0])));
+            v = cart8(0x03, (uint16_t)(0xD813 + course_index_12(g.car[0])));
         else
             v = cart8(0x03, (uint16_t)(0xD810 + g.course_class));
-    } else if (g.hud_mode == 1 && !g.time_off) {
-        v = cart8(0x03, (uint16_t)(0xD8A3 + (uint8_t)((uint8_t)((uint8_t)(g.course - 0x0C) * 4) + g.car_kind[0])));
+    } else if (g.hud_mode == 1 && !g.hud_blank) {
+        v = cart8(0x03, (uint16_t)(0xD8A3 + (uint8_t)((uint8_t)((uint8_t)(g.course - 0x0C) * 4) + g.car[0])));
     }
     g.time_left = v;
 }

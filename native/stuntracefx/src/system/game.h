@@ -12,7 +12,6 @@
 typedef struct {
     uint16_t held[2], pressed[2];
     uint16_t pressed_copy[2];           /* $0D1A, $0D1C: the race's presses, folded in by the raster */
-    uint16_t last[2];                   /* $0D1E, $0D20 */
     uint16_t menu_pressed[2];
     uint8_t brightness, brightness_target, half_rate;
     uint8_t frames;

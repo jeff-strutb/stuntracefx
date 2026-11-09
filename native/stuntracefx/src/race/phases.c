@@ -294,12 +294,12 @@ static void finish_sound(uint8_t car)
 }
 
 /* @routine 07:E944 CarFinishSound */
-void CarFinishSound(void) { finish_sound(g.car_kind[0]); }
+void CarFinishSound(void) { finish_sound(g.car[0]); }
 
 void CarFinishSoundP2(void)
 {
     g.current_player = 0x01;
-    finish_sound(g.car_kind[1]);
+    finish_sound(g.car[1]);
 }
 
 /*
@@ -397,7 +397,7 @@ static void lap_override(void)
         fx16_set((uint16_t)(0xFC5E + entry), packed);
         HudBestTimeDigits();
         fx16_set((uint16_t)(0xFC60 + entry), g.level_colour);
-        fx8_set((uint16_t)(0xFC62 + entry), g.car_kind[0]);
+        fx8_set((uint16_t)(0xFC62 + entry), g.car[0]);
         SaveSumsRecordsB();
         g.lead = 0x01;
     } else if (packed != best) {
@@ -627,9 +627,9 @@ static void race_end_wait(void (*draw)(void))
         draw();
         return;
     }
-    g.byte_e5f = 0;
-    g.window_up_kept = palettes.amount;
-    g.window_step_d23 = 0x06;
+    g.palette_animate = 0;
+    g.split_stage_on = palettes.amount;
+    g.split_stage = 0x06;
     g.finish_timer = 0x78;
     g.race_ended_d55 = 0;
     RaceEndCountdownFade();
@@ -642,8 +642,8 @@ void RaceEndWaitBigSprites(void) { race_end_wait(BigSpritesRow5); }
 
 static void window_up(void)
 {
-    g.window_up_kept = 0x01;
-    g.window_step_d23 = 0x00;
+    g.split_stage_on = 0x01;
+    g.split_stage = 0x00;
     WindowSlideUpSound();
 }
 
@@ -702,7 +702,7 @@ void RaceEndWindowSteps(void)
             if (g.champ_stage == 0x01) {
                 g.time_override = 0xFF;
                 g.course = (uint8_t)(g.course_class + 0x14);
-                g.car_kind[0] = 0x04;
+                g.car[0] = 0x04;
             } else {
                 g.champ_stage++;
             }
@@ -823,8 +823,8 @@ void RaceEndLeave(void)
 
 static void time_up_end(uint8_t t)
 {
-    g.window_up_kept = 0x06;
-    g.window_step_d23 = 0x06;
+    g.split_stage_on = 0x06;
+    g.split_stage = 0x06;
     g.time_up_timer = t;
     g.race_ended_d55 = 0;
     sound_port0_push_raw(0x30);
@@ -856,7 +856,7 @@ void TimeUpBattle(void)
 /* The first part's wait; returns 1 to go on, 2 when it set phase 6, 0 when it only counted. */
 static int time_up_wait(void)
 {
-    if (g.byte_0dda < 0x10)
+    if (g.status_level[0] < 0x10)
         return 1;
     if ((uint8_t)g.time_left) {
         g.player_phase[0] = 0x06;

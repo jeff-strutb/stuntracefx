@@ -29,7 +29,6 @@ typedef struct {
     uint8_t frames_last_step;           /* $06D4: the frames the step now running covers */
     uint8_t frame_count;                /* $0E3B: video frames, free running */
     uint8_t course_class;               /* $0D4A: the championship class */
-    uint8_t car_kind[2];                /* $0D89, $0D8A: each player's car */
     uint8_t start_light;                /* $0D54: the start's lights */
     uint8_t start_substate;             /* $0D5A */
     uint8_t panel_state;                /* $0D56 */
@@ -40,10 +39,8 @@ typedef struct {
     uint8_t race_ended_d55;             /* $0D55 */
     uint8_t overlay_d59;                /* $0D59 */
     uint8_t player_mode_kept;           /* $0D5E */
-    uint8_t window_up_kept, window_step_d23; /* $0D22, $0D23 */
     uint8_t pause_stage_b, pause_player, pause_stage; /* $0D2D, $0D2E, $0D2F */
     uint8_t race_again;                 /* $0DD4 */
-    uint8_t byte_0dda;                  /* $0DDA */
     uint8_t laps_done[2];               /* $0DE8: laps the physics has counted */
     uint8_t laps_counted[2];            /* $0DEA: laps this code has counted */
     uint8_t car_flags_low[2];           /* $0DEC */
@@ -55,13 +52,11 @@ typedef struct {
     uint8_t finish_timer;               /* $0E56 */
     uint8_t end_timer;                  /* $0E58 */
     uint8_t time_up_timer;              /* $0E5A */
-    uint8_t byte_e5f;                   /* $0E5F */
     uint16_t time_shown;                /* $0E6C */
     uint16_t level_colour;              /* $0F11: BGR */
     uint16_t time_bonus, time_bonus_2;  /* $0D67, $0D69 */
     uint16_t hits_bcd_2;                /* $19F0 */
     uint8_t save_bad_flag;              /* $1FFE */
-    uint8_t time_off;                   /* $0D4E: no time limit */
     uint16_t clock_step;                /* $0D29: BCD added to the clock each frame */
     uint16_t clock_fraction;            /* $0E62: BCD; its high byte is the hundredths */
     uint16_t clock_seconds;             /* $0E64: BCD */
