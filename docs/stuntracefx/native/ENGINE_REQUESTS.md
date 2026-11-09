@@ -24,7 +24,7 @@ in screen pixels. A game cannot see:
 game keeps updating and stops its own logic; this needs nothing from the engine. Listed so the engine's owner knows it was
 considered.
 
-## 3. Typing and a layer past the original picture
+## 3. Typing
 
 - **Keys that type text, kept off the pad while typing.** Today every key that goes down is put in the text queue and
   also presses whatever pad button it is bound to. The default bindings put B, Y, A, X, L and R on Z, A, X, S, Q and W.
@@ -33,10 +33,3 @@ considered.
   itself, because the player may bind keys anywhere. Asked: while text input is on, keys that type text ('A'-'Z', digits,
   space, Backspace) go to the text queue only and press no pad button. Enter can keep pressing its button, so a typed
   name can be confirmed.
-- **A layer's own map outside the original picture.** On a screen larger than the original's 256 x 224, a tile layer
-  shows its own map wrapped beyond that picture. That is right for a texture, but not for a map that also holds the
-  screen's contents: a hole cut for another layer's picture, panels waiting beside the shown screen for a slide, a
-  frame. These repeat into the margins, so a game cannot fill a wider window with its menu's background texture
-  while keeping its contents to the original picture. Asked: a second map per layer, read only outside the original
-  picture at the layer's own scroll and wrapped, e.g. `nshvc_map outside` in `nshvc_layer`, where an empty map keeps
-  today's behaviour. 2.x had this as `nshvc_ext_layer_outside`.
