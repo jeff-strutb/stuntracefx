@@ -53,6 +53,8 @@ void race_picture_shown(int buffer);
 void race_backdrop_rows_upload(int buffer);
 void race_panel_show(int half, uint8_t sign_of_y, uint8_t y_low, uint8_t y_high_when_plus, uint8_t y_when_minus, uint8_t x_low);
 void RaceVideoSetup(void);
+void PictureTurnStep(void);
+void VramUploadGsuBuffer(void);
 void RaceCourseUpload(void);
 uint16_t *race_map_buffer(void);
 void RaceHudLoad(void);

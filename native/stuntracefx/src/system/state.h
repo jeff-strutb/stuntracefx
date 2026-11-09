@@ -52,7 +52,7 @@ typedef struct {
     uint8_t byte_0e92;                  /* $0E92 */
 
     /* ---- the race: its flow, cars, laps and times ---- */
-    uint8_t byte_19e6, byte_19e8, byte_19e9, byte_19ea, byte_19ec, byte_19f0, byte_19f2; /* $19E6-$19F2: cleared with the windows */
+    uint8_t byte_19e6, byte_19e7, byte_19e8, byte_19e9, byte_19ea, byte_19ec, byte_19f0, byte_19f2; /* $19E6-$19F2: cleared with the windows */
     uint8_t byte_1a04, byte_1a06, byte_1a07, byte_1a29; /* $1A04, $1A06, $1A07, $1A29 */
     uint8_t hud_mode;                   /* $0D2B: 0 speed, 1 stunt, 2 two-player, 3 demo */
     uint8_t split_screen;               /* $0D62: 0 one player, else the two-player split */
@@ -227,6 +227,8 @@ typedef struct {
     uint16_t course_scroll_top;         /* $0E33 (its high byte $0E34 also the low band's): the course screen's upper BG2 scroll */
     uint16_t course_scroll_low;         /* $0E37 */
     uint8_t course_scroll_table[16];    /* $10AA: its per-line table, a line count and two scroll bytes an entry */
+    uint8_t picture_turn_delay, picture_turn_pending; /* $0D31, $0D32: the pause's turning picture */
+    uint16_t picture_turn_number;       /* $0D33 */
     uint8_t panel_top, panel_bottom;    /* $0D5C, $0D5D: the half shows the finished player's panel; bit 7 its other scroll */
     uint16_t backdrop_x[2], backdrop_y[2]; /* $0D92, $0D8E: BG2's scroll by picture buffer or half */
     uint8_t hdma_enable;                /* $0D45: the per-line effects on; bit 5 the fixed colour's bands */

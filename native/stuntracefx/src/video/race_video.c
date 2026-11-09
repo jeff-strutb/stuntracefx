@@ -9,6 +9,7 @@
 #include "audio/sound.h"
 #include "data/cart.h"
 #include "data/unpack.h"
+#include "fx/fx.h"
 #include "fx/fx_draw.h"
 #include "fx/fx_rt.h"
 #include "math/math.h"
@@ -1103,4 +1104,57 @@ void race_two_player_list(void)
         which ^= 1;
     }
     pic.bg[1].draw_list = fx_draw_picture(which);
+}
+
+/* ---- the pause screen's turning picture ---- */
+
+/* The next picture when its delay is up: the pace by the buttons held, the
+   number back with Select, unpacked and made 4-bit by the chip into the half of
+   its RAM the other buffer is not using. It goes to the sprites' art at the
+   next vertical blank (VramUploadGsuBuffer). */
+void PictureTurnStep(void)
+{
+    uint16_t held = g.pad_last[0], t = g.picture_turn_number;
+    uint16_t end;
+    uint8_t bank;
+
+    if (g.picture_turn_pending)
+        return;
+    if (g.picture_turn_delay) {
+        g.picture_turn_delay--;
+        return;
+    }
+    g.picture_turn_delay = (held & 0x0040) ? 3 : (held & 0x4000) ? 2 : (held & 0x0020) ? 6 : (held & 0x0010) ? 8 : 4;
+    if (g.race_held[0] & 0x2000) {
+        t = (uint16_t)(t - 1);
+        if (t & 0x8000)
+            t = 7;
+    } else {
+        t = (uint16_t)(t + 1);
+    }
+    for (;;) {
+        g.picture_turn_number = t;
+        end = cart16(0x07, (uint16_t)(0xC648 + t * 3));
+        bank = cart8(0x07, (uint16_t)(0xC64A + t * 3));
+        if (end >= 0x8000)
+            break;
+        t = end;                        /* an entry below $8000 names the picture to go to instead */
+    }
+    if (g.fx_buffer) {
+        chip_unpack((uint32_t)bank << 16 | end, 0x3000);
+        FxTiles2bppTo4bppLow();
+    } else {
+        chip_unpack((uint32_t)bank << 16 | end, 0xC000);
+        FxTiles2bppTo4bppHigh();
+    }
+    g.picture_turn_pending = 0xFF;
+}
+
+/* The turned picture, when one is waiting, to the sprites' art. */
+void VramUploadGsuBuffer(void)
+{
+    if (!g.picture_turn_pending)
+        return;
+    race_art_write(0x6600, fx_ram + (g.fx_buffer ? 0x4000 : 0xD000), 0x0C00);
+    g.picture_turn_pending = 0;
 }
