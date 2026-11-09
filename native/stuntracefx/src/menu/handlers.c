@@ -495,6 +495,7 @@ static void mode_select(Actor *a)
     choices_from_save(g.menu_mode);
     g.sel[0] = 0;
     show_choice(g.choice_p1);
+
 }
 
 /*

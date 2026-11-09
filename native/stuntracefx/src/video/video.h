@@ -44,6 +44,9 @@ void race_picture_shown(int buffer);
 void race_backdrop_rows_upload(int buffer);
 void race_panel_show(int half, uint8_t sign_of_y, uint8_t y_low, uint8_t y_high_when_plus, uint8_t y_when_minus, uint8_t x_low);
 void RaceVideoSetup(void);
+void RaceHudLoad(void);
+void NmiFrameUploadSprites(void);
+extern uint8_t race_pictures[0x3000];
 void race_screen_start(void);
 void RaceVideoUpload1P(void);
 void RaceVideoWindows1P(void);
@@ -297,6 +300,8 @@ void SpriteTextAt895E(void);
 void SpriteTextAt8152(void);
 void SpriteTextAt8952(void);
 
+/* wanted (menu/records_screen.c): a row's car, three pieces */
+void SpritePieces3(uint16_t x, uint8_t y, uint16_t set, uint16_t palette, int slot);
 /* wanted by the race (race/phases.c, the lap and results panels) */
 void OamByteSet(uint16_t offset, uint8_t value);   /* a byte of the sprite table, 0-$21F */
 uint8_t SpriteYOnScreen(uint8_t y);                /* 7E:B005 */

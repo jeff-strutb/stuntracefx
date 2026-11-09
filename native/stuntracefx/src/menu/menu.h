@@ -60,4 +60,12 @@ void SelectionSave(void);
 void CarSelectTwoPlayers(void);
 void MenuCursorFourWay(void);
 
+/* the course screens' records pages */
+void SpeedRecordsScreen(void);
+void StuntRecordsScreen(void);
+void BattleRecordsScreen(void);
+void AllRecordsScreen(void);
+void record_rows_first_times(uint8_t page_offset);
+void record_rows_group_firsts(uint8_t page_offset);
+
 #endif

@@ -46,6 +46,9 @@ typedef struct {
     uint16_t panel_row, panel_place, panel_char; /* $0FA8, $0FAA, $0FA6: where the records panel is being drawn */
     uint16_t player_name;               /* $0F11: three 5-bit letters */
     uint8_t cursor_x, cursor_column_x;  /* $0D37, $0E91 */
+    uint8_t course_screen_state;        /* $0D40 */
+    uint8_t records_wait, records_cursor; /* $0D41, $0D50 */
+    uint8_t byte_0e92;                  /* $0E92 */
 
     /* ---- the race: its flow, cars, laps and times ---- */
     uint8_t byte_19e6, byte_19e8, byte_19e9, byte_19ea, byte_19ec, byte_19f0, byte_19f2; /* $19E6-$19F2: cleared with the windows */
@@ -196,6 +199,7 @@ typedef struct {
     uint16_t overlay_x, overlay_y, overlay_picture; /* $10A4, $10A6, $10A0 */
     uint8_t slot_mask, slot_count, slot1_finished; /* $05D5, $08FB, $7E:FF65 */
     struct { uint8_t first, unused1, unused2, unused3, unused4, unused5, unused6, value; } slot[8]; /* $0595: colour-flash records */
+    uint8_t oam_upload_wanted;          /* $0D28: the sprites go out with the next stage that has room */
     uint8_t panel_top, panel_bottom;    /* $0D5C, $0D5D: the half shows the finished player's panel; bit 7 its other scroll */
     uint16_t backdrop_x[2], backdrop_y[2]; /* $0D92, $0D8E: BG2's scroll by picture buffer or half */
     uint8_t hdma_enable;                /* $0D45: the per-line effects on; bit 5 the fixed colour's bands */

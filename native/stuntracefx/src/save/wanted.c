@@ -7,6 +7,7 @@
 
 #include "hud/hud.h"
 #include "race/race.h"
+#include "video/video.h"
 
 #define NOT_YET(name) \
     do { static int said; if (!said++) fprintf(stderr, "stuntracefx: %s is not converted yet\n", name); } while (0)
@@ -40,4 +41,9 @@ __attribute__((weak)) void TimeTotalsSum(void) { NOT_YET("TimeTotalsSum"); }
 __attribute__((weak)) void TimeRunningTotals(void) { NOT_YET("TimeRunningTotals"); }
 __attribute__((weak)) int DemoRun(int which) { (void)which; NOT_YET("DemoRun"); return -1; }
 __attribute__((weak)) void RecordsPanelTile(uint16_t offset, uint8_t tile) { (void)offset; (void)tile; NOT_YET("RecordsPanelTile"); }
+__attribute__((weak)) void CourseScreenState8(void) { NOT_YET("CourseScreenState8"); }
+__attribute__((weak)) void SpritePieces3(uint16_t x, uint8_t y, uint16_t set, uint16_t palette, int slot)
+{
+    (void)x; (void)y; (void)set; (void)palette; (void)slot; NOT_YET("SpritePieces3");
+}
 __attribute__((weak)) void PlayerSound35(void) { NOT_YET("PlayerSound35"); }
