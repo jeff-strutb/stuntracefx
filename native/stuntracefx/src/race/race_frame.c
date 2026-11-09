@@ -86,7 +86,10 @@ static Camera *view_camera(uint16_t car)
 {
     const Object *first = obj_at(obj_at(car)->link);
 
-    return camera_of(first->link);
+    /* At a race's first step the car is not linked yet (its link is 0), and
+       the original takes the record at work RAM $0000 as the camera; the
+       objects' camera_at_link builds it from the named state left there. */
+    return camera_at_link(first->link);
 }
 
 /* The frame's first part: the physics and the timers, the side's flag set. */
