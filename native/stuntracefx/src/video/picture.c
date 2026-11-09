@@ -249,18 +249,42 @@ static void course_lines_send(void)
     }
 }
 
+/* One player, the per-line tables the original turned on in $0D45: BG1 off
+   in the middle rows (channel 1, the table RaceHudSetup builds: $20 lines
+   $13, $80 lines $12, then $13), the gradient (channels 2 and 3), the window
+   bands (4), the fixed colour's bands (5). Two players have them all on. */
 static void race_lines_send(void)
 {
+    int one = !pic.race.split;
+
     if (pic.race.course_screen) {
         course_lines_send();
         return;
     }
     blank_lines_send();
-    gradient_lines_send();
-    window_lines_send();
+    if (!one || (g.hdma_enable & 0x0C) == 0x0C)
+        gradient_lines_send();
+    if (!one || (g.hdma_enable & 0x10))
+        window_lines_send();
     if (g.hdma_enable & 0x20)
         fixed_lines_send(pic.blend.fixed_bgr15);
-    if (pic.race.split)
+    if (one && (g.hdma_enable & 0x02)) {
+        nshvc_line(0, NSHVC_LINE_MAIN + 0, 1);
+        nshvc_line(32, NSHVC_LINE_MAIN + 0, 0);
+        nshvc_line(160, NSHVC_LINE_MAIN + 0, 1);
+    }
+    if (one && g.bg2_map_reg == 0x5C) {
+        /* BG2's map is the 32 x 32 page at $5C00: the backdrop map's second
+           page, wrapping at 256 lines and columns */
+        int32_t y[224];
+        int r, sy = pic.race.backdrop_y[0];
+
+        for (r = 0; r < 224; r++)
+            y[r] = 256 + ((sy + r + 1) & 255) - (r + 1);
+        nshvc_lines(0, 224, (nshvc_line_field)(NSHVC_LINE_SCROLL_Y + 1), y);
+        nshvc_line(0, (nshvc_line_field)(NSHVC_LINE_SCROLL_X + 1), pic.race.backdrop_x[0] & 255);
+    }
+    if (!one)
         split_half_send();
 }
 

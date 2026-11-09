@@ -25,6 +25,13 @@ Windows windows;
 #define EDGE_COPY_ROW 160               /* $7F:FB03 */
 static WindowEdges edge_rows[EDGE_ROWS];
 
+/* The records the band tables also point at, $7F:43D7-$51D6: per-line edges
+   for the start lights' and results' windows, built by WindowsInit. Four
+   bytes each, read as edges like the rows above. */
+#define EDGE_RECORDS_ADDR 0x43D7u
+#define EDGE_RECORDS_BYTES 0x0E00u
+static uint8_t edge_records[EDGE_RECORDS_BYTES];
+
 const WindowEdges *window_edges_at(uint16_t addr)
 {
     switch (addr) {
@@ -37,6 +44,8 @@ const WindowEdges *window_edges_at(uint16_t addr)
     }
     if (addr >= EDGE_ROWS_ADDR && addr < EDGE_ROWS_ADDR + EDGE_ROWS * 4)
         return &edge_rows[(addr - EDGE_ROWS_ADDR) / 4];
+    if (addr >= EDGE_RECORDS_ADDR && addr + 4u <= EDGE_RECORDS_ADDR + EDGE_RECORDS_BYTES)
+        return (const WindowEdges *)(const void *)&edge_records[addr - EDGE_RECORDS_ADDR];
     return &windows.normal;
 }
 
@@ -820,6 +829,66 @@ uint8_t FixedColourFromStep(void)
 
 /* ---- the setup of a race ---- */
 
+/* the byte at $7F:addr of the record area */
+static uint8_t *record_byte(uint32_t addr)
+{
+    static uint8_t spare;
+
+    if (addr < EDGE_RECORDS_ADDR || addr >= EDGE_RECORDS_ADDR + EDGE_RECORDS_BYTES)
+        return &spare;
+    return &edge_records[addr - EDGE_RECORDS_ADDR];
+}
+
+/* Two players: a record ($10, x - $28, y - $28, $A0) at $43D7 and one ($60,
+   x + $28, y + $28, $F0) at $47FF for each pair of the list at $09:F634. */
+static void records_two_players(void)
+{
+    uint16_t x = 0, y = 0xF634;
+    uint8_t v;
+
+    while ((v = cart8(0x09, y)) != 0xFF) {
+        uint8_t d = (uint8_t)(v - 0x28);
+
+        *record_byte(0x43D8u + x) = d;
+        *record_byte(0x4800u + x) = (uint8_t)(d + 0x50);
+        *record_byte(0x43D7u + x) = 0x10;
+        *record_byte(0x47FFu + x) = 0x60;
+        d = (uint8_t)(cart8(0x09, (uint16_t)(y + 1)) - 0x28);
+        *record_byte(0x43D9u + x) = d;
+        *record_byte(0x4801u + x) = (uint8_t)(d + 0x50);
+        *record_byte(0x43DAu + x) = 0xA0;
+        *record_byte(0x4802u + x) = 0xF0;
+        x = (uint16_t)(x + 4);
+        y = (uint16_t)(y + 2);
+    }
+}
+
+/* One player: a record ($18, x, y, $E7) at $43D7 for each pair of the list at
+   $09:F170, then eight 32-byte blocks over them and the area after, and $40
+   bytes at $5187, all from bank $09. */
+static void records_one_player(void)
+{
+    static const uint16_t from[8] = {0xF88B, 0xF8AB, 0xF8CB, 0xF8EB, 0xF90B, 0xF92B, 0xF94B, 0xF96B};
+    static const uint16_t to[8] = {0x43D7, 0x45B7, 0x45D7, 0x47B7, 0x47D7, 0x49B7, 0x49D7, 0x4BB7};
+    uint16_t x = 0, y = 0xF170;
+    uint8_t v;
+    unsigned i, k;
+
+    while ((v = cart8(0x09, y)) != 0xFF) {
+        *record_byte(0x43D8u + x) = v;
+        *record_byte(0x43D7u + x) = 0x18;
+        *record_byte(0x43D9u + x) = cart8(0x09, (uint16_t)(y + 1));
+        *record_byte(0x43DAu + x) = 0xE7;
+        x = (uint16_t)(x + 4);
+        y = (uint16_t)(y + 2);
+    }
+    for (i = 0; i < 0x20; i++)
+        for (k = 0; k < 8; k++)
+            *record_byte(to[k] + i) = cart8(0x09, (uint16_t)(from[k] + i));
+    for (i = 0; i < 0x40; i++)
+        *record_byte(0x5187u + i) = cart8(0x09, (uint16_t)(0xF849 + i));
+}
+
 /* The edge rows from one list of pairs and its mirror image: each pair is
    the first window's left and the second window's left, mirrored about $80
    for the right edges. */
@@ -879,6 +948,10 @@ void WindowsInit(void)
     edges_from_rom(0xF9A1, &windows.ffd5);
     edges_from_rom(0xF9A5, &windows.ffd9);
     edges_from_rom(0xF9A9, &windows.ffdd);
+    if (g.split_screen)
+        records_two_players();
+    else
+        records_one_player();
     for (i = 0; i < 16; i += 4) {
         uint8_t c = cart8(0x09, (uint16_t)(0xF163 + i));
 

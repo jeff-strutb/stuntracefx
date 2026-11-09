@@ -45,7 +45,6 @@ void race_video_init(void)
     race_video.panel_image = nshvc_image_create(256, 256, NSHVC_IMAGE_INDEXED);
     race_video.course_tiles = nshvc_tiles_create(4, 1024, 1);
     race_video.course_map = nshvc_map_create(32, 64);
-    race_video.results_map = nshvc_map_create(32, 32);
     race_video.frame_image = nshvc_image_create(256, 224, NSHVC_IMAGE_INDEXED);
     sprites_use_tiles(race_video.tiles, 0x200, 0x300);
 }
@@ -823,17 +822,22 @@ uint16_t *race_map_buffer(void)
 
 /* The results' and championship's BG2 map: 17 rows of 26 entries copied
    from the map buffer ($7F:93D7, rows $40 bytes apart) to the map at $5C00,
-   one row apart, as they stand now; then BG2's scroll from the first half. */
+   as they stand now; then BG2's scroll from the first half. $5C00 is the
+   second page of the one-player backdrop's map, so the rows go there, with
+   its tile numbering and priority (race_backdrop_rows_upload). */
 void TilemapRowsTo5C00(void)
 {
-    uint16_t rows[17 * 32];
+    uint16_t row[26];
     int r, i;
 
-    memset(rows, 0, sizeof rows);
-    for (r = 0; r < 17; r++)
-        for (i = 0; i < 26; i++)
-            rows[r * 32 + i] = backdrop_map(0)[r * 32 + i];
-    nshvc_map_write_snes(race_video.results_map, 0, 0, 26, 17, rows);
+    for (r = 0; r < 17; r++) {
+        for (i = 0; i < 26; i++) {
+            uint16_t w = backdrop_map(0)[r * 32 + i];
+
+            row[i] = (uint16_t)((w & 0xDC00) | (((w & 0x3FF) + 0x200) & 0x3FF));
+        }
+        nshvc_map_write_snes(race_video.backdrop_one, 0, (uint32_t)(32 + r), 26, 1, row);
+    }
     Bg2ScrollFromTable(0);
 }
 

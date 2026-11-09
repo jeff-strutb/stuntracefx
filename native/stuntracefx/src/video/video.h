@@ -32,7 +32,6 @@ typedef struct {
     nshvc_image backdrop_image, panel_image; /* the two-player backdrop and panel, drawn into the list */
     nshvc_tiles course_tiles;           /* the course screen's backdrop art */
     nshvc_map course_map;               /* and its map, 32 x 64 */
-    nshvc_map results_map;              /* the results' and championship's BG2 map ($5C00) */
     nshvc_image frame_image;            /* the frame and panels around the 3D, at screen positions */
 } RaceVideo;
 
