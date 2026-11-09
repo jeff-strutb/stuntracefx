@@ -264,6 +264,84 @@ game's own logic (its physics, objects, menus, rules) stays the game's, and reco
   initials on a keyboard.
 `fullwindow.c`'s CPU span generator is not brought over; its decisions (view words, anchors, sky) are the reference.
 
+#### Stage 10's 3D (the fx session's design, 2026-11-09)
+
+How it meets the direction in one line: the CPU makes vertices (geometry) and lists them; the GPU fills every pixel with the
+smooth rule at the window's resolution; no span, row or pixel is made on the CPU.
+
+Facts it rests on, from reading: the engine renders a draw list into a target of the list's own size and samples it across the
+whole screen (`rr_metal.m` draw_lists, `picture_body.h` kind 3), so the 3D's resolution is the size the list is cleared at;
+`nshvc_vertex` is 2D (x, y, u, v, colour), so projection stays on the CPU and texture mapping is affine per triangle unless a
+shader is given the depth. Every polygon and line the race draws is queued by one routine, `FxModelFaces` (01:90CD), from the
+model's projected point table ($04E4 + 6i), which `FxModelProject` (01:8BAA) makes from view-space points ($0340 + 6i plus the
+object's place at $0026-$002A, summed in 16 bits) with focal length 128 (`FxRatioClamp`: R1 * 256 / R3 of the halved pair; the
+far table at $14:896C gives the same). The chip holds a point's offset at $3FFF, clamps far depths at $43FE and clips at z = 0
+and at the view's edges in 2D, at whole pixels.
+
+**Where the precision comes from.** The frame program goes on deciding everything at the console's scale: which objects
+(the sort and its frustum), level of detail, facing, painter's order, materials, which faces are queued. Only positions are made
+again, in floats, from the same view-space points:
+- Faces. `FxModelProject` keeps each point's view-space sum as floats beside its table; `FxModelFaces` notes each face's queue
+  entry, its point indices and its u, v. A face is committed when the list's end has moved past its entry (settled at the next
+  face and at `FxDrawList`); its shape is then made from its points: clipped in view space against a near plane, projected
+  x = cx + 128 X / Z, y = cy + 128 Y / Z unrounded and unheld, clipped in 2D against the screen with a margin (the GPU's guard
+  band), and a textured face cut by depth planes until each piece's far over near depth is at most 1.25 (affine pieces; the
+  original cut once, at 3). `FxDrawList` draws that shape in place of the chip's entries from the face's first entry to its
+  last (the chip's near split makes two). The chip's held, clamped and edge-clipped vertices are not used. This is
+  `fullwindow.c`'s `project_exact` done once per face in floats; neither a 16-bit list nor view words scaled by k are needed for
+  the precision.
+- Scaled sprites (`FxObjectSprite`): centre and size from `FxProjectScaled`'s inputs in floats; the chip's row quads mapped
+  from its whole-pixel box onto that one.
+- Particles, weather, labels and the HUD's chip-drawn pieces: the console's pixels, scaled with nearest texels (not sub-pixel
+  until step E).
+
+**Resolution.** The list is cleared at the window pixels the screen covers (`nshvc_display_info` and the screen's shape; 4 times
+the screen when no window is known, as in a check), rule smooth. Recordings keep vertices in the screen's pixels as floats;
+composing scales them. Quads put u, v at their corners for nearest texels: no filtered or upscaled art.
+
+**The window's shape (the full window).** The view words come from the screen, not the original's window: centre across at
+W / 2, down at the original's horizon row (screen line 96) plus half of any rows a taller screen adds; edges the whole screen
+(each half for two players); the frustum constants $92 = 128 * 2^14 / half-width and $94 = 128 * 2^13 / the larger
+half-height, as the original's are made (0x4EC4, 0x4000 for 208 x 128). The sort's cull and the frame program's clips then cover
+the window. The words stay 16-bit (W up to 16,383). The race sets `g.view_*` from `fx_view_words()` at its set-up and when the
+screen's shape changes. The HUD's chip-drawn pieces are placed by the video session's anchors.
+
+**In-between pictures.** At each step's end the positions and angles are kept: the camera records (+08 point, +0E angles), the
+objects (+0C place, +14 angles), the Super FX records (the list at $2332: +1E place, +24 angles, the car parts). A picture at
+draw(between) is t = (updates since the step + between) / 6 of the way (the course menu's steps: / 4): the whole state is saved
+(`g`, `objects`, `cameras`, `fx_ram`, `fxs`), the camera, objects and records set t of the way from the last step's end to this
+one's (angles the short way; a field that moved more than $800 in a step, or an object made in the step, keeps the end's), the
+picture's part of a step run (`ViewFromRecord`, `ObjectDrawListBuild`, `GsuRecordsUpload`, `ViewUpdateAndGsuAEF8`,
+`BackdropAnglesFromView`, `GsuParamsUpdate`, `FxFrameProgram` into a third recording), the backdrop's scrolls for that picture
+handed to the video session, and the state put back. Nothing the game keeps changes, so the redraw's weather drops, particles
+and seed move per step (a known limit). The step's end shows a step late, as the original's picture showed after its step's
+frames.
+
+**Needed from other sessions.**
+- Race: a call of `fx_tween_step_end()` at the end of `RaceFrameRun`, `RaceFrameRunTwoPlayers` and `RaceFrameStep` after the
+  picture; `race_step_progress(float between)` (0 at a step, 1 at the next); that the calls above are a picture's whole part of
+  a step and touch nothing but `g`, `objects`, `cameras` and `fx_ram`; `g.view_*` from `fx_view_words()`.
+- Objects: that `ObjectDrawListBuild` and `GsuRecordsUpload` change nothing but `g.frame_records` and its count; how to tell an
+  object made or freed during a step.
+- Video: the screen's size and where the 3D's picture origin goes; `race_frame_art_draw` scaled to the list
+  (`fx_draw_list_scale`); in the full window, anchors for the chip-drawn HUD pieces; the backdrop scroll of an in-between
+  picture taken from `fx_tween_backdrop()`.
+
+**Steps, each with its check (fx_view on the recorded race, 1,100 frames, unless said).**
+- A. Sub-pixel picture in today's layout: faces and sprites in floats, the list at the output's pixels, smooth rule. Checks:
+  every vertex of a face whose points all lay on the screen within 1.02 pixels of the chip's (the chip floors or ceils by sign,
+  so 0 apart is expected; a planted centre + 2 must fail it); the picture drawn 4 times larger and read at each console pixel's
+  centre against the original's bitmap, expected within a point of the exact rule's 3.7%, every difference at a polygon edge;
+  game shots at 4 times for looking.
+- B. The full window: view words from the screen, the 3D over the whole screen, HUD pieces anchored. Needs video and race.
+- C. In-between pictures. Needs race, objects and video. Check: a race run's pictures between two steps lie between the two
+  steps' pictures (vertices of the same face moving monotonically), and the state after a run with in-between pictures equals one
+  without.
+- D. The course menu's 3D: A's precision in its window, C at its 4-update steps.
+- E. Perspective-correct textures (a game shader given the face's 1/z plane, u/z and v/z as vertex u, v), angle fractions for
+  turning objects between steps, particles, weather and labels sub-pixel, facing from the 3D determinant if slivers show.
+- F. Solid tyres, eyes and trees (`remaster/solids.c`).
+
 ### Stage 11. Whole game
 Finder zero on `native/stuntracefx`; section 8's criteria; every play through `nshvc-check`; every reachable platform.
 
