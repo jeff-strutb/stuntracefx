@@ -24,21 +24,17 @@ typedef struct {
     uint16_t menu_mode;                 /* $18C3: the mode menu's selection */
     uint16_t choice_p1, choice_p2;      /* $18CB, $18C9: the players' choices */
     uint16_t choices[3];                /* $18CD-$18D1: the three car settings, 0-2 each */
-    union {                             /* the same twelve words by two names */
-        uint16_t sel[12];               /* $18D3-$18E9: derived from the choices; sel[4]-[7] are the handler addresses $18DB-$18E1, sel[8] $18E3, sel[9] $18E5 */
-        struct {
-            uint16_t selection_out[4];      /* $18D3: each racer's model (words), sel[0]-[3] */
-            uint16_t selection_handler[4];  /* $18DB: each racer's control word, sel[4]-[7] */
-            uint16_t selection_derived[4];  /* $18E3: sel[8]-[11] */
-        };
-    };
+    /* $18D3-$18E9: what the menus derive from the choices */
+    uint16_t selection_out[4];          /* $18D3: each racer's model (words) */
+    uint16_t selection_handler[4];      /* $18DB: each racer's control word, the handler address */
+    uint16_t selection_derived[4];      /* $18E3: each racer's word from the choice tables */
     uint16_t settings_row[3];           /* $18EF-$18F3: the settings also shown as initials */
     uint8_t car_settings[3];            /* $1184-$1186 */
     uint16_t word_1168;                 /* $1168 */
     uint16_t word_116e[3];              /* $116E-$1173: the objects after the one at $116C */
     uint16_t course_menu_seen;          /* $1917 */
     uint16_t demo_number;               /* $1915: the next attract demo */
-    uint16_t record_times[12];          /* $0F2B: sorted times; the first is best_lap_time */
+    uint16_t record_times[12];          /* $0F2B: sorted times; the first is the best, $FFFF for none */
     uint16_t record_names[12];          /* $0F43 */
     uint16_t record_tags[12];           /* $0F13 */
     uint8_t record_bcd[3][3];           /* $0F5B, $0F5E, $0F61: hundredths, seconds, minutes */
@@ -137,7 +133,6 @@ typedef struct {
     uint8_t time_override;              /* $0D4C */
     uint8_t race_skipped;               /* $10CD: $FF when the mode runs no race */
     uint8_t lead;                       /* $0FA3: player 1's lead, signed */
-    uint16_t best_lap_time;             /* $0F2B: $FFFF for none */
     uint8_t best_times[4][3];           /* $0EF9, $0EFC, $0EFF */
     uint16_t packed_time_a, packed_time_b; /* $1163, $1161 */
     uint8_t draw_side;                  /* $1F07: 0 the near side of a frame, 1 the far */

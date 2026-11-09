@@ -18,6 +18,7 @@
 #include "system/game.h"
 #include "system/state.h"
 #include "video/picture.h"
+#include "video/video.h"
 
 MenuState menu;
 
@@ -82,7 +83,7 @@ static void menu_scroll_reset(void)
 
 static void menu_common_mode(void)
 {
-    pic.race.on = 0;
+    race_screen_end();                  /* none of the race's layers left behind this screen */
     pic.mode = 1;
     pic.bg3_priority = 1;
     pic.bg[0].tiles = menu_video.tiles_a;
@@ -396,7 +397,7 @@ static void menu_state_clear(void)
 /* BG1 and BG2 for the course menu's full mode. */
 static void preview_full_mode(void)
 {
-    pic.race.on = 0;
+    race_screen_end();                  /* none of the race's layers left behind this screen */
     pic.mode = 3;
     pic.bg3_priority = 0;
     pic.bg[0].tiles = tiles_8bpp;
@@ -777,18 +778,18 @@ void SelectionCommit(void)
 {
     uint16_t v;
 
-    g.sel[4] = handler_table_a(g.choice_p1);    /* $18DB */
-    g.sel[5] = handler_table_a(g.choice_p2);    /* $18DD */
+    g.selection_handler[0] = handler_table_a(g.choice_p1);    /* $18DB */
+    g.selection_handler[1] = handler_table_a(g.choice_p2);    /* $18DD */
     v = (uint16_t)((cart16(0x03, (uint16_t)(0xB540 + ((g.choice_p2 & 3) << 1))) << 4)
                    | cart16(0x03, (uint16_t)(0xB540 + ((g.choice_p1 & 3) << 1))));
     save.cars_battle = (uint8_t)v;
     SaveChecksum();
-    g.sel[0] = 0;
-    g.sel[1] = 0;
+    g.selection_out[0] = 0;
+    g.selection_out[1] = 0;
     if (g.choice_p1 == g.choice_p2)
-        g.sel[1] = cart16(0x03, (uint16_t)(0xB464 + g.choice_p2 * 2));
-    g.sel[8] = cart16(0x03, (uint16_t)(0xB46C + ((g.choice_p1 << 2) + g.sel[0]) * 2));
-    g.sel[9] = cart16(0x03, (uint16_t)(0xB46C + ((g.choice_p2 << 2) + g.sel[1]) * 2));
+        g.selection_out[1] = cart16(0x03, (uint16_t)(0xB464 + g.choice_p2 * 2));
+    g.selection_derived[0] = cart16(0x03, (uint16_t)(0xB46C + ((g.choice_p1 << 2) + g.selection_out[0]) * 2));
+    g.selection_derived[1] = cart16(0x03, (uint16_t)(0xB46C + ((g.choice_p2 << 2) + g.selection_out[1]) * 2));
 }
 
 /*
@@ -800,10 +801,10 @@ void SelectionSave(void)
 {
     uint16_t entry = cart16(0x03, (uint16_t)(0xB540 + ((g.choice_p1 & 3) << 1)));
 
-    g.sel[4] = handler_table_a(g.choice_p1);
-    g.sel[5] = handler_table_b(g.choices[0]);
-    g.sel[6] = handler_table_b(g.choices[1]);
-    g.sel[7] = handler_table_b(g.choices[2]);
+    g.selection_handler[0] = handler_table_a(g.choice_p1);
+    g.selection_handler[1] = handler_table_b(g.choices[0]);
+    g.selection_handler[2] = handler_table_b(g.choices[1]);
+    g.selection_handler[3] = handler_table_b(g.choices[2]);
     SelectionTables18CB();
     if (g.menu_mode == 3)
         save.car_mode3 = (uint8_t)cart16(0x03, (uint16_t)(0xB540 + ((g.choice_p1 & 3) << 1)));
@@ -954,7 +955,7 @@ static void champion_open(void)
 
     pic.blank = 1;
     frame_state.brightness = 0;
-    pic.race.on = 0;
+    race_screen_end();                  /* none of the race's layers left behind this screen */
     pic.mode = 3;
     pic.bg3_priority = 0;
     pic.bg[2].draw_list.id = 0;

@@ -382,7 +382,6 @@ void RecordsLoadCourse(void)
     unpack_to(g.course < 12 ? save.laps[g.course][0] : 0xFFFF, g.record_bcd[0]);
     unpack_to(g.course < 12 ? save.laps[g.course][1] : 0xFFFF, g.record_bcd[1]);
     unpack_to(g.record_times[0], g.record_bcd[2]);
-    g.best_lap_time = g.record_times[0];
 }
 
 /*

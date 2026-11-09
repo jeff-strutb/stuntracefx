@@ -367,9 +367,9 @@ static void show_choice(uint16_t c)
  */
 static void choice_repeat(void)
 {
-    g.sel[0] = 0;
+    g.selection_out[0] = 0;
     if (g.choice_p1 == g.choice_p2)
-        g.sel[0] = cart16(0x0B, (uint16_t)(0xC758 + g.choice_p2 * 2));
+        g.selection_out[0] = cart16(0x0B, (uint16_t)(0xC758 + g.choice_p2 * 2));
 }
 
 /*
@@ -497,7 +497,7 @@ static void mode_select(Actor *a)
     a->count = 0;
     actor_spawn(0x0270);
     choices_from_save(g.menu_mode);
-    g.sel[0] = 0;
+    g.selection_out[0] = 0;
     show_choice(g.choice_p1);
 
 }
@@ -522,7 +522,7 @@ static void slide_to_preview(Actor *a)
     k = actor_find(0x0004);
     if (k)
         actor_start_animation(k, 0x008A);
-    g.sel[0] = 0;
+    g.selection_out[0] = 0;
     show_choice(g.choice_p1);
     RaceFrameStep(0);
     menu.shown_3d = 1;
@@ -689,14 +689,14 @@ void SelectionTables18CB(void)
     uint16_t x = (uint16_t)(base + g.choices[0] * 3 + g.choices[1] * 9 + g.choices[2] * 27);
     int i;
 
-    g.sel[9] = cart8(0x0B, (uint16_t)(0xB014 + x)) & 3;           /* $18E5 */
-    g.sel[10] = cart8(0x0B, (uint16_t)(0xB014 + x + 1)) & 3;      /* $18E7 */
-    g.sel[11] = cart8(0x0B, (uint16_t)(0xB014 + x + 2)) & 3;      /* $18E9 */
-    g.sel[8] = cart8(0x03, (uint16_t)(0xB7B1 + g.choice_p1)) & 3; /* $18E3 */
+    g.selection_derived[1] = cart8(0x0B, (uint16_t)(0xB014 + x)) & 3;           /* $18E5 */
+    g.selection_derived[2] = cart8(0x0B, (uint16_t)(0xB014 + x + 1)) & 3;      /* $18E7 */
+    g.selection_derived[3] = cart8(0x0B, (uint16_t)(0xB014 + x + 2)) & 3;      /* $18E9 */
+    g.selection_derived[0] = cart8(0x03, (uint16_t)(0xB7B1 + g.choice_p1)) & 3; /* $18E3 */
     for (i = 0; i < 4; i++) {
         uint16_t choice = i == 0 ? g.choice_p1 : g.choices[i - 1];
 
-        g.sel[i] = cart8(0x03, (uint16_t)(0xB7B5 + choice * 4 + g.sel[8 + i])) & 3; /* $18D3 + 2i */
+        g.selection_out[i] = cart8(0x03, (uint16_t)(0xB7B5 + choice * 4 + g.selection_derived[i])) & 3; /* $18D3 + 2i */
     }
 }
 
@@ -710,7 +710,7 @@ static void choice_animations(void)
     int i;
 
     for (i = 0; i < 3; i++) {
-        uint16_t anim = cart16(0x0B, (uint16_t)(0xC1B0 + g.choices[i] * 8 + g.sel[9 + i] * 2));
+        uint16_t anim = cart16(0x0B, (uint16_t)(0xC1B0 + g.choices[i] * 8 + g.selection_derived[1 + i] * 2));
         Actor *a = actor_find(cart16(0x0B, (uint16_t)(0xC15E + i * 2)));
 
         if (a)
@@ -786,7 +786,7 @@ static void settings_input(void)
 /* The end of both settings handlers: the choice shown again. */
 static void settings_leave(void)
 {
-    g.sel[0] = 0;
+    g.selection_out[0] = 0;
     show_choice(g.choice_p1);
 }
 
@@ -1286,7 +1286,7 @@ static void preview_back_out(Actor *a)
     if (preview_frame(2))
         return;
     a->handler = HANDLER_PREVIEW_BACK_WAIT;
-    g.sel[0] = 0;
+    g.selection_out[0] = 0;
     show_choice(g.choice_p1);
     RaceFrameStep(0);
     menu.shown_3d = 1;
@@ -1345,8 +1345,10 @@ static void select_start(Actor *a)
     menu.animated_offset = 0;
     menu.mode_previous = 0xFFFF;
     menu.fixed_colour = 0x1F;
-    memset(g.sel, 0, sizeof g.sel);
-    g.sel[3] = 0x0003;                  /* $18D9 */
+    memset(g.selection_out, 0, sizeof g.selection_out);
+    memset(g.selection_handler, 0, sizeof g.selection_handler);
+    memset(g.selection_derived, 0, sizeof g.selection_derived);
+    g.selection_out[3] = 0x0003;        /* $18D9 */
     g.settings_row[0] = save.settings[0];
     g.settings_row[1] = save.settings[1];
     g.settings_row[2] = save.settings[2];
