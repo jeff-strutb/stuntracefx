@@ -14,6 +14,11 @@
 
 typedef struct {
     /* ---- the session: boot, modes, what was chosen ---- */
+    uint8_t car[2];                     /* $0D89, $0D8A: each player's car, 0 to 3, 4 for none */
+    uint8_t car_index_kept;             /* $0D8B: the first racer's car as a sound index, kept */
+    uint16_t car_handler_kept;          /* $0D8C: the first racer's selection handler */
+    uint8_t hud_blank;                  /* $0D4E: the stunt mode's HUD is blanked */
+    uint8_t current_player;             /* $1A5D: the player whose car is being processed */
 
     /* ---- menus and saves ---- */
 
@@ -24,6 +29,50 @@ typedef struct {
     uint8_t frames_last_step;           /* $06D4: the frames the step now running covers */
     uint8_t frame_count;                /* $0E3B: video frames, free running */
     uint8_t course_class;               /* $0D4A: the championship class */
+    uint8_t car_kind[2];                /* $0D89, $0D8A: each player's car */
+    uint8_t start_light;                /* $0D54: the start's lights */
+    uint8_t start_substate;             /* $0D5A */
+    uint8_t panel_state;                /* $0D56 */
+    uint8_t panel_delay;                /* $0D5F */
+    uint8_t flash_0d65;                 /* $0D65 */
+    uint8_t champ_stage;                /* $0D48: the championship's stage */
+    uint8_t byte_0d24;                  /* $0D24 */
+    uint8_t race_ended_d55;             /* $0D55 */
+    uint8_t overlay_d59;                /* $0D59 */
+    uint8_t player_mode_kept;           /* $0D5E */
+    uint8_t window_up_kept, window_step_d23; /* $0D22, $0D23 */
+    uint8_t pause_stage_b, pause_player, pause_stage; /* $0D2D, $0D2E, $0D2F */
+    uint8_t race_again;                 /* $0DD4 */
+    uint8_t byte_0dda;                  /* $0DDA */
+    uint8_t laps_done[2];               /* $0DE8: laps the physics has counted */
+    uint8_t laps_counted[2];            /* $0DEA: laps this code has counted */
+    uint8_t car_flags_low[2];           /* $0DEC */
+    uint8_t car_flags_high[2];          /* $0DEE */
+    uint8_t banner_timer[2];            /* $0E3F */
+    uint8_t banner[2];                  /* $0E41: the lap banner's step */
+    uint8_t game_e18;                   /* $0E18 */
+    uint8_t end_ready;                  /* $0E4B */
+    uint8_t finish_timer;               /* $0E56 */
+    uint8_t end_timer;                  /* $0E58 */
+    uint8_t time_up_timer;              /* $0E5A */
+    uint8_t byte_e5f;                   /* $0E5F */
+    uint16_t time_shown;                /* $0E6C */
+    uint16_t level_colour;              /* $0F11: BGR */
+    uint16_t time_bonus, time_bonus_2;  /* $0D67, $0D69 */
+    uint16_t hits_bcd_2;                /* $19F0 */
+    uint8_t save_bad_flag;              /* $1FFE */
+    uint8_t time_off;                   /* $0D4E: no time limit */
+    uint16_t clock_step;                /* $0D29: BCD added to the clock each frame */
+    uint16_t clock_fraction;            /* $0E62: BCD; its high byte is the hundredths */
+    uint16_t clock_seconds;             /* $0E64: BCD */
+    uint16_t clock_minutes;             /* $0E66: BCD */
+    uint16_t countdown_fraction;        /* $0E68: BCD */
+    uint16_t countdown_fraction_2;      /* $0E6A: set with it, not read here */
+    uint16_t time_left;                 /* $0E70: BCD seconds left */
+    uint8_t lap_mark[3];                /* $0EDB-$0EDD: the clock at the last lap */
+    uint8_t lap_splits[9];              /* $0EDE: three laps' times, hundredths seconds minutes */
+    uint8_t lap_clock[9];               /* $0EF0: the clock at each lap */
+    uint8_t race_time_kept[3];          /* $0EE7-$0EE9 */
     uint8_t player_mode[2];             /* $0DF4, $0DF5 */
     uint8_t player_phase[2];            /* $0DD6, $0DD7: each player's race phase */
     uint8_t race_timer;                 /* $0E55: the phases' countdown */
@@ -39,6 +88,7 @@ typedef struct {
     uint8_t split_window_state;         /* $19D8 */
     uint8_t split_window_count;         /* $19DF */
     uint8_t draw_side;                  /* $1F07: 0 the near side of a frame, 1 the far */
+    uint8_t fade_low;                   /* $0D60: the fade level's fraction */
     uint8_t fade_level;                 /* $0D61: the race's brightness, bit 7 when it is over */
     uint8_t fade_out;                   /* $0E3A: the fade out has started */
 
@@ -89,6 +139,7 @@ typedef struct {
     uint16_t course_options;            /* $1AEE: bit 0 keeps the cars where they are */
     uint8_t spawn_mirror;               /* $1AF4: the heading a course script spawns objects with */
     uint16_t spawn_counter;             /* $1ADE: the spawn counter */
+    uint16_t director[2];               /* $1ADA, $1ADC: the two bare objects that move the cameras */
     uint16_t trigger_list[0x104][2];    /* $1AF5: code and bucket number per entry, ended by 0 */
     uint16_t bucket_origin[3];          /* $1F01, $1F03, $1F05: the bucket trigger window */
     uint16_t selection_out[4];          /* $18D3: each racer's model (words) */
@@ -100,6 +151,21 @@ typedef struct {
     uint8_t frame_records[64 * 30];     /* $7E:F77F: those records, 30 bytes each */
 
     /* ---- the picture: palettes, windows, tile maps, the HUD ---- */
+    uint8_t clear_colours_b0;           /* $10DC: the course keeps no colours $B0-$BF */
+    uint8_t palette_animate;            /* $0E5F: the animated colours are in use */
+    uint8_t split_stage_on;             /* $0D22: the split screen's upload stages run */
+    uint8_t split_stage;                /* $0D23: which of them */
+    uint8_t picture_effects;            /* $0DA5: bits 0 slide check, 1-2 slide, 3 oscillate/gradient off, 4 sweep, 5 weather ease, 6 alternate backdrop, 7 stops the ease */
+    uint8_t status_level[2];            /* $0DDA, by player */
+    uint16_t status_flags[2];           /* $0DF0 (low bytes) and $0DF2 (high bytes), by player */
+    uint8_t kept_enable[2];             /* $0E05, by player */
+    uint16_t pad_last[2];               /* $0D1E, by player: the buttons as the race read them */
+    uint8_t kept_timer[2];              /* $0E01 */
+    uint8_t kept_step[2];               /* $0E03 */
+    uint8_t kept_cycle[2];              /* $0DFF */
+    uint8_t kept_count[2], kept_rate[2]; /* $0DFD, $0DFB */
+    uint8_t flash_count[2];             /* $0E1F */
+    uint16_t player_palette_offset[2];  /* $0D83: each player's first colour, counted from $E4 */
     uint16_t hud_hold;                  /* $0E5D: the HUD's hold, bit 15 and low byte used apart */
     uint16_t hud_point_index;           /* $0D6B */
     uint16_t hud_point_x, hud_point_y;  /* $0D6D, $0D6F */
@@ -122,6 +188,7 @@ typedef struct {
     uint16_t times_step, times_timer, times_entry; /* $10D8, $115A, $115C */
 
     /* ---- sound ---- */
+    uint16_t near_car_none;             /* $117C: 1 while there is no nearest car */
 
     uint8_t unused_keeps_the_struct_valid_until_fields_exist;
 } Game;
