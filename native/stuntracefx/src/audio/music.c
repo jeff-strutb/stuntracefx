@@ -32,6 +32,23 @@ static Queue queue[2];
 static uint8_t wire[4];                 /* what the game has on the four ports */
 static uint32_t samples;
 
+/* Whether the echo on ports 0 and 1 answers what they now carry: a count of
+   the changes to each port, the count a music tick's exchange took in, the
+   count a sound tick then read, and the count the echo the next exchange
+   shows was read from. The original sent the next byte as soon as a port's
+   echo showed 0, which it also shows after the driver has read a new byte and
+   before it has echoed it; a command sent twice running was then heard once
+   (seen in a race: two of 227 commands). Here a port changes only on an echo
+   of what it carries. */
+static uint8_t wire_count[2], latched_count[2], read_count[2], echo_count[2];
+
+static void wire_set(int q, uint8_t value)
+{
+    if (wire[q] != value)
+        wire_count[q]++;
+    wire[q] = value;
+}
+
 /* The slot after `count` queued bytes as the original works it out with the
    CPU in decimal mode: its add of the count to the head is then a BCD add of
    two binary numbers, so a low digit past 9 carries early (count 1 on head 9
@@ -64,15 +81,19 @@ static void queue_push(Queue *q, uint8_t value, int decimal)
 
 /* One ring to its port: 0 while the driver still shows a command there, else
    the oldest byte (the head steps on unless that was the last). */
-static void ring_send(Queue *q, uint8_t echo, uint8_t *port)
+static void ring_send(int port)
 {
-    if (echo) {
-        *port = 0;
+    Queue *q = &queue[port];
+
+    if (echo_count[port] != wire_count[port])
+        return;                         /* the echo is from before this port's last change */
+    if (s.port_out[port]) {
+        wire_set(port, 0);
         return;
     }
     if (!q->count)
         return;
-    *port = q->ring[q->head];
+    wire_set(port, q->ring[q->head]);
     q->count--;
     if (q->count)
         q->head = (q->head + 1) & 15;
@@ -88,8 +109,8 @@ static void ports_send(const Message *m)
 {
     if (m->held || !m->odd)
         return;
-    ring_send(&queue[0], s.port_out[0], &wire[0]);
-    ring_send(&queue[1], s.port_out[1], &wire[1]);
+    ring_send(0);
+    ring_send(1);
     wire[2] = m->port2;
     wire[3] = m->port3;
 }
@@ -98,11 +119,15 @@ static void ports_send(const Message *m)
    keeps for the ports and reads what the game has put there. */
 static void port_exchange(void)
 {
+    echo_count[0] = read_count[0];
+    echo_count[1] = read_count[1];
     s.port_out[0] = s.port_seen;
     s.port_out[1] = s.port_copy[1];
     s.port_out[2] = s.port_copy[2];
     s.port_out[3] = s.port_copy[3];
     memcpy(s.port_latch, wire, 4);
+    latched_count[0] = wire_count[0];
+    latched_count[1] = wire_count[1];
 }
 
 void music_pass(void)
@@ -115,6 +140,8 @@ void music_pass(void)
             battle_sound_tick();
         else
             race_sound_tick();
+        read_count[0] = latched_count[0];
+        read_count[1] = latched_count[1];
         if (d.echo_delay_wait != d.echo_delay)
             d.echo_delay_wait++;
     }
@@ -145,6 +172,8 @@ void music_tick(void)
             driver_reset();
             s.battle = m.battle;
             memset(wire, 0, sizeof wire);
+            for (q = 0; q < 2; q++)
+                wire_count[q] = latched_count[q] = read_count[q] = echo_count[q] = 0;
             break;
         case MESSAGE_STOP:
             driver_leave();
@@ -158,7 +187,7 @@ void music_tick(void)
             wire[2] = wire[3] = 0;
             break;
         case MESSAGE_PORT0:
-            wire[0] = m.value;
+            wire_set(0, m.value);
             break;
         case MESSAGE_FRAME:
             ports_send(&m);
