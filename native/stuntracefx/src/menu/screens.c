@@ -82,6 +82,7 @@ static void menu_scroll_reset(void)
 
 static void menu_common_mode(void)
 {
+    pic.race.on = 0;
     pic.mode = 1;
     pic.bg3_priority = 1;
     pic.bg[0].tiles = menu_video.tiles_a;
@@ -380,6 +381,7 @@ static void menu_state_clear(void)
 /* BG1 and BG2 for the course menu's full mode. */
 static void preview_full_mode(void)
 {
+    pic.race.on = 0;
     pic.mode = 3;
     pic.bg3_priority = 0;
     pic.bg[0].tiles = tiles_8bpp;
@@ -924,6 +926,7 @@ static void champion_open(void)
 
     pic.blank = 1;
     frame_state.brightness = 0;
+    pic.race.on = 0;
     pic.mode = 3;
     pic.bg3_priority = 0;
     pic.bg[2].draw_list.id = 0;

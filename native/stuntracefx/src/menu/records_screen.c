@@ -238,7 +238,7 @@ static void page_mark_flip(void)
 
     for (i = 0; i < 3; i++) {
         OamByteSet((uint16_t)(y + i * 8 + 2), 0xF0);
-        sprites[(y + i * 8) / 4].hflip = 1;
+        OamByteSet((uint16_t)(y + i * 8 + 3), (uint8_t)(OamByte((uint16_t)(y + i * 8 + 3)) | 0x40));
     }
 }
 
