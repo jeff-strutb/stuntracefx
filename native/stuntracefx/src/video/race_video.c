@@ -550,6 +550,7 @@ void race_screen_end(void)
     pic.race.on = 0;
     pic.race.split = 0;
     pic.race.course_screen = 0;
+    fx_draw_set_palette_row(0);
     for (i = 0; i < 3; i++) {
         pic.bg[i].draw_list.id = 0;
         pic.bg[i].tiles.id = 0;
@@ -723,6 +724,9 @@ static void race_screen_layers(void)
     pic.race.split = g.split_screen != 0;
     pic.bg3_priority = 0;
     pic.mode = 1;
+    /* the two-player pictures are 4-bit; the original's map shows their
+       tiles in palette row 2 (entries $08xx at $1C00); one player's are 8-bit */
+    fx_draw_set_palette_row(pic.race.split ? 2 : 0);
     if (pic.race.split) {
         /* the frame at its own priority on BG1, tiles; the 3D, backdrop and
            panel in the list, in BG2's place under it (race_frame_art_draw) */
