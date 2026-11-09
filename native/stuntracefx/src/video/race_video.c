@@ -1125,7 +1125,7 @@ void PictureTurnStep(void)
         return;
     }
     g.picture_turn_delay = (held & 0x0040) ? 3 : (held & 0x4000) ? 2 : (held & 0x0020) ? 6 : (held & 0x0010) ? 8 : 4;
-    if (g.race_held[0] & 0x2000) {
+    if (frame_state.held[0] & 0x2000) {
         t = (uint16_t)(t - 1);
         if (t & 0x8000)
             t = 7;

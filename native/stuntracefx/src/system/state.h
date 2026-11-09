@@ -189,7 +189,6 @@ typedef struct {
     uint16_t pace_z;                    /* $1F73 */
     uint16_t word_1176;                 /* $1176 */
     uint8_t lamp_lights;                /* $1A5B: the start lamps' bits */
-    uint16_t race_held[2];              /* $0309, $030D: buttons held since the last race step (ORed by the frame) */
     uint16_t control_held, control_prev; /* $1AF0, $1AF2: the buttons the controls code is reading */
     uint16_t race_last[2];              /* $1F23, $1F25: last race step's buttons */
     uint16_t player_flags[2];           /* $1A5E, $1A60 */
