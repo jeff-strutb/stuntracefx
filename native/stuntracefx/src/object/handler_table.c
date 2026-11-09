@@ -15,6 +15,11 @@ void object_handler_call(Object *o, uint32_t handler)
     unsigned i;
 
     switch (handler) {
+    case 0x088B5B: CameraDirectorNext(o); return;
+    case 0x088BD7: CameraDirectorHold(o); return;
+    case 0x088BFB: CameraDirectorSkip3(o); return;
+    case 0x088C43: CameraDirectorSkip5(o); return;
+    case 0x088C99: CameraDirectorSkip2(o); return;
     case 0x088D2D: CameraDirectorTrack(o); return;
     case 0x088E2A: CameraDirectorPathStart(o); return;
     case 0x088E51: CameraDirectorPath(o); return;
@@ -39,7 +44,18 @@ void object_handler_call(Object *o, uint32_t handler)
     case 0x08951B: CameraStill(o); return;
     case 0x08953C: CameraStillStep(o); return;
     case 0x08958C: CameraEndStep(o); return;
+    case 0x089896: CameraPath8603(o); return;
+    case 0x0898CC: CameraPath8679(o); return;
+    case 0x0898E7: CameraPath869B(o); return;
+    case 0x089902: CameraPath86B3(o); return;
+    case 0x08991D: CameraPath86CB(o); return;
+    case 0x089938: CameraPath8709(o); return;
+    case 0x089946: CameraPath86E3(o); return;
     case 0x08998B: CameraPathGoStep(o); return;
+    case 0x0899DC: CameraPathLow87B7(o); return;
+    case 0x0899E6: CameraPathLow875B(o); return;
+    case 0x089A0D: CameraPathLowStep(o); return;
+    case 0x089A25: CameraLowHoldStep(o); return;
     case 0x089BD9: ObjectRingStartZ(o); return;
     case 0x089BF7: ObjectRingStartX(o); return;
     case 0x089C15: ObjectRingStartBackZ(o); return;
@@ -273,6 +289,10 @@ void object_handler_call(Object *o, uint32_t handler)
     case 0x09C531: ObjectBreakableRecord(o); return;
     case 0x09C560: ObjectBreakableStep(o); return;
     case 0x09C5C8: ObjectColour2(o); return;
+    case 0x09C5D1: ObjectColour3(o); return;
+    case 0x09C5DA: ObjectColour4(o); return;
+    case 0x09C5E3: ObjectColour5(o); return;
+    case 0x09C5EC: ObjectColour6(o); return;
     case 0x09C5F5: ObjectColour7(o); return;
     case 0x09C5FE: ObjectScaleE0(o); return;
     case 0x09C605: ObjectScaleA0(o); return;

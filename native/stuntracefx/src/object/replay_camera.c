@@ -6,9 +6,8 @@
  * CameraSnapToTable, CameraTableStep, CameraFixedAhead, CameraHoldStep and
  * Step2, CameraFixedSide, CameraFollowCar and Step, CameraLiftOff and Step,
  * CameraBeside, BesideStep and BesideWait, CameraTrackHalf and Step,
- * CameraReturn and Step, CameraPathFollow and Step, the CameraPath86xx
- * shots, CameraLowBehind, CameraLowHold and Step, CameraPathLow87B7 and
- * 875B, CameraPathLowStep.
+ * CameraReturn and Step, CameraPathFollow and Step, CameraPath8643 and
+ * 86FB, CameraLowBehind.
  */
 #include <string.h>
 
@@ -335,3 +334,77 @@ void CameraPathGo(Object *o)
     ObjectSetHandler(o, H_CAMERA_PATH_GO_STEP);
     CameraPathGoStep(o);
 }
+
+/* A path shot that goes: on path p, mode 1 unless `keep_mode`, then
+   CameraPathGo. */
+static void path_go(Object *o, uint16_t path, int keep_mode)
+{
+    ObjectPathStart(o, path);
+    if (!keep_mode)
+        set_mode(o, 0x0001);
+    CameraFollowLink(o);
+    CameraPathGo(o);
+}
+
+/* @routine 08:9896 CameraPath8603 */
+void CameraPath8603(Object *o) { path_go(o, 0x8603, 0); }
+/* @routine 08:98CC CameraPath8679 */
+void CameraPath8679(Object *o) { path_go(o, 0x8679, 0); }
+/* @routine 08:98E7 CameraPath869B */
+void CameraPath869B(Object *o) { path_go(o, 0x869B, 0); }
+/* @routine 08:9902 CameraPath86B3 */
+void CameraPath86B3(Object *o) { path_go(o, 0x86B3, 0); }
+/* @routine 08:991D CameraPath86CB */
+void CameraPath86CB(Object *o) { path_go(o, 0x86CB, 0); }
+/* @routine 08:9946 CameraPath86E3 */
+void CameraPath86E3(Object *o) { path_go(o, 0x86E3, 0); }
+/* @routine 08:9938 CameraPath8709: the camera's mode kept */
+void CameraPath8709(Object *o) { path_go(o, 0x8709, 1); }
+
+/*
+ * @routine 08:9A25 CameraLowHoldStep
+ * WHAT IT DOES: The low shot's frame: the camera 100 above its target.
+ */
+void CameraLowHoldStep(Object *o)
+{
+    Camera *c = cam_of(o);
+
+    c->place[0] = 0x0000;
+    c->place[1] = 0xFF9C;
+    c->place[2] = 0x0000;
+    tail(o);
+}
+
+/* @routine 08:9A16 CameraLowHold */
+void CameraLowHold(Object *o)
+{
+    ObjectSetHandler(o, H_CAMERA_LOW_HOLD_STEP);
+    CameraLowHoldStep(o);
+}
+
+/*
+ * @routine 08:9A0D CameraPathLowStep
+ * WHAT IT DOES: Along its path; once there, the low shot held.
+ */
+void CameraPathLowStep(Object *o)
+{
+    if (CameraApproachTarget(o)) {
+        CameraLowHold(o);
+        return;
+    }
+    tail(o);
+}
+
+static void path_low(Object *o, uint16_t path)
+{
+    ObjectPathStart(o, path);
+    set_mode(o, 0x0001);
+    CameraFollowLink(o);
+    ObjectSetHandler(o, H_CAMERA_PATH_LOW_STEP);
+    CameraPathLowStep(o);
+}
+
+/* @routine 08:99DC CameraPathLow87B7 */
+void CameraPathLow87B7(Object *o) { path_low(o, 0x87B7); }
+/* @routine 08:99E6 CameraPathLow875B */
+void CameraPathLow875B(Object *o) { path_low(o, 0x875B); }

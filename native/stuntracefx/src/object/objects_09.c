@@ -1714,7 +1714,8 @@ void ObjectBreakable(Object *o)
     ObjectBreakableRecord(o);
 }
 
-/* @routine 09:C5C8 ObjectColour2 to 09:C5F5 ObjectColour7 */
+/* @routine 09:C5C8 ObjectColour2, 09:C5D1 ObjectColour3, 09:C5DA ObjectColour4,
+   09:C5E3 ObjectColour5, 09:C5EC ObjectColour6, 09:C5F5 ObjectColour7 */
 #define COLOUR(n) void ObjectColour##n(Object *o) { o->sprite_turn[0] = (uint8_t)(n | 0x80); }
 COLOUR(2) COLOUR(3) COLOUR(4) COLOUR(5) COLOUR(6) COLOUR(7)
 

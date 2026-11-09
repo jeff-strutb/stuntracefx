@@ -1780,6 +1780,56 @@ void CameraDirectorSkip2(Object *o)
     director_track_start(o);
 }
 
+/*
+ * @routine 08:8BFB CameraDirectorSkip3
+ * WHAT IT DOES: The replay camera three entries on, then tracking.
+ */
+void CameraDirectorSkip3(Object *o)
+{
+    director_place(o, director_entry(o, 3), 0x03E8, 0xFE0C, 0x03E8);
+    director_track_start(o);
+}
+
+/*
+ * @routine 08:8BD7 CameraDirectorHold
+ * WHAT IT DOES: The replay camera held where it is, following its target.
+ */
+void CameraDirectorHold(Object *o)
+{
+    ObjectSetHandler(o, H_DIRECTOR_HOLD);
+    director_mode(o, 0x0003);
+    CameraFollowLink(o);
+    director_tail(o);
+}
+
+/*
+ * @routine 08:8C43 CameraDirectorSkip5
+ * WHAT IT DOES: The replay camera five entries on, that entry kept as its
+ * own, then held there.
+ */
+void CameraDirectorSkip5(Object *o)
+{
+    uint16_t e = director_entry(o, 5);
+
+    camera_of(o->link)->word04 = e;
+    director_place(o, e, 0x03E8, 0xFE0C, 0x03E8);
+    CameraDirectorHold(o);
+}
+
+/*
+ * @routine 08:8B5B CameraDirectorNext
+ * WHAT IT DOES: The replay camera at the next entry, 200 up, then tracking
+ * (the replay flag left as it is).
+ */
+void CameraDirectorNext(Object *o)
+{
+    ObjectSetHandler(o, H_DIRECTOR_TRACK);
+    director_mode(o, 0x0003);
+    director_place(o, director_entry(o, 1), 0x0000, 0xFF38, 0x0000);
+    director_still(o);
+    CameraDirectorTrack(o);
+}
+
 void CameraDirectorTableStart(Object *o)
 {
     Camera *c = camera_of(o->link);

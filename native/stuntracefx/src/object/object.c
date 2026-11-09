@@ -61,12 +61,26 @@ static uint16_t bcd_inc16(uint16_t v)
     return (uint16_t)(lo | bcd_add8((uint8_t)(v >> 8), 0, &carry) << 8);
 }
 
-/* a word read from bank 0: the cartridge from $8000 up */
+/*
+ * A word read from bank 0. From $8000 up that is the cartridge. Course
+ * entries with bit 9 of their flags and no model record (+$20 = 0) make
+ * the original read work RAM $000A, $000C and $000E: direct-page scratch
+ * that whatever ran last left there (in the recordings: 0 for the first
+ * attract demo, $FFD2 for the second, the race camera's Y $F2CE in race1;
+ * $000C and $000E 0 each time). INTERIM: those are taken as 0 here, so the
+ * objects' X offsets differ from the original's whenever that scratch word
+ * was not 0. Reported once.
+ */
 static uint16_t bank0_word(uint16_t at)
 {
+    static int reported;
+
     if (at >= 0x8000)
         return cart16(0x00, at);
-    fprintf(stderr, "stuntracefx: a course script's model record at $%04X is not in the cartridge\n", at);
+    if (!reported) {
+        reported = 1;
+        fprintf(stderr, "stuntracefx: course objects' offsets from stale work RAM ($%04X) taken as 0 (interim)\n", at);
+    }
     return 0;
 }
 

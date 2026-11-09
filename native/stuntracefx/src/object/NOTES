@@ -9,7 +9,9 @@ Dead routines
 Proof, for each below: no call or jump to it from the game's code in asm/ or
 src/ other than from another routine on this list, its address stored by no
 live routine, and no three-byte pointer to it in the ROM (scanned over
-assets/cart.dat). Routines the original's unit scripts reach count as dead
+assets/cart.dat), and no two-byte handler word for it in the attract
+demos' scripts at $03:8004 (the race flow hands those to the director as
+its handler, bank $08). Routines the original's unit scripts reach count as dead
 when that is all that reaches them. Sign-store entries (the "XSign" and
 "YSign" entries of the shard, ring and fan routines) are inner entries no
 live pointer names; their logic is in the converted routine.
@@ -20,6 +22,8 @@ LapSignStep1, 09:D030 ObjectWheelStepXSign, 03:D289 ObjectSet39To4Continue,
 03:C870 ObjectPointDistanceXZ, 03:D2F0 ObjectChildFindTagY. None has a
 caller or setter among the live routines. Should the race ever run one, the
 handler table reports it once on stderr.
+
+228 routines.
 
 car_parts.c (1)
   08:B0B1 ObjectRivalCarB
@@ -88,17 +92,15 @@ object_find.c (18)
   ObjectPairOffsetPitchGsu81E3, 03:CA19 ObjectDistanceApprox, 03:CA85
   ObjectDistanceXY
 
-object_handlers.c (22)
+object_handlers.c (18)
   08:8A59 CameraDirectorFixedStart, 08:8A75 CameraDirectorFixed, 08:8A8A
-  CameraNearestCar, 08:8B5B CameraDirectorNext, 08:8BD7 CameraDirectorHold,
-  08:8BFB CameraDirectorSkip3, 08:8C43 CameraDirectorSkip5, 08:8EB1
-  CameraDirectorReset, 08:9ECD ObjectHandlerEmptyC, 08:9ECE
-  ObjectMarkerStart, 08:9EFD ObjectMarkerFollow, 08:9FEC CameraOnCarNear,
-  08:A02F DataBank7E, 08:A033 DataBank7EEnd, 08:BBA2 ObjectChildLooseBack,
-  08:D29B ObjectBreakOffC, 08:D428 ObjectPieceFallStart, 08:D4B9
-  ObjectPieceSprayXSign, 08:D4CB ObjectPieceSprayYSign, 08:D4E6
-  ObjectPieceSprayZSign, 08:EDDB ObjectHandlerEmptyA, 08:EDDC
-  ObjectHandlerEmptyB
+  CameraNearestCar, 08:8EB1 CameraDirectorReset, 08:9ECD
+  ObjectHandlerEmptyC, 08:9ECE ObjectMarkerStart, 08:9EFD
+  ObjectMarkerFollow, 08:9FEC CameraOnCarNear, 08:A02F DataBank7E, 08:A033
+  DataBank7EEnd, 08:BBA2 ObjectChildLooseBack, 08:D29B ObjectBreakOffC,
+  08:D428 ObjectPieceFallStart, 08:D4B9 ObjectPieceSprayXSign, 08:D4CB
+  ObjectPieceSprayYSign, 08:D4E6 ObjectPieceSprayZSign, 08:EDDB
+  ObjectHandlerEmptyA, 08:EDDC ObjectHandlerEmptyB
 
 object_links.c (7)
   03:B8E7 ObjectListTableFirst, 03:CBB0 ObjectListFreeAll, 03:CBC8
@@ -144,7 +146,7 @@ objects_09.c (80)
   ObjectWheelStepYSign, 09:D055 ObjectWheelStepZSign, 09:D4EA
   ObjectScaleUp6, 09:D695 BreakablePairB
 
-replay_camera.c (34)
+replay_camera.c (22)
   08:90D9 CameraSnapToTable, 08:9176 CameraTableStep, 08:928A
   CameraFixedAhead, 08:92DC CameraHoldStep, 08:937E CameraFixedSide, 08:93D4
   CameraHoldStep2, 08:95A0 CameraFollowCar, 08:95C7 CameraFollowCarStep,
@@ -152,12 +154,8 @@ replay_camera.c (34)
   08:9711 CameraBesideStep, 08:9787 CameraBesideWait, 08:9797
   CameraTrackHalf, 08:9825 CameraTrackHalfStep, 08:9833 CameraReturn,
   08:9847 CameraReturnStep, 08:9861 CameraPathFollow, 08:9888
-  CameraPathFollowStep, 08:9896 CameraPath8603, 08:98B1 CameraPath8643,
-  08:98CC CameraPath8679, 08:98E7 CameraPath869B, 08:9902 CameraPath86B3,
-  08:991D CameraPath86CB, 08:9938 CameraPath8709, 08:9946 CameraPath86E3,
-  08:9961 CameraPath86FB, 08:9992 CameraLowBehind, 08:99DC
-  CameraPathLow87B7, 08:99E6 CameraPathLow875B, 08:9A0D CameraPathLowStep,
-  08:9A16 CameraLowHold, 08:9A25 CameraLowHoldStep
+  CameraPathFollowStep, 08:98B1 CameraPath8643, 08:9961 CameraPath86FB,
+  08:9992 CameraLowBehind
 
 Original paths that are not reproduced
 --------------------------------------
@@ -170,6 +168,13 @@ Direct page $00 (the rails' colour, the shards' third axis) and $80 (the
 burst gate's pitch) are read as 0: no label-addressed store writes other
 than 0 to them in the game's code. An indexed store landing there was not
 ruled out.
+Course entries with flag bit 9 and no model record (+$20 = 0), 35 to 67
+per course: the original adds work RAM $000A/$000C/$000E, direct-page
+scratch, to their offsets. INTERIM: taken as 0. The recordings show $000A
+was 0 for attract demo 1, $FFD2 for demo 2 and $F2CE (the race camera's Y)
+for race1, $E64E for battle; $000C and $000E were 0. Which routine wrote it
+last is not settled: ObjectFaceTied matches race1, not demo 2. Reproducing
+it would need a shared value standing for that scratch word.
 Stray stores to low RAM on paths that need a missing record or an empty
 list are skipped, with a comment where each is: ring_spawn, the track
 director with no entry, ObjectFree with no next, the sky ball when the spawn
