@@ -60,6 +60,10 @@ _Static_assert(sizeof(SaveFile) == 1024, "the save is the cartridge's 1 KB");
 void save_load(void);                   /* at the game's start: reads the file and makes it valid */
 void save_commit(void);                 /* after any change */
 
+/* The game's options, kept beside the save (options.c). */
+int option_auto_accelerate(void);       /* 1 (the default): on a touch screen the gas is held while driving */
+void option_auto_accelerate_set(int on); /* saved at once */
+
 void SaveValidate(void);
 void SaveUnlocksCheck(void);
 uint8_t SaveChecksum(void);
