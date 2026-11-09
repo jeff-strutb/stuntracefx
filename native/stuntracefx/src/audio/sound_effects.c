@@ -11,6 +11,7 @@
 #include "fx/fx.h"
 #include "fx/fx_rt.h"
 #include "system/state.h"
+#include "video/video.h"
 
 /* a word of Super FX RAM, as the S-CPU reads it */
 #define FX_PLAYER_RECORD 0x2476         /* the player's car record */
@@ -359,6 +360,6 @@ void WindowSlideUpSound(void)
 {
     if (g.picture_effects & 0x04)
         SoundPort1QueuePush(0x10);
-    if (!g.split_window_state)
-        g.split_window_state = 1;
+    if (!windows.bands_state)
+        windows.bands_state = 1;
 }

@@ -61,6 +61,17 @@ void race_wait_champion(void (*after)(void));
 void race_go_on(void);
 void OverlayFrameStep(void);
 void PauseFrameStep(void);
+int PauseOnStart(void);                 /* 1: paused, the step stops here */
+int OamStagePause(void);
+int OamStagePause2(void);
+void OamStagePauseLoop(void);
+void OamStagePause2Loop(void);
+void race_pause_begin(int leaves);      /* 1: the pause only ends by leaving the race */
+void race_pause_over(int second_half);
+int race_resuming(void);                /* a step going on after a pause */
+void race_resume_done(void);
+void RaceFrameRunResume(void);
+void RaceFrameRunTwoPlayersResume(int second_half);
 int ChampionshipScreenFrame(void);
 void race_frame_upload(void);
 void SoftResetCheck(void);

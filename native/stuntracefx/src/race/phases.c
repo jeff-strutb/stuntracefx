@@ -591,23 +591,28 @@ progress:
 /* @routine 07:E562 RacePhaseLapP1 */
 void RacePhaseLapP1(void)
 {
-    GsuF441Player1();
-    OamStagePause();
+    if (!race_resuming())
+        GsuF441Player1();
+    if (OamStagePause())
+        return;
     race_phase(0);
 }
 
 /* @routine 07:E56A RacePhaseLapP2 */
 void RacePhaseLapP2(void)
 {
-    GsuF441Player2();
-    OamStagePause2();
+    if (!race_resuming())
+        GsuF441Player2();
+    if (OamStagePause2())
+        return;
     race_phase(1);
 }
 
 /* @routine 07:E572 RacePhaseLap: one player: the pause, then the race. */
 void RacePhaseLap(void)
 {
-    PauseOnStart();
+    if (PauseOnStart())
+        return;
     race_phase(0);
 }
 
@@ -650,12 +655,13 @@ static void window_up(void)
 /* Bits 15 and 12 of the presses: B or START. */
 static int pressed_b_start(void) { return (frame_state.pressed_copy[0] & 0x9000) != 0; }
 
-static int window_closed_overlay(void)
+/* Once the window is closed, the overlay fades out, then `after`. */
+static int window_closed_overlay(void (*after)(void))
 {
-    if (g.split_window_state != 0x05)
+    if (windows.bands_state != 0x05)
         return 0;
     g.overlay_d59 = 0;
-    OverlayFramesUntilFaded();
+    race_wait_overlay(after);
     return 1;
 }
 
@@ -668,24 +674,34 @@ void ResultsWindowWait(void)
         return;
     }
     if (!g.end_timer) {
-        if (!window_closed_overlay())
-            return;
-        if (g.race_again)
-            RaceRestart();
-        else
-            RaceEndVideoReset();
+        window_closed_overlay(race_go_on);
         return;
     }
     if (g.end_timer == 0x10) {
         window_up();
     } else if (g.end_timer < 0x58 && pressed_b_start()) {
-        if (g.split_window_state)
+        if (windows.bands_state)
             return;
         g.end_timer = 0;
         window_up();
         return;
     }
     g.end_timer--;
+}
+
+/* RaceEndWindowSteps after the overlay: on to the next race of the set. */
+static void race_end_window_leave(void)
+{
+    if (g.byte_0d24 != 0x03) {
+        if (g.champ_stage == 0x01) {
+            g.time_override = 0xFF;
+            g.course = (uint8_t)(g.course_class + 0x14);
+            g.car[0] = 0x04;
+        } else {
+            g.champ_stage++;
+        }
+    }
+    RaceRestart();
 }
 
 /* @routine 07:EA85 RaceEndWindowSteps */
@@ -697,22 +713,11 @@ void RaceEndWindowSteps(void)
         GlyphSpritesGrowAndTimes();
         return;
     }
-    if (window_closed_overlay()) {
-        if (g.byte_0d24 != 0x03) {
-            if (g.champ_stage == 0x01) {
-                g.time_override = 0xFF;
-                g.course = (uint8_t)(g.course_class + 0x14);
-                g.car[0] = 0x04;
-            } else {
-                g.champ_stage++;
-            }
-        }
-        RaceRestart();
+    if (window_closed_overlay(race_end_window_leave))
         return;
-    }
     v = g.end_timer;
     if (v == 0x10) {
-        g.split_window_count = 0;
+        windows.bands_kind = 0;
         window_up();
     }
     if (v == 0x58) {
@@ -798,7 +803,7 @@ void RaceEndWindowNine(void)
     BigSpritesNine();
     v = g.end_timer;
     if (!v) {
-        if (g.split_window_state == 0x05)
+        if (windows.bands_state == 0x05)
             RaceEndLeave();
         return;
     }
@@ -807,7 +812,7 @@ void RaceEndWindowNine(void)
         return;
     }
     g.end_timer = 0;
-    g.split_window_count = 0x01;
+    windows.bands_kind = 0x01;
     WindowSlideUpSound();
 }
 
@@ -907,14 +912,14 @@ void TimeUpRace(int player)
     }
     v = g.time_up_timer;
     if (!v) {
-        if (g.split_window_state == 0x05)
+        if (windows.bands_state == 0x05)
             RaceEndLeave();
         return;
     }
     v--;
     g.time_up_timer = v;
     if (v == 0x01) {
-        g.split_window_count = 0x01;
+        windows.bands_kind = 0x01;
         WindowSlideUpSound();
     }
 }

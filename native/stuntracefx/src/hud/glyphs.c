@@ -18,6 +18,7 @@
 #include "race/race.h"
 #include "system/chip.h"
 #include "system/state.h"
+#include "video/video.h"
 
 void GlyphColours(uint8_t b1, uint8_t b2, uint8_t b3)
 {
@@ -774,8 +775,8 @@ void GlyphTimesSequence(void)
     }
     case 21:
         if (times_wait(0x0014)) {
-            g.split_window_state = 0x01;
-            g.split_window_count = 0x00;
+            windows.bands_state = 0x01;
+            windows.bands_kind = 0x00;
             sound_port1_push(0x04);
         }
         glyph_row(0);

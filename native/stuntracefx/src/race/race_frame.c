@@ -178,6 +178,17 @@ static void frame_run_ab13_a(void)
     MapMarkersPanelA();
 }
 
+/* The picture is handed over at the step's end. */
+static void one_player_finish(void)
+{
+    fx_draw_flush();
+    if (race_flow_stopped())
+        return;
+    GsuScreenToggle();
+    g.picture_uploaded = 0;
+    frame_time();
+}
+
 /*
  * @routine 02:D7CD RaceFrameRun
  * WHAT IT DOES: One step of a race: the view, the controls, the physics and
@@ -205,12 +216,44 @@ void RaceFrameRun(void)
         FxTextProgram(0);
     else
         RaceSoundsAndHud();
+    one_player_finish();
+}
+
+/* The rest of a step a pause held. */
+void RaceFrameRunResume(void)
+{
+    RaceSoundsAndHud();
+    one_player_finish();
+}
+
+/* From player 2's sounds to the step's end. */
+static void two_players_second_half(void)
+{
+    RaceSoundsPlayer2();
     fx_draw_flush();
     if (race_flow_stopped())
         return;
-    GsuScreenToggle();
+    GsuScreenFlipMenu();
     g.picture_uploaded = 0;
     frame_time();
+}
+
+/* From player 1's sounds through player 2's picture. */
+static void two_players_first_half(void)
+{
+    RaceSoundsPlayer1();
+    fx_draw_flush();
+    if (race_flow_stopped())
+        return;
+    GsuScreenFlipMenu();
+    g.picture_uploaded = 0;
+    ViewUpdateAndGsuAEF8();
+    BackdropAnglesFromView();
+    g.view_angle_06cf = (uint16_t)(g.view_angle_06cf - 0x0140);
+    fx_draw_begin(g.fx_buffer);
+    frame_run_ab13_a();
+    SpeedGaugeUpdate(0x2142);
+    two_players_second_half();
 }
 
 /*
@@ -233,25 +276,16 @@ void RaceFrameRunTwoPlayers(void)
     fx_draw_begin(g.fx_buffer);
     frame_run_ab13_b();
     SpeedGaugeUpdate(0x2143);
-    RaceSoundsPlayer1();
-    fx_draw_flush();
-    if (race_flow_stopped())
-        return;
-    GsuScreenFlipMenu();
-    g.picture_uploaded = 0;
-    ViewUpdateAndGsuAEF8();
-    BackdropAnglesFromView();
-    g.view_angle_06cf = (uint16_t)(g.view_angle_06cf - 0x0140);
-    fx_draw_begin(g.fx_buffer);
-    frame_run_ab13_a();
-    SpeedGaugeUpdate(0x2142);
-    RaceSoundsPlayer2();
-    fx_draw_flush();
-    if (race_flow_stopped())
-        return;
-    GsuScreenFlipMenu();
-    g.picture_uploaded = 0;
-    frame_time();
+    two_players_first_half();
+}
+
+/* The rest of a two-player step a pause held. */
+void RaceFrameRunTwoPlayersResume(int second_half)
+{
+    if (second_half)
+        two_players_second_half();
+    else
+        two_players_first_half();
 }
 
 /* RaceFinishPhasesTail: $0E58 = $30, the mark and palette work cleared, sound 2. */
@@ -320,7 +354,7 @@ void RaceFinishSplit(int player)
  * timers, NMITIMEN and BG3 scroll the original wrote here have no meaning on
  * the engine. Addresses with no reader converted yet are not stored: $0D9E,
  * $0DA0, $0DD8-$0DD9, $0E07, $0E08, $0E0B, $0E1A, $0E4F-$0E53, $0E54, $0E90,
- * $0D3D, $10BA, $117E, $1180, the $7F:3462, $346A, $346E, $3466, $3476,
+ * $117E, $1180, the $7F:3462, $346A, $346E, $3466, $3476,
  * $345E halves.
  */
 void RaceVarsReset(void)
@@ -356,6 +390,8 @@ void RaceVarsReset(void)
     g.speed_count[0] = g.speed_count[1] = 0;
     g.hud_hold = 0;
     g.tally_state = 0;
+    g.quit_cars_shown = 0;
+    g.pause_choice = 0;
     g.start_light = 0;
     sound_port2 = 0;
     sound_port3 = 0;

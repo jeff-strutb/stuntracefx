@@ -334,11 +334,5 @@ void SpriteBar4WithMarker(uint8_t value, uint16_t pos, uint16_t slot);
 void SpriteBar6WithMarker(uint8_t value, uint16_t pos, uint16_t slot);
 void OamHide75Up(void);
 void OamHideForHudMode(void);
-void OamStagePause(void);
-void OamStagePause2(void);
-void OamStagePauseLoop(void);
-void OamStagePause2Loop(void);
-void OverlayFramesUntilFaded(void);
-void PauseOnStart(void);
 
 #endif

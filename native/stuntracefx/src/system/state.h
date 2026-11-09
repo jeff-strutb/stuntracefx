@@ -92,6 +92,8 @@ typedef struct {
     uint8_t overlay_d59;                /* $0D59 */
     uint8_t player_mode_kept;           /* $0D5E */
     uint8_t pause_stage_b, pause_player, pause_stage; /* $0D2D, $0D2E, $0D2F */
+    uint8_t pause_choice;               /* $0D3D: 0 continue, otherwise quit */
+    uint8_t quit_cars_shown;            /* $10BA */
     uint8_t race_again;                 /* $0DD4 */
     uint8_t laps_done[2];               /* $0DE8: laps the physics has counted */
     uint8_t laps_counted[2];            /* $0DEA: laps this code has counted */
@@ -130,8 +132,6 @@ typedef struct {
     uint16_t best_lap_time;             /* $0F2B: $FFFF for none */
     uint8_t best_times[4][3];           /* $0EF9, $0EFC, $0EFF */
     uint16_t packed_time_a, packed_time_b; /* $1163, $1161 */
-    uint8_t split_window_state;         /* $19D8 */
-    uint8_t split_window_count;         /* $19DF */
     uint8_t draw_side;                  /* $1F07: 0 the near side of a frame, 1 the far */
     uint8_t fade_low;                   /* $0D60: the fade level's fraction */
     uint8_t fade_level;                 /* $0D61: the race's brightness, bit 7 when it is over */

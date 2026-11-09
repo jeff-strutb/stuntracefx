@@ -48,10 +48,12 @@ static struct {
     void (*after)(void);
     int stopped;                        /* the step in progress was left */
     int finished;                       /* the session is over; back to the menus */
+    int resuming;                       /* a step is going on after a pause */
     uint8_t pace_count;
     /* the demo's script */
     uint16_t demo_at, demo_frame, demo_flags;
     int demo_mode;
+    int demo_ended;                     /* the step a pause held ended the demo */
 } flow;
 
 int race_flow_stopped(void) { return flow.stopped; }
@@ -266,6 +268,13 @@ static void wait_step(void)
     }
 }
 
+/* What follows the frame in the race's loop. */
+static void race_step_end(void)
+{
+    if (!flow.stopped && g.object_frames >= 0x1E)
+        g.byte_0713 = 0;
+}
+
 /* One step of the race. */
 static void race_step(void)
 {
@@ -275,8 +284,40 @@ static void race_step(void)
         RaceFrameRunTwoPlayers();
     else
         RaceFrameRun();
-    if (g.object_frames >= 0x1E)
-        g.byte_0713 = 0;
+    race_step_end();
+}
+
+/* forward */
+static int demo_after_step(void);
+
+void race_pause_begin(int leaves)
+{
+    flow.wait = leaves ? WAIT_PAUSE_LOOP : WAIT_PAUSE;
+    flow.stopped = 1;
+}
+
+int race_resuming(void) { return flow.resuming; }
+void race_resume_done(void) { flow.resuming = 0; }
+
+/* The pause is over: the step it held goes on from there. */
+void race_pause_over(int second_half)
+{
+    if (flow.wait != WAIT_PAUSE)
+        return;
+    flow.wait = WAIT_NONE;
+    flow.stopped = 0;
+    flow.resuming = 1;
+    if (g.split_screen)
+        RaceFrameRunTwoPlayersResume(second_half);
+    else
+        RaceFrameRunResume();
+    flow.resuming = 0;
+    if (flow.state == FLOW_DEMO) {
+        if (!flow.stopped && demo_after_step())
+            flow.demo_ended = 1;
+    } else {
+        race_step_end();
+    }
 }
 
 static uint8_t race_pace(void)
@@ -536,11 +577,11 @@ static int demo_commands(void)
             continue;
         case 0x07:
             flow.demo_at = (uint16_t)(at + 1);
-            g.split_window_count = 0;
-            g.split_window_state = 0x01;
+            windows.bands_kind = 0;
+            windows.bands_state = 0x01;
             continue;
         case 0x08:
-            if (g.split_window_state != 0x05)
+            if (windows.bands_state != 0x05)
                 return 0;
             flow.demo_at = (uint16_t)(at + 1);
             continue;
@@ -575,35 +616,12 @@ static int demo_commands(void)
     }
 }
 
-/* The fade out once a button or the script started it: race steps run until
-   it is done. */
-static int demo_run_to_fade(void)
+/* What follows a race step in the demo; returns 1 when it ended. */
+static int demo_after_step(void)
 {
-    RaceFrameRun();
     flow.demo_frame++;
-    return demo_fade_done();
-}
-
-/* One step of the demo; returns 1 when it ended. */
-static int demo_step(void)
-{
-    int r;
-
     if (flow.demo_mode == DEMO_TO_FADE)
-        return demo_run_to_fade();
-    PlayerStatsAndPaletteAnimate();
-    r = demo_commands();
-    if (r == 1)
-        return 1;
-    if (r == 2) {
-        /* $0B: waiting for a button held, no race step taken */
-        flow.pace_count = (uint8_t)(PACE_ONE_PLAYER - 1);
-        return 0;
-    }
-    if (flow.demo_mode == DEMO_WAIT_FADE)
-        return 0;
-    RaceFrameRun();
-    flow.demo_frame++;
+        return demo_fade_done();
     if (!(flow.demo_flags & 0x0001)) {
         if (flow.demo_flags & 0x0002)
             return 0;
@@ -616,6 +634,30 @@ static int demo_step(void)
         return 1;
     flow.demo_mode = DEMO_TO_FADE;
     return 0;
+}
+
+/* One step of the demo; returns 1 when it ended. */
+static int demo_step(void)
+{
+    int r;
+
+    if (flow.demo_mode == DEMO_TO_FADE) {
+        RaceFrameRun();
+        return flow.stopped ? 0 : demo_after_step();
+    }
+    PlayerStatsAndPaletteAnimate();
+    r = demo_commands();
+    if (r == 1)
+        return 1;
+    if (r == 2) {
+        /* $0B: waiting for a button held, no race step taken */
+        flow.pace_count = (uint8_t)(PACE_ONE_PLAYER - 1);
+        return 0;
+    }
+    if (flow.demo_mode == DEMO_WAIT_FADE)
+        return 0;
+    RaceFrameRun();
+    return flow.stopped ? 0 : demo_after_step();
 }
 
 /* One update of attract demo `which`; 0 while it runs, 1 when a button
@@ -632,6 +674,7 @@ int DemoRun(int which)
         flow.wait = WAIT_NONE;
         flow.demo_mode = DEMO_COMMANDS;
         flow.finished = 0;
+        flow.demo_ended = 0;
         return 0;
     }
     raster_frame();
@@ -642,9 +685,9 @@ int DemoRun(int which)
             g.raster_chain = RASTER_NONE;
             return -1;
         }
-        return 0;
-    }
-    if (flow.demo_mode == DEMO_WAIT_FADE) {
+        if (!flow.demo_ended)
+            return 0;
+    } else if (flow.demo_mode == DEMO_WAIT_FADE) {
         if (!demo_fade_done())
             return 0;
     } else if (++flow.pace_count < PACE_ONE_PLAYER) {

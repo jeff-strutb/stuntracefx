@@ -3,8 +3,7 @@
  * sprites already placed, the gauges, the map markers and the panels that
  * slide on and off the screen.
  *
- * Not converted, nothing reaches it: SlideOutWobble (7E:E190), Gauge6APlace
- * and Gauge6BPlace's callers are the objects' (07:C53A, C546).
+ * Not converted, nothing reaches it: SlideOutWobble (7E:E190).
  */
 #include "audio/sound.h"
 #include "fx/fx.h"

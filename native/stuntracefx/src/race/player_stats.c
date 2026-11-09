@@ -79,6 +79,13 @@ void PlayerStatsFromRecord(uint16_t rec, int player)
     GsuRecordBits60();
 }
 
+/* The figures are taken once a step: not again when a step goes on after a pause. */
+static void player_one_stats(void)
+{
+    if (!race_resuming())
+        PlayerStatsFromRecord(fx16(FXIN_PLAYER1_RECORD), 0);
+}
+
 /* @routine 07:DD47 PlayerStatsAndPaletteAnimate */
 void PlayerStatsAndPaletteAnimate(void)
 {
@@ -137,7 +144,7 @@ static void player_two_frame_work(void)
 /* @routine 07:DCEC PlayerStatsThenPhaseE232 */
 static void stats_then_phase_e232(void)
 {
-    PlayerStatsFromRecord(fx16(FXIN_PLAYER1_RECORD), 0);
+    player_one_stats();
     phase_table_e232();
 }
 
@@ -156,7 +163,7 @@ static void stats_then_phase_dd35(void)
     };
     unsigned i;
 
-    PlayerStatsFromRecord(fx16(FXIN_PLAYER1_RECORD), 0);
+    player_one_stats();
     if (g.race_skipped && g.player_phase[0] >= 0x08) {
         g.fade_out = 0x01;
         if (g.fade_level & 0x80)
@@ -173,21 +180,31 @@ static void stats_then_phase_dd35(void)
 /* @routine 07:DA02 RaceSoundsPlayer1: player 1's share of a two-player step. */
 void RaceSoundsPlayer1(void)
 {
-    SoftResetCheck();
-    PlayerStatsFromRecord(fx16(FXIN_PLAYER1_RECORD), 0);
-    PlayerStatsFromRecord(fx16(FXIN_PLAYER2_RECORD), 1);
-    g.current_player = 0;
-    EngineSoundsPlayer1(0, frame_state.pressed_copy[0], frame_state.held[0]);
+    if (!race_resuming()) {
+        SoftResetCheck();
+        PlayerStatsFromRecord(fx16(FXIN_PLAYER1_RECORD), 0);
+        PlayerStatsFromRecord(fx16(FXIN_PLAYER2_RECORD), 1);
+        g.current_player = 0;
+        EngineSoundsPlayer1(0, frame_state.pressed_copy[0], frame_state.held[0]);
+    }
     phase_table_e24f();
+    race_resume_done();
+    if (race_flow_stopped())
+        return;
     frame_state.pressed_copy[0] = 0;
 }
 
 /* @routine 07:DA65 RaceSoundsPlayer2 */
 void RaceSoundsPlayer2(void)
 {
-    g.current_player = 1;
-    EngineSoundsPlayer2(1, frame_state.pressed_copy[1], frame_state.held[1]);
+    if (!race_resuming()) {
+        g.current_player = 1;
+        EngineSoundsPlayer2(1, frame_state.pressed_copy[1], frame_state.held[1]);
+    }
     player_two_frame_work();
+    race_resume_done();
+    if (race_flow_stopped())
+        return;
     frame_state.pressed_copy[1] = 0;
 }
 
@@ -197,7 +214,8 @@ static void player_one_phase_race(void)
     static const struct { uint16_t n, y; } rows[3] = {{7, 0x0034}, {8, 0x004C}, {9, 0x0060}};
     int x = 1;
 
-    PauseOnStart();
+    if (PauseOnStart())
+        return;
     if (g.time_left) {
         if (g.laps_done[0] == g.laps_counted[0])
             return;
@@ -278,10 +296,10 @@ static void player_one_phase_end(void)
         if (g.end_timer == 0x0A)
             SoundPort1QueuePush(0x04);
         if (!--g.end_timer) {
-            g.split_window_count = 0x01;
+            windows.bands_kind = 0x01;
             WindowSlideUpSound();
         }
-    } else if (g.split_window_state == 0x05) {
+    } else if (windows.bands_state == 0x05) {
         g.time_shown = (uint16_t)((g.time_shown & 0xFF00) | (uint8_t)g.digit_pair);
         g.time_override = 0;
         g.champ_stage = 0x02;
@@ -296,7 +314,7 @@ static void player_one_phase_end(void)
 /* @routine 07:DE46 PlayerOnePhaseStep: player 1's phase in the time-override race. */
 static void player_one_phase_step(void)
 {
-    PlayerStatsFromRecord(fx16(FXIN_PLAYER1_RECORD), 0);
+    player_one_stats();
     switch (g.player_phase[0]) {
     case 0x00: RaceStartCountdown(); break;
     case 0x02: RaceStartGlyphsSteps(); break;
@@ -343,7 +361,8 @@ static void stunt_panel_wait(void)
 {
     uint8_t v;
 
-    PauseOnStart();
+    if (PauseOnStart())
+        return;
     v = g.flag_19ed;
     if (!v || v == g.stunt_seen)
         return;
@@ -382,7 +401,7 @@ static void stunt_panel_show(void)
 /* @routine 07:E1E2 StuntPhaseEnd */
 static void stunt_phase_end(void)
 {
-    if (g.split_window_state != 0x05)
+    if (windows.bands_state != 0x05)
         return;
     g.overlay_d59 = 0;
     g.byte_e80 = 0;
@@ -397,7 +416,7 @@ static void stunt_panel_done(void)
     if (--g.banner_timer[0])
         return;
     g.banner[0] = 0x08;
-    g.split_window_count = 0;
+    windows.bands_kind = 0;
     g.split_stage_on = 0x01;
     g.split_stage = 0;
     WindowSlideUpSound();
@@ -439,7 +458,7 @@ static void stunt_phase_race(void)
 /* @routine 07:E08F StuntPhaseStep */
 static void stunt_phase_step(void)
 {
-    PlayerStatsFromRecord(fx16(FXIN_PLAYER1_RECORD), 0);
+    player_one_stats();
     switch (g.player_phase[0]) {
     case 0x00: RaceStartCountdownStunt(); break;
     case 0x02: RaceStartSteps(); break;
@@ -467,6 +486,8 @@ static void hud_mode_two(void)
 {
     g.clock_step = player_car_raised() ? 0x0214 : 0x0182;
     stats_then_phase_dd35();
+    if (race_flow_stopped())
+        return;
     HudTimesDraw();
     CoursePaletteCycle();
     frame_state.pressed_copy[0] = 0;
@@ -486,11 +507,15 @@ static void hud_mode_zero(void)
     }
     if (g.time_override) {
         player_one_phase_step();
+        if (race_flow_stopped())
+            return;
         TimeBonusTally();
         TimeLeftDigits();
         TimeBonusTransfer();
     } else {
         stats_then_phase_e232();
+        if (race_flow_stopped())
+            return;
         TimeBonusTally();
         TimeLeftDigits();
         HudHoldDraw();
@@ -504,9 +529,13 @@ static void hud_mode_one(void)
     if (g.hud_blank) {
         g.freeze = 0;
         TimeUpPhaseStep();
+        if (race_flow_stopped())
+            return;
         HudBlankDraw();
     } else {
         stunt_phase_step();
+        if (race_flow_stopped())
+            return;
         if (!g.flag_0e59) {
             TimeBonusTally();
             TimeLeftDigits();
@@ -524,13 +553,16 @@ static void hud_mode_one(void)
  */
 void RaceSoundsAndHud(void)
 {
-    SoftResetCheck();
-    EngineSoundsPlayer1(0, frame_state.pressed_copy[0], frame_state.held[0]);
+    if (!race_resuming()) {
+        SoftResetCheck();
+        EngineSoundsPlayer1(0, frame_state.pressed_copy[0], frame_state.held[0]);
+    }
     switch (g.hud_mode) {
     case 0: hud_mode_zero(); break;
     case 1: hud_mode_one(); break;
     default: hud_mode_two(); break;
     }
+    race_resume_done();
 }
 
 /* @routine 07:DB97 TimeUpPhaseStart */
@@ -546,7 +578,8 @@ static void time_up_phase_start(void)
 /* @routine 07:DBC0 TimeUpPhaseRace */
 static void time_up_phase_race(void)
 {
-    PauseOnStart();
+    if (PauseOnStart())
+        return;
     if (g.clock_minutes == 0x09 && g.clock_seconds == 0x59 && (uint8_t)(g.clock_fraction >> 8) == 0x99) {
         g.time_up_timer = 0x20;
         g.player_phase[0] = 0x0C;
@@ -583,7 +616,7 @@ static void time_up_phase_end(void)
 /* @routine 07:DB71 TimeUpPhaseStep */
 void TimeUpPhaseStep(void)
 {
-    PlayerStatsFromRecord(fx16(FXIN_PLAYER1_RECORD), 0);
+    player_one_stats();
     switch (g.player_phase[0]) {
     case 0x00: time_up_phase_start(); break;
     case 0x02: GlyphSpritesSlideIn(); break;
