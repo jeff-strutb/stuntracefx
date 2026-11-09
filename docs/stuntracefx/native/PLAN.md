@@ -7,6 +7,19 @@ run was `tools/nshvc-find-hardware`.
 How this meets the direction in one line: the game's own typed C calls `nshvc_*` directly from `update` and `draw`, with no
 register-shaped state, translation layer or imitated hardware anywhere between them.
 
+## Progress (updated as work lands)
+
+Not done: most of the game. Of about 120,000 lines to convert, about 2,500 lines of new code exist so far.
+
+| Stage | State |
+|---|---|
+| 0 Set up | Done: `native/stuntracefx` builds and opens empty on the engine |
+| 1 Record and replay | Picture done: `sfxbox --native`, core patch 0014, `native/checks/replay` and `compare.py`. On the attract play 5 of 5 recorded frames match bsnes, one of them a race frame. Not yet run: two-player, more than one play. Voice replay through the engine not written; the sequencer is checked directly instead |
+| 3 Sound | Partly: the music sequencer and the race driver's rules are written and checked (`native/checks/music_check`). Attract: all 2,445 key-ons match the original in voice, sample and pitch, 2,442 in volume, one extra native key-on. A race play: 4,176 of 4,420 match; the rest, on voice 5 late in the play, are not explained. Not done: the battle driver, the game-side loaders, the top-level music module |
+| 2, 4 to 11 | Not started |
+
+Known differences so far, for the final report: sound $23's noise sample is rewritten while it plays in the original; here it is one long noise made once, at the same rates, because samples do not change on the audio thread.
+
 ## 1. What this plan cannot promise
 
 Read these first.
