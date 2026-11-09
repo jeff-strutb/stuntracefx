@@ -93,6 +93,14 @@ uint8_t race_step_frames(void)
     return pace.taken;
 }
 
+/* The screen goes back to the menus: the race's per-frame work off and none
+   of its layers left behind the next screen (video's race_screen_end). */
+static void screen_handed_back(void)
+{
+    g.raster_chain = RASTER_NONE;
+    race_screen_end();
+}
+
 /* What the race is doing while no step runs. */
 typedef enum {
     WAIT_NONE, WAIT_OVERLAY, WAIT_CHAMPION, WAIT_END_FADE, WAIT_END_COUNT,
@@ -580,7 +588,7 @@ void SoftResetToBootWarm(void)
    menus'), then `after`; the race's raster work is off meanwhile. */
 void race_champion_screen(void (*after)(void))
 {
-    g.raster_chain = RASTER_NONE;
+    screen_handed_back();
     flow.wait = WAIT_CHAMPION_RUN;
     flow.after = after;
     flow.stopped = 1;
@@ -694,7 +702,7 @@ int race_session_update(void)
         break;
     }
     if (flow.finished)
-        g.raster_chain = RASTER_NONE;
+        screen_handed_back();
     return flow.finished;
 }
 
@@ -884,7 +892,7 @@ static int demo_frame(void)
     if (flow.wait != WAIT_NONE) {
         wait_step();
         if (flow.finished) {
-            g.raster_chain = RASTER_NONE;
+            screen_handed_back();
             return -2;
         }
         if (!flow.demo_ended)
@@ -905,7 +913,7 @@ static int demo_frame(void)
 
         pic.blank = 1;
         flow.demo_flags = 0;
-        g.raster_chain = RASTER_NONE;
+        screen_handed_back();
         return button ? 1 : -1;
     }
 }
