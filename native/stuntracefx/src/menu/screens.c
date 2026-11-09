@@ -341,18 +341,29 @@ static void menu_3d_layer_follow(void)
 /* What the menu's vertical blank code did, ordered as it did it. `stage20`:
    the course menu and championship stage, which also steps the animated
    tiles, queues the presses and takes the positions the objects wrote. */
+static int stage20_on;                  /* the last frame ended under the menus' stage $20 */
+
+/* The vertical blank before this frame's objects, under stage $20, queued
+   the presses read at it. */
+static void menu_frame_begin(void)
+{
+    int i;
+
+    if (!stage20_on)
+        return;
+    for (i = 0; i < 2; i++)
+        if (menu.press_count[i] < 8)
+            menu.press_list[i][menu.press_count[i]++] = frame_state.pressed[i];
+}
+
 static void menu_frame_end(int stage20)
 {
+    stage20_on = stage20;
     if (stage20) {
-        int i;
-
         menu_3d_layer_follow();
         menu_frames_vram_tick();
         menu.slide_top = menu.slide_top_next;
         menu.slide_low = menu.slide_low_next;
-        for (i = 0; i < 2; i++)
-            if (menu.press_count[i] < 8)
-                menu.press_list[i][menu.press_count[i]++] = frame_state.pressed[i];
     }
     window_open_close_step();
     if (menu.blink_on) {
@@ -1064,6 +1075,7 @@ static void champion_open(void)
  */
 int ChampionScreenRun(void)
 {
+    menu_frame_begin();
     switch (champion_state) {
     case C_OPEN:
         champion_open();
@@ -1132,10 +1144,12 @@ void session_race_ended(int to_course_menu)
 void session_update(void)
 {
     if (state == S_RACE) {
+        stage20_on = 0;
         if (race_session_update())
             state = after_race;
         return;
     }
+    menu_frame_begin();
     if (state <= S_BOOT_DONE && !MenuScreen0Run())
         goto done;
     if (state >= S_BOOT_DONE) {
