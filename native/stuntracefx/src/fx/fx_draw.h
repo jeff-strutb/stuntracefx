@@ -12,6 +12,9 @@
 void fx_draw_init(void);
 /* Which of the two pictures the Super FX's next drawing goes into. */
 void fx_draw_begin(int picture);
+/* Where the picture's top left goes on a screen other than the race's (the
+   course menu's car); (0, 0) gives the race's places back. */
+void fx_draw_set_origin(int x, int y);
 /* The layer showing picture n (with two players, both). */
 nshvc_draw_list fx_draw_picture(int picture);
 /* The list drawn into, by size in pixels (the checks). */

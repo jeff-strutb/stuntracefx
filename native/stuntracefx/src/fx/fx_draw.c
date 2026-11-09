@@ -38,6 +38,7 @@ static nshvc_draw_list target;  /* a list drawn into directly (the checks) */
 static uint32_t target_w, target_h;
 static Recording recordings[2], *recording;
 static int offset_x, offset_y;
+static int origin_x, origin_y;  /* where a screen other than the race's puts the picture; 0, 0: none */
 static uint32_t generation[2], composed_generation[2];
 static nshvc_draw_list screen_list;
 static int composed_picture = -1, composed_split = -1;
@@ -72,7 +73,21 @@ void fx_draw_begin(int picture)
         offset_x = 96;
         offset_y = 127;
     }
+    if (origin_x || origin_y) {
+        offset_x = origin_x;
+        offset_y = origin_y;
+    }
     generation[picture]++;
+}
+
+void fx_draw_set_origin(int x, int y)
+{
+    origin_x = x;
+    origin_y = y;
+    if (recording && (x || y)) {
+        offset_x = x;
+        offset_y = y;
+    }
 }
 
 static void emit(const nshvc_vertex *v, uint32_t count, uint32_t image, int lines)
