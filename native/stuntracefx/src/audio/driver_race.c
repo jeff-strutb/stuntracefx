@@ -36,7 +36,7 @@ void sfx_stop(int x, uint8_t reason)
         s.ch[x].stop_request = reason;
 }
 
-static void sfx_stop_1(int x) { sfx_stop(x, 1); }
+void sfx_stop_1(int x) { sfx_stop(x, 1); }
 
 static void stop_if(int x, uint8_t loop_bit, uint8_t sound, uint8_t reason)
 {
@@ -50,7 +50,7 @@ static void stop_if(int x, uint8_t loop_bit, uint8_t sound, uint8_t reason)
  * WHAT IT DOES: A channel's queued and looping state cleared and, if active,
  * its fade-out started.
  */
-static void stop_request_fade(int x)
+void stop_request_fade(int x)
 {
     Channel *c = &s.ch[x];
 
@@ -70,7 +70,7 @@ static void fade_out_start(void)
 }
 
 /* Every channel stopped with a fade, and the music fade started. */
-static void stop_all(void)
+void stop_all(void)
 {
     int x;
 
@@ -81,7 +81,7 @@ static void stop_all(void)
 }
 
 /* The driver's end: every key off, and it waits for its next upload. */
-static void driver_leave(void)
+void driver_leave(void)
 {
     int i;
 
@@ -114,7 +114,7 @@ static const uint8_t special_sounds[16] = {
 
 /* ---- the channels ---- */
 
-static uint16_t sfx_pointer(uint8_t sound)
+uint16_t sfx_pointer(uint8_t sound)
 {
     return bank_word((uint16_t)(BANK_SFX_TABLE + (uint16_t)(uint8_t)((sound - 1) * 2)));
 }
@@ -166,7 +166,9 @@ static uint8_t engine_scale(const Channel *c, uint8_t volume)
 
     if (c->mode != 4)
         return volume;
-    speed = s.port_in[3] ? s.port_in[3] : 1;
+    speed = (s.battle && c->side == 2) ? s.port_in[2] : s.port_in[3];
+    if (!speed)
+        speed = 1;
     factor = (uint16_t)(((uint16_t)speed * 3) / 2 + 0x80);
     y = (uint8_t)((volume * (factor & 0xFF)) >> 8);
     y = (uint8_t)(y + volume * (factor >> 8));
@@ -237,6 +239,23 @@ static void volume_slide_side(Channel *c, int side, uint16_t delta)
         c->vol[side] = (uint8_t)(v >> 8);
 }
 
+/* A battle's volume command: engine mode scales both sides; otherwise side 1's
+   sound plays on the left only and side 2's on the right. */
+static void battle_volume(Channel *c, uint8_t left, uint8_t right)
+{
+    if (c->mode == 1) {
+        c->vol[0] = c->vol_int[0] = engine_scale(c, left);
+        c->vol[1] = c->vol_int[1] = engine_scale(c, right);
+    } else if (c->side == 2) {
+        c->vol[0] = c->vol_int[0] = 0;
+        c->vol[1] = c->vol_int[1] = engine_scale(c, right);
+    } else {
+        c->vol[0] = c->vol_int[0] = engine_scale(c, left);
+        c->vol[1] = c->vol_int[1] = 0;
+    }
+    c->vol_frac[0] = c->vol_frac[1] = 0;
+}
+
 /*
  * @routine 19:DB30 SpcSfxRead
  * WHAT IT DOES: The channel's sound data for this tick: its age counts (a
@@ -253,7 +272,7 @@ static void sfx_read(int x)
         c->age = 0;
         return;
     }
-    if (c->lifetime && !((uint8_t)(c->age - c->lifetime) & 0x80))
+    if (c->lifetime && (s.battle ? c->age == c->lifetime : !((uint8_t)(c->age - c->lifetime) & 0x80)))
         sfx_stop_1(x);
     if (c->age != 0xFF)
         c->age++;
@@ -280,6 +299,8 @@ static void sfx_read(int x)
         c->length = (uint8_t)(c->length - 1);
         if (c->length != 0 && c->length != 0xFF) {
             pitch_slide(c);
+            if (s.battle)
+                return;
             if (c->sweep_on) {
                 volume_slide_side(c, 0, c->sweep[0]);
                 volume_slide_side(c, 1, c->sweep[1]);
@@ -325,6 +346,10 @@ static void sfx_read(int x)
             break;
         case 0xFE:              /* one volume for both sides */
             y++;
+            if (s.battle) {
+                battle_volume(c, bank_byte((uint16_t)(at + y)), bank_byte((uint16_t)(at + y)));
+                break;
+            }
             c->vol[0] = c->vol_int[0] = (c->mode == 1 || c->mode == 0 || c->mode > 2) ?
                 engine_scale(c, bank_byte((uint16_t)(at + y))) : bank_byte((uint16_t)(at + y));
             c->vol[1] = c->vol_int[1] = c->vol[0];
@@ -332,6 +357,13 @@ static void sfx_read(int x)
             break;
         case 0xE4:              /* the two volumes */
             y++;
+            if (s.battle) {
+                uint8_t left = bank_byte((uint16_t)(at + y));
+
+                y++;
+                battle_volume(c, left, bank_byte((uint16_t)(at + y)));
+                break;
+            }
             if (c->mode == 2) {
                 c->vol[0] = c->vol_int[0] = bank_byte((uint16_t)(at + y));
                 y++;
@@ -365,7 +397,7 @@ static void sfx_read(int x)
             c->slide_on = 1;
             break;
         case 0xEA:
-            if (!(s.effect_flags & 1))
+            if (s.battle || !(s.effect_flags & 1))
                 d.echo_voices |= voice_mask(x);
             break;
         case 0xEB:
@@ -431,7 +463,9 @@ static void sfx_read(int x)
             if (!d.random)
                 d.random = 1;
             break;
-        default:                /* $EF, $F0, $F4-$F7, $F9, $FA, $FF: the read ends here */
+        default:                /* $EF, $F0, $F4-$F7, $F9, $FA, $FF: the read ends here; a battle sound ends */
+            if (s.battle && !c->held)
+                sfx_stop_1(x);
             return;
         }
         y++;
@@ -598,6 +632,10 @@ static void sfx_special(int x)
     Channel *c = &s.ch[x];
     int i;
 
+    if (s.battle) {
+        battle_special(x);
+        return;
+    }
     for (i = 0; special_sounds[i]; i++)
         if (special_sounds[i] == c->command)
             break;
@@ -662,8 +700,18 @@ static uint8_t fade_volume(int x, int side)
 
 static uint8_t volume_adjust(const Channel *c, uint8_t a)
 {
-    if (a && c->command == 0x25)
+    if (a && c->command == 0x25) {
+        if (s.battle) {
+            int x = (int)(c - s.ch);
+
+            if (x == 5)
+                return (uint8_t)(a + (uint8_t)(s.volume_add * 4));
+            if (x == 4)
+                return (uint8_t)(a + (uint8_t)(s.volume_add_4 * 4));
+            return a;
+        }
         return (uint8_t)(a + (uint8_t)(s.volume_add * 4));
+    }
     return a;
 }
 
@@ -715,17 +763,36 @@ static void channel_begin(int x, uint8_t sound)
     sfx_take_voice(x);
 }
 
+/* The channel a sound takes. In a battle a sound with header bit 6 takes the
+   channel below when the second player's bit is set on port 0, and the
+   sounds $77-$7A take their sample from the player. */
+int sfx_channel_for(uint8_t sound, uint8_t header)
+{
+    int x = header & 15;
+
+    if (s.battle) {
+        if ((header & 0x40) && (s.port_in[0] & 0x80))
+            x--;
+        if (sound >= 0x77 && sound <= 0x7A)
+            s.ch[x & 7].number = (s.port_in[0] & 0x80) ? 0x20 : 0x1C;
+    }
+    return x & 7;
+}
+
 void sfx_start_data(uint8_t sound, uint16_t data)
 {
     uint8_t header = bank_byte(data);
-    int x = header & 7;
+    int x;
     Channel *c;
 
     /* header modes 2 and 3 keep a channel's sound */
     if (header < 8 && (s.ch[header].mode == 2 || s.ch[header].mode == 3))
         return;
+    x = sfx_channel_for(sound, header);
     c = &s.ch[x];
     sfx_mode_apply(x, header);
+    if (s.battle)
+        c->side = (s.port_in[0] & 0x80) ? 2 : 1;
     c->ptr = data;
     c->active = 1;
     channel_begin(x, sound);
@@ -747,7 +814,12 @@ static void stop_accepted(int x, int keep_loop)
             return;
         }
     } else if (c->loop_sound) {
-        sfx_queue_push(c->loop_sound);
+        if (!s.battle)
+            sfx_queue_push(c->loop_sound);
+        else if (c->loop_side == 1)
+            sfx_queue_push(c->loop_sound | 0x80);
+        else if (c->loop_side == 2)
+            sfx_queue_push(c->loop_sound & 0x7F);
     }
     c->state = 4;
     d.key_off |= voice_mask(x);
@@ -756,6 +828,8 @@ static void stop_accepted(int x, int keep_loop)
     c->age = 0;
     c->number = 0;
     c->mode = 0;
+    c->side = 0;
+    c->loop_side = 0;
 }
 
 static void channel_step(int x)
@@ -805,6 +879,17 @@ static void channel_step(int x)
         stop_accepted(x, 0);
         return;
     }
+    if (s.battle) {
+        if (((reason == 0x0A || reason == 0x1A) && c->command == 0x25) ||
+            ((reason == 0x0B || reason == 0x1B) && c->command == 0x15) ||
+            ((reason == 0x0C || reason == 0x1C) && c->command == 0x17)) {
+            stop_accepted(x, 1);
+            return;
+        }
+        c->stop_request = 0;
+        channel_read(x);
+        return;
+    }
     if (reason == 7 ||
         (reason == 8 && c->command == 0x02) ||
         (reason == 0x0A && c->command == 0x25) ||
@@ -828,7 +913,7 @@ key_on:
     channel_read(x);
 }
 
-static void channels_frame(void)
+void channels_frame(void)
 {
     int x;
 
@@ -1125,7 +1210,7 @@ static void command_timers(void)
     }
 }
 
-static void tempo_bend(void)
+void tempo_bend(void)
 {
     /* the bend's start and end by command */
     if (s.command == 0x2C) {
@@ -1257,7 +1342,7 @@ static void pitch_ramps(void)
  * WHAT IT DOES: The port 0 command: 6 and up is a sound command, 1-5 a song
  * request, which also clears the fade state.
  */
-static void port_command(void)
+void port_command(void)
 {
     uint8_t a = s.port_in[0] & 0x7F;
 
@@ -1558,13 +1643,15 @@ void sfx_mode_apply(int x, uint8_t header)
 
     if (header & 0x80) {
         if (header & 0x20) {
-            c->loop_sound = 0;
+            if (!s.battle)
+                c->loop_sound = 0;
             c->loop = 2;
         } else {
             c->loop = 1;
         }
     } else if (c->loop == 1 && !c->loop_sound) {
         c->loop_sound = c->command;
+        c->loop_side = c->side;
     }
 }
 
@@ -1594,7 +1681,7 @@ static void sound_tick_end(void)
     {
         uint16_t data = sfx_pointer(sound);
         uint8_t header = bank_byte(data);
-        int x = header & 7;
+        int x = sfx_channel_for(sound, header);
         Channel *c = &s.ch[x];
 
         sfx_mode_apply(x, header);
@@ -1637,7 +1724,7 @@ static void noise_tick(void)
  * bottom the fade ends and, by flags, the driver leaves or the music pauses.
  * Without a fade the scale follows the master volume.
  */
-static void music_fade(void)
+void music_fade(void)
 {
     if (!(d.flags & 0x40)) {
         s.fade_start = (uint8_t)(d.master >> 8);

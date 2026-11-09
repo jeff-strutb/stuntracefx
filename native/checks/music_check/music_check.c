@@ -19,6 +19,7 @@
 
 #include "audio/driver.h"
 #include "audio/driver_sfx.h"
+#include "audio/music.h"
 
 #define APU_AT (0x20000 + 0x10000 + 0x10000 + 544 + 512)
 #define STATE_SIZE (APU_AT + 0x10000)
@@ -49,12 +50,6 @@ static void add_event(int kind, uint32_t v, uint8_t source)
     e->pitch = voice_pitch[v];
     e->left = voice_left[v];
     e->right = voice_right[v];
-    if (getenv("DBG") && kind == EV_KEY_ON && v == 4 && pass_now > 12900 && pass_now < 13400) {
-        int c;
-        printf("pass %u voice %u sample %02X held %02X:", pass_now, v, source, d.sfx_voices);
-        for (c = 0; c < 8; c++) printf(" [%d %02X s%u a%u num%02X]", c, s.ch[c].command, s.ch[c].state, s.ch[c].active, s.ch[c].number);
-        printf("\n");
-    }
 }
 
 void nshvc_voice_key_on(uint32_t v, nshvc_sample s) { add_event(EV_KEY_ON, v, (uint8_t)(s.id - 1)); }
@@ -122,32 +117,20 @@ static void bank_from_machine(void)
     memcpy(bank->bytes, machine + APU_AT, 0x10000);
     for (i = 0; i < DRIVER_SAMPLES; i++)
         bank->samples[i].id = (uint32_t)i + 1;
+    d.bank = bank;
 }
 
 static uint8_t port_wire[4];
+static FILE *trace_f;
 
-/* one pass of the driver's main loop: what SpcReset's loop does each timer tick */
+void nshvc_music_send(const void *m, uint32_t size) { (void)m; (void)size; }
+uint32_t nshvc_music_receive(void *b, uint32_t max) { (void)b; (void)max; return 0; }
+nshvc_sample nshvc_sample_load(const void *d_, uint32_t size, nshvc_sample_format f, uint32_t loop) { nshvc_sample r; (void)d_; (void)size; (void)f; (void)loop; r.id = 0; return r; }
+
 static void pass(void)
 {
-    d.sfx_acc = (uint8_t)(d.sfx_acc + 0x20);
-    if (d.sfx_acc < 0x20) {
-        race_sound_tick();
-        if (d.echo_delay_wait != d.echo_delay)
-            d.echo_delay_wait++;
-    }
-    {
-        uint8_t tempo = (uint8_t)(d.tempo >> 8);
-
-        d.music_acc = (uint8_t)(d.music_acc + tempo);
-        if (d.music_acc < tempo) {
-            driver_music_tick();
-            /* the four port exchanges after each music tick */
-            memcpy(s.port_latch, port_wire, 4);
-        } else {
-            driver_between_ticks();
-        }
-    }
-    driver_output();
+    memcpy(s.port_latch, port_wire, 0);
+    music_pass_with_wire(port_wire);
 }
 
 static void on_alarm(int sig)
@@ -191,6 +174,7 @@ int main(int argc, char **argv)
         if (!strcmp(argv[a], "--passes")) max_pass = (uint32_t)atoi(argv[a + 1]);
         if (!strcmp(argv[a], "--from")) from = (uint32_t)atoi(argv[a + 1]);
     }
+    if (getenv("TRACE")) trace_f = fopen(getenv("TRACE"), "w");
     apu = load(dir, "apu.bin", &napu);
     spc = load(dir, "spc.bin", &nspc);
     snprintf(p, sizeof p, "%s/state.bin", dir);
@@ -258,8 +242,8 @@ int main(int argc, char **argv)
 
         state_to_frame(now / 534 + 2);
         bank_from_machine();
-        d.bank = bank;
         driver_reset();
+        s.battle = bank_byte(0x10E3) != 0xC4;
         for (; now < end; now += 64) {
             /* the driver is out of its main loop during an upload */
             if (now >= stop_sample[start]) {
@@ -268,8 +252,8 @@ int main(int argc, char **argv)
                 start++;
                 state_to_frame(reset_sample[start] / 534 + 2);
                 bank_from_machine();
-                d.bank = bank;
                 driver_reset();
+                s.battle = bank_byte(0x10E3) != 0xC4;
                 now = reset_sample[start];
             }
             pass_now = now / 64;
@@ -285,6 +269,12 @@ int main(int argc, char **argv)
                 at_spc += 8;
             }
             pass();
+            if (trace_f && (now - reset_sample[0]) % 534 < 64) {
+                int c;
+                fprintf(trace_f, "%u", now / 534);
+                for (c = 0; c < 8; c++) fprintf(trace_f, " %02X:%02X:%02X:%02X", s.ch[c].command, s.ch[c].number, s.ch[c].active, s.ch[c].state);
+                fprintf(trace_f, " sfx %02X flags %02X loop %02X game %02X\n", d.sfx_voices, d.flags, s.loop_flags, s.game_flags);
+            }
         }
     }
     /* compare the two lists of key-ons in order, allowing small slips: the

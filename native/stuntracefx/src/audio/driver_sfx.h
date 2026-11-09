@@ -32,6 +32,7 @@ typedef struct {
     uint8_t fade_count[2], fade_vol[2], fade_step[2];
     uint8_t loop, loop_sound, paused, paused_number;
     uint8_t hold, hold_count;
+    uint8_t side, loop_side, paused_side;     /* battle: 1 or 2, whose sound it is */
 } Channel;
 
 typedef struct {
@@ -56,11 +57,31 @@ typedef struct {
     uint8_t engine_step, engine_speed, engine_quotient, engine_quotient_hi, engine_overflow, engine_rising, engine_direction;
     uint16_t engine_table;
     uint8_t noise_header;
+    /* the battle driver's second player: index 0 port 2, 1 port 3 */
+    uint8_t battle;
+    uint8_t volume_add_4;
+    uint8_t ramp_a2_steps, ramp_b2_steps;
+    uint16_t ramp_a2_pitch, ramp_b2_pitch;
+    uint8_t bports_last[2], b_rising[2], b_quotient[2], b_overflow[2], b_step[2], b_speed[2], b_direction[2], b_rev[2];
+    uint16_t b_table[2];
 } Sfx;
 
 extern Sfx s;
 
 void race_sound_tick(void);
+void battle_sound_tick(void);
+void battle_special(int x);
+void channels_frame(void);
+void sfx_stop_1(int x);
+void stop_request_fade(int x);
+void stop_all(void);
+void driver_leave(void);
+void music_fade(void);
+void port_command(void);
+void tempo_bend(void);
+uint16_t sfx_pointer(uint8_t sound);
+int sfx_channel_for(uint8_t sound, uint8_t header);
+void channel_resume_side(int x);
 void sfx_queue_push(uint8_t sound);
 void sfx_stop(int x, uint8_t reason);
 void sfx_release(int x);
