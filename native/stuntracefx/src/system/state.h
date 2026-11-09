@@ -173,6 +173,7 @@ typedef struct {
     uint16_t handler_object;            /* $034C: the object whose handler is running */
     uint16_t object_frames;             /* $05E9: frames the objects have run */
     uint16_t view_angle_06cd;           /* $06CD: the view angle a car's cue moves */
+    uint16_t last_worked_y;             /* $000A: the last Y ObjectFaceTied (the camera's) or ObjectPlaceOnParent (the doubled turned offset) worked with; course objects with no model record take it as their X offset */
     uint8_t freeze;                     /* $0D53: the race is frozen */
     uint8_t flag_0e59, flag_19ed;       /* $0E59, $19ED */
     uint16_t hits_bcd;                  /* $19EE: a decimal count of hits */

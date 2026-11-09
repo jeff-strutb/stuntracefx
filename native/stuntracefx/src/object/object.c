@@ -61,29 +61,6 @@ static uint16_t bcd_inc16(uint16_t v)
     return (uint16_t)(lo | bcd_add8((uint8_t)(v >> 8), 0, &carry) << 8);
 }
 
-/*
- * A word read from bank 0. From $8000 up that is the cartridge. Course
- * entries with bit 9 of their flags and no model record (+$20 = 0) make
- * the original read work RAM $000A, $000C and $000E: direct-page scratch
- * that whatever ran last left there (in the recordings: 0 for the first
- * attract demo, $FFD2 for the second, the race camera's Y $F2CE in race1;
- * $000C and $000E 0 each time). INTERIM: those are taken as 0 here, so the
- * objects' X offsets differ from the original's whenever that scratch word
- * was not 0. Reported once.
- */
-static uint16_t bank0_word(uint16_t at)
-{
-    static int reported;
-
-    if (at >= 0x8000)
-        return cart16(0x00, at);
-    if (!reported) {
-        reported = 1;
-        fprintf(stderr, "stuntracefx: course objects' offsets from stale work RAM ($%04X) taken as 0 (interim)\n", at);
-    }
-    return 0;
-}
-
 void ObjectSetHandler(Object *o, uint16_t handler)
 {
     o->handler = handler;
@@ -751,9 +728,15 @@ Object *ObjectSpawnFromScript(uint16_t at, uint8_t bank)
     w = cart16(bank, (uint16_t)(0x8014 + at));
     o->script_flags = w;
     if (w & 0x0200) {
-        o->offset_x = bank0_word((uint16_t)(0x000A + o->script));
-        o->offset_y = bank0_word((uint16_t)(0x000C + o->script));
-        o->offset_z = bank0_word((uint16_t)(0x000E + o->script));
+        if (o->script) {                /* the model record's offsets (the data's are all from $8000) */
+            o->offset_x = cart16(0x00, (uint16_t)(0x000A + o->script));
+            o->offset_y = cart16(0x00, (uint16_t)(0x000C + o->script));
+            o->offset_z = cart16(0x00, (uint16_t)(0x000E + o->script));
+        } else {                        /* none: the original reads work RAM $000A-$000F there */
+            o->offset_x = g.last_worked_y;
+            o->offset_y = 0;            /* $000C-$000F: written only by the power-on clear */
+            o->offset_z = 0;
+        }
     }
     o->offset_x = (uint16_t)(o->offset_x + cart16(bank, (uint16_t)(0x800E + at)));
     o->offset_y = (uint16_t)(o->offset_y + cart16(bank, (uint16_t)(0x8010 + at)));
@@ -1079,6 +1062,7 @@ void ObjectPlaceOnParent(Object *parent, Object *o)
     o->x = (uint16_t)(parent->x + (uint16_t)(v.x * 2));
     o->z = (uint16_t)(parent->z + (uint16_t)(v.z * 2));
     o->y = (uint16_t)(parent->y + (uint16_t)(v.y * 2));
+    g.last_worked_y = (uint16_t)(v.y * 2);
 }
 
 /* the view bob a car's cue starts, for one of the two cameras */

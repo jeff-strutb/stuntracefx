@@ -29,6 +29,7 @@ void ObjectFaceTied(Camera *cam)
         const Object *o = obj_at(cam->object);
         uint16_t pitch;
 
+        g.last_worked_y = cam->y;
         cam->turn = (uint16_t)(Gsu81E3((uint16_t)(cam->x - o->x), (uint16_t)(cam->z - o->z)) + 0x8000);
         pitch = Gsu81E3((uint16_t)(cam->y - o->y), ObjectGsu80BC((uint16_t)(cam->x - o->x), (uint16_t)(cam->z - o->z)));
         if (cam->mode & 0x0040)

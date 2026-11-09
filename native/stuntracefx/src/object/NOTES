@@ -169,12 +169,19 @@ burst gate's pitch) are read as 0: no label-addressed store writes other
 than 0 to them in the game's code. An indexed store landing there was not
 ruled out.
 Course entries with flag bit 9 and no model record (+$20 = 0), 35 to 67
-per course: the original adds work RAM $000A/$000C/$000E, direct-page
-scratch, to their offsets. INTERIM: taken as 0. The recordings show $000A
-was 0 for attract demo 1, $FFD2 for demo 2 and $F2CE (the race camera's Y)
-for race1, $E64E for battle; $000C and $000E were 0. Which routine wrote it
-last is not settled: ObjectFaceTied matches race1, not demo 2. Reproducing
-it would need a shared value standing for that scratch word.
+per course, add work RAM $000A/$000C/$000E to their offsets. Traced in the
+original (sfxbox access log) before each course load of the four
+recordings: $000A was last written by ObjectPlaceOnParent (its doubled
+turned Y offset; attract demo 2, $FFD2) or ObjectFaceTied (the camera's Y;
+race1 $F2CE, battle $E64E), and not at all since power-on in attract demo 1
+(0); $000C-$000F only by the power-on clear. Kept as g.last_worked_y,
+written at both places. Checked natively: both attract loads match the
+recording object for object (88 and 119 objects, models and offsets).
+race1 and battle are not checked natively: the game cannot yet be driven
+through the menus to those races. Other routines also write $000A
+(RotateXY, RotateXZFrom08, ObjectMoveForward's and ObjectTrailSign's sign
+stores, ObjectPieceSpray's) but none was the last writer before a course
+load in the four recordings; they do not update the field.
 Stray stores to low RAM on paths that need a missing record or an empty
 list are skipped, with a comment where each is: ring_spawn, the track
 director with no entry, ObjectFree with no next, the sky ball when the spawn
