@@ -317,26 +317,28 @@ static int record_fast(uint16_t rec)
 /*
  * @routine 08:D1BF ObjectBreakOffChance
  * WHAT IT DOES: On a random byte of $7F or more, a new piece at the child's
- * place with the child's parent as its +$27. Returns 1 when one was made.
+ * place with the child's parent as its +$27. Returns the piece, or NULL
+ * when none was made; the break-off handler goes to the piece.
  */
-static int ObjectBreakOffChance(Object *child)
+static Object *ObjectBreakOffChance(Object *child)
 {
     Object *n;
 
     if (RandomStep() < 0x7F)
-        return 0;
+        return NULL;
     n = ObjectSpawn(0xA1AC);
     if (!n)
-        return 0;
+        return NULL;
     ObjectCopyPosition(n, child);
     n->link27 = child->parent;
-    return 1;
+    return n;
 }
 
 /* The break-off a car's knock gives a child, if any */
 static void child_break_off(Object *o, const Object *p, uint16_t own)
 {
     uint16_t d, f4c, w;
+    Object *n;
 
     if (p->flags24 & 0x40)
         return;
@@ -348,34 +350,34 @@ static void child_break_off(Object *o, const Object *p, uint16_t own)
         return;
     d = rec_get(own, 0x002C);
     if (d & 0x0080) {
-        if (ObjectBreakOffChance(o))
-            ObjectSetHandler(o, record_fast(own) ? H_BREAK_OFF_F : H_BREAK_OFF_E);
+        if ((n = ObjectBreakOffChance(o)) != NULL)
+            ObjectSetHandler(n, record_fast(own) ? H_BREAK_OFF_F : H_BREAK_OFF_E);
         return;
     }
     if (d & 0x2000) {
-        if (record_fast(own) && ObjectBreakOffChance(o))
-            ObjectSetHandler(o, H_BREAK_OFF_D);
+        if (record_fast(own) && (n = ObjectBreakOffChance(o)) != NULL)
+            ObjectSetHandler(n, H_BREAK_OFF_D);
         return;
     }
     if (d & 0x0800) {
-        if (record_fast(own) && ObjectBreakOffChance(o))
-            ObjectSetHandler(o, H_BREAK_OFF_B);
+        if (record_fast(own) && (n = ObjectBreakOffChance(o)) != NULL)
+            ObjectSetHandler(n, H_BREAK_OFF_B);
         return;
     }
     if (d & 0x1000) {
-        if (record_fast(own) && ObjectBreakOffChance(o))
-            ObjectSetHandler(o, H_BREAK_OFF_A);
+        if (record_fast(own) && (n = ObjectBreakOffChance(o)) != NULL)
+            ObjectSetHandler(n, H_BREAK_OFF_A);
         return;
     }
     if (d & 0x0060) {
-        if (record_fast(own) && ObjectBreakOffChance(o))
-            ObjectSetHandler(o, H_BREAK_OFF_G);
+        if (record_fast(own) && (n = ObjectBreakOffChance(o)) != NULL)
+            ObjectSetHandler(n, H_BREAK_OFF_G);
         return;
     }
     if (!(f4c & 0x0800) && !(rec_get(own, FXREC_FACE_46) & 0x0020))
         return;
-    if (ObjectBreakOffChance(o))
-        ObjectSetHandler(o, H_BREAK_OFF_H);
+    if ((n = ObjectBreakOffChance(o)) != NULL)
+        ObjectSetHandler(n, H_BREAK_OFF_H);
 }
 
 /*
