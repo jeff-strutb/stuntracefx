@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.20)
+project(stuntracefx C)
+add_subdirectory(${NSHVC_ROOT} nshvc)
+include(${NSHVC_ROOT}/cmake/NshvcGame.cmake)
+file(GLOB_RECURSE game_sources CONFIGURE_DEPENDS src/*.c)
+nshvc_game(stuntracefx SOURCES ${game_sources} ASSETS assets TITLE "Stunt Race FX")
+target_include_directories(stuntracefx PRIVATE src)
+target_compile_options(stuntracefx PRIVATE -std=gnu11 -Wall -Wextra)

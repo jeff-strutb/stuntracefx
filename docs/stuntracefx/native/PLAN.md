@@ -64,7 +64,7 @@ The shelved branches hold usable work, and this plan starts from them where it c
 |---|---|---|
 | `native-port` (d82f1cd6) | Work RAM named from the assembly: `wram_struct.h`, 1,438 fields; record field names; `tools/wramname.py`; some truly typed functions | Field names. Its 2,734 "carried register" functions are not acceptable as a finished form and are not reused as such |
 | `fx3-merge`, `fx3-phys` | Hand-typed Super FX: `fx_unused`, unpack, HUD, effects, frame, `fx_sums` | Reading and reuse, re-proved here |
-| `fxgen-w` | Generated Super FX C: 0 gotos, 0 register references, data-flow names | Only with your approval (decision 1): you ordered this work removed on 2026-10-24 |
+| `fxgen-w` | Generated Super FX C: 0 gotos, 0 register references, data-flow names | Approved as the starting text for the Super FX logic (decision 1) |
 
 The full hardware list is in [`hardware-touches.md`](hardware-touches.md), with every site in `hardware-touches-sites.txt`.
 The real hardware touches:
@@ -279,11 +279,13 @@ Interim forms will be named as interim, with their counts, in the same sentence 
 
 ## 9. Decisions
 
-| # | Question | Recommendation |
+Settled by the maintainer, 2026-11-09:
+
+| # | Question | Answer |
 |---|---|---|
-| 1 | May I start the physics and `model.c` from the generated `fxgen-w` output, then rename and restructure it by hand? You ordered it removed on 2026-10-24. | Yes: it has no `goto`s or register references, and stage 5's job comparison proves it against the ROM, which it was never held to before. Without it, those files are written from scratch from the record |
-| 2 | Are Frame rate 60, the wide picture, solid tyres and the pause screen part of this conversion? | Yes, as stage 10: otherwise the converted game loses features it has. The core is finished and checked first |
-| 3 | Polygon edges: accept the engine's exact rule, with edges measured against bsnes? | Yes: it is what you asked for. If you want byte-identical edges, that is a general edge rule in nativeshvc, separately and on your say |
+| 1 | May the physics and `model.c` start from the generated `fxgen-w` output, then be renamed and restructured by hand? | Yes |
+| 2 | Are Frame rate 60, the wide picture, solid tyres, the pause screen and the other remaster features part of this conversion? | Yes, all of them, as stage 10 |
+| 3 | Polygon edges: accept the engine's exact rule, with edges measured against bsnes? | Yes |
 
 ## 10. What is not known
 
