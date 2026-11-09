@@ -105,8 +105,11 @@ static void send_tmw(const int32_t *tmw)
     int l, v;
 
     for (l = 0; l < 5; l++) {
+        /* on the course menu BG3 is the race's picture, BG1's in the original */
+        int from = l == 2 ? 0 : l;
+
         for (v = 0; v < LINES; v++)
-            bit[v] = (tmw[v] >> l) & 1;
+            bit[v] = (tmw[v] >> from) & 1;
         send((nshvc_line_field)(NSHVC_LINE_MASK_MAIN + l), bit);
     }
 }

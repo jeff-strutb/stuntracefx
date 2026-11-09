@@ -15,9 +15,8 @@ int MenuScreen0Run(void);
 int CourseMenuRun(void);
 int ChampionScreenRun(void);
 
-/* the race's 3D pictures on a menu screen: filled by RaceFrameStep */
-#include "nshvc/nshvc.h"
-extern nshvc_draw_list menu_3d_list;
+/* the race has ended: back to the course menu, or (0) to the start of the game */
+void session_race_ended(int to_course_menu);
 
 /* one handler for one object, once a frame */
 void menu_actor_run(Actor *a);

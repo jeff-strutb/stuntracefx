@@ -9,6 +9,7 @@
 #include "audio/sound.h"
 #include "data/cart.h"
 #include "data/unpack.h"
+#include "fx/fx_draw.h"
 #include "menu/actors.h"
 #include "menu/menu.h"
 #include "menu/menu_tables.h"
@@ -19,7 +20,6 @@
 #include "video/picture.h"
 
 MenuState menu;
-nshvc_draw_list menu_3d_list;
 
 /* tile sets only the course menu and the championship use */
 static nshvc_tiles tiles_8bpp;          /* word 0 in mode 3 */
@@ -90,6 +90,7 @@ static void menu_common_mode(void)
     pic.bg[1].map = menu_video.pages_1_2;
     pic.bg[2].tiles = menu_video.tiles_text;
     pic.bg[2].map = menu_video.text;
+    pic.bg[2].draw_list.id = 0;
     menu_lines_set(MENU_LINES_TITLE, 0);
     memset(&pic.blend, 0, sizeof pic.blend);
     pic.blend.use_fixed = 1;
@@ -320,6 +321,19 @@ static void window_open_close_step(void)
     }
 }
 
+/* The race's picture is BG1's in the original: the engine shows a draw list
+   as a layer of its own, so BG3 stands in for it and follows BG1's switches,
+   windows and colour maths. */
+static void menu_3d_layer_follow(void)
+{
+    pic.main_screen = (uint8_t)((pic.main_screen & ~SHOW_BG3) | ((pic.main_screen & SHOW_BG1) << 2));
+    pic.sub_screen = (uint8_t)((pic.sub_screen & ~SHOW_BG3) | ((pic.sub_screen & SHOW_BG1) << 2));
+    pic.windows.layer_use[2] = pic.windows.layer_use[0];
+    pic.windows.mask_main[2] = pic.windows.mask_main[0];
+    pic.windows.mask_sub[2] = pic.windows.mask_sub[0];
+    pic.blend.layers = (uint8_t)((pic.blend.layers & ~4) | ((pic.blend.layers & 1) << 2));
+}
+
 /* What the menu's vertical blank code did, ordered as it did it. `stage20`:
    the course menu and championship stage, which also steps the animated
    tiles, queues the presses and takes the positions the objects wrote. */
@@ -328,6 +342,7 @@ static void menu_frame_end(int stage20)
     if (stage20) {
         int i;
 
+        menu_3d_layer_follow();
         menu_frames_vram_tick();
         menu.slide_top = menu.slide_top_next;
         menu.slide_low = menu.slide_low_next;
@@ -371,6 +386,7 @@ static void preview_full_mode(void)
     pic.bg[0].map = menu_video.pages_0_1;
     pic.bg[1].tiles = tiles_menu;
     pic.bg[1].map = menu_video.pages_2_3;
+    pic.bg[2].draw_list = fx_draw_picture(0);
     memset(&pic.blend, 0, sizeof pic.blend);
     pic.blend.use_fixed = 1;
     pic.bg[1].scroll_x = (int16_t)0xFF00;
@@ -458,6 +474,7 @@ static void preview_fade_begin(void)
     pic.bg[0].tiles = tiles_8bpp;
     pic.bg[0].map = menu_video.pages_0_1;
     pic.bg[1].tiles = tiles_load;
+    pic.bg[2].draw_list = fx_draw_picture(0);
     memset(&pic.blend, 0, sizeof pic.blend);
     pic.blend.layers = 1;
     pic.blend.use_fixed = 0;
@@ -476,7 +493,7 @@ enum {
     S_COURSE_START, S_TITLE_OPEN, S_TITLE_SHOW, S_TITLE_FADE, S_TITLE_RUN,
     S_TITLE_FADEOUT, S_DEMO, S_PREVIEW_OPEN, S_PREVIEW_SHOW, S_PREVIEW_READY,
     S_FADE_OPEN1, S_FADE_OPEN2, S_FADE_STEPS, S_FADE_FULL, S_FADE_SET, S_FADE_LAST,
-    S_MENU_LOOP, S_MENU_FADEOUT, S_COURSE_DONE
+    S_MENU_LOOP, S_MENU_FADEOUT, S_COURSE_DONE, S_RACE
 };
 
 static int state = S_SOUND_START;
@@ -522,8 +539,11 @@ int MenuScreen0Run(void)
         break;
     case S_LOGO_RUN:
         objects_frame();
-        if (actors.exit_request)
+        if (actors.exit_request) {
+            g.demo_number = 3;
+            g.course_menu_seen = 0;
             state = S_BOOT_DONE;
+        }
         break;
     default:
         return 1;
@@ -906,6 +926,7 @@ static void champion_open(void)
     frame_state.brightness = 0;
     pic.mode = 3;
     pic.bg3_priority = 0;
+    pic.bg[2].draw_list.id = 0;
     pic.bg[0].tiles = tiles_8bpp;
     pic.bg[0].map = menu_video.page_0;
     pic.bg[1].tiles = menu_video.tiles_a;
@@ -1061,6 +1082,7 @@ int ChampionScreenRun(void)
         champion_state = C_OPEN;
         return 1;
     }
+    menu_frame_end(1);
     return 0;
 }
 
@@ -1071,7 +1093,6 @@ void menu_video_more_init(void)
     tiles_8bpp = nshvc_tiles_create(8, 1024, 1);
     tiles_menu = nshvc_tiles_create(4, 512, 1);
     tiles_load = nshvc_tiles_create(4, 64, 1);
-    menu_3d_list = nshvc_draw_list_create();
 }
 
 /* What the menu's stage does with the frame: which vblank stage is on. */
@@ -1088,20 +1109,34 @@ void session_start(void)
     save_load();
 }
 
-/* Logo, title, course menu; the race's flow takes over from here (race/boot). */
+static int after_race = S_COURSE_START;
+
+void session_race_ended(int to_course_menu)
+{
+    after_race = to_course_menu ? S_COURSE_START : S_SOUND_START;
+}
+
+/* Logo, title, course menu, the race, and back. The race's flow and the
+   demos end their own frames. */
 void session_update(void)
 {
+    if (state == S_RACE) {
+        if (race_session_update())
+            state = after_race;
+        return;
+    }
     if (state <= S_BOOT_DONE && !MenuScreen0Run())
         goto done;
-    if (state >= S_BOOT_DONE)
+    if (state >= S_BOOT_DONE) {
         if (CourseMenuRun()) {
-            static int said;
-
-            if (!said)
-                fprintf(stderr, "stuntracefx: the course menu's end: the race's flow is not converted yet\n");
-            said = 1;
-            state = S_COURSE_DONE;
+            after_race = S_COURSE_START;
+            race_session_begin();
+            state = S_RACE;
+            return;
         }
+        if (state == S_DEMO)
+            return;
+    }
 done:
     menu_frame_end(menu_on_stage20());
 }

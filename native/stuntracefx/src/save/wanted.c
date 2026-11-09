@@ -46,4 +46,6 @@ __attribute__((weak)) void SpritePieces3(uint16_t x, uint8_t y, uint16_t set, ui
 {
     (void)x; (void)y; (void)set; (void)palette; (void)slot; NOT_YET("SpritePieces3");
 }
+__attribute__((weak)) void race_session_begin(void) { NOT_YET("race_session_begin"); }
+__attribute__((weak)) int race_session_update(void) { return 0; }
 __attribute__((weak)) void PlayerSound35(void) { NOT_YET("PlayerSound35"); }

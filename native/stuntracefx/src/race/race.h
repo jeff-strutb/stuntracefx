@@ -24,6 +24,9 @@ int DemoRun(int which);
 void RecordsPanelTile(uint16_t offset, uint8_t tile);
 void PlayerSound35(void);
 void CourseScreenState8(void);
+/* the race after the course menu: begin once, then each update until nonzero */
+void race_session_begin(void);
+int race_session_update(void);
 
 void RaceTimeInit(void);
 void RaceTimeAddD814(void);
