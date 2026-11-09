@@ -177,23 +177,14 @@ static void fixed_lines_send(uint16_t start)
     nshvc_lines(0, 224, NSHVC_LINE_FIXED, v);
 }
 
-/* The lower half of a two-player screen: from row 112 its backdrop, or the
-   finished player's panel, its colours and fixed colour. */
+/* The lower half of a two-player screen: from row 112 its colours and fixed
+   colour (its backdrop is in the draw list); the sprites from row 15's column 239. */
 static void split_half_send(void)
 {
-    int32_t y[224];
-    int r, h;
+    int r;
 
-    for (r = 0; r < 224; r++) {
-        h = r >= 112 ? 1 : 0;
-        if (pic.race.panel[h])
-            y[r] = 512 + (pic.race.backdrop_y[h] & 0xFF);
-        else
-            y[r] = ((pic.race.backdrop_y[h] + r + 1) & 511) - (r + 1);
-    }
-    nshvc_lines(0, 224, (nshvc_line_field)(NSHVC_LINE_SCROLL_Y + 1), y);
-    nshvc_line(0, (nshvc_line_field)(NSHVC_LINE_SCROLL_X + 1), pic.race.backdrop_x[0]);
-    nshvc_line(112, (nshvc_line_field)(NSHVC_LINE_SCROLL_X + 1), pic.race.backdrop_x[1]);
+    nshvc_line(0, NSHVC_LINE_SPRITES_MAIN, 0);
+    nshvc_line_from(15, 239, NSHVC_LINE_SPRITES_MAIN, 1);
     for (r = 0; r < 3; r++)
         nshvc_line(112, (nshvc_line_field)(NSHVC_LINE_PALETTE + 0xE1 + r), pic.race.colours_kept[1][r]);
     nshvc_line(112, (nshvc_line_field)(NSHVC_LINE_PALETTE + 0), pic.race.colour_0[1]);
@@ -287,6 +278,8 @@ void video_draw(void)
     if (pic.blank)
         return;
     nshvc_mode_set(pic.mode, pic.bg3_priority, 0);
+    if (pic.race.on && pic.race.split && !pic.race.course_screen)
+        race_two_player_list();
     for (i = 0; i < 3; i++)
         set_background(i);
     nshvc_windows_set(&pic.windows);

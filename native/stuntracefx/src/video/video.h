@@ -27,7 +27,9 @@ static inline uint16_t ram_code_7f16(uint16_t a) { const uint8_t *p = ram_code_7
 typedef struct {
     nshvc_tiles tiles;                  /* the 4bpp art the backdrop and sprites share */
     nshvc_map backdrop_one;             /* 32 x 64 */
-    nshvc_map backdrop_two;             /* 64 x 128: four pages, then the panel repeated */
+    nshvc_tiles frame_tiles_two;        /* the two-player frame and panels, 4bpp */
+    nshvc_map frame_map_two;            /* and its map */
+    nshvc_image backdrop_image, panel_image; /* the two-player backdrop and panel, drawn into the list */
     nshvc_tiles course_tiles;           /* the course screen's backdrop art */
     nshvc_map course_map;               /* and its map, 32 x 64 */
     nshvc_image frame_image;            /* the frame and panels around the 3D, at screen positions */
@@ -44,6 +46,8 @@ void race_art_write(uint16_t word, const uint8_t *data, uint32_t bytes);
 void race_frame_art_write(uint16_t word, const uint8_t *data, uint32_t bytes);
 void race_map_page_write(int page, const uint16_t *words);
 void race_panel_map_write(const uint16_t *words);
+void race_frame_map_two_write(const uint16_t *words);
+void race_two_player_list(void);
 void race_backdrop_two_write(int page, const uint16_t *words);
 void race_picture_shown(int buffer);
 void race_backdrop_rows_upload(int buffer);
@@ -321,6 +325,7 @@ void SpriteTextAt8952(void);
 /* wanted (menu/records_screen.c): a row's car, three pieces */
 void SpritePieces3(uint16_t x, uint8_t y, uint16_t set, uint16_t palette, int slot);
 /* wanted by the race (race/phases.c, the lap and results panels) */
+void race_unpacked_to_art(uint16_t out, uint16_t in);  /* a packed block to its VRAM place, as RaceLoad's GsuCF42ToVram */
 void OamByteSet(uint16_t offset, uint8_t value);   /* a byte of the sprite table, 0-$21F */
 uint8_t SpriteYOnScreen(uint8_t y);                /* 7E:B005 */
 void SpriteBar4WithMarker(uint8_t value, uint16_t pos, uint16_t slot);

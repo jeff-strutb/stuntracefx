@@ -22,13 +22,6 @@
 
 #include <stdio.h>
 
-/* not converted yet by its owner */
-__attribute__((weak)) void MenuCourseGraphics(void)
-{
-    static int said;
-    if (!said) { said = 1; fprintf(stderr, "not converted yet: MenuCourseGraphics\n"); }
-}
-
 RaceVideo race_video;
 
 /* the course backdrop's map, as the course data unpacks it */
@@ -41,7 +34,10 @@ void race_video_init(void)
 {
     race_video.tiles = nshvc_tiles_create(4, 1024, 1);
     race_video.backdrop_one = nshvc_map_create(32, 64);
-    race_video.backdrop_two = nshvc_map_create(64, 128);
+    race_video.frame_tiles_two = nshvc_tiles_create(4, 512, 1);
+    race_video.frame_map_two = nshvc_map_create(32, 32);
+    race_video.backdrop_image = nshvc_image_create(512, 512, NSHVC_IMAGE_INDEXED);
+    race_video.panel_image = nshvc_image_create(256, 256, NSHVC_IMAGE_INDEXED);
     race_video.course_tiles = nshvc_tiles_create(4, 1024, 1);
     race_video.course_map = nshvc_map_create(32, 64);
     race_video.frame_image = nshvc_image_create(256, 224, NSHVC_IMAGE_INDEXED);
@@ -49,6 +45,13 @@ void race_video_init(void)
 }
 
 static void frame_art_clear(void);
+
+/* The two-player screen's backdrop and panel are drawn into the picture's
+   list as images, so the shared art and their maps are kept here too. */
+static uint8_t race_art_bytes[0x8000];
+static uint16_t backdrop_two_words[4][0x400];
+static uint16_t panel_words[0x400];
+static int two_images_stale = 1;
 
 /* every tile and map zero, as the original cleared VRAM */
 static void clear_all(void)
@@ -63,32 +66,32 @@ static void clear_all(void)
     frame_art_clear();
     for (p = 0; p < 2; p++)
         nshvc_map_write_snes(race_video.backdrop_one, 0, (uint32_t)p * 32u, 32, 32, zero_words);
-    for (p = 0; p < 4; p++)
-        nshvc_map_write_snes(race_video.backdrop_two, (p & 1) ? 32 : 0, (p & 2) ? 32 : 0, 32, 32, zero_words);
-    for (p = 0; p < 4; p++)
-        nshvc_map_write_snes(race_video.backdrop_two, (p & 1) ? 32 : 0, (uint32_t)(p & 2 ? 96 : 64), 32, 32, zero_words);
+    nshvc_map_write_snes(race_video.frame_map_two, 0, 0, 32, 32, zero_words);
 }
 
 /* The art at the word address the original gave it, into the sets by what lives there:
    4bpp art from word $4000 up, the frame art (8bpp) at and above $5600 in the one-player screen. */
 void race_art_write(uint16_t word, const uint8_t *data, uint32_t bytes)
 {
-    if (word >= 0x4000 && word < 0x8000)
+    if (word >= 0x4000 && word < 0x8000) {
         nshvc_tiles_write(race_video.tiles, (uint32_t)(word - 0x4000u) / 16u, data, bytes / 32u, NSHVC_TILES_PLANAR);
+        memcpy(race_art_bytes + (uint32_t)(word - 0x4000u) * 2u, data, bytes);
+        two_images_stale = 1;
+    }
 }
 
 static uint8_t frame_art_8[1024 * 64];       /* the one-player frame and HUD art, 8bpp, as loaded */
-static uint8_t frame_art_4[0x8000];          /* the two-player screen's, 4bpp */
-static uint16_t frame_words_2p[32 * 32];     /* the two-player BG1 map */
 static uint16_t frame_words_1p[32 * 32];     /* the one-player BG1 map, first buffer's */
 static int frame_image_stale = 1;
 
 static void frame_art_clear(void)
 {
     memset(frame_art_8, 0, sizeof frame_art_8);
-    memset(frame_art_4, 0, sizeof frame_art_4);
+    memset(race_art_bytes, 0, sizeof race_art_bytes);
+    memset(backdrop_two_words, 0, sizeof backdrop_two_words);
+    memset(panel_words, 0, sizeof panel_words);
+    two_images_stale = 1;
     memset(frame_words_1p, 0, sizeof frame_words_1p);
-    memset(frame_words_2p, 0, sizeof frame_words_2p);
     frame_image_stale = 1;
 }
 
@@ -110,11 +113,9 @@ void race_vram_write(uint16_t word, const uint8_t *data, uint32_t bytes)
         } else if (word >= 0x4C00 && word < 0x8000) {
             race_art_write(word, data, bytes);
         } else if (word == 0x1C00) {
-            memcpy(frame_words_2p, data, sizeof frame_words_2p);
-            frame_image_stale = 1;
-        } else if (word < 0x4000) {
-            memcpy(frame_art_4 + (uint32_t)word * 2u, data, bytes);
-            frame_image_stale = 1;
+            race_frame_map_two_write((const uint16_t *)(const void *)data);
+        } else if (word < 0x2000) {
+            nshvc_tiles_write(race_video.frame_tiles_two, word / 16u, data, bytes / 32u, NSHVC_TILES_PLANAR);
         }
         return;
     }
@@ -135,14 +136,20 @@ void race_vram_write(uint16_t word, const uint8_t *data, uint32_t bytes)
    out of it. Its art is the same tile set from tile $300. */
 void race_panel_map_write(const uint16_t *words)
 {
-    uint16_t adjusted[32 * 32];
-    int i, x, y;
+    memcpy(panel_words, words, sizeof panel_words);
+    two_images_stale = 1;
+}
+
+/* BG1 of the two-player screen holds only the frame and panels at their own
+   priority; the entries for the 3D are left empty, the list draws those. */
+void race_frame_map_two_write(const uint16_t *words)
+{
+    uint16_t frame_only[32 * 32];
+    int i;
 
     for (i = 0; i < 32 * 32; i++)
-        adjusted[i] = (uint16_t)((words[i] & 0xFC00) | (((words[i] & 0x3FF) + 0x300) & 0x3FF));
-    for (y = 0; y < 2; y++)
-        for (x = 0; x < 2; x++)
-            nshvc_map_write_snes(race_video.backdrop_two, (uint32_t)x * 32u, 64u + (uint32_t)y * 32u, 32, 32, adjusted);
+        frame_only[i] = (words[i] & 0x3FF) >= 0x168 ? words[i] : 0;
+    nshvc_map_write_snes(race_video.frame_map_two, 0, 0, 32, 32, frame_only);
 }
 
 /* `n` pages of the two-player backdrop from `first`. */
@@ -157,7 +164,8 @@ void race_backdrop_two_pages_write(int first, const uint16_t *words, uint32_t n)
 /* A page of the two-player backdrop's own four. */
 void race_backdrop_two_write(int page, const uint16_t *words)
 {
-    nshvc_map_write_snes(race_video.backdrop_two, (page & 1) ? 32 : 0, (page & 2) ? 32 : 0, 32, 32, words);
+    memcpy(backdrop_two_words[page], words, sizeof backdrop_two_words[page]);
+    two_images_stale = 1;
 }
 
 /* ---- one unpacked block to the art or a map ---- */
@@ -319,6 +327,21 @@ static void course_maps(int course_3)
    picture, else the frames, HUD art and the course map. */
 static void race_screen_layers(void);
 
+/* The two-player screen's art: the course's backdrop tiles and its four map
+   pages, the frame's tiles and BG1's map. (The original also copies the frame's
+   tiles to $3680, for the BG1 base it flips to; this screen has one.) */
+static void two_player_art(int k3)
+{
+    chip_unpack((uint32_t)cart8(0x03, (uint16_t)(0xF4FB + k3)) << 16 | cart16(0x03, (uint16_t)(0xF4F9 + k3)), 0x3000);
+    race_vram_write(0x4C00, fx_ram + 0x3000, 0x1800);
+    chip_unpack((uint32_t)cart8(0x03, (uint16_t)(0xF5A3 + k3)) << 16 | cart16(0x03, (uint16_t)(0xF5A1 + k3)), 0x3000);
+    race_vram_write(0x3C00, fx_ram + 0x3000, 0x2000);
+    chip_unpack(0x17u << 16 | 0xFB84, 0x3000);
+    race_vram_write(0x1680, fx_ram + 0x3000, 0x600);
+    chip_unpack(0x17u << 16 | 0xFFAC, 0x3000);
+    race_vram_write(0x1C00, fx_ram + 0x3000, 0x800);
+}
+
 void RaceVideoSetup(void)
 {
     int k3 = g.course * 3;
@@ -332,7 +355,7 @@ void RaceVideoSetup(void)
     CgramDmaAll();
     GradientBuildColours(g.course);
     if (g.split_screen) {
-        MenuCourseGraphics();
+        two_player_art(k3);
         unpacked_to_art(0xF84C, 0xF7E3);
         memcpy(backdrop_map[0], fx_ram + 0x3000, 0x800);
         chip_unpack(0x18 << 16 | 0xC770, 0x3000);
@@ -502,6 +525,8 @@ void Bg2ScrollFromTable(int half)
 /* the picture that buffer holds becomes the one shown: its gradient, backdrop scroll and backdrop map */
 void race_picture_shown(int buffer)
 {
+    if (g.split_screen)
+        return;                         /* both pictures are always in its list: race_two_player_list */
     pic.bg[0].draw_list = fx_draw_picture(buffer);
     pic.race.gradient_start[0] = gradient.source[buffer];
     pic.race.backdrop_x[0] = (int16_t)g.backdrop_x[buffer];
@@ -669,11 +694,23 @@ static void race_screen_layers(void)
     pic.race.split = g.split_screen != 0;
     pic.bg3_priority = 0;
     pic.mode = 1;
-    pic.bg[0].tiles.id = 0;
-    pic.bg[0].map.id = 0;
-    pic.bg[0].draw_list = fx_draw_picture(0);
-    pic.bg[1].tiles = race_video.tiles;
-    pic.bg[1].map = pic.race.split ? race_video.backdrop_two : race_video.backdrop_one;
+    if (pic.race.split) {
+        /* the frame at its own priority on BG1, tiles; the 3D, backdrop and
+           panel in the list, in BG2's place under it (race_frame_art_draw) */
+        pic.bg[0].tiles = race_video.frame_tiles_two;
+        pic.bg[0].map = race_video.frame_map_two;
+        pic.bg[0].draw_list.id = 0;
+        pic.bg[1].tiles.id = 0;
+        pic.bg[1].map.id = 0;
+        pic.bg[1].draw_list = fx_draw_picture(0);
+    } else {
+        pic.bg[0].tiles.id = 0;
+        pic.bg[0].map.id = 0;
+        pic.bg[0].draw_list = fx_draw_picture(0);
+        pic.bg[1].tiles = race_video.tiles;
+        pic.bg[1].map = race_video.backdrop_one;
+        pic.bg[1].draw_list.id = 0;
+    }
     pic.bg[2].tiles.id = 0;
     pic.bg[2].map.id = 0;
     pic.line_tables = 0;
@@ -731,7 +768,7 @@ void RaceVideoUpload2P(void)
     } else {
         Bg2ScrollFromTable(0);
     }
-    pic.main_screen = SHOW_BG1 | SHOW_BG2;
+    pic.main_screen = SHOW_BG1 | SHOW_BG2 | SHOW_SPRITES;
     pic.blend.fixed_bgr15 = fixed_from(windows.colours);
     WindowsSetupSelect();
     GradientPointersToBank7F();
@@ -920,25 +957,24 @@ void NmiFrameUploadSprites(void)
 
 /* ---- the frame and panels around the 3D ---- */
 
-/* One tile of the frame into the image at screen position (x, y): colour 0 stays clear. */
-static void plot_tile(uint8_t *image, int x, int y, const uint8_t *data, int bpp, int palette, int hflip, int vflip)
+/* One tile into an image of `w` x `h` at (x, y): colour 0 stays clear. */
+static void plot_tile(uint8_t *image, int w, int h, int x, int y, const uint8_t *data, int bpp, int palette, int hflip, int vflip)
 {
     int px, py, p;
 
     for (py = 0; py < 8; py++)
         for (px = 0; px < 8; px++) {
-            int sy = vflip ? 7 - py : py, sx = hflip ? 7 - px : px, c = 0, sx_screen = x + px, sy_screen = y + py;
+            int sy = vflip ? 7 - py : py, sx = hflip ? 7 - px : px, c = 0, ox = x + px, oy = y + py;
 
             for (p = 0; p < bpp; p++)
                 c |= ((data[sy * 2 + (p / 2) * 16 + (p & 1)] >> (7 - sx)) & 1) << p;
-            if (c && sx_screen >= 0 && sx_screen < 256 && sy_screen >= 0 && sy_screen < 224)
-                image[sy_screen * 256 + sx_screen] = (uint8_t)(bpp == 4 ? palette * 16 + c : c);
+            if (c && ox >= 0 && ox < w && oy >= 0 && oy < h)
+                image[oy * w + ox] = (uint8_t)(bpp == 4 ? palette * 16 + c : c);
         }
 }
 
-/* The frame and panels of BG1, everything that is not the 3D picture, as one
-   image at screen positions. One player: the art tiles from $2B0 on, the map
-   scrolled so its row 0 is at line 16. Two players: art from tile $168 on, row 0 at line -1. */
+/* The one-player frame and panels: the art tiles from $2B0 on, the map
+   scrolled so that its row 0 is at line 16. */
 static void frame_image_build(void)
 {
     static uint8_t image[224 * 256];
@@ -947,104 +983,124 @@ static void frame_image_build(void)
     memset(image, 0, sizeof image);
     for (y = 0; y < 32; y++)
         for (x = 0; x < 32; x++) {
-            uint16_t w = g.split_screen ? frame_words_2p[y * 32 + x] : frame_words_1p[y * 32 + x];
+            uint16_t w = frame_words_1p[y * 32 + x];
             unsigned t = w & 0x3FF;
-            int hf = (w >> 14) & 1, vf = (w >> 15) & 1;
 
-            if (g.split_screen) {
-                if (t >= 0x168)
-                    plot_tile(image, x * 8, y * 8 - 1, frame_art_4 + t * 32u, 4, (w >> 10) & 7, hf, vf);
-            } else if (t >= 0x2B0) {
-                plot_tile(image, x * 8, y * 8 + 16, frame_art_8 + t * 64u, 8, 0, hf, vf);
-            }
+            if (t >= 0x2B0)
+                plot_tile(image, 256, 224, x * 8, y * 8 + 16, frame_art_8 + t * 64u, 8, 0, (w >> 14) & 1, (w >> 15) & 1);
         }
     nshvc_image_write(race_video.frame_image, image);
     frame_image_stale = 0;
 }
 
-/* The frame and panels into a picture's draw list, at screen positions. */
+/* The two-player backdrop (four pages) and the panel, from the shared art;
+   the panel's tile numbers count from its own art, $300 on. */
+static void two_images_build(void)
+{
+    static uint8_t backdrop[512 * 512], panel[256 * 256];
+    int page, x, y;
+
+    memset(backdrop, 0, sizeof backdrop);
+    memset(panel, 0, sizeof panel);
+    for (page = 0; page < 4; page++)
+        for (y = 0; y < 32; y++)
+            for (x = 0; x < 32; x++) {
+                uint16_t w = backdrop_two_words[page][y * 32 + x];
+
+                plot_tile(backdrop, 512, 512, (page & 1) * 256 + x * 8, (page >> 1) * 256 + y * 8,
+                          race_art_bytes + (w & 0x3FFu) * 32u, 4, (w >> 10) & 7, (w >> 14) & 1, (w >> 15) & 1);
+            }
+    for (y = 0; y < 32; y++)
+        for (x = 0; x < 32; x++) {
+            uint16_t w = panel_words[y * 32 + x];
+
+            plot_tile(panel, 256, 256, x * 8, y * 8, race_art_bytes + (((w & 0x3FFu) + 0x300u) & 0x3FFu) * 32u, 4,
+                      (w >> 10) & 7, (w >> 14) & 1, (w >> 15) & 1);
+        }
+    nshvc_image_write(race_video.backdrop_image, backdrop);
+    nshvc_image_write(race_video.panel_image, panel);
+    two_images_stale = 0;
+}
+
+/* A rectangle of the screen from texels (u0, v0), pixel for pixel. */
+static void image_quad(nshvc_draw_list list, nshvc_image image, int x0, int y0, int w, int h, int u0, int v0)
+{
+    nshvc_vertex v[6];
+    nshvc_material m;
+    float ul = (float)u0 - (0.5f - 1.0f / 64), ur = (float)u0 + ((float)w - 0.5f + 1.0f / 64);
+    float vt = (float)v0 - (0.5f - 1.0f / 128), vb = (float)v0 + ((float)h - 0.5f + 1.0f / 128);
+
+    memset(&m, 0, sizeof m);
+    m.image = image;
+    memset(v, 0, sizeof v);
+    v[0].x = (float)x0; v[0].y = (float)y0; v[0].u = ul; v[0].v = vt; v[0].colour = 1;
+    v[1].x = (float)(x0 + w); v[1].y = (float)y0; v[1].u = ur; v[1].v = vt; v[1].colour = 1;
+    v[2].x = (float)(x0 + w); v[2].y = (float)(y0 + h); v[2].u = ur; v[2].v = vb; v[2].colour = 1;
+    v[3] = v[0];
+    v[4] = v[2];
+    v[5].x = (float)x0; v[5].y = (float)(y0 + h); v[5].u = ul; v[5].v = vb; v[5].colour = 1;
+    nshvc_draw_tris(list, v, 6, &m);
+}
+
+/* One half's backdrop or panel, wrapping where its image ends: a pixel at
+   line r shows the image's row r + 1 + scroll, as the hardware counted. */
+static void half_draw(nshvc_draw_list list, int half, int first, int last)
+{
+    nshvc_image image = pic.race.panel[half] ? race_video.panel_image : race_video.backdrop_image;
+    int size = pic.race.panel[half] ? 256 : 512, mask = size - 1, r = first;
+    int sx = pic.race.backdrop_x[half], sy = pic.race.backdrop_y[half];
+
+    while (r < last) {
+        int v = (r + 1 + sy) & mask, n = size - v, x = 0;
+
+        if (n > last - r)
+            n = last - r;
+        while (x < 256) {
+            int u = (x + sx) & mask, w = size - u;
+
+            if (w > 256 - x)
+                w = 256 - x;
+            image_quad(list, image, x, r, w, n, u, v);
+            x += w;
+        }
+        r += n;
+    }
+}
+
+/* What goes behind the 3D in its list: one player the frame and panels;
+   two players each half's backdrop or panel. */
 void race_frame_art_draw(nshvc_draw_list list)
 {
-    static const nshvc_rect to = { 0, 0, 256, 224 };
-    nshvc_material m;
+    if (g.split_screen) {
+        if (two_images_stale)
+            two_images_build();
+        half_draw(list, 0, 0, 112);
+        half_draw(list, 1, 112, 224);
+    } else {
+        static const nshvc_rect to = { 0, 0, 256, 224 };
+        nshvc_material m;
 
-    if (frame_image_stale)
-        frame_image_build();
-    memset(&m, 0, sizeof m);
-    m.image = race_video.frame_image;
-    nshvc_draw_image(list, race_video.frame_image, &to, &m);
+        if (frame_image_stale)
+            frame_image_build();
+        memset(&m, 0, sizeof m);
+        m.image = race_video.frame_image;
+        nshvc_draw_image(list, race_video.frame_image, &to, &m);
+    }
 }
 
-/* ---- the championship screen, one frame's picture step each ---- */
-
-static void championship_scroll_corner(void)
+/* The two-player list, composed again when a half's scroll or panel has moved
+   (asking for the other picture number makes the compose run; both are in it). */
+void race_two_player_list(void)
 {
-    g.backdrop_y[0] = 0xFFE0;
-    g.backdrop_x[0] = 0xFFE8;
-}
+    static struct { int32_t x[2], y[2]; uint8_t panel[2]; } shown;
+    static int which;
 
-/* stage 0: the race's colours off, the split stages from their first, the panels away */
-void ChampionshipStageStart(void)
-{
-    g.palette_animate = 0;
-    g.split_stage_on = 6;
-    g.split_stage = 0;
-    windows.bands_kind = 0;
-    g.overlay_state = 0;
-    WindowSlideUpSound();
-    g.overlay_d59++;
-    OamHide36And96();
-}
-
-/* stage 1: waits for the split window to have opened */
-void ChampionshipStageWaitOpen(void)
-{
-    if (windows.bands_state != 5)
-        return;
-    g.overlay_d59++;
-    championship_scroll_corner();
-}
-
-/* stage 4: the picture and its digits into the map; the screen's colours */
-void ChampionshipStagePicture(void)
-{
-    int i;
-
-    g.race_again = 0;
-    palettes.tile_cycle = 0;
-    chip_unpack(0x1F << 16 | 0xFB99, 0x3000);
-    memcpy(backdrop_map[0], fx_ram + 0x3000, 0x440);
-    DigitTiles1184();
-    g.overlay_d59++;
-    g.hdma_enable = (uint8_t)((g.hdma_enable | 0x02) & 0xF3);
-    for (i = 0; i < 256; i++)
-        palettes.buffer[i] = cart16(0x1F, (uint16_t)(0x8600 + i * 2));
-}
-
-/* stage 7: the corner scroll and the screen's own BG2 map */
-void ChampionshipStageMap(void)
-{
-    championship_scroll_corner();
-    g.overlay_d59++;
-    windows.bands_kind = 0;
-}
-
-/* stage 8: waits for the split window to have closed */
-void ChampionshipStageWaitClosed(void)
-{
-    if (!windows.bands_state)
-        g.overlay_d59++;
-}
-
-/* With the split window closed: 0 nothing yet; 1 the override was set, it is
-   cleared and the race restarts at $07:EC6B; 2 it ends at $07:EBDD. */
-int WindowClosedDigitStep(void)
-{
-    if (windows.bands_state != 5)
-        return 0;
-    if (!g.time_override)
-        return 2;
-    g.time_override = 0;
-    g.champ_stage = 2;
-    return 1;
+    if (memcmp(shown.x, pic.race.backdrop_x, sizeof shown.x) || memcmp(shown.y, pic.race.backdrop_y, sizeof shown.y)
+        || memcmp(shown.panel, pic.race.panel, sizeof shown.panel)) {
+        memcpy(shown.x, pic.race.backdrop_x, sizeof shown.x);
+        memcpy(shown.y, pic.race.backdrop_y, sizeof shown.y);
+        memcpy(shown.panel, pic.race.panel, sizeof shown.panel);
+        which ^= 1;
+    }
+    pic.bg[1].draw_list = fx_draw_picture(which);
 }
