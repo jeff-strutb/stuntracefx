@@ -47,12 +47,20 @@ typedef struct {
     uint16_t panel_b1919, panel_b191b, panel_b191d, panel_b191f, panel_b1925, panel_b1927;
     uint8_t blink_on;                   /* $18B9 */
     uint8_t shown_3d;                   /* a handler showed a race frame this run */
+    uint8_t fixed_colour_queued;        /* a fixed colour was queued this run: the original's queue is
+                                           applied newest first, so the first one queued is what stays */
 } MenuState;
 
 extern MenuState menu;
 
 /* the per-line changes the current screen has switched on */
 void menu_lines_send(void);
+
+/* one race step behind a menu screen, its picture drawn (RaceFrameStep) */
+void menu_race_step(void);
+/* check only: the course menu's race steps' lengths from a recording of the
+   original (its pacing lines for 03:B7D1), in place of the constant 4 */
+int menu_pacing_record(const char *path);
 
 void SelectionTables18CB(void);
 void SelectionCommit(void);

@@ -233,7 +233,9 @@ static void fixed_colour_step(int down)
             v = 0x1F;
     }
     menu.fixed_colour = (uint16_t)v;
-    pic.blend.fixed_bgr15 = (uint16_t)(v | v << 5 | v << 10);
+    if (!menu.fixed_colour_queued)
+        pic.blend.fixed_bgr15 = (uint16_t)(v | v << 5 | v << 10);
+    menu.fixed_colour_queued = 1;
 }
 
 /* Colours 208-215 and 144-151 scaled from their saved copy by factor / 32. */
@@ -522,7 +524,7 @@ static void slide_to_preview(Actor *a)
         actor_start_animation(k, 0x008A);
     g.sel[0] = 0;
     show_choice(g.choice_p1);
-    RaceFrameStep(0);
+    menu_race_step();
     menu.shown_3d = 1;
     actors.fast_animation = 1;
     menu.press_count[0] = 0;
@@ -950,7 +952,7 @@ static void kinds67_animate(uint16_t anim6, uint16_t anim7)
 
 static void show_race_frame(void)
 {
-    RaceFrameStep(0);
+    menu_race_step();
     menu.shown_3d = 1;
     actors.fast_animation = 1;
 }
@@ -1194,7 +1196,7 @@ static void preview_idle(Actor *a)
     choice_repeat();
     cameras[0].object = car_object(g.choice_p2);
     set_pair_animations(g.choice_p2);
-    RaceFrameStep(0);
+    menu_race_step();
     menu.shown_3d = 1;
 }
 
@@ -1286,7 +1288,7 @@ static void preview_back_out(Actor *a)
     a->handler = HANDLER_PREVIEW_BACK_WAIT;
     g.sel[0] = 0;
     show_choice(g.choice_p1);
-    RaceFrameStep(0);
+    menu_race_step();
     menu.shown_3d = 1;
 }
 

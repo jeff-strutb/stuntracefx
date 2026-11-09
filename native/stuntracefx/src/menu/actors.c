@@ -323,6 +323,7 @@ void actors_run(void)
 {
     int i;
 
+    menu.fixed_colour_queued = 0;       /* a run is one frame's queue of byte writes */
     for (i = actors.live_count - 1; i >= 0; i--) {
         actors.current = (uint8_t)i;
         menu_actor_run(&actors.actor[actors.live[i]]);
