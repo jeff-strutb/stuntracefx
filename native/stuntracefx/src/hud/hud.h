@@ -84,5 +84,6 @@ void TimeUnpackBcd(uint16_t packed, uint16_t *minutes, uint16_t *seconds, uint16
 uint16_t TimePackBcd(uint8_t hundredths, uint8_t seconds, uint8_t minutes);
 void TimeTotalsSum(void);
 void TimeRunningTotals(void);
+void RecordTimeInsert(void);
 
 #endif

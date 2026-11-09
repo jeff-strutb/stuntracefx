@@ -36,6 +36,7 @@ typedef struct {
     uint16_t record_tags[12];           /* $0F13 */
     uint8_t record_bcd[3][3];           /* $0F5B, $0F5E, $0F61: hundredths, seconds, minutes */
     uint8_t times_bcd[12][3];           /* $0F76: unpacked times */
+    uint8_t times_total[3][3];          /* $0F9A: each group of four summed */
     uint8_t names_bytes[9];             /* $10CF */
     uint8_t best_digits[5];             /* $0F69: minutes, seconds, hundredths as digits */
     uint16_t word_0f6e[4];              /* $0F6E */

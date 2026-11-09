@@ -57,18 +57,6 @@ __attribute__((weak)) void CourseScriptRun(uint8_t bank, uint16_t addr)
     }
 }
 
-__attribute__((weak)) void TimeUnpackBcd(uint16_t packed, uint16_t *minutes, uint16_t *seconds, uint16_t *hundredths)
-{
-    static int said;
-
-    (void)packed;
-    *minutes = *seconds = *hundredths = 0;
-    if (!said) {
-        said = 1;
-        fprintf(stderr, "not converted yet: TimeUnpackBcd\n");
-    }
-}
-
 #define NOT_YET_ARGS(name, params, body) \
     __attribute__((weak)) void name params \
     { \
@@ -90,15 +78,6 @@ __attribute__((weak)) uint16_t RecordOffsetAllCourses(void)
     static int said;
 
     if (!said) { said = 1; fprintf(stderr, "not converted yet: RecordOffsetAllCourses\n"); }
-    return 0;
-}
-
-__attribute__((weak)) uint16_t TimePackBcd(uint8_t hundredths, uint8_t seconds, uint8_t minutes)
-{
-    static int said;
-
-    (void)hundredths; (void)seconds; (void)minutes;
-    if (!said) { said = 1; fprintf(stderr, "not converted yet: TimePackBcd\n"); }
     return 0;
 }
 
