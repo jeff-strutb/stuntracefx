@@ -200,8 +200,70 @@ static void split_half_send(void)
     nshvc_line(112, NSHVC_LINE_FIXED, pic.race.fixed[1]);
 }
 
+/* The course screen: rows to $D8 lit; BG2's scroll in bands, by its table
+   when the table is on; the sprites from row 55; window 1 from the wipe table. */
+static void course_lines_send(void)
+{
+    int32_t v[224], l1[224], r1[224];
+    int r, at = 0, line = 0;
+    int32_t scroll = g.course_scroll_top;
+
+    for (r = 0; r < 224; r++)
+        v[r] = r >= 216;
+    nshvc_lines(0, 224, NSHVC_LINE_BLANK, v);
+    nshvc_line(0, NSHVC_LINE_SPRITES_MAIN, 0);
+    nshvc_line(55, NSHVC_LINE_SPRITES_MAIN, 1);
+    for (r = 0; r < 55; r++)
+        v[r] = scroll;
+    scroll = (g.course_scroll_low & 0xFF) | (g.course_scroll_top & 0xFF00);
+    for (; r < 224; r++)
+        v[r] = scroll;
+    if (g.hdma_enable & 0x04) {
+        const uint8_t *t = g.course_scroll_table;
+
+        while (t[at] && line < 224) {
+            int32_t value = t[at + 1] | t[at + 2] << 8;
+            int n = t[at];
+
+            for (r = line; r < line + n && r < 224; r++)
+                v[r] = value;
+            line += n;
+            at += 3;
+        }
+        for (r = line; line && r < 224; r++)
+            v[r] = v[line - 1];
+    }
+    nshvc_lines(0, 224, (nshvc_line_field)(NSHVC_LINE_SCROLL_Y + 1), v);
+    if (g.hdma_enable & 0x02) {
+        const uint8_t *t = windows.wipe_table;
+
+        at = 0;
+        line = 0;
+        while (at + 2 < (int)sizeof windows.wipe_table && t[at] && line < 224) {
+            int n = t[at];
+
+            for (r = line; r < line + n && r < 224; r++) {
+                l1[r] = t[at + 1];
+                r1[r] = t[at + 2];
+            }
+            line += n;
+            at += 3;
+        }
+        for (r = line; r < 224; r++) {
+            l1[r] = line ? l1[line - 1] : 1;
+            r1[r] = line ? r1[line - 1] : 0;
+        }
+        nshvc_lines(0, 224, NSHVC_LINE_WIN1_LEFT, l1);
+        nshvc_lines(0, 224, NSHVC_LINE_WIN1_RIGHT, r1);
+    }
+}
+
 static void race_lines_send(void)
 {
+    if (pic.race.course_screen) {
+        course_lines_send();
+        return;
+    }
     blank_lines_send();
     gradient_lines_send();
     window_lines_send();

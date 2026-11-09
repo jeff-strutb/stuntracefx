@@ -45,6 +45,8 @@ void race_video_init(void)
     race_video.frame_map[1] = nshvc_map_create(32, 32);
     race_video.backdrop_one = nshvc_map_create(32, 64);
     race_video.backdrop_two = nshvc_map_create(64, 128);
+    race_video.course_tiles = nshvc_tiles_create(4, 1024, 1);
+    race_video.course_map = nshvc_map_create(32, 64);
     race_video.frame_image = nshvc_image_create(256, 224, NSHVC_IMAGE_INDEXED);
     sprites_use_tiles(race_video.tiles, 0x200, 0x300);
 }
@@ -112,7 +114,11 @@ void race_vram_write(uint16_t word, const uint8_t *data, uint32_t bytes)
         }
         return;
     }
-    if (word >= 0x5600 && word < 0x6000)
+    if (word >= 0x2000 && word < 0x5000) {
+        nshvc_tiles_write(race_video.course_tiles, (uint32_t)(word - 0x2000u) / 16u, data, bytes / 32u, NSHVC_TILES_PLANAR);
+    } else if (word == 0x5000) {
+        nshvc_map_write_snes(race_video.course_map, 0, 0, 32, bytes / 64u, (const uint16_t *)(const void *)data);
+    } else if (word >= 0x5600 && word < 0x6000)
         race_frame_art_write(word, data, bytes);
     else if (word >= 0x7800)
         race_map_page_write((word - 0x7800) / 0x400, (const uint16_t *)(const void *)data);
@@ -655,6 +661,7 @@ static uint16_t fixed_from(const uint8_t *c)
 static void race_screen_layers(void)
 {
     pic.race.on = 1;
+    pic.race.course_screen = 0;
     pic.race.split = g.split_screen != 0;
     pic.bg3_priority = 0;
     pic.mode = pic.race.split ? 1 : 3;
@@ -743,17 +750,94 @@ void RaceVideoSplit2P(void)
     pic.race.colour_0[1] = palettes.buffer[0];
 }
 
-/* not converted yet: the course screen before a race (RaceScreenSetup) and its scroll table */
-__attribute__((weak)) void RaceScreenSetup(void)
+/* ---- the course screen before a race ---- */
+
+uint16_t *race_map_buffer(void)
 {
-    static int said;
-    if (!said) { said = 1; fprintf(stderr, "not converted yet: RaceScreenSetup\n"); }
+    return backdrop_map[0];
 }
 
-__attribute__((weak)) void ScrollHdmaSet(void)
+/* The per-line BG2 scroll table's values, from the two scrolls; a table of
+   three-byte entries (line count, scroll low, high). */
+static void table_entry_value(int entry, uint16_t v)
 {
-    static int said;
-    if (!said) { said = 1; fprintf(stderr, "not converted yet: ScrollHdmaSet\n"); }
+    g.course_scroll_table[entry * 3 + 1] = (uint8_t)v;
+    g.course_scroll_table[entry * 3 + 2] = (uint8_t)(v >> 8);
+}
+
+void ScrollHdmaSet(void)
+{
+    table_entry_value(1, g.course_scroll_low);
+    table_entry_value(4, g.course_scroll_low);
+    table_entry_value(2, 0x0130);
+    table_entry_value(3, 0x0130);
+}
+
+/* The screen with static on BG1 and the course's art on BG2. */
+void RaceScreenSetup(void)
+{
+    static const uint8_t ones[10] = {0x01, 0x04, 0x06, 0x09, 0x0C, 0x15, 0x18, 0x1B, 0x1E, 0x1F};
+    static const uint8_t zeros[4] = {0x02, 0x05, 0x20, 0x21};
+    uint8_t *t = g.course_scroll_table;
+    unsigned i;
+
+    g.fx_buffer = 0;
+    for (i = 0; i < 10; i++)
+        windows.wipe_table[ones[i]] = 1;
+    for (i = 0; i < 4; i++)
+        windows.wipe_table[zeros[i]] = 0;
+    windows.maths = 0;
+    memset(&pic.windows, 0, sizeof pic.windows);
+    pic.windows.layer_use[5] = NSHVC_WIN1 | NSHVC_WIN1_INVERT;
+    for (i = 0; i < 3; i++)
+        pic.windows.mask_main[i] = 1;
+    pic.blend.clip = 0;
+    pic.blend.prevent = 2;
+    pic.blend.use_fixed = 1;
+    t[0] = 0x38;
+    table_entry_value(0, g.course_scroll_top);
+    t[3] = 0x4F;
+    t[6] = t[9] = t[12] = 1;
+    t[15] = 0;
+    for (i = 1; i <= 4; i++)
+        table_entry_value((int)i, g.course_scroll_low);
+    t[6] = t[9] = t[12] = 1;
+    g.hdma_enable = 0x02;
+    g.cursor_column_x = 0xF0;
+    g.cursor_column_x2 = 0xF0;
+    pic.race.on = 1;
+    pic.race.split = 0;
+    pic.race.course_screen = 1;
+    pic.mode = 3;
+    pic.bg3_priority = 0;
+    pic.bg[0].draw_list = fx_draw_picture(0);
+    pic.bg[0].scroll_x = pic.bg[0].scroll_y = 0;
+    pic.bg[1].draw_list.id = 0;
+    pic.bg[1].tiles = race_video.course_tiles;
+    pic.bg[1].map = race_video.course_map;
+    pic.bg[1].scroll_x = pic.bg[1].scroll_y = 0;
+    pic.bg[2].tiles.id = 0;
+    pic.bg[2].map.id = 0;
+    pic.main_screen = SHOW_BG2 | SHOW_BG1;
+    pic.sub_screen = 0;
+    pic.palette[1] = 0;
+    sprites_use_tiles(race_video.tiles, 0x200, 0x300);
+}
+
+/* What the blank lines before each picture of the course screen set: the
+   sprites, the colour maths, the fixed colour, the map, the wipe. */
+void RaceCourseUpload(void)
+{
+    uint8_t level = windows.fixed_level & 31;
+
+    OamDmaAll();
+    pic.blend.subtract = windows.maths >> 7;
+    pic.blend.half = (windows.maths >> 6) & 1;
+    pic.blend.layers = windows.maths & 0x3F;
+    pic.blend.fixed_bgr15 = (uint16_t)(level | level << 5 | level << 10);
+    pic.bg[1].scroll_y = g.course_scroll_top;
+    nshvc_map_write_snes(race_video.course_map, 0, 0, 32, 64, backdrop_map[0]);
+    WindowTable7F();
 }
 
 /* ---- what the race loads before its first frame ---- */

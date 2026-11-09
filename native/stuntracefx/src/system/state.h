@@ -204,6 +204,10 @@ typedef struct {
     uint8_t slot_mask, slot_count, slot1_finished; /* $05D5, $08FB, $7E:FF65 */
     struct { uint8_t first, unused1, unused2, unused3, unused4, unused5, unused6, value; } slot[8]; /* $0595: colour-flash records */
     uint8_t oam_upload_wanted;          /* $0D28: the sprites go out with the next stage that has room */
+    uint16_t course_scroll_top;         /* $0E33 (its high byte $0E34 also the low band's): the course screen's upper BG2 scroll */
+    uint16_t course_scroll_low;         /* $0E37 */
+    uint8_t cursor_column_x2;           /* $0E92 */
+    uint8_t course_scroll_table[16];    /* $10AA: its per-line table, a line count and two scroll bytes an entry */
     uint8_t panel_top, panel_bottom;    /* $0D5C, $0D5D: the half shows the finished player's panel; bit 7 its other scroll */
     uint16_t backdrop_x[2], backdrop_y[2]; /* $0D92, $0D8E: BG2's scroll by picture buffer or half */
     uint8_t hdma_enable;                /* $0D45: the per-line effects on; bit 5 the fixed colour's bands */

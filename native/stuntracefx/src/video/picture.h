@@ -24,6 +24,7 @@ typedef struct {
 typedef struct {
     uint8_t on;                         /* a race screen is up */
     uint8_t split;                      /* two halves, one above the other */
+    uint8_t course_screen;              /* the course screen before a race */
     uint16_t gradient_start[2];         /* colour numbers into the gradient block */
     int32_t backdrop_x[2], backdrop_y[2]; /* BG2's scroll for each half */
     uint8_t panel[2];                   /* the finished player's panel shows in the half */

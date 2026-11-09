@@ -30,6 +30,8 @@ typedef struct {
     nshvc_map frame_map[2];             /* one per picture buffer */
     nshvc_map backdrop_one;             /* 32 x 64 */
     nshvc_map backdrop_two;             /* 64 x 128: four pages, then the panel repeated */
+    nshvc_tiles course_tiles;           /* the course screen's backdrop art */
+    nshvc_map course_map;               /* and its map, 32 x 64 */
     nshvc_image frame_image;            /* the frame and panels around the 3D, at screen positions */
 } RaceVideo;
 
@@ -49,6 +51,8 @@ void race_picture_shown(int buffer);
 void race_backdrop_rows_upload(int buffer);
 void race_panel_show(int half, uint8_t sign_of_y, uint8_t y_low, uint8_t y_high_when_plus, uint8_t y_when_minus, uint8_t x_low);
 void RaceVideoSetup(void);
+void RaceCourseUpload(void);
+uint16_t *race_map_buffer(void);
 void RaceHudLoad(void);
 void NmiFrameUploadSprites(void);
 extern uint8_t race_pictures[0x3000];
@@ -179,7 +183,7 @@ typedef struct {
     uint8_t band_limits;                /* $19D1 */
     uint8_t player_raised;              /* $19D3 */
     /* the wipe that opens the race */
-    uint8_t wipe_table[32];             /* $7F:3410 */
+    uint8_t wipe_table[36];             /* $7F:3410 */
     uint8_t wipe_left, wipe_a, wipe_top, wipe_right, wipe_b, wipe_bottom; /* $7F:3433, $3434, $3435, $3437, $3438, $3439 */
     uint8_t wipe_width, wipe_middle;    /* $7F:3402, $3406 */
     /* the colour maths */
