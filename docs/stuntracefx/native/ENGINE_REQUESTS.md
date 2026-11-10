@@ -99,6 +99,10 @@ The same on Metal, Vulkan and D3D12, and in the picture `nshvc_picture_read` ret
 
 ## 7. Pixel art sharp and even at any size (Jeff, 2026-11-09)
 
+Done in nativeshvc 34f88d8 (4.7.1): a list's image and games' shaders read at each sample. Seen on a textured sign replayed at 8
+times the screen: each texel solid, its edges shaded by coverage. A Vulkan device without sample-rate shading fills lists with one
+sample.
+
 Jeff: "Pixel art shouldn't be 'smoothed' it should be drawn with the hard edges a high resolution texture can be while still
 being sharp." Each texel a solid square with its edges exactly where they fall in the window; a window pixel an edge
 crosses mixed by how much of it each side covers; nothing blurred inside a texel; no texels 3 pixels wide beside ones 4
