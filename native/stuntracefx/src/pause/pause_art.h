@@ -53,6 +53,11 @@ void pause_draw_tag(PauseImg *m, int control, const char *key, int asking);
 void pause_draw_lit(PauseImg *m, int item);
 void pause_draw_hint(PauseImg *m, const char *line1, uint32_t colour1, const char *line2);
 
+/* the pause button in the window's corner, PAUSE_BUTTON points square in its
+   own points: two bars, or a play triangle while the game is paused */
+#define PAUSE_BUTTON 40
+void pause_draw_button(PauseImg *m, int play);
+
 /* ---- the letters and the controller ---- */
 
 const uint8_t *pause_glyph(char c);     /* a 5 x 7 capital's rows, bit 4 leftmost; NULL: none */

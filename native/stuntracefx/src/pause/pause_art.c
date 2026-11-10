@@ -392,6 +392,25 @@ void pause_draw_lit(PauseImg *m, int item)
     rrect_edge(m, tx + 0.75f, ty + 0.75f, TAG_W - 1.5f, TAG_H - 1.5f, 5.5f, 1.75f, GOLD, 1);
 }
 
+void pause_draw_button(PauseImg *m, int play)
+{
+    const float b = PAUSE_BUTTON;
+
+    rrect(m, 1, 1, b - 2, b - 2, 9, PLATE, 0.72f);
+    rrect_edge(m, 1.5f, 1.5f, b - 3, b - 3, 8.5f, 1.5f, GOLD, 1);
+    if (play) {
+        /* a triangle pointing right, (15, 11) (15, 29) (29, 20): the
+           farthest of its three edges' lines, each outward */
+        const float n = hypotf(9, 14);
+
+        SHAPE(m, 10, 8, 32, 32, WHITE, 1,
+              fmaxf(15 - px, fmaxf(((px - 15) * 9 - (py - 11) * 14) / n, ((px - 29) * 9 + (py - 20) * 14) / n)));
+    } else {
+        rrect(m, 13, 11, 5, 18, 1.5f, WHITE, 1);
+        rrect(m, 22, 11, 5, 18, 1.5f, WHITE, 1);
+    }
+}
+
 void pause_draw_hint(PauseImg *m, const char *line1, uint32_t colour1, const char *line2)
 {
     text_centre(m, line1, PAUSE_PW / 2.0f, 312, 2, colour1);

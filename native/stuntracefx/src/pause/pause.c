@@ -20,10 +20,15 @@
  * the hint), redrawn only when it changes, or one of the items' lit pictures
  * shown in its place.
  *
- * Keys as keys (Escape, the key pressed for a button) come with the engine's
- * input of 4.5; built on an engine before it, the screen opens with Select +
- * Start alone and no key can be changed. Rebinding is the keyboard's: the
- * engine binds keys, not a controller's buttons.
+ * A button in the window's top left corner, two bars (a play triangle while
+ * paused), opens and shuts the screen as Escape does, by the pointer or a
+ * touch; not on iOS, whose touch controls give Select and Start.
+ *
+ * Keys as keys (Escape, the key pressed for a button), the pointer and the
+ * touches come with the engine's input of 4.5; built on an engine before it,
+ * the screen opens with Select + Start alone, no key can be changed and
+ * there is no corner button. Rebinding is the keyboard's: the engine binds
+ * keys, not a controller's buttons.
  */
 #include <math.h>
 #include <stdio.h>
@@ -36,6 +41,21 @@
 
 #define KEY_EVENTS (NSHVC_VERSION_MAJOR > 4 || (NSHVC_VERSION_MAJOR == 4 && NSHVC_VERSION_MINOR >= 5))
 
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
+/* The pause button in the window's top left corner, for a pointer or a
+   touch (the engine's input of 4.5); not on iOS, whose touch controls give
+   Select and Start, as before. */
+#if KEY_EVENTS && !(defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE)
+#define CORNER_BUTTON 1
+#else
+#define CORNER_BUTTON 0
+#endif
+#define BUTTON_MARGIN 10                /* points from the safe area's corner */
+#define WINDOW_POINTS 800.0f            /* a point: the window's height over this (the earlier screen's
+                                           40-point button on an 800-point window) */
+
 #define VK_TAB 0x09
 #define VK_ESCAPE 0x1B
 #define VK_F11 0x7A                     /* the engine's own: the whole screen (Windows) */
@@ -46,10 +66,9 @@
 #define TINT 0xFF0A0E1Au                /* a navy laid over the picture */
 #define TINT_ALPHA 0.55f
 #define FILL 0.94f                      /* of the safe area the panel may take, each way */
-
 /* The overlays, the game's only ones: the tint, the panel, the tags, the
-   item chosen, the hint, in that order upward. */
-enum { O_TINT = 12, O_PANEL, O_TAGS, O_LIT = O_TAGS + PAUSE_CONTROLS, O_HINT, O_END };
+   item chosen, the hint, the corner button, in that order upward. */
+enum { O_TINT = 12, O_PANEL, O_TAGS, O_LIT = O_TAGS + PAUSE_CONTROLS, O_HINT, O_BUTTON, O_END };
 _Static_assert(O_END <= NSHVC_OVERLAYS, "the pause screen's overlays fit the engine's");
 
 /* the buttons in the engine's order (its input.c), which the save keeps, and
@@ -80,6 +99,16 @@ static struct {
     char tag_shown[PAUSE_CONTROLS][32]; /* what each tag's image shows, and whether asking */
     int tag_asking[PAUSE_CONTROLS];
     char hint_shown[2][48];
+
+    /* the corner button: its two pictures (pause, play) at btn_density;
+       the pointer's button and the touches at the last update */
+    float btn_density;
+    nshvc_image btn[2];
+    int btn_w, btn_h;
+    int pointer_down;
+    int32_t touch_id[10];
+    int touches;
+
 } p = { .asking = -1 };
 
 /* ---- the keys ---- */
@@ -312,14 +341,102 @@ static void hint_refresh(void)
     snprintf(p.hint_shown[1], sizeof p.hint_shown[1], "%s", line2);
 }
 
-/* the overlays off */
+/* the screen's overlays off (the corner button stays) */
 static void overlays_off(void)
 {
     nshvc_image none = { 0 };
     uint32_t id;
 
-    for (id = O_TINT; id < O_END; id++)
+    for (id = O_TINT; id <= O_HINT; id++)
         nshvc_overlay_set(id, none, NULL, 0);
+}
+
+/* ---- the corner button ---- */
+
+#if CORNER_BUTTON
+/* its box in window pixels: left, top, right, bottom; 0 with no window */
+static int corner_box(float box[4])
+{
+    nshvc_display d = nshvc_display_info();
+    float u;
+
+    if (d.width <= 0 || d.height <= 0)
+        return 0;
+    u = (float)d.height / WINDOW_POINTS;
+    u = u < 1 ? 1 : u;
+    box[0] = d.safe_left + BUTTON_MARGIN * u;
+    box[1] = d.safe_top + BUTTON_MARGIN * u;
+    box[2] = box[0] + PAUSE_BUTTON * u;
+    box[3] = box[1] + PAUSE_BUTTON * u;
+    return 1;
+}
+
+static int in_box(const float b[4], float x, float y) { return x >= b[0] && x < b[2] && y >= b[1] && y < b[3]; }
+#endif
+
+/* whether the pointer's button went down, or a new touch began, on the
+   corner button this update */
+static int corner_pressed(const nshvc_input *in)
+{
+#if CORNER_BUTTON
+    float b[4];
+    int hit = 0, i, k, down = in->pointer.buttons & 1, n = in->touches < 10 ? in->touches : 10;
+
+    if (corner_box(b)) {
+        if (down && !p.pointer_down && in->pointer.inside && in_box(b, in->pointer.x, in->pointer.y))
+            hit = 1;
+        for (i = 0; i < n; i++) {
+            int seen = 0;
+
+            for (k = 0; k < p.touches; k++)
+                seen |= p.touch_id[k] == in->touch[i].id;
+            if (!seen && in_box(b, in->touch[i].x, in->touch[i].y))
+                hit = 1;
+        }
+    }
+    p.pointer_down = down;
+    p.touches = n;
+    for (i = 0; i < n; i++)
+        p.touch_id[i] = in->touch[i].id;
+    return hit;
+#else
+    (void)in;
+    return 0;
+#endif
+}
+
+/* the button laid over the window: two bars, or play while paused */
+static void corner_show(void)
+{
+#if CORNER_BUTTON
+    float b[4], c[6], want;
+    int i;
+
+    if (!corner_box(b)) {
+        nshvc_image none = { 0 };
+
+        nshvc_overlay_set(O_BUTTON, none, NULL, 0);
+        return;
+    }
+    want = ceilf((b[2] - b[0]) / PAUSE_BUTTON * 2) / 2;
+    want = want < 1 ? 1 : want > 4 ? 4 : want;
+    if (want > p.btn_density) {
+        p.btn_density = want;
+        for (i = 0; i < 2; i++) {
+            PauseImg m = pause_img_new(0, 0, PAUSE_BUTTON, PAUSE_BUTTON, want);
+
+            pause_draw_button(&m, i);
+            p.btn[i] = image_of(&m, &p.btn_w, &p.btn_h);
+        }
+    }
+    c[0] = b[0];
+    c[1] = b[1];
+    c[2] = b[0] + (float)p.btn_w / p.btn_density * (b[2] - b[0]) / PAUSE_BUTTON;
+    c[3] = b[1];
+    c[4] = b[0];
+    c[5] = b[1] + (float)p.btn_h / p.btn_density * (b[3] - b[1]) / PAUSE_BUTTON;
+    nshvc_overlay_set(O_BUTTON, p.btn[p.open], c, 1);
+#endif
 }
 
 /* The panel's box (x, y, w, h in points) as an image wpx x hpx: its corners
@@ -466,6 +583,7 @@ const nshvc_input *pause_update(const nshvc_input *in)
 
     if (!out)
         held++;
+    corner_show();
     return out;
 }
 
@@ -488,6 +606,8 @@ static const nshvc_input *pause_step(const nshvc_input *in)
             toggle = 1;
     }
     if (key_pressed(in, VK_ESCAPE))
+        toggle = 1;
+    if (corner_pressed(in))
         toggle = 1;
 
     if (!p.open) {
