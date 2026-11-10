@@ -275,14 +275,10 @@ Done in object/animate.c (the remaster's animate.c) and draw_list.c
   between steps the gaze goes from the last step's to this one's
   (ObjectGazeBetween).
 
-With the 3D session's 306606ed
+With the 3D session's 306606ed and 011ff881
 - The looks and gazes between steps go by fx_tween_t (how far through its
   step a picture is).
-- A parked tyre of a car in the near list is marked (FX_FAR_PARKED); until
-  fx_far.c draws such tyres among the near ones, it is drawn in the far
-  pass.
-
-Waiting on the 3D session (fx/fx_tween.c; asked 2026-11-09)
-- ObjectOrbitBetween: fx_tween to add it to a circling piece's place between
-  steps (the remaster's rm_orbit_between). Until then the dolphins, rings
-  and spinners go straight from place to place, across their circle.
+- A parked tyre of a car in the near list is marked (FX_FAR_PARKED) and
+  drawn among the near objects by depth.
+- Circling pieces keep to their circle between steps: fx_tween adds
+  ObjectOrbitBetween's offset after the straight-line place.
