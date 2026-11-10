@@ -785,12 +785,83 @@ void TimesKeepAndAdvance(void)
 
 /* The static's random tiles: the static itself is drawn with the chip's
    picture, so only the random numbers it took are kept in step. */
+static void image_quad_scaled(nshvc_draw_list list, nshvc_image image, float x, float y, float w, float h,
+                              int u0, int v0, int uw, int vh, int hflip, int vflip);
+
+/* The course screen's BG1 map ($0000): each cell one of the static's 32
+   characters ($20 + n), at random. */
+static uint8_t course_static_cells[32 * 32];
+
 void VramNoiseTiles(void)
 {
     int i;
 
-    for (i = 0; i < 0x400; i++)
+    for (i = 0; i < 0x400; i++) {
         RandomWordStep();
+        course_static_cells[i] = (uint8_t)(g.random_word & 0x1F);
+    }
+}
+
+/* wanted from fx_draw (the Enhanced 3D session): the static's noise texture
+   and the seed each line of the static's 16 x 128 block was drawn with; until
+   they exist the course screen keeps the original's layout */
+__attribute__((weak)) nshvc_image fx_noise_image(void)
+{
+    static int said;
+    nshvc_image none = { 0 };
+
+    if (!said) {
+        said = 1;
+        fprintf(stderr, "not converted yet: fx_noise_image\n");
+    }
+    return none;
+}
+
+__attribute__((weak)) uint16_t fx_static_seed(int line)
+{
+    (void)line;
+    return 0;
+}
+
+/* The course screen fills the window once the static can be laid out. */
+int race_course_full_window(void)
+{
+    return pic.race.on && pic.race.course_screen && fx_noise_image().id != 0;
+}
+
+/*
+ * The course screen's backdrop: BG1's map over the static, drawn over the
+ * whole screen. A cell showing character $20 + k shows the block's 8 x 8 at
+ * column 8 (k / 16), line 8 (k % 16) (the chip's 128-line layout); each of
+ * its lines is that block line's strip of the noise texture, from its seed
+ * (across: the seed's low byte and the cell's column; down: its high byte).
+ * A screen row shows the map's row + 1, as the hardware counted; on the
+ * full window's screen the original's picture is at the origin and the map
+ * wraps around it.
+ */
+static void course_static_draw(nshvc_draw_list list)
+{
+    const ScreenShape *sh = screen_shape();
+    nshvc_image noise = fx_noise_image();
+    int full = race_course_full_window(), w = full ? sh->width : 256, h = full ? sh->height : 224;
+    int ox = full ? sh->origin_x : 0, oy = full ? sh->origin_y : 0, y, x;
+
+    if (!noise.id)
+        return;
+    for (y = 0; y < h; y++) {
+        int my = (y - oy + 1) & 255, cell_y = my >> 3, j = my & 7;
+
+        for (x = -((-ox) & 7); x < w; x += 8) {
+            int mx = (x - ox) & 255, k = course_static_cells[cell_y * 32 + (mx >> 3)];
+            uint16_t seed = fx_static_seed(8 * (k % 16) + j);
+            int u = ((seed & 0xFF) + 8 * (k / 16)) & 255, first = 256 - u < 8 ? 256 - u : 8;
+
+            image_quad_scaled(list, noise, (float)x, (float)y, (float)first, 1.0f, u, seed >> 8, first, 1, 0, 0);
+            if (first < 8)
+                image_quad_scaled(list, noise, (float)(x + first), (float)y, (float)(8 - first), 1.0f, 0, seed >> 8,
+                                  8 - first, 1, 0, 0);
+        }
+    }
 }
 
 /* ---- what the screen's lines take ---- */
@@ -1670,6 +1741,10 @@ void race_frame_art_draw_over(nshvc_draw_list list)
 {
     int k, down;
 
+    if (pic.race.on && pic.race.course_screen) {
+        course_static_draw(list);       /* over the static's own block, which it lays out */
+        return;
+    }
     if (race_two_full_window()) {
         two_full_boxes(list);
         return;

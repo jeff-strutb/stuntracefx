@@ -4,7 +4,7 @@
  */
 #include <string.h>
 
-#include "system/state.h"
+#include "fx/fx_draw.h"
 #include "system/state.h"
 #include "video/picture.h"
 #include "video/video.h"
@@ -203,15 +203,17 @@ static void split_half_send(void)
 
 /* The course screen: rows to $D8 lit; BG2's scroll in bands, by its table
    when the table is on; the sprites from row 55; window 1 from the wipe table. */
-static void course_lines_send(void)
+static void course_lines_send(int full, int origin_x)
 {
     int32_t v[224], l1[224], r1[224];
     int r, at = 0, line = 0;
     int32_t scroll = g.course_scroll_top;
 
-    for (r = 0; r < 224; r++)
-        v[r] = r >= 216;
-    nshvc_lines(0, 224, NSHVC_LINE_BLANK, v);
+    if (!full) {                        /* in the whole window no line is blanked for the uploads */
+        for (r = 0; r < 224; r++)
+            v[r] = r >= 216;
+        nshvc_lines(0, 224, NSHVC_LINE_BLANK, v);
+    }
     nshvc_line(0, NSHVC_LINE_SPRITES_MAIN, 0);
     nshvc_line(55, NSHVC_LINE_SPRITES_MAIN, 1);
     for (r = 0; r < 55; r++)
@@ -254,6 +256,10 @@ static void course_lines_send(void)
             l1[r] = line ? l1[line - 1] : 1;
             r1[r] = line ? r1[line - 1] : 0;
         }
+        for (r = 0; r < 224; r++) {     /* the window's edges are the screen's columns */
+            l1[r] += origin_x;
+            r1[r] += origin_x;
+        }
         nshvc_lines(0, 224, NSHVC_LINE_WIN1_LEFT, l1);
         nshvc_lines(0, 224, NSHVC_LINE_WIN1_RIGHT, r1);
     }
@@ -268,7 +274,9 @@ static void race_lines_send(void)
     int one = !pic.race.split;
 
     if (pic.race.course_screen) {
-        course_lines_send();
+        int full = race_course_full_window();
+
+        course_lines_send(full, full ? screen_shape()->origin_x : 0);
         return;
     }
     blank_lines_send();
@@ -425,17 +433,20 @@ void video_draw(void)
 {
     nshvc_screen s;
     const ScreenShape *sh;
-    int i, full, menu_full;
+    int i, full, menu_full, course_full;
 
     screen_update();
     sh = screen_shape();
     full = race_full_window() || race_two_full_window();
     menu_full = pic.fills_window && !pic.race.on;
+    course_full = race_course_full_window();
+    if (pic.race.on && pic.race.course_screen)
+        pic.bg[0].draw_list = fx_draw_picture(0);   /* the static as this frame's loop drew it */
     memset(&s, 0, sizeof s);
-    s.width = full || menu_full ? sh->width : 256;
-    s.height = full || menu_full ? sh->height : 224;
-    s.origin_x = menu_full ? sh->origin_x : 0;   /* the race places its own (full_window_draw) */
-    s.origin_y = menu_full ? sh->origin_y : 0;
+    s.width = full || menu_full || course_full ? sh->width : 256;
+    s.height = full || menu_full || course_full ? sh->height : 224;
+    s.origin_x = menu_full || course_full ? sh->origin_x : 0;   /* the race places its own (full_window_draw) */
+    s.origin_y = menu_full || course_full ? sh->origin_y : 0;
     s.brightness = pic.brightness;
     s.blank = pic.blank;
     nshvc_screen_set(&s);
@@ -448,6 +459,8 @@ void video_draw(void)
         memset(&l, 0, sizeof l);
         if (menu_full)
             memcpy(l.layer_clip, pic.layer_clip, sizeof l.layer_clip);
+        if (course_full)
+            l.layer_clip[1] = l.layer_clip[4] = 1;      /* the cards and sprites kept to the original's picture */
         nshvc_limits_set(&l);
     }
     if (full) {
@@ -465,7 +478,7 @@ void video_draw(void)
     nshvc_blend_set(&pic.blend);
     nshvc_palette_write(0, 256, pic.palette);
     nshvc_sprites_show((pic.main_screen >> 4) & 1, (pic.sub_screen >> 4) & 1);
-    if (menu_full) {
+    if (menu_full || course_full) {
         static nshvc_sprite moved[128];
         uint32_t k, n = pic.sprite_count > 128 ? 128 : pic.sprite_count;
 
