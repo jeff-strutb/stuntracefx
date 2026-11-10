@@ -99,7 +99,9 @@ The same on Metal, Vulkan and D3D12, and in the picture `nshvc_picture_read` ret
 
 ## 7. Pixel art sharp and even at any size (Jeff, 2026-11-09)
 
-Done in nativeshvc 34f88d8 (4.7.1): a list's image and games' shaders read at each sample. Seen on a textured sign replayed at 8
+To be undone (Jeff, 2026-11-09, on seeing it: "It went from sharp edges to blurry edges. I wanted high resolution
+replacements like the others not smoothing"): textures go back to one read a pixel with hard texel edges; 4.7's polygon-edge
+samples stay. Pixel art gets the game's own high-resolution replacements instead. Was done in nativeshvc 34f88d8 (4.7.1): a list's image and games' shaders read at each sample. Seen on a textured sign replayed at 8
 times the screen: each texel solid, its edges shaded by coverage. A Vulkan device without sample-rate shading fills lists with one
 sample.
 
