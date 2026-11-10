@@ -14,6 +14,8 @@
 
 #include <stdint.h>
 
+#include "data/ref.h"
+
 /* ---- math ---- */
 uint8_t trig_sine(uint8_t angle);       /* the byte sine and cosine tables */
 uint8_t trig_cosine(uint8_t angle);
@@ -35,6 +37,10 @@ uint16_t course_zoom_box_word(uint16_t box, int i);             /* a zoom box's 
 uint16_t course_zoom_target_word(uint16_t target, int i);       /* the zoom target's four words; target: its byte offset */
 uint16_t course_flash_sprite_place(uint16_t stage);             /* the flashing cursor's place by the menu stage */
 uint16_t course_palette_colour(int i);                          /* the race's 256 colours */
+
+/* ---- the course scripts, handed to the objects' CourseScriptRun ---- */
+CartRef course_script(uint8_t course);  /* a course's, by its number (g.course) */
+CartRef course_menu_script(void);       /* the course menu's race behind it */
 
 /* ---- the race load's packed art blocks ---- */
 typedef enum {

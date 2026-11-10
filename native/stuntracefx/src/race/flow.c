@@ -10,7 +10,6 @@
 #include <string.h>
 
 #include "audio/sound.h"
-#include "data/cart.h"
 #include "data/race_tables.h"
 #include "fx/fx.h"
 #include "fx/fx_draw.h"
@@ -412,19 +411,10 @@ static uint8_t race_pace(void)
     return RACE_STEP_UPDATES;
 }
 
-/* The tables in bank 3 the race's flow reads: where each course's script
-   is (three bytes a course: its address, then its bank), and the attract
-   demos' scripts (a command byte, then its operands). A script's address is
-   in its bank's ROM, which starts at $8000. */
-enum { FLOW_BANK = 0x03, COURSE_SCRIPTS = 0xF4A5, BANK_ROM_START = 0x8000 };
-
 /* @routine 03:EC24 CourseDataPointer: the course script's start. */
 static void course_script_start(void)
 {
-    uint16_t i = (uint16_t)((g.course * 3) & 0x00FF);
-
-    CourseScriptRun(cart8(FLOW_BANK, (uint16_t)(COURSE_SCRIPTS + 2 + i)),
-                    (uint16_t)(cart16(FLOW_BANK, (uint16_t)(COURSE_SCRIPTS + i)) - BANK_ROM_START));
+    CourseScriptRun(course_script(g.course));
 }
 
 /* @routine 03:8BF8 BootWarmAttract's start and BootWarm's end: the race's

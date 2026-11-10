@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "data/cart.h"
+#include "data/object_tables.h"
 #include "fx/fx.h"
 #include "object/object.h"
 #include "system/state.h"
@@ -38,7 +38,7 @@ enum {
 
 /* A bare object for the script's directors: kept in `slot`, running from
    the entry's handler, linked to camera `link`. */
-static void bare_object(uint8_t bank, uint16_t entry, uint16_t *slot, uint16_t link)
+static void bare_object(CartRef entry, uint16_t *slot, uint16_t link)
 {
     ObjRef r = ObjectAlloc();
     Object *o;
@@ -52,50 +52,53 @@ static void bare_object(uint8_t bank, uint16_t entry, uint16_t *slot, uint16_t l
     *slot = r;
     o->timer = 3;
     o->link = link;
-    o->handler = script16(bank, entry, DIRECTOR_HANDLER);
-    o->handler_bank = script8(bank, entry, DIRECTOR_HANDLER_BANK);
+    o->handler = course_script_word(entry, DIRECTOR_HANDLER);
+    o->handler_bank = course_script_byte(entry, DIRECTOR_HANDLER_BANK);
 }
 
 /*
  * @routine 08:801C CourseScriptRun
- * WHAT IT DOES: Runs the course script at bank:$8000 + at. Each entry starts
- * with its command (the original's offset of its handler in the table at
- * $08:8000; the table's handlers are the cases here). Spawns objects, sets
- * the course's flags and placing tables, empties the pools; the end entry
- * leaves the address after it for the course's track table.
+ * WHAT IT DOES: Runs the course script `script` (a reference from data/).
+ * Each entry starts with its command (the original's offset of its handler
+ * in the table at $08:8000; the table's handlers are the cases here).
+ * Spawns objects, sets the course's flags and placing tables, empties the
+ * pools; the end entry leaves the place after it for the course's track
+ * table, in the form the Super FX reads it.
  */
-void CourseScriptRun(uint8_t bank, uint16_t at)
+void CourseScriptRun(CartRef script)
 {
+    CartRef at = script;
+
     for (;;) {
-        uint16_t entry = at;
-        uint8_t command = cart8(bank, (uint16_t)(SCRIPT_BASE + entry));
+        CartRef entry = at;
+        uint8_t command = course_script_byte(entry, 0);
         uint8_t v;
         Object *o;
 
         switch (command) {
         case SCRIPT_SPAWN:
-            ObjectSpawnFromScript(entry, bank);
-            at = (uint16_t)(entry + 0x16);
+            ObjectSpawnFromScript(entry);
+            at = course_script_next(entry, 0x16);
             break;
         case SCRIPT_SPAWN_FLAGGED:
-            o = ObjectSpawnFromScript(entry, bank);
+            o = ObjectSpawnFromScript(entry);
             o->depth_lift |= 0x01;
-            at = (uint16_t)(entry + 0x16);
+            at = course_script_next(entry, 0x16);
             break;
         case SCRIPT_SPAWN_NUMBERED:
-            o = ObjectSpawnFromScript(entry, bank);
-            o->script_args.entry_link = script16(bank, entry, ENTRY_LINK);
+            o = ObjectSpawnFromScript(entry);
+            o->script_args.entry_link = course_script_word(entry, ENTRY_LINK);
             o->script_args.number = ++g.spawn_counter;
-            at = (uint16_t)(entry + 0x18);
+            at = course_script_next(entry, 0x18);
             break;
         case SCRIPT_SPAWN_COUNTED:
-            o = ObjectSpawnFromScript(entry, bank);
-            v = script8(bank, entry, ENTRY_COUNT);
+            o = ObjectSpawnFromScript(entry);
+            v = course_script_byte(entry, ENTRY_COUNT);
             o->script_args.count = v;
             o->shown_frame = (uint8_t)(v | 0x80);
-            o->script_args.step = script8(bank, entry, ENTRY_STEP);
-            o->script_args.counter = script8(bank, entry, ENTRY_COUNTER);
-            at = (uint16_t)(entry + 0x19);
+            o->script_args.step = course_script_byte(entry, ENTRY_STEP);
+            o->script_args.counter = course_script_byte(entry, ENTRY_COUNTER);
+            at = course_script_next(entry, 0x19);
             break;
         case SCRIPT_CLEAR:
             memset(objects.bucket_head, 0, sizeof objects.bucket_head);
@@ -110,77 +113,80 @@ void CourseScriptRun(uint8_t bank, uint16_t at)
             g.course_options = 0;
             g.rivals_left = 0;            /* and pace_signal, the same byte */
             ObjectPoolInit();
-            at = (uint16_t)(entry + 1);
+            at = course_script_next(entry, 1);
             break;
         case SCRIPT_MIRROR:
-            g.spawn_mirror = script8(bank, entry, MIRROR_HEADING);
-            at = (uint16_t)(entry + 2);
+            g.spawn_mirror = course_script_byte(entry, MIRROR_HEADING);
+            at = course_script_next(entry, 2);
             break;
         case SCRIPT_SPAWN_CAR: {
-            uint8_t players = script8(bank, entry, ENTRY_PLAYER);
+            uint8_t players = course_script_byte(entry, ENTRY_PLAYER);
             uint16_t n;
 
             if (g.hud_mode == 3 && (players & 0x1C)) {
-                at = (uint16_t)(entry + 0x1A);
+                at = course_script_next(entry, 0x1A);
                 break;
             }
-            o = ObjectSpawnFromScript(entry, bank);
+            o = ObjectSpawnFromScript(entry);
             if (players & 0x01)
                 g.player_car = obj_ref(o);
             if (players & 0x02)
                 g.player2_car = obj_ref(o);
             o->timer = 4;
-            o->heading = script8(bank, entry, ENTRY_HEADING);
-            o->car.car_script = script16(bank, entry, ENTRY_LINK);
+            o->heading = course_script_byte(entry, ENTRY_HEADING);
+            o->car.car_script = course_script_word(entry, ENTRY_LINK);
             n = objects.place_count;    /* bytes: two an object, at most four */
             if (n != 0x0008) {
                 objects.place_count = (uint16_t)(n + 2);
                 objects.place_objects[n / 2] = obj_ref(o);
                 objects.place_objects[n / 2 + 1] = 0;
             }
-            at = (uint16_t)(entry + 0x1A);
+            at = course_script_next(entry, 0x1A);
             break;
         }
         case SCRIPT_PLACE: {
-            uint16_t *e = objects.place_table[(uint8_t)(script8(bank, entry, PLACE_NUMBER) - 1)];
+            uint16_t *e = objects.place_table[(uint8_t)(course_script_byte(entry, PLACE_NUMBER) - 1)];
 
-            e[0] = script16(bank, entry, PLACE_X);
-            e[1] = script16(bank, entry, PLACE_Y);
-            e[2] = script16(bank, entry, PLACE_Z);
-            e[3] = (uint16_t)((e[3] & 0xFF00) | script8(bank, entry, PLACE_HEADING));
-            at = (uint16_t)(entry + 9);
+            e[0] = course_script_word(entry, PLACE_X);
+            e[1] = course_script_word(entry, PLACE_Y);
+            e[2] = course_script_word(entry, PLACE_Z);
+            e[3] = (uint16_t)((e[3] & 0xFF00) | course_script_byte(entry, PLACE_HEADING));
+            at = course_script_next(entry, 9);
             break;
         }
         case SCRIPT_COURSE_FLAGS: {
-            uint16_t flags = (uint16_t)(g.course_flags | script16(bank, entry, WORD_VALUE));
+            uint16_t flags = (uint16_t)(g.course_flags | course_script_word(entry, WORD_VALUE));
 
             fxram_put(FX_COURSE_FLAGS, flags);
             g.course_flags = flags;
-            at = (uint16_t)(entry + 3);
+            at = course_script_next(entry, 3);
             break;
         }
         case SCRIPT_OPTIONS:
-            g.course_options = script16(bank, entry, WORD_VALUE);
-            at = (uint16_t)(entry + 3);
+            g.course_options = course_script_word(entry, WORD_VALUE);
+            at = course_script_next(entry, 3);
             break;
         case SCRIPT_DIRECTOR_1:
-            bare_object(bank, entry, &g.director[0], LINK_CAMERA_1);
-            at = (uint16_t)(entry + 4);
+            bare_object(entry, &g.director[0], LINK_CAMERA_1);
+            at = course_script_next(entry, 4);
             break;
         case SCRIPT_DIRECTOR_2:
-            bare_object(bank, entry, &g.director[1], LINK_CAMERA_2);
-            at = (uint16_t)(entry + 4);
+            bare_object(entry, &g.director[1], LINK_CAMERA_2);
+            at = course_script_next(entry, 4);
             break;
-        case SCRIPT_END:
-            fxram_put(FX_TRACK_TABLE, (uint16_t)(SCRIPT_BASE + entry + 1));
-            fxram_put(FX_TRACK_TABLE_BANK, bank);
+        case SCRIPT_END: {
+            CartRef track = course_script_next(entry, 1);
+
+            fxram_put(FX_TRACK_TABLE, cart_ref_address(track));
+            fxram_put(FX_TRACK_TABLE_BANK, cart_ref_bank(track));
             return;
+        }
         case SCRIPT_RESTART:
-            at = 0;
+            at = course_script_restart(entry);
             break;
         default:                        /* past the table's commands: no script has one */
             fprintf(stderr, "CourseScriptRun: command $%02X at %02X:%04X is not in the table\n",
-                    command, bank, (unsigned)(SCRIPT_BASE + entry));
+                    command, cart_ref_bank(entry), (unsigned)cart_ref_address(entry));
             return;
         }
     }

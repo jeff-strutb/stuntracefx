@@ -13,6 +13,7 @@
 #include <stdint.h>
 
 #include "data/cart.h"
+#include "data/ref.h"
 #include "fx/fx.h"
 #include "math/math.h"
 
@@ -332,9 +333,8 @@ void ObjectRelease(Object *o);
 void ObjectCallHandler(Object *o);
 void ObjectRunHandlerA(Object *o);
 void ObjectsRunHandlers(void);
-/* The course script lies at bank:$8000 + its offset (CourseScriptRun). A
-   spawning entry is its command byte, then these fields. */
-enum { SCRIPT_BASE = 0x8000 };
+/* A course script's spawning entry (CourseScriptRun) is its command byte,
+   then these fields, read through data/object_tables. */
 enum {
     ENTRY_X = 0x01, ENTRY_Y = 0x03, ENTRY_Z = 0x05, ENTRY_MODEL = 0x07, ENTRY_SCRIPT = 0x09,
     ENTRY_HANDLER = 0x0B, ENTRY_HANDLER_BANK = 0x0D,
@@ -343,11 +343,7 @@ enum {
     ENTRY_COUNT = 0x16, ENTRY_STEP = 0x17, ENTRY_COUNTER = 0x18, /* a counted object's +$48, +$49, +$4A */
     ENTRY_PLAYER = 0x18, ENTRY_HEADING = 0x19 /* a car's: bit 0 player 1's, bit 1 player 2's, bits 2-4 not in a demo; its heading */
 };
-static inline uint8_t script8(uint8_t bank, uint16_t entry, unsigned field) { return cart8(bank, (uint16_t)(SCRIPT_BASE + entry + field)); }
-static inline uint16_t script16(uint8_t bank, uint16_t entry, unsigned field) { return cart16(bank, (uint16_t)(SCRIPT_BASE + entry + field)); }
-/* a model record's offsets: an object made with bit 9 of its entry's flags adds them */
-enum { MODEL_OFFSET_X = 0x0A, MODEL_OFFSET_Y = 0x0C, MODEL_OFFSET_Z = 0x0E };
-Object *ObjectSpawnFromScript(uint16_t entry, uint8_t bank);
+Object *ObjectSpawnFromScript(CartRef entry);
 void ObjectFrameCountTo8(Object *o);
 void ObjectPieceSprayChance(Object *o);
 void ObjectLookForSplit(Object *o);
@@ -596,7 +592,7 @@ enum {
 int ObjectPathStart(Object *o, uint16_t path);
 
 /* course_script.c */
-void CourseScriptRun(uint8_t bank, uint16_t at);
+void CourseScriptRun(CartRef script);   /* a script from data/ (race_tables' course_script) */
 
 /* draw_list.c */
 void ObjectDrawListBuild(void);

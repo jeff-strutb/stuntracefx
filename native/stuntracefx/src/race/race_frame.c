@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "audio/sound.h"
+#include "data/race_tables.h"
 #include "fx/fx.h"
 #include "fx/fx_draw.h"
 #include "hud/hud.h"
@@ -132,7 +133,7 @@ void RaceStart(void)
     FxInit();
     g.demo_car_count = 0;
     step_clock_restart();
-    CourseScriptRun(0x05, 0x0000);
+    CourseScriptRun(course_menu_script());
     RaceFrameStep(1);
     RaceFrameStep(1);
     cameras[0].object = g.demo_cars[0];

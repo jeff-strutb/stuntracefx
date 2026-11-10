@@ -13,6 +13,8 @@ typedef struct { uint8_t bank; uint16_t at; } Place;
 static const Place
     SINE = {0x00, 0x96FE}, COSINE = {0x00, 0x973E},
     DEMO_SCRIPTS = {0x03, 0x8004},
+    COURSE_SCRIPTS = {0x03, 0xF4A5},            /* three bytes a course: its script's address, then its bank */
+    COURSE_MENU_SCRIPT = {0x05, 0x8000},
     STUNT_COURSES = {0x03, 0xFB86}, BATTLE_COURSES = {0x03, 0xFB8A},
     ZOOM_BOXES = {0x03, 0xFC11}, ZOOM_TARGETS = {0x03, 0xFB8E},
     FLASH_SPRITE_PLACES = {0x02, 0xFC58},
@@ -47,6 +49,21 @@ uint8_t trig_cosine_in_bank(uint8_t bank, uint8_t angle) { return cart8(bank, (u
 
 uint8_t demo_script_byte(uint16_t at) { return byte_at(DEMO_SCRIPTS, at); }
 uint16_t demo_script_word(uint16_t at) { return word_at(DEMO_SCRIPTS, at); }
+
+CartRef course_script(uint8_t course)
+{
+    unsigned i = (uint8_t)(course * 3);
+    CartRef r = {byte_at(COURSE_SCRIPTS, i + 2), word_at(COURSE_SCRIPTS, i)};
+
+    return r;
+}
+
+CartRef course_menu_script(void)
+{
+    CartRef r = {COURSE_MENU_SCRIPT.bank, COURSE_MENU_SCRIPT.at};
+
+    return r;
+}
 
 uint8_t course_in_list(CourseList list, uint16_t slot)
 {

@@ -21,6 +21,7 @@
 #include <string.h>
 
 #include "data/cart.h"
+#include "data/object_tables.h"
 #include "fx/fx.h"
 #include "math/math.h"
 #include "object/handlers.h"
@@ -718,13 +719,13 @@ void ObjectsRunHandlers(void)
 
 /*
  * @routine 08:826E ObjectSpawnFromScript
- * WHAT IT DOES: Makes an object from the course script entry at bank:$8000
- * + entry: model, script word, place, handler, flags, offsets (added to those
- * of the record +$20 names when bit 9 of the flags is set; X and Z swapped
- * when the spawn heading is not 0 or $80), then its bucket, and +$36 = 3
- * when its handler starts with a NOP.
+ * WHAT IT DOES: Makes an object from the course script entry `entry`:
+ * model, script word, place, handler, flags, offsets (added to those of the
+ * record +$20 names when bit 9 of the flags is set; X and Z swapped when the
+ * spawn heading is not 0 or $80), then its bucket, and +$36 = 3 when its
+ * handler starts with a NOP.
  */
-Object *ObjectSpawnFromScript(uint16_t entry, uint8_t bank)
+Object *ObjectSpawnFromScript(CartRef entry)
 {
     ObjRef r = ObjectAlloc();
     Object *o;
@@ -737,29 +738,29 @@ Object *ObjectSpawnFromScript(uint16_t entry, uint8_t bank)
     o = obj_at(r);
     ObjectInit(o);
     o->heading = g.spawn_mirror;
-    o->x = script16(bank, entry, ENTRY_X);
-    o->y = script16(bank, entry, ENTRY_Y);
-    o->z = script16(bank, entry, ENTRY_Z);
-    o->model = script16(bank, entry, ENTRY_MODEL);
-    o->script = script16(bank, entry, ENTRY_SCRIPT);
-    o->handler = script16(bank, entry, ENTRY_HANDLER);
-    o->handler_bank = script8(bank, entry, ENTRY_HANDLER_BANK);
-    w = script16(bank, entry, ENTRY_FLAGS);
+    o->x = course_script_word(entry, ENTRY_X);
+    o->y = course_script_word(entry, ENTRY_Y);
+    o->z = course_script_word(entry, ENTRY_Z);
+    o->model = course_script_word(entry, ENTRY_MODEL);
+    o->script = course_script_word(entry, ENTRY_SCRIPT);
+    o->handler = course_script_word(entry, ENTRY_HANDLER);
+    o->handler_bank = course_script_byte(entry, ENTRY_HANDLER_BANK);
+    w = course_script_word(entry, ENTRY_FLAGS);
     o->script_flags = w;
     if (w & 0x0200) {
         if (o->script) {                /* the model record's offsets (the data's are all from $8000) */
-            o->offset_x = cart16(0x00, (uint16_t)(o->script + MODEL_OFFSET_X));
-            o->offset_y = cart16(0x00, (uint16_t)(o->script + MODEL_OFFSET_Y));
-            o->offset_z = cart16(0x00, (uint16_t)(o->script + MODEL_OFFSET_Z));
+            o->offset_x = model_record_offset(o->script, 0);
+            o->offset_y = model_record_offset(o->script, 1);
+            o->offset_z = model_record_offset(o->script, 2);
         } else {                        /* none: the original reads work RAM $000A-$000F there */
             o->offset_x = g.last_worked_y;
             o->offset_y = 0;            /* $000C-$000F: written only by the power-on clear */
             o->offset_z = 0;
         }
     }
-    o->offset_x = (uint16_t)(o->offset_x + script16(bank, entry, ENTRY_OFFSET_X));
-    o->offset_y = (uint16_t)(o->offset_y + script16(bank, entry, ENTRY_OFFSET_Y));
-    o->offset_z = (uint16_t)(o->offset_z + script16(bank, entry, ENTRY_OFFSET_Z));
+    o->offset_x = (uint16_t)(o->offset_x + course_script_word(entry, ENTRY_OFFSET_X));
+    o->offset_y = (uint16_t)(o->offset_y + course_script_word(entry, ENTRY_OFFSET_Y));
+    o->offset_z = (uint16_t)(o->offset_z + course_script_word(entry, ENTRY_OFFSET_Z));
     if (g.spawn_mirror != 0x00 && g.spawn_mirror != 0x80) {
         uint16_t t = o->offset_x;
 
