@@ -32,6 +32,7 @@ FxPushesApplyResult FxPushesApply(uint16_t push_x, uint16_t push_y, uint16_t pus
 
     fx_spill(stack);
     fx_romb(0);
+    fx_table_bank = 0x00;
     fx_stw(FX_PUSH_FLAGS, 0);
     push_out = 0x23AE;
     slot_counter = 0;
@@ -135,7 +136,7 @@ FxPushApplyResult FxPushApply(uint16_t push, uint16_t push_x, uint16_t push_y, u
                                     z = normal_z;
                                     if ((x | z) == 0) {
                                     } else {
-                                        { FxTurnResult r_ = FxTurn(x, push_turn, z, stack); new_x_x = r_.new_x_x; new_z = r_.new_z; rom_at = r_.rom_at; };
+                                        { FxTurned t = FxTurn((int16_t)x, (uint8_t)push_turn, (int16_t)z, fx_table_bank); new_x_x = (uint16_t)t.x; new_z = (uint16_t)t.z; };
                                         turned_x_x2 = (uint16_t)(new_x_x + new_x_x);
                                         x = (uint16_t)(turned_x_x2 + turned_x_x2);
                                         turned_z_x2 = (uint16_t)(new_z + new_z);
@@ -570,7 +571,7 @@ FxHitAddUnitResult FxHitAddUnit(uint16_t vector_x, uint16_t vector_y, uint16_t v
     fx_push(stack, owner_record);
     fx_spill(stack);
     if (((vector_x | vector_y) | vector_z) != 0) {
-        { FxNormalized n_; if (FxNormalize((FxVec3){(int16_t)vector_x, (int16_t)vector_y, (int16_t)vector_z}, &n_)) { scaled_vector_x = (uint16_t)n_.unit.x; scaled_vector_y = (uint16_t)n_.unit.y; scaled_vector_z = (uint16_t)n_.unit.z; place_x = (uint16_t)n_.z_low; place_y = 0; model_record = (uint16_t)n_.x_high; } else { scaled_vector_x = 0; scaled_vector_y = 0; scaled_vector_z = 0; place_x = 0; place_y = 0; model_record = model_record; } };
+        { FxNormalized n_; if (FxNormalize((FxVec3){(int16_t)vector_x, (int16_t)vector_y, (int16_t)vector_z}, &n_)) { scaled_vector_x = (uint16_t)n_.unit.x; scaled_vector_y = (uint16_t)n_.unit.y; scaled_vector_z = (uint16_t)n_.unit.z; place_x = (uint16_t)n_.z_low; place_y = 0; model_record = (uint16_t)n_.x_high; } else { scaled_vector_x = 0; scaled_vector_y = 0; scaled_vector_z = 0; place_x = 0; place_y = 0; } };
         abs_unit_x = scaled_vector_x;
         if (!(scaled_vector_x & 0x8000)) {
         } else {

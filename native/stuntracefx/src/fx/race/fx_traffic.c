@@ -475,7 +475,7 @@ void FxNearestCar(uint16_t prev_nearest_car, uint16_t *stack)
                 nearest_car_z = fx_ldw((uint16_t)(prev_nearest_car + 0x0022));
                 param_00e0 = fx_ldw(GSU_PARAM_00E0);
                 fx_romb(0);
-                { FxTurnResult r_ = FxTurn((uint16_t)(half_x_3 - half_x), (uint16_t)(param_00e0 >> 8), (uint16_t)(nearest_car_z - param_00dc), stack); new_x_x = r_.new_x_x; new_z = r_.new_z; };
+                { FxTurned t = FxTurn((int16_t)(half_x_3 - half_x), (uint8_t)(param_00e0 >> 8), (int16_t)(nearest_car_z - param_00dc), 0x00); new_x_x = (uint16_t)t.x; new_z = (uint16_t)t.z; };
                 fx_stw(FX_NEAR_Z, new_z);
                 fx_stw(FX_NEAR_X, (uint16_t)((uint16_t)~new_x_x + 1));
                 side_raw = (uint16_t)(fx_div2(fx_div2(fx_div2(fx_div2(fx_div2(new_z))))) + 7);

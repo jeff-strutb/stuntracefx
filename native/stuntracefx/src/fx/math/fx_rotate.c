@@ -16,49 +16,29 @@
 #include "data/race_tables.h"
 #include "fx/fx.h"
 
+uint8_t fx_table_bank;
+
 /*
  * @routine 04:C15C FxTurn
- * WHAT IT DOES: Turns the vector (R1, R3) by the angle R2 (0-255): R2 = R1 =
- * (sin * x + cos * z) / 2^17 and R3 = (cos * x - sin * z) / 2^17 with the
- * table bytes as signed values times 256.
- * HOW: The return address is pushed on the R10 stack and pulled into R15 at
- * the end. Each component is two LMULTs summed as 32-bit (ADD then ADC of
- * the low and high words) and the high word halved with ASR. The second
- * component's low words are subtracted the other way round (sin * z minus
- * cos * x) from its high words (cos * x minus sin * z); only the borrow of
- * that low subtraction reaches the result.
- * Entry: R1 = x, R2 = angle, R3 = z; R10 = stack; R11 = return address.
- * Exit: R1 = R2 = the new x; R3 = the new z; R0 = the second high word; R4 =
- * low word of cos * x; R5 = cos * 256; R6 = the old x; R7 = the second low
- * word; R8 = high word of sin * z; R9 = sin * 256; R14 = $96FE + angle; the
- * last RAM address R10; S, Z from R10; CY from the last ASR; OV from SBC.
+ * WHAT IT DOES: Turns the vector (x, z) in the plane by the angle (256 a full turn): x' = (sin * x + cos * z) / 2^17,
+ * z' = (cos * x - sin * z) / 2^17, with the table bytes as signed values times 256.
+ * HOW: The sine and cosine bytes are read in `table_bank`: the chip reads them in whatever ROM bank it has, $00 (where
+ * the tables are) unless the physics last read a table elsewhere (fx_table_bank, fx_math.h). Each component is the
+ * high word of two 32-bit products summed, halved as signed. For z' the chip subtracts the products' low words the
+ * other way round (sin * z minus cos * x) from their high words (cos * x minus sin * z), and only that low
+ * subtraction's borrow reaches the result, as here. Nothing after it reads the chip's cursor, left on the sine byte
+ * (the fx chip-state analysis).
  */
-FxTurnResult FxTurn(uint16_t x, uint16_t angle, uint16_t z, uint16_t *stack)
+FxTurned FxTurn(int16_t x, uint8_t angle, int16_t z, uint8_t table_bank)
 {
-    uint16_t cos_byte;
-    uint16_t sin_byte;
-    uint16_t cos_scaled;
-    uint32_t cos_x_prod;
-    uint32_t cos_z_prod;
-    uint16_t sin_scaled;
-    uint32_t sin_x_prod;
-    uint32_t sin_z_prod;
-    uint16_t sin_table_addr;
+    int16_t cosine = (int16_t)(uint16_t)(trig_cosine_in_bank(table_bank, angle) << 8);
+    int16_t sine = (int16_t)(uint16_t)(trig_sine_in_bank(table_bank, angle) << 8);
+    uint32_t sin_x = (uint32_t)((int32_t)sine * x), cos_z = (uint32_t)((int32_t)cosine * z);
+    uint32_t sin_z = (uint32_t)((int32_t)sine * z), cos_x = (uint32_t)((int32_t)cosine * x);
+    uint16_t x_high = (uint16_t)((sin_x + cos_z) >> 16);
+    uint16_t z_high = (uint16_t)((cos_x >> 16) - (sin_z >> 16) - ((uint16_t)sin_z < (uint16_t)cos_x));
 
-    fx_spill(stack);
-    fx_r14((uint16_t)(ROT_COS_TABLE + angle));
-    cos_byte = fx_getb();
-    cos_scaled = (uint16_t)(cos_byte << 8 | cos_byte >> 8);
-    sin_table_addr = (uint16_t)(ROT_SIN_TABLE + angle);
-    fx_r14(sin_table_addr);
-    sin_byte = fx_getb();
-    sin_scaled = (uint16_t)(sin_byte << 8 | sin_byte >> 8);
-    sin_x_prod = (uint32_t)((int32_t)(int16_t)sin_scaled * (int16_t)x);
-    cos_z_prod = (uint32_t)((int32_t)(int16_t)cos_scaled * (int16_t)z);
-    sin_z_prod = (uint32_t)((int32_t)(int16_t)sin_scaled * (int16_t)z);
-    cos_x_prod = (uint32_t)((int32_t)(int16_t)cos_scaled * (int16_t)x);
-    fx_unspill(stack);
-    return (FxTurnResult){(uint16_t)((int16_t)(uint16_t)((uint16_t)(cos_z_prod >> 16) + (uint16_t)(sin_x_prod >> 16) + ((uint32_t)(uint16_t)sin_x_prod + (uint16_t)cos_z_prod > 0xFFFF)) >> 1), (uint16_t)((int16_t)(uint16_t)((uint16_t)(cos_x_prod >> 16) - (uint16_t)(sin_z_prod >> 16) - !((uint16_t)sin_z_prod >= (uint16_t)cos_x_prod)) >> 1), sin_table_addr};
+    return (FxTurned){(int16_t)((int16_t)x_high >> 1), (int16_t)((int16_t)z_high >> 1)};
 }
 
 

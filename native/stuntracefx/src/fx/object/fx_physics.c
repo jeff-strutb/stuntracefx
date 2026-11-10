@@ -795,6 +795,7 @@ FxCollideModelResult FxCollideModel(uint16_t place_x, uint16_t place_y, uint16_t
     fx_stw(0x2462, 0);
     fx_stw(0x2464, 0x7D00);
     fx_romb(0);
+    fx_table_bank = 0x00;
     collision_list_ptr = fx_ldw((uint16_t)(model_record + 0x0014));
     init_2380 = collision_list_ptr;
     if (collision_list_ptr != 0) {
@@ -840,7 +841,7 @@ FxCollideModelResult FxCollideModel(uint16_t place_x, uint16_t place_y, uint16_t
                             fx_push(stack, model_record);
                             fx_push(stack, record);
                             fx_romb(0);
-                            { FxTurnResult r_ = FxTurn(delta_half_x, ((uint16_t)((uint16_t)~model_turn + 1) & 0x00FF), delta_z, stack); new_x_x = r_.new_x_x; new_z = r_.new_z; };
+                            { FxTurned t = FxTurn((int16_t)delta_half_x, (uint8_t)((uint16_t)~model_turn + 1), (int16_t)delta_z, 0x00); new_x_x = (uint16_t)t.x; new_z = (uint16_t)t.z; };
                             turned_x_x2 = (uint16_t)(new_x_x + new_x_x);
                             turned_z_x2 = (uint16_t)(new_z + new_z);
                             delta_half_x = (uint16_t)(turned_z_x2 + turned_z_x2);
@@ -903,6 +904,7 @@ FxCollideModelResult FxCollideModel(uint16_t place_x, uint16_t place_y, uint16_t
             fx_r14((uint16_t)(rom_at_6 + 2));
             points_bank = fx_getb();
             fx_romb(points_bank);
+            fx_table_bank = (uint8_t)(points_bank & 0x7F);
             init_2382 = fx_ldw(0x0044);
             init_2380_2 = fx_ldw(FX_INIT_2380);
             if (init_2380_2 != init_2380) {
@@ -2416,6 +2418,7 @@ FxPartPullResult FxPartPull(uint16_t push_y, uint16_t model_record, uint16_t car
             parts_2 = fx_ldw((uint16_t)(part + FXCAR_PARTS));
             flags40 = fx_ldw((uint16_t)(part + FXREC_FLAGS40));
             fx_romb(4);
+            fx_table_bank = 0x04;
             param_push = fx_ldw(FX_PARAM_PUSH);
             fx_r14(0x9BC6);
             push_table_offset = (uint16_t)(param_push - 0x643A);
@@ -2480,6 +2483,7 @@ FxPartPullResult FxPartPull(uint16_t push_y, uint16_t model_record, uint16_t car
             parts_4 = fx_ldw((uint16_t)(part + FXCAR_PARTS));
             flags40_2 = fx_ldw((uint16_t)(part + FXREC_FLAGS40));
             fx_romb(4);
+            fx_table_bank = 0x04;
             param_push_2 = fx_ldw(FX_PARAM_PUSH);
             fx_r14(0x9BC6);
             push_table_offset_car = (uint16_t)(param_push_2 - 0x643A);
@@ -3000,6 +3004,7 @@ FxWheelUpdateResult FxWheelUpdate(uint16_t entry_product_lo, uint16_t push_y, ui
                     }
                 }
                 fx_romb(0);
+                fx_table_bank = 0x00;
                 pitch_3 = fx_ldw((uint16_t)(wheel + FXREC_HEADING));
                 pitch_4 = fx_ldw((uint16_t)(car + FXREC_HEADING));
                 pitch_diff_index = (uint16_t)((uint16_t)(pitch_3 - pitch_4) >> 8);
@@ -3190,6 +3195,7 @@ FxWheelUpdateResult FxWheelUpdate(uint16_t entry_product_lo, uint16_t push_y, ui
                     push_point_y_offset = fx_ldw((uint16_t)(car + 0x005A));
                     push_point_z_offset = fx_ldw((uint16_t)(car + 0x005C));
                     fx_romb(4);
+                    fx_table_bank = 0x04;
                     param_push = fx_ldw(FX_PARAM_PUSH);
                     fx_r14(0x9BC6);
                     push_table_index = (uint16_t)(param_push - 0x643A);
@@ -3810,6 +3816,7 @@ FxContactsResolveResult FxContactsResolve(uint16_t push_x, uint16_t push_y, uint
 
     fx_spill(stack);
     fx_romb(0);
+    fx_table_bank = 0x00;
     fx_stw(FX_PUSH_FLAGS, 0);
     hit_depth = fx_ldw((uint16_t)(car + 0x002C));
     fx_stw(FX_HIT_DEPTH, hit_depth);
@@ -3986,7 +3993,7 @@ FxContactResolveResult FxContactResolve(uint16_t slot_ptr, uint16_t push_x, uint
                                         z = slot_normal_z;
                                         if ((x | z) == 0) {
                                         } else {
-                                            { FxTurnResult r_ = FxTurn(x, push_turn, z, stack); new_x_x = r_.new_x_x; new_z = r_.new_z; rom_at = r_.rom_at; };
+                                            { FxTurned t = FxTurn((int16_t)x, (uint8_t)push_turn, (int16_t)z, fx_table_bank); new_x_x = (uint16_t)t.x; new_z = (uint16_t)t.z; };
                                             turned_x_x2 = (uint16_t)(new_x_x + new_x_x);
                                             x = (uint16_t)(turned_x_x2 + turned_x_x2);
                                             turned_z_x2 = (uint16_t)(new_z + new_z);
@@ -4239,7 +4246,7 @@ FxContactResolveNegateResult FxContactResolveNegate(uint16_t slot_past, uint16_t
                             z = normal_z;
                             if ((x | z) == 0) {
                             } else {
-                                { FxTurnResult r_ = FxTurn(x, push_turn, z, stack); new_x_x = r_.new_x_x; new_z = r_.new_z; };
+                                { FxTurned t = FxTurn((int16_t)x, (uint8_t)push_turn, (int16_t)z, fx_table_bank); new_x_x = (uint16_t)t.x; new_z = (uint16_t)t.z; };
                                 turned_x_x2 = (uint16_t)(new_x_x + new_x_x);
                                 x = (uint16_t)(turned_x_x2 + turned_x_x2);
                                 turned_z_x2 = (uint16_t)(new_z + new_z);
@@ -4830,6 +4837,7 @@ FxCarHandlerResult FxCarHandler(uint16_t pose_cos, uint16_t pose_sin, uint16_t p
             }
             fx_stw((uint16_t)(car + 0x0078), param_thrust);
             fx_romb(9);
+            fx_table_bank = 0x09;
             param_curve_a = fx_ldw(FX_PARAM_CURVE_A);
             fx_r14(param_curve_a);
             curve_index = 1;

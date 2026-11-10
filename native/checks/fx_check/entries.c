@@ -60,14 +60,12 @@ static void entry_FxDivide(void)
 
 static void entry_FxTurn(void)
 {
-    uint16_t stack = gsu.r[10];
     uint16_t ret = gsu.r[11];
 
-    FxTurnResult r_ = FxTurn(gsu.r[1], gsu.r[2], gsu.r[3], &stack);
-    gsu.r[10] = stack;
-    gsu.r[1] = (uint16_t)r_.new_x_x;
-    gsu.r[3] = (uint16_t)r_.new_z;
-    gsu.r[14] = (uint16_t)r_.rom_at;
+    FxTurned t = FxTurn((int16_t)gsu.r[1], (uint8_t)gsu.r[2], (int16_t)gsu.r[3], fxs.rombr);
+    gsu.r[1] = (uint16_t)t.x;
+    gsu.r[3] = (uint16_t)t.z;
+    gsu.r[14] = (uint16_t)(0x96FE + gsu.r[2]);    /* the chip's cursor, left on the sine byte */
     fx_code(0x040000 | ret, 1);          /* the byte the return goes to */
 }
 
