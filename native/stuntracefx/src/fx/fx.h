@@ -18,7 +18,7 @@ _Noreturn void fx_bad_dispatch(uint16_t at);
 
 /* the port's renderer calls (render/fx_ops.c, fxhooks.txt) */
 
-#define FXCAR_0A FXREC_HANDLER     /* interim: render/frame.c's name, until the 3D session's work there lands */
+#define FX_PARTICLE_LIFE 0x000A         /* a particle slot's +$0A: its life's offset (render/frame.c) */
 #define FXCAR_44 0x0044
 #define FXCAR_64 0x0064
 #define FXCAR_8C 0x008C

@@ -1240,7 +1240,7 @@ void FxEffectsAdd(uint16_t kind, uint16_t place_x, uint16_t place, uint16_t coun
         } else {
             fx_stw((uint16_t)(slot_ptr + FXREC_ALL_PREV), 0);
             fx_stw((uint16_t)(slot_ptr + FXREC_POOL), 0);
-            fx_stw((uint16_t)(slot_ptr + FXCAR_0A), 0);
+            fx_stw((uint16_t)(slot_ptr + FX_PARTICLE_LIFE), 0);
             fx_stw((uint16_t)(slot_ptr + 0x000C), place);
             fx_stb(slot_ptr, (uint8_t)place_x);
             if ((uint16_t)((uint16_t)(0 - kind) + 1) != 0) {
@@ -1270,7 +1270,7 @@ void FxEffectsAdd(uint16_t kind, uint16_t place_x, uint16_t place, uint16_t coun
                                         random_seed = (uint16_t)((uint16_t)(kind7_seed_rot + random_seed) + random_seed + ((uint32_t)kind7_seed_rot + random_seed > 0xFFFF));
                                         kind7_life_offset = (uint16_t)((0x003F & random_seed) - 0x001F);
                                         fx_stb((uint16_t)(slot_ptr + 5), (uint8_t)kind7_life_offset);
-                                        fx_stw((uint16_t)(slot_ptr + FXCAR_0A), kind7_life_offset);
+                                        fx_stw((uint16_t)(slot_ptr + FX_PARTICLE_LIFE), kind7_life_offset);
                                         kind7_frame_byte = 4;
                                         if ((1 & count_2) == 0) {
                                         } else {
@@ -1297,7 +1297,7 @@ void FxEffectsAdd(uint16_t kind, uint16_t place_x, uint16_t place, uint16_t coun
                                     random_seed = (uint16_t)((uint16_t)(kind6_seed_rot + random_seed) + random_seed + ((uint32_t)kind6_seed_rot + random_seed > 0xFFFF));
                                     kind6_life_offset = (uint16_t)((0x001F & random_seed) - 0x000F);
                                     fx_stb((uint16_t)(slot_ptr + 5), (uint8_t)kind6_life_offset);
-                                    fx_stw((uint16_t)(slot_ptr + FXCAR_0A), kind6_life_offset);
+                                    fx_stw((uint16_t)(slot_ptr + FX_PARTICLE_LIFE), kind6_life_offset);
                                     kind6_frame_byte = 4;
                                     if ((1 & count_2) == 0) {
                                     } else {
@@ -1468,7 +1468,7 @@ FxEffectsAddNextResult FxEffectsAddNext(uint16_t effect_seed, uint16_t particle_
                     } else {
                         fx_stw((uint16_t)(particle_slot_ptr + FXREC_ALL_PREV), 0);
                         fx_stw((uint16_t)(particle_slot_ptr + FXREC_POOL), 0);
-                        fx_stw((uint16_t)(particle_slot_ptr + FXCAR_0A), 0);
+                        fx_stw((uint16_t)(particle_slot_ptr + FX_PARTICLE_LIFE), 0);
                         fx_stw((uint16_t)(particle_slot_ptr + 0x000C), place_y);
                         fx_stb(particle_slot_ptr, (uint8_t)place_x);
                         if ((uint16_t)((uint16_t)(0 - effect_kind) + 1) != 0) {
@@ -1500,7 +1500,7 @@ FxEffectsAddNextResult FxEffectsAddNext(uint16_t effect_seed, uint16_t particle_
                                                     effect_seed = (uint16_t)((uint16_t)(kind7_seed_rot + effect_seed) + effect_seed + ((uint32_t)kind7_seed_rot + effect_seed > 0xFFFF));
                                                     kind7_life_offset = (uint16_t)((0x003F & effect_seed) - 0x001F);
                                                     fx_stb((uint16_t)(particle_slot_ptr + 5), (uint8_t)kind7_life_offset);
-                                                    fx_stw((uint16_t)(particle_slot_ptr + FXCAR_0A), kind7_life_offset);
+                                                    fx_stw((uint16_t)(particle_slot_ptr + FX_PARTICLE_LIFE), kind7_life_offset);
                                                     kind7_frame_byte = 4;
                                                     if ((1 & count) == 0) {
                                                     } else {
@@ -1529,7 +1529,7 @@ FxEffectsAddNextResult FxEffectsAddNext(uint16_t effect_seed, uint16_t particle_
                                                 effect_seed = (uint16_t)((uint16_t)(kind6_seed_rot + effect_seed) + effect_seed + ((uint32_t)kind6_seed_rot + effect_seed > 0xFFFF));
                                                 kind6_life_offset = (uint16_t)((0x001F & effect_seed) - 0x000F);
                                                 fx_stb((uint16_t)(particle_slot_ptr + 5), (uint8_t)kind6_life_offset);
-                                                fx_stw((uint16_t)(particle_slot_ptr + FXCAR_0A), kind6_life_offset);
+                                                fx_stw((uint16_t)(particle_slot_ptr + FX_PARTICLE_LIFE), kind6_life_offset);
                                                 kind6_frame_byte = 4;
                                                 if ((1 & count) == 0) {
                                                 } else {
@@ -1719,7 +1719,7 @@ FxEffectsAddUnusedResult FxEffectsAddUnused(uint16_t seed, uint16_t slot_ptr, ui
     seed_next = (uint16_t)((uint16_t)(seed_rot + seed) + seed + ((uint32_t)seed_rot + seed > 0xFFFF));
     life_offset = (uint16_t)((0x003F & seed_next) - 0x001F);
     fx_stb((uint16_t)(slot_ptr + 5), (uint8_t)life_offset);
-    fx_stw((uint16_t)(slot_ptr + FXCAR_0A), life_offset);
+    fx_stw((uint16_t)(slot_ptr + FX_PARTICLE_LIFE), life_offset);
     frame_byte = 4;
     if ((1 & count) == 0) {
     } else {
@@ -1742,7 +1742,7 @@ FxEffectsAddUnusedResult FxEffectsAddUnused(uint16_t seed, uint16_t slot_ptr, ui
                     } else {
                         fx_stw((uint16_t)(slot_ptr + FXREC_ALL_PREV), 0);
                         fx_stw((uint16_t)(slot_ptr + FXREC_POOL), 0);
-                        fx_stw((uint16_t)(slot_ptr + FXCAR_0A), 0);
+                        fx_stw((uint16_t)(slot_ptr + FX_PARTICLE_LIFE), 0);
                         fx_stw((uint16_t)(slot_ptr + 0x000C), place_y);
                         fx_stb(slot_ptr, (uint8_t)place_x);
                         if ((uint16_t)((uint16_t)(0 - effect_kind) + 1) != 0) {
@@ -1774,7 +1774,7 @@ FxEffectsAddUnusedResult FxEffectsAddUnused(uint16_t seed, uint16_t slot_ptr, ui
                                                     seed_next = (uint16_t)((uint16_t)(kind7_seed_rot + seed_next) + seed_next + ((uint32_t)kind7_seed_rot + seed_next > 0xFFFF));
                                                     kind7_life_offset = (uint16_t)((0x003F & seed_next) - 0x001F);
                                                     fx_stb((uint16_t)(slot_ptr + 5), (uint8_t)kind7_life_offset);
-                                                    fx_stw((uint16_t)(slot_ptr + FXCAR_0A), kind7_life_offset);
+                                                    fx_stw((uint16_t)(slot_ptr + FX_PARTICLE_LIFE), kind7_life_offset);
                                                     kind7_frame_byte = 4;
                                                     if ((1 & count) == 0) {
                                                     } else {
@@ -1803,7 +1803,7 @@ FxEffectsAddUnusedResult FxEffectsAddUnused(uint16_t seed, uint16_t slot_ptr, ui
                                                 seed_next = (uint16_t)((uint16_t)(kind6_seed_rot + seed_next) + seed_next + ((uint32_t)kind6_seed_rot + seed_next > 0xFFFF));
                                                 kind6_life_offset = (uint16_t)((0x001F & seed_next) - 0x000F);
                                                 fx_stb((uint16_t)(slot_ptr + 5), (uint8_t)kind6_life_offset);
-                                                fx_stw((uint16_t)(slot_ptr + FXCAR_0A), kind6_life_offset);
+                                                fx_stw((uint16_t)(slot_ptr + FX_PARTICLE_LIFE), kind6_life_offset);
                                                 kind6_frame_byte = 4;
                                                 if ((1 & count) == 0) {
                                                 } else {
@@ -2001,7 +2001,7 @@ FxEffectsAddKindsResult FxEffectsAddKinds(uint16_t seed, uint16_t particle_ptr, 
                         } else {
                             fx_stw((uint16_t)(particle_ptr + FXREC_ALL_PREV), 0);
                             fx_stw((uint16_t)(particle_ptr + FXREC_POOL), 0);
-                            fx_stw((uint16_t)(particle_ptr + FXCAR_0A), 0);
+                            fx_stw((uint16_t)(particle_ptr + FX_PARTICLE_LIFE), 0);
                             fx_stw((uint16_t)(particle_ptr + 0x000C), place_y);
                             fx_stb(particle_ptr, (uint8_t)base_color);
                             if ((uint16_t)((uint16_t)(0 - effect_kind) + 1) != 0) {
@@ -2033,7 +2033,7 @@ FxEffectsAddKindsResult FxEffectsAddKinds(uint16_t seed, uint16_t particle_ptr, 
                                                         seed = (uint16_t)((uint16_t)(kind7_seed_rot + seed) + seed + ((uint32_t)kind7_seed_rot + seed > 0xFFFF));
                                                         kind7_life_offset = (uint16_t)((0x003F & seed) - 0x001F);
                                                         fx_stb((uint16_t)(particle_ptr + 5), (uint8_t)kind7_life_offset);
-                                                        fx_stw((uint16_t)(particle_ptr + FXCAR_0A), kind7_life_offset);
+                                                        fx_stw((uint16_t)(particle_ptr + FX_PARTICLE_LIFE), kind7_life_offset);
                                                         kind7_frame_byte = 4;
                                                         if ((1 & count) == 0) {
                                                         } else {
@@ -2062,7 +2062,7 @@ FxEffectsAddKindsResult FxEffectsAddKinds(uint16_t seed, uint16_t particle_ptr, 
                                                     seed = (uint16_t)((uint16_t)(kind6_seed_rot + seed) + seed + ((uint32_t)kind6_seed_rot + seed > 0xFFFF));
                                                     kind6_life_offset = (uint16_t)((0x001F & seed) - 0x000F);
                                                     fx_stb((uint16_t)(particle_ptr + 5), (uint8_t)kind6_life_offset);
-                                                    fx_stw((uint16_t)(particle_ptr + FXCAR_0A), kind6_life_offset);
+                                                    fx_stw((uint16_t)(particle_ptr + FX_PARTICLE_LIFE), kind6_life_offset);
                                                     kind6_frame_byte = 4;
                                                     if ((1 & count) == 0) {
                                                     } else {
