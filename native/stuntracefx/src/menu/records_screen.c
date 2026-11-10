@@ -40,9 +40,6 @@ static uint16_t *slot_at(int s)
    next group starts that many sprites past the last. */
 #define GROUP_COUNTS 0x04EDCBu
 
-/* A slot's sprite buffer offset for the OamByteSet calls. */
-static uint16_t y_of(int s) { return (uint16_t)(s * 4); }
-
 static void origin(uint8_t x, uint8_t y)
 {
     g.sprite_origin[0] = x;
@@ -248,12 +245,11 @@ static void menu_stunt_three(void)
 /* Sprites 0, 2 and 4 of the group from slot $0D73: tile $F0, flipped. */
 static void page_mark_flip(void)
 {
-    uint16_t y = y_of(*slot_at(S_73));
-    int i;
+    int s = *slot_at(S_73), i;
 
     for (i = 0; i < 3; i++) {
-        OamByteSet((uint16_t)(y + i * 8 + 2), 0xF0);
-        OamByteSet((uint16_t)(y + i * 8 + 3), (uint8_t)(OamByte((uint16_t)(y + i * 8 + 3)) | 0x40));
+        sprite_tile_set(s + 2 * i, 0xF0);
+        sprite_attributes_set(s + 2 * i, (uint8_t)(sprite_attributes_get(s + 2 * i) | 0x40));
     }
 }
 
@@ -265,11 +261,10 @@ static void page_mark_flip(void)
  */
 static void page_mark_flip_hide(void)
 {
-    uint16_t y = y_of(*slot_at(S_73));
-    int i;
+    int s = *slot_at(S_73), i;
 
     for (i = 0; i < 3; i++)
-        OamByteSet((uint16_t)(y + 5 + i * 8), 0xF0);
+        sprite_y_set(s + 1 + 2 * i, 0xF0);    /* sprites 1, 3 and 5 hidden */
     page_mark_flip();
 }
 
@@ -282,58 +277,56 @@ static void page_mark_flip_hide(void)
  * WHAT IT DOES: A packed time or a Stunt Trax score as digit sprites from a
  * slot.
  */
-static void large_digit(uint16_t at, uint8_t d)
+/* A large digit: its two characters into sprites n and n + 1. */
+static void large_digit(int n, uint8_t d)
 {
-    OamByteSet(at, (uint8_t)(d + 0x50));
-    OamByteSet((uint16_t)(at + 4), (uint8_t)(d + 0x60));
+    sprite_tile_set(n, (uint8_t)(d + 0x50));
+    sprite_tile_set(n + 1, (uint8_t)(d + 0x60));
 }
 
 static void time_digits_large(uint16_t time, int s)
 {
     uint16_t min, sec, hund;
-    uint16_t y = y_of(s);
 
     TimeUnpackBcd(time, &min, &sec, &hund);
-    large_digit((uint16_t)(y + 0x12), min & 0x0F);
-    large_digit((uint16_t)(y + 0x22), (uint8_t)(sec >> 4));
-    large_digit((uint16_t)(y + 0x2A), sec & 0x0F);
-    large_digit((uint16_t)(y + 0x3A), (uint8_t)(hund >> 4));
-    large_digit((uint16_t)(y + 0x42), hund & 0x0F);
+    large_digit(s + 4, min & 0x0F);
+    large_digit(s + 8, (uint8_t)(sec >> 4));
+    large_digit(s + 10, sec & 0x0F);
+    large_digit(s + 14, (uint8_t)(hund >> 4));
+    large_digit(s + 16, hund & 0x0F);
 }
 
 static void time_digits_small(uint16_t time, int s)
 {
     uint16_t min, sec, hund;
-    uint16_t y = y_of(s);
 
     TimeUnpackBcd(time, &min, &sec, &hund);
-    OamByteSet((uint16_t)(y + 0x0E), min & 0x0F);
-    OamByteSet((uint16_t)(y + 0x16), (uint8_t)(sec >> 4));
-    OamByteSet((uint16_t)(y + 0x1A), sec & 0x0F);
-    OamByteSet((uint16_t)(y + 0x22), (uint8_t)(hund >> 4));
-    OamByteSet((uint16_t)(y + 0x26), hund & 0x0F);
+    sprite_tile_set(s + 3, min & 0x0F);
+    sprite_tile_set(s + 5, (uint8_t)(sec >> 4));
+    sprite_tile_set(s + 6, sec & 0x0F);
+    sprite_tile_set(s + 8, (uint8_t)(hund >> 4));
+    sprite_tile_set(s + 9, hund & 0x0F);
 }
 
 static void score_digits(uint16_t score, int s)
 {
     static const uint16_t perfect[7] = {0x3619, 0x360E, 0x361B, 0x360F, 0x360E, 0x360C, 0x361D};
-    uint16_t y = y_of(s);
     int i;
 
-    OamByteSet((uint16_t)(y + 0x2E), score & 0x0F);
+    sprite_tile_set(s + 11, score & 0x0F);
     if (score >= 0x4000) {
-        OamByteSet((uint16_t)(y + 0x2A), (uint8_t)((score >> 4) & 0x0F));
+        sprite_tile_set(s + 10, (uint8_t)((score >> 4) & 0x0F));
         for (i = 0; i < 7; i++) {
-            OamByteSet((uint16_t)(y + 0x0E + i * 4), (uint8_t)perfect[i]);
-            OamByteSet((uint16_t)(y + 0x0F + i * 4), (uint8_t)(perfect[i] >> 8));
+            sprite_tile_set(s + 3 + i, (uint8_t)perfect[i]);
+            sprite_attributes_set(s + 3 + i, (uint8_t)(perfect[i] >> 8));
         }
         return;
     }
-    OamByteSet((uint16_t)(y + 0x2A), (uint8_t)((score >> 4) & 0x0F));
-    OamByteSet((uint16_t)(y + 0x16), (uint8_t)((score >> 8) & 0x0F));
-    OamByteSet((uint16_t)(y + 0x12), (uint8_t)(score >> 12));
-    OamByteSet((uint16_t)(y + 0x0D), 0xF0);
-    OamByteSet((uint16_t)(y + 0x25), 0xF0);
+    sprite_tile_set(s + 10, (uint8_t)((score >> 4) & 0x0F));
+    sprite_tile_set(s + 5, (uint8_t)((score >> 8) & 0x0F));
+    sprite_tile_set(s + 4, (uint8_t)(score >> 12));
+    sprite_y_set(s + 3, 0xF0);
+    sprite_y_set(s + 9, 0xF0);
 }
 
 /*
@@ -344,13 +337,12 @@ static void score_digits(uint16_t score, int s)
  * WHAT IT DOES: The three 5-bit letters of a name into tile bytes from a
  * slot: the small sprites' tiles, or large letters of two tiles each.
  */
-static void name_letters(uint16_t name, int s, uint16_t first)
+static void name_letters(uint16_t name, int s, int first)
 {
-    uint16_t y = y_of(s);
     int i;
 
     for (i = 0; i < 3; i++)
-        OamByteSet((uint16_t)(y + first + i * 4), (uint8_t)(((name >> (i * 5)) & 0x1F) + 0x0A));
+        sprite_tile_set(s + first + i, (uint8_t)(((name >> (i * 5)) & 0x1F) + 0x0A));
 }
 
 static uint16_t letter_tile(uint16_t letter)
@@ -362,15 +354,14 @@ static uint16_t letter_tile(uint16_t letter)
 
 static void name_letters_large(uint16_t name, int s)
 {
-    uint16_t y = y_of(s);
-    static const uint16_t at[3] = {0x4A, 0x52, 0x5A};
+    static const int at[3] = {18, 20, 22};     /* the letters' first sprites past `s` */
     int i;
 
     for (i = 0; i < 3; i++) {
         uint16_t t = letter_tile((name >> (i * 5)) & 0x1F);
 
-        OamByteSet((uint16_t)(y + at[i]), (uint8_t)t);
-        OamByteSet((uint16_t)(y + at[i] + 4), (uint8_t)(t + 0x10));
+        sprite_tile_set(s + at[i], (uint8_t)t);
+        sprite_tile_set(s + at[i] + 1, (uint8_t)(t + 0x10));
     }
 }
 
@@ -393,9 +384,9 @@ static void special_row(int row_slot, int k, int stunt, void (*place)(uint16_t s
         else
             time_digits_small(v, row_slot);
         if (stunt)
-            name_letters(g.record_names[k], row_slot, 0x3E);
+            name_letters(g.record_names[k], row_slot, 15);
         else
-            name_letters(g.record_names[k], row_slot, 0x2A);
+            name_letters(g.record_names[k], row_slot, 10);
         place(tag_car_set((uint8_t)g.record_tags[k]), row_slot);
         return;
     }
@@ -417,9 +408,9 @@ static void best_time(const SaveBest *table, int first, int d_time, int d_rest)
         SpritePiecesCarAt51(r->car, s_rest);
         return;
     }
-    OamByteSet((uint16_t)(y_of(s_rest) + 1), 0x0F);
-    OamByteSet((uint16_t)(y_of(s_rest) + 5), 0x0F);
-    OamByteSet((uint16_t)(y_of(s_rest) + 9), 0x0F);
+    sprite_y_set(s_rest, 0x0F);
+    sprite_y_set(s_rest + 1, 0x0F);
+    sprite_y_set(s_rest + 2, 0x0F);
 }
 
 /*
@@ -598,22 +589,21 @@ void AllRecordsScreen(void)
 static void record_row_draw(int s, uint8_t name[3], uint8_t page_offset, uint8_t time_offset, uint8_t row_y)
 {
     const uint8_t *t = &g.times_bcd[0][(uint8_t)(page_offset + time_offset)];
-    uint16_t y = y_of(s);
 
     if (t[1] == 0xFF) {
-        OamByteSet((uint16_t)(y + 1), 0xF0);
-        OamByteSet((uint16_t)(y + 5), 0xF0);
-        OamByteSet((uint16_t)(y + 9), 0xF0);
+        sprite_y_set(s, 0xF0);
+        sprite_y_set(s + 1, 0xF0);
+        sprite_y_set(s + 2, 0xF0);
         return;
     }
-    OamByteSet((uint16_t)(y + 0x26), (uint8_t)(t[0] >> 4));
-    OamByteSet((uint16_t)(y + 0x2A), t[0] & 0x0F);
-    OamByteSet((uint16_t)(y + 0x1A), (uint8_t)(t[1] >> 4));
-    OamByteSet((uint16_t)(y + 0x1E), t[1] & 0x0F);
-    OamByteSet((uint16_t)(y + 0x0E), (uint8_t)(t[2] >> 4));
-    OamByteSet((uint16_t)(y + 0x12), t[2] & 0x0F);
+    sprite_tile_set(s + 9, (uint8_t)(t[0] >> 4));
+    sprite_tile_set(s + 10, t[0] & 0x0F);
+    sprite_tile_set(s + 6, (uint8_t)(t[1] >> 4));
+    sprite_tile_set(s + 7, t[1] & 0x0F);
+    sprite_tile_set(s + 3, (uint8_t)(t[2] >> 4));
+    sprite_tile_set(s + 4, t[2] & 0x0F);
     SpritePieces3(0x57, row_y, (uint16_t)((name[2] * 3) & 0x0F), 0, s);
-    name_letters((uint16_t)(name[0] | name[1] << 8), s + 1, 0x2A);
+    name_letters((uint16_t)(name[0] | name[1] << 8), s + 1, 10);
 }
 
 static void record_row(int n, uint8_t page_offset, uint8_t time_offset)

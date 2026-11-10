@@ -44,7 +44,7 @@ static void gauge6_place(uint8_t *at, uint8_t y, unsigned x)
 
     *at = y;
     for (i = 0; i < 4; i++)
-        OamByteSet((uint16_t)(0x206 + i + x), (uint8_t)(OamByte((uint16_t)(0x206 + i + x)) & keep[i]));
+        sprite_high_set((int)((6 + i + x) * 4), (uint8_t)(sprite_high_get((int)((6 + i + x) * 4)) & keep[i]));
 }
 
 /* @routine 07:BC32 PauseStageStart */

@@ -522,68 +522,61 @@ static void bar_marker(int slot, uint16_t v, uint16_t pos, uint16_t span, uint16
     }
 }
 
-void SpriteBar4WithMarker(uint8_t value, uint16_t pos, uint16_t slot)
+void SpriteBar4WithMarker(uint8_t value, uint16_t pos, int n)
 {
     uint16_t v = value < 0x3F ? value : 0x3F;
-    int n = slot / 4;
 
     SpriteStrip4(v, n + 1, pos);
     bar_marker(n, v, pos, 0x10, 0x3C20, 0x3622);
 }
 
-void SpriteBar6WithMarker(uint8_t value, uint16_t pos, uint16_t slot)
+void SpriteBar6WithMarker(uint8_t value, uint16_t pos, int n)
 {
-    int n = slot / 4;
-
     SpriteStrip6(value, n + 1, pos);
     bar_marker(n, value, pos, 0x08, 0x3C1F, 0x3C1E);
 }
 
-/* The bytes of the table as the original addressed them: 512 four to a
-   sprite, then the 32 high bytes. */
-uint8_t OamByte(uint16_t offset)
+/* ---- one sprite's fields, by its number ---- */
+
+void sprite_x_set(int n, uint8_t x) { set_x_byte(n & 127, x); }
+void sprite_y_set(int n, uint8_t y) { set_y(n & 127, y); }
+void sprite_tile_set(int n, uint8_t tile) { set_tile_byte(n & 127, tile); }
+void sprite_attributes_set(int n, uint8_t attributes) { set_attr(n & 127, attributes); }
+uint8_t sprite_x_get(int n) { return (uint8_t)sprites[n & 127].x; }
+uint8_t sprite_y_get(int n) { return y_byte(n & 127); }
+uint8_t sprite_tile_get(int n) { return tile_byte(n & 127); }
+uint8_t sprite_attributes_get(int n) { return attr_byte(n & 127); }
+
+void sprite_field_set(int n, SpriteField field, uint8_t v)
 {
-    if (offset >= 0x200) {
-        int i, b = offset - 0x200;
-        uint8_t v = 0;
-
-        for (i = 0; i < 4; i++) {
-            int n = b * 4 + i;
-
-            if (sprites[n].x < 0)
-                v |= (uint8_t)(1 << (i * 2));
-            if (sprites[n].width > 1)
-                v |= (uint8_t)(2 << (i * 2));
-        }
-        return v;
-    }
-    switch (offset & 3) {
-    case 0: return (uint8_t)sprites[offset / 4].x;
-    case 1: return y_byte(offset / 4);
-    case 2: return tile_byte(offset / 4);
-    default: return attr_byte(offset / 4);
+    switch (field) {
+    case SPRITE_X: sprite_x_set(n, v); break;
+    case SPRITE_Y: sprite_y_set(n, v); break;
+    case SPRITE_TILE: sprite_tile_set(n, v); break;
+    default: sprite_attributes_set(n, v); break;
     }
 }
 
-void OamBufferByteSet(uint16_t offset, uint8_t value)
+/* sprites first to first + 3 (first a multiple of 4): each one's X ninth bit, then large */
+void sprite_high_set(int first, uint8_t bits)
 {
-    OamByteSet(offset, value);
+    set_high_byte((first & 127) / 4, bits);
 }
 
-/* A byte of the table as the original addressed it: 512 bytes four to a
-   sprite, then the 32 high bytes. */
-void OamByteSet(uint16_t offset, uint8_t value)
+uint8_t sprite_high_get(int first)
 {
-    if (offset >= 0x200) {
-        set_high_byte(offset - 0x200, value);
-        return;
+    int i, b = (first & 127) / 4;
+    uint8_t v = 0;
+
+    for (i = 0; i < 4; i++) {
+        int n = b * 4 + i;
+
+        if (sprites[n].x < 0)
+            v |= (uint8_t)(1 << (i * 2));
+        if (sprites[n].width > 1)
+            v |= (uint8_t)(2 << (i * 2));
     }
-    switch (offset & 3) {
-    case 0: set_x_byte(offset / 4, value); break;
-    case 1: set_y(offset / 4, value); break;
-    case 2: set_tile_byte(offset / 4, value); break;
-    default: set_attr(offset / 4, value); break;
-    }
+    return v;
 }
 
 /* ---- metasprites ---- */

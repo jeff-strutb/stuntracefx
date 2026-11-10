@@ -18,8 +18,8 @@
 /* A digit's two tiles into two sprites stacked: tile 2d on top, 2d + 1 below. */
 static void digit(int sprite, uint8_t d)
 {
-    OamByteSet((uint16_t)(sprite * 4 + 2), (uint8_t)(d << 1));
-    OamByteSet((uint16_t)((sprite + 1) * 4 + 2), (uint8_t)((d << 1) + 1));
+    sprite_tile_set(sprite, (uint8_t)(d << 1));
+    sprite_tile_set(sprite + 1, (uint8_t)((d << 1) + 1));
 }
 
 /*
@@ -80,17 +80,17 @@ void HudDrawNumber3(uint8_t n, int sprite)
 }
 
 /* @routine 7E:E7AE HudDrawValueA, E7BA HudDrawValueB, E7C6 HudDrawValueC */
-void HudDrawValueA(void) { HudDrawNumber3(g.status_level[0], 0x0114 / 4); }
-void HudDrawValueB(void) { HudDrawNumber3(g.status_level[0], 0x0028 / 4); }
-void HudDrawValueC(void) { HudDrawNumber3(g.status_level[1], 0x0128 / 4); }
+void HudDrawValueA(void) { HudDrawNumber3(g.status_level[0], 0x45); }
+void HudDrawValueB(void) { HudDrawNumber3(g.status_level[0], 0x0A); }
+void HudDrawValueC(void) { HudDrawNumber3(g.status_level[1], 0x4A); }
 
 /* @routine 7E:E7FC HudDigitSprites62: a digit on sprites 62 and 63. */
 void HudDigitSprites62(void)
 {
     uint8_t d = g.time_override ? 0x01 : g.player_rank[0];
 
-    OamByteSet(62 * 4 + 2, (uint8_t)(d << 1));
-    OamByteSet(63 * 4 + 2, (uint8_t)((d << 1) + 1));
+    sprite_tile_set(62, (uint8_t)(d << 1));
+    sprite_tile_set(63, (uint8_t)((d << 1) + 1));
 }
 
 /* @routine 09:C072 HudCountUp19EC: an object's flag set, the count up, sound $3C. */
@@ -130,8 +130,8 @@ void HitsCollect(uint16_t rec)
  */
 void HudGaugesPanelA(void)
 {
-    SpriteBar4WithMarker(g.gauge_one[1], (uint16_t)(g.gauge_place[3] << 8 | g.gauge_place[1]), 0x0140);
-    SpriteBar6WithMarker(g.kept_enable[1], (uint16_t)(g.gauge_place[7] << 8 | g.gauge_place[5]), 0x016C);
+    SpriteBar4WithMarker(g.gauge_one[1], (uint16_t)(g.gauge_place[3] << 8 | g.gauge_place[1]), 0x50);
+    SpriteBar6WithMarker(g.kept_enable[1], (uint16_t)(g.gauge_place[7] << 8 | g.gauge_place[5]), 0x5B);
 }
 
 /*
@@ -144,9 +144,9 @@ void HudGaugesPanelB(void)
     if (!g.end_panel_in && !g.split_screen)
         return;
     SpriteBar4WithMarker(g.gauge_one[0], (uint16_t)(g.gauge_place[2] << 8 | g.gauge_place[0]),
-                         g.split_screen ? 0x0040 : 0x0100);
+                         g.split_screen ? 0x10 : 0x40);
     SpriteBar6WithMarker(g.kept_enable[0], (uint16_t)(g.gauge_place[6] << 8 | g.gauge_place[4]),
-                         g.split_screen ? 0x006C : 0x012C);
+                         g.split_screen ? 0x1B : 0x4B);
 }
 
 /* An arithmetic shift right by 3. */
@@ -161,9 +161,9 @@ static uint16_t asr3(uint16_t v)
  * @routine 7F:0AD6 MapMarkerSprites
  * WHAT IT DOES: A map marker sprite for each object of the drawn list, at
  * its world position scaled down plus the map's origin, the tile by the
- * low bits of its +$26; each next at `step` bytes along the sprite table.
+ * low bits of its +$26; each next `step` sprites on (1 or -1) from sprite `n`.
  */
-static void map_marker_sprites(uint8_t origin_x, uint8_t origin_y, int16_t step, uint16_t slot)
+static void map_marker_sprites(uint8_t origin_x, uint8_t origin_y, int step, int n)
 {
     for (int i = 0; objects.list[i]; i++) {
         const Object *o = obj_at(objects.list[i]);
@@ -173,19 +173,19 @@ static void map_marker_sprites(uint8_t origin_x, uint8_t origin_y, int16_t step,
         sx = (uint8_t)(((uint16_t)(v >> 8 | v << 8) + origin_x) & 0xFF);
         v = asr3((uint16_t)-o->z);
         v = (uint16_t)((uint16_t)(v + (uint16_t)(origin_y << 8)) & 0xFF00);
-        OamByteSet((uint16_t)(slot), (uint8_t)sx);
-        OamByteSet((uint16_t)(slot + 1), (uint8_t)(v >> 8));
+        sprite_x_set(n, (uint8_t)sx);
+        sprite_y_set(n, (uint8_t)(v >> 8));
         v = ram_code_7f16((uint16_t)(0x0B46 + 2 * (o->byte26 & 0x07)));
-        OamByteSet((uint16_t)(slot + 2), (uint8_t)v);
-        OamByteSet((uint16_t)(slot + 3), (uint8_t)(v >> 8));
-        slot = (uint16_t)(slot + step);
+        sprite_tile_set(n, (uint8_t)v);
+        sprite_attributes_set(n, (uint8_t)(v >> 8));
+        n += step;
     }
 }
 
 /* @routine 7E:EEF7 MapMarkersPanelA */
 void MapMarkersPanelA(void)
 {
-    map_marker_sprites(g.hud_map_origin_x[1], g.hud_map_y_a, -4, 0x0158);
+    map_marker_sprites(g.hud_map_origin_x[1], g.hud_map_y_a, -1, 0x56);
 }
 
 /* @routine 7E:EF16 MapMarkersPanelB */
@@ -193,7 +193,7 @@ void MapMarkersPanelB(void)
 {
     if (!g.end_panel_in && !g.split_screen)
         return;
-    map_marker_sprites(g.hud_map_origin_x[0], g.hud_map_y_b, 4, g.split_screen ? 0x0054 : 0x0180);
+    map_marker_sprites(g.hud_map_origin_x[0], g.hud_map_y_b, 1, g.split_screen ? 0x15 : 0x60);
 }
 
 /* @routine 7E:AECE HudSlideIn: the panel 4 further in, stopping at $10. */
@@ -216,21 +216,22 @@ void HudSlideOut(void)
     g.hud_slide = v;
 }
 
-/* The slide plus the panel's offset as the panel's Y, into its sprites' Y
-   bytes (`at` table offsets plus the panel's sprite base). */
-static void hud_sprites_y(uint8_t y_offset, uint16_t base)
+/* The slide plus the panel's offset, into its sprites' X (the field at the
+   start of each sprite's four bytes, where the original wrote it): sprites
+   in the table below plus the panel's first sprite `base`. */
+static void hud_sprites_y(uint8_t y_offset, int base)
 {
-    static const uint16_t row[4][2] = {{0x009C, 0x00AC}, {0x00A0, 0x00B0}, {0x00A4, 0x00B4}, {0x00A8, 0x00B8}};
-    static const struct { uint8_t add; int clc; uint16_t at; } tail[3] = {
-        {0x0A, 0, 0x0090}, {0x18, 0, 0x0094}, {0x26, 1, 0x0098}};
+    static const int row[4][2] = {{39, 43}, {40, 44}, {41, 45}, {42, 46}};
+    static const struct { uint8_t add; int clc; int sprite; } tail[3] = {
+        {0x0A, 0, 36}, {0x18, 0, 37}, {0x26, 1, 38}};
     uint8_t v0 = (uint8_t)(g.hud_slide + y_offset), v = v0, y;
 
     for (int i = 0; i < 4; i++) {
         if (i)
             v = (uint8_t)(v + 0x10);
         y = SpriteYOnScreen(v);
-        OamByteSet((uint16_t)(row[i][0] + base), y);
-        OamByteSet((uint16_t)(row[i][1] + base), y);
+        sprite_x_set(row[i][0] + base, y);
+        sprite_x_set(row[i][1] + base, y);
     }
     /* The tail's first two sit a line lower after a sprite at or past line
        $B0 (the original's add took the carry of the test before it); the
@@ -239,11 +240,11 @@ static void hud_sprites_y(uint8_t y_offset, uint16_t base)
         int lower = !tail[i].clc && v >= 0xB0;
 
         v = (uint8_t)(v0 + tail[i].add + lower);
-        OamByteSet((uint16_t)(tail[i].at + base), SpriteYOnScreen(v));
+        sprite_x_set(tail[i].sprite + base, SpriteYOnScreen(v));
     }
 }
 
-static void hud_panel_slide(uint8_t y_offset, uint16_t base, int panel_a)
+static void hud_panel_slide(uint8_t y_offset, int base, int panel_a)
 {
     if (g.start_light < 0x08)
         return;
@@ -260,38 +261,39 @@ static void hud_panel_slide(uint8_t y_offset, uint16_t base, int panel_a)
 }
 
 /* @routine 7E:AE18 HudPanelASlide */
-void HudPanelASlide(void) { hud_panel_slide(0xF8, 0x0020, 1); }
+void HudPanelASlide(void) { hud_panel_slide(0xF8, 8, 1); }
 /* @routine 7E:AE30 HudPanelBSlide */
-void HudPanelBSlide(void) { hud_panel_slide(0x4A, 0x0120, 0); }
+void HudPanelBSlide(void) { hud_panel_slide(0x4A, 0x48, 0); }
 
-/* Panel B's Y for its two sprite pairs. */
+/* Panel B's place for its two sprite pairs, $70-$73: into their X, where the original wrote it. */
 static void hud_panel_b_y(void)
 {
     uint8_t v = (uint8_t)(g.hud_panel_b_y - 0x0D);
 
-    OamByteSet(0x01C0, v);
-    OamByteSet(0x01C8, v);
+    sprite_x_set(0x70, v);
+    sprite_x_set(0x72, v);
     v = (uint8_t)(v + 0x10);
-    OamByteSet(0x01C4, v);
-    OamByteSet(0x01CC, v);
+    sprite_x_set(0x71, v);
+    sprite_x_set(0x73, v);
 }
 
-/* The map marker's Y and the column of Ys below it, $FF once a step carries. */
+/* The map marker's place and the column of places after it, $FF once a
+   step carries: into sprites $74-$7F's X, where the original wrote it. */
 static void hud_marker_y(void)
 {
-    static const struct { uint8_t add; uint16_t at[2]; int n; } step[6] = {
-        {0x08, {0x01D0, 0}, 1}, {0x06, {0x01E8, 0x01EC}, 2}, {0x08, {0x01F0, 0x01F4}, 2},
-        {0x08, {0x01D4, 0}, 1}, {0x08, {0x01D8, 0x01DC}, 2}, {0x08, {0x01E0, 0x01E4}, 2}};
+    static const struct { uint8_t add; int sprite[2]; int n; } step[6] = {
+        {0x08, {0x74, 0}, 1}, {0x06, {0x7A, 0x7B}, 2}, {0x08, {0x7C, 0x7D}, 2},
+        {0x08, {0x75, 0}, 1}, {0x08, {0x76, 0x77}, 2}, {0x08, {0x78, 0x79}, 2}};
     unsigned sum = g.hud_marker_y;
 
-    OamByteSet(0x01F8, g.hud_marker_y);
-    OamByteSet(0x01FC, g.hud_marker_y);
+    sprite_x_set(0x7E, g.hud_marker_y);
+    sprite_x_set(0x7F, g.hud_marker_y);
     for (int i = 0; i < 6; i++) {
         unsigned r = (sum & 0xFF) + step[i].add;
 
         sum = r > 0xFF ? 0xFF : r;
         for (int j = 0; j < step[i].n; j++)
-            OamByteSet(step[i].at[j], (uint8_t)sum);
+            sprite_x_set(step[i].sprite[j], (uint8_t)sum);
     }
 }
 
@@ -301,13 +303,13 @@ static void hud_marker_y(void)
    further (the original's add took the carry the one before left). */
 static void hud_gauge_b_x(void)
 {
-    static const struct { uint8_t add; int sub, clc, skip; uint16_t at[2]; int n; } step[11] = {
-        {0x00, 0, 0, 1, {0x012C, 0}, 1}, {0x08, 1, 0, 1, {0x0148, 0}, 1},
-        {0x10, 0, 1, 1, {0x0130, 0}, 1}, {0x08, 0, 1, 1, {0x0134, 0}, 1},
-        {0x08, 0, 1, 1, {0x0138, 0}, 1}, {0x08, 0, 0, 0, {0x0140, 0}, 1},
-        {0x08, 0, 0, 0, {0x0144, 0x013C}, 2}, {0x08, 0, 0, 0, {0x014C, 0}, 1},
-        {0x04, 0, 0, 0, {0x0150, 0}, 1}, {0x08, 0, 0, 0, {0x0154, 0}, 1},
-        {0x08, 0, 0, 0, {0x0158, 0}, 1}};
+    static const struct { uint8_t add; int sub, clc, skip; int sprite[2]; int n; } step[11] = {
+        {0x00, 0, 0, 1, {0x4B, 0}, 1}, {0x08, 1, 0, 1, {0x52, 0}, 1},
+        {0x10, 0, 1, 1, {0x4C, 0}, 1}, {0x08, 0, 1, 1, {0x4D, 0}, 1},
+        {0x08, 0, 1, 1, {0x4E, 0}, 1}, {0x08, 0, 0, 0, {0x50, 0}, 1},
+        {0x08, 0, 0, 0, {0x51, 0x4F}, 2}, {0x08, 0, 0, 0, {0x53, 0}, 1},
+        {0x04, 0, 0, 0, {0x54, 0}, 1}, {0x08, 0, 0, 0, {0x55, 0}, 1},
+        {0x08, 0, 0, 0, {0x56, 0}, 1}};
     uint8_t v = g.gauge_place[4];
     int wrapped = 0;                    /* the X before went past 255 (or, after the subtract, did not go below 0) */
 
@@ -326,7 +328,7 @@ static void hud_gauge_b_x(void)
         if (step[i].skip && (v & 0x80))
             continue;
         for (int j = 0; j < step[i].n; j++)
-            OamByteSet(step[i].at[j], v);
+            sprite_x_set(step[i].sprite[j], v);
     }
 }
 
@@ -407,14 +409,12 @@ enum { CLASS_NAME_BANK = 0x02, CLASS_NAME_TILES = 0xEFD6 };
 /* @routine 02:EFA3 OamClassName: the class's name over six sprites. */
 void OamClassName(void)
 {
-    uint16_t y = (uint16_t)(((g.oam_first_free + 1) * 4) + 2);
+    int n = g.oam_first_free + 1;       /* the six sprites after the first free one: their characters */
     uint16_t x;
 
     if (!g.course_class)
         return;
     x = g.course_class == 1 ? 0x0006 : 0x0000;
-    for (int i = 0; i < 6; i++) {
-        OamByteSet(y, cart8(CLASS_NAME_BANK, (uint16_t)(CLASS_NAME_TILES + x + i)));
-        y = (uint16_t)(y + 4);
-    }
+    for (int i = 0; i < 6; i++)
+        sprite_tile_set(n + i, cart8(CLASS_NAME_BANK, (uint16_t)(CLASS_NAME_TILES + x + i)));
 }

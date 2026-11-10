@@ -150,7 +150,7 @@ static void record_cars(uint8_t x, uint16_t empty)
         place_frame((uint8_t)g.record_tags[n]);
         g.piece_tile = 0xF4;
         SpritePieces3(x, ys[n], g.piece_set, 0x3E, (int)(0x4C + 4 * n));
-        OamByteSet((uint16_t)(0x213 + n), 0x60);
+        sprite_high_set((int)(0x4C + 4 * n), 0x60);
     }
 }
 
@@ -161,9 +161,9 @@ static void records_wait(uint8_t next, const uint16_t *rows, int count, uint8_t 
     if (pressed(0x9000)) {
         SoundPort0QueuePush(0x46);
         g.results_step = next;
-        OamByteSet(0x213, 0x55);
-        OamByteSet(0x214, 0x55);
-        OamByteSet(0x215, 0x55);
+        sprite_high_set(0x4C, 0x55);
+        sprite_high_set(0x50, 0x55);
+        sprite_high_set(0x54, 0x55);
         g.overlay_state = 0x05;
         return;
     }
@@ -380,7 +380,7 @@ static void ResultsMenu(void)
         }
         g.race_again = 0;
         SoundPort0QueuePush(0x46);
-        OamByteSet(0x20D, 0x55);
+        sprite_high_set(0x34, 0x55);
         rows_retry();
         return;
     }
@@ -426,17 +426,17 @@ static void ResultsMenu(void)
     if (g.frame_count & 0x08) {
         uint8_t y = (uint8_t)(g.overlay_y + 0x18);
 
-        OamByteSet(0xD0, (uint8_t)(g.overlay_x - 0x08));
-        OamByteSet(0xD4, (uint8_t)(g.overlay_x + 0x40));
-        OamByteSet(0xD1, y);
-        OamByteSet(0xD5, y);
-        OamByteSet(0xD2, 0x19);
-        OamByteSet(0xD6, 0x19);
-        OamByteSet(0xD3, 0x76);
-        OamByteSet(0xD7, 0x36);
-        OamByteSet(0x20D, 0x50);
+        sprite_x_set(52, (uint8_t)(g.overlay_x - 0x08));
+        sprite_x_set(53, (uint8_t)(g.overlay_x + 0x40));
+        sprite_y_set(52, y);
+        sprite_y_set(53, y);
+        sprite_tile_set(52, 0x19);
+        sprite_tile_set(53, 0x19);
+        sprite_attributes_set(52, 0x76);
+        sprite_attributes_set(53, 0x36);
+        sprite_high_set(52, 0x50);
     } else {
-        OamByteSet(0x20D, 0x55);
+        sprite_high_set(52, 0x55);
     }
     if (pressed(0x0100))
         car_change(1);
@@ -504,18 +504,18 @@ static void ResultsTotalLine(void)
     total_line_end(0x0190);
 }
 
-/* @routine 07:D576 OamWordRow5: the five letters at $07:D5AD as sprites 90-94. */
+/* @routine 07:D576 OamWordRow5: the five letters at $07:D5AD as sprites 91-95. */
 static void OamWordRow5(void)
 {
     unsigned i;
 
     for (i = 0; i < 5; i++) {
-        uint16_t at = (uint16_t)(0x16C + 4 * i);
+        int n = 91 + (int)i;
 
-        OamByteSet(at, (uint8_t)(0xA5 + 8 * i));
-        OamByteSet((uint16_t)(at + 1), 0x4E);
-        OamByteSet((uint16_t)(at + 2), (uint8_t)(cart8(RESULTS_BANK, (uint16_t)(TOTALS_WORD_LETTERS + i)) + 0xC0));
-        OamByteSet((uint16_t)(at + 3), 0x38);
+        sprite_x_set(n, (uint8_t)(0xA5 + 8 * i));
+        sprite_y_set(n, 0x4E);
+        sprite_tile_set(n, (uint8_t)(cart8(RESULTS_BANK, (uint16_t)(TOTALS_WORD_LETTERS + i)) + 0xC0));
+        sprite_attributes_set(n, 0x38);
     }
 }
 

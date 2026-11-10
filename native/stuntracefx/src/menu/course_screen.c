@@ -17,24 +17,45 @@
 /* the sprite-table word lists, in bank $0B */
 enum { MENU_BANK = 0x0B, SPRITE_LISTS = 0xFCA2 };
 
-static void oam_word(uint16_t offset, uint16_t w)
+/* A sprite's place (X low byte, Y high) or look (character low, attributes high) from a word. */
+static void sprite_word(int n, int look, uint16_t w)
 {
-    OamByteSet(offset, (uint8_t)w);
-    OamByteSet((uint16_t)(offset + 1), (uint8_t)(w >> 8));
+    if (look) {
+        sprite_tile_set(n, (uint8_t)w);
+        sprite_attributes_set(n, (uint8_t)(w >> 8));
+    } else {
+        sprite_x_set(n, (uint8_t)w);
+        sprite_y_set(n, (uint8_t)(w >> 8));
+    }
 }
 
 /*
  * @routine 0B:FAE5 MenuOamFromList
- * WHAT IT DOES: Copies words from a list at $0B:FCA2 into the sprite table
- * from an offset, until a $FFFF word.
+ * WHAT IT DOES: Copies words from a list at $0B:FCA2 into the sprites from
+ * sprite `first`, a place then a look each, until a $FFFF word.
  */
-static void oam_from_list(uint16_t offset, uint16_t list)
+static void sprites_from_list(int first, uint16_t list)
+{
+    uint16_t w;
+    int k = 0;
+
+    while ((w = cart16(MENU_BANK, (uint16_t)(SPRITE_LISTS + list))) != 0xFFFF) {
+        sprite_word(first + k / 2, k & 1, w);
+        k++;
+        list = (uint16_t)(list + 2);
+    }
+}
+
+/* The same into the sprites' X ninth bits and sizes from sprite `first`:
+   each word eight sprites' (the original's high table, two bytes). */
+static void sprite_highs_from_list(int first, uint16_t list)
 {
     uint16_t w;
 
     while ((w = cart16(MENU_BANK, (uint16_t)(SPRITE_LISTS + list))) != 0xFFFF) {
-        oam_word(offset, w);
-        offset = (uint16_t)(offset + 2);
+        sprite_high_set(first, (uint8_t)w);
+        sprite_high_set(first + 4, (uint8_t)(w >> 8));
+        first += 8;
         list = (uint16_t)(list + 2);
     }
 }
@@ -68,17 +89,20 @@ static void course_picture_to_art(void)
  */
 void MenuCourseScreenSetup(void)
 {
-    static const uint16_t groups[4][2] = {{0x0000, 0x0000}, {0x0200, 0x0154}, {0x0100, 0x00A8}, {0x0210, 0x0162}};
-    uint16_t x;
     int i;
 
     SoundPairFromTable();
-    for (x = 0; x != 0x0200; x = (uint16_t)(x + 2))
-        oam_word(x, 0xE0E0);
-    for (x = 0; x != 0x0020; x = (uint16_t)(x + 2))
-        oam_word((uint16_t)(0x0200 + x), 0x5555);
-    for (i = 0; i < 4; i++)
-        oam_from_list(groups[i][0], groups[i][1]);
+    for (i = 0; i < 128; i++) {         /* every sprite at (224, 224), character $E0, attributes $E0 */
+        sprite_word(i, 0, 0xE0E0);
+        sprite_word(i, 1, 0xE0E0);
+    }
+    for (i = 0; i < 128; i += 4)        /* every X ninth bit set, every sprite small */
+        sprite_high_set(i, 0x55);
+    /* four sprite groups: the first half's from sprite 0, the second's from 64 */
+    sprites_from_list(0, 0x0000);
+    sprite_highs_from_list(0, 0x0154);
+    sprites_from_list(64, 0x00A8);
+    sprite_highs_from_list(64, 0x0162);
     OamDmaAll();
     unpack((uint32_t)0x1D << 16 | 0xD970, fx_ram + 0x3000, 0xC000);
     course_picture_to_art();

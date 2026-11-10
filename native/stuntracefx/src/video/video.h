@@ -328,8 +328,22 @@ int WindowClosedDigitStep(void);
 extern nshvc_sprite sprites[128];
 /* the tile set and page starts sprite tile numbers count in: each screen sets its own */
 void sprites_use_tiles(nshvc_tiles set, uint16_t first_page, uint16_t second_page);
-uint8_t OamByte(uint16_t offset);                 /* a byte of the table, 0-$21F */
-void OamBufferByteSet(uint16_t offset, uint8_t value);
+/* One sprite's fields by its number (0-127), never by the original's table
+   addresses: X's low eight bits (the ninth with the size, four sprites a
+   call: sprite_high), Y, the character in its page, and the attributes as
+   the original's byte (page, palette, priority, flips). */
+void sprite_x_set(int n, uint8_t x);
+void sprite_y_set(int n, uint8_t y);
+void sprite_tile_set(int n, uint8_t tile);
+void sprite_attributes_set(int n, uint8_t attributes);
+void sprite_high_set(int first, uint8_t bits);  /* sprites first..first+3, two bits each: X's ninth, large */
+uint8_t sprite_x_get(int n);
+uint8_t sprite_y_get(int n);
+uint8_t sprite_tile_get(int n);
+uint8_t sprite_attributes_get(int n);
+uint8_t sprite_high_get(int first);
+typedef enum { SPRITE_X, SPRITE_Y, SPRITE_TILE, SPRITE_ATTRIBUTES } SpriteField;
+void sprite_field_set(int n, SpriteField field, uint8_t v);  /* for tables of sprites' fields */
 void OamDmaAll(void);
 void OamDirectStage(void);
 void OamHideRange(int first, int count);
@@ -395,10 +409,9 @@ void SpriteTextAt8952(void);
 void SpritePieces3(uint16_t x, uint8_t y, uint16_t set, uint16_t palette, int slot);
 /* wanted by the race (race/phases.c, the lap and results panels) */
 uint32_t race_block_unpack(uint16_t out, uint16_t in); /* a packed block to the unpack area; its length from its transfer record */
-void OamByteSet(uint16_t offset, uint8_t value);   /* a byte of the sprite table, 0-$21F */
 uint8_t SpriteYOnScreen(uint8_t y);                /* 7E:B005 */
-void SpriteBar4WithMarker(uint8_t value, uint16_t pos, uint16_t slot);
-void SpriteBar6WithMarker(uint8_t value, uint16_t pos, uint16_t slot);
+void SpriteBar4WithMarker(uint8_t value, uint16_t pos, int first);  /* from sprite `first` */
+void SpriteBar6WithMarker(uint8_t value, uint16_t pos, int first);
 void OamHide75Up(void);
 void OamHideForHudMode(void);
 

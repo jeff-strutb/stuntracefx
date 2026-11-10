@@ -595,9 +595,9 @@ static void time_up_phase_race(void)
     g.finish_mark = 0;
     g.end_timer = 0x30;
     SoundPort0QueuePush(0x3E);
-    OamByteSet(0x021D, 0x55);
-    OamByteSet(0x021E, 0x55);
-    OamByteSet(0x021F, 0x55);
+    sprite_high_set(0x74, 0x55);        /* sprites $74-$7F: X's ninth bit, small */
+    sprite_high_set(0x78, 0x55);
+    sprite_high_set(0x7C, 0x55);
     TimeUpRecordUpdate();
 }
 

@@ -204,14 +204,14 @@ static void panel_next_delay(uint8_t d)
     g.panel_delay = d;
 }
 
-/* A result line shown: its sprites brought on, the next state, sound $49. */
-static void panel_line(uint16_t at)
+/* Result line `line` (0-2) shown: its sprites brought on (Y), the next state, sound $49. */
+static void panel_line(int line)
 {
     if (g.split_screen) {
-        OamByteSet((uint16_t)(0x00AB + at), 0x20);
-        OamByteSet((uint16_t)(0x01AB + at), 0x88);
+        sprite_y_set(0x2C + line, 0x20);
+        sprite_y_set(0x6C + line, 0x88);
     } else {
-        OamByteSet((uint16_t)(0x008B + at), 0x28);
+        sprite_y_set(0x24 + line, 0x28);
     }
     panel_next_delay(0x32);
     sound_port0_push(0x49);
@@ -237,29 +237,27 @@ void ResultsPanelSteps(void)
         return;
     case 0x04:
         if (panel_delay_out())
-            panel_line(0x06);
+            panel_line(0);
         return;
     case 0x06:
         if (panel_delay_out())
-            panel_line(0x0A);
+            panel_line(1);
         return;
     case 0x08:
         if (panel_delay_out())
-            panel_line(0x0E);
+            panel_line(2);
         return;
     case 0x0A:
         if (!panel_delay_out())
             return;
-        if (g.split_screen) {
-            static const uint16_t marks_split[6] = {0x00B2, 0x01B2, 0x00B6, 0x01B6, 0x00BA, 0x01BA};
-
-            for (int i = 0; i < 6; i++)
-                OamByteSet(marks_split[i], 0xA2);
-        } else {
-            static const uint16_t marks[3] = {0x0092, 0x0096, 0x009A};
-
-            for (int i = 0; i < 3; i++)
-                OamByteSet(marks[i], 0xA2);
+        /* the lines' marks: their sprites' character $A2 */
+        for (int i = 0; i < 3; i++) {
+            if (g.split_screen) {
+                sprite_tile_set(0x2C + i, 0xA2);
+                sprite_tile_set(0x6C + i, 0xA2);
+            } else {
+                sprite_tile_set(0x24 + i, 0xA2);
+            }
         }
         panel_next_delay(0x32);
         sound_port0_push(0x4A);
