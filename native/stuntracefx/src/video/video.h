@@ -16,14 +16,6 @@
 #include "nshvc/nshvc.h"
 #include "system/state.h"
 
-/* tables in the code the original copied to work RAM ($7E:A2D9 up from ROM
-   $01:0000, $7F:0800 up from $05:8000), by the address they ran at */
-static inline const uint8_t *ram_code_7e(uint16_t a) { return &cart[0x10000u + (uint32_t)(a - 0xA2D9u)]; }
-static inline uint16_t ram_code_7e16(uint16_t a) { const uint8_t *p = ram_code_7e(a); return (uint16_t)(p[0] | p[1] << 8); }
-static inline uint8_t ram_code_7e8(uint16_t a) { return *ram_code_7e(a); }
-static inline const uint8_t *ram_code_7f(uint16_t a) { return &cart[0x58000u + (uint32_t)(a - 0x0800u)]; }
-static inline uint16_t ram_code_7f16(uint16_t a) { const uint8_t *p = ram_code_7f(a); return (uint16_t)(p[0] | p[1] << 8); }
-
 /* The per-line effects all set at once, as a store of the whole of $0D45 set them. */
 static inline void line_effects_set(int results_bg1_off, int course_wipe, int course_scroll, int sky, int window_bands, int fixed_bands)
 {
@@ -169,7 +161,6 @@ typedef struct {
 
 extern Palettes palettes;
 
-void PaletteLoad16(uint8_t bank, uint16_t src);
 void PaletteCourseLoad(int course);
 void PaletteDarkenFour(uint16_t request);
 

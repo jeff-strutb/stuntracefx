@@ -4,44 +4,37 @@
  */
 #include <string.h>
 
-#include "data/cart.h"
+#include "data/video_tables.h"
 #include "system/state.h"
 #include "video/picture.h"
 #include "video/video.h"
 
 Gradient gradient;
 
-/* the run lengths, from offset `x` of the table; a colour word each from the
-   block, the colours repeated into list `out` */
-static void expand_runs(uint8_t bank, uint16_t *block, uint16_t *out, unsigned x)
+/* the run lengths, from run `x` of the table; a colour each from the
+   course's sky list, the colours repeated into list `out` */
+static void expand_runs(int course, int list, uint16_t *out, unsigned x)
 {
-    for (;;) {
-        unsigned n = cart8(0x1F, (uint16_t)(0xB44E + x));
+    unsigned run;
+
+    for (run = 0;; run++, x++) {
+        unsigned n = sky_run_length(x);
         uint16_t colour;
 
         if (!n)
             return;
-        colour = cart16(bank, (uint16_t)(*block + 0x20));
+        colour = course_sky_colour(course, list, run);
         while (n--)
             *out++ = colour;
-        *block = (uint16_t)(*block + 2);
-        x++;
     }
 }
 
 /* Runs' count table: course 10 uses another run table for the first list, course 1 for the second. */
 void GradientBuildColours(int course)
 {
-    int i = course * 3;
-    uint8_t bank = cart8(0x03, (uint16_t)(0xF6F3 + i));
-    uint16_t block = cart16(0x03, (uint16_t)(0xF6F1 + i)), second;
-
-    expand_runs(bank, &block, gradient.day, course == 0x0A ? 0x28 : 0);
-    second = cart16(0x03, (uint16_t)(0xF745 + i));
-    if (second) {
-        block = second;
-        expand_runs(bank, &block, gradient.night, course == 1 ? 0x50 : 0);
-    }
+    expand_runs(course, 0, gradient.day, course == 0x0A ? 0x28 : 0);
+    if (course_has_night_sky(course))
+        expand_runs(course, 1, gradient.night, course == 1 ? 0x50 : 0);
     memset(gradient.black, 0, sizeof gradient.black);
 }
 

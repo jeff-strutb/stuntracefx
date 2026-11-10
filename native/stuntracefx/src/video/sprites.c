@@ -7,8 +7,8 @@
 #include <string.h>
 
 #include "audio/sound.h"
-#include "data/cart.h"
 #include "data/race_tables.h"
+#include "data/video_tables.h"
 #include "system/game.h"
 #include "system/state.h"
 #include "video/picture.h"
@@ -316,7 +316,7 @@ void OamSetPalette(uint8_t bits, int count, int first)
 /* @routine 04:E2EC OamPaletteFromTableE30F */
 void StuntRecordsPagePalette(void)
 {
-    OamSetPalette(cart8(0x04, (uint16_t)(0xE30F + g.champ_stage)), 0x16, g.records_group_slot[4]);
+    OamSetPalette(records_palette_stunt(g.champ_stage), 0x16, g.records_group_slot[4]);
 }
 
 /* @routine 04:E23F OamPaletteFromTableE26A */
@@ -324,21 +324,21 @@ void SpeedRecordsPagePalette(void)
 {
     uint16_t n = g.times_step;
 
-    OamSetPalette(n ? cart8(0x04, (uint16_t)(0xE26A + ((n - 1) & 0xFF))) : 0x0A, 0x16, g.records_group_slot[5] + 0x0D);
+    OamSetPalette(n ? records_palette_speed((uint8_t)((n - 1) & 0xFF)) : 0x0A, 0x16, g.records_group_slot[5] + 0x0D);
 }
 
 /* @routine 04:E26E OamPaletteFromTableE26AByMode */
 void AllRecordsPagePalette(void)
 {
-    OamSetPalette(cart8(0x04, (uint16_t)(0xE26A + g.champ_stage)), 0x12, g.records_group_slot[4]);
+    OamSetPalette(records_palette_speed(g.champ_stage), 0x12, g.records_group_slot[4]);
 }
 
 /* @routine 04:E28D OamPalettesE28D */
 void BattleRecordsPagePalettes(void)
 {
-    OamSetPalette(cart8(0x04, (uint16_t)(0xE30B + g.champ_stage)), 0x12, g.records_group_slot[2]);
-    OamSetPalette(cart8(0x04, (uint16_t)(0xE313 + g.car[0])), 0x06, g.records_group_slot[2] + 0x16);
-    OamSetPalette(cart8(0x04, (uint16_t)(0xE313 + g.car[1])), 0x06, g.records_group_slot[2] + 0x1C);
+    OamSetPalette(records_palette_battle(g.champ_stage), 0x12, g.records_group_slot[2]);
+    OamSetPalette(records_palette_car(g.car[0]), 0x06, g.records_group_slot[2] + 0x16);
+    OamSetPalette(records_palette_car(g.car[1]), 0x06, g.records_group_slot[2] + 0x1C);
 }
 
 /* The records screens' sprite palettes, by screen: the rows' sprites after
@@ -523,25 +523,25 @@ void OamHideForHudMode(void)
 
 /* ---- strips and bars ---- */
 
-static void sprite_strip(int first, const uint8_t *table, uint16_t pos, int step, int n)
+static void sprite_strip(int first, uint16_t (*tile)(uint16_t, int), uint16_t selector, uint16_t pos, int step, int n)
 {
     int i;
 
     for (i = 0; i <= n; i++) {
         set_pos_word(first + i, pos);
         pos = (uint16_t)(pos + step);
-        set_tile_word(first + i, (uint16_t)(table[2 * i] | table[2 * i + 1] << 8));
+        set_tile_word(first + i, tile(selector, i));
     }
 }
 
 void SpriteStrip4(uint16_t selector, int first, uint16_t pos)
 {
-    sprite_strip(first, ram_code_7f((uint16_t)(0x09CD + ((selector >> 1) & 0x00F8))), pos, 0x0010, 3);
+    sprite_strip(first, strip4_tile, selector, pos, 0x0010, 3);
 }
 
 void SpriteStrip6(uint16_t selector, int first, uint16_t pos)
 {
-    sprite_strip(first, ram_code_7f((uint16_t)(0x0A66 + ((selector & 0x0038) << 1))), pos, 0x0008, 5);
+    sprite_strip(first, strip6_tile, selector, pos, 0x0008, 5);
 }
 
 static void bar_marker(int slot, uint16_t v, uint16_t pos, uint16_t span, uint16_t tile_far, uint16_t tile_near)
@@ -616,15 +616,17 @@ uint8_t sprite_high_get(int first)
 
 int MetaspriteDraw(uint16_t group, int slot)
 {
-    uint16_t at = cart16(0x04, (uint16_t)(0xEDCB + group * 4));
-    int n = (uint8_t)cart16(0x04, (uint16_t)(0xEDCD + group * 4)), count = n;
+    uint16_t at = sprite_group_first(group);
+    int n = (uint8_t)sprite_group_count(group), count = n;
 
     do {
-        set_x_byte(slot, (uint8_t)(cart8(0x04, (uint16_t)(0xEE4B + at)) + g.sprite_origin[0]));
-        set_y(slot, (uint8_t)(cart8(0x04, (uint16_t)(0xEE4C + at)) + g.sprite_origin[1]));
-        set_tile_byte(slot, cart8(0x04, (uint16_t)(0xEE4D + at)));
-        set_attr(slot, cart8(0x04, (uint16_t)(0xEE4E + at)));
-        if (!(cart8(0x04, (uint16_t)(0xEE4F + at)) & 1))
+        SpritePiece p = sprite_group_piece(at);
+
+        set_x_byte(slot, (uint8_t)(p.x + g.sprite_origin[0]));
+        set_y(slot, (uint8_t)(p.y + g.sprite_origin[1]));
+        set_tile_byte(slot, p.tile);
+        set_attr(slot, p.attr);
+        if (!(p.size & 1))
             set_large(slot, 0);
         at = (uint16_t)(at + 5);
         slot++;
@@ -656,16 +658,15 @@ static void flashing_metasprite_draw(uint16_t set)
 
         g.flash_phase = ph < 3 ? ph : 0;
     }
-    at = cart16(0x1C, (uint16_t)(0xE5AC + g.metasprite_set * 4));
-    n = (uint8_t)cart16(0x1C, (uint16_t)(0xE5AE + g.metasprite_set * 4));
+    at = flash_group_first(g.metasprite_set);
+    n = (uint8_t)flash_group_count(g.metasprite_set);
     do {
-        uint8_t attr;
+        SpritePiece p = flash_group_piece(at);
 
-        set_x_byte(slot, (uint8_t)(cart8(0x1C, (uint16_t)(0xE62C + at)) + (uint8_t)g.flash_sprite_pos));
-        set_y(slot, (uint8_t)(cart8(0x1C, (uint16_t)(0xE62D + at)) + (uint8_t)(g.flash_sprite_pos >> 8)));
-        set_tile_byte(slot, cart8(0x1C, (uint16_t)(0xE62E + at)));
-        attr = cart8(0x1C, (uint16_t)(0xE62F + at));
-        set_attr(slot, g.flash_phase ? cycled_attr(attr, (uint8_t)g.flash_phase) : attr);
+        set_x_byte(slot, (uint8_t)(p.x + (uint8_t)g.flash_sprite_pos));
+        set_y(slot, (uint8_t)(p.y + (uint8_t)(g.flash_sprite_pos >> 8)));
+        set_tile_byte(slot, p.tile);
+        set_attr(slot, g.flash_phase ? cycled_attr(p.attr, (uint8_t)g.flash_phase) : p.attr);
         at = (uint16_t)(at + 5);
         slot++;
     } while (--n);
@@ -683,15 +684,16 @@ static void sprite_pieces3(int slot)
     uint16_t i;
     uint8_t n;
 
-    i = (uint16_t)(cart8(0x07, (uint16_t)(0xB981 + (g.piece_selector & 0xFF))) + g.piece_set);
-    i = cart16(0x1C, (uint16_t)(0xF09E + ((uint16_t)(i << 2) & 0xFF)));
+    i = (uint16_t)(piece_set_of((uint8_t)(g.piece_selector & 0xFF)) + g.piece_set);
+    i = piece_set_first(i);
     for (n = 3; n; n--) {
+        SpritePiece p = piece_set_piece(i);
         uint8_t a;
 
-        set_x_byte(slot, (uint8_t)(g.piece_x + cart8(0x1C, (uint16_t)(0xF11E + i))));
-        set_y(slot, (uint8_t)(g.piece_y + cart8(0x1C, (uint16_t)(0xF11F + i))));
-        set_tile_byte(slot, (uint8_t)(g.piece_tile + cart8(0x1C, (uint16_t)(0xF120 + i))));
-        a = cart8(0x1C, (uint16_t)(0xF121 + i));
+        set_x_byte(slot, (uint8_t)(g.piece_x + p.x));
+        set_y(slot, (uint8_t)(g.piece_y + p.y));
+        set_tile_byte(slot, (uint8_t)(g.piece_tile + p.tile));
+        a = p.attr;
         if (g.piece_palette)
             a = (uint8_t)((a & 0xF1) | g.piece_palette);
         set_attr(slot, a);
@@ -818,18 +820,19 @@ void OverlaySpritesStep(void)
     }
     {
         uint16_t p = g.overlay_picture;
-        uint8_t pal = p == cart16(0x04, 0xE066) ? 0 : p == cart16(0x04, 0xE068) ? 2 : p == cart16(0x04, 0xE06A) ? 4 : 8;
+        uint8_t pal = car_picture_palette(p);
         unsigned at = g.overlay_attr ? 0x24 : 0;
 
         for (i = 0; i < 12; i++, at += 3) {
-            uint16_t x = (uint16_t)(cart8(0x04, (uint16_t)(0xE1B6 + at)) + g.overlay_x);
+            SpritePiece piece = overlay_piece(at);
+            uint16_t x = (uint16_t)(piece.x + g.overlay_x);
 
             if ((x & 0x8000) || x >= 0xF0) {
                 set_y(36 + i, 0xF0);
             } else {
                 set_x_byte(36 + i, (uint8_t)x);
-                set_y(36 + i, (uint8_t)(cart8(0x04, (uint16_t)(0xE1B7 + at)) + g.overlay_y - bob));
-                set_tile_byte(36 + i, (uint8_t)(cart8(0x04, (uint16_t)(0xE1B8 + at)) + step));
+                set_y(36 + i, (uint8_t)(piece.y + g.overlay_y - bob));
+                set_tile_byte(36 + i, (uint8_t)(piece.tile + step));
                 set_attr(36 + i, (uint8_t)(0x10 | pal | g.overlay_attr));
             }
         }
@@ -845,13 +848,13 @@ void OverlaySpritesStep(void)
    tile_base; a byte with bit 7 moves the pen without a sprite. */
 void OamTextLine(int slot, uint8_t tile_base, uint8_t x, uint8_t y, uint8_t attr)
 {
-    uint16_t at = cart16(0x07, (uint16_t)(0x8000 + (uint8_t)(g.course * 2)));
-    uint8_t n = cart8(0x07, at);
+    unsigned at = 0;
+    uint8_t n = course_name_byte(g.course, at);
     uint8_t pen = (uint8_t)(x - (uint8_t)(n * 4));
 
     at++;
     for (;;) {
-        uint8_t c = cart8(0x07, at);
+        uint8_t c = course_name_byte(g.course, at);
 
         at++;
         if (c & 0x80) {

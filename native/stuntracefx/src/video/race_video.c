@@ -7,9 +7,9 @@
 #include <string.h>
 
 #include "audio/sound.h"
-#include "data/cart.h"
 #include "data/menu_tables.h"
-#include "data/unpack.h"
+#include "data/race_tables.h"
+#include "data/video_tables.h"
 #include "fx/fx.h"
 #include "fx/fx_draw.h"
 #include "fx/fx_rt.h"
@@ -290,24 +290,19 @@ void race_backdrop_two_write(int page, const uint16_t *words)
 
 /* ---- one unpacked block to the art or a map ---- */
 
-static uint32_t chip_unpack(uint32_t end, uint32_t at)
+/* the chip's RAM from the unpack area on */
+enum { UNPACK_ROOM = 0xC000 };
+
+/* A block unpacked to the chip RAM's $3000; the length its transfer record
+   gives (where the original sent it is each caller's named destination). */
+static uint32_t unpacked(VideoBlock block)
 {
-    return unpack(end, fx_ram + at, 0xC000);
+    return video_block_unpack(block, fx_ram + FX_UNPACK_AREA, UNPACK_ROOM);
 }
 
-/* An unpack from a record (end, bank) to the chip RAM's $3000 */
-static void unpack_record(uint16_t in)
+static uint32_t course_unpacked(CourseBlock block)
 {
-    chip_unpack((uint32_t)cart8(0x03, (uint16_t)(in + 2)) << 16 | cart16(0x03, in), FX_UNPACK_AREA);
-}
-
-/* The record's unpack to the chip RAM's $3000; its length from its
-   transfer record `out` (where the original sent it is each caller's named
-   destination). */
-static uint32_t unpacked(uint16_t out, uint16_t in)
-{
-    unpack_record(in);
-    return cart16(0x03, (uint16_t)(out + 5));
+    return course_block_unpack(g.course, block, fx_ram + FX_UNPACK_AREA, UNPACK_ROOM);
 }
 
 /* The one-player frame's art by character: its frame and HUD from FRAME_HUD,
@@ -413,24 +408,20 @@ static void hud_art_mode0(void)
     uint8_t row[0x100];
     int i;
 
-    race_frame_art_write(FRAME_HUD, fx_ram + FX_UNPACK_AREA, unpacked(0xF829, 0xF7D1));
-    chip_unpack(0x1D << 16 | 0x9228, FX_UNPACK_AREA);
+    race_frame_art_write(FRAME_HUD, fx_ram + FX_UNPACK_AREA, unpacked(VIDEO_BLOCK_HUD_FRAME_SPEED));
+    unpacked(VIDEO_BLOCK_HUD_CARS);
     for (i = 0; i < 0x100; i++)
         row[i] = fx_ram[FX_UNPACK_AREA + k + (uint16_t)i];
     race_frame_art_write(FRAME_HUD_CAR, row, 0x100);
-    chip_unpack(0x18 << 16 | 0xFAE8, FX_UNPACK_AREA);
+    unpacked(VIDEO_BLOCK_AFTER_SPEED);
 }
 
-static void course_maps(int course_3)
+static void course_maps(void)
 {
-    uint8_t bank = cart8(0x03, (uint16_t)(0xF5A3 + course_3));
-    uint16_t end = cart16(0x03, (uint16_t)(0xF5A1 + course_3));
-    uint8_t bank2 = cart8(0x03, (uint16_t)(0xF5F7 + course_3));
-
-    chip_unpack((uint32_t)bank << 16 | end, FX_UNPACK_AREA);
+    course_unpacked(COURSE_BACKDROP_MAP);
     course_map_rows(0);
-    if (bank2) {
-        chip_unpack((uint32_t)bank2 << 16 | cart16(0x03, (uint16_t)(0xF5F5 + course_3)), FX_UNPACK_AREA);
+    if (course_block_present(g.course, COURSE_BACKDROP_MAP_2)) {
+        course_unpacked(COURSE_BACKDROP_MAP_2);
         course_map_rows(1);
     }
 }
@@ -442,39 +433,37 @@ static void race_screen_layers(void);
 /* The two-player screen's art: the course's backdrop tiles and its four map
    pages, the frame's tiles and BG1's map. (The original also copies the frame's
    tiles to $3680, for the BG1 base it flips to; this screen has one.) */
-static void two_player_art(int k3)
+static void two_player_art(void)
 {
-    chip_unpack((uint32_t)cart8(0x03, (uint16_t)(0xF4FB + k3)) << 16 | cart16(0x03, (uint16_t)(0xF4F9 + k3)), FX_UNPACK_AREA);
+    course_unpacked(COURSE_BACKDROP_ART);
     race_art_write(RACE_ART_TWO_BACKDROP + 0x0C0, fx_ram + FX_UNPACK_AREA, 0x1800);
-    chip_unpack((uint32_t)cart8(0x03, (uint16_t)(0xF5A3 + k3)) << 16 | cart16(0x03, (uint16_t)(0xF5A1 + k3)), FX_UNPACK_AREA);
+    course_unpacked(COURSE_BACKDROP_MAP);
     race_backdrop_two_pages_write(0, (const uint16_t *)(const void *)(fx_ram + FX_UNPACK_AREA), 4);
-    chip_unpack(0x17u << 16 | 0xFB84, FX_UNPACK_AREA);
+    unpacked(VIDEO_BLOCK_SPLIT_FRAME_ART);
     race_frame_two_art_write(RACE_FRAME_TWO_FRAME, fx_ram + FX_UNPACK_AREA, 0x600);
-    chip_unpack(0x17u << 16 | 0xFFAC, FX_UNPACK_AREA);
+    unpacked(VIDEO_BLOCK_SPLIT_FRAME_MAP);
     race_frame_map_two_write((const uint16_t *)(const void *)(fx_ram + FX_UNPACK_AREA));
 }
 
 void RaceVideoSetup(void)
 {
-    int k3 = g.course * 3;
-
     VideoRegsReset();
     g.fx_screen_mode = 3;
     clear_all();
     SoundIndicesFromHandlers();
-    race_art_write(RACE_ART_SPRITES, fx_ram + FX_UNPACK_AREA, unpacked(0xF80D, 0xF7DA));
+    race_art_write(RACE_ART_SPRITES, fx_ram + FX_UNPACK_AREA, unpacked(VIDEO_BLOCK_SPRITE_ART));
     PaletteCourseLoad(g.course);
     CgramDmaAll();
     GradientBuildColours(g.course);
     if (g.split_screen) {
-        two_player_art(k3);
+        two_player_art();
         /* $7F:9BD7-$BBD7 cleared: what the results and the quit menu put
            in a half's 3D place (split_picture) is this, a blank picture */
         memset((uint8_t *)bank7f_words + 0x800, 0, 0x2001);
-        unpacked(0xF84C, 0xF7E3);
+        unpacked(VIDEO_BLOCK_SPLIT_PANEL_MAP);
         race_panel_map_write((const uint16_t *)(const void *)(fx_ram + FX_UNPACK_AREA));
         memcpy(backdrop_map(0), fx_ram + FX_UNPACK_AREA, 0x800);
-        chip_unpack(0x18 << 16 | 0xC770, FX_UNPACK_AREA);
+        unpacked(VIDEO_BLOCK_SPLIT_SPRITE_ART);
         race_art_write(RACE_ART_SPRITES + 0x1C0, fx_ram + FX_UNPACK_AREA, 0x800);
         race_art_write(RACE_ART_SPRITES + 0x060, fx_ram + FX_UNPACK_AREA + 0x600, 0x400);
         race_screen_layers();
@@ -482,28 +471,28 @@ void RaceVideoSetup(void)
     }
     /* the course's backdrop art: BG2's characters $C0 on (with one player
        BG2's start is the sprites') */
-    race_art_write(RACE_ART_SPRITES + 0x0C0, fx_ram + FX_UNPACK_AREA, unpacked(0xF853, (uint16_t)(0xF4F9 + k3)));
-    if (cart16(0x03, (uint16_t)(0xF54D + k3)))
-        race_art_write(RACE_ART_SPRITES + 0x140, fx_ram + FX_UNPACK_AREA, unpacked(0xF85A, (uint16_t)(0xF54D + k3)));
-    race_art_write(RACE_ART_SPRITES + 0x040, fx_ram + FX_UNPACK_AREA, unpacked(0xF814, 0xF7DD));
-    chip_unpack(0x1D << 16 | 0xD970, FX_UNPACK_AREA);
+    race_art_write(RACE_ART_SPRITES + 0x0C0, fx_ram + FX_UNPACK_AREA, course_unpacked(COURSE_BACKDROP_ART));
+    if (course_block_present(g.course, COURSE_BACKDROP_ART_2))
+        race_art_write(RACE_ART_SPRITES + 0x140, fx_ram + FX_UNPACK_AREA, course_unpacked(COURSE_BACKDROP_ART_2));
+    race_art_write(RACE_ART_SPRITES + 0x040, fx_ram + FX_UNPACK_AREA, unpacked(VIDEO_BLOCK_SHARED_ART));
+    unpacked(VIDEO_BLOCK_COURSE_PICTURES);
     race_course_picture_write();
     switch (g.hud_mode) {
     case 1:
         if (!g.hud_blank) {
-            race_frame_art_write(FRAME_HUD, fx_ram + FX_UNPACK_AREA, unpacked(0xF830, 0xF7D4));
-            chip_unpack(0x18 << 16 | 0xFA38, FX_UNPACK_AREA);
+            race_frame_art_write(FRAME_HUD, fx_ram + FX_UNPACK_AREA, unpacked(VIDEO_BLOCK_HUD_FRAME_STUNT));
+            unpacked(VIDEO_BLOCK_HUD_PIECES);
             race_frame_art_write(FRAME_HUD_PIECES, fx_ram + FX_UNPACK_AREA, 0x180);
-            chip_unpack(0x18 << 16 | 0xFB90, FX_UNPACK_AREA);
+            unpacked(VIDEO_BLOCK_AFTER_STUNT);
             break;
         }
         /* fall through */
     case 3:
         if (!g.race_skipped) {
-            race_frame_art_write(FRAME_HUD, fx_ram + FX_UNPACK_AREA, unpacked(0xF830, 0xF7D4));
-            chip_unpack(0x18 << 16 | 0xFA38, FX_UNPACK_AREA);
+            race_frame_art_write(FRAME_HUD, fx_ram + FX_UNPACK_AREA, unpacked(VIDEO_BLOCK_HUD_FRAME_STUNT));
+            unpacked(VIDEO_BLOCK_HUD_PIECES);
             race_frame_art_write(FRAME_HUD_PIECES, fx_ram + FX_UNPACK_AREA + 0x180, 0x100);
-            chip_unpack(0x18 << 16 | 0xFC20, FX_UNPACK_AREA);
+            unpacked(VIDEO_BLOCK_AFTER_ALL);
             break;
         }
         /* fall through */
@@ -514,7 +503,7 @@ void RaceVideoSetup(void)
         break;
     }
     screen_frame_and_pictures();
-    course_maps(k3);
+    course_maps();
     race_screen_layers();
 }
 
@@ -554,7 +543,7 @@ uint16_t BackdropScrollFromView(void)
     if (t >= 0xF257)
         t = 0xF257;
     gradient.view_offset[half] = (uint16_t)(t - 0xEF57);
-    h = (uint16_t)(h + ram_code_7e16((uint16_t)(0xE920 + half * 2)));
+    h = (uint16_t)(h + backdrop_two_scroll_base(half));
     g.backdrop_y[half] = h;
     return h;
 }
@@ -572,7 +561,7 @@ void BackdropRowsUpdate(void)
     BackdropPitchForCameraMode();
     s = (uint16_t)((uint16_t)(h << 1) + 0x42 + (h >> 15));
     gradient.view_offset[0] = s < 0x0300 ? s : 0x0300;
-    g.backdrop_y[buf] = (uint16_t)((h & 7) - 0x20 + ram_code_7e16((uint16_t)(0xE811 + buf * 2)));
+    g.backdrop_y[buf] = (uint16_t)((h & 7) - 0x20 + backdrop_one_scroll_base(buf));
     g.backdrop_x[buf] = (uint16_t)(((g.backdrop_heading >> 1) & 7) - 0x18);
     row_step = (unsigned)(((uint16_t)(h + g.backdrop_row_adjust) >> 3) & 0x3F) * 0x140u;
     x = ((g.backdrop_heading >> 3) & 0xFE) + row_step;
@@ -745,7 +734,7 @@ static void hills_from_angles(int buffer, uint16_t heading, uint16_t pitch)
 
     hills_map_write(wide_band[buffer].map);
     pic.race.wide_x = (((heading >> 3) & 0xFE) * 4 + ((heading >> 1) & 7) - 0x18) & (WIDE_COLUMNS * 8 - 1);
-    pic.race.wide_y = (int16_t)(uint16_t)((pitch & 7) - 0x20 + ram_code_7e16((uint16_t)(0xE811 + buffer * 2)))
+    pic.race.wide_y = (int16_t)(uint16_t)((pitch & 7) - 0x20 + backdrop_one_scroll_base(buffer))
                       + (WIDE_DROP + row - band) * 8;
     if (full_horizon_row(&horizon))
         pic.race.wide_y -= horizon - (screen_shape()->origin_y + SKY_AT_HORIZON - 1 - (int)pitch);
@@ -843,7 +832,7 @@ void TilemapPaletteCycle(unsigned at, int count)
         if (phase >= 6)
             phase = 0;
         palettes.tile_cycle = phase;
-        pal = cart8(0x07, (uint16_t)((g.hud_mode == 2 ? 0xCF2C : 0xCF26) + phase));
+        pal = results_row_cycle_bits(g.hud_mode == 2, phase);
         palette_fill(at, count, pal);
     }
 }
@@ -885,7 +874,7 @@ void TilemapLevelColumns(void)
     int i, k;
 
     for (i = 0; i < 12; i++) {
-        uint16_t x = cart16(0x02, (uint16_t)(0xFB6E + 2 * i)), y;
+        uint16_t x = level_column_place(i), y;
         uint8_t n = g.level_columns[i];
 
         if (n > 4)
@@ -895,7 +884,7 @@ void TilemapLevelColumns(void)
             int c;
 
             for (c = 0; c < 4; c++)
-                backdrop_map(0)[(x + 2 * c) / 2] = cart16(0x02, (uint16_t)(0xFB4E + y + 2 * c));
+                backdrop_map(0)[(x + 2 * c) / 2] = level_column_tile((uint16_t)(y + 2 * c));
             y = (uint16_t)(y + 8);
             x = (uint16_t)(x + 0x40);
         }
@@ -1275,7 +1264,7 @@ void RaceHudLoad(void)
     else
         SoundIndicesFromHandlers();
     CourseSoundLoad();
-    chip_unpack(0x1D << 16 | 0x8078, FX_UNPACK_AREA);
+    unpacked(VIDEO_BLOCK_HUD_PICTURE);
     switch (g.hud_mode) {
     case 0:
         hud_tile(FX_UNPACK_AREA + 0xA0, g.selection_derived[1], 0x2F);
@@ -1294,12 +1283,13 @@ void RaceHudLoad(void)
         break;
     }
     hud_tile(FX_UNPACK_AREA, g.selection_derived[0], 0x2E);
-    race_art_write(RACE_ART_SPRITES + 0x0A0, fx_ram + FX_UNPACK_AREA, unpacked(0xF845, 0xF804));
-    chip_unpack(0x18 << 16 | 0xD920, FX_UNPACK_AREA);
+    race_art_write(RACE_ART_SPRITES + 0x0A0, fx_ram + FX_UNPACK_AREA,
+                   race_block_unpack(RACE_BLOCK_SPLIT_ART, fx_ram + FX_UNPACK_AREA, UNPACK_ROOM));
+    unpacked(VIDEO_BLOCK_RESULTS_CARS);
     memcpy(race_pictures, fx_ram + FX_UNPACK_AREA, sizeof race_pictures);
     SoundReset();
     RaceTimeInit();
-    fx16_set(FXIN_COURSE_MODELS, cart16(0x03, (uint16_t)(0xF799 + g.course * 2)));
+    fx16_set(FXIN_COURSE_MODELS, course_models_word(g.course));
     if (g.split_screen)
         RaceHudSetupTwoPlayers();
     else
@@ -1708,7 +1698,7 @@ static void two_full_backdrop(nshvc_draw_list list)
                original put the half's sky entry SKY_AT_HORIZON: the half's
                middle + SKY_AT_HORIZON - $21 - 40 - its pitch (BackdropScrollFromView's
                h, its scroll less the half's table word) */
-            int pitch = (int16_t)(uint16_t)(pic.race.backdrop_y[p] - ram_code_7e16((uint16_t)(0xE920 + p * 2)));
+            int pitch = (int16_t)(uint16_t)(pic.race.backdrop_y[p] - backdrop_two_scroll_base(p));
 
             sy -= horizon - (rcy + SKY_AT_HORIZON - 0x21 - 40 - pitch);
         }
@@ -1997,7 +1987,7 @@ static void two_halves_between(void)
         if (t >= 0xF257)
             t = 0xF257;
         pic.race.backdrop_x[half] = (int16_t)(uint16_t)(heading[half] >> 2);
-        pic.race.backdrop_y[half] = (int16_t)(uint16_t)(h + ram_code_7e16((uint16_t)(0xE920 + half * 2)));
+        pic.race.backdrop_y[half] = (int16_t)(uint16_t)(h + backdrop_two_scroll_base(half));
         pic.race.gradient_start[half] = (uint16_t)(GRADIENT_AT_DAY + (uint16_t)(t - 0xEF57) / 2);
     }
 }
@@ -2029,8 +2019,6 @@ void race_two_player_list(void)
 void PictureTurnStep(void)
 {
     uint16_t held = g.pad_last[0], t = g.picture_turn_number;
-    uint16_t end;
-    uint8_t bank;
 
     if (g.picture_turn_pending)
         return;
@@ -2046,19 +2034,13 @@ void PictureTurnStep(void)
     } else {
         t = (uint16_t)(t + 1);
     }
-    for (;;) {
-        g.picture_turn_number = t;
-        end = cart16(0x07, (uint16_t)(0xC648 + t * 3));
-        bank = cart8(0x07, (uint16_t)(0xC64A + t * 3));
-        if (end >= 0x8000)
-            break;
-        t = end;                        /* an entry below $8000 names the picture to go to instead */
-    }
+    t = turn_picture_resolve(t);        /* an entry may name the picture to go to instead */
+    g.picture_turn_number = t;
     if (g.fx_buffer) {
-        chip_unpack((uint32_t)bank << 16 | end, FX_UNPACK_AREA);
+        turn_picture_unpack(t, fx_ram + FX_UNPACK_AREA, UNPACK_ROOM);
         FxTiles2bppTo4bppLow();
     } else {
-        chip_unpack((uint32_t)bank << 16 | end, FX_TURN_UNPACK_HIGH);
+        turn_picture_unpack(t, fx_ram + FX_TURN_UNPACK_HIGH, UNPACK_ROOM);
         FxTiles2bppTo4bppHigh();
     }
     g.picture_turn_pending = 0xFF;

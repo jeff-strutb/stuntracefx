@@ -2,6 +2,7 @@
  * fade.c: the race's fade, a level whose whole part is the brightness and
  * whose fraction is carried in $0D60. In and out by g.fade_out.
  */
+#include "data/video_tables.h"
 #include "system/state.h"
 #include "video/video.h"
 
@@ -39,5 +40,5 @@ uint16_t FadeStep(void)
 {
     if (g.fade_out)
         return fade_out();
-    return fade_in_by(ram_code_7e16((uint16_t)(0xAC9D + (uint8_t)(g.fade_level << 1))));
+    return fade_in_by(fade_in_step(g.fade_level));
 }

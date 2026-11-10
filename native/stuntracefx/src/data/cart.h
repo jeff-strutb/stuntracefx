@@ -30,4 +30,12 @@ static inline uint32_t cart24(uint8_t bank, uint16_t addr)
     return (uint32_t)cart16(bank, addr) | (uint32_t)cart8(bank, (uint16_t)(addr + 2)) << 16;
 }
 
+/* tables in the code the original copied to work RAM ($7E:A2D9 up from ROM
+   $01:0000, $7F:0800 up from $05:8000), by the address they ran at */
+static inline const uint8_t *ram_code_7e(uint16_t a) { return &cart[0x10000u + (uint32_t)(a - 0xA2D9u)]; }
+static inline uint16_t ram_code_7e16(uint16_t a) { const uint8_t *p = ram_code_7e(a); return (uint16_t)(p[0] | p[1] << 8); }
+static inline uint8_t ram_code_7e8(uint16_t a) { return *ram_code_7e(a); }
+static inline const uint8_t *ram_code_7f(uint16_t a) { return &cart[0x58000u + (uint32_t)(a - 0x0800u)]; }
+static inline uint16_t ram_code_7f16(uint16_t a) { const uint8_t *p = ram_code_7f(a); return (uint16_t)(p[0] | p[1] << 8); }
+
 #endif

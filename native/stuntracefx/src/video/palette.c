@@ -8,7 +8,7 @@
 #include <string.h>
 
 #include "audio/sound.h"
-#include "data/cart.h"
+#include "data/video_tables.h"
 #include "system/game.h"
 #include "system/state.h"
 #include "video/picture.h"
@@ -79,67 +79,48 @@ void RasterColoursUnlessSplitStages(void)
 }
 
 /* One colour-cycling step: the phase runs 0 to 15 and folds back after 7. */
-static void cycle_step(int which, uint16_t table, int colour)
+static void cycle_step(int which, ColourCycle cycle, int colour)
 {
     int phase = palettes.cycle_phase[which], i = phase >= 8 ? 15 - phase : phase;
 
-    palettes.buffer[colour] = ram_code_7e16((uint16_t)(table + i * 2));
+    palettes.buffer[colour] = colour_cycle_colour(cycle, i);
     palettes.cycle_phase[which] = (uint8_t)(phase + 1 >= 16 ? 0 : phase + 1);
 }
 
 void PaletteCycle(void)
 {
     if (!(g.frame_count & 1)) {
-        cycle_step(0, 0xB71B, 0x10);
-        cycle_step(1, 0xB6FB, 0x11);
+        cycle_step(0, COLOUR_CYCLE_10, 0x10);
+        cycle_step(1, COLOUR_CYCLE_11, 0x11);
     } else {
-        cycle_step(2, 0xB70B, 0x12);
+        cycle_step(2, COLOUR_CYCLE_12, 0x12);
     }
 }
 
-void PaletteLoad16(uint8_t bank, uint16_t src)
-{
-    int i;
-
-    for (i = 0; i < 16; i++) {
-        uint16_t c = cart16(bank, (uint16_t)(src + 2 * i));
-
-        palettes.blended[i] = palettes.day[i] = palettes.buffer[i] = c;
-    }
-}
-
-/* the bit table: whether a colour takes part in the blend toward night */
-static int blend_bit(int colour)
-{
-    uint16_t bits = cart16(0x03, (uint16_t)(0xEF1F + ((colour >> 3) & 0x1E)));
-
-    return (bits >> (colour & 15)) & 1;
-}
-
+/* The course's colours: 16-255 by day (shown) and by night, then 0-15 by
+   day (shown) and by night. */
 void PaletteCourseLoad(int course)
 {
-    int i = course * 3, c;
-    uint8_t bank = cart8(0x03, (uint16_t)(0xF64B + i));
-    uint16_t src = cart16(0x03, (uint16_t)(0xF649 + i));
+    int c;
 
     for (c = 16; c < 256; c++) {
-        uint16_t w = cart16(bank, (uint16_t)(src + 2 * c));
+        uint16_t w = course_day_colour(course, c);
 
         palettes.blended[c] = palettes.day[c] = palettes.buffer[c] = w;
     }
-    bank = cart8(0x03, (uint16_t)(0xF69F + i));
-    src = cart16(0x03, (uint16_t)(0xF69D + i));
     for (c = 16; c < 256; c++)
-        palettes.night[c] = cart16(bank, (uint16_t)(src + 2 * c));
-    PaletteLoad16(cart8(0x03, (uint16_t)(0xF6F3 + i)), cart16(0x03, (uint16_t)(0xF6F1 + i)));
-    bank = cart8(0x03, (uint16_t)(0xF747 + i));
-    src = cart16(0x03, (uint16_t)(0xF745 + i));
+        palettes.night[c] = course_night_colour(course, c);
+    for (c = 0; c < 16; c++) {
+        uint16_t w = course_day_colour(course, c);
+
+        palettes.blended[c] = palettes.day[c] = palettes.buffer[c] = w;
+    }
     for (c = 0; c < 16; c++)
-        palettes.night[c] = cart16(bank, (uint16_t)(src + 2 * c));
+        palettes.night[c] = course_night_colour(course, c);
     for (c = 255; c >= 0; c--) {
         uint16_t w = palettes.day[c], d = palettes.night[c];
 
-        if (blend_bit(c)) {
+        if (colour_blends_to_night(c)) {
             if (w != d)
                 palettes.night[c] = w;
         } else if (w == d) {
@@ -231,7 +212,7 @@ void PaletteKeptColoursStep(int player, int pad_index)
         uint8_t step = cycle13(g.kept_step[player], go == KEPT_TWO ? 2 : 1);
 
         g.kept_step[player] = step;
-        palettes.buffer[0xE3] = ram_code_7e16((uint16_t)(0xB4E9 + step * 2));
+        palettes.buffer[0xE3] = kept_colour(KEPT_COLOUR_E3, step);
     }
     {
         unsigned s = (unsigned)g.kept_count[player] - g.kept_rate[player];
@@ -241,8 +222,8 @@ void PaletteKeptColoursStep(int player, int pad_index)
             uint8_t step = cycle13(g.kept_cycle[player], 1);
 
             g.kept_cycle[player] = step;
-            palettes.buffer[0xE1] = ram_code_7e16((uint16_t)(0xB505 + step * 2));
-            palettes.buffer[0xE2] = ram_code_7e16((uint16_t)(0xB521 + step * 2));
+            palettes.buffer[0xE1] = kept_colour(KEPT_COLOUR_E1, step);
+            palettes.buffer[0xE2] = kept_colour(KEPT_COLOUR_E2, step);
         }
     }
 }
@@ -289,13 +270,13 @@ void StatusColourPick(int item)
     } else {
         flags = g.status_flags[item];
         if ((flags & 0x0400) && g.kept_enable[item]) {
-            colour = ram_code_7e16((uint16_t)(0xB5B9 + (g.frame_count & 3) * 2));
+            colour = status_colour(STATUS_COLOURS_KEPT, g.frame_count & 3);
         } else if ((flags & 0x0010) && level >= 0x3C) {
-            colour = ram_code_7e16((uint16_t)(0xB5B1 + (g.frame_count & 3) * 2));
+            colour = status_colour(STATUS_COLOURS_HIGH, g.frame_count & 3);
         } else {
             if (g.frame_count & 1)
                 return;
-            colour = ram_code_7e16((uint16_t)(0xB5B1 + ((g.frame_count >> 1) & 3) * 2));
+            colour = status_colour(STATUS_COLOURS_HIGH, (g.frame_count >> 1) & 3);
         }
     }
     palettes.buffer[0x13] = colour;
@@ -337,8 +318,6 @@ void PaletteFadeStep(void)
    night set, $0B only colour 15's low byte). */
 void CoursePaletteCycle(void)
 {
-    static const uint16_t c3[4] = {0xE45F, 0xE48B, 0xE4B7, 0xE4E3};
-    static const uint16_t c7[4] = {0xE50F, 0xE53B, 0xE4B7, 0xE4E3};
     static const uint16_t fixed7[4] = {0x14A7, 0x1086, 0x15FF, 0x269F};
     int c = g.course, i;
     uint8_t s;
@@ -352,14 +331,14 @@ void CoursePaletteCycle(void)
     s = (uint8_t)(s * 2);
     if (c == 3) {
         for (i = 0; i < 4; i++)
-            palettes.buffer[12 + i] = cart16(0x04, (uint16_t)(c3[i] + s));
+            palettes.buffer[12 + i] = course_cycle_colour(3, i, s);
     } else if (c == 7) {
         for (i = 0; i < 4; i++) {
             palettes.day[12 + i] = fixed7[i];
-            palettes.night[12 + i] = cart16(0x04, (uint16_t)(c7[i] + s));
+            palettes.night[12 + i] = course_cycle_colour(7, i, s);
         }
     } else {
-        uint8_t v = cart8(0x04, (uint16_t)((palettes.weather >= 0x18 ? 0xE433 : 0xE407) + s));
+        uint8_t v = course_cycle_low_byte(palettes.weather >= 0x18, s);
 
         palettes.buffer[15] = (uint16_t)((palettes.buffer[15] & 0xFF00) | v);
         palettes.day[15] = (uint16_t)((palettes.day[15] & 0xFF00) | v);
@@ -431,7 +410,7 @@ static void gradient_band_rebuild(void)
     int first = 1;
 
     palettes.band = (uint16_t)(palettes.band + 1 >= 3 ? 0 : palettes.band + 1);
-    start = ram_code_7e16((uint16_t)(0xE69C + palettes.band * 2));
+    start = gradient_band_start(palettes.band);
     end = (uint16_t)(start + 0x100);
     palettes.band_end = end;
     gradient.source[g.fx_buffer] = (uint16_t)(start / 2);
