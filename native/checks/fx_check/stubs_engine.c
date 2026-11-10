@@ -17,6 +17,7 @@ void race_frame_art_draw(nshvc_draw_list l) { (void)l; }
 void race_frame_art_draw_over(nshvc_draw_list l) { (void)l; }
 int race_full_window(void) { return 0; }
 int race_two_full_window(void) { return 0; }
+void race_two_full_window_ready(int on) { (void)on; }
 int race_course_full_window(void) { return 0; }
 #include "video/picture.h"
 Picture pic;

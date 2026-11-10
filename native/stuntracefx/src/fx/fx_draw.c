@@ -113,6 +113,7 @@ void fx_draw_set_target(nshvc_draw_list list, uint32_t width, uint32_t height)
 void fx_draw_init(void)
 {
     screen_list = nshvc_draw_list_create();
+    race_two_full_window_ready(1);      /* each player's 3D drawn in its rectangle (video's interim switch) */
 }
 
 /* Where each picture's pixel (x, y) goes on the screen. */
