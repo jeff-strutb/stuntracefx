@@ -321,6 +321,116 @@ typedef enum {
 #define ROT_COS_TABLE 0x973E
 #define ROT_SIN_TABLE 0x96FE
 
+/*
+ * The Super FX's state as named fields (plan, stage 5, "The Super FX state"): the records, the record pool's
+ * bookkeeping, and the words that outlive a job or that the S-CPU side reads, in one block. No field is at an SNES
+ * address and none holds a register's byte. The +$xx and $xxxx in the comments name the original's place, for the
+ * reader and for fx_check's writer, which lays the state back out as the original's RAM; the game never uses them.
+ * One field per meaning: where the original reused a record offset for another kind's meaning (a part's +$34 next
+ * part, a car's +$34 heading rate), each meaning has its own field. The files move onto these as they convert.
+ */
+typedef struct FxRecord FxRecord;
+
+/* the record maker's mode (+$1A): still, falling, falling part, trigger, camera follower */
+typedef enum { FX_MODE_NONE, FX_MODE_STILL, FX_MODE_FALLING, FX_MODE_FALLING_PART, FX_MODE_TRIGGER, FX_MODE_CAMERA } FxMode;
+/* what made it, which fixes its size: a car ($98 bytes in the original), a car's part ($52), an object ($34), a still
+   ($2A, in the second pool) */
+typedef enum { FX_KIND_CAR, FX_KIND_PART, FX_KIND_OBJECT, FX_KIND_STILL } FxKind;
+
+struct FxRecord {
+    /* the pool's: the allocator's bookkeeping and the check writer's, nothing else */
+    uint8_t in_use, pool;                       /* +$08: the pool it came from (0 first, 1 second) */
+    uint16_t block_place, block_size;           /* where its block is in its pool, and how big */
+    FxKind kind;
+    /* every record */
+    FxRecord *next, *prev;                      /* +$04, +$06: the list of all records */
+    FxHandler handler;                          /* +$0A */
+    int16_t offset_x, offset_y, offset_z;       /* +$0C-$10: the model's offset (an object's) */
+    uint16_t flags10;                           /* +$10 (the record's own list's keep bit, bit 0) */
+    FxRecord *list, *list_next;                 /* +$18 the head of its own list, +$0E the next on the list it is on */
+    uint16_t frame, script;                     /* +$12, +$14 */
+    uint16_t flags16, flags1c;                  /* +$16, +$1C */
+    FxMode mode;                                /* +$1A */
+    int16_t pos_x, pos_y, pos_z;                /* +$1E-$22: the place (half units) */
+    uint16_t heading, pitch, roll;              /* +$24, +$26, +$28 */
+    uint16_t mass;                              /* +$2A */
+    uint16_t contact_flags;                     /* +$2C */
+    int16_t vel_x, vel_y, vel_z;                /* +$2E-$32 */
+    int16_t heading_rate, pitch_rate, roll_rate;/* +$34-$38 */
+    FxRecord *still_next;                       /* +$26 of a still: the next on the still list */
+    /* a car's */
+    int16_t steer_bias;                         /* +$3A */
+    FxRecord *parts;                            /* +$3E: its first part */
+    uint16_t flags40, sides, flags44;           /* +$40, +$42, +$44 */
+    uint16_t speed;                             /* +$4A */
+    uint16_t slide;                             /* +$56 */
+    uint16_t segment;                           /* +$58 */
+    uint16_t jump_timer;                        /* +$5E */
+    uint16_t y_held, impact, flags64;           /* +$60, +$62, +$64 */
+    uint16_t car_script;                        /* +$66 */
+    uint16_t boost, align, entry, direction;    /* +$6A, +$6C, +$6E, +$70 */
+    FxRecord *next_car;                         /* +$74 */
+    uint16_t laps, spread, stuck;               /* +$7A, +$7C, +$7E */
+    uint16_t damage, to_go, counted, rank;      /* +$82, +$84, +$86, +$88 */
+    uint16_t flags8a, flags8c;                  /* +$8A, +$8C */
+    FxRecord *partner;                          /* +$8E */
+    uint16_t flags40_kept, part_contacts;       /* +$90, +$92 */
+    uint16_t push_total;                        /* +$94 */
+    /* a part's */
+    FxRecord *child;                            /* +$12 of a part */
+    FxRecord *part_next;                        /* +$34 of a part */
+    uint16_t part_world;                        /* +$36 */
+    int16_t part3c, part_offset_x, part_offset_y, part_offset_z; /* +$3C, +$4A-$4E */
+    uint16_t part_flags, part50;                /* +$46, +$50 */
+};
+
+/* The original's memory manager: first fit over two pools of bytes, a larger block split, neighbours merged; a record
+   is not made when no block fits, which is game behaviour. Places and sizes are its own bookkeeping. */
+#define FX_RECORDS_MAX 98                       /* at most 63 of the smallest first-pool records ($34) and 35 stills ($2A) */
+typedef struct { uint16_t place, size; uint8_t used; } FxBlock;
+typedef struct {
+    FxBlock blocks[2][FX_RECORDS_MAX * 2];      /* each pool's blocks in place order */
+    uint16_t nblocks[2];
+} FxPool;
+
+/* The words the S-CPU side gives the renderer each frame (race's): the view and the frame's switches. A job's own
+   inputs and results (the vector, the angles, the length) are its arguments and its result, not fields. */
+typedef struct {
+    uint16_t view_centre_x, view_centre_y;      /* $0034, $0036 */
+    uint16_t view_left, view_right, view_top, view_bottom; /* $0038-$003E */
+    uint16_t view_scale_a, view_scale_b;        /* $0092, $0094 */
+    uint16_t view_pos[3];                       /* $00D8-$00DC */
+    uint16_t view_angles[3];                    /* $00DE-$00E2 */
+    uint16_t camera_flags;                      /* $2736 */
+    uint16_t effects_seed;                      /* $01D0: the renderer's effects random seed */
+    uint16_t not_menu;                          /* $108C: 0 for the course menu's view, else the players' */
+    uint16_t text_notice;                       /* $2732: 0 none, else draw the text */
+    uint16_t step_frames;                       /* $108E: the frames of the last step */
+    uint16_t shade_base;                        /* $004E: the faces' colour tables' base */
+    uint16_t course_models;                     /* $0050: the course's model table */
+} FxFrameInputs;
+
+/* The words that outlive a job or that the S-CPU side reads (the measured split, fx-ram-split-measured.tsv in the
+   notes folder); groups are added as the files convert. */
+typedef struct {
+    FxFrameInputs frame;
+    FxRecord *records;                          /* $2332: the first of all records */
+    FxRecord *stills;                           /* $2398 */
+    uint16_t still_count;                       /* $2482 */
+    FxRecord *player1, *player2, *view;         /* $2476, $2478, $247A */
+    uint16_t timer_up, timer_down;              /* $2470, $2472 */
+    uint16_t physics_busy;                      /* $246E */
+} FxShared;
+
+/* One block: fx_tween and fx_far copy it whole and put it back, so the records are a fixed array, never allocated,
+   and a record pointer stays valid across the copy. */
+typedef struct {
+    FxShared shared;
+    FxRecord record[FX_RECORDS_MAX];
+    FxPool pool;
+} FxStateBlock;
+extern FxStateBlock fx_state;
+
 typedef struct { uint16_t touch_pos_result; uint16_t record_z_out; uint16_t last_contact_ptr_out; uint16_t last_contact_flags_out; } FxAllTouchesResult;
 typedef struct { uint16_t angle; uint16_t xor_negative; uint16_t swap_marker_out; } FxAngleOfResult;
 typedef struct { uint16_t angle; uint16_t angle_sign_xor; uint16_t swap_mark_out; } FxBearingToResult;

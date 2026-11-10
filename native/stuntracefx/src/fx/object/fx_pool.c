@@ -15,6 +15,8 @@
 
 #include "fx/fx.h"
 
+FxStateBlock fx_state;
+
 /*
  * @routine 04:893A FxPoolTake
  * WHAT IT DOES: Takes a block of R4 bytes from the pool whose chain head is

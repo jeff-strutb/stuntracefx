@@ -241,8 +241,10 @@ colours and order.
 
 #### The Super FX state (section 3's split, for section 8)
 
-Agreed with the 3D session (fx.h, the drawing side) on 2026-11-09; objects (the S-CPU object code's record links) and
-race (`FxFrameInputs`) asked. The types are drafted in the notes folder (`fx-state-types-draft.h`) for the 3D session to land.
+Agreed with the 3D session (fx.h, the drawing side) on 2026-11-09, with objects (the record links, `FxHandler`) and race
+(`FxFrameInputs`). The types are in fx.h: `FxRecord`, `FxPool`, `FxShared` with race's frame inputs as its `frame`
+member, and the aggregate `FxStateBlock fx_state` (landed by the sound session with the 3D session's yes; the name
+`FxState` was taken by the chip's registers in fx_rt.h).
 
 Today the chip's 64 KB of RAM is one byte array that both sides read by address: 256 named addresses (72 also read by the
 S-CPU side), 64 record offsets and 129 literal addresses in `src/fx`. Section 3 splits it into **shared state**, kept as
@@ -281,8 +283,8 @@ $108E; 6 more); which of the other 184 outlive a job is measured, not guessed (s
 90 shared, 124 scratch, 25 not reached; the list is `fx-ram-split-measured.tsv` in the notes folder. An array a job partly
 rewrites can look shared when a job reads a slot first, so arrays are read in the code before they are made fields.
 
-**3a. One aggregate, one copy.** `FxState` holds `FxShared`, the fixed `FxRecord` array and `FxPool`'s bookkeeping as
-one block (`fx_state`), never allocated, so a record pointer stays valid when the pictures between steps (`fx_tween`) and
+**3a. One aggregate, one copy.** `FxStateBlock` holds `FxShared`, the fixed `FxRecord` array and `FxPool`'s bookkeeping
+as one block (`fx_state`), never allocated, so a record pointer stays valid when the pictures between steps (`fx_tween`) and
 the far list (`fx_far`) copy the chip's state whole and put it back. The per-frame words race proposed as `FxFrameInputs`
 (the view, the records, the shade base) are a part of `FxShared`, not a second struct. The far records the draw list
 writes into bank 1 (the far list and the view's world place) become a far-list array in `FxShared`, filled by the S-CPU
