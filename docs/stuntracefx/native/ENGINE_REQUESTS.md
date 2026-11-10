@@ -61,3 +61,18 @@ With that, a game's pause screen takes a controller button pressed (from `contro
 way it takes a key now.
 
 A touch screen's on-screen controls are the engine's, with nothing to rebind; nothing is asked for touch.
+
+## 5. The game's icon on every platform (Jeff's bug, 2026-11-09)
+
+Jeff: "Built app (mac at least, probably all platforms) doesn't use the app icon specified." The game now passes
+`ICON icon/icon.png` (800 x 800, no alpha) to `nshvc_game()`. Today `cmake/NshvcGame.cmake` uses `ICON` only on Android
+(one PNG in `res/mipmap`). On Apple it copies the file into `Resources` but sets no `MACOSX_BUNDLE_ICON_FILE`, so
+Info.plist has no `CFBundleIconFile` and macOS shows the generic icon; iOS gets no asset catalog or `CFBundleIcons`;
+Windows gets no resource script, so the window class finds no icon 1; Linux gets nothing.
+
+Asked: `nshvc_game(... ICON <one square image>)` makes each platform's form at build time:
+- macOS: an `.icns` (each size at 1x and 2x, via `sips` and `iconutil`) in Resources, named by `MACOSX_BUNDLE_ICON_FILE`.
+- iOS: an asset catalog compiled by `actool`, its partial Info.plist merged (`CFBundleIcons`).
+- Windows: an `.ico` (16 to 256) in a resource script linked into the program as the icon the window class loads.
+- Linux: a PNG beside the program for a desktop file; Android as now.
+A working recipe for all of these from one image is in the old port's `ports/stuntracefx/icon/icons.sh`.
