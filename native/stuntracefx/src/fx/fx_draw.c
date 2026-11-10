@@ -11,11 +11,8 @@
 #include <string.h>
 
 #include "fx/fx.h"
-#include "fx/fx_art.h"
 #include "fx/fx_draw.h"
 #include "fx/fx_face.h"
-#include "data/menu_tables.h"
-#include "data/video_tables.h"
 #include "system/state.h"
 #include "video/picture.h"
 #include "video/video.h"
@@ -1083,158 +1080,6 @@ static nshvc_image glyph_image(uint8_t bank, uint16_t base, uint16_t width, uint
     return glyph_known[glyph_count++].image;
 }
 
-/* ---- pictures drawn as their clean geometry (fx_art.c) ---- */
-
-uint8_t fx_art_rom(uint8_t bank, uint16_t at)
-{
-    return fx_rom_read(bank, at);
-}
-
-/* The console art's tile sets: video's blocks (0 on) and the menus' pictures
-   (32 on), unpacked the first time asked for. */
-const uint8_t *fx_art_tile_set(uint16_t n, uint32_t *bytes)
-{
-    enum { SETS = 32, ROOM = 0x40000 };
-    static uint8_t *set[2 * SETS];
-    static uint32_t size[2 * SETS];
-
-    /* 0 on: video's blocks; 32 on: the menus' pictures */
-    if (n >= 2 * SETS || (n < SETS && n > VIDEO_BLOCK_RESULTS_CARS) || (n >= SETS && n - SETS >= MENU_PICS))
-        return NULL;
-    if (!set[n]) {
-        set[n] = malloc(ROOM);
-        if (!set[n])
-            abort();
-        size[n] = n < SETS ? video_block_unpack((VideoBlock)n, set[n], ROOM)
-                           : menu_picture_unpack((MenuPicture)(n - SETS), set[n], ROOM);
-    }
-    *bytes = size[n];
-    return set[n];
-}
-
-/* The part [u0, u1) x [v0, v1) of picture p, its texel (u, v) at
-   (ox + u sx, oy + v sy), each colour's flat pieces in their order through
-   the four colours. 0 when the picture has no geometry (or failed its check). */
-static int art_draw(const FxArtPicture *p, double ox, double oy, double sx, double sy, double u0, double u1, double v0,
-                    double v1, const uint8_t colours[4])
-{
-    enum { ROOM = 3 * 2048 };
-    static nshvc_vertex v[ROOM + 24];
-    int layers = fx_art_layers(p), k, nv = 0;
-
-    if (!layers)
-        return 0;
-    if ((!target.id && !recording) || u1 <= u0 || v1 <= v0)
-        return 1;
-    for (k = 0; k < layers; k++) {
-        uint8_t value, colour;
-        int n, t;
-        const float (*tri)[2] = fx_art_layer(p, k, &n, &value);
-
-        colour = ink(colours[value & 3]);
-        if (!colour || !tri)
-            continue;
-        for (t = 0; t < n; t++) {
-            static const double side[4][3] = { { -1, 0, 0 }, { 1, 0, 0 }, { 0, -1, 0 }, { 0, 1, 0 } };
-            double a[10][2], b[10][2];
-            int m = 3, e, i;
-
-            for (i = 0; i < 3; i++) {
-                a[i][0] = tri[3 * t + i][0];
-                a[i][1] = tri[3 * t + i][1];
-            }
-            for (e = 0; e < 4 && m >= 3; e++) {
-                double c = e == 0 ? -u0 : e == 1 ? u1 : e == 2 ? -v0 : v1;
-                int o = 0;
-
-                for (i = 0; i < m; i++) {
-                    const double *P = a[i], *Q = a[(i + 1) % m];
-                    double dp = side[e][0] * P[0] + side[e][1] * P[1] - c, dq = side[e][0] * Q[0] + side[e][1] * Q[1] - c;
-
-                    if (dp <= 0) {
-                        b[o][0] = P[0];
-                        b[o][1] = P[1];
-                        o++;
-                    }
-                    if ((dp < 0 && dq > 0) || (dp > 0 && dq < 0)) {
-                        double f = dp / (dp - dq);
-
-                        b[o][0] = P[0] + (Q[0] - P[0]) * f;
-                        b[o][1] = P[1] + (Q[1] - P[1]) * f;
-                        o++;
-                    }
-                }
-                memcpy(a, b, sizeof a[0] * (size_t)o);
-                m = o;
-            }
-            for (i = 1; i + 1 < m; i++) {
-                const double *q[3] = { a[0], a[i], a[i + 1] };
-                int j;
-
-                for (j = 0; j < 3; j++) {
-                    memset(&v[nv], 0, sizeof v[nv]);
-                    v[nv].x = (float)(ox + q[j][0] * sx);
-                    v[nv].y = (float)(oy + q[j][1] * sy);
-                    v[nv].colour = colour;
-                    nv++;
-                }
-            }
-            if (nv >= ROOM) {
-                emit(v, (uint32_t)nv, 0, 0);
-                nv = 0;
-            }
-        }
-        if (nv) {
-            emit(v, (uint32_t)nv, 0, 0);
-            nv = 0;
-        }
-    }
-    return 1;
-}
-
-/* A scaled glyph (fx/render/hud.c's scaled sprites) as its geometry: the
-   picture from `glyph` in `bank` with its top left at (x, y) (16-bit, a
-   negative place above or left of the screen), u / 256 texels across and
-   v / 256 down a screen pixel, cut to the sprite's w x h and to the view's
-   right and bottom as the chip's rows were. 0 when it has none. */
-int fx_glyph_scaled(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t right, uint16_t bottom, uint16_t u,
-                    uint16_t v, uint8_t bank, uint16_t glyph, const uint8_t colours[4])
-{
-    int col, row;
-    const FxArtPicture *p = fx_art_find(bank, glyph, &col, &row);
-    double X = (int16_t)x, Y = (int16_t)y, sx, sy, l, r, t, b;
-
-    if (!p || !u || !v || !fx_art_layers(p))
-        return 0;
-    blocks_flush();
-    sx = 256.0 / u;
-    sy = 256.0 / v;
-    l = X < 0 ? 0 : X;
-    r = X + w;
-    if (X >= 0 && X >= right)
-        return 1;
-    if (X >= 0 && r >= right)
-        r = right;
-    t = Y < 0 ? 0 : Y;
-    b = Y + h;
-    if (Y >= 0 && Y >= bottom)
-        return 1;
-    if (Y >= 0 && b >= bottom)
-        b = bottom;
-    if (r <= l || b <= t)
-        return 1;
-    /* the box in the picture's texels, kept to the picture */
-    {
-        double u0 = col + (l - X) / sx, u1 = col + (r - X) / sx, v0 = row + (t - Y) / sy, v1 = row + (b - Y) / sy;
-
-        if (u0 < 0) u0 = 0;
-        if (v0 < 0) v0 = 0;
-        if (u1 > p->w) u1 = p->w;
-        if (v1 > p->h) v1 = p->h;
-        return art_draw(p, X - col * sx, Y - row * sy, sx, sy, u0, u1, v0, v1, colours);
-    }
-}
-
 /* The block being gathered from consecutive rows of a glyph. */
 static struct {
     int open;
@@ -1245,17 +1090,9 @@ static struct {
 static void blocks_flush(void)
 {
     if (block.open) {
-        const FxArtPicture *p;
-        int col, row;
-        nshvc_image image;
+        nshvc_image image = glyph_image(block.bank, block.base, block.width, block.rows, block.rows > 1 ? block.stride : 32, block.colours);
 
         block.open = 0;
-        /* a picture with clean geometry: its rows' part of it */
-        if ((block.rows == 1 || block.stride == 32) && (p = fx_art_find(block.bank, block.base, &col, &row))
-            && col + block.width <= p->w && row + block.rows <= p->h
-            && art_draw(p, block.x - col, block.y - row, 1, 1, col, col + block.width, row, row + block.rows, block.colours))
-            return;
-        image = glyph_image(block.bank, block.base, block.width, block.rows, block.rows > 1 ? block.stride : 32, block.colours);
         quad(image, block.x, block.x + block.width, block.y, block.y + block.rows, 0, 1, 0, 1);
     }
 }

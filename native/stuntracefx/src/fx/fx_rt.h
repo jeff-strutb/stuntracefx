@@ -103,10 +103,6 @@ void fx_bitmap_row(uint16_t x, uint16_t y, uint16_t n, uint16_t palette, uint16_
 void fx_glyph_row(uint16_t x, uint16_t y, uint16_t n, uint8_t bank, uint16_t base, const uint8_t colours[4]);
 void fx_glyph_scaled_row(uint16_t x, uint16_t y, uint16_t n, uint16_t tu, uint16_t du, uint8_t bank, uint16_t start, uint16_t base, const uint8_t colours[4]);
 void fx_scaled_row_start(void);
-/* A scaled glyph drawn whole from its clean geometry (fx_art.c); 0 when it
-   has none, and its rows go as fx_glyph_scaled_row's. */
-int fx_glyph_scaled(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t right, uint16_t bottom, uint16_t u,
-                    uint16_t v, uint8_t bank, uint16_t glyph, const uint8_t colours[4]);
 void fx_scaled_row(uint16_t x, uint16_t y, uint16_t n, uint16_t tu, uint16_t du, uint16_t base, uint16_t palette);
 void fx_noise_row(uint16_t x, uint16_t y, uint16_t n, uint16_t seed);
 void fx_row_open(uint8_t kind, uint16_t x, uint16_t y, uint16_t tu, uint16_t du, uint16_t tv, uint16_t base, uint16_t dv);

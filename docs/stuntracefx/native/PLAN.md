@@ -629,83 +629,11 @@ backend.
 - **Bounds.** A face over more than 64 tiles keeps the texture as it is drawn now (no seen face is near that).
 - Shown to Jeff before and after (a scratch build's attract demo, 2026-11-09; the game's own on Aqua Tunnel once wired in); more patterns added the same way, each checked against its texels.
 
-#### Pictures as geometry: the HUD's fonts (2026-11-10)
-
-How it meets the direction: the CPU builds each picture's clean shapes once into flat pieces and lays them in the draw list
-at the picture's place and scale; the GPU fills them at the output's resolution; no pixel is made on the CPU and no art is
-filtered or scaled; one path for every backend.
-
-- **What a picture is.** `fx/fx_art.c`, data in `fx/fx_art_data.c`: each picture's fill as loops of corners (x, y and the
-  corner's radius in its texels), straight from corner to corner and each corner rounded by the arc tangent to both its edges
-  (0 sharp), so every curve eases into the straights it meets. The other colours come from the fill as the art makes them:
-  the outline is the fill grown by one texel (each straight moved out by one, each arc one larger about the same centre, or
-  one smaller at a concave corner; where a cusp's two grown arcs cross they are cut there), the drop shadow that outline moved
-  1 (16 x 32) or 1 and 2 (24 x 40, places) texels right and down, and the 8 x 16 set's bevel the fill where the fill also
-  lies a texel right, down and both (dark the rest). The art's in-between texels (2) at the fill's edge are not drawn: the
-  GPU's smoothing of that edge makes them.
-- **How the pieces were decided and fitted.** From the art first: straights (runs with three or more texels fully in, or
-  uniformly half), regular stairs as slanted straights (a stair longer than any curve of the art's radii makes kept as a
-  straight unless it fits worse; a shorter one only where it takes three texels off), the art's extremes as tangent lines, a
-  notch made a cusp (two arcs running into a point, as at the waists of the 3 and 8), a corner, or two straights meeting
-  sharp, whichever fits best. Then every number fitted to the texels (the fill's exact share of each texel against full 1,
-  in-between 1/2, else 0, and the outline's share of the texels only it explains). Glyphs whose decided pieces were wrong
-  were built one by one by hand (their corners and sharp points read from the texels, the numbers fitted): the 16 x 32
-  4 M R W X; the 24 x 40 K; the places' 1 t n; the 8 x 16 1 4 7 I K M N Q W X ' ". The fitting tool is outside the game.
-- **Texels off** (the texels the clean shapes leave on the other side, by the rule the check uses: outlined, the fill's
-  exact share 3 from 3/4, 2 above 1/4, else 1 where half of 8 x 8 points lie in the outline or shadow; bevelled, the colour
-  at the texel's centre). Each picture states its count; the first use checks it exactly against the cartridge's texels and
-  draws the picture from its texels if it differs (all 102 passed in the sheet tool built from the game's own `fx_art.c`).
-  Most of the larger counts are the drop shadow's outer stair along slanted edges, as the red U-turn's outline.
-  - 16 x 32 (37, 74 in all): 0 0, 1 7, 2 0, 3 2, 4 1, 5 0, 6 0, 7 0, 8 3, 9 1, A 0, B 3, C 0, D 0, E 0, F 0, G 11, H 0,
-    I 8, L 0, M 0, N 5, O 0, P 0, R 1, S 0, T 0, U 0, V 5, W 1, X 3, Y 14, Z 1, . 0, ' 0, " 8, ! 0.
-  - 8 x 16 (39, 84): 0 0, 1 2, 2 0, 3 0, 4 9, 5 0, 6 0, 7 7, 8 0, 9 0, A 0, B 1, C 2, D 0, E 0, F 0, G 2, H 0, I 0, J 0,
-    K 4, L 0, M 9, N 4, O 0, P 0, Q 3, R 0, S 0, T 6, U 0, V 3, W 10, X 9, Y 5, Z 7, . 0, ' 0, " 1.
-  - 24 x 40 letters (18, 261): A 10, C 12, E 24, F 16, G 13, H 11, I 22, K 26, L 15, M 14, N 14, O 8, P 12, R 7, S 17,
-    T 9, U 9, V 22.
-  - places (8, 136): 1 0, 2 13, 3 19, t 21, d 35, s 9, n 15, r 24.
-- **Rules from Jeff's review (2026-11-10).** No convex corner comes to a point: every one is rounded, at least 0.6 texel
-  on the 16 x 32, 24 x 40 and places sets and 0.3 on the 8-texel-scale ones (small enough that no texel changes side);
-  concave notches and cusps stay crisp. The digits are one design everywhere: the 8 x 16 digits (and the race sprites'
-  speed digits, the same texels) are the 16 x 32 digits' corners scaled into their box and fitted to their own texels.
-  The 8 x 16 quote marks are closing quotes: each a comma, a round head tapering into a tail that curls down to the left,
-  the yellow a teardrop inside it (full at the head, a thin line down the tail), dark round it, the outline grown from it.
-- **Where drawn.** `fx_draw.c`: a run of glyph rows (`fx_glyph_row`'s blocks) inside a picture with geometry draws that
-  part of it (rolling digits cut to their rows); `hud.c`'s scaled sprites ask `fx_glyph_scaled` to draw the whole sprite from
-  its geometry at its scale, cut to the sprite's box and the view as the rows were. Anything else is drawn as before.
-- Compiled on macOS and iOS; not run in the game (the sheets were made by a tool built from the game's own files).
-- **The HUD's other draw-list pictures** (13): the time frame's sliding words EXTRA TIME and TIME EXTEND ($15:$1C00, $1E00,
-  outlined as the fonts: 38 and 45 off), the lap banner LAP 2 FINAL ($15:$3D00, 112 x 24, outlined without a shadow: 14),
-  the frame's pieces cut from their region's shapes (the diamond 0, the square 0, the end an octagon of 45-degree corners
-  0, the bar 0, the tail's U 8), Stunt Trax's marks (the E 0; the used mark, two bars crossing with sharp notches, 0),
-  and as colour layers each a region over the one before: the rank badges RANK 1 / RANK 2 and the LAP badge, whose
-  lettering is strokes a texel wide, kept as drawn (straight edges on the texel lines; 0 each). The diamond, the used
-  mark and the octagon were built by hand.
-- **Console art (tile sets the game unpacks), first set: the race's sprite art** (video block 0; 36 pictures, 36 off): the
-  speed digits (the 16 x 32 design, as above), MPH and BOOST and two small marks (lettering a texel wide, kept as drawn
-  with its corners eased), the gauge's striped bar pieces (exact), the arrow (a triangle with its tip rounded, its border
-  grown from it; built by hand) and the 8 x 16 letters of RETRY? YES NO (each colour a region over the one before).
-  The picture table reads these from the tile sets (`fx_art_tile_set`); how the console's layers draw them is not this
-  table's (Jeff: not this job's concern), so nothing draws them yet; the sheet tool runs their check.
-- **Console art, more:** the shared sprite set's minimap panel corner (0 off) and MINI MAP label (0); lettering a texel
-  thick kept as its strokes, corners eased, diagonal neighbours joined. **The menus' 8 x 16 font** (menu picture 10; 36,
-  76 off): each glyph the 16 x 32 set's design (K the 24 x 40 set's) scaled into its box and fitted to its texels, V and
-  N built by hand: 0 0, 1 3, 2 0, 3 2, 4 4, 5 0, 6 1, 7 0, 8 0, 9 1, A 2, B 0, C 2, D 0, E 0, F 1, G 2, H 2, I 0, J 2,
-  K 2, L 2, M 9, N 5, O 0, P 0, Q 5, R 1, S 2, T 1, U 2, V 4, W 5, X 0, Y 3, Z 2.
-- **The menus' other sprite art** (menu picture 10; 50 pictures): the mode words SPEED / STUNT / BATTLE / FREE TRAX (36
-  16 x 16 letters, face, rim and shade as nested regions, X and N by hand; all 0 off but a few), the lettering STRONG
-  FA1402 (the menu font's design scaled, the outline grown from the fill; its 4 the open kind, by hand), the frame pieces
-  (slabs, a framed box, triangles; the in-between colour along a slope taken as the outline's edge) and a gem.
-- **Not done yet:** the race frame's background panels (blocks 2, 3, 6 and their maps: mostly flat rectangles on the
-  texel lines), the two-player sets (blocks 10-12), the menus' other pictures (the title's and the championship's sprite
-  sets, the menus' background tiles: not yet classified), and the 3D textures the census below found.
-- **Census of the 3D texture banks (2026-11-10)**, every 32 x 32 tile of banks $06, $12 and $13, both nibbles, with two to
-  four colours and stair corners (slanted or curved edges): besides the eight patterns done, a second diagonal-stripe tile
-  ($12:$A0A0 high), a zig-zag arrow ($13:$A000 low), a curved arrow ($13:$A020 high), triangle-sign variants ($12:$E000
-  high, $13:$A040 high) and clouds ($13:$E0E0 high and low). Not yet known whether these are drawn on faces (the pattern
-  path) or as object sprites; not done. The other 15 found are effects (sparks, fire, debris, dust) and dithered bands:
-  not flat colours bounded by edges. Artwork left as drawn (not flat colours bounded by edges, so
-  not this method's): the title logo and characters, the granite backdrop, the championship's 8-bit picture, the course
-  pictures, the cars' pictures and icons.
+**Pictures as geometry (the HUD's fonts and pieces, console art): shelved (2026-11-10).** Out of the game, kept on
+branch `shelf/hires-pictures` (the 239 pictures, the engine's later console-art extensions, and the fitting tools in
+`tools/hires_art`). Jeff: the 239 are close to right, but they stand out against the rest of the game's art, which
+cannot be converted the same way; the automatic fits of the other console art (race panels, menus, sprites, course
+outlines) were rejected. To be talked through before anything more.
 
 ### Stage 11. Whole game
 Finder zero on `native/stuntracefx`; section 8's criteria; every play through `nshvc-check`; every reachable platform.
