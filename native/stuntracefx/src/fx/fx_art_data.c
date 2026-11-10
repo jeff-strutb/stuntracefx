@@ -415,15 +415,15 @@ static const FxArtCorner small8_dot_0[] = { { 5.02f, 10.98f, 0.0f }, { 5.02f, 14
 static const FxArtLoop small8_dot[] = { { 4, small8_dot_0 } };
 static const FxArtLayer small8_dot_fill[] = { { 3, 1, small8_dot } };
 
-/* the 8 x 16 glyph ''' ($15:$980A): 1 loop, 8 corners (8 sharp), radii none; 6 off, built by hand */
-static const FxArtCorner small8_quote_0[] = { { 1.98f, 0.98f, 0.0f }, { 5.01f, 0.98f, 0.0f }, { 5.01f, 4.7f, 0.0f }, { 3.69f, 6.03f, 0.0f }, { 1.98f, 6.03f, 0.0f }, { 1.98f, 4.27f, 0.0f }, { 3.43f, 3.45f, 0.0f }, { 1.98f, 2.76f, 0.0f } };
+/* the 8 x 16 glyph ''' ($15:$980A): 1 loop, 8 corners (1 sharp), radii 0.4, 0.5, 0.9, 1.5, 2.4; 6 off, built by hand */
+static const FxArtCorner small8_quote_0[] = { { 2.0f, 0.85f, 0.5f }, { 5.15f, 0.85f, 0.91f }, { 5.15f, 4.6f, 1.5f }, { 3.9f, 6.0f, 0.4f }, { 1.8f, 6.0f, 0.5f }, { 1.8f, 4.35f, 2.37f }, { 2.84f, 3.34f, 0.0f }, { 2.0f, 2.6f, 2.4f } };
 static const FxArtLoop small8_quote[] = { { 8, small8_quote_0 } };
 static const FxArtLayer small8_quote_fill[] = { { 3, 1, small8_quote } };
 
-/* the 8 x 16 glyph '"' ($15:$980C): 2 loops, 19 corners (9 sharp), radii 0, 0.1, 0.2; 11 off, built by hand */
-static const FxArtCorner small8_quotes_0[] = { { 0.97f, 0.98f, 0.01f }, { 3.0f, 0.98f, 0.24f }, { 3.0f, 3.0f, 0.0f }, { 4.0f, 3.0f, 0.0f }, { 4.0f, 4.0f, 0.0f }, { 3.0f, 4.0f, 0.0f }, { 3.0f, 6.02f, 0.24f }, { 0.97f, 6.02f, 0.01f }, { 0.97f, 4.27f, 0.09f }, { 2.43f, 3.44f, 0.0f }, { 0.97f, 2.75f, 0.08f } };
-static const FxArtCorner small8_quotes_1[] = { { 4.0f, 0.98f, 0.23f }, { 7.02f, 0.98f, 0.01f }, { 7.02f, 4.7f, 0.09f }, { 5.71f, 6.01f, 0.0f }, { 4.0f, 6.01f, 0.22f }, { 4.0f, 4.27f, 0.0f }, { 5.41f, 3.5f, 0.0f }, { 4.0f, 2.72f, 0.0f } };
-static const FxArtLoop small8_quotes[] = { { 11, small8_quotes_0 }, { 8, small8_quotes_1 } };
+/* the 8 x 16 glyph '"' ($15:$980C): 2 loops, 16 corners (2 sharp), radii 0.4, 0.5, 0.9, 1, 1.2, 1.5, 2.3, 2.4; 11 off, built by hand */
+static const FxArtCorner small8_quotes_0[] = { { 0.93f, 1.04f, 0.47f }, { 3.58f, 1.04f, 0.93f }, { 3.58f, 4.37f, 1.25f }, { 2.43f, 5.91f, 0.4f }, { 0.81f, 5.91f, 0.51f }, { 0.81f, 4.34f, 2.34f }, { 1.81f, 3.36f, 0.0f }, { 0.93f, 2.59f, 2.38f } };
+static const FxArtCorner small8_quotes_1[] = { { 4.08f, 0.84f, 0.52f }, { 7.17f, 0.84f, 0.96f }, { 7.17f, 4.56f, 1.5f }, { 5.88f, 6.03f, 0.4f }, { 3.98f, 6.03f, 0.49f }, { 3.98f, 4.41f, 2.4f }, { 5.02f, 3.52f, 0.0f }, { 4.08f, 2.6f, 2.4f } };
+static const FxArtLoop small8_quotes[] = { { 8, small8_quotes_0 }, { 8, small8_quotes_1 } };
 static const FxArtLayer small8_quotes_fill[] = { { 3, 2, small8_quotes } };
 
 /* ---- the big sprites' 24 x 40 letters (bank $15 from $A000) ---- */
