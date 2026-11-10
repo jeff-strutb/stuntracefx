@@ -427,7 +427,7 @@ backend.
   straight edges the stairs stand for, checked against every texel of the tile when the table is made (each texel's centre
   falls in the region of its own value). Found by the texture's key as the face's draw-list entry gives it: ROM bank, base,
   mask, and which part of the byte the options read (all eight bits, the high or the low four).
-- **The first: the yellow and black stripes** (bank $12, base $A040, mask $1F1F, the high four bits; course 0's walls). Tile
+- **The first: the yellow and black stripes** (bank $12, base $A040, mask $1F1F, the high four bits; the barriers' walls, Aqua Tunnel's among them). Tile
   32 x 32 texels, two values ($A, $F), stripes 8 texels wide that move one texel left every 4 rows. Their edges are the lines
   X = 8k - Y/4 (through the middle of each step); value $A where X + Y/4 mod 16 is below 8, else $F. The texel centres
   give the tile's 1,024 texels exactly. The tile repeats every 32 in both directions as the mask has it (the stripes jump at
@@ -442,7 +442,7 @@ backend.
 - **Where.** `fx/fx_pattern.c` holds the table and the cutting; fx_face.c asks it for a textured face and keeps the pieces'
   values per corner; fx_draw.c's shape drawing colours a pattern shape's corners instead of laying the texture.
 - **Bounds.** A face over more than 64 tiles keeps the texture as it is drawn now (no seen face is near that).
-- Shown to Jeff on course 0 before and after; more patterns added the same way, each checked against its texels.
+- Shown to Jeff before and after (a scratch build's attract demo, 2026-11-09; the game's own on Aqua Tunnel once wired in); more patterns added the same way, each checked against its texels.
 
 ### Stage 11. Whole game
 Finder zero on `native/stuntracefx`; section 8's criteria; every play through `nshvc-check`; every reachable platform.

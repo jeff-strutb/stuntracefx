@@ -56,7 +56,7 @@ struct FxPattern {
     double poly[REGIONS][POLY][2];
 };
 
-/* The yellow and black stripes (course 0's walls). A 32 x 32 tile of two
+/* The yellow and black stripes (the barriers' walls). A 32 x 32 tile of two
    values, $A and $F, in stripes 8 texels wide that move one texel left
    every 4 rows (the first and last steps 2 rows, the tile's middle the
    steps' middle). The edges through the middle of each step are
