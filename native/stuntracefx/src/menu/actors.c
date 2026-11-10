@@ -25,6 +25,7 @@ enum {
 
 /* the block is modified as objects run: this is the copy */
 uint8_t *menu_tables_at(void) { return actors.groups; }
+uint8_t *menu_table_byte(uint16_t at) { return &actors.groups[at - 0x0800]; }
 
 void actors_load(void)
 {

@@ -61,7 +61,7 @@ static int open_window(Actor *a, uint16_t line)
     a->count = (uint16_t)(a->count + 8);
     if (a->count == 0x0100)
         return 1;
-    actors.groups[line - 0x0800] = (uint8_t)a->count;
+    *menu_table_byte(line) = (uint8_t)a->count;
     return 0;
 }
 
@@ -75,7 +75,7 @@ static int open_window(Actor *a, uint16_t line)
  */
 static void results_open_top(Actor *a)
 {
-    if (!open_window(a, 0x130D))
+    if (!open_window(a, MT_CHAMPION_WINDOW_B + 5))      /* the top band: the third run's edge */
         return;
     a->handler = HANDLER_RESULTS_OPEN_BOTTOM;
     a->count = 0;
@@ -85,7 +85,7 @@ static void results_open_bottom(Actor *a)
 {
     Actor *m;
 
-    if (!open_window(a, 0x130F))
+    if (!open_window(a, MT_CHAMPION_WINDOW_B + 7))      /* the bottom band: the fourth run's */
         return;
     a->handler = HANDLER_RESULTS_WAIT_BUTTON;
     a->count = 0;
