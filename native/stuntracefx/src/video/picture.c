@@ -144,7 +144,7 @@ static void window_band_values(int32_t l1[224], int32_t r1[224], int32_t l2[224]
     for (band = 0; band < WINDOW_BANDS_MAX && windows.band[band].lines && line < 224; band++) {
         uint8_t c = windows.band[band].lines;
         int repeat = c >= 0x81, n = repeat ? c - 0x80 : c, i;
-        const WindowEdges *e = window_edges_at(windows.band[band].edges);
+        const WindowEdges *e = windows.band[band].edges;
 
         for (i = 0; i < n && line < 224; i++, line++) {
             l1[line] = e->left1;
@@ -152,7 +152,7 @@ static void window_band_values(int32_t l1[224], int32_t r1[224], int32_t l2[224]
             l2[line] = e->left2;
             r2[line] = e->right2;
             if (repeat)
-                e = window_edges_at((uint16_t)(windows.band[band].edges + (uint16_t)(4 * (i + 1))));
+                e = window_edges_next(windows.band[band].edges, i + 1);
         }
     }
     for (; line < 224; line++) {
@@ -418,34 +418,20 @@ static int32_t full_sky_at(int row, int origin_y)
  * read their bands about their middles; the original's screens read their
  * bands by line. Rows past a band's end give its last.
  */
-static uint16_t ground_colour(int panel, float row)
+uint16_t race_ground_colour(int panel, float row)
 {
+    const Game *w = video_between_g();  /* the picture's game state, asked during the 3D's compose too */
     int r = (int)floorf(row), line = r - screen_shape()->origin_y;
 
     if (race_two_full_window())
         return race_two_sky_colour(panel, r);
     if (pic.race.split)
         return band_line_colour(line);
-    if (!g.line_effects.sky)
+    if (!w->line_effects.sky)
         return pic.palette[1];
-    if (race_full_window())
+    if (pic.race.on && !pic.race.course_screen && !w->results_page_shown)    /* race_full_window's, with the picture's state */
         return full_sky_colour(race_sky_offset_now(), line);
     return band_line_colour(line);
-}
-
-/* (asked during the 3D's compose too: the picture's game state, g, taken
-   in for the read and the caller's put back) */
-uint16_t race_ground_colour(int panel, float row)
-{
-    int took = !video_between_world_is_in();
-    uint16_t c;
-
-    if (took)
-        video_between_world_in();
-    c = ground_colour(panel, row);
-    if (took)
-        video_between_world_out();
-    return c;
 }
 
 /* Whether each window of the band table covers any of the screen: the
@@ -459,13 +445,13 @@ static void full_windows(nshvc_windows *w, int width)
     for (band = 0; band < WINDOW_BANDS_MAX && windows.band[band].lines && line < 224; band++) {
         uint8_t c = windows.band[band].lines;
         int repeat = c >= 0x81, n = repeat ? c - 0x80 : c, k;
-        const WindowEdges *e = window_edges_at(windows.band[band].edges);
+        const WindowEdges *e = windows.band[band].edges;
 
         for (k = 0; k < n && line < 224; k++, line++) {
             cover[0] |= e->left1 <= e->right1;
             cover[1] |= e->left2 <= e->right2;
             if (repeat)
-                e = window_edges_at((uint16_t)(windows.band[band].edges + (uint16_t)(4 * (k + 1))));
+                e = window_edges_next(windows.band[band].edges, k + 1);
         }
     }
     for (i = 0; i < 2; i++) {

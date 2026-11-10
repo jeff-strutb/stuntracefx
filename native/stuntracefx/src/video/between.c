@@ -87,30 +87,6 @@ void tween_lines(int32_t *values, const int32_t *now, int n, int32_t far, int32_
         values[i] = value_tween(values[i], now[i], t, far, period);
 }
 
-void tween_table(TweenTable *keep, int32_t *values, int n, int32_t far, int32_t period)
-{
-    uint64_t u = nshvc_updates();
-    float t = video_between();
-    int i;
-
-    if (n > 1024)
-        n = 1024;
-    if (keep->at + 1 == u) {
-        memcpy(keep->was, keep->now, sizeof keep->was);
-        keep->was_n = keep->n;
-        keep->have = 1;
-    } else if (keep->at != u) {
-        keep->have = 0;
-    }
-    memcpy(keep->now, values, (size_t)n * sizeof values[0]);
-    keep->n = n;
-    keep->at = u;
-    if (!keep->have || keep->was_n != n || t >= 1.0f)
-        return;
-    for (i = 0; i < n; i++)
-        values[i] = value_tween(keep->was[i], values[i], t, far, period);
-}
-
 /* ---- the resource writes of an update, run at the next update's start ---- */
 
 enum { WRITE_TILES, WRITE_MAP, WRITE_COPY, WRITE_FILL };
@@ -424,6 +400,11 @@ void video_between_world_out(void)
 int video_between_world_is_in(void)
 {
     return world_in;
+}
+
+const Game *video_between_g(void)
+{
+    return video_between_eased() && !world_in ? &was.g : &g;
 }
 
 void video_between_end(void)

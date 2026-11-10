@@ -219,7 +219,7 @@ void GradientStartsFromViews(void);
 typedef struct { uint8_t left1, right1, left2, right2; } WindowEdges;
 
 enum { WINDOW_BANDS_MAX = 16 };
-typedef struct { uint8_t lines; uint16_t edges; } WindowBand;   /* the edges by the original table's number for them */
+typedef struct { uint8_t lines; const WindowEdges *edges; } WindowBand;   /* a band's line count and its edges */
 
 typedef struct {
     WindowBand band[WINDOW_BANDS_MAX];  /* $7F:F85B: a table of line counts and edges */
@@ -282,7 +282,7 @@ void BobWindowsRun(void);
 void WindowBandsAnimate(void);
 void WindowSplitAnimate(void);
 void WindowsSetupSelect(void);
-const WindowEdges *window_edges_at(uint16_t addr);
+const WindowEdges *window_edges_next(const WindowEdges *e, int k);   /* a repeating band's edges k lines on */
 void WindowsColourAddBg12(void);
 void WindowsColourWindowOnly(void);
 void WindowsAllInverted(void);

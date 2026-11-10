@@ -52,7 +52,7 @@ typedef struct {
     uint8_t records_wait, records_cursor; /* $0D41, $0D50 */
 
     /* ---- the race: its flow, cars, laps and times ---- */
-    uint8_t trail_zone_on, byte_19ec, byte_19f0; /* $19E7, $19EC, $19F0: cleared with the windows */
+    uint8_t trail_zone_on;              /* $19E7 */
     uint8_t time_gate_bonus;            /* $19E6: the BCD seconds a time gate adds, from the table at $09:F115 by class and stage */
     uint8_t switches_hit[3];            /* $19E8-$19EA: the count trigger and switches B and C touched; each one's lamp counts while set */
     uint8_t slide_wobble_step;          /* $1A04: set to $FF with each slide down; read only by the unreached SlideOutWobble */

@@ -261,7 +261,7 @@ static uint32_t chip_unpack(uint32_t end, uint32_t at)
 /* An unpack from a record (end, bank) to the chip RAM's $3000 */
 static void unpack_record(uint16_t in)
 {
-    chip_unpack((uint32_t)cart8(0x03, (uint16_t)(in + 2)) << 16 | cart16(0x03, in), 0x3000);
+    chip_unpack((uint32_t)cart8(0x03, (uint16_t)(in + 2)) << 16 | cart16(0x03, in), FX_UNPACK_AREA);
 }
 
 /* The record's unpack to the chip RAM's $3000; its length from its
@@ -315,7 +315,7 @@ static void picture_rows(uint16_t *out, uint16_t base)
     int i;
 
     for (i = 0; i < 192; i++)
-        out[i] = (uint16_t)(fx16(0x3000u + (uint16_t)(i * 2)) + base);
+        out[i] = (uint16_t)(fx16((uint16_t)(FX_UNPACK_AREA + i * 2)) + base);
 }
 
 /* The two panels of frame, gradient and picture rows. */
@@ -347,8 +347,8 @@ void VideoRegsReset(void)
     pic.palette[0] = 0;
     pic.line_tables = 0;
     g.results_page_shown = 0;           /* BG2 on the race's hills again */
-    fx16_set(0x021A, 0x2C00);
-    g.screen_start = 0x2C00;
+    fx16_set(GSU_SCREEN_START, FX_PICTURE_0);
+    g.screen_start = FX_PICTURE_0;
 }
 
 /* The maps of the course: rows copied out of the unpacked picture, with the priority bit. */
@@ -361,7 +361,7 @@ static void course_map_rows(int which)
     for (x = 0; x < 0x800; x = (uint16_t)(x + 0x40))
         for (n = 0; n < 5; n++)
             for (r = 0; r < 32; r++) {
-                backdrop_map(which)[y] = (uint16_t)(fx16((uint16_t)(0x3000 + src[n] + x + 2 * r)) | 0x2000);
+                backdrop_map(which)[y] = (uint16_t)(fx16((uint16_t)(FX_UNPACK_AREA + src[n] + x + 2 * r)) | 0x2000);
                 y++;
             }
     }
@@ -372,12 +372,12 @@ static void hud_art_mode0(void)
     uint8_t row[0x100];
     int i;
 
-    race_frame_art_write(FRAME_HUD, fx_ram + 0x3000, unpacked(0xF829, 0xF7D1));
-    chip_unpack(0x1D << 16 | 0x9228, 0x3000);
+    race_frame_art_write(FRAME_HUD, fx_ram + FX_UNPACK_AREA, unpacked(0xF829, 0xF7D1));
+    chip_unpack(0x1D << 16 | 0x9228, FX_UNPACK_AREA);
     for (i = 0; i < 0x100; i++)
-        row[i] = fx_ram[0x3000u + k + (uint16_t)i];
+        row[i] = fx_ram[FX_UNPACK_AREA + k + (uint16_t)i];
     race_frame_art_write(FRAME_HUD_CAR, row, 0x100);
-    chip_unpack(0x18 << 16 | 0xFAE8, 0x3000);
+    chip_unpack(0x18 << 16 | 0xFAE8, FX_UNPACK_AREA);
 }
 
 static void course_maps(int course_3)
@@ -386,10 +386,10 @@ static void course_maps(int course_3)
     uint16_t end = cart16(0x03, (uint16_t)(0xF5A1 + course_3));
     uint8_t bank2 = cart8(0x03, (uint16_t)(0xF5F7 + course_3));
 
-    chip_unpack((uint32_t)bank << 16 | end, 0x3000);
+    chip_unpack((uint32_t)bank << 16 | end, FX_UNPACK_AREA);
     course_map_rows(0);
     if (bank2) {
-        chip_unpack((uint32_t)bank2 << 16 | cart16(0x03, (uint16_t)(0xF5F5 + course_3)), 0x3000);
+        chip_unpack((uint32_t)bank2 << 16 | cart16(0x03, (uint16_t)(0xF5F5 + course_3)), FX_UNPACK_AREA);
         course_map_rows(1);
     }
 }
@@ -403,14 +403,14 @@ static void race_screen_layers(void);
    tiles to $3680, for the BG1 base it flips to; this screen has one.) */
 static void two_player_art(int k3)
 {
-    chip_unpack((uint32_t)cart8(0x03, (uint16_t)(0xF4FB + k3)) << 16 | cart16(0x03, (uint16_t)(0xF4F9 + k3)), 0x3000);
-    race_art_write(RACE_ART_TWO_BACKDROP + 0x0C0, fx_ram + 0x3000, 0x1800);
-    chip_unpack((uint32_t)cart8(0x03, (uint16_t)(0xF5A3 + k3)) << 16 | cart16(0x03, (uint16_t)(0xF5A1 + k3)), 0x3000);
-    race_backdrop_two_pages_write(0, (const uint16_t *)(const void *)(fx_ram + 0x3000), 4);
-    chip_unpack(0x17u << 16 | 0xFB84, 0x3000);
-    race_frame_two_art_write(RACE_FRAME_TWO_FRAME, fx_ram + 0x3000, 0x600);
-    chip_unpack(0x17u << 16 | 0xFFAC, 0x3000);
-    race_frame_map_two_write((const uint16_t *)(const void *)(fx_ram + 0x3000));
+    chip_unpack((uint32_t)cart8(0x03, (uint16_t)(0xF4FB + k3)) << 16 | cart16(0x03, (uint16_t)(0xF4F9 + k3)), FX_UNPACK_AREA);
+    race_art_write(RACE_ART_TWO_BACKDROP + 0x0C0, fx_ram + FX_UNPACK_AREA, 0x1800);
+    chip_unpack((uint32_t)cart8(0x03, (uint16_t)(0xF5A3 + k3)) << 16 | cart16(0x03, (uint16_t)(0xF5A1 + k3)), FX_UNPACK_AREA);
+    race_backdrop_two_pages_write(0, (const uint16_t *)(const void *)(fx_ram + FX_UNPACK_AREA), 4);
+    chip_unpack(0x17u << 16 | 0xFB84, FX_UNPACK_AREA);
+    race_frame_two_art_write(RACE_FRAME_TWO_FRAME, fx_ram + FX_UNPACK_AREA, 0x600);
+    chip_unpack(0x17u << 16 | 0xFFAC, FX_UNPACK_AREA);
+    race_frame_map_two_write((const uint16_t *)(const void *)(fx_ram + FX_UNPACK_AREA));
 }
 
 void RaceVideoSetup(void)
@@ -421,7 +421,7 @@ void RaceVideoSetup(void)
     g.fx_screen_mode = 3;
     clear_all();
     SoundIndicesFromHandlers();
-    race_art_write(RACE_ART_SPRITES, fx_ram + 0x3000, unpacked(0xF80D, 0xF7DA));
+    race_art_write(RACE_ART_SPRITES, fx_ram + FX_UNPACK_AREA, unpacked(0xF80D, 0xF7DA));
     PaletteCourseLoad(g.course);
     CgramDmaAll();
     GradientBuildColours(g.course);
@@ -431,21 +431,21 @@ void RaceVideoSetup(void)
            in a half's 3D place (split_picture) is this, a blank picture */
         memset((uint8_t *)bank7f_words + 0x800, 0, 0x2001);
         unpacked(0xF84C, 0xF7E3);
-        race_panel_map_write((const uint16_t *)(const void *)(fx_ram + 0x3000));
-        memcpy(backdrop_map(0), fx_ram + 0x3000, 0x800);
-        chip_unpack(0x18 << 16 | 0xC770, 0x3000);
-        race_art_write(RACE_ART_SPRITES + 0x1C0, fx_ram + 0x3000, 0x800);
-        race_art_write(RACE_ART_SPRITES + 0x060, fx_ram + 0x3600, 0x400);
+        race_panel_map_write((const uint16_t *)(const void *)(fx_ram + FX_UNPACK_AREA));
+        memcpy(backdrop_map(0), fx_ram + FX_UNPACK_AREA, 0x800);
+        chip_unpack(0x18 << 16 | 0xC770, FX_UNPACK_AREA);
+        race_art_write(RACE_ART_SPRITES + 0x1C0, fx_ram + FX_UNPACK_AREA, 0x800);
+        race_art_write(RACE_ART_SPRITES + 0x060, fx_ram + FX_UNPACK_AREA + 0x600, 0x400);
         race_screen_layers();
         return;
     }
     /* the course's backdrop art: BG2's characters $C0 on (with one player
        BG2's start is the sprites') */
-    race_art_write(RACE_ART_SPRITES + 0x0C0, fx_ram + 0x3000, unpacked(0xF853, (uint16_t)(0xF4F9 + k3)));
+    race_art_write(RACE_ART_SPRITES + 0x0C0, fx_ram + FX_UNPACK_AREA, unpacked(0xF853, (uint16_t)(0xF4F9 + k3)));
     if (cart16(0x03, (uint16_t)(0xF54D + k3)))
-        race_art_write(RACE_ART_SPRITES + 0x140, fx_ram + 0x3000, unpacked(0xF85A, (uint16_t)(0xF54D + k3)));
-    race_art_write(RACE_ART_SPRITES + 0x040, fx_ram + 0x3000, unpacked(0xF814, 0xF7DD));
-    chip_unpack(0x1D << 16 | 0xD970, 0x3000);
+        race_art_write(RACE_ART_SPRITES + 0x140, fx_ram + FX_UNPACK_AREA, unpacked(0xF85A, (uint16_t)(0xF54D + k3)));
+    race_art_write(RACE_ART_SPRITES + 0x040, fx_ram + FX_UNPACK_AREA, unpacked(0xF814, 0xF7DD));
+    chip_unpack(0x1D << 16 | 0xD970, FX_UNPACK_AREA);
     {
         /* four rows of the course picture's sprite art: the sprites' characters $48, $58, $4C, $5C, four each */
         uint16_t w = ram_code_7f16((uint16_t)(0x0B96 + 2 * g.course)), t = (uint16_t)(w & 0xFFFC);
@@ -455,26 +455,26 @@ void RaceVideoSetup(void)
         t = (uint16_t)((uint16_t)(t >> 8 | t << 8) << 1);
         t = (uint16_t)(t + ((w & 3) << 7));
         for (r = 0; r < 4; r++) {
-            race_art_write(row_at[r], fx_ram + 0x3000u + t, 0x80);
+            race_art_write(row_at[r], fx_ram + FX_UNPACK_AREA + t, 0x80);
             t = (uint16_t)(t + 0x200);
         }
     }
     switch (g.hud_mode) {
     case 1:
         if (!g.hud_blank) {
-            race_frame_art_write(FRAME_HUD, fx_ram + 0x3000, unpacked(0xF830, 0xF7D4));
-            chip_unpack(0x18 << 16 | 0xFA38, 0x3000);
-            race_frame_art_write(FRAME_HUD_PIECES, fx_ram + 0x3000, 0x180);
-            chip_unpack(0x18 << 16 | 0xFB90, 0x3000);
+            race_frame_art_write(FRAME_HUD, fx_ram + FX_UNPACK_AREA, unpacked(0xF830, 0xF7D4));
+            chip_unpack(0x18 << 16 | 0xFA38, FX_UNPACK_AREA);
+            race_frame_art_write(FRAME_HUD_PIECES, fx_ram + FX_UNPACK_AREA, 0x180);
+            chip_unpack(0x18 << 16 | 0xFB90, FX_UNPACK_AREA);
             break;
         }
         /* fall through */
     case 3:
         if (!g.race_skipped) {
-            race_frame_art_write(FRAME_HUD, fx_ram + 0x3000, unpacked(0xF830, 0xF7D4));
-            chip_unpack(0x18 << 16 | 0xFA38, 0x3000);
-            race_frame_art_write(FRAME_HUD_PIECES, fx_ram + 0x3180, 0x100);
-            chip_unpack(0x18 << 16 | 0xFC20, 0x3000);
+            race_frame_art_write(FRAME_HUD, fx_ram + FX_UNPACK_AREA, unpacked(0xF830, 0xF7D4));
+            chip_unpack(0x18 << 16 | 0xFA38, FX_UNPACK_AREA);
+            race_frame_art_write(FRAME_HUD_PIECES, fx_ram + FX_UNPACK_AREA + 0x180, 0x100);
+            chip_unpack(0x18 << 16 | 0xFC20, FX_UNPACK_AREA);
             break;
         }
         /* fall through */
@@ -1075,8 +1075,8 @@ void ResultsMapRowsUpload(void)
    both maps, $7F:93D7 and $7F:BBD7. */
 void race_course_maps_keep(void)
 {
-    memcpy(backdrop_map(0), fx_ram + 0x3000, 0x1000);
-    memcpy(backdrop_map(1), fx_ram + 0x3000, 0x1000);
+    memcpy(backdrop_map(0), fx_ram + FX_UNPACK_AREA, 0x1000);
+    memcpy(backdrop_map(1), fx_ram + FX_UNPACK_AREA, 0x1000);
 }
 
 /* The preview's half of the first map put back from the second: $800 bytes
@@ -1187,31 +1187,31 @@ void RaceHudLoad(void)
     else
         SoundIndicesFromHandlers();
     CourseSoundLoad();
-    chip_unpack(0x1D << 16 | 0x8078, 0x3000);
+    chip_unpack(0x1D << 16 | 0x8078, FX_UNPACK_AREA);
     switch (g.hud_mode) {
     case 0:
-        hud_tile(0x30A0, g.selection_derived[1], 0x2F);
-        hud_tile(0x30A0, g.selection_derived[2], 0x3E);
-        hud_tile(0x30A0, g.selection_derived[3], 0x3F);
+        hud_tile(FX_UNPACK_AREA + 0xA0, g.selection_derived[1], 0x2F);
+        hud_tile(FX_UNPACK_AREA + 0xA0, g.selection_derived[2], 0x3E);
+        hud_tile(FX_UNPACK_AREA + 0xA0, g.selection_derived[3], 0x3F);
         /* fall through */
     case 1:
         if (g.hud_blank)
-            race_art_write(RACE_ART_SPRITES + 0x3F, fx_ram + 0x3080, 0x20);
+            race_art_write(RACE_ART_SPRITES + 0x3F, fx_ram + FX_UNPACK_AREA + 0x80, 0x20);
         break;
     case 2:
-        hud_tile(0x3000, g.selection_derived[1], 0x2F);
+        hud_tile(FX_UNPACK_AREA, g.selection_derived[1], 0x2F);
         break;
     default:
-        race_art_write(RACE_ART_SPRITES + 0x3F, fx_ram + 0x3080, 0x20);
+        race_art_write(RACE_ART_SPRITES + 0x3F, fx_ram + FX_UNPACK_AREA + 0x80, 0x20);
         break;
     }
-    hud_tile(0x3000, g.selection_derived[0], 0x2E);
-    race_art_write(RACE_ART_SPRITES + 0x0A0, fx_ram + 0x3000, unpacked(0xF845, 0xF804));
-    chip_unpack(0x18 << 16 | 0xD920, 0x3000);
-    memcpy(race_pictures, fx_ram + 0x3000, sizeof race_pictures);
+    hud_tile(FX_UNPACK_AREA, g.selection_derived[0], 0x2E);
+    race_art_write(RACE_ART_SPRITES + 0x0A0, fx_ram + FX_UNPACK_AREA, unpacked(0xF845, 0xF804));
+    chip_unpack(0x18 << 16 | 0xD920, FX_UNPACK_AREA);
+    memcpy(race_pictures, fx_ram + FX_UNPACK_AREA, sizeof race_pictures);
     SoundReset();
     RaceTimeInit();
-    fx16_set(0x0050, cart16(0x03, (uint16_t)(0xF799 + g.course * 2)));
+    fx16_set(FXIN_COURSE_MODELS, cart16(0x03, (uint16_t)(0xF799 + g.course * 2)));
     if (g.split_screen)
         RaceHudSetupTwoPlayers();
     else
@@ -1935,10 +1935,10 @@ void PictureTurnStep(void)
         t = end;                        /* an entry below $8000 names the picture to go to instead */
     }
     if (g.fx_buffer) {
-        chip_unpack((uint32_t)bank << 16 | end, 0x3000);
+        chip_unpack((uint32_t)bank << 16 | end, FX_UNPACK_AREA);
         FxTiles2bppTo4bppLow();
     } else {
-        chip_unpack((uint32_t)bank << 16 | end, 0xC000);
+        chip_unpack((uint32_t)bank << 16 | end, FX_TURN_UNPACK_HIGH);
         FxTiles2bppTo4bppHigh();
     }
     g.picture_turn_pending = 0xFF;
@@ -1949,6 +1949,6 @@ void VramUploadGsuBuffer(void)
 {
     if (!g.picture_turn_pending)
         return;
-    race_art_write(RACE_ART_SPRITES + 0x060, fx_ram + (g.fx_buffer ? 0x4000 : 0xD000), 0x0C00);
+    race_art_write(RACE_ART_SPRITES + 0x060, fx_ram + (g.fx_buffer ? FX_TURN_PICTURE_LOW : FX_TURN_PICTURE_HIGH), 0x0C00);
     g.picture_turn_pending = 0;
 }

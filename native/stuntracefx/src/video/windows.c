@@ -16,45 +16,74 @@
 
 Windows windows;
 
-/* The edge rows the band table's entries name by address: the normal edges,
-   the named ones, and the shapes WindowsInit builds. The seven lists fill
-   rows 0 to 447 ($7F:F883-$FF82); with two players rows 160 on start with a
-   copy of the first 160, moved. */
-#define EDGE_ROWS_ADDR 0xF883u
+/* The edge rows WindowsInit builds: the seven lists fill rows 0 to 447;
+   with two players rows 160 on start with a copy of the first 160, moved. */
 #define EDGE_ROWS 448
-#define EDGE_COPY_ROW 160               /* $7F:FB03 */
+#define EDGE_COPY_ROW 160
 static WindowEdges edge_rows[EDGE_ROWS];
 
-/* The records the band tables also point at, $7F:43D7-$51D6: per-line edges
-   for the start lights' and results' windows, built by WindowsInit. Four
-   bytes each, read as edges like the rows above. */
-#define EDGE_RECORDS_ADDR 0x43D7u
-#define EDGE_RECORDS_BYTES 0x0E00u
-static uint8_t edge_records[EDGE_RECORDS_BYTES];
+/* The records WindowsInit builds: per-line edges for the start lights' and
+   results' windows, four bytes each, read as edges like the rows above. */
+#define EDGE_RECORDS_SIZE 0x0E00u
+static uint8_t edge_records[EDGE_RECORDS_SIZE];
 
-const WindowEdges *window_edges_at(uint16_t addr)
+/*
+ * The cartridge's band lists name a band's edges by the address the
+ * original kept them at: this is the one place that reads those numbers.
+ * The named edges sit at $7F:F857 (the normal ones) and $FFD1-$FFDD (the
+ * view's, each half's, the split's, in that order), the rows from $F883,
+ * the records from $43D7. Anything else is the normal edges, as the
+ * original's tables never name it.
+ */
+enum { DATA_NORMAL = 0xF857, DATA_NAMED = 0xFFD1, DATA_ROWS = 0xF883, DATA_RECORDS = 0x43D7 };
+
+static const WindowEdges *edges_named_by(uint16_t addr)
 {
-    switch (addr) {
-    case 0xF857: return &windows.normal;
-    case 0xFFD1: return &windows.view_edges;
-    case 0xFFD5: return &windows.top_view_edges;
-    case 0xFFD9: return &windows.bottom_view_edges;
-    case 0xFFDD: return &windows.split_edges;
-    default: break;
-    }
-    if (addr >= EDGE_ROWS_ADDR && addr < EDGE_ROWS_ADDR + EDGE_ROWS * 4)
-        return &edge_rows[(addr - EDGE_ROWS_ADDR) / 4];
-    if (addr >= EDGE_RECORDS_ADDR && addr + 4u <= EDGE_RECORDS_ADDR + EDGE_RECORDS_BYTES)
-        return (const WindowEdges *)(const void *)&edge_records[addr - EDGE_RECORDS_ADDR];
+    const WindowEdges *named[4] = { &windows.view_edges, &windows.top_view_edges, &windows.bottom_view_edges,
+                                    &windows.split_edges };
+
+    if (addr >= DATA_NAMED && addr < DATA_NAMED + 16 && !((addr - DATA_NAMED) & 3))
+        return named[(addr - DATA_NAMED) / 4];
+    if (addr >= DATA_ROWS && addr < DATA_ROWS + EDGE_ROWS * 4)
+        return &edge_rows[(addr - DATA_ROWS) / 4];
+    if (addr >= DATA_RECORDS && addr + 4u <= DATA_RECORDS + EDGE_RECORDS_SIZE)
+        return (const WindowEdges *)(const void *)&edge_records[addr - DATA_RECORDS];
     return &windows.normal;
 }
 
-/* Set a band: `lines` of the original's count (bit 7 repeats a row per line),
-   edges by address. */
-static void band_set(int i, uint8_t lines, uint16_t edges_addr)
+/* the number the band lists know edges by (edges_named_by's inverse) */
+static uint16_t edges_number(const WindowEdges *e)
+{
+    const uint8_t *b = (const uint8_t *)(const void *)e;
+
+    if (e == &windows.view_edges)
+        return DATA_NAMED;
+    if (e == &windows.top_view_edges)
+        return DATA_NAMED + 4;
+    if (e == &windows.bottom_view_edges)
+        return DATA_NAMED + 8;
+    if (e == &windows.split_edges)
+        return DATA_NAMED + 12;
+    if (e >= edge_rows && e < edge_rows + EDGE_ROWS)
+        return (uint16_t)(DATA_ROWS + 4 * (e - edge_rows));
+    if (b >= edge_records && b < edge_records + EDGE_RECORDS_SIZE)
+        return (uint16_t)(DATA_RECORDS + (b - edge_records));
+    return DATA_NORMAL;
+}
+
+/* A repeating band's edges `k` lines on: the next rows of its list, as the
+   original stepped its address four bytes a line. */
+const WindowEdges *window_edges_next(const WindowEdges *e, int k)
+{
+    return edges_named_by((uint16_t)(edges_number(e) + 4 * k));
+}
+
+/* Set a band: `lines` of the original's count (bit 7 repeats a row per line)
+   and its edges. */
+static void band_set(int i, uint8_t lines, const WindowEdges *edges)
 {
     windows.band[i].lines = lines;
-    windows.band[i].edges = edges_addr;
+    windows.band[i].edges = edges;
 }
 
 static void band_end(int i)
@@ -69,10 +98,10 @@ static void band_end(int i)
 /* @routine 7E:D8A8 WindowHdmaFFDD */
 void WindowBandsSplit(void)
 {
-    band_set(0, 0x40, 0xFFDD);
-    band_set(1, 0x40, 0xFFDD);
-    band_set(2, 0x40, 0xFFDD);
-    band_set(3, 0x3E, 0xFFDD);
+    band_set(0, 0x40, &windows.split_edges);
+    band_set(1, 0x40, &windows.split_edges);
+    band_set(2, 0x40, &windows.split_edges);
+    band_set(3, 0x3E, &windows.split_edges);
     band_end(4);
 }
 
@@ -82,31 +111,31 @@ void WindowBandsSplit(void)
 /* @routine 7E:DC8D WindowHdmaFFD1 */
 void WindowBandsView(void)
 {
-    band_set(0, 0x20, 0xF857);
-    band_set(1, 0x70, 0xFFD1);
-    band_set(2, 0x10, 0xFFD1);
-    band_set(3, 0x08, 0xF857);
+    band_set(0, 0x20, &windows.normal);
+    band_set(1, 0x70, &windows.view_edges);
+    band_set(2, 0x10, &windows.view_edges);
+    band_set(3, 0x08, &windows.normal);
     band_end(4);
 }
 
 /* Three bands, 16, 48 and 16 lines, at band `at`; the entries around them stay. */
-static void window_bands_3(int at, uint16_t addr)
+static void window_bands_3(int at, const WindowEdges *e)
 {
-    band_set(at, 0x10, addr);
-    band_set(at + 1, 0x30, addr);
-    band_set(at + 2, 0x10, addr);
+    band_set(at, 0x10, e);
+    band_set(at + 1, 0x30, e);
+    band_set(at + 2, 0x10, e);
 }
 
 /* @routine 7E:DCC6 WindowHdmaFFD5 */
 void WindowBandsTopView(void)
 {
-    window_bands_3(1, 0xFFD5);
+    window_bands_3(1, &windows.top_view_edges);
 }
 
 /* @routine 7E:DCEC WindowHdmaFFD9 */
 void WindowBandsBottomView(void)
 {
-    window_bands_3(5, 0xFFD9);
+    window_bands_3(5, &windows.bottom_view_edges);
 }
 
 /* normal edges over the screen, unless the bands animation or a moving layout has it */
@@ -117,7 +146,7 @@ void WindowHdmaNormal(void)
     if (windows.bands_state || windows.layout_moving == 0xFF)
         return;
     for (i = 0; i < 4; i++)
-        band_set(i, 0x40, 0xF857);
+        band_set(i, 0x40, &windows.normal);
     band_end(4);
 }
 
@@ -129,7 +158,7 @@ void WindowHdmaBands(void)
     if (windows.bands_state)
         return;
     for (i = 0; i < 9; i++)
-        band_set(i, lines[i], 0xF857);
+        band_set(i, lines[i], &windows.normal);
     band_end(9);
 }
 
@@ -138,9 +167,9 @@ static void window_hdma_from_table(void)
 {
     uint16_t x = (uint16_t)windows.layout;
 
-    band_set(0, ram_code_7e8((uint16_t)(0xE0B4 + x)), 0xF857);
-    band_set(1, ram_code_7e8((uint16_t)(0xE0B5 + x)), ram_code_7e16((uint16_t)(0xE0D2 + x)));
-    band_set(2, 0x30, 0xF857);
+    band_set(0, ram_code_7e8((uint16_t)(0xE0B4 + x)), &windows.normal);
+    band_set(1, ram_code_7e8((uint16_t)(0xE0B5 + x)), edges_named_by(ram_code_7e16((uint16_t)(0xE0D2 + x))));
+    band_set(2, 0x30, &windows.normal);
     band_end(3);
 }
 
@@ -150,17 +179,17 @@ static void window_hdma_layout(void)
     uint16_t x = (uint16_t)windows.layout;
 
     if (!g.pause_player) {
-        band_set(0, ram_code_7e8((uint16_t)(0xE0C2 + x)), 0xF857);
-        band_set(1, ram_code_7e8((uint16_t)(0xE0C3 + x)), ram_code_7e16((uint16_t)(0xE0D2 + x)));
-        band_set(2, 0x10, 0xF857);
+        band_set(0, ram_code_7e8((uint16_t)(0xE0C2 + x)), &windows.normal);
+        band_set(1, ram_code_7e8((uint16_t)(0xE0C3 + x)), edges_named_by(ram_code_7e16((uint16_t)(0xE0D2 + x))));
+        band_set(2, 0x10, &windows.normal);
         band_end(3);
     } else {
         uint8_t n = ram_code_7e8((uint16_t)(0xE0CA + x));
 
-        band_set(0, n, 0xF857);
-        band_set(1, n, 0xF857);
-        band_set(2, ram_code_7e8((uint16_t)(0xE0CB + x)), ram_code_7e16((uint16_t)(0xE0E0 + x)));
-        band_set(3, 0x10, 0xF857);
+        band_set(0, n, &windows.normal);
+        band_set(1, n, &windows.normal);
+        band_set(2, ram_code_7e8((uint16_t)(0xE0CB + x)), edges_named_by(ram_code_7e16((uint16_t)(0xE0E0 + x))));
+        band_set(3, 0x10, &windows.normal);
         band_end(4);
     }
 }
@@ -200,10 +229,10 @@ static void window_hdma_at(uint8_t line)
 {
     uint8_t h = (uint8_t)(windows.split_pos >> 8);
 
-    band_set(0, (uint8_t)(h - 1 + windows.split_bottoms[0]), 0xFFDD);
-    band_set(1, (uint8_t)(line + windows.split_bottoms[1]), 0xF857);
-    band_set(2, (uint8_t)(line + windows.split_tops[1]), 0xF857);
-    band_set(3, (uint8_t)(h + windows.split_tops[0]), 0xFFDD);
+    band_set(0, (uint8_t)(h - 1 + windows.split_bottoms[0]), &windows.split_edges);
+    band_set(1, (uint8_t)(line + windows.split_bottoms[1]), &windows.normal);
+    band_set(2, (uint8_t)(line + windows.split_tops[1]), &windows.normal);
+    band_set(3, (uint8_t)(h + windows.split_tops[0]), &windows.split_edges);
     band_end(4);
 }
 
@@ -214,9 +243,9 @@ static void window_hdma_from_list(uint8_t select)
     const uint8_t *p = ram_code_7e(ram_code_7e16((uint16_t)(0xD8DE + select)));
     int i = 1;
 
-    band_set(0, 0x20, 0xF857);
+    band_set(0, 0x20, &windows.normal);
     while (*p && i < WINDOW_BANDS_MAX - 1) {
-        band_set(i++, p[0], (uint16_t)(p[1] | p[2] << 8));
+        band_set(i++, p[0], edges_named_by((uint16_t)(p[1] | p[2] << 8)));
         p += 3;
     }
     band_end(i);
@@ -236,7 +265,7 @@ static void window_hdma_preset(uint8_t index)
         at = 1;
     }
     for (i = 0; i < 3; i++, p += 3)
-        band_set(at + i, p[0], (uint16_t)(p[1] | p[2] << 8));
+        band_set(at + i, p[0], edges_named_by((uint16_t)(p[1] | p[2] << 8)));
 }
 
 /* ---- the moving windows ---- */
@@ -724,8 +753,9 @@ void WindowEdgesStep(void)
 
 /* ---- the setups ---- */
 
-/* The window choices of the setups below, for each layer; the masks are the
-   original's TMW bits. */
+/* The window choices of the setups below, for each layer: one bit a layer
+   (BG1 to BG4, the sprites), the layer kept out of the main screen inside
+   its windows. */
 static void masks_main(uint8_t bits)
 {
     int i;
@@ -848,18 +878,22 @@ uint8_t FixedColourFromStep(void)
 
 /* ---- the setup of a race ---- */
 
-/* the byte at $7F:addr of the record area */
-static uint8_t *record_byte(uint32_t addr)
+/* the byte `at` of the records area (laid out as the original's, which the
+   band lists name by address: edges_named_by) */
+static uint8_t *record_byte(uint32_t at)
 {
     static uint8_t spare;
 
-    if (addr < EDGE_RECORDS_ADDR || addr >= EDGE_RECORDS_ADDR + EDGE_RECORDS_BYTES)
-        return &spare;
-    return &edge_records[addr - EDGE_RECORDS_ADDR];
+    return at < EDGE_RECORDS_SIZE ? &edge_records[at] : &spare;
 }
 
-/* Two players: a record ($10, x - $28, y - $28, $A0) at $43D7 and one ($60,
-   x + $28, y + $28, $F0) at $47FF for each pair of the list at $09:F634. */
+/* where the records area's parts start: the first set, the second player's
+   (two players), the one-player blocks, the last block */
+enum { RECORDS_FIRST = 0x0000, RECORDS_SECOND = 0x0428, RECORDS_LAST = 0x0DB0 };
+
+/* Two players: a record ($10, x - $28, y - $28, $A0) in the first set and
+   one ($60, x + $28, y + $28, $F0) in the second for each pair of the list
+   at $09:F634. */
 static void records_two_players(void)
 {
     uint16_t x = 0, y = 0xF634;
@@ -868,36 +902,36 @@ static void records_two_players(void)
     while ((v = cart8(0x09, y)) != 0xFF) {
         uint8_t d = (uint8_t)(v - 0x28);
 
-        *record_byte(0x43D8u + x) = d;
-        *record_byte(0x4800u + x) = (uint8_t)(d + 0x50);
-        *record_byte(0x43D7u + x) = 0x10;
-        *record_byte(0x47FFu + x) = 0x60;
+        *record_byte(RECORDS_FIRST + 1u + x) = d;
+        *record_byte(RECORDS_SECOND + 1u + x) = (uint8_t)(d + 0x50);
+        *record_byte(RECORDS_FIRST + x) = 0x10;
+        *record_byte(RECORDS_SECOND + x) = 0x60;
         d = (uint8_t)(cart8(0x09, (uint16_t)(y + 1)) - 0x28);
-        *record_byte(0x43D9u + x) = d;
-        *record_byte(0x4801u + x) = (uint8_t)(d + 0x50);
-        *record_byte(0x43DAu + x) = 0xA0;
-        *record_byte(0x4802u + x) = 0xF0;
+        *record_byte(RECORDS_FIRST + 2u + x) = d;
+        *record_byte(RECORDS_SECOND + 2u + x) = (uint8_t)(d + 0x50);
+        *record_byte(RECORDS_FIRST + 3u + x) = 0xA0;
+        *record_byte(RECORDS_SECOND + 3u + x) = 0xF0;
         x = (uint16_t)(x + 4);
         y = (uint16_t)(y + 2);
     }
 }
 
-/* One player: a record ($18, x, y, $E7) at $43D7 for each pair of the list at
-   $09:F170, then eight 32-byte blocks over them and the area after, and $40
-   bytes at $5187, all from bank $09. */
+/* One player: a record ($18, x, y, $E7) in the first set for each pair of
+   the list at $09:F170, then eight 32-byte blocks over them and the area
+   after, and $40 bytes in the last block, all from bank $09. */
 static void records_one_player(void)
 {
     static const uint16_t from[8] = {0xF88B, 0xF8AB, 0xF8CB, 0xF8EB, 0xF90B, 0xF92B, 0xF94B, 0xF96B};
-    static const uint16_t to[8] = {0x43D7, 0x45B7, 0x45D7, 0x47B7, 0x47D7, 0x49B7, 0x49D7, 0x4BB7};
+    static const uint16_t to[8] = {0x0000, 0x01E0, 0x0200, 0x03E0, 0x0400, 0x05E0, 0x0600, 0x07E0};   /* in the records area */
     uint16_t x = 0, y = 0xF170;
     uint8_t v;
     unsigned i, k;
 
     while ((v = cart8(0x09, y)) != 0xFF) {
-        *record_byte(0x43D8u + x) = v;
-        *record_byte(0x43D7u + x) = 0x18;
-        *record_byte(0x43D9u + x) = cart8(0x09, (uint16_t)(y + 1));
-        *record_byte(0x43DAu + x) = 0xE7;
+        *record_byte(RECORDS_FIRST + 1u + x) = v;
+        *record_byte(RECORDS_FIRST + x) = 0x18;
+        *record_byte(RECORDS_FIRST + 2u + x) = cart8(0x09, (uint16_t)(y + 1));
+        *record_byte(RECORDS_FIRST + 3u + x) = 0xE7;
         x = (uint16_t)(x + 4);
         y = (uint16_t)(y + 2);
     }
@@ -905,7 +939,7 @@ static void records_one_player(void)
         for (k = 0; k < 8; k++)
             *record_byte(to[k] + i) = cart8(0x09, (uint16_t)(from[k] + i));
     for (i = 0; i < 0x40; i++)
-        *record_byte(0x5187u + i) = cart8(0x09, (uint16_t)(0xF849 + i));
+        *record_byte(RECORDS_LAST + i) = cart8(0x09, (uint16_t)(0xF849 + i));
 }
 
 /* The edge rows from one list of pairs and its mirror image: each pair is
@@ -974,7 +1008,7 @@ void WindowsInit(void)
     for (i = 0; i < 16; i += 4) {
         uint8_t c = cart8(0x09, (uint16_t)(0xF163 + i));
 
-        band_set(i / 4, c, (uint16_t)(cart8(0x09, (uint16_t)(0xF164 + i)) | cart8(0x09, (uint16_t)(0xF165 + i)) << 8));
+        band_set(i / 4, c, edges_named_by((uint16_t)(cart8(0x09, (uint16_t)(0xF164 + i)) | cart8(0x09, (uint16_t)(0xF165 + i)) << 8)));
     }
     for (sel = 0; sel != 0x000E; )
         sel = edges_from_list(sel);
@@ -1033,9 +1067,10 @@ void WindowsInit(void)
     windows.bands_kind = 0;
     windows.split_pos = windows.split_step = 0;
     g.stunt_finished = 0;
-    g.switches_hit[0] = g.switches_hit[1] = g.switches_hit[2] = g.byte_19ec = 0;
+    g.switches_hit[0] = g.switches_hit[1] = g.switches_hit[2] = 0;
+    g.stunt_score_high = 0;             /* the stunt score's count and its addition, from 0 each race */
     g.hits_bcd = 0;
-    g.byte_19f0 = 0;
+    g.stunt_score_add = 0;
     g.bonus_markers_taken = 0;
     g.slide_gate_state = 0;
     g.posts_hit = 0;

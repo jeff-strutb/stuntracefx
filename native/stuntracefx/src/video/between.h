@@ -23,6 +23,7 @@
 #include <stdint.h>
 
 #include "nshvc/nshvc.h"
+#include "system/state.h"
 #include "video/picture.h"
 
 /* A place between the update before's and the newest: was + (now - was) *
@@ -41,17 +42,6 @@ int32_t tween_wrapped(int32_t was, int32_t now, float between, int32_t far, int3
    for a scroll (round 1024, or 256 for a value kept in a byte). */
 enum { TWEEN_SCROLL = -1 };
 void tween_lines(int32_t *values, const int32_t *now, int n, int32_t far, int32_t period);
-
-/* The first version's table, eased against the table the pictures of the
-   update before kept; kept for the menus' per-line tables until they move
-   to tween_lines (with the world swapped in, it no longer gives the update
-   before's values). */
-typedef struct {
-    uint64_t at;
-    int have, n, was_n;
-    int32_t was[1024], now[1024];
-} TweenTable;
-void tween_table(TweenTable *keep, int32_t *values, int n, int32_t far, int32_t period);
 
 /* main's update calls begin before the game's update and end after it:
    begin runs the update before's resource writes, then keeps the world
@@ -80,6 +70,8 @@ void video_between_end(void);
 void video_between_world_in(void);
 void video_between_world_out(void);
 int video_between_world_is_in(void);
+/* the picture's game state for a read outside video_draw (the 3D's compose): the update before's while eased */
+const Game *video_between_g(void);
 float video_between(void);              /* this picture's between; 1 outside a draw */
 int video_between_drawing(void);        /* between begin and end */
 int video_between_eased(void);          /* this picture is the update before's, eased */

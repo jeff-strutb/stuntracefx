@@ -58,6 +58,7 @@ enum {
     FXIN_VIEW_RECORD = 0x247A,          /* the record the view follows */
     FXIN_STEP_FRAMES = 0x108E,          /* the frames of the last step, for the renderer */
     FXIN_SHADE_BASE = 0x004E,           /* the faces' colour tables' base (the frame program's shade base) */
+    FXIN_COURSE_MODELS = 0x0050,        /* the course's model table in bank 3 (from $03:F799 by course), the model program's */
 };
 
 /* The shade bases the screens use: the race's 3D, the HUD's pieces. */
@@ -67,6 +68,11 @@ enum { FX_SHADE_BASE_RACE = 0xA545, FX_SHADE_BASE_HUD = 0xA325 };
    program's screen start), and where a packed screen is unpacked. */
 enum { FX_PICTURE_0 = 0x2C00, FX_PICTURE_1 = 0x9400, FX_PICTURE_0_CLEARED_END = 0x6000, FX_UNPACK_AREA = 0x3000,
        FX_RESULTS_PICTURE = 0x4000 /* the results' picture, unpacked for the screen's overlay */ };
+
+/* The pause's turning picture: unpacked at FX_UNPACK_AREA (buffer 1) or
+   FX_TURN_UNPACK_HIGH (buffer 0), made 4-bit at FX_TURN_PICTURE_LOW or
+   FX_TURN_PICTURE_HIGH. */
+enum { FX_TURN_UNPACK_HIGH = 0xC000, FX_TURN_PICTURE_LOW = 0x4000, FX_TURN_PICTURE_HIGH = 0xD000 };
 
 /* The renderer's inputs that only the glyph programs read: the colours. */
 void GlyphColours(uint8_t b1, uint8_t b2, uint8_t b3);
