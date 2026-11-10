@@ -10,6 +10,7 @@
 #include "data/cart.h"
 #include "menu/menu.h"
 #include "menu/menu_tables.h"
+#include "menu/menu_window.h"
 #include "video/picture.h"
 
 enum { LINES = 225 };
@@ -82,8 +83,34 @@ static void table_indirect(uint16_t at, int32_t *values, int32_t before)
 }
 
 /* Output lines 0-223 are the original's lines 1-224. */
+/* Each field sent by line this picture, as line 0 has it: on a larger
+   screen the rows above the picture take the frame's own state, not the
+   lines', so the window and colour-maths fields among these are made the
+   frame's own state too, and those rows show what the picture's first line
+   shows. (The rows below keep the last line's, as the engine has them.) */
+enum { FIELDS = 128 };
+static int32_t line0[FIELDS];
+static uint8_t sent[FIELDS];
+
 static void send(nshvc_line_field field, const int32_t *values)
 {
+    int32_t moved[LINES];
+    int v;
+
+    /* a window's edges on the larger screen: the original's columns moved
+       to the picture's place, its first and last reaching the screen's edges */
+    if (pic.fills_window && (field == NSHVC_LINE_WIN1_LEFT || field == NSHVC_LINE_WIN2_LEFT ||
+                             field == NSHVC_LINE_WIN1_RIGHT || field == NSHVC_LINE_WIN2_RIGHT)) {
+        int left = field == NSHVC_LINE_WIN1_LEFT || field == NSHVC_LINE_WIN2_LEFT;
+
+        for (v = 0; v < LINES; v++)
+            moved[v] = left ? menu_window_left(values[v]) : menu_window_right(values[v]);
+        values = moved;
+    }
+    if ((int)field < FIELDS) {
+        line0[field] = values[1];
+        sent[field] = 1;
+    }
     nshvc_lines(0, 224, field, values + 1);
 }
 
@@ -232,11 +259,44 @@ static void champion_lines(void)
     }
 }
 
+/* The frame's own window and colour-maths state as line 0 has it. */
+static void line0_as_frame(void)
+{
+    nshvc_windows w = pic.windows;
+    nshvc_blend b = pic.blend;
+    int k;
+
+    for (k = 0; k < 2; k++) {
+        if (sent[NSHVC_LINE_WIN1_LEFT + 2 * k])
+            w.w[k].left = line0[NSHVC_LINE_WIN1_LEFT + 2 * k];
+        if (sent[NSHVC_LINE_WIN1_RIGHT + 2 * k])
+            w.w[k].right = line0[NSHVC_LINE_WIN1_RIGHT + 2 * k];
+    }
+    for (k = 0; k < 6; k++)
+        if (sent[NSHVC_LINE_WIN_USE + k])
+            w.layer_use[k] = (uint8_t)line0[NSHVC_LINE_WIN_USE + k];
+    for (k = 0; k < 5; k++) {
+        if (sent[NSHVC_LINE_MASK_MAIN + k])
+            w.mask_main[k] = (uint8_t)line0[NSHVC_LINE_MASK_MAIN + k];
+        if (sent[NSHVC_LINE_MASK_SUB + k])
+            w.mask_sub[k] = (uint8_t)line0[NSHVC_LINE_MASK_SUB + k];
+    }
+    if (sent[NSHVC_LINE_CLIP])
+        b.clip = (uint8_t)line0[NSHVC_LINE_CLIP];
+    if (sent[NSHVC_LINE_PREVENT])
+        b.prevent = (uint8_t)line0[NSHVC_LINE_PREVENT];
+    nshvc_windows_set(&w);
+    nshvc_blend_set(&b);
+}
+
 void menu_lines_send(void)
 {
+    memset(sent, 0, sizeof sent);
     switch (set_now) {
     case MENU_LINES_TITLE: title_lines(); break;
     case MENU_LINES_PREVIEW: preview_lines(); break;
     default: champion_lines(); break;
     }
+    if (pic.fills_window)
+        line0_as_frame();
 }

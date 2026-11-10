@@ -13,6 +13,7 @@
 #include "menu/actors.h"
 #include "menu/menu.h"
 #include "menu/menu_tables.h"
+#include "menu/menu_window.h"
 #include "race/race.h"
 #include "save/save.h"
 #include "system/game.h"
@@ -51,13 +52,20 @@ static void tiles_from_picture(nshvc_tiles set, uint32_t first, uint32_t bytes, 
     nshvc_tiles_write(set, first, picture, bytes / per_tile, NSHVC_TILES_PLANAR);
 }
 
+/* A menu page written, and kept for the granite's map at the window's size. */
+static void page_write(int page, const void *words)
+{
+    menu_page_write(page, words);
+    menu_window_page(page, (const uint16_t *)words);
+}
+
 /* A picture's map pages, 32 x 32 words each, from page `first` on. */
 static void pages_from_picture(int first, uint32_t bytes)
 {
     uint32_t i;
 
     for (i = 0; i < bytes / 0x800; i++)
-        menu_page_write(first + (int)i, picture + i * 0x800);
+        page_write(first + (int)i, picture + i * 0x800);
 }
 
 static void palette_load(uint8_t bank, uint16_t addr)
@@ -98,6 +106,8 @@ static void menu_common_mode(void)
     memset(&pic.blend, 0, sizeof pic.blend);
     pic.blend.use_fixed = 1;
     memset(&pic.windows, 0, sizeof pic.windows);
+    /* past the picture: the checks (BG3) */
+    menu_window_screen(KEEP_BG1 | KEEP_BG2 | KEEP_SPRITES, 0);
 }
 
 /* The objects made and placed before the screen first shows. */
@@ -189,6 +199,7 @@ void menu_load_screen_open(void)
     pic.bg[1].map = menu_video.text;
     pic.main_screen = SHOW_BG2;
     menu_lines_set(MENU_LINES_TITLE, 0);
+    menu_window_screen(KEEP_BG1 | KEEP_BG3 | KEEP_SPRITES, 0);    /* past the picture: the loading pattern */
 }
 
 /*
@@ -211,13 +222,13 @@ void menu_grid_load(uint16_t first_tile, int page)
         for (x = 0; x < 32; x++)
             w[y * 32 + x] = (uint16_t)(w[y * 32 + x] + 0x0100);
     if (page == 0) {
-        menu_page_write(1, w);
-        menu_page_write(0, w);
+        page_write(1, w);
+        page_write(0, w);
     }
     for (y = 12; y < 23; y++)
         for (x = 4; x < 17; x++)
             w[y * 32 + x] = (uint16_t)((first_tile + (y - 12) + (x - 4) * 0x0B) | 0x2000);
-    menu_page_write(page, w);
+    page_write(page, w);
 }
 
 /*
@@ -351,6 +362,7 @@ static void menu_frame_begin(void)
 {
     int i;
 
+    menu_window_frame_begin();
     if (!stage20_on)
         return;
     for (i = 0; i < 2; i++)
@@ -378,6 +390,7 @@ static void menu_frame_end(int stage20)
         pic.palette[0xD9] = (uint16_t)(t[0x0DA8 + menu.blink_phase * 2] | t[0x0DA9 + menu.blink_phase * 2] << 8);
     }
     actors_rows_flush();
+    menu_window_frame_end();
     frame_end();
 }
 
@@ -423,6 +436,7 @@ static void preview_full_mode(void)
     menu.slide_low = menu.slide_low_next = 0x00A8;
     actors.groups[0x1354 - 0x0800] = 0xFF;
     menu_lines_set(MENU_LINES_PREVIEW, 0x90);
+    menu_window_screen(KEEP_BG2 | KEEP_BG3 | KEEP_SPRITES, 1);    /* past the picture: the granite */
 }
 
 /* The palette and its full colours for the course menu. */
@@ -447,7 +461,7 @@ static void preview_open(void)
     menu_state_clear();
     actors_reset();
     actors_spawn_list(0x10);
-    fx_draw_set_origin(32, 96);
+    menu_window_car_origin();
     RaceStart();
     actors_run();
     actors_build_sprites();
@@ -487,7 +501,7 @@ static void preview_fade_begin(void)
     memset(pic.palette, 0, 12 * 2);
     for (i = 0; i < 12; i++)
         pic.palette_saved[i] = cart16(0x1C, (uint16_t)(0xE3AC + i * 2));
-    fx_draw_set_origin(32, 96);
+    menu_window_car_origin();
     RaceStart();
     menu.slide_top = menu.slide_top_next = 0;
     menu.slide_low = menu.slide_low_next = 0x00A8;
@@ -502,6 +516,8 @@ static void preview_fade_begin(void)
     pic.blend.layers = 1;
     pic.blend.use_fixed = 0;
     pic.sub_screen = SHOW_BG2;
+    /* past the picture: the granite and the loading pattern it fades from */
+    menu_window_screen(KEEP_BG3 | KEEP_SPRITES, 1);
     memset(pic.windows.mask_main, 0, sizeof pic.windows.mask_main);
     memset(pic.windows.mask_sub, 0, sizeof pic.windows.mask_sub);
     pic.main_screen = SHOW_BG1 | SHOW_BG2;
@@ -744,6 +760,7 @@ int CourseMenuRun(void)
             state = S_COURSE_DONE;
         break;
     case S_COURSE_DONE:
+        menu_window_screen(0, 0);
         fx_draw_set_origin(0, 0);
         g.hud_mode = (uint8_t)g.menu_mode;
         g.course_menu_seen = 1;
@@ -958,6 +975,7 @@ static void champion_open(void)
     frame_state.brightness = 0;
     race_steps_end();                   /* no race steps drawn between behind this screen */
     race_screen_end();                  /* none of the race's layers left behind this screen */
+    menu_window_screen(KEEP_BG2 | KEEP_BG3 | KEEP_SPRITES, 0);    /* past the picture: the granite, a whole page of it */
     pic.mode = 3;
     pic.bg3_priority = 0;
     pic.bg[2].draw_list.id = 0;
@@ -1005,7 +1023,7 @@ static void champion_open(void)
         memcpy(w, picture, n < sizeof w ? n : sizeof w);
         for (x = 0; x < 0x400; x++)
             w[x] = (uint16_t)(w[x] + 0x0100);
-        menu_page_write(0, w);
+        page_write(0, w);
     }
     tiles_from_picture(menu_video.sprites, 0, picture_unpack(0x18, 0xC770), 32);
     tiles_from_picture(tiles_8bpp, 0x100, picture_unpack(0x18, 0x998C), 64);
@@ -1059,7 +1077,7 @@ static void champion_open(void)
     cell_attributes(map, 0x0628, cart16(0x0B, (uint16_t)(0xEDDF + (g.choice_p1 & 3) * 2)));
     cell_attributes(map, 0x052E, cart16(0x0B, (uint16_t)(0xEDDF + (g.choice_p1 & 3) * 2)));
     for (x = 0; x < 2; x++)
-        menu_page_write(1 + x, map + x * 0x800);
+        page_write(1 + x, map + x * 0x800);
 
     picture_unpack(0x04, 0xEBCB);
     memcpy(champion_frames, picture, sizeof champion_frames);
