@@ -494,7 +494,7 @@ uint16_t BackdropScrollFromView(void)
     unsigned s;
 
     g.backdrop_x[half] = (uint16_t)(g.view_heading_06cf >> 2);
-    h = (uint16_t)(player_vehicle_raised(half) + g.view_angle_06cd + 0x18);
+    h = (uint16_t)(player_vehicle_raised(half) + g.backdrop_pitch + 0x18);
     s = (unsigned)(uint16_t)(h << 1) + 0xEF99 + (h >> 15);
     t = (uint16_t)s;
     if (t >= 0xF257)
@@ -509,7 +509,7 @@ uint16_t BackdropScrollFromView(void)
 void BackdropRowsUpdate(void)
 {
     int buf = g.fx_buffer, n;
-    uint16_t h = g.view_angle_06cd, s;
+    uint16_t h = g.backdrop_pitch, s;
     uint32_t x;
     const uint16_t *map = backdrop_map((g.picture_effects & 0x40) ? 1 : 0);
     uint16_t *out = backdrop_rows(buf);
@@ -564,7 +564,7 @@ void BackdropAnglesFromView(void)
         v = 0x00E8;
     if ((uint16_t)(v - 0xFFC8) & 0x8000)
         v = 0xFFC8;
-    g.view_angle_06cd = (uint16_t)((v + 0x0098) & 0x01FF);
+    g.backdrop_pitch = (uint16_t)((v + 0x0098) & 0x01FF);
     w = g.view_angles[1];
     for (i = 0; i < 5; i++)
         w = (uint16_t)((w >> 1) | (w & 0x8000));

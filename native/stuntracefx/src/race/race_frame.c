@@ -130,12 +130,12 @@ void RaceStart(void)
     fx16_set(GSU_WORD_1C4, 2);
     fx16_set(FXIN_NOT_MENU, 0);
     FxInit();
-    g.word_116a = 0;
+    g.demo_car_count = 0;
     step_clock_restart();
     CourseScriptRun(0x05, 0x0000);
     RaceFrameStep(1);
     RaceFrameStep(1);
-    cameras[0].object = g.word_116c;
+    cameras[0].object = g.demo_cars[0];
     g.picture_uploaded = 1;
     memset(&fx_ram[0x2C00], 0, 0x3400);
 }
@@ -561,7 +561,7 @@ void RaceVarsReset(void)
     g.race_ended_d55 = 0;
     g.lap_shown = 0;
     g.sprites_counted = 0;
-    g.flag_0e59 = 0;
+    g.time_up_shown = 0;
     g.fade_out = 0;
     g.banner_timer[0] = g.banner_timer[1] = 0;
     g.banner[0] = g.banner[1] = 0;

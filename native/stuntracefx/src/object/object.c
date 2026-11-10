@@ -127,14 +127,14 @@ void ObjectPoolInit(void)
 /*
  * @routine 7F:12AC ObjectLinkFlag4000Step
  * WHAT IT DOES: When player 1's camera has bit 14 of its mode set, adds 8
- * to the view angle at $06CD.
+ * to the backdrop's pitch ($06CD).
  */
 void ObjectLinkFlag4000Step(void)
 {
     const Object *director = obj_at(obj_at(g.player_car)->link);
 
     if (camera_of(director->link)->mode & 0x4000)
-        g.view_angle_06cd = (uint16_t)(g.view_angle_06cd + 8);
+        g.backdrop_pitch = (uint16_t)(g.backdrop_pitch + 8);
 }
 
 /*
@@ -404,11 +404,11 @@ void ObjectLinkedHandlerByState(Object *o, uint8_t state)
         }
     } else if (state == 0x0C || state == 0x0A) {
         rec_and(o->record, FXREC_SIDES, 0xFBCF);
-        if (!g.flag_0e59)
+        if (!g.time_up_shown)
             return;
         handler = H_CAMERA_ORBIT;
     } else {
-        if (g.flag_19ed != 0x08)
+        if (g.stunt_finished != 0x08)
             return;
         handler = H_CAMERA_STILL;
     }

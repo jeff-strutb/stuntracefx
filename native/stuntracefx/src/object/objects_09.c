@@ -449,7 +449,7 @@ void ObjectPostAStep(Object *o)
     if (!hit(o))
         return;
     ease8(&o->pitch, 0x33, ApproachHalfMin2Byte);
-    g.byte_1a07 |= 0x01;
+    g.posts_hit |= 0x01;
 }
 
 static void post_record(Object *o, uint16_t v)
@@ -507,9 +507,9 @@ void ObjectPostBStep(Object *o)
         return;
     if (!(o->flags25 & 0x01)) {
         o->flags25 |= 0x01;
-        g.byte_1a07 |= 0x02;
+        g.posts_hit |= 0x02;
     }
-    if (g.byte_1a07 != 0x03 || (o->flags25 & 0x02))
+    if (g.posts_hit != 0x03 || (o->flags25 & 0x02))
         return;
     o->flags25 |= 0x02;
     {
@@ -1204,7 +1204,7 @@ void ObjectSlideChimeGateStep(Object *o)
         o->flags25 |= 0x01;
         g.picture_effects |= 0xA0;
         slide_set(0x0080, 0xFF80, 0x8000);
-        g.byte_1a04 = 0xFF;
+        g.slide_wobble_step = 0xFF;
         fade_set(0x0020, 0x2000);
         return;
     }
@@ -1247,7 +1247,7 @@ void ObjectSlideZoneStep(Object *o)
         return;
     }
     slide_set(0x0100, 0xFF00, 0x8000);
-    g.byte_1a04 = 0xFF;
+    g.slide_wobble_step = 0xFF;
 }
 
 /* @routine 09:A997 ObjectSlideZone, 09:A9B5 ObjectSlideZoneRecord */
@@ -1260,7 +1260,7 @@ void ObjectBonusMarkerStep(Object *o)
 
     if (!r || g.laps_counted[0] != 0x00)
         return;
-    g.byte_1a06++;
+    g.bonus_markers_taken++;
     GsuRecordFlags8ASet(r, 0x01);
     if (((uint8_t)(g.clock_fraction >> 8) >> 4) & 0x03) {
         g.picture_effects |= 0x10;
@@ -1286,7 +1286,7 @@ void ObjectBonusGateStep(Object *o)
         return;
     o->flags25 |= 0x01;
     SoundPort1QueuePush(0x10);
-    if (g.laps_counted[0] != 0x00 || !g.byte_1a06)
+    if (g.laps_counted[0] != 0x00 || !g.bonus_markers_taken)
         return;
     GsuRecordFlags8ASet(r, 0x01);
 }
@@ -1308,7 +1308,7 @@ void ObjectBonusEndGateStep(Object *o)
         return;
     o->flags25 |= 0x01;
     SoundPort1QueuePush(0x0F);
-    if (g.laps_counted[0] == 0x02 || !g.byte_1a06)
+    if (g.laps_counted[0] == 0x02 || !g.bonus_markers_taken)
         return;
     GsuRecordFlags8AClear(r, 0x01);
 }
@@ -1378,7 +1378,7 @@ void ObjectTimeGateStep(Object *o)
         return;
     o->count48 = g.laps_counted[0];
     SoundPort0QueuePush(0x41);
-    g.time_left = bcd_add_bonus(g.time_left, g.byte_19e6);
+    g.time_left = bcd_add_bonus(g.time_left, g.time_gate_bonus);
 }
 
 static void time_gate(Object *o, uint16_t record_handler)
@@ -1512,7 +1512,7 @@ void ObjectCountGateStep(Object *o)
         return;
     o->flags25 |= 0x01;
     HudCountMove19EECopy();
-    g.flag_19ed = 0x08;
+    g.stunt_finished = 0x08;
 }
 
 /* @routine 09:AFB7 ObjectCountGate, 09:AFD5 ObjectCountGateRecord */
@@ -1521,7 +1521,7 @@ GATE(ObjectCountGate, ObjectCountGateRecord, ObjectCountGateStep, H9_COUNT_GATE_
 /* @routine 09:B092 ObjectCountMarkerStep */
 void ObjectCountMarkerStep(Object *o)
 {
-    if (g.byte_19e8)
+    if (g.switches_hit[0])
         ObjectStep48To8(o);
     ObjectSyncFromRecord(o);
 }
@@ -1564,7 +1564,7 @@ void ObjectCountTriggerStep(Object *o)
         o->flags25 |= 0x01;
         HudCountMove19EE(r);
     }
-    g.byte_19e8 = 0x01;
+    g.switches_hit[0] = 0x01;
 }
 
 /* @routine 09:B0DC ObjectCountTriggerRecord */
@@ -2404,11 +2404,11 @@ static void gate_slide_step(Object *o)
 {
     if (!(o->flags25 & 0x01)) {
         o->flags25 |= 0x01;
-        g.byte_1a29 = 0x01;
+        g.slide_gate_state = 0x01;
         SoundPort0QueuePush(0x5F);
     }
     if (o->x == o->link27) {
-        g.byte_1a29 = 0x02;
+        g.slide_gate_state = 0x02;
         return;
     }
     o->x = (uint16_t)(((uint16_t)(o->x - o->link27) & 0x8000) ? o->x + 0x0280 : o->x - 0x0280);
@@ -2443,8 +2443,8 @@ void ObjectSlideLapGate(Object *o)
 /* @routine 09:E4F2 ObjectSlideMeterStep */
 void ObjectSlideMeterStep(Object *o)
 {
-    if (g.byte_1a29) {
-        if (g.byte_1a29 == 0x01) {
+    if (g.slide_gate_state) {
+        if (g.slide_gate_state == 0x01) {
             if (o->count48 != 0x07)
                 o->count48++;
         } else if (o->count48) {
@@ -2903,7 +2903,7 @@ static int hit_switch_frame(Object *o)
 }
 
 /* @routine 09:B19B ObjectSwitchLampBStep */
-void ObjectSwitchLampBStep(Object *o) { hit_lamp_frame(o, g.byte_19e9); }
+void ObjectSwitchLampBStep(Object *o) { hit_lamp_frame(o, g.switches_hit[1]); }
 /* @routine 09:B16E ObjectSwitchLampBRecord */
 void ObjectSwitchLampBRecord(Object *o) { hit_lamp_record(o); ObjectSwitchLampBStep(o); }
 /* @routine 09:B133 ObjectSwitchLampB */
@@ -2917,7 +2917,7 @@ void ObjectSwitchLampB(Object *o)
 void ObjectSwitchBStep(Object *o)
 {
     if (hit_switch_frame(o))
-        g.byte_19e9 = 0x01;
+        g.switches_hit[1] = 0x01;
 }
 /* @routine 09:B1C8 ObjectSwitchBRecord */
 void ObjectSwitchBRecord(Object *o) { hit_switch_record(o); ObjectSwitchBStep(o); }
@@ -2929,7 +2929,7 @@ void ObjectSwitchB(Object *o)
 }
 
 /* @routine 09:B287 ObjectSwitchLampCStep */
-void ObjectSwitchLampCStep(Object *o) { hit_lamp_frame(o, g.byte_19ea); }
+void ObjectSwitchLampCStep(Object *o) { hit_lamp_frame(o, g.switches_hit[2]); }
 /* @routine 09:B25A ObjectSwitchLampCRecord */
 void ObjectSwitchLampCRecord(Object *o) { hit_lamp_record(o); ObjectSwitchLampCStep(o); }
 /* @routine 09:B21F ObjectSwitchLampC */
@@ -2943,7 +2943,7 @@ void ObjectSwitchLampC(Object *o)
 void ObjectSwitchCStep(Object *o)
 {
     if (hit_switch_frame(o))
-        g.byte_19ea = 0x01;
+        g.switches_hit[2] = 0x01;
 }
 /* @routine 09:B2B4 ObjectSwitchCRecord */
 void ObjectSwitchCRecord(Object *o) { hit_switch_record(o); ObjectSwitchCStep(o); }

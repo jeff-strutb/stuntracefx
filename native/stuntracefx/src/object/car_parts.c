@@ -472,7 +472,7 @@ void ObjectRivalCarStep(Object *o)
     if (rec_get(rec, 0x002C) & 0x0004) {
         o->flags25 |= 0x10;
         if (!CarCrashParts(o, 0x03)) {
-            g.script_byte_1f71--;
+            g.rivals_left--;
             rec_or(rec, FXREC_FLAGS16, 0x0020);
             rec_or(rec, FXREC_FLAGS1C, 0x0010);
         }
@@ -489,7 +489,7 @@ void ObjectRivalCarStep(Object *o)
  */
 void ObjectRivalCar(Object *o)
 {
-    g.script_byte_1f71++;
+    g.rivals_left++;
     o->count48 = 0;
     o->byte26 = 0;
     ObjectCarSpawnListed(o);

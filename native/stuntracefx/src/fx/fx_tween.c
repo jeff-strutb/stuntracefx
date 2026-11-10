@@ -308,7 +308,7 @@ void fx_tween_draw(float between)
         if (picture < 0 || !RaceViewForPicture(panel))
             break;
         heading[panel] = g.view_heading_06cf;
-        pitch[panel] = g.view_angle_06cd;
+        pitch[panel] = g.backdrop_pitch;
         panels = panel + 1;
         records_take_fractions();
         fractions_on = 1;

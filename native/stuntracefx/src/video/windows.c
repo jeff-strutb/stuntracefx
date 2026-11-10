@@ -1004,7 +1004,7 @@ void WindowsInit(void)
     memset(g.bob_22, 0, sizeof g.bob_22);
     g.bob_speed[0] = g.bob_speed[1] = 0xFE;
     if (g.hud_mode == 0)
-        g.byte_19e6 = cart8(0x09, (uint16_t)(cart16(0x09, (uint16_t)(0xF115 + 2 * g.course_class)) + g.champ_stage));
+        g.time_gate_bonus = cart8(0x09, (uint16_t)(cart16(0x09, (uint16_t)(0xF115 + 2 * g.course_class)) + g.champ_stage));
     palettes.weather_value = 0;
     i = (uint8_t)(g.car[0] * 2);
     windows.band_limits = (uint8_t)i;
@@ -1019,12 +1019,12 @@ void WindowsInit(void)
     windows.windows_colour = 0xFE;
     windows.bands_kind = 0;
     windows.split_pos = windows.split_step = 0;
-    g.flag_19ed = 0;
-    g.byte_19e8 = g.byte_19e9 = g.byte_19ea = g.byte_19ec = g.byte_19f2 = 0;
+    g.stunt_finished = 0;
+    g.switches_hit[0] = g.switches_hit[1] = g.switches_hit[2] = g.byte_19ec = g.byte_19f2 = 0;
     g.hits_bcd = 0;
     g.byte_19f0 = 0;
-    g.byte_1a06 = 0;
-    g.byte_1a29 = 0;
-    g.byte_1a07 = 0;
-    g.byte_1a04 = 0xFF;
+    g.bonus_markers_taken = 0;
+    g.slide_gate_state = 0;
+    g.posts_hit = 0;
+    g.slide_wobble_step = 0xFF;
 }

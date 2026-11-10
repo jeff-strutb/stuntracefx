@@ -81,7 +81,7 @@ void CourseScriptRun(uint8_t bank, uint16_t at)
             fxram_put(FX_DRIVE_LEVEL, g.course);
             g.frame_record_count = 0;
             g.course_options = 0;
-            g.script_byte_1f71 = 0;
+            g.rivals_left = 0;            /* and pace_signal, the same byte */
             ObjectPoolInit();
             x = (uint16_t)(y + 1);
             break;

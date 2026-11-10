@@ -1029,7 +1029,7 @@ void HudBlankDraw(void)
     }
     GlyphColours(0xBF, 0xB7, 0xB6);
     fx16_set(FXIN_PIECE, 0x0E08);
-    n = g.script_byte_1f71 & 0x000F;
+    n = g.rivals_left & 0x000F;
     if (n > 2)
         return;
     for (int i = 2; i >= (int)n; i--) {

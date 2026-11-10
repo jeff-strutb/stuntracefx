@@ -840,12 +840,12 @@ static void time_up_end(uint8_t t)
 void TimeUpBattle(void)
 {
     BigSpritesRow6();
-    if (!g.flag_0e59) {
+    if (!g.time_up_shown) {
         if (!g.time_up_timer) {
             sound_port0_push(0x51);
             OamHide75Up();
             g.time_up_timer = 0x3C;
-            g.flag_0e59 = 0x3C;
+            g.time_up_shown = 0x3C;
         }
         g.time_up_timer--;
         return;
@@ -874,10 +874,10 @@ static int time_up_wait(void)
 void TimeUpStunt(void)
 {
     BigSpritesRow6();
-    if (!g.flag_0e59) {
+    if (!g.time_up_shown) {
         if (time_up_wait() == 1) {
             g.time_up_timer = 0x20;
-            g.flag_0e59--;
+            g.time_up_shown--;
             sound_port0_push(0x51);
             OamHide75Up();
         }
@@ -896,7 +896,7 @@ void TimeUpRace(int player)
     uint8_t v;
 
     BigSpritesRow6();
-    if (!g.flag_0e59) {
+    if (!g.time_up_shown) {
         if (g.laps_done[0] > g.laps_counted[0]) {
             g.player_phase[0] = 0x06;
             RaceLapCrossed(player);
@@ -904,7 +904,7 @@ void TimeUpRace(int player)
         }
         if (time_up_wait() == 1) {
             g.time_up_timer = 0x24;
-            g.flag_0e59--;
+            g.time_up_shown--;
             sound_port0_push(0x51);
             Countdown0DF8();
         }

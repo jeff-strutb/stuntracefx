@@ -339,7 +339,7 @@ static void choice_up_down(void)
  */
 static uint16_t car_object(uint16_t i)
 {
-    return i == 0 ? g.word_116c : g.word_116e[i - 1];
+    return g.demo_cars[i];
 }
 
 static void set_pair_animations(uint16_t pair)

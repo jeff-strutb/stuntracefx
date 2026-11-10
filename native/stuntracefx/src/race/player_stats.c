@@ -363,7 +363,7 @@ static void stunt_panel_wait(void)
 
     if (PauseOnStart())
         return;
-    v = g.flag_19ed;
+    v = g.stunt_finished;
     if (!v || v == g.stunt_seen)
         return;
     g.stunt_seen = v;
@@ -536,7 +536,7 @@ static void hud_mode_one(void)
         stunt_phase_step();
         if (race_flow_stopped())
             return;
-        if (!g.flag_0e59) {
+        if (!g.time_up_shown) {
             TimeBonusTally();
             TimeLeftDigits();
             TimeBonusTransfer();
@@ -586,7 +586,7 @@ static void time_up_phase_race(void)
         SoundPort0QueuePush(0x31);
         return;
     }
-    if (g.script_byte_1f71)
+    if (g.rivals_left)
         return;
     g.player_phase[0] = 0x08;
     g.freeze = 0x08;

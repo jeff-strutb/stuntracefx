@@ -31,7 +31,6 @@ typedef struct {
     uint16_t settings_row[3];           /* $18EF-$18F3: the settings also shown as initials */
     uint8_t car_settings[3];            /* $1184-$1186 */
     uint16_t word_1168;                 /* $1168 */
-    uint16_t word_116e[3];              /* $116E-$1173: the objects after the one at $116C */
     uint16_t course_menu_seen;          /* $1917 */
     uint16_t demo_number;               /* $1915: the next attract demo */
     uint16_t record_times[12];          /* $0F2B: sorted times; the first is the best, $FFFF for none */
@@ -56,8 +55,13 @@ typedef struct {
     uint8_t byte_0e92;                  /* $0E92 */
 
     /* ---- the race: its flow, cars, laps and times ---- */
-    uint8_t byte_19e6, trail_zone_on, byte_19e8, byte_19e9, byte_19ea, byte_19ec, byte_19f0, byte_19f2; /* $19E6-$19F2: cleared with the windows */
-    uint8_t byte_1a04, byte_1a06, byte_1a07, byte_1a29; /* $1A04, $1A06, $1A07, $1A29 */
+    uint8_t trail_zone_on, byte_19ec, byte_19f0, byte_19f2; /* $19E7, $19EC, $19F0, $19F2: cleared with the windows */
+    uint8_t time_gate_bonus;            /* $19E6: the BCD seconds a time gate adds, from the table at $09:F115 by class and stage */
+    uint8_t switches_hit[3];            /* $19E8-$19EA: the count trigger and switches B and C touched; each one's lamp counts while set */
+    uint8_t slide_wobble_step;          /* $1A04: set to $FF with each slide down; read only by the unreached SlideOutWobble */
+    uint8_t bonus_markers_taken;        /* $1A06: bonus markers touched on the first lap; the bonus gates mark a car only after one */
+    uint8_t posts_hit;                  /* $1A07: bit 0 post A, bit 1 post B touched; with both the sky ball goes */
+    uint8_t slide_gate_state;           /* $1A29: the slide lap gate: 0 still, 1 sliding, 2 there; its meter follows */
     uint8_t hud_mode;                   /* $0D2B: 0 speed, 1 stunt, 2 two-player, 3 demo */
     uint8_t split_screen;               /* $0D62: 0 one player, else the two-player split */
     uint8_t frames_since_step;          /* $0306: video frames since the last race step */
@@ -157,8 +161,8 @@ typedef struct {
     uint16_t fx_upload_stage;           /* $0D7D: the picture's upload stage */
     uint8_t picture_uploaded;           /* $0357: set when the frame's picture has gone up */
     uint8_t fx_screen_mode;             /* $0374: the Super FX screen mode */
-    uint16_t word_116a;                 /* $116A: cleared when a race starts */
-    uint16_t word_116c;                 /* $116C: the object the camera follows after RaceStart */
+    uint8_t demo_car_count;             /* $116A: the demo cars made since RaceStart cleared it (ObjectDemoCarStart) */
+    uint16_t demo_cars[4];              /* $116C-$1173: those cars in order; the camera follows the first after RaceStart */
     uint16_t view_left, view_right;     /* $2A, $2E: the view's window, left and right */
     uint16_t view_top, view_bottom;     /* $2C, $30 */
     uint16_t view_centre_x, view_centre_y; /* $CE, $D0: where the horizon's centre is */
@@ -172,11 +176,12 @@ typedef struct {
     uint16_t player_car, player2_car;   /* $0346, $034A: the players' cars */
     uint16_t handler_object;            /* $034C: the object whose handler is running */
     uint16_t object_frames;             /* $05E9: frames the objects have run */
-    uint16_t view_angle_06cd;           /* $06CD: the view angle a car's cue moves */
+    uint16_t backdrop_pitch;            /* $06CD: the view's pitch as the backdrop's rows and gradient take it (BackdropAnglesFromView); a camera mode's bit 14 lowers it */
     uint16_t place_list_next;           /* $0008: the starter number ObjectPlaceAll reached: its count + 1 */
     uint16_t last_worked_y;             /* $000A: the last Y ObjectFaceTied (the camera's) or ObjectPlaceOnParent (the doubled turned offset) worked with; course objects with no model record take it as their X offset */
     uint8_t freeze;                     /* $0D53: the race is frozen */
-    uint8_t flag_0e59, flag_19ed;       /* $0E59, $19ED */
+    uint8_t time_up_shown;              /* $0E59: set once time-up is announced ($3C in battle, else $FF): hits no longer count, no time bonus, the orbit camera */
+    uint8_t stunt_finished;             /* $19ED: 8 once a car passes the stunt course's count gate (its finish): the panel's finish, the still camera */
     uint16_t hits_bcd;                  /* $19EE: a decimal count of hits */
     uint8_t hits;                       /* $1A28 */
     uint8_t view_event[2];              /* $0DA4, $0DA6: bit 7 while a view bob runs */
@@ -198,7 +203,10 @@ typedef struct {
     uint16_t player_flags[2];           /* $1A5E, $1A60 */
     uint16_t seq_count, seq_stage;      /* $1A33, $1A35: the button sequence */
     uint16_t bucket_origin[3];          /* $1F01, $1F03, $1F05: the bucket trigger window */
-    uint8_t script_byte_1f71;
+    union {                             /* $1F71, cleared by each course script */
+        uint8_t rivals_left;            /* the blank-HUD stunt course: rival cars set up and not yet wrecked; it ends at 0 */
+        uint8_t pace_signal;            /* Speed Trax: the pace car's start: 0 waiting, 1 past the mark (the signal counts), 2 go */
+    };
     uint8_t course;                     /* $0E3D */
     uint16_t frame_record_count;        /* $0CEE: the records built for the renderer this frame */
     uint8_t frame_records[64 * 30];     /* $7E:F77F: those records, 30 bytes each */

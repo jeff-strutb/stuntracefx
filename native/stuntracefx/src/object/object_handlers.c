@@ -6,6 +6,7 @@
  *
  * Not converted, nothing in the game reaches them: see object/NOTES.
  */
+#include <stdio.h>
 #include <string.h>
 
 #include "audio/sound.h"
@@ -207,9 +208,9 @@ void ObjectPaceCarStep(Object *o)
     ObjectRebucket(o);
     ObjectPoseFromRecord(o);
     rec = o->record;
-    if (g.script_byte_1f71 != 0x02) {
+    if (g.pace_signal != 0x02) {
         if (!below((uint16_t)(rec_get(rec, FXREC_POS_Z) + 0x0258), g.pace_z))
-            g.script_byte_1f71 = 0x01;
+            g.pace_signal = 0x01;
         rec_and(rec, FXREC_SIDES, 0xF7FF);
         if (below(rec_get(rec, FXREC_SPEED), 0x001E))
             rec_or(rec, FXREC_SIDES, 0x0800);
@@ -243,7 +244,7 @@ void ObjectPaceCarStart(Object *o)
  */
 void ObjectSignalStep(Object *o)
 {
-    if (g.script_byte_1f71) {
+    if (g.pace_signal) {
         Object *child = obj_at(o->parent);
         uint8_t v;
 
@@ -252,7 +253,7 @@ void ObjectSignalStep(Object *o)
             obj_at(g.player_car)->model = 0xA75C;
             ObjectRelease(child);
             ObjectRelease(o);
-            g.script_byte_1f71 = 0x02;
+            g.pace_signal = 0x02;
             return;
         }
         v = (uint8_t)(child->frame5a + 1);
@@ -281,7 +282,7 @@ void ObjectPaceCarSetup(Object *o)
         return;
     }
     g.pace_z = o->z;
-    g.script_byte_1f71 = 0;
+    g.pace_signal = 0;
     o->y = (uint16_t)(o->y + 0xFF9C);
     n = ObjectSpawn(0xA040);
     if (!n)
@@ -1630,14 +1631,16 @@ void ObjectDemoCarStart(Object *o)
     c->mode = (uint16_t)((c->mode & 0xFF00) | 0x01);
     ObjectSetHandler(o, H_DEMO_CAR_STEP);
     {
-        uint8_t n = (uint8_t)((uint8_t)g.word_116a << 1) / 2;
+        unsigned n = g.demo_car_count & 0x7Fu;
 
-        if (n == 0)
-            g.word_116c = obj_ref(o);
+        /* the original's table runs on past four into $1174; RaceStart
+           clears the count and the menus read four */
+        if (n < 4)
+            g.demo_cars[n] = obj_ref(o);
         else
-            g.word_116e[n - 1] = obj_ref(o);
+            fprintf(stderr, "ObjectDemoCarStart: a fifth demo car (%u)\n", n);
     }
-    g.word_116a = (uint16_t)((g.word_116a & 0xFF00) | (uint8_t)(g.word_116a + 1));
+    g.demo_car_count++;
     o->count48 = 0x04;
     ObjectDemoCarStep(o);
 }

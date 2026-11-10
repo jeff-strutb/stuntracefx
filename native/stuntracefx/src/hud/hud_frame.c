@@ -114,10 +114,10 @@ void HudCountMove19EECopy(void)
     g.byte_19f2 = 0x01;
 }
 
-/* @routine 09:C08E HudCountMove19EE: unless $0E59 is set: sound $35, the record's lift, the count moved. */
+/* @routine 09:C08E HudCountMove19EE: unless time-up is shown ($0E59): sound $35, the record's lift, the count moved. */
 void HudCountMove19EE(uint16_t rec)
 {
-    if (g.flag_0e59)
+    if (g.time_up_shown)
         return;
     sound_port0_push(0x35);
     GsuRecordRaise6A(rec, 0x7F);
