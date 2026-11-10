@@ -1487,7 +1487,7 @@ static const FxArtLoop menu_z[] = { { 10, menu_z_0 } };
 static const FxArtLayer menu_z_fill[] = { { 3, 1, menu_z } };
 static const uint16_t menu_z_tiles[] = { 67, 83 };
 
-/* ---- the menus' mode words SPEED / STUNT / BATTLE / FREE TRAX (menu picture 10, 16 x 16 letters): console art, the face, its dark rim and its shade each a region over the one before ---- */
+/* ---- the menus' mode words SPEED / STUNT / BATTLE / FREE TRAX (menu picture 10, 16 x 16 letters), the lettering STRONG FA1402 (the menu font's design, the outline grown from the fill), the frame pieces and a gem: console art, each colour a region over the one before ---- */
 
 /* the menus' mode word letter '0 S' ($FF:$002A), its colours each a region over the one before (1: 1 loop, 15 corners (3 sharp), radii 0.3, 0.6, 0.7, 1.3, 2, 3.2, 3.5, 4.3; 2: 1 loop, 16 corners (5 sharp), radii 0.3, 0.7, 1.5, 2, 3, 3.5, 3.6, 4.2; 7: 1 loop, 16 corners (5 sharp), radii 0.3, 0.7, 1.5, 2, 3, 3.5); 11 off */
 static const FxArtCorner menuword_0_s_0_0[] = { { 10.95f, 1.25f, 0.3f }, { 17.28f, 5.98f, 1.3f }, { 8.16f, 5.98f, 0.59f }, { 9.02f, 4.99f, 0.0f }, { 4.17f, 4.99f, 0.33f }, { 14.81f, 8.54f, 1.99f }, { 14.81f, 14.68f, 4.29f }, { 0.23f, 14.68f, 4.27f }, { 0.23f, 9.99f, 0.3f }, { 6.48f, 9.99f, 0.71f }, { 6.01f, 11.0f, 0.0f }, { 6.03f, 11.0f, 0.3f }, { 9.86f, 11.0f, 0.0f }, { 0.13f, 6.76f, 3.51f }, { 0.13f, 1.25f, 3.21f } };
@@ -1876,6 +1876,168 @@ static const FxArtLoop menuword_35_x_2[] = { { 16, menuword_35_x_2_0 } };
 static const FxArtLayer menuword_35_x_fill[] = { { 1, 1, menuword_35_x_0, 0.0f }, { 2, 1, menuword_35_x_1, 0.0f }, { 7, 1, menuword_35_x_2, 0.0f } };
 static const uint16_t menuword_35_x_tiles[] = { 390, 391, 406, 407 };
 
+/* the menus' mode word letter 'frames' ($FF:$002A), its colours each a region over the one before (10: 3 loops, 32 corners (10 sharp), radii 0.6, 0.7, 2, 4; 8: 4 loops, 36 corners (10 sharp), radii 0.6, 1.2, 1.5, 2; 1: 4 loops, 42 corners (12 sharp), radii 0.6, 1.2, 1.5, 2, 2.4; 15: 5 loops, 46 corners (10 sharp), radii 0.1, 0.6, 0.7, 1.5; 12: 5 loops, 45 corners (12 sharp), radii 0.2, 0.6; 2: 3 loops, 29 corners (8 sharp), radii 0.2, 0.6; 14: 2 loops, 15 corners (4 sharp), radii 0.6; 13: 2 loops, 12 corners (1 sharp), radii 0.6, 2.3); 9 off */
+static const FxArtCorner menu_frames_0_0[] = { { 16.0f, 24.0f, 0.0f }, { 16.0f, 16.0f, 0.6f }, { 26.0f, 16.0f, 0.0f }, { 26.0f, 2.0f, 0.6f }, { 29.53f, 2.0f, 0.6f }, { 36.47f, 16.0f, 0.0f }, { 44.0f, 16.0f, 0.0f }, { 44.0f, 2.0f, 4.0f }, { 68.0f, 2.0f, 4.0f }, { 68.0f, 16.0f, 0.6f }, { 64.0f, 16.0f, 0.0f }, { 64.0f, 32.0f, 0.6f }, { 40.0f, 32.0f, 0.6f }, { 40.0f, 24.0f, 0.0f }, { 24.0f, 24.0f, 0.0f }, { 24.0f, 32.0f, 0.6f }, { -0.0f, 32.0f, 0.6f }, { -0.0f, 24.0f, 0.6f } };
+static const FxArtCorner menu_frames_0_1[] = { { 5.53f, 3.0f, 0.6f }, { 7.0f, 3.0f, 0.6f }, { 7.0f, 8.0f, 0.6f }, { 0.46f, 8.0f, 0.6f } };
+static const FxArtCorner menu_frames_0_2[] = { { 8.0f, 8.5f, 0.0f }, { 8.0f, 0.0f, 2.0f }, { 24.0f, 0.0f, 0.6f }, { 24.0f, 3.0f, 0.6f }, { 11.0f, 3.0f, 0.0f }, { 11.0f, 16.0f, 0.6f }, { 7.54f, 16.0f, 0.71f }, { 8.0f, 15.0f, 0.0f }, { 3.0f, 15.0f, 0.6f }, { 3.0f, 13.5f, 0.6f } };
+static const FxArtLoop menu_frames_0[] = { { 18, menu_frames_0_0 }, { 4, menu_frames_0_1 }, { 10, menu_frames_0_2 } };
+static const FxArtCorner menu_frames_1_0[] = { { 16.0f, 25.0f, 0.0f }, { 16.0f, 16.0f, 0.6f }, { 27.0f, 16.0f, 0.0f }, { 27.0f, 3.0f, 0.6f }, { 28.51f, 3.0f, 0.6f }, { 35.02f, 16.0f, 1.5f }, { 40.0f, 16.0f, 0.6f }, { 40.0f, 23.0f, 0.6f }, { 23.0f, 23.0f, 0.0f }, { 23.0f, 32.0f, 0.6f }, { 0.0f, 32.0f, 0.6f }, { 0.0f, 25.0f, 0.6f } };
+static const FxArtCorner menu_frames_1_1[] = { { 6.0f, 3.5f, 0.6f }, { 6.0f, 8.0f, 0.6f }, { 1.5f, 8.0f, 0.6f } };
+static const FxArtCorner menu_frames_1_2[] = { { 8.0f, 9.5f, 0.0f }, { 8.0f, 0.0f, 2.0f }, { 24.0f, 0.0f, 0.6f }, { 24.0f, 3.0f, 0.6f }, { 11.0f, 3.0f, 0.0f }, { 11.0f, 16.0f, 0.6f }, { 6.21f, 16.0f, 1.2f }, { 8.0f, 14.0f, 0.0f }, { 3.5f, 14.0f, 0.6f } };
+static const FxArtCorner menu_frames_1_3[] = { { 45.0f, 16.0f, 0.0f }, { 45.0f, 3.0f, 2.0f }, { 67.0f, 3.0f, 2.0f }, { 67.0f, 16.0f, 0.6f }, { 64.0f, 16.0f, 0.6f }, { 64.0f, 6.0f, 0.0f }, { 48.0f, 6.0f, 0.0f }, { 48.0f, 16.0f, 0.0f }, { 63.0f, 16.0f, 0.6f }, { 63.0f, 32.0f, 0.6f }, { 41.0f, 32.0f, 0.6f }, { 41.0f, 16.0f, 0.6f } };
+static const FxArtLoop menu_frames_1[] = { { 12, menu_frames_1_0 }, { 3, menu_frames_1_1 }, { 9, menu_frames_1_2 }, { 12, menu_frames_1_3 } };
+static const FxArtCorner menu_frames_2_0[] = { { 16.0f, 25.0f, 0.0f }, { 16.0f, 16.0f, 0.6f }, { 27.0f, 16.0f, 0.0f }, { 27.0f, 3.0f, 0.6f }, { 28.51f, 3.0f, 0.6f }, { 35.02f, 16.0f, 1.5f }, { 40.0f, 16.0f, 0.6f }, { 40.0f, 23.0f, 0.6f }, { 23.0f, 23.0f, 0.0f }, { 23.0f, 32.0f, 0.6f }, { 0.0f, 32.0f, 0.6f }, { 0.0f, 25.0f, 0.6f } };
+static const FxArtCorner menu_frames_2_1[] = { { 8.0f, 0.0f, 2.0f }, { 24.0f, 0.0f, 0.6f }, { 24.0f, 3.0f, 0.6f }, { 11.0f, 3.0f, 0.0f }, { 11.0f, 16.0f, 0.6f }, { 6.21f, 16.0f, 1.2f }, { 8.0f, 14.0f, 0.0f }, { 5.0f, 14.0f, 0.6f }, { 5.0f, 10.3f, 2.44f }, { 8.0f, 11.0f, 0.0f } };
+static const FxArtCorner menu_frames_2_2[] = { { 45.0f, 16.0f, 0.0f }, { 45.0f, 3.0f, 2.0f }, { 67.0f, 3.0f, 2.0f }, { 67.0f, 16.0f, 0.6f }, { 64.0f, 16.0f, 0.6f }, { 64.0f, 6.0f, 0.0f }, { 48.0f, 6.0f, 0.0f }, { 48.0f, 16.0f, 0.0f }, { 63.0f, 16.0f, 0.6f }, { 63.0f, 32.0f, 0.6f }, { 41.0f, 32.0f, 0.6f }, { 41.0f, 16.0f, 0.6f } };
+static const FxArtCorner menu_frames_2_3[] = { { 3.0f, 7.0f, 0.6f }, { 4.0f, 7.0f, 0.0f }, { 4.0f, 6.0f, 0.6f }, { 5.0f, 6.0f, 0.0f }, { 5.0f, 5.0f, 0.6f }, { 6.0f, 5.0f, 0.6f }, { 6.0f, 8.0f, 0.6f }, { 3.0f, 8.0f, 0.6f } };
+static const FxArtLoop menu_frames_2[] = { { 12, menu_frames_2_0 }, { 10, menu_frames_2_1 }, { 12, menu_frames_2_2 }, { 8, menu_frames_2_3 } };
+static const FxArtCorner menu_frames_3_0[] = { { 16.0f, 25.0f, 0.0f }, { 16.0f, 16.0f, 0.6f }, { 27.01f, 16.0f, 0.0f }, { 27.01f, 2.78f, 0.6f }, { 28.4f, 2.78f, 0.6f }, { 35.01f, 15.99f, 1.45f }, { 40.01f, 15.99f, 0.6f }, { 40.01f, 23.0f, 0.6f }, { 23.0f, 23.0f, 0.12f }, { 23.0f, 32.3f, 0.6f }, { -0.27f, 32.3f, 0.6f }, { -0.27f, 25.0f, 0.6f } };
+static const FxArtCorner menu_frames_3_1[] = { { 46.0f, 15.99f, 0.0f }, { 46.0f, 4.0f, 0.6f }, { 66.1f, 4.0f, 0.6f }, { 66.1f, 16.05f, 0.6f }, { 64.9f, 16.05f, 0.6f }, { 64.9f, 5.0f, 0.0f }, { 47.0f, 5.0f, 0.68f }, { 47.0f, 16.0f, 0.0f }, { 63.0f, 16.0f, 0.6f }, { 63.0f, 32.36f, 0.6f }, { 40.99f, 32.36f, 0.6f }, { 40.99f, 15.99f, 0.6f } };
+static const FxArtCorner menu_frames_3_2[] = { { 3.0f, 7.0f, 0.6f }, { 4.0f, 7.0f, 0.0f }, { 4.0f, 6.0f, 0.6f }, { 5.0f, 6.0f, 0.0f }, { 5.0f, 5.0f, 0.6f }, { 6.0f, 5.0f, 0.6f }, { 6.0f, 8.0f, 0.6f }, { 3.0f, 8.0f, 0.6f } };
+static const FxArtCorner menu_frames_3_3[] = { { 5.0f, 13.0f, 0.6f }, { 6.0f, 13.0f, 0.0f }, { 6.0f, 12.0f, 0.6f }, { 7.0f, 12.0f, 0.0f }, { 7.0f, 11.0f, 0.6f }, { 8.0f, 11.0f, 0.6f }, { 8.0f, 14.0f, 0.6f }, { 5.0f, 14.0f, 0.6f } };
+static const FxArtCorner menu_frames_3_4[] = { { 9.0f, 1.0f, 0.6f }, { 24.0f, 1.0f, 0.6f }, { 24.0f, 2.0f, 0.6f }, { 10.0f, 2.0f, 0.0f }, { 10.0f, 16.0f, 0.6f }, { 9.0f, 16.0f, 0.6f } };
+static const FxArtLoop menu_frames_3[] = { { 12, menu_frames_3_0 }, { 12, menu_frames_3_1 }, { 8, menu_frames_3_2 }, { 8, menu_frames_3_3 }, { 6, menu_frames_3_4 } };
+static const FxArtCorner menu_frames_4_0[] = { { 16.0f, 25.0f, 0.0f }, { 16.0f, 15.99f, 0.6f }, { 27.91f, 15.99f, 0.0f }, { 27.91f, 2.23f, 0.6f }, { 34.24f, 15.99f, 0.0f }, { 40.01f, 15.99f, 0.6f }, { 40.01f, 22.99f, 0.6f }, { 22.97f, 22.99f, 0.25f }, { 22.97f, 32.5f, 0.6f }, { -0.26f, 32.5f, 0.6f }, { -0.26f, 25.0f, 0.6f } };
+static const FxArtCorner menu_frames_4_1[] = { { 45.99f, 15.99f, 0.0f }, { 45.99f, 4.0f, 0.6f }, { 66.1f, 4.0f, 0.6f }, { 66.1f, 16.05f, 0.6f }, { 64.9f, 16.05f, 0.6f }, { 64.9f, 4.99f, 0.0f }, { 46.99f, 4.99f, 0.0f }, { 46.99f, 16.0f, 0.0f }, { 63.0f, 16.0f, 0.6f }, { 63.0f, 32.36f, 0.6f }, { 41.0f, 32.36f, 0.6f }, { 41.0f, 15.99f, 0.6f } };
+static const FxArtCorner menu_frames_4_2[] = { { 3.0f, 7.0f, 0.6f }, { 4.0f, 7.0f, 0.0f }, { 4.0f, 6.0f, 0.6f }, { 5.0f, 6.0f, 0.0f }, { 5.0f, 5.0f, 0.6f }, { 6.0f, 5.0f, 0.6f }, { 6.0f, 8.0f, 0.6f }, { 3.0f, 8.0f, 0.6f } };
+static const FxArtCorner menu_frames_4_3[] = { { 5.0f, 13.0f, 0.6f }, { 6.0f, 13.0f, 0.0f }, { 6.0f, 12.0f, 0.6f }, { 7.0f, 12.0f, 0.0f }, { 7.0f, 11.0f, 0.6f }, { 8.0f, 11.0f, 0.6f }, { 8.0f, 14.0f, 0.6f }, { 5.0f, 14.0f, 0.6f } };
+static const FxArtCorner menu_frames_4_4[] = { { 9.0f, 1.0f, 0.6f }, { 24.0f, 1.0f, 0.6f }, { 24.0f, 2.0f, 0.6f }, { 10.0f, 2.0f, 0.0f }, { 10.0f, 16.0f, 0.6f }, { 9.0f, 16.0f, 0.6f } };
+static const FxArtLoop menu_frames_4[] = { { 11, menu_frames_4_0 }, { 12, menu_frames_4_1 }, { 8, menu_frames_4_2 }, { 8, menu_frames_4_3 }, { 6, menu_frames_4_4 } };
+static const FxArtCorner menu_frames_5_0[] = { { 16.0f, 26.0f, 0.0f }, { 16.0f, 16.0f, 0.6f }, { 27.91f, 16.0f, 0.0f }, { 27.91f, 2.19f, 0.6f }, { 34.23f, 16.0f, 0.0f }, { 40.01f, 16.0f, 0.6f }, { 40.01f, 23.0f, 0.6f }, { 22.98f, 23.0f, 0.25f }, { 22.98f, 32.21f, 0.6f }, { -0.12f, 32.21f, 0.6f }, { -0.12f, 26.0f, 0.6f } };
+static const FxArtCorner menu_frames_5_1[] = { { 46.0f, 15.99f, 0.0f }, { 46.0f, 4.0f, 0.6f }, { 66.06f, 4.0f, 0.6f }, { 66.06f, 16.08f, 0.6f }, { 64.86f, 16.08f, 0.6f }, { 64.86f, 5.0f, 0.0f }, { 47.0f, 5.0f, 0.0f }, { 47.0f, 16.0f, 0.0f }, { 63.0f, 16.0f, 0.6f }, { 63.0f, 32.27f, 0.6f }, { 42.0f, 32.27f, 0.6f }, { 42.0f, 15.99f, 0.6f } };
+static const FxArtCorner menu_frames_5_2[] = { { 9.0f, 1.0f, 0.6f }, { 24.0f, 1.0f, 0.6f }, { 24.0f, 2.0f, 0.6f }, { 10.0f, 2.0f, 0.0f }, { 10.0f, 16.0f, 0.6f }, { 9.0f, 16.0f, 0.6f } };
+static const FxArtLoop menu_frames_5[] = { { 11, menu_frames_5_0 }, { 12, menu_frames_5_1 }, { 6, menu_frames_5_2 } };
+static const FxArtCorner menu_frames_6_0[] = { { 16.0f, 26.0f, 0.0f }, { 16.0f, 16.0f, 0.6f }, { 27.91f, 16.0f, 0.0f }, { 27.91f, 2.22f, 0.6f }, { 34.24f, 15.99f, 0.0f }, { 40.01f, 15.99f, 0.6f }, { 40.01f, 23.0f, 0.6f }, { 23.0f, 23.0f, 0.0f }, { 23.0f, 32.45f, 0.6f }, { -0.38f, 32.45f, 0.6f }, { -0.38f, 26.0f, 0.6f } };
+static const FxArtCorner menu_frames_6_1[] = { { 63.0f, 16.0f, 0.6f }, { 63.0f, 32.42f, 0.6f }, { 42.0f, 32.42f, 0.6f }, { 42.0f, 16.0f, 0.6f } };
+static const FxArtLoop menu_frames_6[] = { { 11, menu_frames_6_0 }, { 4, menu_frames_6_1 } };
+static const FxArtCorner menu_frames_7_0[] = { { 16.0f, 26.0f, 0.0f }, { 16.0f, 16.0f, 0.6f }, { 40.01f, 16.0f, 0.6f }, { 40.01f, 22.0f, 0.6f }, { 21.99f, 22.0f, 2.26f }, { 21.99f, 32.45f, 0.6f }, { -0.36f, 32.45f, 0.6f }, { -0.36f, 26.0f, 0.6f } };
+static const FxArtCorner menu_frames_7_1[] = { { 62.0f, 16.0f, 0.6f }, { 62.0f, 32.4f, 0.6f }, { 42.0f, 32.4f, 0.6f }, { 42.0f, 16.0f, 0.6f } };
+static const FxArtLoop menu_frames_7[] = { { 8, menu_frames_7_0 }, { 4, menu_frames_7_1 } };
+static const FxArtLayer menu_frames_fill[] = { { 10, 3, menu_frames_0, 0.0f }, { 8, 4, menu_frames_1, 0.0f }, { 1, 4, menu_frames_2, 0.0f }, { 15, 5, menu_frames_3, 0.0f }, { 12, 5, menu_frames_4, 0.0f }, { 2, 3, menu_frames_5, 0.0f }, { 14, 2, menu_frames_6, 0.0f }, { 13, 2, menu_frames_7, 0.0f } };
+static const uint16_t menu_frames_tiles[] = { 71, 72, 73, 74, 75, 76, 77, 78, 79, 87, 88, 89, 90, 91, 92, 93, 94, 95, 103, 104, 105, 106, 107, 108, 109, 110, 111, 119, 120, 121, 122, 123, 124, 125, 126, 127 };
+
+/* the menus' mode word letter 'gem' ($FF:$002A), its colours each a region over the one before (10: 1 loop, 12 corners (4 sharp), radii 0.3; 13: 5 loops, 24 corners (10 sharp), radii 0.3; 11: 5 loops, 20 corners (8 sharp), radii 0.3); 0 off, its strokes a texel wide kept as drawn, corners eased, diagonal neighbours joined */
+static const FxArtCorner menu_gem_0_0[] = { { 2.0f, 3.0f, 0.3f }, { 3.0f, 3.0f, 0.0f }, { 3.0f, 2.0f, 0.3f }, { 4.0f, 2.0f, 0.0f }, { 4.0f, 1.0f, 0.3f }, { 6.0f, 1.0f, 0.3f }, { 6.0f, 2.0f, 0.0f }, { 7.0f, 2.0f, 0.3f }, { 7.0f, 4.0f, 0.3f }, { 6.0f, 4.0f, 0.0f }, { 6.0f, 6.0f, 0.3f }, { 2.0f, 6.0f, 0.3f } };
+static const FxArtLoop menu_gem_0[] = { { 12, menu_gem_0_0 } };
+static const FxArtCorner menu_gem_1_0[] = { { 2.0f, 5.0f, 0.3f }, { 3.0f, 5.0f, 0.3f }, { 3.0f, 6.0f, 0.3f }, { 2.0f, 6.0f, 0.3f } };
+static const FxArtCorner menu_gem_1_1[] = { { 3.0f, 3.0f, 0.3f }, { 4.0f, 3.0f, 0.0f }, { 4.0f, 2.0f, 0.3f }, { 6.0f, 2.0f, 0.3f }, { 6.0f, 4.0f, 0.3f }, { 5.0f, 4.0f, 0.0f }, { 5.0f, 5.0f, 0.3f }, { 3.0f, 5.0f, 0.3f } };
+static const FxArtCorner menu_gem_1_2[] = { { 5.0f, 5.0f, 0.3f }, { 6.0f, 5.0f, 0.3f }, { 6.0f, 6.0f, 0.3f }, { 5.0f, 6.0f, 0.3f } };
+static const FxArtCorner menu_gem_1_3[] = { { 3.0f, 4.3f, 0.0f }, { 3.7f, 5.0f, 0.0f }, { 3.0f, 5.7f, 0.0f }, { 2.3f, 5.0f, 0.0f } };
+static const FxArtCorner menu_gem_1_4[] = { { 5.0f, 4.3f, 0.0f }, { 5.7f, 5.0f, 0.0f }, { 5.0f, 5.7f, 0.0f }, { 4.3f, 5.0f, 0.0f } };
+static const FxArtLoop menu_gem_1[] = { { 4, menu_gem_1_0 }, { 8, menu_gem_1_1 }, { 4, menu_gem_1_2 }, { 4, menu_gem_1_3 }, { 4, menu_gem_1_4 } };
+static const FxArtCorner menu_gem_2_0[] = { { 3.0f, 4.0f, 0.3f }, { 4.0f, 4.0f, 0.3f }, { 4.0f, 5.0f, 0.3f }, { 3.0f, 5.0f, 0.3f } };
+static const FxArtCorner menu_gem_2_1[] = { { 4.0f, 3.0f, 0.3f }, { 5.0f, 3.0f, 0.3f }, { 5.0f, 4.0f, 0.3f }, { 4.0f, 4.0f, 0.3f } };
+static const FxArtCorner menu_gem_2_2[] = { { 5.0f, 2.0f, 0.3f }, { 6.0f, 2.0f, 0.3f }, { 6.0f, 3.0f, 0.3f }, { 5.0f, 3.0f, 0.3f } };
+static const FxArtCorner menu_gem_2_3[] = { { 5.0f, 2.3f, 0.0f }, { 5.7f, 3.0f, 0.0f }, { 5.0f, 3.7f, 0.0f }, { 4.3f, 3.0f, 0.0f } };
+static const FxArtCorner menu_gem_2_4[] = { { 4.0f, 3.3f, 0.0f }, { 4.7f, 4.0f, 0.0f }, { 4.0f, 4.7f, 0.0f }, { 3.3f, 4.0f, 0.0f } };
+static const FxArtLoop menu_gem_2[] = { { 4, menu_gem_2_0 }, { 4, menu_gem_2_1 }, { 4, menu_gem_2_2 }, { 4, menu_gem_2_3 }, { 4, menu_gem_2_4 } };
+static const FxArtLayer menu_gem_fill[] = { { 10, 1, menu_gem_0, 0.0f }, { 13, 5, menu_gem_1, 0.0f }, { 11, 5, menu_gem_2, 0.0f } };
+static const uint16_t menu_gem_tiles[] = { 70, 86 };
+
+/* the menus' mode word letter 'small 0 S' ($FF:$002A), its colours each a region over the one before (10: 1 loop, 12 corners (1 sharp), radii 0, 0.2, 0.3, 1.4, 3.1; 9: 1 loop, 12 corners (1 sharp), radii 0, 0.2, 0.3, 1.4, 3.1); 0 off, the menu font's design scaled and fitted */
+static const FxArtCorner menu_small_0_s_0_0[] = { { 6.9f, 0.9f, 1.39f }, { 6.9f, 3.71f, 0.3f }, { 3.0f, 3.71f, 0.18f }, { 3.0f, 5.94f, 0.21f }, { 7.05f, 5.94f, 3.09f }, { 7.05f, 14.07f, 3.1f }, { 1.09f, 14.07f, 1.36f }, { 1.09f, 11.3f, 0.3f }, { 4.99f, 11.3f, 0.0f }, { 4.99f, 9.06f, 0.04f }, { 0.94f, 9.06f, 3.1f }, { 0.94f, 0.9f, 3.13f } };
+static const FxArtLoop menu_small_0_s_0[] = { { 12, menu_small_0_s_0_0 } };
+static const FxArtCorner menu_small_0_s_1_0[] = { { 6.9f, 0.9f, 1.39f }, { 6.9f, 3.71f, 0.3f }, { 3.0f, 3.71f, 0.18f }, { 3.0f, 5.94f, 0.21f }, { 7.05f, 5.94f, 3.09f }, { 7.05f, 14.07f, 3.1f }, { 1.09f, 14.07f, 1.36f }, { 1.09f, 11.3f, 0.3f }, { 4.99f, 11.3f, 0.0f }, { 4.99f, 9.06f, 0.04f }, { 0.94f, 9.06f, 3.1f }, { 0.94f, 0.9f, 3.13f } };
+static const FxArtLoop menu_small_0_s_1[] = { { 12, menu_small_0_s_1_0 } };
+static const FxArtLayer menu_small_0_s_fill[] = { { 10, 1, menu_small_0_s_0, 1.0f }, { 9, 1, menu_small_0_s_1, 0.0f } };
+static const uint16_t menu_small_0_s_tiles[] = { 480, 496 };
+
+/* the menus' mode word letter 'small 1 T' ($FF:$002A), its colours each a region over the one before (10: 1 loop, 8 corners (2 sharp), radii 0.3, 0.9, 1.3, 1.5; 9: 1 loop, 8 corners (2 sharp), radii 0.3, 0.9, 1.3, 1.5); 0 off, the menu font's design scaled and fitted */
+static const FxArtCorner menu_small_1_t_0_0[] = { { 6.97f, 0.9f, 1.53f }, { 6.97f, 3.98f, 0.9f }, { 5.08f, 3.98f, 0.0f }, { 5.08f, 13.85f, 1.27f }, { 3.26f, 13.85f, 0.3f }, { 3.26f, 3.97f, 0.0f }, { 1.03f, 3.97f, 0.9f }, { 1.03f, 0.9f, 1.53f } };
+static const FxArtLoop menu_small_1_t_0[] = { { 8, menu_small_1_t_0_0 } };
+static const FxArtCorner menu_small_1_t_1_0[] = { { 6.97f, 0.9f, 1.53f }, { 6.97f, 3.98f, 0.9f }, { 5.08f, 3.98f, 0.0f }, { 5.08f, 13.85f, 1.27f }, { 3.26f, 13.85f, 0.3f }, { 3.26f, 3.97f, 0.0f }, { 1.03f, 3.97f, 0.9f }, { 1.03f, 0.9f, 1.53f } };
+static const FxArtLoop menu_small_1_t_1[] = { { 8, menu_small_1_t_1_0 } };
+static const FxArtLayer menu_small_1_t_fill[] = { { 10, 1, menu_small_1_t_0, 1.0f }, { 9, 1, menu_small_1_t_1, 0.0f } };
+static const uint16_t menu_small_1_t_tiles[] = { 481, 497 };
+
+/* the menus' mode word letter 'small 2 R' ($FF:$002A), its colours each a region over the one before (10: 2 loops, 14 corners (4 sharp), radii 0.2, 0.3, 0.5, 0.8, 0.9, 1.3, 1.5, 1.6, 3, 3.2; 9: 2 loops, 14 corners (4 sharp), radii 0.2, 0.3, 0.5, 0.8, 0.9, 1.3, 1.5, 1.6, 3, 3.2); 0 off, the menu font's design scaled and fitted */
+static const FxArtCorner menu_small_2_r_0_0[] = { { 0.89f, 0.93f, 1.53f }, { 7.07f, 0.93f, 3.15f }, { 7.07f, 6.38f, 2.95f }, { 4.94f, 8.11f, 0.0f }, { 6.98f, 12.19f, 0.5f }, { 6.98f, 13.91f, 0.79f }, { 5.54f, 13.91f, 0.94f }, { 2.77f, 8.45f, 0.0f }, { 2.77f, 13.83f, 0.3f }, { 0.89f, 13.83f, 1.28f } };
+static const FxArtCorner menu_small_2_r_0_1[] = { { 4.86f, 4.02f, 0.25f }, { 2.98f, 4.02f, 0.0f }, { 2.98f, 5.92f, 0.0f }, { 4.86f, 5.92f, 1.6f } };
+static const FxArtLoop menu_small_2_r_0[] = { { 10, menu_small_2_r_0_0 }, { 4, menu_small_2_r_0_1 } };
+static const FxArtCorner menu_small_2_r_1_0[] = { { 0.89f, 0.93f, 1.53f }, { 7.07f, 0.93f, 3.15f }, { 7.07f, 6.38f, 2.95f }, { 4.94f, 8.11f, 0.0f }, { 6.98f, 12.19f, 0.5f }, { 6.98f, 13.91f, 0.79f }, { 5.54f, 13.91f, 0.94f }, { 2.77f, 8.45f, 0.0f }, { 2.77f, 13.83f, 0.3f }, { 0.89f, 13.83f, 1.28f } };
+static const FxArtCorner menu_small_2_r_1_1[] = { { 4.86f, 4.02f, 0.25f }, { 2.98f, 4.02f, 0.0f }, { 2.98f, 5.92f, 0.0f }, { 4.86f, 5.92f, 1.6f } };
+static const FxArtLoop menu_small_2_r_1[] = { { 10, menu_small_2_r_1_0 }, { 4, menu_small_2_r_1_1 } };
+static const FxArtLayer menu_small_2_r_fill[] = { { 10, 2, menu_small_2_r_0, 1.0f }, { 9, 2, menu_small_2_r_1, 0.0f } };
+static const uint16_t menu_small_2_r_tiles[] = { 482, 498 };
+
+/* the menus' mode word letter 'small 3 O' ($FF:$002A), its colours each a region over the one before (10: 2 loops, 8 corners (4 sharp), radii 3, 3.1; 9: 2 loops, 8 corners (4 sharp), radii 3, 3.1); 0 off, the menu font's design scaled and fitted */
+static const FxArtCorner menu_small_3_o_0_0[] = { { 7.06f, 0.96f, 3.07f }, { 7.06f, 14.04f, 3.07f }, { 0.97f, 14.04f, 3.01f }, { 0.97f, 0.96f, 3.01f } };
+static const FxArtCorner menu_small_3_o_0_1[] = { { 3.01f, 11.01f, 0.0f }, { 4.97f, 11.01f, 0.0f }, { 4.97f, 3.98f, 0.0f }, { 3.01f, 3.98f, 0.0f } };
+static const FxArtLoop menu_small_3_o_0[] = { { 4, menu_small_3_o_0_0 }, { 4, menu_small_3_o_0_1 } };
+static const FxArtCorner menu_small_3_o_1_0[] = { { 7.06f, 0.96f, 3.07f }, { 7.06f, 14.04f, 3.07f }, { 0.97f, 14.04f, 3.01f }, { 0.97f, 0.96f, 3.01f } };
+static const FxArtCorner menu_small_3_o_1_1[] = { { 3.01f, 11.01f, 0.0f }, { 4.97f, 11.01f, 0.0f }, { 4.97f, 3.98f, 0.0f }, { 3.01f, 3.98f, 0.0f } };
+static const FxArtLoop menu_small_3_o_1[] = { { 4, menu_small_3_o_1_0 }, { 4, menu_small_3_o_1_1 } };
+static const FxArtLayer menu_small_3_o_fill[] = { { 10, 2, menu_small_3_o_0, 1.0f }, { 9, 2, menu_small_3_o_1, 0.0f } };
+static const uint16_t menu_small_3_o_tiles[] = { 483, 499 };
+
+/* the menus' mode word letter 'small 4 N' ($FF:$002A), its colours each a region over the one before (10: 1 loop, 12 corners (4 sharp), radii 0.4, 0.5, 0.7, 1.2, 1.3, 1.4; 9: 1 loop, 12 corners (4 sharp), radii 0.4, 0.5, 0.7, 1.2, 1.3, 1.4); 1 off, the menu font's design scaled and fitted */
+static const FxArtCorner menu_small_4_n_0_0[] = { { 0.9f, 1.12f, 1.35f }, { 2.95f, 1.12f, 0.7f }, { 2.95f, 4.8f, 0.0f }, { 5.18f, 6.97f, 0.0f }, { 5.18f, 1.18f, 0.37f }, { 7.2f, 1.18f, 1.33f }, { 7.2f, 13.75f, 1.2f }, { 5.0f, 13.75f, 0.53f }, { 5.0f, 11.66f, 0.0f }, { 2.79f, 7.66f, 0.0f }, { 2.79f, 13.87f, 0.39f }, { 0.9f, 13.87f, 1.32f } };
+static const FxArtLoop menu_small_4_n_0[] = { { 12, menu_small_4_n_0_0 } };
+static const FxArtCorner menu_small_4_n_1_0[] = { { 0.9f, 1.12f, 1.35f }, { 2.95f, 1.12f, 0.7f }, { 2.95f, 4.8f, 0.0f }, { 5.18f, 6.97f, 0.0f }, { 5.18f, 1.18f, 0.37f }, { 7.2f, 1.18f, 1.33f }, { 7.2f, 13.75f, 1.2f }, { 5.0f, 13.75f, 0.53f }, { 5.0f, 11.66f, 0.0f }, { 2.79f, 7.66f, 0.0f }, { 2.79f, 13.87f, 0.39f }, { 0.9f, 13.87f, 1.32f } };
+static const FxArtLoop menu_small_4_n_1[] = { { 12, menu_small_4_n_1_0 } };
+static const FxArtLayer menu_small_4_n_fill[] = { { 10, 1, menu_small_4_n_0, 1.0f }, { 9, 1, menu_small_4_n_1, 0.0f } };
+static const uint16_t menu_small_4_n_tiles[] = { 484, 500 };
+
+/* the menus' mode word letter 'small 5 G' ($FF:$002A), its colours each a region over the one before (10: 1 loop, 12 corners (2 sharp), radii 0.2, 0.3, 1.5, 2.9, 3, 3.1; 9: 1 loop, 12 corners (2 sharp), radii 0.2, 0.3, 1.5, 2.9, 3, 3.1); 0 off, the menu font's design scaled and fitted */
+static const FxArtCorner menu_small_5_g_0_0[] = { { 6.93f, 0.89f, 1.47f }, { 6.93f, 3.68f, 0.3f }, { 3.01f, 3.68f, 0.0f }, { 3.01f, 11.01f, 0.25f }, { 5.02f, 11.01f, 0.25f }, { 5.02f, 9.21f, 0.0f }, { 4.03f, 8.88f, 0.3f }, { 4.03f, 6.35f, 0.3f }, { 6.97f, 6.35f, 0.3f }, { 6.97f, 14.05f, 2.9f }, { 0.98f, 14.05f, 3.01f }, { 0.98f, 0.89f, 3.11f } };
+static const FxArtLoop menu_small_5_g_0[] = { { 12, menu_small_5_g_0_0 } };
+static const FxArtCorner menu_small_5_g_1_0[] = { { 6.93f, 0.89f, 1.47f }, { 6.93f, 3.68f, 0.3f }, { 3.01f, 3.68f, 0.0f }, { 3.01f, 11.01f, 0.25f }, { 5.02f, 11.01f, 0.25f }, { 5.02f, 9.21f, 0.0f }, { 4.03f, 8.88f, 0.3f }, { 4.03f, 6.35f, 0.3f }, { 6.97f, 6.35f, 0.3f }, { 6.97f, 14.05f, 2.9f }, { 0.98f, 14.05f, 3.01f }, { 0.98f, 0.89f, 3.11f } };
+static const FxArtLoop menu_small_5_g_1[] = { { 12, menu_small_5_g_1_0 } };
+static const FxArtLayer menu_small_5_g_fill[] = { { 10, 1, menu_small_5_g_0, 1.0f }, { 9, 1, menu_small_5_g_1, 0.0f } };
+static const uint16_t menu_small_5_g_tiles[] = { 485, 501 };
+
+/* the menus' mode word letter 'small 6 F' ($FF:$002A), its colours each a region over the one before (10: 1 loop, 10 corners (3 sharp), radii 0.4, 0.9, 1.3, 1.5; 9: 1 loop, 10 corners (3 sharp), radii 0.4, 0.9, 1.3, 1.5); 0 off, the menu font's design scaled and fitted */
+static const FxArtCorner menu_small_6_f_0_0[] = { { 6.98f, 0.93f, 1.5f }, { 6.98f, 3.93f, 0.85f }, { 3.0f, 3.93f, 0.0f }, { 3.0f, 5.98f, 0.0f }, { 6.03f, 5.98f, 1.49f }, { 6.03f, 9.04f, 1.53f }, { 2.78f, 9.04f, 0.0f }, { 2.78f, 13.89f, 0.42f }, { 0.94f, 13.89f, 1.32f }, { 0.94f, 0.93f, 1.5f } };
+static const FxArtLoop menu_small_6_f_0[] = { { 10, menu_small_6_f_0_0 } };
+static const FxArtCorner menu_small_6_f_1_0[] = { { 6.98f, 0.93f, 1.5f }, { 6.98f, 3.93f, 0.85f }, { 3.0f, 3.93f, 0.0f }, { 3.0f, 5.98f, 0.0f }, { 6.03f, 5.98f, 1.49f }, { 6.03f, 9.04f, 1.53f }, { 2.78f, 9.04f, 0.0f }, { 2.78f, 13.89f, 0.42f }, { 0.94f, 13.89f, 1.32f }, { 0.94f, 0.93f, 1.5f } };
+static const FxArtLoop menu_small_6_f_1[] = { { 10, menu_small_6_f_1_0 } };
+static const FxArtLayer menu_small_6_f_fill[] = { { 10, 1, menu_small_6_f_0, 1.0f }, { 9, 1, menu_small_6_f_1, 0.0f } };
+static const uint16_t menu_small_6_f_tiles[] = { 486, 502 };
+
+/* the menus' mode word letter 'small 7 A' ($FF:$002A), its colours each a region over the one before (10: 2 loops, 12 corners (4 sharp), radii 0.4, 0.5, 1.3, 1.4, 3; 9: 2 loops, 12 corners (4 sharp), radii 0.4, 0.5, 1.3, 1.4, 3); 0 off, the menu font's design scaled and fitted */
+static const FxArtCorner menu_small_7_a_0_0[] = { { 7.07f, 1.0f, 2.99f }, { 7.07f, 13.86f, 1.27f }, { 5.2f, 13.86f, 0.41f }, { 5.2f, 10.02f, 0.0f }, { 2.76f, 10.02f, 0.0f }, { 2.76f, 13.92f, 0.43f }, { 0.9f, 13.92f, 1.42f }, { 0.9f, 1.0f, 3.01f } };
+static const FxArtCorner menu_small_7_a_0_1[] = { { 3.0f, 7.02f, 0.0f }, { 5.01f, 7.02f, 0.0f }, { 5.01f, 3.96f, 0.5f }, { 3.0f, 3.96f, 0.5f } };
+static const FxArtLoop menu_small_7_a_0[] = { { 8, menu_small_7_a_0_0 }, { 4, menu_small_7_a_0_1 } };
+static const FxArtCorner menu_small_7_a_1_0[] = { { 7.07f, 1.0f, 2.99f }, { 7.07f, 13.86f, 1.27f }, { 5.2f, 13.86f, 0.41f }, { 5.2f, 10.02f, 0.0f }, { 2.76f, 10.02f, 0.0f }, { 2.76f, 13.92f, 0.43f }, { 0.9f, 13.92f, 1.42f }, { 0.9f, 1.0f, 3.01f } };
+static const FxArtCorner menu_small_7_a_1_1[] = { { 3.0f, 7.02f, 0.0f }, { 5.01f, 7.02f, 0.0f }, { 5.01f, 3.96f, 0.5f }, { 3.0f, 3.96f, 0.5f } };
+static const FxArtLoop menu_small_7_a_1[] = { { 8, menu_small_7_a_1_0 }, { 4, menu_small_7_a_1_1 } };
+static const FxArtLayer menu_small_7_a_fill[] = { { 10, 2, menu_small_7_a_0, 1.0f }, { 9, 2, menu_small_7_a_1, 0.0f } };
+static const uint16_t menu_small_7_a_tiles[] = { 487, 503 };
+
+/* the menus' mode word letter 'small 8 1' ($FF:$002A), its colours each a region over the one before (10: 1 loop, 10 corners (3 sharp), radii 0.3, 0.6, 1.4, 1.6; 9: 1 loop, 10 corners (3 sharp), radii 0.3, 0.6, 1.4, 1.6); 0 off, the menu font's design scaled and fitted */
+static const FxArtCorner menu_small_8_1_0_0[] = { { 4.94f, 0.94f, 1.4f }, { 4.94f, 10.91f, 0.0f }, { 5.92f, 11.37f, 0.57f }, { 5.92f, 14.23f, 1.63f }, { 2.1f, 14.23f, 1.6f }, { 2.1f, 11.43f, 0.3f }, { 3.1f, 10.85f, 0.0f }, { 3.1f, 4.11f, 0.0f }, { 1.97f, 3.49f, 0.3f }, { 1.97f, 0.94f, 1.57f } };
+static const FxArtLoop menu_small_8_1_0[] = { { 10, menu_small_8_1_0_0 } };
+static const FxArtCorner menu_small_8_1_1_0[] = { { 4.94f, 0.94f, 1.4f }, { 4.94f, 10.91f, 0.0f }, { 5.92f, 11.37f, 0.57f }, { 5.92f, 14.23f, 1.63f }, { 2.1f, 14.23f, 1.6f }, { 2.1f, 11.43f, 0.3f }, { 3.1f, 10.85f, 0.0f }, { 3.1f, 4.11f, 0.0f }, { 1.97f, 3.49f, 0.3f }, { 1.97f, 0.94f, 1.57f } };
+static const FxArtLoop menu_small_8_1_1[] = { { 10, menu_small_8_1_1_0 } };
+static const FxArtLayer menu_small_8_1_fill[] = { { 10, 1, menu_small_8_1_0, 1.0f }, { 9, 1, menu_small_8_1_1, 0.0f } };
+static const uint16_t menu_small_8_1_tiles[] = { 488, 504 };
+
+/* the menus' mode word letter 'small 9 4' ($FF:$002A), its colours each a region over the one before (10: 1 loop, 10 corners (0 sharp), radii 0.3, 0.5, 0.7, 1, 1.2, 1.7; 9: 1 loop, 10 corners (0 sharp), radii 0.3, 0.5, 0.7, 1, 1.2, 1.7); 1 off, built by hand */
+static const FxArtCorner menu_small_9_4_0_0[] = { { 1.16f, 0.99f, 0.96f }, { 2.61f, 0.99f, 0.48f }, { 2.61f, 9.44f, 0.3f }, { 5.1f, 9.44f, 0.3f }, { 5.1f, 1.1f, 0.66f }, { 7.17f, 1.1f, 1.2f }, { 7.17f, 13.94f, 1.17f }, { 4.83f, 13.94f, 1.17f }, { 4.83f, 10.67f, 0.3f }, { 1.16f, 10.67f, 1.7f } };
+static const FxArtLoop menu_small_9_4_0[] = { { 10, menu_small_9_4_0_0 } };
+static const FxArtCorner menu_small_9_4_1_0[] = { { 1.16f, 0.99f, 0.96f }, { 2.61f, 0.99f, 0.48f }, { 2.61f, 9.44f, 0.3f }, { 5.1f, 9.44f, 0.3f }, { 5.1f, 1.1f, 0.66f }, { 7.17f, 1.1f, 1.2f }, { 7.17f, 13.94f, 1.17f }, { 4.83f, 13.94f, 1.17f }, { 4.83f, 10.67f, 0.3f }, { 1.16f, 10.67f, 1.7f } };
+static const FxArtLoop menu_small_9_4_1[] = { { 10, menu_small_9_4_1_0 } };
+static const FxArtLayer menu_small_9_4_fill[] = { { 10, 1, menu_small_9_4_0, 1.0f }, { 9, 1, menu_small_9_4_1, 0.0f } };
+static const uint16_t menu_small_9_4_tiles[] = { 489, 505 };
+
+/* the menus' mode word letter 'small 10 0' ($FF:$002A), its colours each a region over the one before (10: 2 loops, 8 corners (4 sharp), radii 3, 3.1; 9: 2 loops, 8 corners (4 sharp), radii 3, 3.1); 0 off, the menu font's design scaled and fitted */
+static const FxArtCorner menu_small_10_0_0_0[] = { { 7.06f, 0.96f, 3.07f }, { 7.06f, 14.04f, 3.07f }, { 0.97f, 14.04f, 3.01f }, { 0.97f, 0.96f, 3.01f } };
+static const FxArtCorner menu_small_10_0_0_1[] = { { 3.01f, 11.01f, 0.0f }, { 4.97f, 11.01f, 0.0f }, { 4.97f, 3.98f, 0.0f }, { 3.01f, 3.98f, 0.0f } };
+static const FxArtLoop menu_small_10_0_0[] = { { 4, menu_small_10_0_0_0 }, { 4, menu_small_10_0_0_1 } };
+static const FxArtCorner menu_small_10_0_1_0[] = { { 7.06f, 0.96f, 3.07f }, { 7.06f, 14.04f, 3.07f }, { 0.97f, 14.04f, 3.01f }, { 0.97f, 0.96f, 3.01f } };
+static const FxArtCorner menu_small_10_0_1_1[] = { { 3.01f, 11.01f, 0.0f }, { 4.97f, 11.01f, 0.0f }, { 4.97f, 3.98f, 0.0f }, { 3.01f, 3.98f, 0.0f } };
+static const FxArtLoop menu_small_10_0_1[] = { { 4, menu_small_10_0_1_0 }, { 4, menu_small_10_0_1_1 } };
+static const FxArtLayer menu_small_10_0_fill[] = { { 10, 2, menu_small_10_0_0, 1.0f }, { 9, 2, menu_small_10_0_1, 0.0f } };
+static const uint16_t menu_small_10_0_tiles[] = { 490, 506 };
+
+/* the menus' mode word letter 'small 11 2' ($FF:$002A), its colours each a region over the one before (10: 1 loop, 12 corners (2 sharp), radii 0, 0.1, 0.9, 1.5, 1.6, 3.1; 9: 1 loop, 12 corners (2 sharp), radii 0, 0.1, 0.9, 1.5, 1.6, 3.1); 0 off, the menu font's design scaled and fitted */
+static const FxArtCorner menu_small_11_2_0_0[] = { { 7.06f, 0.93f, 3.13f }, { 7.06f, 9.06f, 3.12f }, { 3.01f, 9.06f, 0.01f }, { 3.01f, 11.07f, 0.0f }, { 7.05f, 11.07f, 0.95f }, { 7.05f, 14.02f, 1.52f }, { 0.95f, 14.02f, 1.51f }, { 0.95f, 5.95f, 3.08f }, { 4.99f, 5.95f, 0.0f }, { 4.99f, 3.95f, 0.09f }, { 0.98f, 3.95f, 0.95f }, { 0.98f, 0.93f, 1.57f } };
+static const FxArtLoop menu_small_11_2_0[] = { { 12, menu_small_11_2_0_0 } };
+static const FxArtCorner menu_small_11_2_1_0[] = { { 7.06f, 0.93f, 3.13f }, { 7.06f, 9.06f, 3.12f }, { 3.01f, 9.06f, 0.01f }, { 3.01f, 11.07f, 0.0f }, { 7.05f, 11.07f, 0.95f }, { 7.05f, 14.02f, 1.52f }, { 0.95f, 14.02f, 1.51f }, { 0.95f, 5.95f, 3.08f }, { 4.99f, 5.95f, 0.0f }, { 4.99f, 3.95f, 0.09f }, { 0.98f, 3.95f, 0.95f }, { 0.98f, 0.93f, 1.57f } };
+static const FxArtLoop menu_small_11_2_1[] = { { 12, menu_small_11_2_1_0 } };
+static const FxArtLayer menu_small_11_2_fill[] = { { 10, 1, menu_small_11_2_0, 1.0f }, { 9, 1, menu_small_11_2_1, 0.0f } };
+static const uint16_t menu_small_11_2_tiles[] = { 491, 507 };
+
 const FxArtPicture fx_art_pictures[] = {
     { "the 16 x 32 glyph '0'", 0x15, 0x8000, 16, 32, FX_ART_OUTLINED, 1, 1, big16_0_fill, 0 },
     { "the 16 x 32 glyph '1'", 0x15, 0x8004, 16, 32, FX_ART_OUTLINED, 1, 1, big16_1_fill, 7 },
@@ -2102,5 +2264,19 @@ const FxArtPicture fx_art_pictures[] = {
     { "the menus' mode word letter '33 R'", 0xFF, 0x002A, 16, 16, FX_ART_LAYERED, 0, 3, menuword_33_r_fill, 9, menuword_33_r_tiles, { 0 } },
     { "the menus' mode word letter '34 A'", 0xFF, 0x002A, 16, 16, FX_ART_LAYERED, 0, 3, menuword_34_a_fill, 2, menuword_34_a_tiles, { 0 } },
     { "the menus' mode word letter '35 X'", 0xFF, 0x002A, 16, 16, FX_ART_LAYERED, 0, 3, menuword_35_x_fill, 0, menuword_35_x_tiles, { 0 } },
+    { "the menus' mode word letter 'frames'", 0xFF, 0x002A, 72, 32, FX_ART_LAYERED, 0, 8, menu_frames_fill, 9, menu_frames_tiles, { 0 } },
+    { "the menus' mode word letter 'gem'", 0xFF, 0x002A, 8, 16, FX_ART_LAYERED, 0, 3, menu_gem_fill, 0, menu_gem_tiles, { 0 } },
+    { "the menus' mode word letter 'small 0 S'", 0xFF, 0x002A, 8, 16, FX_ART_LAYERED, 0, 2, menu_small_0_s_fill, 0, menu_small_0_s_tiles, { 0 } },
+    { "the menus' mode word letter 'small 1 T'", 0xFF, 0x002A, 8, 16, FX_ART_LAYERED, 0, 2, menu_small_1_t_fill, 0, menu_small_1_t_tiles, { 0 } },
+    { "the menus' mode word letter 'small 2 R'", 0xFF, 0x002A, 8, 16, FX_ART_LAYERED, 0, 2, menu_small_2_r_fill, 0, menu_small_2_r_tiles, { 0 } },
+    { "the menus' mode word letter 'small 3 O'", 0xFF, 0x002A, 8, 16, FX_ART_LAYERED, 0, 2, menu_small_3_o_fill, 0, menu_small_3_o_tiles, { 0 } },
+    { "the menus' mode word letter 'small 4 N'", 0xFF, 0x002A, 8, 16, FX_ART_LAYERED, 0, 2, menu_small_4_n_fill, 1, menu_small_4_n_tiles, { 0 } },
+    { "the menus' mode word letter 'small 5 G'", 0xFF, 0x002A, 8, 16, FX_ART_LAYERED, 0, 2, menu_small_5_g_fill, 0, menu_small_5_g_tiles, { 0 } },
+    { "the menus' mode word letter 'small 6 F'", 0xFF, 0x002A, 8, 16, FX_ART_LAYERED, 0, 2, menu_small_6_f_fill, 0, menu_small_6_f_tiles, { 0 } },
+    { "the menus' mode word letter 'small 7 A'", 0xFF, 0x002A, 8, 16, FX_ART_LAYERED, 0, 2, menu_small_7_a_fill, 0, menu_small_7_a_tiles, { 0 } },
+    { "the menus' mode word letter 'small 8 1'", 0xFF, 0x002A, 8, 16, FX_ART_LAYERED, 0, 2, menu_small_8_1_fill, 0, menu_small_8_1_tiles, { 0 } },
+    { "the menus' mode word letter 'small 9 4'", 0xFF, 0x002A, 8, 16, FX_ART_LAYERED, 0, 2, menu_small_9_4_fill, 1, menu_small_9_4_tiles, { 0 } },
+    { "the menus' mode word letter 'small 10 0'", 0xFF, 0x002A, 8, 16, FX_ART_LAYERED, 0, 2, menu_small_10_0_fill, 0, menu_small_10_0_tiles, { 0 } },
+    { "the menus' mode word letter 'small 11 2'", 0xFF, 0x002A, 8, 16, FX_ART_LAYERED, 0, 2, menu_small_11_2_fill, 0, menu_small_11_2_tiles, { 0 } },
 };
 const int fx_art_picture_count = (int)(sizeof fx_art_pictures / sizeof fx_art_pictures[0]);

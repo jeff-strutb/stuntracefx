@@ -691,9 +691,13 @@ filtered or scaled; one path for every backend.
   76 off): each glyph the 16 x 32 set's design (K the 24 x 40 set's) scaled into its box and fitted to its texels, V and
   N built by hand: 0 0, 1 3, 2 0, 3 2, 4 4, 5 0, 6 1, 7 0, 8 0, 9 1, A 2, B 0, C 2, D 0, E 0, F 1, G 2, H 2, I 0, J 2,
   K 2, L 2, M 9, N 5, O 0, P 0, Q 5, R 1, S 2, T 1, U 2, V 4, W 5, X 0, Y 3, Z 2.
-- **Not done yet:** the race frame's background panels (blocks 2, 3, 6 and their maps), the two-player sets, the menus'
-  other flat-colour art (the mode words SPEED / STUNT / BATTLE / FREE TRAX, frames and arrows, the small lettering), and a
-  census of the 3D faces' textures beyond the patterns. Artwork left as drawn (not flat colours bounded by edges, so
+- **The menus' other sprite art** (menu picture 10; 50 pictures): the mode words SPEED / STUNT / BATTLE / FREE TRAX (36
+  16 x 16 letters, face, rim and shade as nested regions, X and N by hand; all 0 off but a few), the lettering STRONG
+  FA1402 (the menu font's design scaled, the outline grown from the fill; its 4 the open kind, by hand), the frame pieces
+  (slabs, a framed box, triangles; the in-between colour along a slope taken as the outline's edge) and a gem.
+- **Not done yet:** the race frame's background panels (blocks 2, 3, 6 and their maps: mostly flat rectangles on the
+  texel lines), the two-player sets (blocks 10-12), the menus' other pictures (the title's and the championship's sprite
+  sets, the menus' background tiles: not yet classified), and a census of the 3D faces' textures beyond the patterns. Artwork left as drawn (not flat colours bounded by edges, so
   not this method's): the title logo and characters, the granite backdrop, the championship's 8-bit picture, the course
   pictures, the cars' pictures and icons.
 
