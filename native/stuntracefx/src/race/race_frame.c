@@ -678,11 +678,11 @@ void RaceModeSetup(void)
     g.hud_blank = 0;
     g.champ_stage = 0;
     g.course_high = 0;
-    g.byte_0d63 = 0;
-    g.byte_0d44 = 0;
+    g.course_page = 0;
+    g.records_panel_up = 0;
     memset(g.race_time, 0, sizeof g.race_time);
-    g.byte_0d24 = 0;
-    g.byte_0d25 = 0;
+    g.every_course_open = 0;
+    g.course_code_presses = 0;
     memset(g.level_columns, g.hud_mode ? 0x00 : 0x04, sizeof g.level_columns);
     g.time_shown = 0;
     g.time_shown_2 = 0;

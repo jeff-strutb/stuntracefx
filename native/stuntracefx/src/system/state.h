@@ -81,12 +81,15 @@ typedef struct {
     uint8_t stunt_seen;                 /* $1A2D */
     uint32_t speed_total[2];            /* $0DDC, $0DE0 */
     uint16_t speed_count[2];            /* $0DE4, $0DE6 */
-    uint8_t byte_e80, byte_e81;         /* $0E80, $0E81 */
+    uint8_t stunt_score_counted, time_counted; /* $0E80, $0E81: the results' stunt score and time left as far as they have counted up */
     uint8_t reset_state;                /* $0D51: a soft reset is under way */
     uint8_t frame_stage_00;             /* $00: 2 while a step runs, cleared when its picture is shown */
-    uint8_t course_high, byte_0d63, byte_0d44, byte_0d25; /* $0E3E, $0D63, $0D44, $0D25 */
+    uint8_t course_high;                /* $0E3E */
+    uint8_t course_page;                /* $0D63: the course screen's page of courses: 0 the first, else ($FF) the second */
+    uint8_t records_panel_up;           /* $0D44: 2 while the course screen's records panel is up, else 0 */
+    uint8_t course_code_presses;        /* $0D25: Select presses so far of Speed Trax's every-course code */
     uint8_t champ_stage;                /* $0D48: the championship's stage */
-    uint8_t byte_0d24;                  /* $0D24 */
+    uint8_t every_course_open;          /* $0D24: 3 once Speed Trax's code has opened every course, for this power on */
     uint8_t race_ended_d55;             /* $0D55 */
     uint8_t overlay_d59;                /* $0D59 */
     uint8_t player_mode_kept;           /* $0D5E */

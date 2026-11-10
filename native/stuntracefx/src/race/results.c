@@ -561,12 +561,12 @@ static void StuntResultsCount(void)
         for (i = 0; i < 7; i++)
             map_byte_set((uint16_t)(0x0198 + 2 * i), word[i]);
         TilemapPaletteCycle(0x0199, 7);
-    } else if (g.stunt_score_high != g.byte_e80) {
-        count_digits(&g.byte_e80, 0x0198, 0x019A);
+    } else if (g.stunt_score_high != g.stunt_score_counted) {
+        count_digits(&g.stunt_score_counted, 0x0198, 0x019A);
         return;
     }
-    if ((uint8_t)g.time_left != g.byte_e81) {
-        count_digits(&g.byte_e81, 0x0218, 0x021A);
+    if ((uint8_t)g.time_left != g.time_counted) {
+        count_digits(&g.time_counted, 0x0218, 0x021A);
         return;
     }
     SoundPort0QueuePushRaw(0x3F);

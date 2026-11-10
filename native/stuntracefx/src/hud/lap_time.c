@@ -166,7 +166,7 @@ void RecordTimeInsert(void)
     const uint8_t *bytes;
     int place, i;
 
-    if (g.byte_0d24 == 0x03)
+    if (g.every_course_open == 0x03)
         return;
     if (time_below(g.times_bcd[3])) {
         record_move_down(class, 1);

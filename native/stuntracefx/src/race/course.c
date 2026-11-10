@@ -106,7 +106,7 @@ static int scroll_step(int hide)
 {
     uint8_t v = scroll_low();
 
-    if (!g.byte_0d63) {
+    if (!g.course_page) {
         if (v == 0x50)
             return 0;
         v = (uint8_t)(v + 4);
@@ -281,7 +281,7 @@ static int cursor_up_open(void)
     if (!pressed(0x0800) || (save.courses_open[0] & 0x0F) != 0x0F)
         return 0;
     move_sound();
-    g.byte_0d63 = 0xFF;
+    g.course_page = 0xFF;
     return 1;
 }
 
@@ -346,7 +346,7 @@ static void TimeUpCursorStep(void)
     if (g.champ_stage != 0x02) {
         if (pressed(0x0400)) {
             move_sound();
-            g.byte_0d63 = 0;
+            g.course_page = 0;
             g.champ_stage = 0x01;
         } else if (pressed(0x0200)) {
             move_sound();
@@ -356,7 +356,7 @@ static void TimeUpCursorStep(void)
     }
     if (pressed(0x0400)) {
         move_sound();
-        g.byte_0d63 = 0;
+        g.course_page = 0;
         g.champ_stage = 0x00;
     } else if (pressed(0x0100)) {
         move_sound();
@@ -369,13 +369,13 @@ static void TimeUpCursorStep(void)
 static void select_choose(void)
 {
     if (pressed(0x9000)) {
-        if (g.byte_0d63)
+        if (g.course_page)
             CourseZoomFromSelection4();
         else
             CourseZoomFromSelection();
         return;
     }
-    if (g.byte_0d63)
+    if (g.course_page)
         flash_sprite_y(g.course_class == 0x01 ? 0xB0 : 0x60);
     else
         flash_sprite_y(g.course_class ? 0x60 : 0xB0);
@@ -402,7 +402,7 @@ static void SpeedCourseSelectStep(void)
     if (!fade_full() || scroll_step(1))
         return;
     FlashingMetaspriteDrawByMode();
-    if (!g.byte_0d63) {
+    if (!g.course_page) {
         if (!g.course_class) {
             if (group_open(0x02) && pressed(0x0800)) {
                 move_sound();
@@ -414,7 +414,7 @@ static void SpeedCourseSelectStep(void)
         }
         if (group_open(0x04) && pressed(0x0800)) {
             move_sound();
-            g.byte_0d63--;
+            g.course_page--;
             g.course_class = 0x02;
             return;
         }
@@ -429,7 +429,7 @@ static void SpeedCourseSelectStep(void)
     if (g.course_class == 0x01) {
         if (pressed(0x0400) && group_open(0x01)) {
             move_sound();
-            g.byte_0d63 = 0;
+            g.course_page = 0;
             g.course_class = 0;
             return;
         }
@@ -454,7 +454,7 @@ static void StuntCourseSelectStep(void)
 {
     if (!fade_full() || scroll_step(1))
         return;
-    if (!g.byte_0d63) {
+    if (!g.course_page) {
         Set0D37FromTable();
         FlashingMetaspriteDraw();
         if (pressed(0x9000))
@@ -499,7 +499,7 @@ static void BattleCourseSelectStep(void)
 static int records_key(void)
 {
     g.cursor_column_x = 0x30;
-    if (!g.byte_0d44) {
+    if (!g.records_panel_up) {
         if (!pressed(0x9000)) {
             g.metasprite_set = (uint16_t)(g.metasprite_set & 0xFF00);
             FlashingMetaspriteDraw0();
@@ -508,7 +508,7 @@ static int records_key(void)
         SoundPort0QueuePush(0x46);
     }
     RecordsUnpackCourseTotals();
-    g.byte_0d44 = 0x02;
+    g.records_panel_up = 0x02;
     g.records_state = 0x02;
     g.records_timer = 0x1E;
     return 1;
@@ -524,7 +524,7 @@ static void CourseRecordsSelectStep(void)
 {
     if (scroll_step(0) || records_key())
         return;
-    if (!g.byte_0d63) {
+    if (!g.course_page) {
         if (!g.course_class) {
             records_sprite(0xB0);
             if (pressed(0x0800)) {
@@ -536,7 +536,7 @@ static void CourseRecordsSelectStep(void)
         records_sprite(0x60);
         if (group_open(0x02) && pressed(0x0800)) {
             move_sound();
-            g.byte_0d63--;
+            g.course_page--;
             g.course_class = 0x02;
             return;
         }
@@ -550,7 +550,7 @@ static void CourseRecordsSelectStep(void)
         records_sprite(0xB0);
         if (pressed(0x0400)) {
             move_sound();
-            g.byte_0d63 = 0;
+            g.course_page = 0;
             g.course_class = 0;
             return;
         }
@@ -583,7 +583,7 @@ static void CourseRecordsReopen(void)
 {
     if (++g.records_timer < 0x2A)
         return;
-    g.byte_0d44 = 0x02;
+    g.records_panel_up = 0x02;
     g.records_state = 0;
 }
 
@@ -604,7 +604,7 @@ static void CourseRecordsClosing(void)
         return;
     }
     g.records_state = 0;
-    g.byte_0d44 = 0;
+    g.records_panel_up = 0;
 }
 
 /* @routine 02:E795 CourseRecordsShown */
@@ -612,7 +612,7 @@ static void CourseRecordsShown(void)
 {
     if (!--g.records_timer) {
         g.course_screen_state = 0x02;
-        if (g.byte_0d63)
+        if (g.course_page)
             CourseZoomFromSelection4();
         else
             CourseZoomFromSelection();
@@ -797,7 +797,7 @@ static void CourseScreenFadeBack(void)
     if (!fade_step())
         return;
     fade_done(0x06, 0x02);
-    if (g.hud_mode || g.byte_0d24 == 0x03 || g.time_override)
+    if (g.hud_mode || g.every_course_open == 0x03 || g.time_override)
         return;
     SoundPort0QueuePush(0x2D);
 }
@@ -841,23 +841,23 @@ static void all_courses_code(void)
 {
     uint16_t held = frame_state.held[1];
 
-    if (g.byte_0d24 == 0x03)
+    if (g.every_course_open == 0x03)
         return;
     if (held & 0xDFD0) {
-        g.byte_0d24 = 0;
-        g.byte_0d25 = 0;
+        g.every_course_open = 0;
+        g.course_code_presses = 0;
         return;
     }
     if (!(frame_state.pressed_copy[1] & 0x2000))
         return;
     if (!(held & 0x0020)) {
-        g.byte_0d24 = 0;
-        g.byte_0d25 = 0;
+        g.every_course_open = 0;
+        g.course_code_presses = 0;
         return;
     }
-    if (++g.byte_0d25 < 0x07)
+    if (++g.course_code_presses < 0x07)
         return;
-    g.byte_0d24 = 0x03;
+    g.every_course_open = 0x03;
     for (int i = 0; i < 12; i++)
         g.level_columns[i] = 0;
     SoundPort0QueuePush(0x36);
@@ -883,7 +883,7 @@ void CourseScreenStep(void)
     default: return;                    /* mode 4's entry is 0: nothing reaches it */
     }
     all_courses_code();
-    if (g.byte_0d24 == 0x03)
+    if (g.every_course_open == 0x03)
         screen_state(STATES(all_states));
     else
         screen_state(STATES(speed_states));
@@ -961,7 +961,7 @@ void RaceLoad(void)
     case 0xF1BC:
         views(g.hud_mode == 0 ? 0xF7F2 : 0xF7FB);
         unpacked(0xF83E, 0xF7E9, 1);
-        scroll_set(g.byte_0d63 ? 0x0000 : 0x0050);
+        scroll_set(g.course_page ? 0x0000 : 0x0050);
         break;
     case 0xF256:
         views(0xF7F5);
@@ -973,7 +973,7 @@ void RaceLoad(void)
         views(0xF7F8);
         unpacked(0xF83E, 0xF7EC, 1);
         scroll_set(0x0000);
-        if (!g.byte_0d63) {
+        if (!g.course_page) {
             scroll_set(0x0050);
             g.champ_stage = 0;
         }

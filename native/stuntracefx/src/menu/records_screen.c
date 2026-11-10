@@ -156,7 +156,7 @@ static void menu_all(void)
         all_bottom_show();
         break;
     default:
-        if (g.byte_0d24 != 3 && (p & 0x9000)) { records_view(); return; }
+        if (g.every_course_open != 3 && (p & 0x9000)) { records_view(); return; }
         if (p & 0x0800) { sound_port0_push(0x45); all_top_show(); return; }
         if (p & 0x0400) { sound_port0_push(0x45); all_bottom_show(); return; }
         all_middle_show();

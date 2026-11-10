@@ -403,8 +403,8 @@ static void stunt_phase_end(void)
     if (windows.bands_state != 0x05)
         return;
     g.overlay_d59 = 0;
-    g.byte_e80 = 0;
-    g.byte_e81 = 0;
+    g.stunt_score_counted = 0;
+    g.time_counted = 0;
     race_wait_overlay(race_go_on);
 }
 
@@ -495,7 +495,7 @@ static void hud_mode_two(void)
 static void hud_mode_zero(void)
 {
     g.clock_step = player_car_raised() ? 0x0177 : 0x0166;
-    if (g.byte_0d24 == 0x03 && g.player_phase[0] >= 0x08) {
+    if (g.every_course_open == 0x03 && g.player_phase[0] >= 0x08) {
         g.fade_out = 0x01;
         if (g.fade_level & 0x80)
             RaceRestart();

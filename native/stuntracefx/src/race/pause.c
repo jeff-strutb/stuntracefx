@@ -132,7 +132,7 @@ static void stage_quit_wait(void)
 {
     if (!timer_out())
         return;
-    if (g.byte_0d24)
+    if (g.every_course_open)
         RaceRestart();
     else
         stage_leave();

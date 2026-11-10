@@ -431,7 +431,7 @@ static void lap_finish(int player)
         sound_port0_push(0x51);
         return;
     }
-    if (g.byte_0d24 == 0x03) {
+    if (g.every_course_open == 0x03) {
         finish_both();
         return;
     }
@@ -691,7 +691,7 @@ void ResultsWindowWait(void)
 /* RaceEndWindowSteps after the overlay: on to the next race of the set. */
 static void race_end_window_leave(void)
 {
-    if (g.byte_0d24 != 0x03) {
+    if (g.every_course_open != 0x03) {
         if (g.champ_stage == 0x01) {
             g.time_override = 0xFF;
             g.course = (uint8_t)(g.course_class + 0x14);

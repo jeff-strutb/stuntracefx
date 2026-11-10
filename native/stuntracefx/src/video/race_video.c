@@ -466,7 +466,7 @@ void RaceVideoSetup(void)
 
 void RaceVideoInit(void)
 {
-    if (g.byte_0d24 >= 3) {
+    if (g.every_course_open >= 3) {
         memset(g.race_time, 0, sizeof g.race_time);
         g.time_shown = 0;
         g.time_shown_2 = 0;
