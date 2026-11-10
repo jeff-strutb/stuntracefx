@@ -37,3 +37,7 @@ uint16_t race_ground_colour(int panel, float row) { (void)panel; (void)row; retu
 int race_underwater_cells(uint8_t texels[80][64], uint16_t colours[16]) { (void)texels; (void)colours; return 0; }
 nshvc_shader nshvc_shader_load(const char *name) { nshvc_shader s = {0}; (void)name; return s; }
 int ObjectOrbitBetween(int slot, const ObjectTable *was, const ObjectTable *end, float t, int16_t add[3]) { (void)slot; (void)was; (void)end; (void)t; (void)add; return 0; }
+
+/* the objects kept for the pictures between steps (fx_tween); the check draws none */
+#include "object/object.h"
+void ObjectsKeptForPictures(ObjectTable *kept) { (void)kept; }
