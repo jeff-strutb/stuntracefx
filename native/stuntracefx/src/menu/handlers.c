@@ -303,7 +303,7 @@ static void select_arrive(Actor *a)
     d = (uint16_t)(0x0100 - pos);
     if (d >= 0x01FF)
         d = 0x01FF;
-    *menu_table_byte(MT_PREVIEW_WINDOW + 1) = (uint8_t)d;     /* the first run's left edge */
+    *menu_table_byte(MENU_TABLE_PREVIEW_WINDOW, 1) = (uint8_t)d;     /* the first run's left edge */
 }
 
 /*

@@ -149,7 +149,6 @@ uint16_t group_word(uint16_t at);
 void group_word_set(uint16_t at, uint16_t value);
 void actor_tile_set(Actor *a, uint16_t entry, uint16_t tile);
 void group_palette_set(Actor *a, uint16_t palette_bits);
-uint8_t *menu_tables_at(void);
 
 void menu_palette_scale(int first, int count, uint16_t factor);
 void cross_fade(uint16_t n);

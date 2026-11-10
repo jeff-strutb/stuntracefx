@@ -7,7 +7,6 @@
  */
 #include <string.h>
 
-#include "data/cart.h"
 #include "menu/menu.h"
 #include "menu/menu_tables.h"
 #include "menu/menu_window.h"
@@ -24,14 +23,12 @@ static uint8_t channels_now;
    Kept at each menus' update's end (menu_lines_keep), so a picture between
    update N-1 and N works out N-1's tables and eases their moving lines
    toward N's (the whole-frame rule of video/between.h). */
-enum { TABLES_FROM = MT_CHAMPION_SCROLL_X, TABLES_TO = MT_PREVIEW_WINDOW + 3 };
-enum { W_SLIDE_TOP, W_SLIDE_LOW, W_PANEL_CLASS, W_PANEL_TOP, W_PANEL_LOW, W_PANEL_STILL, WORDS };
 typedef struct {
     uint32_t update;
     int set;
     uint8_t channels;
-    uint8_t tables[TABLES_TO - TABLES_FROM];
-    int32_t words[WORDS];
+    uint8_t tables[MENU_LINE_TABLES_BYTES];
+    int32_t words[MENU_WORDS];
 } LinesState;
 
 static LinesState kept[2];              /* [0] update N-1's, [1] update N's */
@@ -42,13 +39,13 @@ static void take(LinesState *k)
     k->update = menu_window_updates();
     k->set = set_now;
     k->channels = channels_now;
-    memcpy(k->tables, menu_table_byte(TABLES_FROM), sizeof k->tables);
-    k->words[W_SLIDE_TOP] = menu.slide_top;
-    k->words[W_SLIDE_LOW] = menu.slide_low;
-    k->words[W_PANEL_CLASS] = menu.panel_class_scroll;
-    k->words[W_PANEL_TOP] = menu.panel_top_scroll;
-    k->words[W_PANEL_LOW] = menu.panel_low_scroll;
-    k->words[W_PANEL_STILL] = menu.panel_still_scroll;
+    memcpy(k->tables, &actors.groups[menu_line_tables_place()], sizeof k->tables);
+    k->words[MENU_WORD_SLIDE_TOP] = menu.slide_top;
+    k->words[MENU_WORD_SLIDE_LOW] = menu.slide_low;
+    k->words[MENU_WORD_PANEL_CLASS] = menu.panel_class_scroll;
+    k->words[MENU_WORD_PANEL_TOP] = menu.panel_top_scroll;
+    k->words[MENU_WORD_PANEL_LOW] = menu.panel_low_scroll;
+    k->words[MENU_WORD_PANEL_STILL] = menu.panel_still_scroll;
 }
 
 void menu_lines_keep(void)
@@ -57,10 +54,13 @@ void menu_lines_keep(void)
     take(&kept[1]);
 }
 
-/* a byte of the tables as `from` has them; 0 (a table's end) outside them */
-static uint8_t tb(uint16_t at)
+/* a byte of the tables as `from` has them, by its place in the block; 0 (a
+   table's end) outside them */
+static uint8_t tb(uint32_t place)
 {
-    return at >= TABLES_FROM && at < TABLES_TO ? from->tables[at - TABLES_FROM] : 0;
+    uint32_t i = place - menu_line_tables_place();
+
+    return i < MENU_LINE_TABLES_BYTES ? from->tables[i] : 0;
 }
 
 void menu_lines_set(int set, uint8_t channels)
@@ -73,11 +73,11 @@ void menu_lines_set(int set, uint8_t channels)
     pic.line_tables = channels;
 }
 
-/* A table of byte-wide values at `at` in the block, into values[0..224],
-   leaving lines before its first entry at `before`. */
-static void table_bytes(uint16_t at, int32_t *values, int32_t before, int width)
+/* A table of byte-wide values, into values[0..224], leaving lines before
+   its first entry at `before`. */
+static void table_bytes(MenuTable table, int32_t *values, int32_t before, int width)
 {
-    uint16_t t = at;
+    uint32_t t = menu_table_place(table);
     int v = 0;
     int32_t last = before;
 
@@ -87,50 +87,35 @@ static void table_bytes(uint16_t at, int32_t *values, int32_t before, int width)
         t++;
         for (i = 0; i < n && v < LINES; i++, v++) {
             if (i == 0 || repeat) {
-                uint16_t e = (uint16_t)(t + i * width);
+                uint32_t e = t + (uint32_t)(i * width);
 
-                last = width == 2 ? (tb(e) | tb((uint16_t)(e + 1)) << 8) : tb(e);
+                last = width == 2 ? (tb(e) | tb(e + 1) << 8) : tb(e);
             }
             values[v] = last;
         }
-        t = (uint16_t)(t + (repeat ? n * width : width));
+        t += (uint32_t)(repeat ? n * width : width);
     }
     for (; v < LINES; v++)
         values[v] = last;
 }
 
-/* The words the indirect tables name, by the addresses the cartridge's
-   tables give for them. */
-enum {
-    WORD_SLIDE_TOP = 0x18BB, WORD_SLIDE_LOW = 0x18BD,
-    WORD_PANEL_CLASS = 0x1919, WORD_PANEL_TOP = 0x191B, WORD_PANEL_LOW = 0x191D, WORD_PANEL_STILL = 0x191F
-};
-
-/* An indirect table: a line count and the address of a word to read. */
-static void table_indirect(uint16_t at, int32_t *values, int32_t before)
+/* A table naming words: a line count and the word's name (data/menu_tables.h
+   resolves it). */
+static void table_indirect(MenuTable table, int32_t *values, int32_t before)
 {
-    uint16_t t = at;
+    uint32_t t = menu_table_place(table);
     int v = 0;
     int32_t last = before;
 
     while (tb(t) && v < LINES) {
         int n = tb(t) & 0x7F, i;
-        uint16_t addr = (uint16_t)(tb((uint16_t)(t + 1)) | tb((uint16_t)(t + 2)) << 8);
-        int32_t value;
+        MenuWord w = menu_line_word((uint16_t)(tb(t + 1) | tb(t + 2) << 8));
+        int32_t value = w == MENU_WORD_NONE ? last : from->words[w];
 
-        switch (addr) {
-        case WORD_SLIDE_TOP: value = from->words[W_SLIDE_TOP]; break;
-        case WORD_SLIDE_LOW: value = from->words[W_SLIDE_LOW]; break;
-        case WORD_PANEL_CLASS: value = from->words[W_PANEL_CLASS]; break;
-        case WORD_PANEL_TOP: value = from->words[W_PANEL_TOP]; break;
-        case WORD_PANEL_LOW: value = from->words[W_PANEL_LOW]; break;
-        case WORD_PANEL_STILL: value = from->words[W_PANEL_STILL]; break;
-        default: value = last; break;
-        }
         for (i = 0; i < n && v < LINES; i++, v++)
             values[v] = value;
         last = value;
-        t = (uint16_t)(t + 3);
+        t += 3;
     }
     for (; v < LINES; v++)
         values[v] = last;
@@ -262,16 +247,16 @@ static void title_lines(void)
     for (v = 0; v < LINES; v++)
         tm[v] = pic.main_screen;
     if (from->channels & LINES_TM_C)
-        table_bytes(MT_TITLE_MAIN_C, tm, pic.main_screen, 1);
+        table_bytes(MENU_TABLE_TITLE_MAIN_C, tm, pic.main_screen, 1);
     if (from->channels & LINES_TM_B)
-        table_bytes(MT_TITLE_MAIN_B, tm, pic.main_screen, 1);
+        table_bytes(MENU_TABLE_TITLE_MAIN_B, tm, pic.main_screen, 1);
     if (from->channels & LINES_TM_A)
-        table_bytes(MT_TITLE_MAIN_A, tm, pic.main_screen, 1);
+        table_bytes(MENU_TABLE_TITLE_MAIN_A, tm, pic.main_screen, 1);
     send_tm(tm);
     if (from->channels & LINES_WINDOW) {
         int32_t left[LINES], right[LINES];
 
-        table_bytes(MT_TITLE_WINDOW, wh, 0, 2);
+        table_bytes(MENU_TABLE_TITLE_WINDOW, wh, 0, 2);
         for (v = 0; v < LINES; v++) {
             left[v] = wh[v] & 0xFF;
             right[v] = wh[v] >> 8;
@@ -286,14 +271,14 @@ static void preview_lines(void)
     int32_t a[LINES];
 
     if (from->channels & 0x80) {          /* BG2's horizontal scroll */
-        table_indirect(MT_PREVIEW_SCROLL_X, a, 0);
+        table_indirect(MENU_TABLE_PREVIEW_SCROLL_X, a, 0);
         send(NSHVC_LINE_SCROLL_X + 1, a);
     }
     if (from->channels & 0x40) {          /* the colour maths' prevent and clip */
         int32_t b[LINES], c[LINES];
         int v;
 
-        table_bytes(MT_PREVIEW_COLOUR, a, 0, 1);
+        table_bytes(MENU_TABLE_PREVIEW_COLOUR, a, 0, 1);
         for (v = 0; v < LINES; v++) {
             b[v] = (a[v] >> 4) & 3;
             c[v] = (a[v] >> 6) & 3;
@@ -311,7 +296,7 @@ static void preview_lines(void)
             int v;
 
             if (from->channels & 0x20) {
-                table_bytes(MT_PREVIEW_MASK, a, 0, 1);
+                table_bytes(MENU_TABLE_PREVIEW_MASK, a, 0, 1);
             } else {
                 int32_t bits = 0;
                 int l;
@@ -338,7 +323,7 @@ static void preview_lines(void)
         }
     }
     if (from->channels & 0x10) {          /* window 1's left edge */
-        table_bytes(MT_PREVIEW_WINDOW, a, 0, 1);
+        table_bytes(MENU_TABLE_PREVIEW_WINDOW, a, 0, 1);
         send(NSHVC_LINE_WIN1_LEFT, a);
     }
 }
@@ -348,23 +333,23 @@ static void champion_lines(void)
     int32_t a[LINES];
 
     if (from->channels & 0x80) {          /* BG2's horizontal scroll */
-        table_bytes(MT_CHAMPION_SCROLL_X, a, 0, 2);
+        table_bytes(MENU_TABLE_CHAMPION_SCROLL_X, a, 0, 2);
         send(NSHVC_LINE_SCROLL_X + 1, a);
     }
     if (from->channels & 0x40) {          /* BG2's vertical scroll */
-        table_indirect(MT_CHAMPION_SCROLL_Y, a, 0);
+        table_indirect(MENU_TABLE_CHAMPION_SCROLL_Y, a, 0);
         send(NSHVC_LINE_SCROLL_Y + 1, a);
     }
     if (from->channels & 0x20) {
-        table_bytes(MT_CHAMPION_MAIN, a, pic.main_screen, 1);
+        table_bytes(MENU_TABLE_CHAMPION_MAIN, a, pic.main_screen, 1);
         send_tm(a);
     }
     if (from->channels & 0x10) {          /* window 1's right edge */
-        table_bytes(MT_CHAMPION_WINDOW, a, 0, 1);
+        table_bytes(MENU_TABLE_CHAMPION_WINDOW, a, 0, 1);
         send(NSHVC_LINE_WIN1_RIGHT, a);
     }
     if (from->channels & 0x08) {          /* window 1's right edge, the second set */
-        table_bytes(MT_CHAMPION_WINDOW_B, a, 0, 1);
+        table_bytes(MENU_TABLE_CHAMPION_WINDOW_B, a, 0, 1);
         send(NSHVC_LINE_WIN1_RIGHT, a);
     }
 }

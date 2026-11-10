@@ -369,7 +369,7 @@ void menu_frames_vram_tick(void)
 static void window_table(void)
 {
     /* the mask table's runs 1-3: count, value; count, value; count */
-    uint8_t *t = menu_table_byte(MT_PREVIEW_MASK);
+    uint8_t *t = menu_table_byte(MENU_TABLE_PREVIEW_MASK, 0);
     uint8_t c = (uint8_t)(0x2C - menu.window_size), d = (uint8_t)(menu.window_size << 1);
 
     t[2] = c;
@@ -390,10 +390,10 @@ static void window_open_close_step(void)
         uint8_t n = (uint8_t)(menu.panel_rise + 1);
 
         /* the panels' rows: the third run's line count in each table */
-        *menu_table_byte(MT_CHAMPION_SCROLL_X + 6) = n;
-        *menu_table_byte(MT_CHAMPION_SCROLL_Y + 6) = n;
-        *menu_table_byte(MT_CHAMPION_MAIN + 4) = n;
-        *menu_table_byte(MT_CHAMPION_WINDOW + 4) = n;
+        *menu_table_byte(MENU_TABLE_CHAMPION_SCROLL_X, 6) = n;
+        *menu_table_byte(MENU_TABLE_CHAMPION_SCROLL_Y, 6) = n;
+        *menu_table_byte(MENU_TABLE_CHAMPION_MAIN, 4) = n;
+        *menu_table_byte(MENU_TABLE_CHAMPION_WINDOW, 4) = n;
         menu.panel_top_scroll = (uint16_t)(0x0016 - menu.panel_rise + menu.panel_top_lowered);
         menu.panel_low_scroll = (uint16_t)(0x0045 - menu.panel_rise + menu.panel_low_start);
         return;
@@ -461,7 +461,7 @@ static void menu_frame_end(int stage20)
     }
     window_open_close_step();
     if (menu.blink_on) {
-        const uint8_t *t = menu_table_byte(MT_BLINK_COLOURS);
+        const uint8_t *t = menu_table_byte(MENU_TABLE_BLINK_COLOURS, 0);
 
         if (++menu.blink_count == 5) {
             menu.blink_count = 0;
@@ -514,7 +514,7 @@ static void preview_full_mode(void)
     pic.sub_screen = 0;
     menu.slide_top = menu.slide_top_next = 0;
     menu.slide_low = menu.slide_low_next = 0x00A8;
-    *menu_table_byte(MT_PREVIEW_WINDOW + 1) = 0xFF;   /* the first run's left edge: none */
+    *menu_table_byte(MENU_TABLE_PREVIEW_WINDOW, 1) = 0xFF;   /* the first run's left edge: none */
     menu_lines_set(MENU_LINES_PREVIEW, 0x90);
     menu_window_screen(KEEP_BG2 | KEEP_BG3 | KEEP_SPRITES, 1);    /* past the picture: the granite */
 }
@@ -585,7 +585,7 @@ static void preview_fade_begin(void)
     RaceStart();
     menu.slide_top = menu.slide_top_next = 0;
     menu.slide_low = menu.slide_low_next = 0x00A8;
-    *menu_table_byte(MT_PREVIEW_WINDOW + 1) = 0xFF;   /* the first run's left edge: none */
+    *menu_table_byte(MENU_TABLE_PREVIEW_WINDOW, 1) = 0xFF;   /* the first run's left edge: none */
     actors_run();
     actors_build_sprites();
     pic.bg[0].tiles = tiles_8bpp;
@@ -1090,8 +1090,8 @@ static void champion_open(void)
 
     /* the table entries the window step and the blink change, as they start */
     actors_load();
-    *menu_table_byte(MT_CHAMPION_WINDOW_B + 5) = 0;     /* the third run's value */
-    *menu_table_byte(MT_CHAMPION_WINDOW_B + 7) = 0;     /* the fourth run's */
+    *menu_table_byte(MENU_TABLE_CHAMPION_WINDOW_B, 5) = 0;     /* the third run's value */
+    *menu_table_byte(MENU_TABLE_CHAMPION_WINDOW_B, 7) = 0;     /* the fourth run's */
 
     picture_unpack(PIC_GRANITE_FRAMES);
     memcpy(frames_tiles, picture, sizeof frames_tiles);

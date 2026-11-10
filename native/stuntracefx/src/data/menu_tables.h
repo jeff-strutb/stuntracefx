@@ -23,4 +23,58 @@ uint8_t menu_selection_model(int choice, int row);      /* a racer's model by it
 uint16_t menu_setting_animation(int setting, int row);  /* the animation that shows a setting's value */
 uint16_t menu_setting_object(int i);                    /* the kind of the object that shows setting i */
 
+/* --- the objects ---------------------------------------------------------- */
+
+/* The objects' block: their sprite groups and the screens' per-line tables,
+   loaded once and changed as the objects run (actors.groups). The data
+   refers to places in it, and to groups, by its own references, which
+   these resolve. */
+enum { MENU_BLOCK_BYTES = 0x3800 };
+void menu_block_load(uint8_t *block);                   /* the block as the cartridge has it */
+uint32_t menu_group_place(uint16_t group);              /* a group's place in the block */
+uint16_t menu_groups_free_from(void);                   /* the first group the objects may copy into */
+uint16_t menu_groups_end(void);                         /* and the end of that room */
+
+uint16_t menu_actor_template(int i);                    /* the 44 words a new object starts from */
+uint16_t menu_spawn_list_entry(uint16_t list);          /* a spawn list's entry at `list`; bit 15 ends the list */
+uint16_t menu_spawn_field(uint16_t entry);              /* a spawn entry's field offset; bit 15 ends it */
+uint16_t menu_spawn_value(uint16_t entry);              /* and the value it gives the field */
+uint16_t menu_animation_steps(uint16_t at);             /* an animation step's duration; bit 15 ends the animation */
+uint16_t menu_animation_group(uint16_t at);             /* and its sprite group */
+uint16_t menu_frame_art_tile(int i);                    /* a sprite's tile in the sprite set for its art (i: 2 a sprite) */
+uint16_t menu_frame_art_base(int i);                    /* and where its art is in the frames */
+uint16_t menu_frame_offset(int f);                      /* a frame's offset in them (f: 2 a frame), bit 15 its vertical flip */
+uint16_t menu_cross_fade_level(int n);                  /* the cross-fade's factor by step */
+
+/* the screens' per-line tables in the block, and the blink's colours */
+typedef enum {
+    MENU_TABLE_BLINK_COLOURS,           /* colour $D9's two blink colours */
+    MENU_TABLE_CHAMPION_SCROLL_X,       /* the championship: BG2's horizontal scroll (2-byte runs) */
+    MENU_TABLE_CHAMPION_SCROLL_Y,       /* BG2's vertical scroll (runs naming words) */
+    MENU_TABLE_CHAMPION_MAIN,           /* the main screen's layers */
+    MENU_TABLE_CHAMPION_WINDOW,         /* window 1's right edge */
+    MENU_TABLE_CHAMPION_WINDOW_B,       /* window 1's right edge, the second set */
+    MENU_TABLE_TITLE_MAIN_A,            /* the title: the main screen's layers, three sets */
+    MENU_TABLE_TITLE_MAIN_B,
+    MENU_TABLE_TITLE_MAIN_C,
+    MENU_TABLE_TITLE_WINDOW,            /* window 1's edges (2-byte runs) */
+    MENU_TABLE_PREVIEW_SCROLL_X,        /* the course menu: BG2's horizontal scroll (runs naming words) */
+    MENU_TABLE_PREVIEW_COLOUR,          /* the colour maths' prevent and clip */
+    MENU_TABLE_PREVIEW_MASK,            /* the layers the windows mask */
+    MENU_TABLE_PREVIEW_WINDOW,          /* window 1's left edge */
+    MENU_TABLES
+} MenuTable;
+uint32_t menu_table_place(MenuTable t);                 /* its place in the block */
+enum { MENU_LINE_TABLES_BYTES = 0x81 };                 /* the block's bytes the per-line tables are in, */
+uint32_t menu_line_tables_place(void);                  /* from here */
+
+/* the menus' words a per-line table's run names */
+typedef enum {
+    MENU_WORD_NONE = -1,
+    MENU_WORD_SLIDE_TOP, MENU_WORD_SLIDE_LOW,
+    MENU_WORD_PANEL_CLASS, MENU_WORD_PANEL_TOP, MENU_WORD_PANEL_LOW, MENU_WORD_PANEL_STILL,
+    MENU_WORDS
+} MenuWord;
+MenuWord menu_line_word(uint16_t name);                 /* the word a run's two bytes name */
+
 #endif

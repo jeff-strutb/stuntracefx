@@ -64,13 +64,14 @@ static void results_rise(Actor *a)
     menu_lines_set(MENU_LINES_CHAMPION, 0xE8);
 }
 
-/* Each window band's line opens by 8 a frame; 1 at $100. */
-static int open_window(Actor *a, uint16_t line)
+/* Each window band's line opens by 8 a frame; 1 at $100. `k`: the band's
+   byte in the second set of window 1's right edges. */
+static int open_window(Actor *a, int k)
 {
     a->count = (uint16_t)(a->count + 8);
     if (a->count == 0x0100)
         return 1;
-    *menu_table_byte(line) = (uint8_t)a->count;
+    *menu_table_byte(MENU_TABLE_CHAMPION_WINDOW_B, k) = (uint8_t)a->count;
     return 0;
 }
 
@@ -84,7 +85,7 @@ static int open_window(Actor *a, uint16_t line)
  */
 static void results_open_top(Actor *a)
 {
-    if (!open_window(a, MT_CHAMPION_WINDOW_B + 5))      /* the top band: the third run's edge */
+    if (!open_window(a, 5))      /* the top band: the third run's edge */
         return;
     a->handler = HANDLER_RESULTS_OPEN_BOTTOM;
     a->count = 0;
@@ -94,7 +95,7 @@ static void results_open_bottom(Actor *a)
 {
     Actor *m;
 
-    if (!open_window(a, MT_CHAMPION_WINDOW_B + 7))      /* the bottom band: the fourth run's */
+    if (!open_window(a, 7))      /* the bottom band: the fourth run's */
         return;
     a->handler = HANDLER_RESULTS_WAIT_BUTTON;
     a->count = 0;
