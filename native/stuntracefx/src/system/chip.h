@@ -47,7 +47,6 @@ enum {
     FXIN_PLAYER1_RECORD = 0x2476,       /* the record of player 1's car */
     FXIN_PLAYER2_RECORD = 0x2478,
     FXIN_VIEW_RECORD = 0x247A,          /* the record the view follows */
-    FXIN_STEP_FRAMES = 0x108E,          /* the frames of the last step, for the renderer */
     FXIN_SHADE_BASE = 0x004E,           /* the faces' colour tables' base (the frame program's shade base) */
     FXIN_COURSE_MODELS = 0x0050,        /* the course's model table in bank 3 (from $03:F799 by course), the model program's */
 };

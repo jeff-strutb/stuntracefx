@@ -173,12 +173,10 @@ static void frame_start(void)
     view_words_follow();
 }
 
-/* The step's frames to the renderer. The original also kept $1F3E and a
-   steps-per-second count ($06D5-$06D7) here, which nothing reads. */
-static void frame_time(void)
-{
-    fx16_set(FXIN_STEP_FRAMES, g.frames_last_step);
-}
+/* The original also handed the renderer the step's frames ($70:108E), and
+   kept $1F3E and a steps-per-second count ($06D5-$06D7): nothing reads any
+   of them (no job reads $108E in the five recordings, nor any code), so
+   none is kept. */
 
 /*
  * @routine 7E:E303 HudFrameWhileGsuRuns
@@ -247,7 +245,6 @@ static void one_player_finish(void)
         return;
     GsuScreenToggle();
     g.picture_uploaded = 0;
-    frame_time();
     step_end(STEP_ONE_PLAYER, RACE_STEP_UPDATES);
 }
 
@@ -295,7 +292,6 @@ static void two_players_second_half(void)
         return;
     GsuScreenFlipMenu();
     g.picture_uploaded = 0;
-    frame_time();
     step_end(STEP_TWO_PLAYERS, RACE_STEP_UPDATES);
 }
 
