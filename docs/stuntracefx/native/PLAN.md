@@ -273,6 +273,10 @@ game's own logic (its physics, objects, menus, rules) stays the game's, and reco
   Aqua Tunnel's sea level -1280).
 - Solid shapes for the sprites that show solid things: the cars' tyres, the 4WD's eyes, the bonus trucks' wheels, the trees
   (faceted, as approved); effects stay sprites. No filtered or upscaled art.
+- Simple pattern textures as geometry (Jeff, 2026-11-09: "create high resolution textures of simple pattern textures like
+  this yellow/black border just like we created 3d models for tires and eyes"): a textured face whose texture is a simple
+  pattern is drawn as the pattern's own shapes, flat polygons laid on the face in 3D, sharp at any resolution. Design below
+  ("Pattern textures as geometry"); first texture: the yellow and black stripes.
 - The pause screen with the controller panel and key remapping on every host, the options (auto-accelerate), and typing the
   initials on a keyboard. In (`src/pause`): the panel, a keyboard's keys rebound and saved, the screen opened by Escape,
   Select + Start (a touch screen's own controls) or the corner button, moved through with any pad, and the AUTO-ACCELERATE
@@ -409,6 +413,34 @@ every pixel of the surface, its texel and its colour.
 - No engine feature is needed: draw lists take a material with a game shader, its image read at any texel (`nshvc_image`, as
   `pause_blur.shade` does) and eight inputs.
 - Shown to Jeff on a couple of courses (land and water, Aqua Tunnel from above and in the tube) before it is switched on.
+
+#### Pattern textures as geometry (design, 2026-11-09)
+
+How it meets the direction: the CPU builds flat polygons into the draw list, as for the solids; the GPU fills them at the
+output's resolution with the smooth rule; no pixel is made on the CPU, and no art is filtered or scaled; one path for every
+backend.
+
+- **What a pattern is.** A texture whose texels are a few flat colours bounded by straight edges, drawn as stairs at the
+  chip's texel size. Each is described once in its tile's texel space (a texel x, y covers [x, x+1) x [y, y+1)) by the
+  straight edges the stairs stand for, checked against every texel of the tile when the table is made (each texel's centre
+  falls in the region of its own value). Found by the texture's key as the face's draw-list entry gives it: ROM bank, base,
+  mask, and which part of the byte the options read (all eight bits, the high or the low four).
+- **The first: the yellow and black stripes** (bank $12, base $A040, mask $1F1F, the high four bits; course 0's walls). Tile
+  32 x 32 texels, two values ($A, $F), stripes 8 texels wide that move one texel left every 4 rows. Their edges are the lines
+  X = 8k - Y/4 (through the middle of each step); value $A where X + Y/4 mod 16 is below 8, else $F. The texel centres
+  give the tile's 1,024 texels exactly. The tile repeats every 32 in both directions as the mask has it (the stripes jump at
+  a vertical repeat as the texels do).
+- **On a face.** The textured face (fx_face.c, its corners in view space with their u, v, before the near clip) is fanned
+  into triangles; each triangle maps u, v to view space by its own three corners, as the GPU would lay the texels. Each
+  pattern region of each tile the triangle's u, v cover is clipped to the triangle in u, v, its corners mapped into view
+  space, and the piece goes the way of any face: near clip, projection, the view's rectangle, fanned. Each piece is flat, its
+  colour the texel value made into a colour as the texture's own texels are (the colour register's high four bits, the
+  transparency rule, the palette row and depth mask), so it matches the texture's colours. In place of the face's textured
+  pieces cut by depth; the face's outline, order and everything else are unchanged.
+- **Where.** `fx/fx_pattern.c` holds the table and the cutting; fx_face.c asks it for a textured face and keeps the pieces'
+  values per corner; fx_draw.c's shape drawing colours a pattern shape's corners instead of laying the texture.
+- **Bounds.** A face over more than 64 tiles keeps the texture as it is drawn now (no seen face is near that).
+- Shown to Jeff on course 0 before and after; more patterns added the same way, each checked against its texels.
 
 ### Stage 11. Whole game
 Finder zero on `native/stuntracefx`; section 8's criteria; every play through `nshvc-check`; every reachable platform.
