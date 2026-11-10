@@ -12,7 +12,9 @@
  * had goes over to the button whose key was taken, so every button keeps
  * one. The keys are kept in the save folder ("keys") and laid out at the
  * game's first update. RESUME, Escape or Select + Start again goes on;
- * DEFAULT KEYS puts the engine's own keys back. Buttons held as the screen
+ * DEFAULT KEYS puts the engine's own keys back; AUTO-ACCELERATE turns the
+ * option over (on a touch screen the gas is held while driving; the menus'
+ * save keeps it, option_auto_accelerate_set). Buttons held as the screen
  * closes reach the game only once let go.
  *
  * Every picture is drawn once into an image (pause_art.c) and laid over the
@@ -38,6 +40,7 @@
 #include "audio/music.h"
 #include "pause/pause.h"
 #include "pause/pause_art.h"
+#include "save/save.h"
 
 #define KEY_EVENTS (NSHVC_VERSION_MAJOR > 4 || (NSHVC_VERSION_MAJOR == 4 && NSHVC_VERSION_MINOR >= 5))
 
@@ -75,8 +78,9 @@
 #define BLUR_SCALE 2
 
 /* The overlays, the game's only ones: the tint, the panel, the tags, the
-   item chosen, the hint, the corner button, in that order upward. */
-enum { O_TINT = 12, O_PANEL, O_TAGS, O_LIT = O_TAGS + PAUSE_CONTROLS, O_HINT, O_BUTTON, O_END };
+   item chosen, the option with its value, the hint, the corner button, in
+   that order upward. */
+enum { O_TINT = 12, O_PANEL, O_TAGS, O_LIT = O_TAGS + PAUSE_CONTROLS, O_OPTION, O_HINT, O_BUTTON, O_END };
 _Static_assert(O_END <= NSHVC_OVERLAYS, "the pause screen's overlays fit the engine's");
 
 /* the buttons in the engine's order (its input.c), which the save keeps, and
@@ -107,6 +111,8 @@ static struct {
     char tag_shown[PAUSE_CONTROLS][32]; /* what each tag's image shows, and whether asking */
     int tag_asking[PAUSE_CONTROLS];
     char hint_shown[2][48];
+    nshvc_image option;                 /* the auto-accelerate button, with its value */
+    int option_w, option_h, option_shown; /* what it shows: value * 2 + lit; -1 not yet */
 
     /* the corner button: its two pictures (pause, play) at btn_density;
        the pointer's button and the touches at the last update */
@@ -288,6 +294,30 @@ static void pictures_make(float density)
     p.hint = nshvc_image_create((uint32_t)p.hint_w, (uint32_t)p.hint_h, NSHVC_IMAGE_RGBA);
     p.hint_shown[0][0] = 1;             /* no text: drawn at the first look */
     p.hint_shown[0][1] = 0;
+    pause_lit_box(PAUSE_OPTION, &x, &y, &w, &h);
+    p.option_w = (int)ceilf(w * density);
+    p.option_h = (int)ceilf(h * density);
+    p.option = nshvc_image_create((uint32_t)p.option_w, (uint32_t)p.option_h, NSHVC_IMAGE_RGBA);
+    p.option_shown = -1;
+}
+
+/* The option's button as it stands: its value, lit while chosen. */
+static void option_refresh(void)
+{
+    int on = option_auto_accelerate() != 0, lit = p.chosen == PAUSE_OPTION, want = on * 2 + lit;
+    float x, y, w, h;
+    PauseImg m;
+
+    if (!p.option.id || want == p.option_shown)
+        return;
+    pause_lit_box(PAUSE_OPTION, &x, &y, &w, &h);
+    m = pause_img_new(x, y, w, h, p.density);
+    if (!m.px)
+        return;
+    pause_draw_option(&m, on, lit);
+    nshvc_image_write(p.option, m.px);
+    free(m.px);
+    p.option_shown = want;
 }
 
 /* A tag's key as the player's device names it, in capitals. */
@@ -339,6 +369,9 @@ static void hint_refresh(void)
         snprintf(line1, sizeof line1, "PRESS A KEY FOR %s", pause_controls[p.asking].name);
         snprintf(line2, sizeof line2, "ESCAPE TO CANCEL");
         colour = GOLD;
+    } else if (p.chosen == PAUSE_OPTION) {
+        snprintf(line1, sizeof line1, "TOUCH: THE GAS HELD WHILE YOU DRIVE");
+        snprintf(line2, sizeof line2, "%s", KEY_EVENTS ? "ESCAPE OR SELECT + START TO RESUME" : "SELECT + START TO RESUME");
     } else {
         snprintf(line1, sizeof line1, "%s", can_ask() ? "CHOOSE A BUTTON TO CHANGE ITS KEY" : "KEYS ARE CHANGED FROM A KEYBOARD");
         snprintf(line2, sizeof line2, "%s", KEY_EVENTS ? "ESCAPE OR SELECT + START TO RESUME" : "SELECT + START TO RESUME");
@@ -500,6 +533,7 @@ static void show(void)
     }
     tags_refresh();
     hint_refresh();
+    option_refresh();
     c[0] = 0, c[1] = 0, c[2] = (float)d.width, c[3] = 0, c[4] = 0, c[5] = (float)d.height;
     nshvc_overlay_set(O_TINT, p.tint, c, TINT_ALPHA);
     place(O_PANEL, p.panel, 0, 0, p.panel_w, p.panel_h, ox, oy, scale);
@@ -507,8 +541,16 @@ static void show(void)
         pause_tag_box(i, &x, &y, &bw, &bh);
         place(O_TAGS + (uint32_t)i, p.tags[i], x, y, p.tag_w[i], p.tag_h[i], ox, oy, scale);
     }
-    pause_lit_box(p.chosen, &x, &y, &bw, &bh);
-    place(O_LIT, p.lit[p.chosen], x, y, p.lit_w[p.chosen], p.lit_h[p.chosen], ox, oy, scale);
+    if (p.chosen == PAUSE_OPTION) {
+        nshvc_image none = { 0 };
+
+        nshvc_overlay_set(O_LIT, none, NULL, 0);        /* the option's own picture shows it lit */
+    } else {
+        pause_lit_box(p.chosen, &x, &y, &bw, &bh);
+        place(O_LIT, p.lit[p.chosen], x, y, p.lit_w[p.chosen], p.lit_h[p.chosen], ox, oy, scale);
+    }
+    pause_lit_box(PAUSE_OPTION, &x, &y, &bw, &bh);
+    place(O_OPTION, p.option, x, y, p.option_w, p.option_h, ox, oy, scale);
     pause_hint_box(&x, &y, &bw, &bh);
     place(O_HINT, p.hint, x, y, p.hint_w, p.hint_h, ox, oy, scale);
 }
@@ -525,17 +567,20 @@ static int control_at(int right, int row)
     return 0;
 }
 
-/* the item a direction leads to from item i: the tags in their two columns,
-   RESUME under the left one and DEFAULT KEYS under the right */
+/* the item a direction leads to from item i: the tags in their two columns;
+   under them a row of RESUME (under the left), DEFAULT KEYS and
+   AUTO-ACCELERATE (under the right), left and right going round */
 static int move(int i, uint16_t dir)
 {
     int right, row;
 
     if (i >= PAUSE_CONTROLS) {
         if (dir & NSHVC_UP)
-            return control_at(i == PAUSE_DEFAULTS, 5);
-        if (dir & (NSHVC_LEFT | NSHVC_RIGHT))
-            return i == PAUSE_RESUME ? PAUSE_DEFAULTS : PAUSE_RESUME;
+            return control_at(i != PAUSE_RESUME, 5);
+        if (dir & NSHVC_LEFT)
+            return i == PAUSE_RESUME ? PAUSE_OPTION : i - 1;
+        if (dir & NSHVC_RIGHT)
+            return i == PAUSE_OPTION ? PAUSE_RESUME : i + 1;
         return i;
     }
     right = pause_controls[i].right;
@@ -763,6 +808,8 @@ static const nshvc_input *pause_step(const nshvc_input *in)
         }
         if (p.chosen == PAUSE_DEFAULTS)
             keys_default();
+        else if (p.chosen == PAUSE_OPTION)
+            option_auto_accelerate_set(!option_auto_accelerate());
         else if (can_ask())
             p.asking = p.chosen;
     }

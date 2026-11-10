@@ -38,8 +38,9 @@ typedef struct {
 } PauseControl;
 extern const PauseControl pause_controls[PAUSE_CONTROLS];
 
-/* the panel's own buttons */
-enum { PAUSE_RESUME = PAUSE_CONTROLS, PAUSE_DEFAULTS, PAUSE_ITEMS };
+/* the panel's own buttons; the option shows its value with its name, so it
+   is drawn into its own picture (pause_draw_option), not the panel's */
+enum { PAUSE_RESUME = PAUSE_CONTROLS, PAUSE_DEFAULTS, PAUSE_OPTION, PAUSE_ITEMS };
 
 /* the boxes the overlays cover, in points: a control's tag, an item lit
    (a control's tag, line and ring; a panel button), the hint's two lines */
@@ -52,6 +53,8 @@ void pause_draw_panel(PauseImg *m);     /* everything that never changes, every 
 void pause_draw_tag(PauseImg *m, int control, const char *key, int asking);
 void pause_draw_lit(PauseImg *m, int item);
 void pause_draw_hint(PauseImg *m, const char *line1, uint32_t colour1, const char *line2);
+/* the auto-accelerate button with its value, lit (chosen) or not; its box is pause_lit_box(PAUSE_OPTION) */
+void pause_draw_option(PauseImg *m, int on, int lit);
 
 /* the pause button in the window's corner, PAUSE_BUTTON points square in its
    own points: two bars, or a play triangle while the game is paused */

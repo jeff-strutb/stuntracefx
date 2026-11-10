@@ -95,7 +95,13 @@ int main(int argc, char **argv)
             over(pic, pw, ph, &m, d);
             free(m.px);
         }
-        if (item >= 0 && item < PAUSE_ITEMS) {
+        /* the option's own picture (on), lit when it is the item asked for */
+        pause_lit_box(PAUSE_OPTION, &x, &y, &w, &h);
+        m = pause_img_new(x, y, w, h, d);
+        pause_draw_option(&m, 1, item == PAUSE_OPTION);
+        over(pic, pw, ph, &m, d);
+        free(m.px);
+        if (item >= 0 && item < PAUSE_ITEMS && item != PAUSE_OPTION) {
             pause_lit_box(item, &x, &y, &w, &h);
             m = pause_img_new(x, y, w, h, d);
             pause_draw_lit(&m, item);

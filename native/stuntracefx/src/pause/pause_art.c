@@ -232,9 +232,10 @@ const PauseControl pause_controls[PAUSE_CONTROLS] = {
 static const struct {
     const char *name;
     float x, y, w, h;
-} k_button[2] = {
-    { "RESUME", 196, 356, 112, 30 },
-    { "DEFAULT KEYS", 320, 356, 136, 30 },
+} k_button[3] = {
+    { "RESUME", 79, 356, 112, 30 },
+    { "DEFAULT KEYS", 203, 356, 136, 30 },
+    { "AUTO-ACCELERATE", 351, 356, 210, 30 }, /* its value after the name (pause_draw_option) */
 };
 
 /* the tag itself, without the image's margin */
@@ -319,14 +320,21 @@ static void checks(PauseImg *m, float x, float y, int cols, float sq)
             rrect(m, x + (float)c * sq, y + (float)r * sq, sq, sq, 0, (c + r) & 1 ? 0x101010 : WHITE, 0.9f);
 }
 
-static void panel_button(PauseImg *m, int b, int lit)
+static void panel_button_text(PauseImg *m, int b, const char *text, int lit)
 {
     float x = k_button[b].x, y = k_button[b].y, w = k_button[b].w, h = k_button[b].h;
 
     /* lit, over the button unlit: whole, so the unlit letters do not show */
     rrect(m, x, y, w, h, 8, lit ? LIT_FILL : PLATE, lit ? 1 : 0.85f);
     rrect_edge(m, x + 0.75f, y + 0.75f, w - 1.5f, h - 1.5f, 7.5f, lit ? 1.75f : 1, GOLD, 1);
-    text_centre(m, k_button[b].name, x + w / 2, y + (h - 7 * 1.75f) / 2, 1.75f, lit ? GOLD : WHITE);
+    text_centre(m, text, x + w / 2, y + (h - 7 * 1.75f) / 2, 1.75f, lit ? GOLD : WHITE);
+}
+
+static void panel_button(PauseImg *m, int b, int lit) { panel_button_text(m, b, k_button[b].name, lit); }
+
+void pause_draw_option(PauseImg *m, int on, int lit)
+{
+    panel_button_text(m, PAUSE_OPTION - PAUSE_CONTROLS, on ? "AUTO-ACCELERATE ON" : "AUTO-ACCELERATE OFF", lit);
 }
 
 void pause_draw_panel(PauseImg *m)
@@ -352,7 +360,7 @@ void pause_draw_panel(PauseImg *m)
         if (dot)
             disc(m, fx, fy, 1.6f, LINE_GREY, 1);
     }
-    for (b = 0; b < 2; b++)
+    for (b = 0; b < PAUSE_OPTION - PAUSE_CONTROLS; b++)
         panel_button(m, b, 0);
 }
 
@@ -378,6 +386,10 @@ void pause_draw_lit(PauseImg *m, int item)
     float tx, ty, ex, ey, fx, fy;
     int dot;
 
+    if (item == PAUSE_OPTION) {
+        pause_draw_option(m, 0, 1);     /* (pause.c draws the option's own picture lit instead) */
+        return;
+    }
     if (item >= PAUSE_CONTROLS) {
         panel_button(m, item - PAUSE_CONTROLS, 1);
         return;
