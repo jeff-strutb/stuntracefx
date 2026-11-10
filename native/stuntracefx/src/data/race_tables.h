@@ -51,6 +51,15 @@ typedef enum {
 /* the block unpacked into `out` (`room` bytes); returns its length from its transfer record */
 uint32_t race_block_unpack(RaceBlock block, uint8_t *out, uint32_t room);
 
+/* ---- the results' packed pictures ---- */
+typedef enum {
+    RESULTS_PANEL_RACE, RESULTS_PANEL_STUNT, RESULTS_PANEL_TIMED,
+    RESULTS_RECORDS_STUNT, RESULTS_RECORDS_TIMED, RESULTS_PANEL_MENU,
+    RESULTS_OVERLAY                     /* the results' picture, for the screen's overlay */
+} ResultsPicture;
+/* the picture unpacked into `out` (`room` bytes); returns its size */
+uint32_t results_picture_unpack(ResultsPicture which, uint8_t *out, uint32_t room);
+
 /* ---- the race's times ---- */
 uint8_t course_lap_time(uint8_t entry, int lap);                /* the BCD seconds for lap 0-2; entry: its byte offset (CourseIndex12) */
 uint8_t class_time(uint8_t course_class);                       /* the time override's seconds by class */

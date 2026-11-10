@@ -98,6 +98,21 @@ uint32_t race_block_unpack(RaceBlock block, uint8_t *out, uint32_t room)
     return word_at(transfer, 5);
 }
 
+/* each results picture's place: its bank, and where its packed data ends */
+static const Place k_results_pictures[] = {
+    [RESULTS_PANEL_RACE] = {0x1F, 0xFA39}, [RESULTS_PANEL_STUNT] = {0x1F, 0xFAB5},
+    [RESULTS_PANEL_TIMED] = {0x1C, 0xF38E}, [RESULTS_RECORDS_STUNT] = {0x1F, 0xFB21},
+    [RESULTS_RECORDS_TIMED] = {0x1C, 0xF3F2}, [RESULTS_PANEL_MENU] = {0x1F, 0xFB99},
+    [RESULTS_OVERLAY] = {0x18, 0xC770},
+};
+
+uint32_t results_picture_unpack(ResultsPicture which, uint8_t *out, uint32_t room)
+{
+    Place p = k_results_pictures[which];
+
+    return unpack((uint32_t)p.bank << 16 | p.at, out, room);
+}
+
 uint8_t course_lap_time(uint8_t entry, int lap) { return byte_at(COURSE_TIMES, (unsigned)(lap + entry)); }
 uint8_t class_time(uint8_t course_class) { return byte_at(CLASS_TIMES, course_class); }
 uint8_t stunt_time(uint8_t entry) { return byte_at(STUNT_TIMES, entry); }

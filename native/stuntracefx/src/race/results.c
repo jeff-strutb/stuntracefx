@@ -11,9 +11,7 @@
 #include <stdint.h>
 
 #include "audio/sound.h"
-#include "data/cart.h"
 #include "data/race_tables.h"
-#include "data/unpack.h"
 #include "hud/hud.h"
 #include "menu/menu.h"
 #include "race/race.h"
@@ -51,28 +49,20 @@ static uint8_t split_byte(unsigned i)
     return i < 9 ? g.lap_splits[i] : g.race_time_kept[i - 9];
 }
 
-/* A packed picture in the cartridge: its bank and its address there. */
-typedef struct { uint8_t bank; uint16_t at; } Packed;
-
-static const Packed RACE_RESULTS_PANEL = {0x1F, 0xFA39}, STUNT_RESULTS_PANEL = {0x1F, 0xFAB5},
-                    TIMED_RESULTS_PANEL = {0x1C, 0xF38E}, STUNT_RECORDS_PANEL = {0x1F, 0xFB21},
-                    TIMED_RECORDS_PANEL = {0x1C, 0xF3F2}, RESULTS_MENU_PANEL = {0x1F, 0xFB99},
-                    RESULTS_PICTURE = {0x18, 0xC770};
-
 /* The results' tables are in data/race_tables.h: each car's picture word
    and choice byte, the five letters of the word over the totals, the
-   championship screen's palette. */
+   championship screen's palette, and the packed pictures (ResultsPicture). */
 enum { UNPACK_ROOM = 0xC000 /* the chip's RAM from the unpack area on */ };
 
 /* A Super FX picture (program $01:CF42, the unpacker) to the chip's RAM at `to`. */
-static void picture_unpack(Packed p, uint16_t to)
+static void picture_unpack(ResultsPicture p, uint16_t to)
 {
-    unpack((uint32_t)p.bank << 16 | p.at, fx_ram + to, UNPACK_ROOM);
+    results_picture_unpack(p, fx_ram + to, UNPACK_ROOM);
 }
 
 /* A panel: the picture unpacked to the unpack area, its $440 bytes copied
    into the map buffer, then the name's digits. */
-static void panel(Packed p)
+static void panel(ResultsPicture p)
 {
     unsigned i;
 
@@ -211,7 +201,7 @@ static void StuntRecordsDraw(void)
 {
     unsigned n;
 
-    panel(STUNT_RECORDS_PANEL);
+    panel(RESULTS_RECORDS_STUNT);
     for (n = 0; n < 3 && g.record_times[n]; n++) {
         score_tiles((uint16_t)(0x0190 + 0xC0 * n), g.record_times[n]);
         name_tiles((uint16_t)(0x0190 + 0xC0 * n + 26), g.record_names[n]);
@@ -225,7 +215,7 @@ static void TimedRecordsDraw(void)
 {
     unsigned n;
 
-    panel(TIMED_RECORDS_PANEL);
+    panel(RESULTS_RECORDS_TIMED);
     for (n = 0; n < 3 && g.record_times[n] != 0xFFFF; n++) {
         time_tiles((uint16_t)(0x0194 + 0xC0 * n), g.record_times[n]);
         name_tiles((uint16_t)(0x0194 + 0xC0 * n + 16), g.record_names[n]);
@@ -235,9 +225,9 @@ static void TimedRecordsDraw(void)
 }
 
 /* @routine 07:CAD5 ResultsPanelFAB5 */
-static void ResultsPanelStunt(void) { panel(STUNT_RESULTS_PANEL); step_next(); }
+static void ResultsPanelStunt(void) { panel(RESULTS_PANEL_STUNT); step_next(); }
 /* @routine 07:CB7C ResultsPanelF38E */
-static void ResultsPanelTimed(void) { panel(TIMED_RESULTS_PANEL); step_next(); }
+static void ResultsPanelTimed(void) { panel(RESULTS_PANEL_TIMED); step_next(); }
 
 /* B or START on the records: to `skip` for a placed player, else the next step. */
 static void records_choice(uint8_t skip, int check_skipped)
@@ -268,7 +258,7 @@ static void ResultsMenuPanel(void)
     g.split_stage = 0;
     g.race_again = 0;
     palettes.tile_cycle = 0;
-    panel(RESULTS_MENU_PANEL);
+    panel(RESULTS_PANEL_MENU);
     step_next();
     g.split_stage = 0x02;
 }
@@ -281,7 +271,7 @@ static void RecordTimeTiles(void);
 /* @routine 07:CC4A ResultsPanelFA39 */
 static void ResultsPanelRace(void)
 {
-    panel(RACE_RESULTS_PANEL);
+    panel(RESULTS_PANEL_RACE);
     if (g.race_time[2])
         ResultsTotalTiles();
     if (g.times_bcd[3][2] != 0xFF)
@@ -292,7 +282,7 @@ static void ResultsPanelRace(void)
 /* @routine 07:CC83 ResultsPicture4000: picture $18:C770 to $70:4000. */
 static void ResultsPictureLoad(void)
 {
-    picture_unpack(RESULTS_PICTURE, FX_RESULTS_PICTURE);
+    picture_unpack(RESULTS_OVERLAY, FX_RESULTS_PICTURE);
     step_next();
     g.overlay_state = 0;
 }
@@ -847,7 +837,7 @@ void ChampionshipStagePicture(void)
 
     g.race_again = 0;
     palettes.tile_cycle = 0;
-    picture_unpack(RESULTS_MENU_PANEL, FX_UNPACK_AREA);
+    picture_unpack(RESULTS_PANEL_MENU, FX_UNPACK_AREA);
     for (i = 0; i < 0x440; i++)
         map_byte_set((uint16_t)i, fx_ram[FX_UNPACK_AREA + i]);
     CarSettingsDigits();
