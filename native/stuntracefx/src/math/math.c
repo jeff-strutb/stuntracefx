@@ -137,7 +137,7 @@ uint16_t Mode7ScaleProduct(uint16_t value, int positive, uint8_t divisor, uint8_
  * (x >> 10) + $20 with bit 0 cleared, z (its top five bits >> 5) + $400;
  * returns their sum.
  */
-uint16_t ScaleDp02Dp94(uint16_t *x, uint16_t *z)
+uint16_t AreaCellOf(uint16_t *x, uint16_t *z)
 {
     uint16_t a = asr1(asr1(*x)), b;
 
@@ -258,7 +258,7 @@ Vec16 HeadingFlatSpeedA(int8_t speed, uint8_t heading) { return flat(speed, (uin
 /* @routine 03:BAEB HeadingPitched: the pitch negated. */
 Vec16 HeadingPitched(int8_t speed, uint8_t heading, uint8_t pitch) { return pitched(speed, heading, (uint8_t)-pitch); }
 /* @routine 03:BCC7 HeadingPitchedFrom1F7C: the heading negated. */
-Vec16 HeadingPitchedFrom1F7C(int8_t speed, uint8_t heading, uint8_t pitch) { return pitched(speed, (uint8_t)-heading, pitch); }
+Vec16 HeadingPitchedMirrored(int8_t speed, uint8_t heading, uint8_t pitch) { return pitched(speed, (uint8_t)-heading, pitch); }
 
 Vec16 VectorDoubled(Vec16 v)
 {

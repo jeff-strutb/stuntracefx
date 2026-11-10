@@ -1511,7 +1511,7 @@ void ObjectCountGateStep(Object *o)
     if (!hit(o) || (o->flags25 & 0x01))
         return;
     o->flags25 |= 0x01;
-    HudCountMove19EECopy();
+    HitsToScoreAdd();
     g.stunt_finished = 0x08;
 }
 
@@ -1562,7 +1562,7 @@ void ObjectCountTriggerStep(Object *o)
     }
     if (!(o->flags25 & 0x01)) {
         o->flags25 |= 0x01;
-        HudCountMove19EE(r);
+        HitsCollect(r);
     }
     g.switches_hit[0] = 0x01;
 }
@@ -2796,7 +2796,7 @@ static void bonus_marker_frame(Object *o, void (*shatter_it)(Object *), uint16_t
     marker_bounce_y(o);
     if (!ObjectSyncToRecord(o) || !next_contact())
         return;
-    HudCountUp19EC(o);
+    StuntScoreUp(o);
     shatter_it(o);
     n = ObjectSpawn(kind);
     if (n) {
@@ -2897,7 +2897,7 @@ static int hit_switch_frame(Object *o)
         return 0;
     if (!(o->flags25 & 0x01)) {
         o->flags25 |= 0x01;
-        HudCountMove19EE(r);
+        HitsCollect(r);
     }
     return 1;
 }

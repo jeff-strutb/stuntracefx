@@ -37,13 +37,14 @@ static uint8_t course_index_12(uint8_t entry)
     return (uint8_t)((uint8_t)(((uint8_t)(g.course * 2) + g.course) * 4) + (uint8_t)(entry * 3));
 }
 
-/* @routine 03:EF9F RaceTimeAddD815, 03:EF93 RaceTimeAddD814: the time left gains this course's value. */
-void RaceTimeAddD815(void)
+/* @routine 03:EF9F RaceTimeAddD815, 03:EF93 RaceTimeAddD814 (TimeLeftAddLap3, TimeLeftAddLap2):
+   the time left gains this course's time for the lap ahead ($03:D815 the third, $D814 the second). */
+void TimeLeftAddLap3(void)
 {
     g.time_left = BcdAdd(cart8(0x03, (uint16_t)(0xD815 + course_index_12(g.car[0]))), g.time_left);
 }
 
-void RaceTimeAddD814(void)
+void TimeLeftAddLap2(void)
 {
     g.time_left = BcdAdd(cart8(0x03, (uint16_t)(0xD814 + course_index_12(g.car[0]))), g.time_left);
 }

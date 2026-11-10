@@ -128,7 +128,7 @@ void RaceStartSteps(void)
 /* @routine 07:E2E4 RaceStartGlyphsSteps */
 void RaceStartGlyphsSteps(void)
 {
-    GlyphWordAt1C28();
+    ShowBonusTrax();
     RaceStartSteps();
 }
 
@@ -495,7 +495,7 @@ void RaceLapCrossed(int player)
     }
     v = ++g.laps_counted[player];
     if (v == 0x02) {
-        RaceTimeAddD815();
+        TimeLeftAddLap3();
         g.hud_hold = 0x012C;
         sound_port0_push(0x48);
         g.banner[player] = 0x06;
@@ -512,7 +512,7 @@ void RaceLapCrossed(int player)
         sound_port0_push(0x48);
         return;
     }
-    RaceTimeAddD814();
+    TimeLeftAddLap2();
     g.hud_hold = 0x012C;
     g.banner[player] = 0x04;
     g.banner_timer[player] = 0x17;
@@ -553,10 +553,10 @@ progress:
                 RaceLapCrossed(player);
             return;
         case 0x04:
-            lap_banner(player, GsuF0A5OrF0B4);
+            lap_banner(player, LapBannerRise);
             return;
         case 0x06:
-            lap_banner(player, GsuEEF5OrEFCD);
+            lap_banner(player, LastLapBannerRise);
             return;
         case 0x08:
             lap_banner_wait(player);
@@ -591,7 +591,7 @@ progress:
 void RacePhaseLapP1(void)
 {
     if (!race_resuming())
-        GsuF441Player1();
+        RankBadgePlayer1();
     if (OamStagePause())
         return;
     race_phase(0);
@@ -601,7 +601,7 @@ void RacePhaseLapP1(void)
 void RacePhaseLapP2(void)
 {
     if (!race_resuming())
-        GsuF441Player2();
+        RankBadgePlayer2();
     if (OamStagePause2())
         return;
     race_phase(1);
@@ -616,13 +616,13 @@ void RacePhaseLap(void)
 }
 
 /* @routine 07:E972 PhaseGlyphsFive */
-void PhaseGlyphsFive(void) { GsuF15BFive(); }
+void PhaseGlyphsFive(void) { ShowWordCrash(); }
 /* @routine 07:E976 PhaseGlyphsSix */
 void PhaseGlyphsSix(void) { HudSixGlyphs(); }
 /* @routine 07:EB45 PhaseGlyphsFourB */
-void PhaseGlyphsFourB(void) { GsuF15BFourB(); }
+void PhaseGlyphsFourB(void) { ShowWordDraw(); }
 /* @routine 07:EBA0 PhaseGlyphsFourA */
-void PhaseGlyphsFourA(void) { GsuF15BFourA(); }
+void PhaseGlyphsFourA(void) { ShowWordLose(); }
 
 /* Once the slide out has reached $1F: the race's end; before it, draw. */
 static void race_end_wait(void (*draw)(void))
@@ -739,7 +739,7 @@ static void pause_stage_ten(void)
 /* @routine 07:EB10 PauseResultsP2 */
 void PauseResultsP2(void)
 {
-    GsuF15BThree();
+    ShowWordWin();
     if (g.end_timer) {
         if (--g.end_timer)
             return;
@@ -783,14 +783,14 @@ static void pause_results(void)
 /* @routine 07:EB49 PauseResultsFourB */
 void PauseResultsFourB(void)
 {
-    GsuF15BFourB();
+    ShowWordDraw();
     pause_results();
 }
 
 /* @routine 07:EB4E PauseResults */
 void PauseResults(void)
 {
-    GsuF15BThree();
+    ShowWordWin();
     pause_results();
 }
 

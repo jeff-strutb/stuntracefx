@@ -28,21 +28,22 @@ void GlyphColours(uint8_t b1, uint8_t b2, uint8_t b3)
     fx8_set(FXIN_GLYPH_BYTES + 3, b3);
 }
 
-/* $70:0216 from the word tables at $07:8E3E and $07:8E52 (GsuParam216A, B). */
-static void param_216_a(uint16_t index) { fx16_set(FXIN_PIECE, cart16(0x07, (uint16_t)(0x8E3E + index))); }
-static void param_216_b(uint16_t index) { fx16_set(FXIN_PIECE, cart16(0x07, (uint16_t)(0x8E52 + index))); }
+/* $70:0216 from the word tables at $07:8E3E and $07:8E52 (DigitGlyphSelect, B). */
+static void piece_big_digit(uint16_t index) { fx16_set(FXIN_PIECE, cart16(0x07, (uint16_t)(0x8E3E + index))); }
+static void piece_small_digit(uint16_t index) { fx16_set(FXIN_PIECE, cart16(0x07, (uint16_t)(0x8E52 + index))); }
 
-void GsuParam216A(uint16_t digit) { param_216_a((uint16_t)(digit << 1)); }
+void DigitGlyphSelect(uint16_t digit) { piece_big_digit((uint16_t)(digit << 1)); }
 
 /* @routine 07:8B9B GsuF329Entry: a digit (low four bits) through the table to program $07:F329. */
-static void f329_entry(uint16_t digit)
+static void small_digit(uint16_t digit)
 {
-    param_216_b((uint16_t)((digit & 0x000F) << 1));
+    piece_small_digit((uint16_t)((digit & 0x000F) << 1));
     FxGlyph8x16();
 }
 
-/* @routine 07:A684 GsuF441Player1, 07:A694 GsuF441Player2: program $07:F441, the kind from the player mode. */
-static void f441(uint8_t kind)
+/* @routine 07:A684 GsuF441Player1, 07:A694 GsuF441Player2 (RankBadgePlayer1, 2): program $07:F441,
+   the rank badge (first place or not) by the player's rank. */
+static void rank_badge(uint8_t kind)
 {
     if ((kind & 0x0F) == 1) {
         GlyphColours(0x0F, 0x05, 0x0E);
@@ -56,15 +57,15 @@ static void f441(uint8_t kind)
     FxGlyph24x16();
 }
 
-void GsuF441Player1(void) { f441(g.player_mode[0]); }
-void GsuF441Player2(void) { f441(g.player_mode[1]); }
+void RankBadgePlayer1(void) { rank_badge(g.player_mode[0]); }
+void RankBadgePlayer2(void) { rank_badge(g.player_mode[1]); }
 
 /*
  * @routine 07:85E1 GsuF0A5OrF0B4
  * WHAT IT DOES: The input at $020C, then the split-screen picture rise or
  * the one-player one.
  */
-void GsuF0A5OrF0B4(uint16_t input)
+void LapBannerRise(uint16_t input)
 {
     fx16_set(FXIN_PIECE_Y, input);
     if (g.split_screen) {
@@ -77,7 +78,7 @@ void GsuF0A5OrF0B4(uint16_t input)
 }
 
 /* @routine 07:8619 GsuEEF5OrEFCD: as above, for the last lap's banner. */
-void GsuEEF5OrEFCD(uint16_t input)
+void LastLapBannerRise(uint16_t input)
 {
     fx16_set(FXIN_PIECE_Y, input);
     if (g.split_screen) {
@@ -90,18 +91,18 @@ void GsuEEF5OrEFCD(uint16_t input)
 }
 
 /* @routine 07:9252 GsuDigitPair0E74: the two digits of the byte at $0E74. */
-void GsuDigitPair0E74(void)
+void BonusDigitsDraw(void)
 {
     fx16_set(FXIN_PIECE_W, 0x0010);
     fx16_set(FXIN_PIECE_X, 0x0004);
     fx16_set(FXIN_PIECE_Y, 0x0008);
-    param_216_a((uint16_t)((g.digit_pair >> 4 & 0x000F) << 1));
+    piece_big_digit((uint16_t)((g.digit_pair >> 4 & 0x000F) << 1));
     FxGlyph16RowsFromTop();
-    param_216_a((uint16_t)((g.digit_pair & 0x000F) << 1));
+    piece_big_digit((uint16_t)((g.digit_pair & 0x000F) << 1));
     FxGlyph16RowsFromTop();
 }
 
-static void f15b_setup(uint16_t x, uint16_t y)
+static void word_at(uint16_t x, uint16_t y)
 {
     fx16_set(FXIN_PIECE_H, 0x0020);
     fx16_set(FXIN_PIECE_W, 0x0010);
@@ -109,7 +110,7 @@ static void f15b_setup(uint16_t x, uint16_t y)
     fx16_set(FXIN_PIECE_Y, y);
 }
 
-static void f15b_pieces(const uint16_t *pieces, int n)
+static void word_letters(const uint16_t *pieces, int n)
 {
     for (int i = 0; i < n; i++) {
         fx16_set(FXIN_PIECE, pieces[i]);
@@ -118,47 +119,47 @@ static void f15b_pieces(const uint16_t *pieces, int n)
 }
 
 /* @routine 07:9883 GsuF15BThree */
-void GsuF15BThree(void)
+void ShowWordWin(void)
 {
     static const uint16_t p[3] = {0x9000, 0x8808, 0x881C};
 
-    f15b_setup(0x0030, 0x0018);
+    word_at(0x0030, 0x0018);
     GlyphColours(0x0F, 0x04, 0x05);
-    f15b_pieces(p, 3);
+    word_letters(p, 3);
 }
 
 /* @routine 07:997F GsuF15BFive */
-void GsuF15BFive(void)
+void ShowWordCrash(void)
 {
     static const uint16_t p[5] = {0x8410, 0x8C0C, 0x8408, 0x8C10, 0x8804};
 
-    f15b_setup(0x0018, 0x0018);
+    word_at(0x0018, 0x0018);
     GlyphColours(0x0F, 0x09, 0x0A);
-    f15b_pieces(p, 5);
+    word_letters(p, 5);
 }
 
 /* @routine 07:98F4 GsuF15BFourA */
-void GsuF15BFourA(void)
+void ShowWordLose(void)
 {
     static const uint16_t p[4] = {0x8814, 0x8C00, 0x8C10, 0x8418};
 
-    f15b_setup(0x0028, 0x0018);
+    word_at(0x0028, 0x0018);
     GlyphColours(0x0F, 0x07, 0x08);
-    f15b_pieces(p, 4);
+    word_letters(p, 4);
 }
 
 /* @routine 07:9A24 GsuF15BFourB */
-void GsuF15BFourB(void)
+void ShowWordDraw(void)
 {
     static const uint16_t p[4] = {0x8414, 0x8C0C, 0x8408, 0x9000};
 
-    f15b_setup(0x0028, 0x0018);
+    word_at(0x0028, 0x0018);
     GlyphColours(0x0F, 0x0D, 0x03);
-    f15b_pieces(p, 4);
+    word_letters(p, 4);
 }
 
 /* @routine 07:8653 GsuF15BTwoLines: sixteen pieces, three from ($50, 8) and thirteen from (0, $2C). */
-void GsuF15BTwoLines(uint16_t input)
+void ShowGetAllTheStars(uint16_t input)
 {
     static const uint16_t first[3] = {0x8800, 0x8418, 0x8C14};
     static const uint16_t second[13] = {0x8408, 0x8814, 0x8814, 0x0000, 0x8C14, 0x8804, 0x8418,
@@ -169,10 +170,10 @@ void GsuF15BTwoLines(uint16_t input)
     fx16_set(FXIN_PIECE_X, 0x0050);
     fx16_set(FXIN_PIECE_Y, 0x0008);
     GlyphColours(0xBF, 0xB7, 0xB6);
-    f15b_pieces(first, 3);
+    word_letters(first, 3);
     fx16_set(FXIN_PIECE_X, 0x0000);
     fx16_set(FXIN_PIECE_Y, 0x002C);
-    f15b_pieces(second, 13);
+    word_letters(second, 13);
 }
 
 static void glyph_rows_at(uint16_t input, uint16_t x, const uint16_t *pieces, int n)
@@ -182,7 +183,7 @@ static void glyph_rows_at(uint16_t input, uint16_t x, const uint16_t *pieces, in
     fx16_set(FXIN_PIECE_X, x);
     fx16_set(FXIN_PIECE_Y, 0x0028);
     GlyphColours(0xBF, 0xB7, 0xB6);
-    f15b_pieces(pieces, n);
+    word_letters(pieces, n);
 }
 
 /* @routine 07:8821 GlyphRowsAt32 */
@@ -201,7 +202,7 @@ void GlyphRowsAt56(uint16_t input)
     glyph_rows_at(input, 0x0038, p, 6);
 }
 
-static void fa5a_scale(uint16_t w, uint16_t h, uint16_t u, uint16_t v)
+static void piece_scale(uint16_t w, uint16_t h, uint16_t u, uint16_t v)
 {
     fx16_set(FXIN_PIECE_W, w);
     fx16_set(FXIN_PIECE_H, h);
@@ -209,7 +210,7 @@ static void fa5a_scale(uint16_t w, uint16_t h, uint16_t u, uint16_t v)
     fx16_set(FXIN_PIECE_V, v);
 }
 
-static void fa5a(uint16_t x, uint16_t y, uint16_t piece)
+static void scaled_piece(uint16_t x, uint16_t y, uint16_t piece)
 {
     fx16_set(FXIN_PIECE_X, x);
     fx16_set(FXIN_PIECE_Y, y);
@@ -218,7 +219,7 @@ static void fa5a(uint16_t x, uint16_t y, uint16_t piece)
 }
 
 /* @routine 07:976B GsuFA1BFromTables */
-void GsuFA1BFromTables(void)
+void TimeFrameTailB(void)
 {
     uint16_t v;
 
@@ -237,7 +238,7 @@ void GsuFA1BFromTables(void)
 }
 
 /* @routine 07:9718 GsuFA35FromTables */
-void GsuFA35FromTables(void)
+void TimeFrameTailA(void)
 {
     uint16_t v;
 
@@ -256,74 +257,74 @@ void GsuFA35FromTables(void)
 }
 
 /* @routine 07:92B5 GsuFA5AThree: three pieces around the point. */
-void GsuFA5AThree(void)
+void TimeFrameLeft(void)
 {
     uint16_t x = (uint16_t)(g.hud_point_x - 8), y = g.hud_point_y;
 
-    fa5a_scale(0x0100, 0x0100, 0x0100, 0x0100);
-    fa5a(x, y, 0x1A10);
-    fa5a(x, (uint16_t)(y + 0x18), 0x1B10);
-    fa5a_scale(0x0100, 0x0200, 0x0100, 0x0080);
-    fa5a(x, (uint16_t)(y + 8), 0x1A18);
+    piece_scale(0x0100, 0x0100, 0x0100, 0x0100);
+    scaled_piece(x, y, 0x1A10);
+    scaled_piece(x, (uint16_t)(y + 0x18), 0x1B10);
+    piece_scale(0x0100, 0x0200, 0x0100, 0x0080);
+    scaled_piece(x, (uint16_t)(y + 8), 0x1A18);
 }
 
 /* @routine 07:9486 GsuFA5AThreeShifted */
-void GsuFA5AThreeShifted(void)
+void TimeFrameLeftShifted(void)
 {
     uint16_t x = (uint16_t)(cart16(0x07, (uint16_t)(0x9806 + g.hud_point_index)) + g.hud_point_x);
     uint16_t y = g.hud_point_y;
 
-    fa5a_scale(0x0100, 0x0100, 0x0100, 0x0100);
-    fa5a(x, y, 0x1A12);
-    fa5a(x, (uint16_t)(y + 0x18), 0x1B12);
-    fa5a_scale(0x0100, 0x0200, 0x0100, 0x0080);
-    fa5a(x, (uint16_t)(y + 8), 0x1C18);
+    piece_scale(0x0100, 0x0100, 0x0100, 0x0100);
+    scaled_piece(x, y, 0x1A12);
+    scaled_piece(x, (uint16_t)(y + 0x18), 0x1B12);
+    piece_scale(0x0100, 0x0200, 0x0100, 0x0080);
+    scaled_piece(x, (uint16_t)(y + 8), 0x1C18);
 }
 
 /* @routine 07:9366 GsuFA5ASix */
-void GsuFA5ASix(void)
+void TimeFrameRight(void)
 {
     static const uint16_t dy[6] = {0x0000, 0x0008, 0x0010, 0x0018, 0x0008, 0x0010};
     static const uint16_t piece[6] = {0x1A0E, 0x1A16, 0x1B16, 0x1B0E, 0x1A0E, 0x1B0E};
     uint16_t x = (uint16_t)(cart16(0x07, (uint16_t)(0x9806 + g.hud_point_index)) + g.hud_point_x);
 
-    fa5a_scale(0x0100, 0x0100, 0x0100, 0x0100);
+    piece_scale(0x0100, 0x0100, 0x0100, 0x0100);
     for (int i = 0; i < 6; i++) {
         if (i == 4)
             x = (uint16_t)(x + 8);
-        fa5a(x, (uint16_t)(g.hud_point_y + dy[i]), piece[i]);
+        scaled_piece(x, (uint16_t)(g.hud_point_y + dy[i]), piece[i]);
     }
 }
 
 /* @routine 07:9533 GsuFA5ASixLeft */
-void GsuFA5ASixLeft(void)
+void TimeFrameRightMirrored(void)
 {
     static const uint16_t dy[6] = {0x0000, 0x0008, 0x0010, 0x0018, 0x0008, 0x0010};
     static const uint16_t dx[6] = {0xFFF8, 0xFFF8, 0xFFF8, 0xFFF8, 0xFFF0, 0xFFF0};
     static const uint16_t piece[6] = {0x1A0C, 0x1A14, 0x1B14, 0x1B0C, 0x1A0C, 0x1B0C};
 
-    fa5a_scale(0x0100, 0x0100, 0x0100, 0x0100);
+    piece_scale(0x0100, 0x0100, 0x0100, 0x0100);
     for (int i = 0; i < 6; i++)
-        fa5a((uint16_t)(g.hud_point_x + dx[i]), (uint16_t)(g.hud_point_y + dy[i]), piece[i]);
+        scaled_piece((uint16_t)(g.hud_point_x + dx[i]), (uint16_t)(g.hud_point_y + dy[i]), piece[i]);
 }
 
 /* @routine 07:9660 GsuFA5AFromTables */
-void GsuFA5AFromTables(void)
+void TimeFrameMiddle(void)
 {
     uint16_t i = g.hud_point_index;
 
-    fa5a_scale(cart16(0x07, (uint16_t)(0x97BE + i)), 0x0100, cart16(0x07, (uint16_t)(0x97CA + i)), 0x0100);
-    fa5a(g.hud_point_x, g.hud_point_y, 0x1B18);
+    piece_scale(cart16(0x07, (uint16_t)(0x97BE + i)), 0x0100, cart16(0x07, (uint16_t)(0x97CA + i)), 0x0100);
+    scaled_piece(g.hud_point_x, g.hud_point_y, 0x1B18);
     fx16_set(FXIN_PIECE_H, 0x0100);
     fx16_set(FXIN_PIECE_V, 0x0100);
-    fa5a(g.hud_point_x, (uint16_t)(g.hud_point_y + 0x18), 0x1D18);
+    scaled_piece(g.hud_point_x, (uint16_t)(g.hud_point_y + 0x18), 0x1D18);
     fx16_set(FXIN_PIECE_H, 0x0200);
     fx16_set(FXIN_PIECE_V, 0x0080);
-    fa5a(g.hud_point_x, (uint16_t)(g.hud_point_y + 8), 0x1A55);
+    scaled_piece(g.hud_point_x, (uint16_t)(g.hud_point_y + 8), 0x1A55);
 }
 
 /* @routine 07:833B GsuPiecesStep10CB: steps the counter at $10CB and draws eleven pieces. */
-void GsuPiecesStep10CB(void)
+void ShowLapsToGo(void)
 {
     static const uint16_t piece[11] = {0x800C, 0x8814, 0x8408, 0x8C04, 0x8C10, 0x0000,
                                        0x8C14, 0x8C00, 0x0000, 0x8800, 0x8C00};
@@ -354,8 +355,8 @@ void HudSixGlyphs(void)
     static const uint16_t glyph[6] = {0x8C10, 0x8C04, 0x8814, 0x8408, 0x8C10, 0x8804};
 
     GlyphColours(0x0F, 0x06, 0x0E);
-    f15b_setup(0x0010, 0x0018);
-    f15b_pieces(glyph, 6);
+    word_at(0x0010, 0x0018);
+    word_letters(glyph, 6);
 }
 
 /* A 24 x 40 sprite, piece src. */
@@ -478,17 +479,17 @@ void BigSpritesNine(void)
 }
 
 /* @routine 07:8AA6 GsuF329Sequence: five digits with two separators, at the position set. */
-static void f329_sequence(const uint8_t *digits)
+static void time_digits(const uint8_t *digits)
 {
-    f329_entry(digits[0]);
+    small_digit(digits[0]);
     fx16_set(FXIN_PIECE, 0x980A);
     FxGlyph8x16();
-    f329_entry(digits[1]);
-    f329_entry(digits[2]);
+    small_digit(digits[1]);
+    small_digit(digits[2]);
     fx16_set(FXIN_PIECE, 0x980C);
     FxGlyph8x16();
-    f329_entry(digits[3]);
-    f329_entry(digits[4]);
+    small_digit(digits[3]);
+    small_digit(digits[4]);
 }
 
 static void times_at(uint16_t y)
@@ -504,7 +505,7 @@ void HudHoldDraw(void)
         return;
     GlyphColours(0xBF, 0xB3, 0xBE);
     times_at(0x006C);
-    f329_sequence(g.best_digits);
+    time_digits(g.best_digits);
 }
 
 /* @routine 04:DDB0 GlyphAtY60: a glyph at (x, 96). */
@@ -635,16 +636,16 @@ static void glyph_list_message_and_time(uint16_t index, uint8_t min, uint8_t sec
 }
 
 /* @routine 07:A03F GlyphWordAt1C28 */
-void GlyphWordAt1C28(void)
+void ShowBonusTrax(void)
 {
     static const uint16_t g1[5] = {0x840C, 0x8C00, 0x881C, 0x8C18, 0x8C10};
     static const uint16_t g2[4] = {0x8C14, 0x8C0C, 0x8408, 0x9004};
 
-    f15b_setup(0x001C, 0x0028);
+    word_at(0x001C, 0x0028);
     GlyphColours(0xBF, 0xBC, 0xBD);
-    f15b_pieces(g1, 5);
+    word_letters(g1, 5);
     fx16_set(FXIN_PIECE_X, (uint16_t)(fx16(FXIN_PIECE_X) + 4));
-    f15b_pieces(g2, 4);
+    word_letters(g2, 4);
 }
 
 /* Three rows of three 8 x 8 glyphs: the glyphs are row * $100 + $1A, $1C, $1E. */
@@ -913,7 +914,7 @@ static void packed_time_draw(uint16_t packed)
 
     TimeUnpackBcd(packed, &min, &sec, &hund);
     TimeDigitsStore((uint8_t)min, (uint8_t)sec, (uint8_t)hund);
-    f329_sequence(g.time_digits_a);
+    time_digits(g.time_digits_a);
 }
 
 /* @routine 07:8B17 HudTimesPackedDraw */
@@ -951,7 +952,7 @@ void HudTimesDraw(void)
     if (g.record_times[0] == 0xFFFF) {
         GlyphColours(0xBF, 0xB3, 0xBE);
         times_at(0x006C);
-        f329_sequence(g.best_digits);
+        time_digits(g.best_digits);
         return;
     }
     if (g.lap_shown) {
@@ -965,10 +966,10 @@ void HudTimesDraw(void)
     else
         GlyphColours(0xBF, 0xB2, 0xB3);
     times_at(0x0058);
-    f329_sequence(g.time_digits_a);
+    time_digits(g.time_digits_a);
     lead_colours((int8_t)g.lead);
     times_at(0x006C);
-    f329_sequence(g.best_digits);
+    time_digits(g.best_digits);
 }
 
 /* @routine 07:A7AE HudLeadWordDraw */
@@ -993,7 +994,7 @@ void HudLeadWordDraw(void)
 
 static void lap_digit(uint8_t digit)
 {
-    param_216_a((uint16_t)(digit << 1));
+    piece_big_digit((uint16_t)(digit << 1));
     FxGlyph16x32();
 }
 

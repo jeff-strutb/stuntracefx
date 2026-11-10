@@ -21,7 +21,7 @@ uint16_t ScaleSevenEighths(uint16_t v);
 uint16_t ScaleFifteenSixteenths(uint16_t v);
 uint16_t ScaleFiveThirtySeconds(uint16_t v);
 uint16_t Mode7ScaleProduct(uint16_t value, int positive, uint8_t divisor, uint8_t factor);
-uint16_t ScaleDp02Dp94(uint16_t *x, uint16_t *z);
+uint16_t AreaCellOf(uint16_t *x, uint16_t *z);
 
 /* Moving `value` toward `target` by a share of the difference, at least the
    minimum either way; *moved is 0 when it was already there. */
@@ -46,7 +46,7 @@ Vec16 HeadingFlatMirrored(int8_t speed, uint8_t heading);
 Vec16 HeadingFlatQuarterTurn(int8_t speed, uint8_t heading);
 Vec16 HeadingFlatSpeedA(int8_t speed, uint8_t heading);
 Vec16 HeadingPitched(int8_t speed, uint8_t heading, uint8_t pitch);
-Vec16 HeadingPitchedFrom1F7C(int8_t speed, uint8_t heading, uint8_t pitch);
+Vec16 HeadingPitchedMirrored(int8_t speed, uint8_t heading, uint8_t pitch);
 Vec16 VectorDoubled(Vec16 v);
 
 /* Rotating 8-bit vectors by an 8-bit angle; the two results are sign-extended. */

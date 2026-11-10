@@ -46,20 +46,20 @@ Folded into other converted code
   04:DD88 GlyphRowY60From3 -> hud/glyphs.c GlyphRowY60From0's entries
   04:DD95 GlyphRowY60From4 -> hud/glyphs.c GlyphRowY60From0's entries
   04:DDA2 GlyphRowY60From5 -> hud/glyphs.c GlyphRowY60From0's entries
-  07:8E34 GsuParam216B -> hud/glyphs.c param_216_b
+  07:8E34 GsuParam216B -> hud/glyphs.c piece_small_digit
   07:AACE SoftResetLong -> race/flow.c SoftResetCheck
   07:AB88 SoftResetApuLong -> audio SoftResetApu
   07:B93C RecordSlotCopy0 -> hud/lap_time.c record_move_down
   07:B948 RecordSlotCopy3 -> hud/lap_time.c record_move_down
   07:DBB8 TimeUpPhaseSlideIn -> race/player_stats.c TimeUpPhaseStep, phase 2
   07:DBBC TimeUpPhaseSlideOut -> race/player_stats.c TimeUpPhaseStep, phase 4
-  07:E22B PhaseDispatchE232 -> race/player_stats.c phase_table_e232
-  07:E246 PhaseDispatchE24F -> race/player_stats.c phase_table_e24f
-  07:E9C1 LapBannerGrow -> race/phases.c lap_banner (with GsuF0A5OrF0B4)
-  07:E9E1 LapBannerGrowLast -> race/phases.c lap_banner (with GsuEEF5OrEFCD)
+  07:E22B PhaseDispatchE232 -> race/player_stats.c phases_one_player
+  07:E246 PhaseDispatchE24F -> race/player_stats.c phases_two_players_p1
+  07:E9C1 LapBannerGrow -> race/phases.c lap_banner (with LapBannerRise)
+  07:E9E1 LapBannerGrowLast -> race/phases.c lap_banner (with LastLapBannerRise)
   07:EBDC PhaseNothingEBDC -> PhaseNothing (an RTS other phases' tables name)
   07:ECF3 PhaseNothingECF3 -> PhaseNothing
-  08:83E8 ScaleDp02Dp94Long -> math/math.c ScaleDp02Dp94
+  08:83E8 ScaleDp02Dp94Long -> math/math.c AreaCellOf
   0B:E2C5 ApproachTargetFull -> frame_state.brightness_target = 15 where the menus set it
   0B:E2CF ApproachTargetZero -> frame_state.brightness_target = 0 where the menus set it
   7E:A467 WindowTable7FLong -> video WindowTable7F

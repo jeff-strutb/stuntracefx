@@ -18,7 +18,7 @@ static uint16_t size_grow(void) { return cart16(0x07, (uint16_t)(0x918F + g.hud_
 
 static void digit(uint16_t d)
 {
-    GsuParam216A(d);
+    DigitGlyphSelect(d);
     FxGlyph16RowsFromTop();
 }
 
@@ -31,7 +31,7 @@ void GsuTimeDigits(void)
     fx16_set(FXIN_PIECE_Y, 0x0008);
     fx16_set(FXIN_PIECE_W, 0x0010);
     if (v >= 0x0100) {
-        GsuParam216A((v >> 8) & 0x000F);
+        DigitGlyphSelect((v >> 8) & 0x000F);
         fx16_set(FXIN_PIECE_X, 0x009E);
         FxGlyph16RowsFromTop();
         fx16_set(FXIN_PIECE_X, 0x00AC);
@@ -63,7 +63,7 @@ static void bonus_digits_grow(void)
     if (!g.time_shown)
         return;
     GlyphColours(0xBF, 0xB7, 0xB6);
-    GsuDigitPair0E74();
+    BonusDigitsDraw();
 }
 
 /* @routine 07:90EE TimeDigitBytes: the digits' colours by the time kept. */
@@ -88,17 +88,17 @@ static void bonus_x_from_table(void)
 static void draw_mirrored(void)
 {
     GlyphColours(0xBF, 0xB7, 0xB6);
-    GsuFA5AThreeShifted();
-    GsuFA5AFromTables();
-    GsuFA5ASixLeft();
-    GsuFA35FromTables();
+    TimeFrameLeftShifted();
+    TimeFrameMiddle();
+    TimeFrameRightMirrored();
+    TimeFrameTailA();
 }
 
 static void draw_bonus_then_time(void)
 {
     time_digit_bytes();
     fx16_set(FXIN_PIECE_H, size_grow());
-    GsuDigitPair0E74();
+    BonusDigitsDraw();
     time_digit_bytes();
     fx16_set(FXIN_PIECE_H, 0x0020);
     time_digit_bytes();
@@ -111,12 +111,12 @@ static void draw_frame(void)
 {
     if (g.time_shown) {
         GlyphColours(0xBF, 0xB7, 0xB6);
-        GsuFA5AThree();
-        GsuFA5AFromTables();
-        GsuFA5ASix();
-        GsuFA35FromTables();
+        TimeFrameLeft();
+        TimeFrameMiddle();
+        TimeFrameRight();
+        TimeFrameTailA();
     } else {
-        GsuPiecesStep10CB();
+        ShowLapsToGo();
     }
 }
 
@@ -133,10 +133,10 @@ static void draw_time(void)
 static void draw_pieces(void)
 {
     g.hud_point_x = 0x0030;
-    GsuFA5AThree();
-    GsuFA5AFromTables();
-    GsuFA5ASix();
-    GsuFA1BFromTables();
+    TimeFrameLeft();
+    TimeFrameMiddle();
+    TimeFrameRight();
+    TimeFrameTailB();
 }
 
 /* State 6's count: the bonus into the time, the step at a time. */
@@ -270,7 +270,7 @@ void TimeBonusTally(void)
         g.hud_point_x = 0x0037;
         time_digit_bytes();
         fx16_set(FXIN_PIECE_H, size_grow());
-        GsuDigitPair0E74();
+        BonusDigitsDraw();
         time_digits_grow();
         draw_mirrored();
         return;
@@ -314,7 +314,7 @@ static void transfer_digits(void)
 {
     GlyphColours(0xBF, 0xBA, 0xB9);
     fx16_set(FXIN_PIECE_H, g.time_bonus_2);
-    GsuDigitPair0E74();
+    BonusDigitsDraw();
 }
 
 /*
@@ -389,21 +389,21 @@ void TimeLeftDigits(void)
     }
     if (v >= 0x0100) {
         g.time_left_shown = v;
-        GsuParam216A((v >> 8) & 0x000F);
+        DigitGlyphSelect((v >> 8) & 0x000F);
         GlyphColours(0xBF, 0xB5, 0xBB);
         fx16_set(FXIN_PIECE_X, 0x009E);
         fx16_set(FXIN_PIECE_Y, 0x0008);
         FxGlyph16x32();
         fx16_set(FXIN_PIECE_X, 0x00AC);
-        GsuParam216A((v >> 4) & 0x000F);
+        DigitGlyphSelect((v >> 4) & 0x000F);
         FxGlyph16x32();
-        GsuParam216A(v & 0x000F);
+        DigitGlyphSelect(v & 0x000F);
         FxGlyph16x32();
         return;
     }
     if (v >= 0x0010) {
         g.time_left_shown = v;
-        GsuParam216A(v >> 4);
+        DigitGlyphSelect(v >> 4);
         if (v >= 0x0020)
             GlyphColours(0xBF, 0xB5, 0xBB);
         else
@@ -411,7 +411,7 @@ void TimeLeftDigits(void)
         fx16_set(FXIN_PIECE_X, 0x00AC);
         fx16_set(FXIN_PIECE_Y, 0x0008);
         FxGlyph16x32();
-        GsuParam216A(v & 0x000F);
+        DigitGlyphSelect(v & 0x000F);
         FxGlyph16x32();
         return;
     }
@@ -419,7 +419,7 @@ void TimeLeftDigits(void)
         g.time_left_shown = v;
         SoundPort0QueuePush(0x42);
     }
-    GsuParam216A(v);
+    DigitGlyphSelect(v);
     {
         uint16_t at = (uint16_t)(0x8DDA + (uint16_t)(((g.countdown_fraction >> 8) >> 4) * 8));
 
@@ -435,12 +435,12 @@ void TimeLeftDigits(void)
 }
 
 /* @routine 07:925C GsuDigitPair0E74At: the two digits of the bonus at (x, 8). */
-void GsuDigitPair0E74At(uint16_t x)
+void BonusDigitsDrawAt(uint16_t x)
 {
     fx16_set(FXIN_PIECE_X, x);
     fx16_set(FXIN_PIECE_Y, 0x0008);
-    GsuParam216A((g.digit_pair >> 4) & 0x000F);
+    DigitGlyphSelect((g.digit_pair >> 4) & 0x000F);
     FxGlyph16RowsFromTop();
-    GsuParam216A(g.digit_pair & 0x000F);
+    DigitGlyphSelect(g.digit_pair & 0x000F);
     FxGlyph16RowsFromTop();
 }

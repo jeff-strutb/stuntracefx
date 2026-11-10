@@ -243,7 +243,7 @@ void ObjectBucketRemove(Object *o)
  */
 void ObjectRebucket(Object *o)
 {
-    uint16_t x = o->x, z = o->z, key = ScaleDp02Dp94(&x, &z);
+    uint16_t x = o->x, z = o->z, key = AreaCellOf(&x, &z);
 
     if (key == o->bucket)
         return;

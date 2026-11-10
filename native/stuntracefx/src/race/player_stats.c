@@ -99,7 +99,7 @@ static void phase_ready_long(void) { RaceReadyLong(); }
 static void time_up_race_p0(void) { TimeUpRace(0); }
 
 /* The race phases by the table at $07:E232. */
-static void phase_table_e232(void)
+static void phases_one_player(void)
 {
     static const PhaseFn t[] = {
         phase_ready_long, RaceStartTimerSteps, ResultsPanelSteps, RacePhaseLap,
@@ -113,7 +113,7 @@ static void phase_table_e232(void)
 }
 
 /* The race phases by the table at $07:E24F, two players, player 1's side. */
-static void phase_table_e24f(void)
+static void phases_two_players_p1(void)
 {
     static const PhaseFn t[] = {
         phase_ready_long, RaceStartTimerSteps, PhaseNothing, RacePhaseLapP1,
@@ -141,10 +141,10 @@ static void player_two_frame_work(void)
 }
 
 /* @routine 07:DCEC PlayerStatsThenPhaseE232 */
-static void stats_then_phase_e232(void)
+static void stats_then_phases_one_player(void)
 {
     player_one_stats();
-    phase_table_e232();
+    phases_one_player();
 }
 
 /*
@@ -153,7 +153,7 @@ static void stats_then_phase_e232(void)
  * 8 or more, the fade out and, once it is done, the restart; otherwise the
  * phase by the table at $07:DD35.
  */
-static void stats_then_phase_dd35(void)
+static void stats_then_phases_battle_demo(void)
 {
     static const PhaseFn t[] = {
         RaceReadyShort, RaceStartTimer, ResultsPanelSteps, RacePhaseLap,
@@ -186,7 +186,7 @@ void RaceSoundsPlayer1(void)
         g.current_player = 0;
         EngineSoundsPlayer1(0, frame_state.pressed_copy[0], frame_state.held[0]);
     }
-    phase_table_e24f();
+    phases_two_players_p1();
     race_resume_done();
     if (race_flow_stopped())
         return;
@@ -284,7 +284,7 @@ static void player_one_phase_tally(void)
     g.glyph_sprite_x[0] = a;
     fx16_set(FXIN_PIECE_H, 0x0020);
     GlyphColours(0xBF, 0xBA, 0xB9);
-    GsuDigitPair0E74At(g.glyph_sprite_x[0]);
+    BonusDigitsDrawAt(g.glyph_sprite_x[0]);
     GlyphSpritesDrawAll();
 }
 
@@ -386,7 +386,7 @@ static void stunt_panel_wait(void)
 /* @routine 07:E1AE StuntPanelCount */
 static void stunt_panel_count(void)
 {
-    GsuF15BTwoLines(stunt_count_byte());
+    ShowGetAllTheStars(stunt_count_byte());
     stunt_count_down();
 }
 
@@ -483,7 +483,7 @@ static int player_car_raised(void)
 static void hud_mode_two(void)
 {
     g.clock_step = player_car_raised() ? 0x0214 : 0x0182;
-    stats_then_phase_dd35();
+    stats_then_phases_battle_demo();
     if (race_flow_stopped())
         return;
     HudTimesDraw();
@@ -511,7 +511,7 @@ static void hud_mode_zero(void)
         TimeLeftDigits();
         TimeBonusTransfer();
     } else {
-        stats_then_phase_e232();
+        stats_then_phases_one_player();
         if (race_flow_stopped())
             return;
         TimeBonusTally();

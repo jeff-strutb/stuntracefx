@@ -47,11 +47,11 @@ void ObjectFaceTied(Camera *cam)
         cam->roll = 0;
 }
 
-/* the origin ScaleDp02Dp94 makes from a place: its key, then the rescaled
+/* the origin AreaCellOf makes from a place: its key, then the rescaled
    x and z */
 static void area_origin(uint16_t *out, uint16_t x, uint16_t z)
 {
-    out[0] = ScaleDp02Dp94(&x, &z);
+    out[0] = AreaCellOf(&x, &z);
     out[1] = x;
     out[2] = z;
 }

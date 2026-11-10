@@ -64,8 +64,8 @@ void race_session_begin(void);
 int race_session_update(void);
 
 void RaceTimeInit(void);
-void RaceTimeAddD814(void);
-void RaceTimeAddD815(void);
+void TimeLeftAddLap2(void);
+void TimeLeftAddLap3(void);
 void RaceClockStep(void);
 void LapSplit(int offset);
 void LapSplitTimes(int offset);
@@ -192,7 +192,7 @@ void TimeUpPhaseStep(void);
 void TimeBonusTally(void);
 void TimeBonusTransfer(void);
 void TimeLeftDigits(void);
-void GsuDigitPair0E74At(uint16_t x);
+void BonusDigitsDrawAt(uint16_t x);
 
 /* hud_setup.c */
 void RaceHudSetup(void);

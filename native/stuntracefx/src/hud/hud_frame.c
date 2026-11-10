@@ -94,7 +94,7 @@ void HudDigitSprites62(void)
 }
 
 /* @routine 09:C072 HudCountUp19EC: an object's flag set, the count up, sound $3C. */
-void HudCountUp19EC(Object *o)
+void StuntScoreUp(Object *o)
 {
     uint8_t v = g.stunt_score_high;
 
@@ -107,21 +107,21 @@ void HudCountUp19EC(Object *o)
 }
 
 /* @routine 09:C0AB HudCountMove19EECopy */
-void HudCountMove19EECopy(void)
+void HitsToScoreAdd(void)
 {
     g.stunt_score_add = (uint8_t)g.hits_bcd;
     g.hits_bcd = 0;
 }
 
 /* @routine 09:C08E HudCountMove19EE: unless time-up is shown ($0E59): sound $35, the record's lift, the count moved. */
-void HudCountMove19EE(uint16_t rec)
+void HitsCollect(uint16_t rec)
 {
     if (g.time_up_shown)
         return;
     sound_port0_push(0x35);
     GsuRecordRaise6A(rec, 0x7F);
     GsuRecordLower82(rec, 0x7F);
-    HudCountMove19EECopy();
+    HitsToScoreAdd();
 }
 
 /*
