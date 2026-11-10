@@ -667,9 +667,15 @@ filtered or scaled; one path for every backend.
   part of it (rolling digits cut to their rows); `hud.c`'s scaled sprites ask `fx_glyph_scaled` to draw the whole sprite from
   its geometry at its scale, cut to the sprite's box and the view as the rows were. Anything else is drawn as before.
 - Compiled on macOS and iOS; not run in the game (the sheets were made by a tool built from the game's own files).
-- **Not done yet:** the other HUD pictures in these banks (the pieces sheet at $15:$9A00, the rank badges, Stunt Trax's
-  marks, the lap banner's LAP 2 FINAL at $15:$3D00), the console's sprite and background art (the race panel's digits and
-  MPH, gauges, map markers, panels) and the menu screens, and a census of the 3D faces' textures beyond the patterns.
+- **The HUD's other draw-list pictures** (13): the time frame's sliding words EXTRA TIME and TIME EXTEND ($15:$1C00, $1E00,
+  outlined as the fonts: 38 and 45 off), the lap banner LAP 2 FINAL ($15:$3D00, 112 x 24, outlined without a shadow: 14),
+  the frame's pieces cut from their region's shapes (the diamond 0, the square 0, the end an octagon of 45-degree corners
+  0, the bar 0, the tail's U 8), Stunt Trax's marks (the E 0; the used mark, two bars crossing with sharp notches, 0),
+  and as colour layers each a region over the one before: the rank badges RANK 1 / RANK 2 and the LAP badge, whose
+  lettering is strokes a texel wide, kept as drawn (straight edges on the texel lines; 0 each). The diamond, the used
+  mark and the octagon were built by hand.
+- **Not done yet:** the console's sprite and background art (the race panel's digits and MPH, gauges, map markers,
+  panels) and the menu screens, and a census of the 3D faces' textures beyond the patterns.
 
 ### Stage 11. Whole game
 Finder zero on `native/stuntracefx`; section 8's criteria; every play through `nshvc-check`; every reachable platform.

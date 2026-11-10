@@ -202,7 +202,7 @@ static const FxArtCorner big16_quote_0[] = { { 11.02f, 0.94f, 3.25f }, { 11.02f,
 static const FxArtLoop big16_quote[] = { { 10, big16_quote_0 } };
 static const FxArtLayer big16_quote_fill[] = { { 3, 1, big16_quote } };
 
-/* the 16 x 32 glyph '"' ($15:$9018): 2 loops, 16 corners (2 sharp), radii 1, 2.5, 3, 5, 5.9, 6, 6.1; 8 off */
+/* the 16 x 32 glyph '\"' ($15:$9018): 2 loops, 16 corners (2 sharp), radii 1, 2.5, 3, 5, 5.9, 6, 6.1; 8 off */
 static const FxArtCorner big16_quotes_0[] = { { 7.0f, 1.0f, 3.01f }, { 7.0f, 10.21f, 5.0f }, { 3.39f, 14.97f, 2.5f }, { 1.01f, 14.97f, 1.02f }, { 1.01f, 10.79f, 5.99f }, { 3.59f, 9.0f, 0.0f }, { 0.98f, 7.18f, 6.09f }, { 0.98f, 1.0f, 3.0f } };
 static const FxArtCorner big16_quotes_1[] = { { 14.0f, 1.0f, 3.0f }, { 14.0f, 10.2f, 5.0f }, { 10.37f, 14.97f, 2.5f }, { 8.02f, 14.97f, 1.02f }, { 8.02f, 10.77f, 5.95f }, { 10.58f, 9.0f, 0.0f }, { 8.0f, 7.2f, 6.03f }, { 8.0f, 1.0f, 3.0f } };
 static const FxArtLoop big16_quotes[] = { { 8, big16_quotes_0 }, { 8, big16_quotes_1 } };
@@ -420,7 +420,7 @@ static const FxArtCorner small8_quote_0[] = { { 2.0f, 0.85f, 0.5f }, { 5.15f, 0.
 static const FxArtLoop small8_quote[] = { { 8, small8_quote_0 } };
 static const FxArtLayer small8_quote_fill[] = { { 3, 1, small8_quote } };
 
-/* the 8 x 16 glyph '"' ($15:$980C): 2 loops, 16 corners (2 sharp), radii 0.4, 0.5, 0.9, 1, 1.2, 1.5, 2.3, 2.4; 11 off, built by hand */
+/* the 8 x 16 glyph '\"' ($15:$980C): 2 loops, 16 corners (2 sharp), radii 0.4, 0.5, 0.9, 1, 1.2, 1.5, 2.3, 2.4; 11 off, built by hand */
 static const FxArtCorner small8_quotes_0[] = { { 0.93f, 1.04f, 0.47f }, { 3.58f, 1.04f, 0.93f }, { 3.58f, 4.37f, 1.25f }, { 2.43f, 5.91f, 0.4f }, { 0.81f, 5.91f, 0.51f }, { 0.81f, 4.34f, 2.34f }, { 1.81f, 3.36f, 0.0f }, { 0.93f, 2.59f, 2.38f } };
 static const FxArtCorner small8_quotes_1[] = { { 4.08f, 0.84f, 0.52f }, { 7.17f, 0.84f, 0.96f }, { 7.17f, 4.56f, 1.5f }, { 5.88f, 6.03f, 0.4f }, { 3.98f, 6.03f, 0.49f }, { 3.98f, 4.41f, 2.4f }, { 5.02f, 3.52f, 0.0f }, { 4.08f, 2.6f, 2.4f } };
 static const FxArtLoop small8_quotes[] = { { 8, small8_quotes_0 }, { 8, small8_quotes_1 } };
@@ -565,6 +565,204 @@ static const FxArtCorner places_r_0[] = { { 7.72f, 9.0f, 3.5f }, { 11.49f, 9.0f,
 static const FxArtLoop places_r[] = { { 14, places_r_0 } };
 static const FxArtLayer places_r_fill[] = { { 3, 1, places_r } };
 
+/* ---- the HUD's other pictures in bank $15: the time frame's words and pieces, the lap banner, the badges and marks ---- */
+
+/* the HUD piece 'EXTRA TIME' ($15:$1C00): 11 loops, 131 corners (49 sharp), radii 0.1, 0.2, 0.6, 0.7, 0.8, 1, 1.2, 1.5, 1.9, 2, 2.1, 2.2, 2.7, 3, 4.8, 5, 9.3, 14.9, 18.1; 38 off */
+static const FxArtCorner piece_extra_time_0[] = { { 9.0f, 1.0f, 1.5f }, { 9.0f, 4.0f, 1.5f }, { 4.0f, 4.0f, 0.0f }, { 4.0f, 6.0f, 0.0f }, { 8.0f, 6.0f, 1.5f }, { 8.0f, 9.0f, 1.5f }, { 4.0f, 9.0f, 0.0f }, { 4.0f, 11.0f, 0.0f }, { 9.0f, 11.0f, 1.5f }, { 9.0f, 14.0f, 1.5f }, { 1.0f, 14.0f, 1.5f }, { 1.0f, 1.0f, 1.5f } };
+static const FxArtCorner piece_extra_time_1[] = { { 13.0f, 1.0f, 1.5f }, { 13.0f, 5.5f, 0.0f }, { 15.0f, 5.5f, 0.0f }, { 15.0f, 1.0f, 1.5f }, { 18.0f, 1.0f, 1.5f }, { 18.0f, 5.49f, 2.06f }, { 16.69f, 6.0f, 0.0f }, { 16.63f, 6.0f, 0.0f }, { 16.63f, 9.0f, 0.0f }, { 16.69f, 9.0f, 0.0f }, { 18.0f, 9.51f, 2.06f }, { 18.0f, 14.0f, 1.5f }, { 15.0f, 14.0f, 1.5f }, { 15.0f, 9.5f, 0.0f }, { 13.0f, 9.5f, 0.0f }, { 13.0f, 14.0f, 1.5f }, { 10.0f, 14.0f, 1.5f }, { 10.0f, 9.51f, 2.06f }, { 11.31f, 9.0f, 0.0f }, { 11.37f, 9.0f, 0.0f }, { 11.37f, 6.0f, 0.0f }, { 11.31f, 6.0f, 0.0f }, { 10.0f, 5.49f, 2.06f }, { 10.0f, 1.0f, 1.5f } };
+static const FxArtCorner piece_extra_time_2[] = { { 28.0f, 1.0f, 0.75f }, { 28.0f, 5.46f, 2.25f }, { 24.81f, 4.0f, 0.0f }, { 25.0f, 3.99f, 0.18f }, { 25.0f, 14.0f, 1.5f }, { 21.81f, 14.0f, 1.5f }, { 21.81f, 4.92f, 9.34f }, { 22.0f, 4.0f, 0.0f }, { 19.0f, 5.37f, 2.12f }, { 19.0f, 1.0f, 1.0f } };
+static const FxArtCorner piece_extra_time_3[] = { { 37.0f, 1.0f, 3.0f }, { 37.0f, 6.54f, 1.86f }, { 35.82f, 7.0f, 0.0f }, { 35.87f, 7.13f, 0.68f }, { 35.87f, 7.73f, 2.7f }, { 35.82f, 8.0f, 0.0f }, { 37.0f, 8.46f, 1.86f }, { 37.0f, 14.0f, 1.5f }, { 34.0f, 14.0f, 1.5f }, { 34.0f, 9.0f, 0.0f }, { 32.0f, 9.0f, 0.0f }, { 32.0f, 14.0f, 1.5f }, { 29.0f, 14.0f, 1.5f }, { 29.0f, 1.0f, 1.5f } };
+static const FxArtCorner piece_extra_time_4[] = { { 32.0f, 6.0f, 0.0f }, { 34.0f, 6.0f, 0.0f }, { 34.0f, 4.0f, 0.0f }, { 32.0f, 4.0f, 0.0f } };
+static const FxArtCorner piece_extra_time_5[] = { { 46.0f, 1.0f, 3.0f }, { 46.0f, 14.0f, 1.5f }, { 43.0f, 14.0f, 1.5f }, { 43.0f, 9.0f, 0.0f }, { 41.0f, 9.0f, 0.0f }, { 41.0f, 14.0f, 1.5f }, { 38.0f, 14.0f, 1.5f }, { 38.0f, 1.0f, 3.0f } };
+static const FxArtCorner piece_extra_time_6[] = { { 41.0f, 6.0f, 0.0f }, { 43.0f, 6.0f, 0.0f }, { 43.0f, 4.0f, 0.0f }, { 41.0f, 4.0f, 0.0f } };
+static const FxArtCorner piece_extra_time_7[] = { { 61.0f, 1.0f, 0.75f }, { 61.0f, 5.46f, 2.25f }, { 57.81f, 4.0f, 0.0f }, { 58.0f, 3.99f, 0.18f }, { 58.0f, 14.0f, 1.5f }, { 54.81f, 14.0f, 1.5f }, { 54.81f, 4.92f, 9.34f }, { 55.0f, 4.0f, 0.0f }, { 52.0f, 5.37f, 2.12f }, { 52.0f, 1.0f, 1.0f } };
+static const FxArtCorner piece_extra_time_8[] = { { 67.0f, 1.0f, 0.75f }, { 67.0f, 3.54f, 1.86f }, { 65.81f, 4.0f, 0.0f }, { 66.0f, 3.69f, 0.1f }, { 66.0f, 11.31f, 0.1f }, { 65.81f, 11.0f, 0.0f }, { 67.0f, 11.46f, 1.86f }, { 67.0f, 14.0f, 0.75f }, { 62.0f, 14.0f, 1.25f }, { 62.0f, 11.58f, 1.99f }, { 63.0f, 11.0f, 0.0f }, { 62.63f, 9.22f, 18.13f }, { 62.63f, 5.61f, 14.86f }, { 63.0f, 4.0f, 0.0f }, { 62.0f, 3.42f, 1.99f }, { 62.0f, 1.0f, 1.25f } };
+static const FxArtCorner piece_extra_time_9[] = { { 71.06f, 1.0f, 5.0f }, { 72.5f, 3.5f, 0.0f }, { 73.94f, 1.0f, 5.0f }, { 77.0f, 1.0f, 0.0f }, { 77.0f, 14.0f, 1.5f }, { 74.0f, 14.0f, 1.5f }, { 74.0f, 6.8f, 0.0f }, { 73.5f, 6.8f, 4.76f }, { 73.0f, 6.7f, 0.0f }, { 73.37f, 7.5f, 0.57f }, { 71.63f, 7.5f, 0.57f }, { 72.0f, 6.7f, 0.0f }, { 71.5f, 6.8f, 4.76f }, { 71.0f, 6.8f, 0.0f }, { 71.0f, 14.0f, 1.25f }, { 68.0f, 14.0f, 1.5f }, { 68.0f, 1.0f, 0.0f } };
+static const FxArtCorner piece_extra_time_10[] = { { 86.0f, 1.0f, 1.5f }, { 86.0f, 4.0f, 1.5f }, { 81.0f, 4.0f, 0.0f }, { 81.0f, 6.0f, 0.0f }, { 85.0f, 6.0f, 1.5f }, { 85.0f, 9.0f, 1.5f }, { 81.0f, 9.0f, 0.0f }, { 81.0f, 11.0f, 0.0f }, { 86.0f, 11.0f, 1.5f }, { 86.0f, 14.0f, 1.5f }, { 78.0f, 14.0f, 1.5f }, { 78.0f, 1.0f, 1.5f } };
+static const FxArtLoop piece_extra_time[] = { { 12, piece_extra_time_0 }, { 24, piece_extra_time_1 }, { 10, piece_extra_time_2 }, { 14, piece_extra_time_3 }, { 4, piece_extra_time_4 }, { 8, piece_extra_time_5 }, { 4, piece_extra_time_6 }, { 10, piece_extra_time_7 }, { 16, piece_extra_time_8 }, { 17, piece_extra_time_9 }, { 12, piece_extra_time_10 } };
+static const FxArtLayer piece_extra_time_fill[] = { { 3, 11, piece_extra_time } };
+
+/* the HUD piece 'TIME EXTEND' ($15:$1E00): 11 loops, 134 corners (43 sharp), radii 0, 0.5, 0.6, 0.8, 1, 1.2, 1.3, 1.4, 1.5, 1.8, 1.9, 2, 2.1, 2.2, 2.3, 2.5, 3.7, 3.8, 3.9, 4.9, 7.4, 8; 45 off */
+static const FxArtCorner piece_time_extend_0[] = { { 9.97f, 1.03f, 1.0f }, { 9.97f, 5.55f, 2.19f }, { 6.81f, 4.0f, 0.0f }, { 7.0f, 4.84f, 7.96f }, { 7.0f, 13.98f, 1.5f }, { 3.94f, 13.98f, 1.51f }, { 3.94f, 4.35f, 3.71f }, { 4.01f, 3.99f, 0.0f }, { 1.01f, 5.41f, 2.1f }, { 1.01f, 1.03f, 1.02f } };
+static const FxArtCorner piece_time_extend_1[] = { { 15.94f, 1.02f, 1.24f }, { 15.94f, 3.52f, 1.9f }, { 14.84f, 4.03f, 0.0f }, { 15.0f, 4.8f, 7.41f }, { 15.0f, 10.2f, 7.42f }, { 14.84f, 10.97f, 0.0f }, { 15.95f, 11.49f, 1.92f }, { 15.95f, 13.98f, 1.23f }, { 11.01f, 13.98f, 1.26f }, { 11.01f, 11.56f, 1.95f }, { 12.0f, 11.0f, 0.0f }, { 11.83f, 10.57f, 2.47f }, { 11.83f, 4.43f, 2.46f }, { 12.0f, 4.0f, 0.0f }, { 11.02f, 3.44f, 1.95f }, { 11.02f, 1.02f, 1.26f } };
+static const FxArtCorner piece_time_extend_2[] = { { 20.5f, 1.24f, 0.0f }, { 22.5f, 1.24f, 0.0f }, { 26.0f, 1.24f, 0.01f }, { 26.0f, 14.01f, 1.5f }, { 22.99f, 14.01f, 1.49f }, { 22.99f, 6.76f, 0.0f }, { 22.21f, 6.76f, 2.29f }, { 21.99f, 6.71f, 0.0f }, { 22.69f, 7.5f, 0.48f }, { 20.31f, 7.5f, 0.48f }, { 21.01f, 6.71f, 0.0f }, { 20.79f, 6.76f, 2.29f }, { 20.0f, 6.76f, 0.0f }, { 20.0f, 14.0f, 1.5f }, { 17.0f, 14.0f, 1.5f }, { 17.0f, 1.24f, 0.01f } };
+static const FxArtCorner piece_time_extend_3[] = { { 35.0f, 1.0f, 1.5f }, { 35.0f, 4.0f, 1.5f }, { 30.0f, 4.0f, 0.0f }, { 30.0f, 6.0f, 0.0f }, { 34.0f, 6.0f, 1.5f }, { 34.0f, 9.0f, 1.5f }, { 30.0f, 9.0f, 0.0f }, { 30.0f, 11.0f, 0.0f }, { 34.99f, 11.0f, 1.5f }, { 34.99f, 14.0f, 1.5f }, { 27.01f, 14.0f, 1.5f }, { 27.01f, 1.0f, 1.51f } };
+static const FxArtCorner piece_time_extend_4[] = { { 48.99f, 1.0f, 1.5f }, { 48.99f, 4.0f, 1.5f }, { 44.0f, 4.0f, 0.0f }, { 44.0f, 6.0f, 0.0f }, { 47.99f, 6.0f, 1.5f }, { 47.99f, 9.0f, 1.5f }, { 44.0f, 9.0f, 0.0f }, { 44.0f, 11.0f, 0.0f }, { 49.0f, 11.0f, 1.5f }, { 49.0f, 14.0f, 1.5f }, { 41.0f, 14.0f, 1.5f }, { 41.0f, 1.0f, 1.5f } };
+static const FxArtCorner piece_time_extend_5[] = { { 53.0f, 1.0f, 1.5f }, { 53.0f, 5.5f, 0.0f }, { 55.0f, 5.5f, 0.0f }, { 55.0f, 1.0f, 1.5f }, { 58.01f, 1.0f, 1.5f }, { 58.01f, 5.34f, 2.49f }, { 56.63f, 6.03f, 0.0f }, { 56.64f, 6.09f, 0.64f }, { 56.64f, 8.91f, 0.65f }, { 56.63f, 8.97f, 0.0f }, { 58.01f, 9.66f, 2.5f }, { 58.01f, 13.99f, 1.5f }, { 55.0f, 13.99f, 1.5f }, { 55.0f, 9.5f, 0.0f }, { 53.0f, 9.5f, 0.0f }, { 53.0f, 13.99f, 1.5f }, { 49.99f, 13.99f, 1.5f }, { 49.99f, 9.66f, 2.5f }, { 51.37f, 8.97f, 0.0f }, { 51.35f, 8.89f, 0.83f }, { 51.35f, 6.11f, 0.83f }, { 51.37f, 6.03f, 0.0f }, { 49.99f, 5.34f, 2.49f }, { 49.99f, 1.0f, 1.5f } };
+static const FxArtCorner piece_time_extend_6[] = { { 67.97f, 1.03f, 1.0f }, { 67.97f, 5.55f, 2.19f }, { 64.81f, 4.0f, 0.0f }, { 65.0f, 4.85f, 7.99f }, { 65.0f, 13.98f, 1.5f }, { 61.94f, 13.98f, 1.51f }, { 61.94f, 4.36f, 3.81f }, { 62.02f, 3.98f, 0.0f }, { 59.03f, 5.37f, 2.11f }, { 59.03f, 1.03f, 1.02f } };
+static const FxArtCorner piece_time_extend_7[] = { { 76.99f, 1.0f, 1.5f }, { 76.99f, 4.0f, 1.5f }, { 72.0f, 4.0f, 0.0f }, { 72.0f, 6.0f, 0.0f }, { 75.99f, 6.0f, 1.5f }, { 75.99f, 9.0f, 1.5f }, { 72.0f, 9.0f, 0.0f }, { 72.0f, 11.0f, 0.0f }, { 76.99f, 11.0f, 1.5f }, { 76.99f, 14.0f, 1.5f }, { 69.0f, 14.0f, 1.5f }, { 69.0f, 1.0f, 1.5f } };
+static const FxArtCorner piece_time_extend_8[] = { { 82.5f, 1.03f, 3.79f }, { 81.99f, 5.27f, 0.0f }, { 82.13f, 5.25f, 1.39f }, { 82.99f, 5.25f, 0.0f }, { 82.99f, 0.99f, 1.5f }, { 86.0f, 0.99f, 1.5f }, { 86.0f, 13.98f, 0.0f }, { 81.63f, 13.98f, 3.91f }, { 82.01f, 9.72f, 0.0f }, { 81.83f, 9.75f, 1.8f }, { 81.0f, 9.75f, 0.0f }, { 81.0f, 14.0f, 1.49f }, { 78.03f, 14.0f, 1.49f }, { 78.03f, 1.03f, 0.01f } };
+static const FxArtCorner piece_time_extend_9[] = { { 95.06f, 0.96f, 4.91f }, { 95.06f, 14.03f, 4.92f }, { 87.01f, 14.03f, 1.5f }, { 87.01f, 0.96f, 1.51f } };
+static const FxArtCorner piece_time_extend_10[] = { { 90.0f, 11.0f, 0.0f }, { 92.0f, 11.0f, 0.0f }, { 92.0f, 4.0f, 0.0f }, { 90.0f, 4.0f, 0.0f } };
+static const FxArtLoop piece_time_extend[] = { { 10, piece_time_extend_0 }, { 16, piece_time_extend_1 }, { 16, piece_time_extend_2 }, { 12, piece_time_extend_3 }, { 12, piece_time_extend_4 }, { 24, piece_time_extend_5 }, { 10, piece_time_extend_6 }, { 12, piece_time_extend_7 }, { 14, piece_time_extend_8 }, { 4, piece_time_extend_9 }, { 4, piece_time_extend_10 } };
+static const FxArtLayer piece_time_extend_fill[] = { { 3, 11, piece_time_extend } };
+
+/* the HUD piece 'LAP banner' ($15:$3D00): 12 loops, 83 corners (29 sharp), radii 0.9, 1.5, 3, 4.6, 4.9; 14 off */
+static const FxArtCorner piece_lap_banner_0[] = { { 4.0f, 0.99f, 1.5f }, { 4.0f, 15.0f, 0.0f }, { 10.99f, 15.0f, 1.5f }, { 10.99f, 19.0f, 1.5f }, { 1.0f, 19.0f, 3.0f }, { 1.0f, 0.99f, 1.5f } };
+static const FxArtCorner piece_lap_banner_1[] = { { 22.02f, 0.92f, 4.91f }, { 22.02f, 19.01f, 1.5f }, { 19.0f, 19.01f, 1.5f }, { 19.0f, 13.0f, 0.0f }, { 15.0f, 13.0f, 0.0f }, { 15.0f, 19.0f, 1.5f }, { 11.98f, 19.0f, 1.5f }, { 11.98f, 0.92f, 4.91f } };
+static const FxArtCorner piece_lap_banner_2[] = { { 15.0f, 9.0f, 0.0f }, { 19.0f, 9.0f, 0.0f }, { 19.0f, 5.0f, 0.0f }, { 15.0f, 5.0f, 0.0f } };
+static const FxArtCorner piece_lap_banner_3[] = { { 34.06f, 0.97f, 4.91f }, { 34.06f, 13.04f, 4.91f }, { 27.0f, 13.04f, 0.0f }, { 27.0f, 19.01f, 1.5f }, { 24.0f, 19.01f, 1.5f }, { 24.0f, 0.97f, 1.5f } };
+static const FxArtCorner piece_lap_banner_4[] = { { 27.0f, 9.0f, 0.0f }, { 31.0f, 9.0f, 0.0f }, { 31.0f, 5.0f, 0.0f }, { 27.0f, 5.0f, 0.0f } };
+static const FxArtCorner piece_lap_banner_5[] = { { 51.07f, 0.97f, 4.91f }, { 51.07f, 12.04f, 4.92f }, { 44.0f, 12.04f, 0.0f }, { 44.0f, 15.0f, 0.0f }, { 51.01f, 15.0f, 1.5f }, { 51.01f, 19.0f, 1.5f }, { 40.96f, 19.0f, 1.5f }, { 40.96f, 7.96f, 4.9f }, { 48.0f, 7.96f, 0.0f }, { 48.0f, 5.0f, 0.0f }, { 41.0f, 5.0f, 1.5f }, { 41.0f, 0.97f, 1.5f } };
+static const FxArtCorner piece_lap_banner_6[] = { { 67.0f, 1.0f, 1.5f }, { 67.0f, 5.0f, 1.5f }, { 60.0f, 5.0f, 0.0f }, { 60.0f, 9.0f, 0.0f }, { 66.01f, 9.0f, 1.5f }, { 66.01f, 13.0f, 1.5f }, { 60.0f, 13.0f, 0.0f }, { 60.0f, 19.01f, 1.5f }, { 57.0f, 19.01f, 1.5f }, { 57.0f, 1.0f, 3.0f } };
+static const FxArtCorner piece_lap_banner_7[] = { { 71.0f, 1.0f, 1.5f }, { 71.0f, 19.01f, 1.5f }, { 67.99f, 19.01f, 1.5f }, { 67.99f, 1.0f, 1.5f } };
+static const FxArtCorner piece_lap_banner_8[] = { { 76.52f, 0.99f, 1.5f }, { 80.0f, 10.75f, 0.0f }, { 80.0f, 0.99f, 1.5f }, { 83.02f, 0.99f, 1.5f }, { 83.02f, 18.96f, 0.95f }, { 74.6f, 18.96f, 4.6f }, { 77.98f, 12.29f, 0.0f }, { 75.99f, 12.29f, 0.0f }, { 75.99f, 19.01f, 1.5f }, { 72.99f, 19.01f, 1.49f }, { 72.99f, 0.99f, 1.5f } };
+static const FxArtCorner piece_lap_banner_9[] = { { 95.02f, 0.92f, 4.91f }, { 95.02f, 19.01f, 1.5f }, { 91.99f, 19.01f, 1.5f }, { 91.99f, 13.0f, 0.0f }, { 88.0f, 13.0f, 0.0f }, { 88.0f, 19.01f, 1.5f }, { 84.97f, 19.01f, 1.5f }, { 84.97f, 0.92f, 4.92f } };
+static const FxArtCorner piece_lap_banner_10[] = { { 88.0f, 9.0f, 0.0f }, { 92.0f, 9.0f, 0.0f }, { 92.0f, 5.0f, 0.0f }, { 88.0f, 5.0f, 0.0f } };
+static const FxArtCorner piece_lap_banner_11[] = { { 100.0f, 0.99f, 1.5f }, { 100.0f, 15.0f, 0.0f }, { 107.01f, 15.0f, 1.5f }, { 107.01f, 19.0f, 1.5f }, { 96.99f, 19.0f, 3.0f }, { 96.99f, 0.99f, 1.5f } };
+static const FxArtLoop piece_lap_banner[] = { { 6, piece_lap_banner_0 }, { 8, piece_lap_banner_1 }, { 4, piece_lap_banner_2 }, { 6, piece_lap_banner_3 }, { 4, piece_lap_banner_4 }, { 12, piece_lap_banner_5 }, { 10, piece_lap_banner_6 }, { 4, piece_lap_banner_7 }, { 11, piece_lap_banner_8 }, { 8, piece_lap_banner_9 }, { 4, piece_lap_banner_10 }, { 6, piece_lap_banner_11 } };
+static const FxArtLayer piece_lap_banner_fill[] = { { 3, 12, piece_lap_banner } };
+
+/* the HUD piece 'frame bar' ($15:$1A18), its colours each a region over the one before (1: 2 loops, 12 corners (10 sharp), radii 1.2; 2: 2 loops, 12 corners (12 sharp), radii none; 3: 2 loops, 12 corners (12 sharp), radii none); 0 off */
+static const FxArtCorner piece_frame_bar_0_0[] = { { 8.0f, 11.0f, 0.0f }, { 8.0f, 17.79f, 1.2f }, { 6.0f, 16.0f, 0.0f }, { 6.0f, 24.0f, 0.0f }, { 8.0f, 22.21f, 1.2f }, { 8.0f, 30.0f, 0.0f }, { 0.0f, 30.0f, 0.0f }, { 0.0f, 11.0f, 0.0f } };
+static const FxArtCorner piece_frame_bar_0_1[] = { { 8.0f, 0.0f, 0.0f }, { 8.0f, 8.0f, 0.0f }, { 3.0f, 8.0f, 0.0f }, { 3.0f, 0.0f, 0.0f } };
+static const FxArtLoop piece_frame_bar_0[] = { { 8, piece_frame_bar_0_0 }, { 4, piece_frame_bar_0_1 } };
+static const FxArtCorner piece_frame_bar_1_0[] = { { 8.0f, 12.0f, 0.0f }, { 8.0f, 16.0f, 0.0f }, { 4.0f, 16.0f, 0.0f }, { 4.0f, 24.0f, 0.0f }, { 8.0f, 24.0f, 0.0f }, { 8.0f, 28.0f, 0.0f }, { 0.0f, 28.0f, 0.0f }, { 0.0f, 12.0f, 0.0f } };
+static const FxArtCorner piece_frame_bar_1_1[] = { { 8.0f, 0.0f, 0.0f }, { 8.0f, 8.0f, 0.0f }, { 4.0f, 8.0f, 0.0f }, { 4.0f, 0.0f, 0.0f } };
+static const FxArtLoop piece_frame_bar_1[] = { { 8, piece_frame_bar_1_0 }, { 4, piece_frame_bar_1_1 } };
+static const FxArtCorner piece_frame_bar_2_0[] = { { 8.0f, 13.0f, 0.0f }, { 8.0f, 16.0f, 0.0f }, { 3.0f, 16.0f, 0.0f }, { 3.0f, 24.0f, 0.0f }, { 8.0f, 24.0f, 0.0f }, { 8.0f, 27.0f, 0.0f }, { 0.0f, 27.0f, 0.0f }, { 0.0f, 13.0f, 0.0f } };
+static const FxArtCorner piece_frame_bar_2_1[] = { { 8.0f, 0.0f, 0.0f }, { 8.0f, 8.0f, 0.0f }, { 5.0f, 8.0f, 0.0f }, { 5.0f, 0.0f, 0.0f } };
+static const FxArtLoop piece_frame_bar_2[] = { { 8, piece_frame_bar_2_0 }, { 4, piece_frame_bar_2_1 } };
+static const FxArtLayer piece_frame_bar_fill[] = { { 1, 2, piece_frame_bar_0 }, { 2, 2, piece_frame_bar_1 }, { 3, 2, piece_frame_bar_2 } };
+
+/* the HUD piece 'tail' ($15:$1A1A), its colours each a region over the one before (1: 1 loop, 19 corners (6 sharp), radii 0.1, 1.7, 2.2, 2.8, 3, 4.1; 2: 5 loops, 24 corners (14 sharp), radii 2, 4; 3: 3 loops, 16 corners (6 sharp), radii 2); 8 off */
+static const FxArtCorner piece_tail_0_0[] = { { 10.07f, 0.92f, 4.06f }, { 10.07f, 7.51f, 3.0f }, { 8.0f, 8.18f, 0.0f }, { 8.0f, 19.0f, 0.0f }, { 18.0f, 19.0f, 0.0f }, { 18.0f, 8.16f, 0.07f }, { 18.02f, 8.14f, 0.0f }, { 15.92f, 7.58f, 2.83f }, { 15.92f, 0.93f, 4.09f }, { 24.13f, 0.93f, 4.12f }, { 24.13f, 7.68f, 3.01f }, { 21.79f, 8.21f, 0.0f }, { 22.01f, 8.02f, 0.13f }, { 22.01f, 23.01f, 2.25f }, { 4.0f, 23.01f, 2.25f }, { 4.0f, 8.31f, 1.74f }, { 4.03f, 8.14f, 0.0f }, { 1.91f, 7.59f, 2.82f }, { 1.91f, 0.92f, 4.1f } };
+static const FxArtLoop piece_tail_0[] = { { 19, piece_tail_0_0 } };
+static const FxArtCorner piece_tail_1_0[] = { { 9.0f, 2.0f, 4.0f }, { 9.0f, 8.0f, 2.0f }, { 3.0f, 8.0f, 4.0f }, { 3.0f, 2.0f, 2.0f } };
+static const FxArtCorner piece_tail_1_1[] = { { 7.0f, 9.0f, 0.0f }, { 7.0f, 10.0f, 0.0f }, { 5.0f, 10.0f, 0.0f }, { 5.0f, 9.0f, 0.0f } };
+static const FxArtCorner piece_tail_1_2[] = { { 7.0f, 11.0f, 0.0f }, { 7.0f, 20.0f, 0.0f }, { 19.0f, 20.0f, 0.0f }, { 19.0f, 11.0f, 0.0f }, { 21.0f, 11.0f, 0.0f }, { 21.0f, 22.0f, 2.0f }, { 5.0f, 22.0f, 2.0f }, { 5.0f, 11.0f, 0.0f } };
+static const FxArtCorner piece_tail_1_3[] = { { 23.0f, 2.0f, 4.0f }, { 23.0f, 8.0f, 2.0f }, { 17.0f, 8.0f, 4.0f }, { 17.0f, 2.0f, 2.0f } };
+static const FxArtCorner piece_tail_1_4[] = { { 21.0f, 9.0f, 0.0f }, { 21.0f, 10.0f, 0.0f }, { 19.0f, 10.0f, 0.0f }, { 19.0f, 9.0f, 0.0f } };
+static const FxArtLoop piece_tail_1[] = { { 4, piece_tail_1_0 }, { 4, piece_tail_1_1 }, { 8, piece_tail_1_2 }, { 4, piece_tail_1_3 }, { 4, piece_tail_1_4 } };
+static const FxArtCorner piece_tail_2_0[] = { { 8.0f, 3.0f, 2.0f }, { 8.0f, 7.0f, 2.0f }, { 4.0f, 7.0f, 2.0f }, { 4.0f, 3.0f, 2.0f } };
+static const FxArtCorner piece_tail_2_1[] = { { 7.0f, 11.0f, 0.0f }, { 7.0f, 20.0f, 0.0f }, { 19.0f, 20.0f, 0.0f }, { 19.0f, 11.0f, 0.0f }, { 21.0f, 11.0f, 0.0f }, { 21.0f, 22.0f, 2.0f }, { 5.0f, 22.0f, 2.0f }, { 5.0f, 11.0f, 0.0f } };
+static const FxArtCorner piece_tail_2_2[] = { { 22.0f, 3.0f, 2.0f }, { 22.0f, 7.0f, 2.0f }, { 18.0f, 7.0f, 2.0f }, { 18.0f, 3.0f, 2.0f } };
+static const FxArtLoop piece_tail_2[] = { { 4, piece_tail_2_0 }, { 8, piece_tail_2_1 }, { 4, piece_tail_2_2 } };
+static const FxArtLayer piece_tail_fill[] = { { 1, 1, piece_tail_0 }, { 2, 5, piece_tail_1 }, { 3, 3, piece_tail_2 } };
+
+/* the HUD piece 'LAP badge' ($15:$1D1A), its colours each a region over the one before (1: 3 loops, 42 corners (42 sharp), radii none; 2: 6 loops, 78 corners (78 sharp), radii none; 3: 5 loops, 38 corners (38 sharp), radii none); 0 off, its strokes a texel wide kept as drawn */
+static const FxArtCorner piece_lap_badge_0_0[] = { { 3.0f, 4.0f, 0.0f }, { 4.0f, 4.0f, 0.0f }, { 4.0f, 3.0f, 0.0f }, { 22.0f, 3.0f, 0.0f }, { 22.0f, 4.0f, 0.0f }, { 23.0f, 4.0f, 0.0f }, { 23.0f, 21.0f, 0.0f }, { 22.0f, 21.0f, 0.0f }, { 22.0f, 22.0f, 0.0f }, { 17.0f, 22.0f, 0.0f }, { 17.0f, 24.0f, 0.0f }, { 14.0f, 24.0f, 0.0f }, { 14.0f, 23.0f, 0.0f }, { 13.0f, 23.0f, 0.0f }, { 13.0f, 22.0f, 0.0f }, { 12.0f, 22.0f, 0.0f }, { 12.0f, 18.0f, 0.0f }, { 13.0f, 18.0f, 0.0f }, { 13.0f, 17.0f, 0.0f }, { 7.0f, 17.0f, 0.0f }, { 7.0f, 18.0f, 0.0f }, { 11.0f, 18.0f, 0.0f }, { 11.0f, 22.0f, 0.0f }, { 4.0f, 22.0f, 0.0f }, { 4.0f, 21.0f, 0.0f }, { 3.0f, 21.0f, 0.0f } };
+static const FxArtCorner piece_lap_badge_0_1[] = { { 7.0f, 7.0f, 0.0f }, { 7.0f, 8.0f, 0.0f }, { 8.0f, 8.0f, 0.0f }, { 8.0f, 13.0f, 0.0f }, { 10.0f, 13.0f, 0.0f }, { 10.0f, 9.0f, 0.0f }, { 11.0f, 9.0f, 0.0f }, { 11.0f, 8.0f, 0.0f }, { 19.0f, 8.0f, 0.0f }, { 19.0f, 7.0f, 0.0f } };
+static const FxArtCorner piece_lap_badge_0_2[] = { { 17.0f, 17.0f, 0.0f }, { 17.0f, 18.0f, 0.0f }, { 19.0f, 18.0f, 0.0f }, { 19.0f, 15.0f, 0.0f }, { 18.0f, 15.0f, 0.0f }, { 18.0f, 17.0f, 0.0f } };
+static const FxArtLoop piece_lap_badge_0[] = { { 26, piece_lap_badge_0_0 }, { 10, piece_lap_badge_0_1 }, { 6, piece_lap_badge_0_2 } };
+static const FxArtCorner piece_lap_badge_1_0[] = { { 4.0f, 5.0f, 0.0f }, { 5.0f, 5.0f, 0.0f }, { 5.0f, 4.0f, 0.0f }, { 21.0f, 4.0f, 0.0f }, { 21.0f, 5.0f, 0.0f }, { 22.0f, 5.0f, 0.0f }, { 22.0f, 20.0f, 0.0f }, { 21.0f, 20.0f, 0.0f }, { 21.0f, 21.0f, 0.0f }, { 16.0f, 21.0f, 0.0f }, { 16.0f, 23.0f, 0.0f }, { 15.0f, 23.0f, 0.0f }, { 15.0f, 22.0f, 0.0f }, { 14.0f, 22.0f, 0.0f }, { 14.0f, 21.0f, 0.0f }, { 13.0f, 21.0f, 0.0f }, { 13.0f, 19.0f, 0.0f }, { 14.0f, 19.0f, 0.0f }, { 14.0f, 18.0f, 0.0f }, { 15.0f, 18.0f, 0.0f }, { 15.0f, 17.0f, 0.0f }, { 16.0f, 17.0f, 0.0f }, { 16.0f, 19.0f, 0.0f }, { 20.0f, 19.0f, 0.0f }, { 20.0f, 14.0f, 0.0f }, { 21.0f, 14.0f, 0.0f }, { 21.0f, 9.0f, 0.0f }, { 20.0f, 9.0f, 0.0f }, { 20.0f, 6.0f, 0.0f }, { 6.0f, 6.0f, 0.0f }, { 6.0f, 8.0f, 0.0f }, { 5.0f, 8.0f, 0.0f }, { 5.0f, 16.0f, 0.0f }, { 6.0f, 16.0f, 0.0f }, { 6.0f, 19.0f, 0.0f }, { 10.0f, 19.0f, 0.0f }, { 10.0f, 21.0f, 0.0f }, { 5.0f, 21.0f, 0.0f }, { 5.0f, 20.0f, 0.0f }, { 4.0f, 20.0f, 0.0f } };
+static const FxArtCorner piece_lap_badge_1_1[] = { { 6.0f, 9.0f, 0.0f }, { 7.0f, 9.0f, 0.0f }, { 7.0f, 14.0f, 0.0f }, { 10.0f, 14.0f, 0.0f }, { 10.0f, 16.0f, 0.0f }, { 7.0f, 16.0f, 0.0f }, { 7.0f, 15.0f, 0.0f }, { 6.0f, 15.0f, 0.0f } };
+static const FxArtCorner piece_lap_badge_1_2[] = { { 11.0f, 10.0f, 0.0f }, { 12.0f, 10.0f, 0.0f }, { 12.0f, 9.0f, 0.0f }, { 14.0f, 9.0f, 0.0f }, { 14.0f, 10.0f, 0.0f }, { 15.0f, 10.0f, 0.0f }, { 15.0f, 16.0f, 0.0f }, { 14.0f, 16.0f, 0.0f }, { 14.0f, 14.0f, 0.0f }, { 12.0f, 14.0f, 0.0f }, { 12.0f, 16.0f, 0.0f }, { 11.0f, 16.0f, 0.0f } };
+static const FxArtCorner piece_lap_badge_1_3[] = { { 12.0f, 11.0f, 0.0f }, { 12.0f, 12.0f, 0.0f }, { 14.0f, 12.0f, 0.0f }, { 14.0f, 11.0f, 0.0f } };
+static const FxArtCorner piece_lap_badge_1_4[] = { { 16.0f, 9.0f, 0.0f }, { 19.0f, 9.0f, 0.0f }, { 19.0f, 10.0f, 0.0f }, { 20.0f, 10.0f, 0.0f }, { 20.0f, 13.0f, 0.0f }, { 19.0f, 13.0f, 0.0f }, { 19.0f, 14.0f, 0.0f }, { 17.0f, 14.0f, 0.0f }, { 17.0f, 16.0f, 0.0f }, { 16.0f, 16.0f, 0.0f } };
+static const FxArtCorner piece_lap_badge_1_5[] = { { 17.0f, 11.0f, 0.0f }, { 17.0f, 12.0f, 0.0f }, { 19.0f, 12.0f, 0.0f }, { 19.0f, 11.0f, 0.0f } };
+static const FxArtLoop piece_lap_badge_1[] = { { 40, piece_lap_badge_1_0 }, { 8, piece_lap_badge_1_1 }, { 12, piece_lap_badge_1_2 }, { 4, piece_lap_badge_1_3 }, { 10, piece_lap_badge_1_4 }, { 4, piece_lap_badge_1_5 } };
+static const FxArtCorner piece_lap_badge_2_0[] = { { 6.0f, 9.0f, 0.0f }, { 7.0f, 9.0f, 0.0f }, { 7.0f, 14.0f, 0.0f }, { 10.0f, 14.0f, 0.0f }, { 10.0f, 16.0f, 0.0f }, { 7.0f, 16.0f, 0.0f }, { 7.0f, 15.0f, 0.0f }, { 6.0f, 15.0f, 0.0f } };
+static const FxArtCorner piece_lap_badge_2_1[] = { { 11.0f, 10.0f, 0.0f }, { 12.0f, 10.0f, 0.0f }, { 12.0f, 9.0f, 0.0f }, { 14.0f, 9.0f, 0.0f }, { 14.0f, 10.0f, 0.0f }, { 15.0f, 10.0f, 0.0f }, { 15.0f, 16.0f, 0.0f }, { 14.0f, 16.0f, 0.0f }, { 14.0f, 14.0f, 0.0f }, { 12.0f, 14.0f, 0.0f }, { 12.0f, 16.0f, 0.0f }, { 11.0f, 16.0f, 0.0f } };
+static const FxArtCorner piece_lap_badge_2_2[] = { { 12.0f, 11.0f, 0.0f }, { 12.0f, 12.0f, 0.0f }, { 14.0f, 12.0f, 0.0f }, { 14.0f, 11.0f, 0.0f } };
+static const FxArtCorner piece_lap_badge_2_3[] = { { 16.0f, 9.0f, 0.0f }, { 19.0f, 9.0f, 0.0f }, { 19.0f, 10.0f, 0.0f }, { 20.0f, 10.0f, 0.0f }, { 20.0f, 13.0f, 0.0f }, { 19.0f, 13.0f, 0.0f }, { 19.0f, 14.0f, 0.0f }, { 17.0f, 14.0f, 0.0f }, { 17.0f, 16.0f, 0.0f }, { 16.0f, 16.0f, 0.0f } };
+static const FxArtCorner piece_lap_badge_2_4[] = { { 17.0f, 11.0f, 0.0f }, { 17.0f, 12.0f, 0.0f }, { 19.0f, 12.0f, 0.0f }, { 19.0f, 11.0f, 0.0f } };
+static const FxArtLoop piece_lap_badge_2[] = { { 8, piece_lap_badge_2_0 }, { 12, piece_lap_badge_2_1 }, { 4, piece_lap_badge_2_2 }, { 10, piece_lap_badge_2_3 }, { 4, piece_lap_badge_2_4 } };
+static const FxArtLayer piece_lap_badge_fill[] = { { 1, 3, piece_lap_badge_0 }, { 2, 6, piece_lap_badge_1 }, { 3, 5, piece_lap_badge_2 } };
+
+/* the HUD piece 'rank first' ($15:$080E), its colours each a region over the one before (1: 1 loop, 22 corners (22 sharp), radii none; 2: 12 loops, 84 corners (84 sharp), radii none; 3: 11 loops, 74 corners (74 sharp), radii none); 0 off, its strokes a texel wide kept as drawn */
+static const FxArtCorner piece_rank_first_0_0[] = { { 3.0f, 0.0f, 0.0f }, { 8.0f, 0.0f, 0.0f }, { 8.0f, 1.0f, 0.0f }, { 9.0f, 1.0f, 0.0f }, { 9.0f, 0.0f, 0.0f }, { 24.0f, 0.0f, 0.0f }, { 24.0f, 3.0f, 0.0f }, { 23.0f, 3.0f, 0.0f }, { 23.0f, 4.0f, 0.0f }, { 24.0f, 4.0f, 0.0f }, { 24.0f, 7.0f, 0.0f }, { 15.0f, 7.0f, 0.0f }, { 15.0f, 12.0f, 0.0f }, { 16.0f, 12.0f, 0.0f }, { 16.0f, 16.0f, 0.0f }, { 10.0f, 16.0f, 0.0f }, { 10.0f, 12.0f, 0.0f }, { 11.0f, 12.0f, 0.0f }, { 11.0f, 10.0f, 0.0f }, { 10.0f, 10.0f, 0.0f }, { 10.0f, 7.0f, 0.0f }, { 3.0f, 7.0f, 0.0f } };
+static const FxArtLoop piece_rank_first_0[] = { { 22, piece_rank_first_0_0 } };
+static const FxArtCorner piece_rank_first_1_0[] = { { 4.0f, 1.0f, 0.0f }, { 7.0f, 1.0f, 0.0f }, { 7.0f, 2.0f, 0.0f }, { 5.0f, 2.0f, 0.0f }, { 5.0f, 3.0f, 0.0f }, { 7.0f, 3.0f, 0.0f }, { 7.0f, 4.0f, 0.0f }, { 5.0f, 4.0f, 0.0f }, { 5.0f, 6.0f, 0.0f }, { 4.0f, 6.0f, 0.0f } };
+static const FxArtCorner piece_rank_first_1_1[] = { { 7.0f, 2.0f, 0.0f }, { 8.0f, 2.0f, 0.0f }, { 8.0f, 3.0f, 0.0f }, { 7.0f, 3.0f, 0.0f } };
+static const FxArtCorner piece_rank_first_1_2[] = { { 7.0f, 4.0f, 0.0f }, { 8.0f, 4.0f, 0.0f }, { 8.0f, 6.0f, 0.0f }, { 7.0f, 6.0f, 0.0f } };
+static const FxArtCorner piece_rank_first_1_3[] = { { 9.0f, 2.0f, 0.0f }, { 10.0f, 2.0f, 0.0f }, { 10.0f, 3.0f, 0.0f }, { 12.0f, 3.0f, 0.0f }, { 12.0f, 2.0f, 0.0f }, { 13.0f, 2.0f, 0.0f }, { 13.0f, 6.0f, 0.0f }, { 12.0f, 6.0f, 0.0f }, { 12.0f, 4.0f, 0.0f }, { 10.0f, 4.0f, 0.0f }, { 10.0f, 6.0f, 0.0f }, { 9.0f, 6.0f, 0.0f } };
+static const FxArtCorner piece_rank_first_1_4[] = { { 10.0f, 1.0f, 0.0f }, { 12.0f, 1.0f, 0.0f }, { 12.0f, 2.0f, 0.0f }, { 10.0f, 2.0f, 0.0f } };
+static const FxArtCorner piece_rank_first_1_5[] = { { 11.0f, 7.0f, 0.0f }, { 14.0f, 7.0f, 0.0f }, { 14.0f, 13.0f, 0.0f }, { 15.0f, 13.0f, 0.0f }, { 15.0f, 15.0f, 0.0f }, { 11.0f, 15.0f, 0.0f }, { 11.0f, 13.0f, 0.0f }, { 12.0f, 13.0f, 0.0f }, { 12.0f, 9.0f, 0.0f }, { 11.0f, 9.0f, 0.0f } };
+static const FxArtCorner piece_rank_first_1_6[] = { { 14.0f, 1.0f, 0.0f }, { 15.0f, 1.0f, 0.0f }, { 15.0f, 2.0f, 0.0f }, { 16.0f, 2.0f, 0.0f }, { 16.0f, 3.0f, 0.0f }, { 17.0f, 3.0f, 0.0f }, { 17.0f, 1.0f, 0.0f }, { 18.0f, 1.0f, 0.0f }, { 18.0f, 6.0f, 0.0f }, { 17.0f, 6.0f, 0.0f }, { 17.0f, 5.0f, 0.0f }, { 16.0f, 5.0f, 0.0f }, { 16.0f, 4.0f, 0.0f }, { 15.0f, 4.0f, 0.0f }, { 15.0f, 6.0f, 0.0f }, { 14.0f, 6.0f, 0.0f } };
+static const FxArtCorner piece_rank_first_1_7[] = { { 19.0f, 1.0f, 0.0f }, { 20.0f, 1.0f, 0.0f }, { 20.0f, 3.0f, 0.0f }, { 21.0f, 3.0f, 0.0f }, { 21.0f, 4.0f, 0.0f }, { 20.0f, 4.0f, 0.0f }, { 20.0f, 6.0f, 0.0f }, { 19.0f, 6.0f, 0.0f } };
+static const FxArtCorner piece_rank_first_1_8[] = { { 21.0f, 2.0f, 0.0f }, { 22.0f, 2.0f, 0.0f }, { 22.0f, 3.0f, 0.0f }, { 21.0f, 3.0f, 0.0f } };
+static const FxArtCorner piece_rank_first_1_9[] = { { 21.0f, 4.0f, 0.0f }, { 22.0f, 4.0f, 0.0f }, { 22.0f, 5.0f, 0.0f }, { 21.0f, 5.0f, 0.0f } };
+static const FxArtCorner piece_rank_first_1_10[] = { { 22.0f, 1.0f, 0.0f }, { 23.0f, 1.0f, 0.0f }, { 23.0f, 2.0f, 0.0f }, { 22.0f, 2.0f, 0.0f } };
+static const FxArtCorner piece_rank_first_1_11[] = { { 22.0f, 5.0f, 0.0f }, { 23.0f, 5.0f, 0.0f }, { 23.0f, 6.0f, 0.0f }, { 22.0f, 6.0f, 0.0f } };
+static const FxArtLoop piece_rank_first_1[] = { { 10, piece_rank_first_1_0 }, { 4, piece_rank_first_1_1 }, { 4, piece_rank_first_1_2 }, { 12, piece_rank_first_1_3 }, { 4, piece_rank_first_1_4 }, { 10, piece_rank_first_1_5 }, { 16, piece_rank_first_1_6 }, { 8, piece_rank_first_1_7 }, { 4, piece_rank_first_1_8 }, { 4, piece_rank_first_1_9 }, { 4, piece_rank_first_1_10 }, { 4, piece_rank_first_1_11 } };
+static const FxArtCorner piece_rank_first_2_0[] = { { 4.0f, 1.0f, 0.0f }, { 7.0f, 1.0f, 0.0f }, { 7.0f, 2.0f, 0.0f }, { 5.0f, 2.0f, 0.0f }, { 5.0f, 3.0f, 0.0f }, { 7.0f, 3.0f, 0.0f }, { 7.0f, 4.0f, 0.0f }, { 5.0f, 4.0f, 0.0f }, { 5.0f, 6.0f, 0.0f }, { 4.0f, 6.0f, 0.0f } };
+static const FxArtCorner piece_rank_first_2_1[] = { { 7.0f, 2.0f, 0.0f }, { 8.0f, 2.0f, 0.0f }, { 8.0f, 3.0f, 0.0f }, { 7.0f, 3.0f, 0.0f } };
+static const FxArtCorner piece_rank_first_2_2[] = { { 7.0f, 4.0f, 0.0f }, { 8.0f, 4.0f, 0.0f }, { 8.0f, 6.0f, 0.0f }, { 7.0f, 6.0f, 0.0f } };
+static const FxArtCorner piece_rank_first_2_3[] = { { 9.0f, 2.0f, 0.0f }, { 10.0f, 2.0f, 0.0f }, { 10.0f, 3.0f, 0.0f }, { 12.0f, 3.0f, 0.0f }, { 12.0f, 2.0f, 0.0f }, { 13.0f, 2.0f, 0.0f }, { 13.0f, 6.0f, 0.0f }, { 12.0f, 6.0f, 0.0f }, { 12.0f, 4.0f, 0.0f }, { 10.0f, 4.0f, 0.0f }, { 10.0f, 6.0f, 0.0f }, { 9.0f, 6.0f, 0.0f } };
+static const FxArtCorner piece_rank_first_2_4[] = { { 10.0f, 1.0f, 0.0f }, { 12.0f, 1.0f, 0.0f }, { 12.0f, 2.0f, 0.0f }, { 10.0f, 2.0f, 0.0f } };
+static const FxArtCorner piece_rank_first_2_5[] = { { 14.0f, 1.0f, 0.0f }, { 15.0f, 1.0f, 0.0f }, { 15.0f, 2.0f, 0.0f }, { 16.0f, 2.0f, 0.0f }, { 16.0f, 3.0f, 0.0f }, { 17.0f, 3.0f, 0.0f }, { 17.0f, 1.0f, 0.0f }, { 18.0f, 1.0f, 0.0f }, { 18.0f, 6.0f, 0.0f }, { 17.0f, 6.0f, 0.0f }, { 17.0f, 5.0f, 0.0f }, { 16.0f, 5.0f, 0.0f }, { 16.0f, 4.0f, 0.0f }, { 15.0f, 4.0f, 0.0f }, { 15.0f, 6.0f, 0.0f }, { 14.0f, 6.0f, 0.0f } };
+static const FxArtCorner piece_rank_first_2_6[] = { { 19.0f, 1.0f, 0.0f }, { 20.0f, 1.0f, 0.0f }, { 20.0f, 3.0f, 0.0f }, { 21.0f, 3.0f, 0.0f }, { 21.0f, 4.0f, 0.0f }, { 20.0f, 4.0f, 0.0f }, { 20.0f, 6.0f, 0.0f }, { 19.0f, 6.0f, 0.0f } };
+static const FxArtCorner piece_rank_first_2_7[] = { { 21.0f, 2.0f, 0.0f }, { 22.0f, 2.0f, 0.0f }, { 22.0f, 3.0f, 0.0f }, { 21.0f, 3.0f, 0.0f } };
+static const FxArtCorner piece_rank_first_2_8[] = { { 21.0f, 4.0f, 0.0f }, { 22.0f, 4.0f, 0.0f }, { 22.0f, 5.0f, 0.0f }, { 21.0f, 5.0f, 0.0f } };
+static const FxArtCorner piece_rank_first_2_9[] = { { 22.0f, 1.0f, 0.0f }, { 23.0f, 1.0f, 0.0f }, { 23.0f, 2.0f, 0.0f }, { 22.0f, 2.0f, 0.0f } };
+static const FxArtCorner piece_rank_first_2_10[] = { { 22.0f, 5.0f, 0.0f }, { 23.0f, 5.0f, 0.0f }, { 23.0f, 6.0f, 0.0f }, { 22.0f, 6.0f, 0.0f } };
+static const FxArtLoop piece_rank_first_2[] = { { 10, piece_rank_first_2_0 }, { 4, piece_rank_first_2_1 }, { 4, piece_rank_first_2_2 }, { 12, piece_rank_first_2_3 }, { 4, piece_rank_first_2_4 }, { 16, piece_rank_first_2_5 }, { 8, piece_rank_first_2_6 }, { 4, piece_rank_first_2_7 }, { 4, piece_rank_first_2_8 }, { 4, piece_rank_first_2_9 }, { 4, piece_rank_first_2_10 } };
+static const FxArtLayer piece_rank_first_fill[] = { { 1, 1, piece_rank_first_0 }, { 2, 12, piece_rank_first_1 }, { 3, 11, piece_rank_first_2 } };
+
+/* the HUD piece 'rank other' ($15:$0A0E), its colours each a region over the one before (1: 1 loop, 26 corners (26 sharp), radii none; 2: 12 loops, 92 corners (92 sharp), radii none; 3: 11 loops, 74 corners (74 sharp), radii none); 0 off, its strokes a texel wide kept as drawn */
+static const FxArtCorner piece_rank_other_0_0[] = { { 3.0f, 0.0f, 0.0f }, { 8.0f, 0.0f, 0.0f }, { 8.0f, 1.0f, 0.0f }, { 9.0f, 1.0f, 0.0f }, { 9.0f, 0.0f, 0.0f }, { 24.0f, 0.0f, 0.0f }, { 24.0f, 3.0f, 0.0f }, { 23.0f, 3.0f, 0.0f }, { 23.0f, 4.0f, 0.0f }, { 24.0f, 4.0f, 0.0f }, { 24.0f, 7.0f, 0.0f }, { 16.0f, 7.0f, 0.0f }, { 16.0f, 8.0f, 0.0f }, { 17.0f, 8.0f, 0.0f }, { 17.0f, 11.0f, 0.0f }, { 16.0f, 11.0f, 0.0f }, { 16.0f, 12.0f, 0.0f }, { 17.0f, 12.0f, 0.0f }, { 17.0f, 16.0f, 0.0f }, { 9.0f, 16.0f, 0.0f }, { 9.0f, 11.0f, 0.0f }, { 10.0f, 11.0f, 0.0f }, { 10.0f, 10.0f, 0.0f }, { 9.0f, 10.0f, 0.0f }, { 9.0f, 7.0f, 0.0f }, { 3.0f, 7.0f, 0.0f } };
+static const FxArtLoop piece_rank_other_0[] = { { 26, piece_rank_other_0_0 } };
+static const FxArtCorner piece_rank_other_1_0[] = { { 4.0f, 1.0f, 0.0f }, { 7.0f, 1.0f, 0.0f }, { 7.0f, 2.0f, 0.0f }, { 5.0f, 2.0f, 0.0f }, { 5.0f, 3.0f, 0.0f }, { 7.0f, 3.0f, 0.0f }, { 7.0f, 4.0f, 0.0f }, { 5.0f, 4.0f, 0.0f }, { 5.0f, 6.0f, 0.0f }, { 4.0f, 6.0f, 0.0f } };
+static const FxArtCorner piece_rank_other_1_1[] = { { 7.0f, 2.0f, 0.0f }, { 8.0f, 2.0f, 0.0f }, { 8.0f, 3.0f, 0.0f }, { 7.0f, 3.0f, 0.0f } };
+static const FxArtCorner piece_rank_other_1_2[] = { { 7.0f, 4.0f, 0.0f }, { 8.0f, 4.0f, 0.0f }, { 8.0f, 6.0f, 0.0f }, { 7.0f, 6.0f, 0.0f } };
+static const FxArtCorner piece_rank_other_1_3[] = { { 9.0f, 2.0f, 0.0f }, { 10.0f, 2.0f, 0.0f }, { 10.0f, 3.0f, 0.0f }, { 12.0f, 3.0f, 0.0f }, { 12.0f, 2.0f, 0.0f }, { 13.0f, 2.0f, 0.0f }, { 13.0f, 6.0f, 0.0f }, { 12.0f, 6.0f, 0.0f }, { 12.0f, 4.0f, 0.0f }, { 10.0f, 4.0f, 0.0f }, { 10.0f, 6.0f, 0.0f }, { 9.0f, 6.0f, 0.0f } };
+static const FxArtCorner piece_rank_other_1_4[] = { { 10.0f, 1.0f, 0.0f }, { 12.0f, 1.0f, 0.0f }, { 12.0f, 2.0f, 0.0f }, { 10.0f, 2.0f, 0.0f } };
+static const FxArtCorner piece_rank_other_1_5[] = { { 10.0f, 7.0f, 0.0f }, { 15.0f, 7.0f, 0.0f }, { 15.0f, 8.0f, 0.0f }, { 16.0f, 8.0f, 0.0f }, { 16.0f, 11.0f, 0.0f }, { 15.0f, 11.0f, 0.0f }, { 15.0f, 12.0f, 0.0f }, { 12.0f, 12.0f, 0.0f }, { 12.0f, 13.0f, 0.0f }, { 16.0f, 13.0f, 0.0f }, { 16.0f, 15.0f, 0.0f }, { 10.0f, 15.0f, 0.0f }, { 10.0f, 11.0f, 0.0f }, { 11.0f, 11.0f, 0.0f }, { 11.0f, 10.0f, 0.0f }, { 14.0f, 10.0f, 0.0f }, { 14.0f, 9.0f, 0.0f }, { 10.0f, 9.0f, 0.0f } };
+static const FxArtCorner piece_rank_other_1_6[] = { { 14.0f, 1.0f, 0.0f }, { 15.0f, 1.0f, 0.0f }, { 15.0f, 2.0f, 0.0f }, { 16.0f, 2.0f, 0.0f }, { 16.0f, 3.0f, 0.0f }, { 17.0f, 3.0f, 0.0f }, { 17.0f, 1.0f, 0.0f }, { 18.0f, 1.0f, 0.0f }, { 18.0f, 6.0f, 0.0f }, { 17.0f, 6.0f, 0.0f }, { 17.0f, 5.0f, 0.0f }, { 16.0f, 5.0f, 0.0f }, { 16.0f, 4.0f, 0.0f }, { 15.0f, 4.0f, 0.0f }, { 15.0f, 6.0f, 0.0f }, { 14.0f, 6.0f, 0.0f } };
+static const FxArtCorner piece_rank_other_1_7[] = { { 19.0f, 1.0f, 0.0f }, { 20.0f, 1.0f, 0.0f }, { 20.0f, 3.0f, 0.0f }, { 21.0f, 3.0f, 0.0f }, { 21.0f, 4.0f, 0.0f }, { 20.0f, 4.0f, 0.0f }, { 20.0f, 6.0f, 0.0f }, { 19.0f, 6.0f, 0.0f } };
+static const FxArtCorner piece_rank_other_1_8[] = { { 21.0f, 2.0f, 0.0f }, { 22.0f, 2.0f, 0.0f }, { 22.0f, 3.0f, 0.0f }, { 21.0f, 3.0f, 0.0f } };
+static const FxArtCorner piece_rank_other_1_9[] = { { 21.0f, 4.0f, 0.0f }, { 22.0f, 4.0f, 0.0f }, { 22.0f, 5.0f, 0.0f }, { 21.0f, 5.0f, 0.0f } };
+static const FxArtCorner piece_rank_other_1_10[] = { { 22.0f, 1.0f, 0.0f }, { 23.0f, 1.0f, 0.0f }, { 23.0f, 2.0f, 0.0f }, { 22.0f, 2.0f, 0.0f } };
+static const FxArtCorner piece_rank_other_1_11[] = { { 22.0f, 5.0f, 0.0f }, { 23.0f, 5.0f, 0.0f }, { 23.0f, 6.0f, 0.0f }, { 22.0f, 6.0f, 0.0f } };
+static const FxArtLoop piece_rank_other_1[] = { { 10, piece_rank_other_1_0 }, { 4, piece_rank_other_1_1 }, { 4, piece_rank_other_1_2 }, { 12, piece_rank_other_1_3 }, { 4, piece_rank_other_1_4 }, { 18, piece_rank_other_1_5 }, { 16, piece_rank_other_1_6 }, { 8, piece_rank_other_1_7 }, { 4, piece_rank_other_1_8 }, { 4, piece_rank_other_1_9 }, { 4, piece_rank_other_1_10 }, { 4, piece_rank_other_1_11 } };
+static const FxArtCorner piece_rank_other_2_0[] = { { 4.0f, 1.0f, 0.0f }, { 7.0f, 1.0f, 0.0f }, { 7.0f, 2.0f, 0.0f }, { 5.0f, 2.0f, 0.0f }, { 5.0f, 3.0f, 0.0f }, { 7.0f, 3.0f, 0.0f }, { 7.0f, 4.0f, 0.0f }, { 5.0f, 4.0f, 0.0f }, { 5.0f, 6.0f, 0.0f }, { 4.0f, 6.0f, 0.0f } };
+static const FxArtCorner piece_rank_other_2_1[] = { { 7.0f, 2.0f, 0.0f }, { 8.0f, 2.0f, 0.0f }, { 8.0f, 3.0f, 0.0f }, { 7.0f, 3.0f, 0.0f } };
+static const FxArtCorner piece_rank_other_2_2[] = { { 7.0f, 4.0f, 0.0f }, { 8.0f, 4.0f, 0.0f }, { 8.0f, 6.0f, 0.0f }, { 7.0f, 6.0f, 0.0f } };
+static const FxArtCorner piece_rank_other_2_3[] = { { 9.0f, 2.0f, 0.0f }, { 10.0f, 2.0f, 0.0f }, { 10.0f, 3.0f, 0.0f }, { 12.0f, 3.0f, 0.0f }, { 12.0f, 2.0f, 0.0f }, { 13.0f, 2.0f, 0.0f }, { 13.0f, 6.0f, 0.0f }, { 12.0f, 6.0f, 0.0f }, { 12.0f, 4.0f, 0.0f }, { 10.0f, 4.0f, 0.0f }, { 10.0f, 6.0f, 0.0f }, { 9.0f, 6.0f, 0.0f } };
+static const FxArtCorner piece_rank_other_2_4[] = { { 10.0f, 1.0f, 0.0f }, { 12.0f, 1.0f, 0.0f }, { 12.0f, 2.0f, 0.0f }, { 10.0f, 2.0f, 0.0f } };
+static const FxArtCorner piece_rank_other_2_5[] = { { 14.0f, 1.0f, 0.0f }, { 15.0f, 1.0f, 0.0f }, { 15.0f, 2.0f, 0.0f }, { 16.0f, 2.0f, 0.0f }, { 16.0f, 3.0f, 0.0f }, { 17.0f, 3.0f, 0.0f }, { 17.0f, 1.0f, 0.0f }, { 18.0f, 1.0f, 0.0f }, { 18.0f, 6.0f, 0.0f }, { 17.0f, 6.0f, 0.0f }, { 17.0f, 5.0f, 0.0f }, { 16.0f, 5.0f, 0.0f }, { 16.0f, 4.0f, 0.0f }, { 15.0f, 4.0f, 0.0f }, { 15.0f, 6.0f, 0.0f }, { 14.0f, 6.0f, 0.0f } };
+static const FxArtCorner piece_rank_other_2_6[] = { { 19.0f, 1.0f, 0.0f }, { 20.0f, 1.0f, 0.0f }, { 20.0f, 3.0f, 0.0f }, { 21.0f, 3.0f, 0.0f }, { 21.0f, 4.0f, 0.0f }, { 20.0f, 4.0f, 0.0f }, { 20.0f, 6.0f, 0.0f }, { 19.0f, 6.0f, 0.0f } };
+static const FxArtCorner piece_rank_other_2_7[] = { { 21.0f, 2.0f, 0.0f }, { 22.0f, 2.0f, 0.0f }, { 22.0f, 3.0f, 0.0f }, { 21.0f, 3.0f, 0.0f } };
+static const FxArtCorner piece_rank_other_2_8[] = { { 21.0f, 4.0f, 0.0f }, { 22.0f, 4.0f, 0.0f }, { 22.0f, 5.0f, 0.0f }, { 21.0f, 5.0f, 0.0f } };
+static const FxArtCorner piece_rank_other_2_9[] = { { 22.0f, 1.0f, 0.0f }, { 23.0f, 1.0f, 0.0f }, { 23.0f, 2.0f, 0.0f }, { 22.0f, 2.0f, 0.0f } };
+static const FxArtCorner piece_rank_other_2_10[] = { { 22.0f, 5.0f, 0.0f }, { 23.0f, 5.0f, 0.0f }, { 23.0f, 6.0f, 0.0f }, { 22.0f, 6.0f, 0.0f } };
+static const FxArtLoop piece_rank_other_2[] = { { 10, piece_rank_other_2_0 }, { 4, piece_rank_other_2_1 }, { 4, piece_rank_other_2_2 }, { 12, piece_rank_other_2_3 }, { 4, piece_rank_other_2_4 }, { 16, piece_rank_other_2_5 }, { 8, piece_rank_other_2_6 }, { 4, piece_rank_other_2_7 }, { 4, piece_rank_other_2_8 }, { 4, piece_rank_other_2_9 }, { 4, piece_rank_other_2_10 } };
+static const FxArtLayer piece_rank_other_fill[] = { { 1, 1, piece_rank_other_0 }, { 2, 12, piece_rank_other_1 }, { 3, 11, piece_rank_other_2 } };
+
+/* the HUD piece 'stunt mark' ($15:$0C08), its colours each a region over the one before (1: 1 loop, 4 corners (0 sharp), radii 3.9; 2: 3 loops, 24 corners (14 sharp), radii 0.7, 2.1; 3: 1 loop, 12 corners (12 sharp), radii none); 0 off */
+static const FxArtCorner piece_stunt_mark_0_0[] = { { 14.02f, 0.97f, 3.92f }, { 14.02f, 15.03f, 3.92f }, { 1.98f, 15.03f, 3.92f }, { 1.98f, 0.97f, 3.92f } };
+static const FxArtLoop piece_stunt_mark_0[] = { { 4, piece_stunt_mark_0_0 } };
+static const FxArtCorner piece_stunt_mark_1_0[] = { { 13.0f, 2.0f, 2.13f }, { 13.0f, 14.0f, 2.13f }, { 3.0f, 14.0f, 2.13f }, { 3.0f, 2.0f, 2.13f } };
+static const FxArtCorner piece_stunt_mark_1_1[] = { { 4.0f, 13.0f, 2.12f }, { 11.99f, 13.0f, 2.12f }, { 11.99f, 10.0f, 0.0f }, { 10.98f, 10.49f, 0.7f }, { 10.98f, 5.51f, 0.7f }, { 11.99f, 6.0f, 0.0f }, { 11.99f, 3.0f, 2.12f }, { 4.0f, 3.0f, 2.12f } };
+static const FxArtCorner piece_stunt_mark_1_2[] = { { 11.0f, 4.0f, 0.0f }, { 11.0f, 6.0f, 0.0f }, { 7.0f, 6.0f, 0.0f }, { 7.0f, 7.0f, 0.0f }, { 10.0f, 7.0f, 0.0f }, { 10.0f, 9.0f, 0.0f }, { 7.0f, 9.0f, 0.0f }, { 7.0f, 10.0f, 0.0f }, { 11.0f, 10.0f, 0.0f }, { 11.0f, 12.0f, 0.0f }, { 5.0f, 12.0f, 0.0f }, { 5.0f, 4.0f, 0.0f } };
+static const FxArtLoop piece_stunt_mark_1[] = { { 4, piece_stunt_mark_1_0 }, { 8, piece_stunt_mark_1_1 }, { 12, piece_stunt_mark_1_2 } };
+static const FxArtCorner piece_stunt_mark_2_0[] = { { 11.0f, 4.0f, 0.0f }, { 11.0f, 6.0f, 0.0f }, { 7.0f, 6.0f, 0.0f }, { 7.0f, 7.0f, 0.0f }, { 10.0f, 7.0f, 0.0f }, { 10.0f, 9.0f, 0.0f }, { 7.0f, 9.0f, 0.0f }, { 7.0f, 10.0f, 0.0f }, { 11.0f, 10.0f, 0.0f }, { 11.0f, 12.0f, 0.0f }, { 5.0f, 12.0f, 0.0f }, { 5.0f, 4.0f, 0.0f } };
+static const FxArtLoop piece_stunt_mark_2[] = { { 12, piece_stunt_mark_2_0 } };
+static const FxArtLayer piece_stunt_mark_fill[] = { { 1, 1, piece_stunt_mark_0 }, { 2, 3, piece_stunt_mark_1 }, { 3, 1, piece_stunt_mark_2 } };
+
+/* the HUD piece 'stunt mark used' ($15:$0E08): 1 loop, 16 corners (12 sharp), radii 2; 0 off, built by hand */
+static const FxArtCorner piece_stunt_mark_used_0[] = { { 1.24f, 1.24f, 2.05f }, { 3.3f, 1.24f, 0.0f }, { 8.0f, 6.01f, 0.0f }, { 12.69f, 1.26f, 0.0f }, { 14.75f, 1.26f, 2.0f }, { 14.75f, 3.31f, 0.0f }, { 9.99f, 8.0f, 0.0f }, { 14.76f, 12.7f, 0.0f }, { 14.76f, 14.76f, 2.05f }, { 12.7f, 14.76f, 0.0f }, { 8.0f, 9.99f, 0.0f }, { 3.31f, 14.75f, 0.0f }, { 1.26f, 14.75f, 2.0f }, { 1.26f, 12.69f, 0.0f }, { 6.01f, 8.0f, 0.0f }, { 1.24f, 3.3f, 0.0f } };
+static const FxArtLoop piece_stunt_mark_used[] = { { 16, piece_stunt_mark_used_0 } };
+static const FxArtLayer piece_stunt_mark_used_fill[] = { { 3, 1, piece_stunt_mark_used } };
+
+/* the HUD piece 'frame diamond' ($15:$1A0C), its colours each a region over the one before (1: 1 loop, 4 corners (0 sharp), radii 0.3; 2: 1 loop, 4 corners (0 sharp), radii 0.3; 3: 1 loop, 4 corners (0 sharp), radii 0.3); 0 off, built by hand */
+static const FxArtCorner piece_frame_diamond_0_0[] = { { 8.0f, 3.5f, 0.3f }, { 13.0f, 8.5f, 0.3f }, { 8.0f, 13.5f, 0.3f }, { 3.0f, 8.5f, 0.3f } };
+static const FxArtLoop piece_frame_diamond_0[] = { { 4, piece_frame_diamond_0_0 } };
+static const FxArtCorner piece_frame_diamond_1_0[] = { { 8.0f, 4.5f, 0.3f }, { 11.5f, 8.0f, 0.3f }, { 8.0f, 11.5f, 0.3f }, { 4.5f, 8.0f, 0.3f } };
+static const FxArtLoop piece_frame_diamond_1[] = { { 4, piece_frame_diamond_1_0 } };
+static const FxArtCorner piece_frame_diamond_2_0[] = { { 8.0f, 5.5f, 0.3f }, { 10.5f, 8.0f, 0.3f }, { 8.0f, 10.5f, 0.3f }, { 5.5f, 8.0f, 0.3f } };
+static const FxArtLoop piece_frame_diamond_2[] = { { 4, piece_frame_diamond_2_0 } };
+static const FxArtLayer piece_frame_diamond_fill[] = { { 1, 1, piece_frame_diamond_0 }, { 2, 1, piece_frame_diamond_1 }, { 3, 1, piece_frame_diamond_2 } };
+
+/* the HUD piece 'frame square' ($15:$1A10), its colours each a region over the one before (1: 1 loop, 4 corners (0 sharp), radii 2.3, 3.9; 2: 1 loop, 4 corners (4 sharp), radii none; 3: 1 loop, 4 corners (4 sharp), radii none); 0 off */
+static const FxArtCorner piece_frame_square_0_0[] = { { 14.02f, 2.98f, 3.91f }, { 14.02f, 14.02f, 2.31f }, { 2.98f, 14.02f, 3.91f }, { 2.98f, 2.98f, 2.31f } };
+static const FxArtLoop piece_frame_square_0[] = { { 4, piece_frame_square_0_0 } };
+static const FxArtCorner piece_frame_square_1_0[] = { { 12.0f, 4.0f, 0.0f }, { 12.0f, 12.0f, 0.0f }, { 4.0f, 12.0f, 0.0f }, { 4.0f, 4.0f, 0.0f } };
+static const FxArtLoop piece_frame_square_1[] = { { 4, piece_frame_square_1_0 } };
+static const FxArtCorner piece_frame_square_2_0[] = { { 11.0f, 5.0f, 0.0f }, { 11.0f, 11.0f, 0.0f }, { 5.0f, 11.0f, 0.0f }, { 5.0f, 5.0f, 0.0f } };
+static const FxArtLoop piece_frame_square_2[] = { { 4, piece_frame_square_2_0 } };
+static const FxArtLayer piece_frame_square_fill[] = { { 1, 1, piece_frame_square_0 }, { 2, 1, piece_frame_square_1 }, { 3, 1, piece_frame_square_2 } };
+
+/* the HUD piece 'frame end' ($15:$1A14), its colours each a region over the one before (1: 1 loop, 8 corners (8 sharp), radii none; 2: 1 loop, 8 corners (8 sharp), radii none; 3: 1 loop, 8 corners (8 sharp), radii none); 0 off, built by hand */
+static const FxArtCorner piece_frame_end_0_0[] = { { 3.8f, 0.0f, 0.0f }, { 12.2f, 0.0f, 0.0f }, { 17.0f, 4.8f, 0.0f }, { 17.0f, 12.2f, 0.0f }, { 12.2f, 17.0f, 0.0f }, { 3.8f, 17.0f, 0.0f }, { -1.0f, 12.2f, 0.0f }, { -1.0f, 4.8f, 0.0f } };
+static const FxArtLoop piece_frame_end_0[] = { { 8, piece_frame_end_0_0 } };
+static const FxArtCorner piece_frame_end_1_0[] = { { 4.6f, 0.0f, 0.0f }, { 11.4f, 0.0f, 0.0f }, { 16.0f, 4.6f, 0.0f }, { 16.0f, 11.4f, 0.0f }, { 11.4f, 16.0f, 0.0f }, { 4.6f, 16.0f, 0.0f }, { 0.0f, 11.4f, 0.0f }, { 0.0f, 4.6f, 0.0f } };
+static const FxArtLoop piece_frame_end_1[] = { { 8, piece_frame_end_1_0 } };
+static const FxArtCorner piece_frame_end_2_0[] = { { 5.6f, 0.0f, 0.0f }, { 10.4f, 0.0f, 0.0f }, { 16.0f, 5.6f, 0.0f }, { 16.0f, 10.4f, 0.0f }, { 10.4f, 16.0f, 0.0f }, { 5.6f, 16.0f, 0.0f }, { 0.0f, 10.4f, 0.0f }, { 0.0f, 5.6f, 0.0f } };
+static const FxArtLoop piece_frame_end_2[] = { { 8, piece_frame_end_2_0 } };
+static const FxArtLayer piece_frame_end_fill[] = { { 1, 1, piece_frame_end_0 }, { 2, 1, piece_frame_end_1 }, { 3, 1, piece_frame_end_2 } };
+
 const FxArtPicture fx_art_pictures[] = {
     { "the 16 x 32 glyph '0'", 0x15, 0x8000, 16, 32, FX_ART_OUTLINED, 1, 1, big16_0_fill, 0 },
     { "the 16 x 32 glyph '1'", 0x15, 0x8004, 16, 32, FX_ART_OUTLINED, 1, 1, big16_1_fill, 1 },
@@ -668,5 +866,18 @@ const FxArtPicture fx_art_pictures[] = {
     { "the places' 24 x 32 glyph 's'", 0x04, 0x8400, 24, 32, FX_ART_OUTLINED, 2, 1, places_s_fill, 9 },
     { "the places' 24 x 32 glyph 'n'", 0x04, 0x8406, 24, 32, FX_ART_OUTLINED, 2, 1, places_n_fill, 16 },
     { "the places' 24 x 32 glyph 'r'", 0x04, 0x840C, 24, 32, FX_ART_OUTLINED, 2, 1, places_r_fill, 6 },
+    { "the HUD piece 'EXTRA TIME'", 0x15, 0x1C00, 96, 16, FX_ART_OUTLINED, 1, 1, piece_extra_time_fill, 38 },
+    { "the HUD piece 'TIME EXTEND'", 0x15, 0x1E00, 96, 16, FX_ART_OUTLINED, 1, 1, piece_time_extend_fill, 45 },
+    { "the HUD piece 'LAP banner'", 0x15, 0x3D00, 112, 24, FX_ART_OUTLINED, 0, 1, piece_lap_banner_fill, 14 },
+    { "the HUD piece 'frame bar'", 0x15, 0x1A18, 8, 32, FX_ART_LAYERED, 0, 3, piece_frame_bar_fill, 0 },
+    { "the HUD piece 'tail'", 0x15, 0x1A1A, 24, 24, FX_ART_LAYERED, 0, 3, piece_tail_fill, 8 },
+    { "the HUD piece 'LAP badge'", 0x15, 0x1D1A, 24, 24, FX_ART_LAYERED, 0, 3, piece_lap_badge_fill, 0 },
+    { "the HUD piece 'rank first'", 0x15, 0x080E, 24, 16, FX_ART_LAYERED, 0, 3, piece_rank_first_fill, 0 },
+    { "the HUD piece 'rank other'", 0x15, 0x0A0E, 24, 16, FX_ART_LAYERED, 0, 3, piece_rank_other_fill, 0 },
+    { "the HUD piece 'stunt mark'", 0x15, 0x0C08, 16, 16, FX_ART_LAYERED, 0, 3, piece_stunt_mark_fill, 0 },
+    { "the HUD piece 'stunt mark used'", 0x15, 0x0E08, 16, 16, FX_ART_OUTLINED, 0, 1, piece_stunt_mark_used_fill, 0 },
+    { "the HUD piece 'frame diamond'", 0x15, 0x1A0C, 16, 16, FX_ART_LAYERED, 0, 3, piece_frame_diamond_fill, 0 },
+    { "the HUD piece 'frame square'", 0x15, 0x1A10, 16, 16, FX_ART_LAYERED, 0, 3, piece_frame_square_fill, 0 },
+    { "the HUD piece 'frame end'", 0x15, 0x1A14, 16, 16, FX_ART_LAYERED, 0, 3, piece_frame_end_fill, 0 },
 };
 const int fx_art_picture_count = (int)(sizeof fx_art_pictures / sizeof fx_art_pictures[0]);
