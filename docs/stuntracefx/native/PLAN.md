@@ -408,7 +408,8 @@ game's own logic (its physics, objects, menus, rules) stays the game's, and reco
 - Simple pattern textures as geometry (Jeff, 2026-11-09: "create high resolution textures of simple pattern textures like
   this yellow/black border just like we created 3d models for tires and eyes"): a textured face whose texture is a simple
   pattern is drawn as the pattern's own shapes, flat polygons laid on the face in 3D, sharp at any resolution. Design below
-  ("Pattern textures as geometry"); first texture: the yellow and black stripes.
+  ("Pattern textures as geometry"); first texture: the yellow and black stripes. Shelved (Jeff, 2026-11-10): out of the
+  game, kept on branch `shelf/pattern-textures`.
 - The pause screen with the controller panel and key remapping on every host, the options (auto-accelerate), and typing the
   initials on a keyboard. In (`src/pause`): the panel, a keyboard's keys rebound and saved, the screen opened by Escape,
   Select + Start (a touch screen's own controls) or the corner button, moved through with any pad, and the AUTO-ACCELERATE
@@ -583,6 +584,10 @@ script on (125-150 a course), so the whole course's shapes are known from the fi
   ($10-$13) were surveyed in two players.
 
 #### Pattern textures as geometry (design, 2026-11-09)
+
+**Shelved (2026-11-10).** Out of the game at Jeff's direction, with the pictures-as-geometry work: kept on branch
+`shelf/pattern-textures` (fx_pattern.c and its hooks in fx_face.c and fx_draw.c). Every textured face is drawn from its
+texture again. The text below records the design.
 
 How it meets the direction: the CPU builds flat polygons into the draw list, as for the solids; the GPU fills them at the
 output's resolution with the smooth rule; no pixel is made on the CPU, and no art is filtered or scaled; one path for every

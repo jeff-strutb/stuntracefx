@@ -31,7 +31,6 @@
 #include "fx/fx.h"
 #include "fx/fx_draw.h"
 #include "fx/fx_face.h"
-#include "fx/fx_pattern.h"
 
 enum {
     POINTS = 256,               /* a model's point records ($04E4 + 6i, i a byte) */
@@ -265,26 +264,6 @@ static uint32_t ncorners;
 
 static void commit(const FxMaterial *m);
 
-/* ---- pattern faces (fx_pattern.c): kept whole, with their view, and cut
-   when drawn with the draw list's texture offsets ---- */
-
-enum { PATTERN_FACES = 256 };
-
-static struct {
-    const FxPattern *pattern;
-    View view;
-    int n;
-    Corner3 c[MOST];
-} pattern_faces[PATTERN_FACES];
-static int npatterns;
-
-/* A textured face's pattern (fx_pattern.c), by its texture and plot
-   options. */
-static const FxPattern *material_pattern(const FxMaterial *m)
-{
-    return fx_pattern_find(m->bank, m->base, m->mask, (uint8_t)((m->word >> 8) & 0x1F));
-}
-
 /* The model's distance tier is the place of its colour table ($0052) past
    the tables' base ($004E), $88 bytes a tier (FxModelProject), or of its
    light table among the four of its set ($2C bytes each: $A1C5 near, $A275
@@ -350,7 +329,6 @@ void fx_face_end(const FxMaterial *material)
 
 void fx_face_reset(void)
 {
-    npatterns = 0;
     face.open = 0;
     nshapes = 0;
     ncorners = 0;
@@ -363,8 +341,8 @@ const FxShape *fx_face_at(uint32_t i) { return &shapes[i]; }
 int fx_face_full(void)
 {
     /* a face's most: its clipped polygon fanned, twice over when the water
-       cuts it, and a pattern face's place */
-    return nshapes >= SHAPES - 1 || ncorners + 2u * 3u * WORK > CORNERS || npatterns >= PATTERN_FACES;
+       cuts it */
+    return nshapes >= SHAPES - 1 || ncorners + 2u * 3u * WORK > CORNERS;
 }
 
 const FxCorner *fx_face_corners(void) { return corners; }
@@ -861,18 +839,6 @@ static void commit(const FxMaterial *m)
     s->tint_index = face.tint.index;
     s->light = face.tint.light;
     s->under_first = s->under_count = 0;
-    s->pattern = 0;
-    if (!s->line && face.textured && npatterns < PATTERN_FACES) {
-        const FxPattern *pattern = material_pattern(m);
-
-        if (pattern) {
-            pattern_faces[npatterns].pattern = pattern;
-            pattern_faces[npatterns].view = face.view;
-            pattern_faces[npatterns].n = face.n;
-            memcpy(pattern_faces[npatterns].c, face.c, sizeof(Corner3) * (size_t)face.n);
-            s->pattern = (uint16_t)++npatterns;
-        }
-    }
     if (s->line) {
         ok = line(face.c, &face.view);
     } else if (cut.on) {
@@ -912,108 +878,6 @@ static void commit(const FxMaterial *m)
     s->first = first;
     s->count = ncorners - first;
     nshapes++;
-}
-
-/* ---- a pattern face's pieces ---- */
-
-typedef struct {
-    const View *view;
-    FxCorner *out;
-    uint8_t *values, *past;
-    uint32_t room, made;
-    int full;
-} PatternCut;
-
-/* A flat piece's part on one side of the water (past: 1 past it from the
-   eye): near clip, projection, the view's rectangle, fanned. */
-static void piece_part(PatternCut *pc, const Corner3 *a, int n, uint8_t value, uint8_t past)
-{
-    Corner3 b[WORK];
-    Corner2 c[WORK], d[WORK];
-    int i, m;
-
-    m = clip_depth(a, n, b, NEAR_Z, 1);
-    if (m < 3)
-        return;
-    project(b, m, c, pc->view);
-    m = clip_side(c, m, d, 0, pc->view->left, 1);
-    m = clip_side(d, m, c, 0, pc->view->right, 0);
-    m = clip_side(c, m, d, 1, pc->view->top, 1);
-    m = clip_side(d, m, c, 1, pc->view->bottom, 0);
-    if (m < 3)
-        return;
-    if (pc->made + (uint32_t)(m - 2) * 3 > pc->room) {
-        pc->full = 1;
-        return;
-    }
-    for (i = 1; i + 1 < m; i++) {
-        const Corner2 *t[3] = { &c[0], &c[i], &c[i + 1] };
-        int j;
-
-        for (j = 0; j < 3; j++) {
-            FxCorner *o = &pc->out[pc->made];
-
-            o->x = (float)t[j]->x;
-            o->y = (float)t[j]->y;
-            o->u = o->v = 0;
-            pc->past[pc->made] = past;
-            pc->values[pc->made++] = value;
-        }
-    }
-}
-
-/* A flat piece; while the water cuts the picture, cut by it as a face is,
-   each part to its side. */
-static void cut_piece(void *context, const double (*p)[3], int n, uint8_t value)
-{
-    PatternCut *pc = (PatternCut *)context;
-    Corner3 a[WORK], w[WORK];
-    int i, m;
-
-    if (n > MOST || pc->full)
-        return;
-    for (i = 0; i < n; i++) {
-        a[i].x = p[i][0];
-        a[i].y = p[i][1];
-        a[i].z = p[i][2];
-        a[i].u = a[i].v = 0;
-    }
-    if (!cut.on) {
-        piece_part(pc, a, n, value, 0);
-        return;
-    }
-    if ((m = clip_water(a, n, w, 0)) >= 3)
-        piece_part(pc, w, m, value, 0);
-    if ((m = clip_water(a, n, w, 1)) >= 3)
-        piece_part(pc, w, m, value, 1);
-}
-
-uint32_t fx_face_pattern(const FxShape *sh, double u_off, double v_off, FxCorner *out, uint8_t *values, uint8_t *past, uint32_t room)
-{
-    double xyz[MOST][3], uv[MOST][2];
-    PatternCut pc;
-    int i, k;
-
-    if (!sh->pattern || sh->pattern > npatterns)
-        return 0;
-    k = sh->pattern - 1;
-    for (i = 0; i < pattern_faces[k].n; i++) {
-        xyz[i][0] = pattern_faces[k].c[i].x;
-        xyz[i][1] = pattern_faces[k].c[i].y;
-        xyz[i][2] = pattern_faces[k].c[i].z;
-        uv[i][0] = pattern_faces[k].c[i].u + u_off;
-        uv[i][1] = pattern_faces[k].c[i].v + v_off;
-    }
-    pc.view = &pattern_faces[k].view;
-    pc.out = out;
-    pc.values = values;
-    pc.past = past;
-    pc.room = room;
-    pc.made = 0;
-    pc.full = 0;
-    if (!fx_pattern_cut(pattern_faces[k].pattern, (const double (*)[3])xyz, (const double (*)[2])uv, pattern_faces[k].n, cut_piece, &pc) || pc.full)
-        return 0;
-    return pc.made;
 }
 
 /* ---- scaled sprites ---- */

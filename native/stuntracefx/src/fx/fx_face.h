@@ -42,7 +42,6 @@ typedef struct {
     /* while the water cuts the picture (fx_face_cut): the face's part past
        the water from the eye, drawn before it (count 0: none) */
     uint32_t under_first, under_count;
-    uint16_t pattern;           /* a pattern face's place among them (fx_face_pattern), plus one; 0 none */
 } FxShape;
 
 /* A face: begun, its points given (fx_face_vertex, fx_rt.h), then ended
@@ -59,14 +58,6 @@ int fx_face_full(void);
 const FxCorner *fx_face_corners(void);
 /* The shapes were drawn: they are gone. */
 void fx_face_reset(void);
-
-/* A pattern face's pieces (fx_pattern.c) with the texture's offsets the
-   draw list adds: triangles' corners in `out`, each corner's texel value in
-   `values` and in `past` 1 where the piece lies past the water from the eye
-   (while the water cuts the picture, each piece is cut by it as a face is);
-   the count made, 0 when the face is drawn with its texture (too many
-   tiles, no area, or no room). */
-uint32_t fx_face_pattern(const FxShape *sh, double u_off, double v_off, FxCorner *out, uint8_t *values, uint8_t *past, uint32_t room);
 
 /* What the checks count: vertices of faces wholly on the screen, and those
    more than 1.02 pixels from the chip's own. */
