@@ -70,6 +70,97 @@ uint16_t menu_champion_choice_attributes(int choice);   /* the chosen car's cell
 
 /* --- the objects ---------------------------------------------------------- */
 
+/* The menu objects' handlers. The spawn data and the objects' template name
+   them by the original's routines; data/ resolves those to these. */
+typedef enum {
+    HANDLER_UNKNOWN,                    /* a word the data gives that names no handler here */
+    HANDLER_ROW_SET,                    /* a settings row once set up: nothing */
+    HANDLER_DONE,                       /* an object done moving, which others wait for: nothing */
+    HANDLER_NO_STEP,                    /* an object with no step of its own */
+    HANDLER_NO_STEP_B,                  /* the same, a second copy */
+    HANDLER_ANIMATE_THEN_EXIT,
+    HANDLER_DROP_START,
+    HANDLER_DROP_BOUNCE,
+    HANDLER_RISE_AWAY,
+    HANDLER_COUNTDOWN,
+    HANDLER_CROSS_FADE_IN,
+    HANDLER_DROP_AWAY,
+    HANDLER_AWAY_CHECK,
+    HANDLER_CROSS_FADE_OUT,
+    HANDLER_LOAD_FIRST,
+    HANDLER_LOAD_LAST,
+    HANDLER_SET_EXIT,
+    HANDLER_SELECT_START,
+    HANDLER_WAIT_THEN_ANIMATE,
+    HANDLER_ANIMATE_ONLY,
+    HANDLER_WAIT_THEN_SEQUENCE,
+    HANDLER_BUTTON_SEQUENCE,
+    HANDLER_ERASE_CONFIRM,
+    HANDLER_ERASE_CONFIRM2,
+    HANDLER_ERASE_DONE,
+    HANDLER_IDLE,
+
+    HANDLER_SELECT_ARRIVE,
+    HANDLER_MODE_SELECT,
+    HANDLER_SETTINGS_FRAME,
+    HANDLER_PREVIEW_IDLE,
+    HANDLER_WAIT_PICTURE,
+    HANDLER_PREVIEW_START,
+    HANDLER_PREVIEW_COUNTDOWN,
+    HANDLER_PREVIEW_BACK_OUT,
+    HANDLER_PREVIEW_BACK_WAIT,
+    HANDLER_PREVIEW_BACK_END,
+    HANDLER_SETTINGS_SELECT,
+    HANDLER_SETTINGS_SELECT2,
+    HANDLER_INITIALS_FRAME,
+    HANDLER_ROW_START,
+    HANDLER_SLIDE_TO_PREVIEW,
+    HANDLER_SLIDE_IN,
+    HANDLER_FADE_IN,
+    HANDLER_SLIDE_IN_DONE,
+    HANDLER_FADE_UP,
+    HANDLER_FOLLOW_SLIDE_FAR,           /* with the sliding sprites, at $1CF less the slide */
+    HANDLER_FOLLOW_SLIDE_NEAR,          /* at $194 less the slide */
+    HANDLER_FADE_OUT,
+    HANDLER_CHOICE_00_START,
+    HANDLER_CHOICE_00,
+    HANDLER_CHOICE_12_COPY,
+    HANDLER_CHOICE_12_START,
+    HANDLER_CHOICE_12,
+    HANDLER_CHOICE_24_START,
+    HANDLER_CHOICE_24,
+    HANDLER_CHOICE_48_START,
+    HANDLER_CHOICE_38_START,
+    HANDLER_CHOICE_38,
+    HANDLER_CHOICE_48,
+
+    HANDLER_RESULTS_WAIT_THEN_RISE,
+    HANDLER_RESULTS_RISE,
+    HANDLER_RESULTS_OPEN_TOP,
+    HANDLER_RESULTS_OPEN_BOTTOM,
+    HANDLER_RESULTS_PLACE_WAIT,
+    HANDLER_RESULTS_PLACE_CAR,
+    HANDLER_RESULTS_LEADER_RESUME,
+    HANDLER_RESULTS_LEADER_BLINK,
+    HANDLER_RESULTS_WAIT_BUTTON,
+    HANDLER_RESULTS_LOWER,
+    HANDLER_RESULTS_RISE_AGAIN,
+    HANDLER_RESULTS_WAIT_END,
+    HANDLER_RESULTS_TIME_DIGITS,
+    HANDLER_RESULTS_OVER_OR_HIDE,
+    HANDLER_RESULTS_INITIALS,
+    HANDLER_RESULTS_LAP_TIMES,
+    HANDLER_RESULTS_PLACE_0,
+    HANDLER_RESULTS_PLACE_0_ANIM,
+    HANDLER_RESULTS_PLACE_1,
+    HANDLER_RESULTS_PLACE_1_ANIM,
+    HANDLER_RESULTS_PLACE_2,
+    HANDLER_RESULTS_PLACE_2_ANIM,
+    HANDLER_RESULTS_PLACE_3,
+    HANDLER_RESULTS_PLACE_3_ANIM,
+    HANDLER_SELECTION_FRAMES_CYCLE,
+} MenuHandler;
+
 /* The objects' block: their sprite groups and the screens' per-line tables,
    loaded once and changed as the objects run (actors.groups). The data
    refers to places in it, and to groups, by its own references, which
@@ -80,10 +171,10 @@ uint32_t menu_group_place(uint16_t group);              /* a group's place in th
 uint16_t menu_groups_free_from(void);                   /* the first group the objects may copy into */
 uint16_t menu_groups_end(void);                         /* and the end of that room */
 
-uint16_t menu_actor_template(int i);                    /* the 44 words a new object starts from */
+uint16_t menu_actor_template(int i);                    /* the 44 words a new object starts from (handlers as MenuHandler) */
 uint16_t menu_spawn_list_entry(uint16_t list);          /* a spawn list's entry at `list`; bit 15 ends the list */
 uint16_t menu_spawn_field(uint16_t entry);              /* a spawn entry's field offset; bit 15 ends it */
-uint16_t menu_spawn_value(uint16_t entry);              /* and the value it gives the field */
+uint16_t menu_spawn_value(uint16_t entry);              /* and the value it gives the field (a handler as MenuHandler) */
 uint16_t menu_animation_steps(uint16_t at);             /* an animation step's duration; bit 15 ends the animation */
 uint16_t menu_animation_group(uint16_t at);             /* and its sprite group */
 uint16_t menu_frame_art_tile(int i);                    /* a sprite's tile in the sprite set for its art (i: 2 a sprite) */

@@ -549,7 +549,7 @@ void menu_results_run(Actor *a)
         static uint16_t last;
 
         if (a->handler != last)
-            fprintf(stderr, "stuntracefx: menu handler %04X is not converted yet\n", a->handler);
+            fprintf(stderr, "stuntracefx: a menu object's handler (%u) is not converted\n", (unsigned)a->handler);
         last = a->handler;
         break;
     }

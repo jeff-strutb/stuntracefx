@@ -110,6 +110,105 @@ enum {
     CROSS_FADE_LEVELS = 0x05CFE5        /* words, by step (even) */
 };
 
+/* the handlers as the template and the spawn data name them: by the
+   original's routines */
+enum { RECORD_WORDS = 22, RECORD_HANDLER = 4 };     /* an object's words; its handler's */
+static const struct { uint16_t word; MenuHandler handler; } handler_words[] = {
+    {0xC47B, HANDLER_ROW_SET},
+    {0xCE89, HANDLER_DONE},
+    {0xDF7B, HANDLER_NO_STEP},
+    {0xE0DF, HANDLER_NO_STEP_B},
+    {0xCD6C, HANDLER_ANIMATE_THEN_EXIT},
+    {0xCD7C, HANDLER_DROP_START},
+    {0xCE19, HANDLER_DROP_BOUNCE},
+    {0xCE8A, HANDLER_RISE_AWAY},
+    {0xCF9C, HANDLER_COUNTDOWN},
+    {0xCFAB, HANDLER_CROSS_FADE_IN},
+    {0xCF27, HANDLER_DROP_AWAY},
+    {0xD068, HANDLER_AWAY_CHECK},
+    {0xD14A, HANDLER_CROSS_FADE_OUT},
+    {0xD1F7, HANDLER_LOAD_FIRST},
+    {0xD476, HANDLER_LOAD_LAST},
+    {0xD4A5, HANDLER_SET_EXIT},
+    {0xD4AE, HANDLER_SELECT_START},
+    {0xD5EC, HANDLER_WAIT_THEN_ANIMATE},
+    {0xD5F6, HANDLER_ANIMATE_ONLY},
+    {0xD5FA, HANDLER_WAIT_THEN_SEQUENCE},
+    {0xD606, HANDLER_BUTTON_SEQUENCE},
+    {0xD71B, HANDLER_ERASE_CONFIRM},
+    {0xD7C2, HANDLER_ERASE_CONFIRM2},
+    {0xD872, HANDLER_ERASE_DONE},
+    {0xD8A8, HANDLER_IDLE},
+    {0xB814, HANDLER_SELECT_ARRIVE},
+    {0xB952, HANDLER_MODE_SELECT},
+    {0xBA4E, HANDLER_SETTINGS_FRAME},
+    {0xBC9A, HANDLER_PREVIEW_IDLE},
+    {0xBCD2, HANDLER_WAIT_PICTURE},
+    {0xBCF1, HANDLER_PREVIEW_START},
+    {0xBD55, HANDLER_PREVIEW_COUNTDOWN},
+    {0xBE29, HANDLER_PREVIEW_BACK_OUT},
+    {0xBE65, HANDLER_PREVIEW_BACK_WAIT},
+    {0xBE84, HANDLER_PREVIEW_BACK_END},
+    {0xBEEF, HANDLER_SETTINGS_SELECT},
+    {0xBFB8, HANDLER_SETTINGS_SELECT2},
+    {0xC225, HANDLER_INITIALS_FRAME},
+    {0xC46D, HANDLER_ROW_START},
+    {0xC5EF, HANDLER_SLIDE_TO_PREVIEW},
+    {0xC872, HANDLER_SLIDE_IN},
+    {0xC896, HANDLER_FADE_IN},
+    {0xC8BF, HANDLER_SLIDE_IN_DONE},
+    {0xC95F, HANDLER_FADE_UP},
+    {0xC985, HANDLER_FOLLOW_SLIDE_FAR},
+    {0xC993, HANDLER_FOLLOW_SLIDE_NEAR},
+    {0xC9C4, HANDLER_FADE_OUT},
+    {0xCAE6, HANDLER_CHOICE_00_START},
+    {0xCAEE, HANDLER_CHOICE_00},
+    {0xCAF8, HANDLER_CHOICE_12_COPY},
+    {0xCB01, HANDLER_CHOICE_12_START},
+    {0xCB06, HANDLER_CHOICE_12},
+    {0xCB13, HANDLER_CHOICE_24_START},
+    {0xCB1B, HANDLER_CHOICE_24},
+    {0xCB28, HANDLER_CHOICE_48_START},
+    {0xCB3D, HANDLER_CHOICE_38_START},
+    {0xCB42, HANDLER_CHOICE_38},
+    {0xCB74, HANDLER_CHOICE_48},
+    {0xD8A9, HANDLER_RESULTS_WAIT_THEN_RISE},
+    {0xD8B5, HANDLER_RESULTS_RISE},
+    {0xD8FA, HANDLER_RESULTS_OPEN_TOP},
+    {0xD91B, HANDLER_RESULTS_OPEN_BOTTOM},
+    {0xD985, HANDLER_RESULTS_PLACE_WAIT},
+    {0xD9AF, HANDLER_RESULTS_PLACE_CAR},
+    {0xDA1F, HANDLER_RESULTS_LEADER_RESUME},
+    {0xDA33, HANDLER_RESULTS_LEADER_BLINK},
+    {0xDA8A, HANDLER_RESULTS_WAIT_BUTTON},
+    {0xDAD1, HANDLER_RESULTS_LOWER},
+    {0xDC6D, HANDLER_RESULTS_RISE_AGAIN},
+    {0xDC9F, HANDLER_RESULTS_WAIT_END},
+    {0xDCBF, HANDLER_RESULTS_TIME_DIGITS},
+    {0xDD01, HANDLER_RESULTS_OVER_OR_HIDE},
+    {0xDD1E, HANDLER_RESULTS_INITIALS},
+    {0xDE0B, HANDLER_RESULTS_LAP_TIMES},
+    {0xDFDB, HANDLER_RESULTS_PLACE_0},
+    {0xE018, HANDLER_RESULTS_PLACE_0_ANIM},
+    {0xE01C, HANDLER_RESULTS_PLACE_1},
+    {0xE059, HANDLER_RESULTS_PLACE_1_ANIM},
+    {0xE05D, HANDLER_RESULTS_PLACE_2},
+    {0xE09A, HANDLER_RESULTS_PLACE_2_ANIM},
+    {0xE09E, HANDLER_RESULTS_PLACE_3},
+    {0xE0DB, HANDLER_RESULTS_PLACE_3_ANIM},
+    {0xDF7C, HANDLER_SELECTION_FRAMES_CYCLE},
+};
+
+static uint16_t handler_of(uint16_t word)
+{
+    unsigned i;
+
+    for (i = 0; i < sizeof handler_words / sizeof handler_words[0]; i++)
+        if (handler_words[i].word == word)
+            return (uint16_t)handler_words[i].handler;
+    return HANDLER_UNKNOWN;
+}
+
 /* the per-line tables' places in the block, by the data's own addresses */
 static const uint16_t table_places[MENU_TABLES] = {
     [MENU_TABLE_BLINK_COLOURS] = 0x0DA8,
@@ -297,10 +396,22 @@ uint32_t menu_group_place(uint16_t group) { return (uint32_t)(GROUP_ORIGIN - BLO
 uint16_t menu_groups_free_from(void) { return GROUPS_FREE; }
 uint16_t menu_groups_end(void) { return GROUPS_END; }
 
-uint16_t menu_actor_template(int i) { return word_at(ACTOR_TEMPLATE + (uint32_t)i * 2); }
+uint16_t menu_actor_template(int i)
+{
+    uint16_t w = word_at(ACTOR_TEMPLATE + (uint32_t)i * 2);
+
+    return i % RECORD_WORDS == RECORD_HANDLER ? handler_of(w) : w;
+}
+
 uint16_t menu_spawn_list_entry(uint16_t list) { return word_at(SPAWN_LISTS + list); }
 uint16_t menu_spawn_field(uint16_t entry) { return word_at(SPAWN_ENTRIES + entry); }
-uint16_t menu_spawn_value(uint16_t entry) { return word_at(SPAWN_ENTRIES + (uint32_t)entry + 2); }
+uint16_t menu_spawn_value(uint16_t entry)
+{
+    uint16_t w = word_at(SPAWN_ENTRIES + (uint32_t)entry + 2);
+
+    return menu_spawn_field(entry) == RECORD_HANDLER * 2 ? handler_of(w) : w;
+}
+
 uint16_t menu_animation_steps(uint16_t at) { return word_at(ANIMATIONS + at); }
 uint16_t menu_animation_group(uint16_t at) { return word_at(ANIMATIONS + (uint32_t)at + 2); }
 uint16_t menu_frame_art_tile(int i) { return (uint16_t)((word_at(FRAME_ART_SLOTS + (uint32_t)i) - SPRITE_SET_SLOT) / 16); }
