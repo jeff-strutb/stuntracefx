@@ -1455,122 +1455,9 @@ void fx_draw_flat_entry(const FxCorner *c, uint32_t n, uint8_t colour)
 
 uint8_t fx_rpix(uint8_t x, uint8_t y) { (void)x; (void)y; return 0; }
 
-/* ---- the queue ---- */
-
-enum { QUEUE = 0x08AA };
+/* ---- the faces ---- */
 
 static uint16_t rd(uint16_t a) { return (uint16_t)(fx_ram[a] | fx_ram[(uint16_t)(a + 1)] << 8); }
-
-static void flat_polygon(uint16_t p, int n)
-{
-    nshvc_vertex v[8 * 3];
-    uint8_t colour = fx_ram[p];
-    uint16_t at = (uint16_t)(p + 1);
-    int i, ymin = 999, ymax = -1, xmin = 999, xmax = -1, out = 0;
-
-    for (i = 0; i < n; i++) {
-        int x = fx_ram[(uint16_t)(at + i * 4)], y = fx_ram[(uint16_t)(at + i * 4 + 2)];
-
-        if (y < ymin)
-            ymin = y;
-        if (y > ymax)
-            ymax = y;
-        if (x < xmin)
-            xmin = x;
-        if (x > xmax)
-            xmax = x;
-    }
-    fxs.por = 0;
-    fxs.colr = colour;
-    colour = ink(colour);
-    if ((!target.id && !recording) || !colour)
-        return;
-    if (ymax - ymin < 2) {
-        /* the original's single row: from the smallest x up to the largest */
-        if (xmax > xmin) {
-            nshvc_vertex q[6];
-
-            memset(q, 0, sizeof q);
-            q[0].x = (float)xmin; q[0].y = (float)ymin;
-            q[1].x = (float)xmax; q[1].y = (float)ymin;
-            q[2].x = (float)xmax; q[2].y = (float)ymin + 1;
-            q[3] = q[0]; q[4] = q[2];
-            q[5].x = (float)xmin; q[5].y = (float)ymin + 1;
-            for (i = 0; i < 6; i++)
-                q[i].colour = colour;
-            emit(q, 6, 0, 0);
-        }
-        return;
-    }
-    memset(v, 0, sizeof v);
-    for (i = 1; i + 1 < n && out + 3 <= 24; i++) {
-        int t[3] = {0, i, i + 1}, j;
-
-        for (j = 0; j < 3; j++) {
-            v[out].x = fx_ram[(uint16_t)(at + t[j] * 4)];
-            v[out].y = fx_ram[(uint16_t)(at + t[j] * 4 + 2)];
-            v[out].colour = colour;
-            out++;
-        }
-    }
-    if (out)
-        emit(v, (uint32_t)out, 0, 0);
-}
-
-static void line(uint16_t p)
-{
-    nshvc_vertex v[2];
-    uint8_t colour = fx_ram[p];
-
-    fxs.por = 0;
-    fxs.colr = colour;
-    colour = ink(colour);
-    if ((!target.id && !recording) || !colour)
-        return;
-    memset(v, 0, sizeof v);
-    v[0].x = fx_ram[(uint16_t)(p + 1)];
-    v[0].y = fx_ram[(uint16_t)(p + 3)];
-    v[1].x = fx_ram[(uint16_t)(p + 5)];
-    v[1].y = fx_ram[(uint16_t)(p + 7)];
-    v[0].colour = v[1].colour = colour;
-    emit(v, 2, 0, 1);
-}
-
-static void textured_polygon(uint16_t p, int n)
-{
-    nshvc_vertex v[8 * 3];
-    nshvc_material m;
-    uint8_t bank = fx_ram[p];
-    uint16_t word = rd((uint16_t)(p + 1)), base = rd((uint16_t)(p + 3)), mask = rd((uint16_t)(p + 5));
-    uint16_t at = (uint16_t)(p + 7);
-    uint8_t colour = (uint8_t)word, options = (uint8_t)((word >> 8) & 0x1F);
-    double u_off, v_off;
-    int i, out = 0;
-
-    fxs.por = options;
-    fxs.colr = colour;
-    if (!target.id && !recording)
-        return;
-    u_off = (int16_t)rd(0x00C0) / 256.0;
-    v_off = (int16_t)rd(0x00C2) / 256.0;
-    memset(&m, 0, sizeof m);
-    m.image = texture(bank, base, mask, colour, options);
-    memset(v, 0, sizeof v);
-    for (i = 1; i + 1 < n && out + 3 <= 24; i++) {
-        int t[3] = {0, i, i + 1}, j;
-
-        for (j = 0; j < 3; j++) {
-            v[out].x = fx_ram[(uint16_t)(at + t[j] * 8)];
-            v[out].y = fx_ram[(uint16_t)(at + t[j] * 8 + 2)];
-            v[out].u = (float)(fx_ram[(uint16_t)(at + t[j] * 8 + 5)] + u_off);
-            v[out].v = (float)(fx_ram[(uint16_t)(at + t[j] * 8 + 7)] + v_off);
-            v[out].colour = 1;
-            out++;
-        }
-    }
-    if (out)
-        emit(v, (uint32_t)out, m.image.id, 0);
-}
 
 /* ---- pattern faces (fx_pattern.c) ---- */
 
@@ -1802,17 +1689,18 @@ static uint32_t two_player_colour(const FxShape *sh, uint8_t c)
 
 /* A face's shape in floats (fx_face.c) in place of the chip's entries for
    it, in the material of its first entry (p, after the kind byte). */
-static void shape_draw(const FxShape *sh, uint16_t p, int8_t type)
+static void shape_draw(const FxShape *sh)
 {
     const FxCorner *c = fx_face_corners() + sh->first;
+    const FxMaterial *m = &sh->material;
     nshvc_vertex v[48];
     uint32_t image = 0, done = 0, i, tinted = 0;
     uint8_t colour;
     double u_off = 0, v_off = 0;
 
-    if (type < 0) {
-        uint8_t bank = fx_ram[p];
-        uint16_t word = rd((uint16_t)(p + 1)), base = rd((uint16_t)(p + 3)), mask = rd((uint16_t)(p + 5));
+    if (m->textured) {
+        uint8_t bank = m->bank;
+        uint16_t word = m->word, base = m->base, mask = m->mask;
 
         colour = (uint8_t)word;
         fxs.por = (uint8_t)((word >> 8) & 0x1F);
@@ -1827,7 +1715,7 @@ static void shape_draw(const FxShape *sh, uint16_t p, int8_t type)
         image = texture(bank, base, mask, colour, fxs.por).id;
         colour = 1;
     } else {
-        colour = fx_ram[p];
+        colour = m->colour;
         fxs.por = 0;
         fxs.colr = colour;
         tinted = two_player_colour(sh, colour);
@@ -1871,53 +1759,15 @@ static void shape_draw(const FxShape *sh, uint16_t p, int8_t type)
 
 FxDrawListResult FxDrawList(uint16_t caller_list_end, uint16_t caller_write_ptr, uint16_t *stack, uint16_t rom_at)
 {
-    uint16_t list_end = fx_ldw(FX_LIST_END), at = QUEUE, skip_to = 0;
+    uint32_t i, n = fx_face_count();
 
-    fx_face_settle();
-    if (list_end != QUEUE) {
+    (void)stack;
+    if (n) {
         blocks_flush();
-        fx_spill(stack);
-        fx_stw(0x005E, *stack);
-        fx_stw(list_end, 0);
-        fx_stw(FX_LIST_END, QUEUE);
-        for (;;) {
-            uint16_t entry = at;
-            int8_t type = (int8_t)fx_ram[at];
-            const FxShape *sh = NULL;
-
-            at = (uint16_t)(at + 1);
-            if (type != 0 && entry >= skip_to) {
-                sh = fx_face_shape(entry);
-                if (sh && sh->line != (type == 2))
-                    sh = NULL;
-                if (sh) {
-                    shape_draw(sh, at, type);
-                    skip_to = sh->end;
-                }
-            }
-            if (type >= 3) {
-                if (!sh && entry >= skip_to)
-                    flat_polygon(at, type);
-                at = (uint16_t)(at + 1 + 4 * type);
-            } else if (type == 2) {
-                if (!sh && entry >= skip_to)
-                    line(at);
-                at = (uint16_t)(at + 9);
-            } else if (type == 0) {
-                break;
-            } else {
-                int n = (uint8_t)~type;
-
-                if (!sh && entry >= skip_to)
-                    textured_polygon(at, n);
-                at = (uint16_t)(at + 7 + 8 * n);
-            }
-        }
-        fx_stw(FX_LIST_END, QUEUE);
-        fx_romb(fx_ldw(0x001C));
+        for (i = 0; i < n; i++)
+            shape_draw(fx_face_at(i));
         fx_face_reset();
-        *stack = fx_ldw(0x005E);
-        fx_unspill(stack);
+        fx_romb(fx_ldw(0x001C));        /* the model's bank, as the chip's walk left it */
     }
     return (FxDrawListResult){caller_list_end, caller_write_ptr, rom_at};
 }

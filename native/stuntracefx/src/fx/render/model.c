@@ -8,7 +8,10 @@
  * C: src/stuntracefx/render/model.c, which describes the commands.
  */
 
+#include <string.h>
+
 #include "fx/fx.h"
+#include "fx/fx_face.h"
 #include "fx/fx_far.h"
 
 /*
@@ -2641,321 +2644,99 @@ uint16_t FxModelMaterial(uint16_t rom_at)
 
 /*
  * @routine 01:90CD FxModelFaces
- * WHAT IT DOES: Command $14: the faces that follow, each with its
- * material (FxModelMaterial), its points gathered and clipped
- * (FxPolygonGather or FxPolygonDraw, FxPolygonClipScreen) and queued in
- * the draw list, which is drawn (FxDrawList) when nearly full.
- * HOW: CACHE; a face count byte less than 0 ends it.
- * Entry: R10 = stack; R11 = return address; R14 at the command's bytes
- * (bank $001C).
- * Exit: as the code leaves the registers, flags and RAM; R14 and the
- * ROM buffer move as on the Super FX.
+ * WHAT IT DOES: Command $14: the faces that follow. Each is its point
+ * count c (a count of $80 or more ends the list: $FF returns, the others go
+ * on to the next command), a byte, the index of its facing flag at $07C6,
+ * its material (four bytes, FxModelMaterial), and c point indices; a
+ * textured face's texels come from a stream in bank 3 ($0088), two bytes a
+ * point. A face whose flag's bit 7 is clear faces away and is passed (a
+ * line, c = 2, is always drawn). A face drawn is its points and texels
+ * handed to fx_face with its material, which clips and projects it in
+ * floats and keeps its shape in order for FxDrawList; the chip's queue,
+ * its screen corners and its fixed-point clips are not used. When fx_face
+ * has no room for another face, what it holds is drawn first, as the chip
+ * drew its queue when it was nearly full.
+ * Entry: R14 at the command's bytes (bank $001C).
  */
 FxModelFacesResult FxModelFaces(uint16_t divisor_made, uint16_t list_write_ptr, uint16_t *stack, uint16_t rom_at)
 {
-    int run_l90F0 = 0;
-    int run_l920F = 0;
-    uint16_t count;
-    uint16_t point_x;
-    uint16_t point_y;
-    uint16_t face_cmd;
-    uint16_t list_end;
-    uint16_t outcodes;
-    uint16_t rom_at_2;
-    uint16_t rom_at_3;
-    uint16_t tex_bank;
-    uint16_t tex_base;
-    uint16_t tex_mask;
-    uint16_t uv_u_byte;
-    uint16_t uv_v_byte;
-    uint16_t list_end_2;
-    uint16_t next_rom_at;
-    uint16_t point_count;
-    uint16_t point_index;
-    uint16_t next_command;
-    uint16_t uv_rom_ptr_v;
-    uint16_t clipped_count;
-    uint16_t face_cmd_byte;
-    uint16_t face_flags_uv;
-    uint16_t material_word;
-    uint16_t point_count_2;
-    uint16_t point_count_3;
-    uint16_t point_outcode;
-    uint16_t point_rec_ptr;
-    uint16_t face_list_base;
-    uint16_t points_rom_ptr;
-    uint16_t rom_bank_saved;
-    uint16_t saved_rom_bank;
-    uint16_t tex_extra_word;
-    uint16_t face_flags_clip;
-    uint16_t face_flags_word;
-    uint16_t face_kind_flags;
-    uint16_t face_kind_index;
-    uint16_t material_result;
-    uint16_t point_rec_ptr_y;
-    uint16_t uv_rom_ptr_next;
-    uint16_t clipped_count_x2;
-    uint16_t clipped_count_x4;
-    uint16_t list_ptr_after_u;
-    uint16_t list_ptr_after_x;
-    uint16_t rom_ptr_after_cmd;
-    uint16_t clipped_count_copy;
-    uint16_t final_vertex_count;
-    uint16_t material_word_copy;
-    uint16_t rom_ptr_after_kind;
-    uint16_t rom_ptr_after_flags;
-    uint16_t clipped_vertex_count;
-    uint16_t face_flags_unclipped;
-    uint16_t list_ptr_after_extra;
-    uint16_t clipped_vertex_count_2;
-    uint16_t list_ptr_after_tex_bank;
+    uint16_t face_cmd, rom_ptr_after_cmd, material_result, uv_at;
+    uint8_t flag_index, point_index, u, v;
+    FxMaterial material;
+    unsigned i;
 
     for (;;) {
-        face_cmd_byte = fx_getb();
-        face_cmd = (uint16_t)(face_cmd_byte & 0xFF);
+        face_cmd = (uint16_t)(fx_getb() & 0xFF);
         rom_ptr_after_cmd = (uint16_t)(rom_at + 1);
         fx_r14(rom_ptr_after_cmd);
-        if ((face_cmd >> 7 & 1)) {
+        if (face_cmd & 0x80)
             break;
-        } else {
-            rom_ptr_after_kind = (uint16_t)(rom_ptr_after_cmd + 1);
-            fx_r14(rom_ptr_after_kind);
-            face_kind_index = fx_getb();
-            if (face_cmd == 2) {
-                rom_at_2 = (uint16_t)(rom_ptr_after_kind + 1);
-                fx_r14(rom_at_2);
-                run_l90F0 = 1;
-            } else {
-                face_kind_flags = fx_ldb((uint16_t)(face_kind_index + 0x07C6));
-                rom_ptr_after_flags = (uint16_t)(rom_ptr_after_kind + 1);
-                rom_at_2 = rom_ptr_after_flags;
-                fx_r14(rom_at_2);
-                if (((uint16_t)(face_kind_flags & 0xFF) >> 7 & 1)) {
-                    run_l90F0 = 1;
-                } else {
-                    if (rom_ptr_after_flags == 0) {
-                        run_l90F0 = 1;
-                    } else {
-                        rom_at = (uint16_t)((uint16_t)(rom_at_2 + face_cmd) + 4);
-                        fx_r14(rom_at);
-                        continue;
-                    }
-                }
-            }
-            fx_stw(FX_POINT_COUNT, face_cmd);
-            list_end = fx_ldw(FX_LIST_END);
-            if (!((uint16_t)((uint16_t)(0 - list_end) + 0x09AA) & 0x8000)) {
-            } else {
-                fx_push(stack, rom_at_2);
-                FxDrawList(list_end, list_write_ptr, stack, rom_at_2);
-                rom_at_2 = fx_pull(stack);
-                fx_r14(rom_at_2);
-                fx_ldw(FX_LIST_END);
-            }
-            material_result = FxModelMaterial(rom_at_2);
-            list_end_2 = fx_ldw(FX_LIST_END);
-            fx_face_begin(list_end_2, (material_result & 0x8000) != 0);
-            rom_at = (uint16_t)(rom_at_2 + 4);
+        fx_r14((uint16_t)(rom_at + 2));
+        flag_index = fx_getb();
+        fx_r14((uint16_t)(rom_at + 3));
+        if (face_cmd != 2 && !(fx_ldb((uint16_t)(flag_index + 0x07C6)) & 0x80)) {
+            rom_at = (uint16_t)(rom_at + 7 + face_cmd);     /* faces away: passed */
             fx_r14(rom_at);
-            point_count = fx_ldw(FX_POINT_COUNT);
-            tex_mask = ((uint16_t)((uint16_t)(material_result & 0xFF) << 8 | (uint16_t)(material_result & 0xFF) >> 8) | point_count);
-            material_word = material_result;
-            if (!(material_result & 0x8000)) {
-            } else {
-                tex_bank = fx_ldw(FX_TEX_BANK);
-                fx_stw(list_end_2, ((uint16_t)((uint16_t)(tex_bank & 0xFF) << 8 | (uint16_t)(tex_bank & 0xFF) >> 8) | (uint16_t)((uint16_t)~point_count & 0xFF)));
-                list_ptr_after_tex_bank = (uint16_t)(list_end_2 + 2);
-                tex_extra_word = fx_ldw(0x0058);
-                fx_stw(list_ptr_after_tex_bank, tex_extra_word);
-                list_ptr_after_extra = (uint16_t)(list_ptr_after_tex_bank + 2);
-                tex_base = fx_ldw(FX_TEX_BASE);
-                fx_stw(list_ptr_after_extra, tex_base);
-                list_end_2 = (uint16_t)(list_ptr_after_extra + 2);
-                tex_mask = fx_ldw(FX_TEX_MASK);
-            }
-            fx_stw(list_end_2, tex_mask);
-            divisor_made = (uint16_t)(list_end_2 + 2);
-            list_write_ptr = divisor_made;
-            outcodes = 0;
-            for (;;) {
-                point_index = fx_getb();
-                rom_at = (uint16_t)(rom_at + 1);
-                fx_r14(rom_at);
-                point_rec_ptr = (uint16_t)((uint16_t)((uint8_t)point_index * (uint8_t)6) + 0x04E4);
-                point_x = fx_ldw(point_rec_ptr);
-                fx_stw(divisor_made, point_x);
-                list_ptr_after_x = (uint16_t)(divisor_made + 2);
-                point_rec_ptr_y = (uint16_t)(point_rec_ptr + 2);
-                point_y = fx_ldw(point_rec_ptr_y);
-                fx_stw(list_ptr_after_x, point_y);
-                divisor_made = (uint16_t)(list_ptr_after_x + 2);
-                point_outcode = fx_ldw((uint16_t)(point_rec_ptr_y + 2));
-                outcodes = (point_outcode | outcodes);
-                material_word_copy = material_word;
-                material_word = material_word_copy;
-                if (!(material_word_copy & 0x8000)) {
-                    fx_face_vertex((uint8_t)point_index, 0, 0);
-                } else {
-                    fx_stw(0x001A, rom_at);
-                    fx_romb(3);
-                    rom_at_3 = fx_ldw(0x0088);
-                    fx_r14(rom_at_3);
-                    uv_u_byte = fx_getb();
-                    uv_rom_ptr_v = (uint16_t)(rom_at_3 + 1);
-                    fx_r14(uv_rom_ptr_v);
-                    fx_stw(divisor_made, (uint16_t)(uv_u_byte << 8 | uv_u_byte >> 8));
-                    list_ptr_after_u = (uint16_t)(divisor_made + 2);
-                    uv_v_byte = fx_getb();
-                    uv_rom_ptr_next = (uint16_t)(uv_rom_ptr_v + 1);
-                    fx_r14(uv_rom_ptr_next);
-                    fx_stw(list_ptr_after_u, (uint16_t)(uv_v_byte << 8 | uv_v_byte >> 8));
-                    fx_face_vertex((uint8_t)point_index, (uint8_t)uv_u_byte, (uint8_t)uv_v_byte);
-                    divisor_made = (uint16_t)(list_ptr_after_u + 2);
-                    rom_bank_saved = fx_ldw(0x001C);
-                    fx_stw(0x0088, uv_rom_ptr_next);
-                    fx_romb(rom_bank_saved);
-                    rom_at = fx_ldw(0x001A);
-                    fx_r14(rom_at);
-                }
-                point_count = (uint16_t)(point_count - 1);
-                if (point_count != 0) {
-                    continue;
-                } else {
-                    break;
-                }
-            }
-            if ((uint16_t)(outcodes & 0xFF) != 0) {
-                if ((0x1F00 & outcodes) == 0x1F00) {
-                    fx_stw(FX_OUTCODES, outcodes);
-                    fx_stw(0x001A, rom_at);
-                    fx_stw(0x005A, list_write_ptr);
-                    if ((uint16_t)(outcodes & 0xFF) == 0) {
-                        if ((0x0010 & outcodes) == 0) {
-                            face_flags_unclipped = fx_ldw(0x0042);
-                            if ((uint16_t)(face_flags_unclipped >> 8) != 0) {
-                                { FxModelFacesOnScreenUVResult tr_ = FxModelFacesOnScreenUV(divisor_made, list_write_ptr, stack); return (FxModelFacesResult){tr_.divisor_made_out, tr_.draw_list_end_out, tr_.rom_at, tr_.up ? tr_.up == 0 ? 0 : tr_.up - 0 : 0}; }
-                            }
-                            point_count_2 = fx_ldw(FX_POINT_COUNT);
-                            { FxPolygonClipScreenResult r_ = FxPolygonClipScreen(point_count_2, divisor_made, list_write_ptr, stack); clipped_vertex_count = r_.clipped_vertex_count; divisor_made = r_.prev_end_y_out; list_write_ptr = r_.divide_remainder_out; };
-                            clipped_count = clipped_vertex_count;
-                            if (clipped_vertex_count == 0) {
-                            } else {
-                                run_l920F = 1;
-                            }
-                        } else {
-                            point_count_3 = fx_ldw(FX_POINT_COUNT);
-                            points_rom_ptr = (uint16_t)(rom_at - point_count_3);
-                            fx_r14(points_rom_ptr);
-                            { FxPolygonGatherResult r_ = FxPolygonGather(point_count_3, stack, points_rom_ptr); final_vertex_count = r_.final_vertex_count; divisor_made = r_.kept_z_out; list_write_ptr = r_.final_src_ptr; };
-                            point_count_2 = final_vertex_count;
-                            if (final_vertex_count == 0) {
-                            } else {
-                                face_flags_uv = fx_ldw(0x0042);
-                                if ((uint16_t)(face_flags_uv >> 8) == 0) {
-                                    { FxPolygonClipScreenResult r_ = FxPolygonClipScreen(point_count_2, divisor_made, list_write_ptr, stack); clipped_vertex_count = r_.clipped_vertex_count; divisor_made = r_.prev_end_y_out; list_write_ptr = r_.divide_remainder_out; };
-                                    clipped_count = clipped_vertex_count;
-                                    if (clipped_vertex_count == 0) {
-                                    } else {
-                                        run_l920F = 1;
-                                    }
-                                } else {
-                                    { FxPolygonClipScreenUVResult r_ = FxPolygonClipScreenUV(point_count_2, divisor_made, list_write_ptr, stack); clipped_vertex_count_2 = r_.clipped_vertex_count; divisor_made = r_.divisor_made_out; list_write_ptr = r_.quotient_sign; };
-                                    clipped_count = clipped_vertex_count_2;
-                                    if (clipped_vertex_count_2 == 0) {
-                                    } else {
-                                        run_l920F = 1;
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        face_flags_clip = fx_ldw(0x0042);
-                        if ((uint16_t)(face_flags_clip >> 8) == 0) {
-                            if ((0x0010 & outcodes) == 0) {
-                                face_flags_unclipped = fx_ldw(0x0042);
-                                if ((uint16_t)(face_flags_unclipped >> 8) != 0) {
-                                    { FxModelFacesOnScreenUVResult tr_ = FxModelFacesOnScreenUV(divisor_made, list_write_ptr, stack); return (FxModelFacesResult){tr_.divisor_made_out, tr_.draw_list_end_out, tr_.rom_at, tr_.up ? tr_.up == 0 ? 0 : tr_.up - 0 : 0}; }
-                                }
-                                point_count_2 = fx_ldw(FX_POINT_COUNT);
-                                { FxPolygonClipScreenResult r_ = FxPolygonClipScreen(point_count_2, divisor_made, list_write_ptr, stack); clipped_vertex_count = r_.clipped_vertex_count; divisor_made = r_.prev_end_y_out; list_write_ptr = r_.divide_remainder_out; };
-                                clipped_count = clipped_vertex_count;
-                                if (clipped_vertex_count == 0) {
-                                } else {
-                                    run_l920F = 1;
-                                }
-                            } else {
-                                point_count_3 = fx_ldw(FX_POINT_COUNT);
-                                points_rom_ptr = (uint16_t)(rom_at - point_count_3);
-                                fx_r14(points_rom_ptr);
-                                { FxPolygonGatherResult r_ = FxPolygonGather(point_count_3, stack, points_rom_ptr); final_vertex_count = r_.final_vertex_count; divisor_made = r_.kept_z_out; list_write_ptr = r_.final_src_ptr; };
-                                point_count_2 = final_vertex_count;
-                                if (final_vertex_count == 0) {
-                                } else {
-                                    face_flags_uv = fx_ldw(0x0042);
-                                    if ((uint16_t)(face_flags_uv >> 8) == 0) {
-                                        { FxPolygonClipScreenResult r_ = FxPolygonClipScreen(point_count_2, divisor_made, list_write_ptr, stack); clipped_vertex_count = r_.clipped_vertex_count; divisor_made = r_.prev_end_y_out; list_write_ptr = r_.divide_remainder_out; };
-                                        clipped_count = clipped_vertex_count;
-                                        if (clipped_vertex_count == 0) {
-                                        } else {
-                                            run_l920F = 1;
-                                        }
-                                    } else {
-                                        { FxPolygonClipScreenUVResult r_ = FxPolygonClipScreenUV(point_count_2, divisor_made, list_write_ptr, stack); clipped_vertex_count_2 = r_.clipped_vertex_count; divisor_made = r_.divisor_made_out; list_write_ptr = r_.quotient_sign; };
-                                        clipped_count = clipped_vertex_count_2;
-                                        if (clipped_vertex_count_2 == 0) {
-                                        } else {
-                                            run_l920F = 1;
-                                        }
-                                    }
-                                }
-                            }
-                        } else {
-                            { FxPolygonDrawResult r_ = FxPolygonDraw(outcodes, stack, rom_at); count = r_.count; divisor_made = r_.last_clip_slope; list_write_ptr = r_.out_list_end; };
-                            clipped_count = count;
-                            if (count != 0) {
-                                run_l920F = 1;
-                            } else {
-                            }
-                        }
-                    }
-                    if (run_l920F) {
-                        run_l920F = 0;
-                        face_flags_word = fx_ldw(0x0042);
-                        face_list_base = fx_ldw(0x005A);
-                        clipped_count_copy = clipped_count;
-                        clipped_count_x2 = (uint16_t)(clipped_count + clipped_count);
-                        if (!(face_flags_word & 0x8000)) {
-                            fx_stw(FX_LIST_END, (uint16_t)((uint16_t)(clipped_count_x2 + clipped_count_x2) + face_list_base));
-                            divisor_made = (uint16_t)(face_list_base - 2);
-                            fx_stb(divisor_made, (uint8_t)clipped_count_copy);
-                        } else {
-                            clipped_count_x4 = (uint16_t)(clipped_count_x2 + clipped_count_x2);
-                            fx_stw(FX_LIST_END, (uint16_t)((uint16_t)(clipped_count_x4 + clipped_count_x4) + face_list_base));
-                            divisor_made = (uint16_t)(face_list_base - 8);
-                            fx_stb(divisor_made, (uint8_t)(uint16_t)~clipped_count_copy);
-                        }
-                        saved_rom_bank = fx_ldw(0x001C);
-                        fx_romb(saved_rom_bank);
-                    }
-                    rom_at = fx_ldw(0x001A);
-                    fx_r14(rom_at);
-                } else {
-                }
-                continue;
-            } else {
-                fx_stw(FX_LIST_END, divisor_made);
-                continue;
-            }
+            continue;
         }
+        fx_stw(FX_POINT_COUNT, face_cmd);
+        if (fx_face_full()) {
+            FxDrawList(0, list_write_ptr, stack, (uint16_t)(rom_at + 3));
+            fx_r14((uint16_t)(rom_at + 3));
+        }
+        material_result = FxModelMaterial((uint16_t)(rom_at + 3));
+        memset(&material, 0, sizeof material);
+        material.textured = (material_result & 0x8000) != 0;
+        if (material.textured) {
+            material.bank = (uint8_t)fx_ldw(FX_TEX_BANK);
+            material.word = fx_ldw(0x0058);
+            material.base = fx_ldw(FX_TEX_BASE);
+            material.mask = fx_ldw(FX_TEX_MASK);
+        } else {
+            material.colour = (uint8_t)material_result;
+        }
+        fx_face_begin(material.textured);
+        rom_at = (uint16_t)(rom_at + 7);
+        fx_r14(rom_at);
+        for (i = 0; i < face_cmd; i++) {
+            point_index = fx_getb();
+            rom_at = (uint16_t)(rom_at + 1);
+            fx_r14(rom_at);
+            if (!material.textured) {
+                fx_face_vertex(point_index, 0, 0);
+                continue;
+            }
+            /* its texel from the stream in bank 3, the model's bank back after */
+            fx_stw(0x001A, rom_at);
+            fx_romb(3);
+            uv_at = fx_ldw(0x0088);
+            fx_r14(uv_at);
+            u = fx_getb();
+            fx_r14((uint16_t)(uv_at + 1));
+            v = fx_getb();
+            fx_r14((uint16_t)(uv_at + 2));
+            fx_face_vertex(point_index, u, v);
+            fx_stw(0x0088, (uint16_t)(uv_at + 2));
+            fx_romb(fx_ldw(0x001C));
+            rom_at = fx_ldw(0x001A);
+            fx_r14(rom_at);
+        }
+        fx_face_end(&material);
     }
-    if ((uint16_t)((uint16_t)(face_cmd + 1) & 0xFF) == 0) {
+    if (face_cmd == 0xFF) {
         fx_unspill(stack);
         return (FxModelFacesResult){divisor_made, list_write_ptr, rom_ptr_after_cmd, 1};
-    } else {
-        next_command = fx_getb();
-        next_rom_at = (uint16_t)(rom_ptr_after_cmd + 1);
+    }
+    {
+        uint16_t next_command = fx_getb();
+        uint16_t next_rom_at = (uint16_t)(rom_ptr_after_cmd + 1);
+
         fx_r14(next_rom_at);
-        { FxModelNextResult tr_ = FxModelNext(divisor_made, list_write_ptr, stack, next_rom_at, next_command); return (FxModelFacesResult){tr_.prev_end_y, tr_.draw_list_end_out, tr_.rom_at_out, tr_.up ? tr_.up == 0 ? 0 : tr_.up - 0 : 0}; }
+        {
+            FxModelNextResult tr_ = FxModelNext(divisor_made, list_write_ptr, stack, next_rom_at, next_command);
+
+            return (FxModelFacesResult){tr_.prev_end_y, tr_.draw_list_end_out, tr_.rom_at_out, tr_.up ? tr_.up : 0};
+        }
     }
 }
 

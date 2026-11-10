@@ -110,11 +110,10 @@ void fx_row_close(uint16_t x);
 void fx_draw_flush(void);
 
 /* The race's shapes in floats (fx/fx_face.c): what the frame program
-   projects and queues, noted as it goes. A model point's view-space sum
-   with its projected record's address; a queued face's entry, then each of
-   its points with its texel; a scaled sprite's place. */
+   projects, noted as it goes. A model point's view-space sum with its
+   projected record's address; a face's points with their texels (between
+   fx_face_begin and fx_face_end, fx_face.h); a scaled sprite's place. */
 void fx_face_point(uint16_t record, uint16_t x, uint16_t y, uint16_t z);
-void fx_face_begin(uint16_t entry, int textured);
 /* FxModelFacing's flag byte for the triangle of the projected records at
    a, b, c ($04E4 + 6i): bit 7, whether it faces away, from its points in
    view space in floats (the sign of A . (B x C), which is the chip's cross

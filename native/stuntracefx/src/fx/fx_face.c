@@ -1,20 +1,21 @@
 /*
  * fx_face.c: the race's shapes in floats (plan stage 10, "Stage 10's 3D").
  *
- * The frame program goes on deciding what is drawn at the console's scale:
- * which objects, which level of detail, which faces face the eye, their
- * order and materials. Where it is drawn is made again here, from the
- * view-space points the program projected, unrounded and unheld:
+ * The frame program decides what is drawn: which objects, which level of
+ * detail, which faces face the eye, their order and materials. Where it is
+ * drawn is made here, from the view-space points, unrounded and unheld:
  *
  *   FxModelProject   each point's view-space sum (the model's point at
  *                    $0340 + 6i plus the object's place at $0026-$002A, in
- *                    16 bits as the chip adds them) is kept beside its
- *                    projected record at $04E4 + 6i (fx_face_point);
- *   FxModelFaces     each face's queue entry, its points and texels are
- *                    noted (fx_face_begin, fx_face_vertex);
- *   FxDrawList       the faces whose entries the queue kept are made into
- *                    shapes (fx_face_settle) and drawn in place of the
- *                    chip's entries, from the face's first to its last.
+ *                    16 bits as the chip adds them) is kept by its record
+ *                    $04E4 + 6i (fx_face_point);
+ *   FxModelFaces     each face that faces the eye: its points and texels
+ *                    (fx_face_begin, fx_face_vertex), then its material
+ *                    (fx_face_end), which makes its shape;
+ *   FxDrawList       the shapes drawn in order (fx_draw.c).
+ *
+ * The chip's own clip, projection to whole pixels and queue are not used:
+ * whether a face is seen is decided here, in floats.
  *
  * A shape is the face clipped against a near plane in view space,
  * projected x = cx + 128 X / Z, y = cy + 128 Y / Z, clipped against the
@@ -37,8 +38,7 @@ enum {
     WORK = MOST + 8,            /* each clip adds at most one */
     SHAPES = 512,
     CORNERS = 32768,
-    TABLE = 0x04E4,
-    LIST_END = 0x005C
+    TABLE = 0x04E4
 };
 
 #define FOCAL 128.0             /* FxRatioClamp: (R1 / 2) * 256 / R3; the far table the same */
@@ -252,18 +252,17 @@ static Tint chosen = { -1, 0, 0, 0 };
 
 static struct {
     int open, textured, whole, n;
-    uint16_t entry;
     View view;
     Tint tint;
     Corner3 c[MOST];
 } face;
 
 static FxShape shapes[SHAPES];
-static int nshapes, cursor;
+static int nshapes;
 static FxCorner corners[CORNERS];
 static uint32_t ncorners;
 
-static void commit(uint16_t end);
+static void commit(const FxMaterial *m);
 
 /* ---- pattern faces (fx_pattern.c): kept whole, with their view, and cut
    when drawn with the draw list's texture offsets ---- */
@@ -278,31 +277,11 @@ static struct {
 } pattern_faces[PATTERN_FACES];
 static int npatterns;
 
-/* The texture's key from the face's draw-list entry, laid out as
-   FxDrawList reads it: the kind, the bank, the colour and options word,
-   the base and the mask. */
-static const FxPattern *entry_pattern(uint16_t entry)
+/* A textured face's pattern (fx_pattern.c), by its texture and plot
+   options. */
+static const FxPattern *material_pattern(const FxMaterial *m)
 {
-    uint16_t p = (uint16_t)(entry + 1);
-    uint8_t bank = fx_ram[p], options = (uint8_t)(fx_ram[(uint16_t)(p + 2)] & 0x1F);
-    uint16_t base = (uint16_t)(fx_ram[(uint16_t)(p + 3)] | fx_ram[(uint16_t)(p + 4)] << 8);
-    uint16_t mask = (uint16_t)(fx_ram[(uint16_t)(p + 5)] | fx_ram[(uint16_t)(p + 6)] << 8);
-
-    return fx_pattern_find(bank, base, mask, options);
-}
-
-/* The face noted last is settled: kept when the queue's end has moved past
-   its entry (the chip queued it), dropped when it has not. */
-static void settle_face(void)
-{
-    uint16_t end;
-
-    if (!face.open)
-        return;
-    face.open = 0;
-    end = word(LIST_END);
-    if (end > face.entry)
-        commit(end);
+    return fx_pattern_find(m->bank, m->base, m->mask, (uint8_t)((m->word >> 8) & 0x1F));
 }
 
 /* The model's distance tier is the place of its colour table ($0052) past
@@ -327,11 +306,9 @@ void fx_face_material(int kind, uint16_t index, uint16_t table, uint16_t light)
     chosen.tier = (uint8_t)(tier > 3 ? 3 : tier);
 }
 
-void fx_face_begin(uint16_t entry, int textured)
+void fx_face_begin(int textured)
 {
-    settle_face();
     face.open = 1;
-    face.entry = entry;
     face.textured = textured != 0;
     face.tint = chosen;
     chosen.kind = -1;
@@ -362,10 +339,12 @@ void fx_face_vertex(uint8_t p, uint8_t u, uint8_t v)
         check_point(p, &face.view);
 }
 
-void fx_face_settle(void)
+void fx_face_end(const FxMaterial *material)
 {
-    settle_face();
-    cursor = 0;
+    if (!face.open)
+        return;
+    face.open = 0;
+    commit(material);
 }
 
 void fx_face_reset(void)
@@ -374,16 +353,17 @@ void fx_face_reset(void)
     face.open = 0;
     nshapes = 0;
     ncorners = 0;
-    cursor = 0;
 }
 
-const FxShape *fx_face_shape(uint16_t entry)
+uint32_t fx_face_count(void) { return (uint32_t)nshapes; }
+
+const FxShape *fx_face_at(uint32_t i) { return &shapes[i]; }
+
+int fx_face_full(void)
 {
-    while (cursor < nshapes && shapes[cursor].entry < entry)
-        cursor++;
-    if (cursor < nshapes && shapes[cursor].entry == entry)
-        return &shapes[cursor];
-    return NULL;
+    /* a face's most: its clipped polygon fanned, twice over when the water
+       cuts it, and a pattern face's place */
+    return nshapes >= SHAPES - 1 || ncorners + 2u * 3u * WORK > CORNERS || npatterns >= PATTERN_FACES;
 }
 
 const FxCorner *fx_face_corners(void) { return corners; }
@@ -851,10 +831,9 @@ static int polygon_corners(const Corner3 *in, int n0, int textured)
     return ok;
 }
 
-/* The face noted, queued from its entry up to `end`, made into a shape. A
-   face not wholly known (a point not projected with this model's table)
-   makes none, and the chip's entries are drawn as they stand. */
-static void commit(uint16_t end)
+/* The face noted made into a shape with its material. A face not wholly
+   known (a point not projected with this model's table) makes none. */
+static void commit(const FxMaterial *m)
 {
     FxShape *s;
     uint32_t first = ncorners;
@@ -871,11 +850,10 @@ static void commit(uint16_t end)
             c[i][1] = face.c[i].y;
             c[i][2] = face.c[i].z;
         }
-        survey_face((const double (*)[3])c, face.n, fx_ram[(uint16_t)(face.entry + 1)], face.textured, survey_context);
+        survey_face((const double (*)[3])c, face.n, m->colour, face.textured, survey_context);
     }
     s = &shapes[nshapes];
-    s->entry = face.entry;
-    s->end = end;
+    s->material = *m;
     s->line = face.n == 2;
     s->tint = face.textured ? -1 : face.tint.kind;
     s->tier = face.tint.tier;
@@ -884,7 +862,7 @@ static void commit(uint16_t end)
     s->under_first = s->under_count = 0;
     s->pattern = 0;
     if (!s->line && face.textured && npatterns < PATTERN_FACES) {
-        const FxPattern *pattern = entry_pattern(face.entry);
+        const FxPattern *pattern = material_pattern(m);
 
         if (pattern) {
             pattern_faces[npatterns].pattern = pattern;

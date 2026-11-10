@@ -13,10 +13,21 @@ typedef struct {
     float x, y, u, v;
 } FxCorner;
 
-/* A face's shape: triangles (or a line's two ends) standing for the queue's
-   entries from `entry` up to `end`. */
+/* A face's material as FxModelMaterial chose it: a flat face's colour
+   byte; a textured face's texture (its bank, base and mask) and its colour
+   and options word (the colour in the low byte, the plot options in bits
+   8-12). */
 typedef struct {
-    uint16_t entry, end;
+    uint8_t textured;
+    uint8_t colour;
+    uint8_t bank;
+    uint16_t word, base, mask;
+} FxMaterial;
+
+/* A face's shape: triangles (or a line's two ends), in the order the faces
+   were made, with its material. */
+typedef struct {
+    FxMaterial material;
     uint8_t line;
     uint32_t first, count;
     /* how the chip chose a flat face's colour (fx_face_material): -1 not
@@ -34,12 +45,19 @@ typedef struct {
     uint16_t pattern;           /* a pattern face's place among them (fx_face_pattern), plus one; 0 none */
 } FxShape;
 
-/* The faces committed since the queue was last drawn are made into shapes. */
-void fx_face_settle(void);
-/* The shape standing for the entry at `entry`, or NULL. */
-const FxShape *fx_face_shape(uint16_t entry);
+/* A face: begun, its points given (fx_face_vertex, fx_rt.h), then ended
+   with its material, which makes its shape (none when a point is not
+   known, or it is wholly off the view). */
+void fx_face_begin(int textured);
+void fx_face_end(const FxMaterial *material);
+/* The shapes made since they were last drawn, in order; whether there is
+   room for another face's (else they are drawn first, as the chip drew its
+   queue when it was nearly full). */
+uint32_t fx_face_count(void);
+const FxShape *fx_face_at(uint32_t i);
+int fx_face_full(void);
 const FxCorner *fx_face_corners(void);
-/* The queue was drawn: its shapes are gone. */
+/* The shapes were drawn: they are gone. */
 void fx_face_reset(void);
 
 /* A pattern face's pieces (fx_pattern.c) with the texture's offsets the
