@@ -239,6 +239,78 @@ and `render/model.c` are the parts that stalled last time. **Delete:** `gsu.h`, 
 STOP), and each frame's polygons against the recorded draw list. Expected: compute results identical; polygons identical in vertices,
 colours and order.
 
+#### The Super FX state (section 3's split, for section 8)
+
+Agreed with the 3D session (fx.h, the drawing side) on 2026-11-09; objects (the S-CPU object code's record links) and
+race (`FxFrameInputs`) asked. The types are drafted in the notes folder (`fx-state-types-draft.h`) for the 3D session to land.
+
+Today the chip's 64 KB of RAM is one byte array that both sides read by address: 256 named addresses (72 also read by the
+S-CPU side), 64 record offsets and 129 literal addresses in `src/fx`. Section 3 splits it into **shared state**, kept as
+named fields, and **the chip's scratch**, which becomes locals and arguments. No field is at an SNES address, none holds a
+register's byte, and nothing in the game reads the chip's RAM by address. `fx.h` (the 3D session's) holds the types.
+
+**1. Records.** One `FxRecord` struct with the fields fx and objects have named (`fx-answer-to-objects-record-names.md`):
+the all-records links, pool, size, handler, model offsets, flags, frame, script, list head and next, mode, place, heading,
+pitch, roll, mass, contact flags, velocity, turn rates, the car's and the part's own fields. Kinds, from the record makers:
+
+| Kind | Bytes in the original | Pool | Made by |
+|---|---|---|---|
+| car | $98 | first | `FxCarNew`, from a car script in bank 9 |
+| car part | $52 | first | `FxCarAddPart` |
+| falling part, falling, trigger, camera follower | $34 | first | the record makers, modes $0424, $0426, $042D, $042E |
+| still | $2A | second | mode $0422, counted, on the still list |
+
+Every link that holds a record's RAM address today becomes an `FxRecord *`: the all-records list (+$04, +$06, head at
+$2332), the still list (head $2398, +$26), a record's own list (+$18 head, +$0E next), a car's parts (+$3E, +$34), the
+next car (+$74), the partner (+$8E), the player and view records ($2476-$247A), the S-CPU objects' record links. A test
+that a word "is a record" by its address range becomes a null test.
+
+**2. The pool keeps its accounting.** The record pool is the original's memory manager: first fit over two byte pools,
+splitting a larger block and merging neighbours (`FxPoolTake`, `FxPoolsMerge`, `FxListSweep`, `FxObjectFree`). When no
+block fits, the record is not made, and that is game behaviour. So `FxPool` keeps each pool's free blocks as places and
+sizes and decides as the original does. A record's place is the allocator's bookkeeping and the check writer's, nothing
+else; the game reaches records by pointer. The structs live in a fixed array; a slot is taken with the block and given
+back with it.
+
+**3. Shared state.** One `FxShared` struct (in fx.h, an instance in the game state) holds every word that outlives a job
+or is read by the S-CPU side: the race timers ($2470, $2472), the physics busy flag, the car class's physics parameters
+($2652-$2686), steering ($2662-$266A), the near car ($2642-$264C), traffic, effects, haze and weather, the text's place,
+the drive level, the track table, the far-object list, the new car's slots, the counts. 72 named words are read by the
+S-CPU side today (38 in $0000-$023F, the job inputs `FXIN_*` among them; 22 in $2330-$2BFF; 6 job parameters at $0AAA-
+$108E; 6 more); which of the other 184 outlive a job is measured, not guessed (step 6). Measured on five recordings (attract, a novice race, battle, a Stunt Trax course, Test Run): of the named words
+90 shared, 124 scratch, 25 not reached; the list is `fx-ram-split-measured.tsv` in the notes folder. An array a job partly
+rewrites can look shared when a job reads a slot first, so arrays are read in the code before they are made fields.
+
+**3a. One aggregate, one copy.** `FxState` holds `FxShared`, the fixed `FxRecord` array and `FxPool`'s bookkeeping as
+one block (`fx_state`), never allocated, so a record pointer stays valid when the pictures between steps (`fx_tween`) and
+the far list (`fx_far`) copy the chip's state whole and put it back. The per-frame words race proposed as `FxFrameInputs`
+(the view, the records, the shade base) are a part of `FxShared`, not a second struct. The far records the draw list
+writes into bank 1 (the far list and the view's world place) become a far-list array in `FxShared`, filled by the S-CPU
+side and read by `fx_far`.
+
+**4. The chip's scratch becomes locals and arguments.** The drawing's own scratch is the render share (the 3D session's)
+and needs no field: the frame program's points ($0340, $04E4), facing flags ($07C6), queue ($08AA), slots ($0AAA) and
+stack ($0240); the float hooks that read some of them by address change with that conversion. The stack at $0240 and every push, pull and spill; R14 and the
+ROM buffer (a ROM table read becomes a read of that named table); the RAM address register (`fx_sbk` stores to the field it
+last read); the bank registers; the per-job temporaries in $0000-$023F and $2330-$27FF that no later job reads; the
+generated `rom_at`, `stack`, `*_scratch`, `caller_scratch_back` and `up` parameters. A job's inputs that the S-CPU writes
+just before starting it (`FXIN_*`) become the job function's arguments, its outputs the function's result. A return past
+several callers becomes each caller returning.
+
+**5. The S-CPU side.** Its reads of chip RAM by address (hud 138, race 62, system 37, object 53, menu 5, video 5, sound 1)
+move to the same fields and record pointers, each area switching its own. Until then an adapter may answer the old reads,
+named interim in its own comment and in the row with the count of callers left on it; it goes at 0.
+
+**6. Checks.** `fx_check` stays the check, with a check-only writer that lays `FxShared` and each live record (at its pool
+place) back out as the original image, so the comparison with the recordings is unchanged. Before converting, one run of an
+instrumented `fx_check` (a scratch copy of the RAM accessors, not the game's) records, per job, each word read before it
+is written and each word written that a later job or the S-CPU reads: that decides the shared/scratch split of step 3.
+After: `fx_check` over the five plays and the battle recording's 898 steps, one run each when a share is done.
+
+**7. Order.** This design agreed (fx owns fx.h and the drawing side; objects the S-CPU object code); the instrumented run
+and the split's list added here; `FxRecord`, `FxPool` and `FxShared` in fx.h; then the shares file by file (sound:
+fx/object, fx/race, fx/math, 13,400 lines and 105 functions), each row counting lines and functions converted.
+
 ### Stage 6. Menus and saves (13,358 lines)
 Menus, course preview, records, the 3D car display, saves. **Check:** `nshvc-check` on the menu plays. Expected: frames with no
 polygons byte identical; 3D frames differ on polygon edges only (section 1, item 3).
