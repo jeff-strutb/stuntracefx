@@ -67,7 +67,8 @@ void GradientSetup(void)
 }
 
 /* The two-player screen: each half's gradient starts at its view's place in the day list. */
-void GradientPointersToBank7F(void)
+/* @routine 7E:B2A5 GradientPointersToBank7F */
+void GradientStartsFromViews(void)
 {
     pic.race.gradient_start[0] = (uint16_t)(GRADIENT_AT_DAY + gradient.view_offset[0] / 2);
     pic.race.gradient_start[1] = (uint16_t)(GRADIENT_AT_DAY + gradient.view_offset[1] / 2);

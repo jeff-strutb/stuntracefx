@@ -323,9 +323,9 @@ static void menu_rows(unsigned at, int count, void (*other_row)(void), void (*la
     last_row();
 }
 
-static void rows_retry(void) { menu_rows(0x0187, 9, TilemapRow207Palette4, TilemapRow287Palette4); }
-static void rows_course(void) { menu_rows(0x0207, 13, TilemapRow187Palette4, TilemapRow287Palette4); }
-static void rows_car(void) { menu_rows(0x0287, 10, TilemapRow187Palette4, TilemapRow207Palette4); }
+static void rows_retry(void) { menu_rows(0x0187, 9, ResultsMenuCoursePlain, ResultsMenuCarPlain); }
+static void rows_course(void) { menu_rows(0x0207, 13, ResultsMenuRetryPlain, ResultsMenuCarPlain); }
+static void rows_car(void) { menu_rows(0x0287, 10, ResultsMenuRetryPlain, ResultsMenuCoursePlain); }
 
 /* Car 3 only in mode 3 or once the save's progress has bit 2. */
 static int car3_open(void) { return g.hud_mode == 3 || (save.progress & 0x04); }
@@ -831,7 +831,7 @@ void ChampionshipStageStart(void)
     g.overlay_state = 0;
     WindowSlideUpSound();
     step_next();
-    OamHide36And96();
+    ChampionshipSpritesHide();
 }
 
 /* @routine 07:BA56 (stage 1) */

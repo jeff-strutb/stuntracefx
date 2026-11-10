@@ -442,7 +442,7 @@ static void stunt_phase_race(void)
         g.player_phase[0] = 0x0E;
         g.finish_timer = 0x0C;
         g.end_ready = 0x0C;
-        OamHide75Up();
+        HudSpritesHide();
         SoundReset();
         SoundPort0QueuePush(0x37);
         return;

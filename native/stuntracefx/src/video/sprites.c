@@ -311,31 +311,38 @@ void OamSetPalette(uint8_t bits, int count, int first)
     } while (--count);
 }
 
-void OamPaletteFromTableE30F(void)
+/* @routine 04:E2EC OamPaletteFromTableE30F */
+void StuntRecordsPagePalette(void)
 {
     OamSetPalette(cart8(0x04, (uint16_t)(0xE30F + g.champ_stage)), 0x16, g.sprite_row_d79);
 }
 
-void OamPaletteFromTableE26A(void)
+/* @routine 04:E23F OamPaletteFromTableE26A */
+void SpeedRecordsPagePalette(void)
 {
     uint16_t n = g.times_step;
 
     OamSetPalette(n ? cart8(0x04, (uint16_t)(0xE26A + ((n - 1) & 0xFF))) : 0x0A, 0x16, g.oam_first_free + 0x0D);
 }
 
-void OamPaletteFromTableE26AByMode(void)
+/* @routine 04:E26E OamPaletteFromTableE26AByMode */
+void AllRecordsPagePalette(void)
 {
     OamSetPalette(cart8(0x04, (uint16_t)(0xE26A + g.champ_stage)), 0x12, g.sprite_row_d79);
 }
 
-void OamPalettesE28D(void)
+/* @routine 04:E28D OamPalettesE28D */
+void BattleRecordsPagePalettes(void)
 {
     OamSetPalette(cart8(0x04, (uint16_t)(0xE30B + g.champ_stage)), 0x12, g.sprite_row_d75);
     OamSetPalette(cart8(0x04, (uint16_t)(0xE313 + g.car[0])), 0x06, g.sprite_row_d75 + 0x16);
     OamSetPalette(cart8(0x04, (uint16_t)(0xE313 + g.car[1])), 0x06, g.sprite_row_d75 + 0x1C);
 }
 
-void OamPaletteForD75(void)
+/* The records screens' sprite palettes, by screen: the rows' sprites after
+   the class name's. */
+/* @routine 04:E227 OamPaletteForD75 */
+void SpeedRecordsLinePalette(void)
 {
     OamSetPalette(0x0A, 0x16, g.sprite_row_d75 + 13);
 }
@@ -351,12 +358,21 @@ static void oam_block(int first, uint8_t x0, uint8_t dx, uint8_t attr_a, uint8_t
     set_attr(first + 4, attr_b);
 }
 
-void OamBlock52Left(void) { oam_block(52, 0x50, 0x22, 0x0C, 0x06); }
-void OamBlock52Right(void) { oam_block(52, 0x87, 0x1A, 0x06, 0x0C); }
-void OamBlock59Left(void) { oam_block(59, 0x30, 0x22, 0x0C, 0x06); }
-void OamBlock59Right(void) { oam_block(59, 0x5F, 0x1A, 0x06, 0x0C); }
-void OamBlock123Left(void) { oam_block(123, 0x7E, 0x22, 0x0C, 0x06); }
-void OamBlock123Right(void) { oam_block(123, 0xAD, 0x1A, 0x06, 0x0C); }
+/* The pause's two choices with the left or the right one lit: the cursor's
+   two sprites placed and the words' palettes. One player's from sprite 52,
+   pad 1's from 59, pad 2's from 123. */
+/* @routine 07:C33A OamBlock52Left */
+void PauseChoiceLeft(void) { oam_block(52, 0x50, 0x22, 0x0C, 0x06); }
+/* @routine 07:C36A OamBlock52Right */
+void PauseChoiceRight(void) { oam_block(52, 0x87, 0x1A, 0x06, 0x0C); }
+/* @routine 07:C328 OamBlock59Left */
+void PauseChoiceLeftPad1(void) { oam_block(59, 0x30, 0x22, 0x0C, 0x06); }
+/* @routine 07:C358 OamBlock59Right */
+void PauseChoiceRightPad1(void) { oam_block(59, 0x5F, 0x1A, 0x06, 0x0C); }
+/* @routine 07:C331 OamBlock123Left */
+void PauseChoiceLeftPad2(void) { oam_block(123, 0x7E, 0x22, 0x0C, 0x06); }
+/* @routine 07:C361 OamBlock123Right */
+void PauseChoiceRightPad2(void) { oam_block(123, 0xAD, 0x1A, 0x06, 0x0C); }
 
 void OamColumn8(int first, uint16_t pos, uint16_t tile)
 {
@@ -370,7 +386,10 @@ void OamColumn8(int first, uint16_t pos, uint16_t tile)
     }
 }
 
-void OamHighBits18(void)
+/* A half's gauge sprites off the screen (their X past the right edge): the
+   top's 27-38, the bottom's 91-102; its gauge place parked at $F8. */
+/* @routine 07:C502 OamHighBits18 */
+void TopGaugeSpritesOff(void)
 {
     static const uint8_t bits[4] = {0x40, 0x55, 0x55, 0x15};
     int i;
@@ -380,7 +399,8 @@ void OamHighBits18(void)
         or_high_byte(6 + i, bits[i]);
 }
 
-void OamHighBits58(void)
+/* @routine 07:C50E OamHighBits58 */
+void BottomGaugeSpritesOff(void)
 {
     static const uint8_t bits[4] = {0x40, 0x55, 0x55, 0x15};
     int i;
@@ -390,25 +410,31 @@ void OamHighBits58(void)
         or_high_byte(22 + i, bits[i]);
 }
 
-void OamHighBits18Park48(void)
+/* The same and the half's panel and map sprites off the left edge: the
+   top's 48-63, the bottom's 112-127. */
+/* @routine 07:C4E0 OamHighBits18Park48 */
+void TopHudSpritesOff(void)
 {
-    OamHighBits18();
+    TopGaugeSpritesOff();
     set_high_byte(12, 0x55);
     set_high_byte(13, 0x55);
     set_high_byte(14, 0x55);
     set_high_byte(15, 0x55);
 }
 
-void OamHighBits58Park112(void)
+/* @routine 07:C4F1 OamHighBits58Park112 */
+void BottomHudSpritesOff(void)
 {
-    OamHighBits58();
+    BottomGaugeSpritesOff();
     set_high_byte(28, 0x55);
     set_high_byte(29, 0x55);
     set_high_byte(30, 0x55);
     set_high_byte(31, 0x55);
 }
 
-void OamHide36And96(void)
+/* Sprites 36-56 and 96-111 hidden for the championship's screen. */
+/* @routine 07:C45D OamHide36And96 */
+void ChampionshipSpritesHide(void)
 {
     int i;
 
@@ -418,7 +444,10 @@ void OamHide36And96(void)
         set_high_byte(0x18 + i, 0);
 }
 
-void OamHide75Up(void)
+/* The HUD's sprites hidden at the race's end: 75-127 (in the modes with a
+   map, 87-95 left alone); the map and gauge places parked at $F8. */
+/* @routine 07:C4A4 OamHide75Up */
+void HudSpritesHide(void)
 {
     g.hud_map_y_b = 0xF8;
     g.gauge_place[6] = 0xF8;
@@ -443,7 +472,9 @@ void OamLargeColumns(void)
     set_high_byte(27, 0xAA);
 }
 
-void OamPlaceRows75And112(void)
+/* The HUD's sprites back on their rows after a replay. */
+/* @routine 07:C3DD OamPlaceRows75And112 */
+void HudSpritesPlace(void)
 {
     static const uint8_t at8c[7] = {116, 117, 118, 120, 122, 124, 126};
     static const uint8_t at94[5] = {119, 121, 123, 125, 127};
@@ -686,14 +717,22 @@ static void pieces_at(uint16_t set, uint8_t x, uint8_t y, int slot)
 
 void SpritePiecesAtLeft(uint16_t set, int slot) { pieces_at(set, 0x81 - 0x24, 0x89 - 0x0B, slot); }
 void SpritePiecesAtRight(uint16_t set, int slot) { pieces_at(set, 0x81 + 0x24, 0x89 - 0x0B, slot); }
-void SpritePiecesAt46Y71(uint16_t set, int slot) { pieces_at(set, 0x81 - 0x3B, 0x89 - 0x18, slot); }
-void SpritePiecesAt46Y82(uint16_t set, int slot) { pieces_at(set, 0x81 - 0x3B, 0x89 - 0x07, slot); }
-void SpritePiecesAt46Y93(uint16_t set, int slot) { pieces_at(set, 0x81 - 0x3B, 0x89 + 0x0A, slot); }
-void SpritePiecesAt62Y71(uint16_t set, int slot) { pieces_at(set, 0x89 - 0x27, 0x89 - 0x18, slot); }
-void SpritePiecesAt62Y83(uint16_t set, int slot) { pieces_at(set, 0x89 - 0x27, 0x89 - 0x06, slot); }
-void SpritePiecesAt62Y95(uint16_t set, int slot) { pieces_at(set, 0x89 - 0x27, 0x89 + 0x0C, slot); }
+/* The records screens' cars, three sprites each, by row. */
+/* @routine 02:FC9A SpritePiecesAt46Y71 */
+void StuntRecordsRow1Car(uint16_t set, int slot) { pieces_at(set, 0x81 - 0x3B, 0x89 - 0x18, slot); }
+/* @routine 02:FCA9 SpritePiecesAt46Y82 */
+void StuntRecordsRow2Car(uint16_t set, int slot) { pieces_at(set, 0x81 - 0x3B, 0x89 - 0x07, slot); }
+/* @routine 02:FCB8 SpritePiecesAt46Y93 */
+void StuntRecordsRow3Car(uint16_t set, int slot) { pieces_at(set, 0x81 - 0x3B, 0x89 + 0x0A, slot); }
+/* @routine 02:FCD6 SpritePiecesAt62Y71 */
+void AllRecordsRow1Car(uint16_t set, int slot) { pieces_at(set, 0x89 - 0x27, 0x89 - 0x18, slot); }
+/* @routine 02:FCE5 SpritePiecesAt62Y83 */
+void AllRecordsRow2Car(uint16_t set, int slot) { pieces_at(set, 0x89 - 0x27, 0x89 - 0x06, slot); }
+/* @routine 02:FCF4 SpritePiecesAt62Y95 */
+void AllRecordsRow3Car(uint16_t set, int slot) { pieces_at(set, 0x89 - 0x27, 0x89 + 0x0C, slot); }
 
-void SpritePiecesCarAt51(uint16_t car, int slot)
+/* @routine 02:FD12 SpritePiecesCarAt51 */
+void RecordsBestTimeCar(uint16_t car, int slot)
 {
     g.piece_palette = 0;
     pieces_at((uint16_t)((car * 3) & 0x0F), 0x81 - 0x30, 0x89 - 0x02, slot);
@@ -839,9 +878,13 @@ static void sprite_text_line_at(uint8_t x, uint8_t y)
     g.slot[0].first = 0;                /* the eighth byte falls on the record after the table */
 }
 
-void SpriteTextAt895E(void) { sprite_text_line_at(0x89, 0x5E); }
-void SpriteTextAt8152(void) { sprite_text_line_at(0x81, 0x52); }
-void SpriteTextAt8952(void) { sprite_text_line_at(0x89, 0x52); }
+/* The records screens' text line (sprites from $70), placed for each screen. */
+/* @routine 02:FBE5 SpriteTextAt895E */
+void SpeedRecordsTextLine(void) { sprite_text_line_at(0x89, 0x5E); }
+/* @routine 02:FBF1 SpriteTextAt8152 */
+void StuntBattleRecordsTextLine(void) { sprite_text_line_at(0x81, 0x52); }
+/* @routine 02:FC03 SpriteTextAt8952 */
+void AllRecordsTextLine(void) { sprite_text_line_at(0x89, 0x52); }
 
 /* ---- the eight records after the table: effects on the screen's colours ---- */
 

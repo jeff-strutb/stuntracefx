@@ -36,10 +36,10 @@ const WindowEdges *window_edges_at(uint16_t addr)
 {
     switch (addr) {
     case 0xF857: return &windows.normal;
-    case 0xFFD1: return &windows.ffd1;
-    case 0xFFD5: return &windows.ffd5;
-    case 0xFFD9: return &windows.ffd9;
-    case 0xFFDD: return &windows.ffdd;
+    case 0xFFD1: return &windows.view_edges;
+    case 0xFFD5: return &windows.top_view_edges;
+    case 0xFFD9: return &windows.bottom_view_edges;
+    case 0xFFDD: return &windows.split_edges;
     default: break;
     }
     if (addr >= EDGE_ROWS_ADDR && addr < EDGE_ROWS_ADDR + EDGE_ROWS * 4)
@@ -65,7 +65,9 @@ static void band_end(int i)
 
 /* ---- the table's fixed shapes ---- */
 
-void WindowHdmaFFDD(void)
+/* Every band at the split's window edges, for the split's opening and closing. */
+/* @routine 7E:D8A8 WindowHdmaFFDD */
+void WindowBandsSplit(void)
 {
     band_set(0, 0x40, 0xFFDD);
     band_set(1, 0x40, 0xFFDD);
@@ -74,7 +76,11 @@ void WindowHdmaFFDD(void)
     band_end(4);
 }
 
-void WindowHdmaFFD1(void)
+/* The window bands over the view (lines 32-159) taking the view's window
+   edges, the rest normal; with two players each half's three bands take its
+   view's. */
+/* @routine 7E:DC8D WindowHdmaFFD1 */
+void WindowBandsView(void)
 {
     band_set(0, 0x20, 0xF857);
     band_set(1, 0x70, 0xFFD1);
@@ -91,12 +97,14 @@ static void window_bands_3(int at, uint16_t addr)
     band_set(at + 2, 0x10, addr);
 }
 
-void WindowHdmaFFD5(void)
+/* @routine 7E:DCC6 WindowHdmaFFD5 */
+void WindowBandsTopView(void)
 {
     window_bands_3(1, 0xFFD5);
 }
 
-void WindowHdmaFFD9(void)
+/* @routine 7E:DCEC WindowHdmaFFD9 */
+void WindowBandsBottomView(void)
 {
     window_bands_3(5, 0xFFD9);
 }
@@ -242,7 +250,7 @@ static void slide_step(int up)
         return;
     }
     windows.slide_pos = v;
-    WindowHdmaFFD1();
+    WindowBandsView();
     windows.colours[1] = 0x40;
     windows.colours[0] = 0x20;
     windows.colours[2] = v;
@@ -284,9 +292,9 @@ static void oscillator_step(int x)
 static void bands_for_screen(void)
 {
     if (g.split_screen)
-        WindowHdmaFFD5();
+        WindowBandsTopView();
     else
-        WindowHdmaFFD1();
+        WindowBandsView();
 }
 
 static void oscillator_window(void)
@@ -407,7 +415,7 @@ void WindowSlideCheck(void)
         return;
     windows.colours[0] = windows.colours[1] = windows.colours[2] = 0xE0;
     if ((uint8_t)(windows.level >> 8) >= 0xE1)
-        WindowHdmaFFD1();
+        WindowBandsView();
     windows.setup = 6;
     level_step();
     if ((uint16_t)(windows.level + (uint16_t)windows.level_step) == 0xE000) {
@@ -505,7 +513,7 @@ void BobWindowsRun(void)
         g.line_effects.fixed_bands = 0;
         windows.setup = 2;
         if (bob_window(1, 3))
-            WindowHdmaFFD9();
+            WindowBandsBottomView();
     }
 }
 
@@ -610,7 +618,7 @@ void WindowSplitAnimate(void)
         }
     }
     if (windows.split_pos >= 0x7000) {
-        WindowHdmaFFDD();
+        WindowBandsSplit();
         windows.bands_state = 5;
     } else {
         windows.bands_state = 0;
@@ -619,7 +627,8 @@ void WindowSplitAnimate(void)
 
 /* The wipe that opens a course: its table of counts and edges rebuilt from
    the scaled edges, each band one step in on both sides. */
-void WindowTable7F(void)
+/* @routine 7E:A46B WindowTable7F */
+void CourseWipeTable(void)
 {
     uint8_t *t = windows.wipe_table;
     uint8_t a;
@@ -778,7 +787,9 @@ static void setup_colour_only(uint8_t subtract, uint8_t layers)
     pic.blend.layers = layers;
 }
 
-void WindowsColourSub81(void)
+/* Window setup 6, which no script selects: the colour window from window 1, subtracting. */
+/* @routine 7E:E054 WindowsColourSub81 */
+void WindowsSubtractSetup(void)
 {
     memset(pic.windows.layer_use, 0, sizeof pic.windows.layer_use);
     pic.windows.layer_use[5] = NSHVC_WIN1;
@@ -797,7 +808,7 @@ void WindowsSetupSelect(void)
     case 0: WindowsColourAddBg12(); break;
     case 2: setup_colour_only(1, 0x03); break;
     case 4: setup_colour_only(0, 0x03); break;
-    case 6: WindowsColourSub81(); break;
+    case 6: WindowsSubtractSetup(); break;
     default: WindowsAllInverted(); break;
     }
 }
@@ -805,7 +816,8 @@ void WindowsSetupSelect(void)
 /* ---- the colour maths and fixed colour ---- */
 
 /* the fixed colour taken from BG1, BG2 and the backdrop */
-void ColourMathA3(void)
+/* @routine 03:FE57 ColourMathA3 */
+void ColourFadeBg12(void)
 {
     windows.maths.subtract = 1;
     windows.maths.half = 0;
@@ -813,7 +825,8 @@ void ColourMathA3(void)
 }
 
 /* the same and BG3, the fade from its first step */
-void ColourMathA7Start(void)
+/* @routine 03:FCC9 ColourMathA7Start */
+void ColourFadeBg123Start(void)
 {
     sound_port1_push(0x04);
     windows.maths.subtract = 1;
@@ -950,10 +963,10 @@ void WindowsInit(void)
     int i;
 
     edges_from_rom(0xF999, &windows.normal);
-    edges_from_rom(0xF99D, &windows.ffd1);
-    edges_from_rom(0xF9A1, &windows.ffd5);
-    edges_from_rom(0xF9A5, &windows.ffd9);
-    edges_from_rom(0xF9A9, &windows.ffdd);
+    edges_from_rom(0xF99D, &windows.view_edges);
+    edges_from_rom(0xF9A1, &windows.top_view_edges);
+    edges_from_rom(0xF9A5, &windows.bottom_view_edges);
+    edges_from_rom(0xF9A9, &windows.split_edges);
     if (g.split_screen)
         records_two_players();
     else

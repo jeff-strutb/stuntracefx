@@ -166,8 +166,8 @@ static void course_zoom(uint16_t box, uint16_t target)
     }
     zoom.limit = 0x0F;
     windows.fixed_step = 0;
-    WindowTable7F();
-    ColourMathA3();
+    CourseWipeTable();
+    ColourFadeBg12();
     OamBufferHideLarge();
     g.course_screen_state = 0x04;
     SoundPort0QueuePush(0x24);
@@ -258,7 +258,7 @@ static void CourseZoomTimeUpNext(void)
  */
 static void CourseZoomInStep(void)
 {
-    ColourMathA3();
+    ColourFadeBg12();
     BlendStepUp();
     FixedColourFromStep();
     if (windows.fixed_step != zoom.limit)
@@ -750,7 +750,7 @@ static void CourseScreenZoomIn(void)
 {
     uint16_t top, bottom;
 
-    ColourMathA3();
+    ColourFadeBg12();
     bottom = (uint16_t)(zoom_word(3) + 0x0300);
     top = (uint16_t)(zoom_word(1) - 0x0300);
     zoom_word_set(3, bottom);

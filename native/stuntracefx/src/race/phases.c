@@ -369,7 +369,7 @@ static void finish_alone(int player, uint16_t colour, uint8_t phase, uint8_t t)
     g.player_phase[player] = phase;
     g.finish_timer = t;
     g.end_ready = t;
-    OamHide75Up();
+    HudSpritesHide();
     SoundReset();
     sound_port0_push(0x37);
 }
@@ -843,7 +843,7 @@ void TimeUpBattle(void)
     if (!g.time_up_shown) {
         if (!g.time_up_timer) {
             sound_port0_push(0x51);
-            OamHide75Up();
+            HudSpritesHide();
             g.time_up_timer = 0x3C;
             g.time_up_shown = 0x3C;
         }
@@ -879,7 +879,7 @@ void TimeUpStunt(void)
             g.time_up_timer = 0x20;
             g.time_up_shown--;
             sound_port0_push(0x51);
-            OamHide75Up();
+            HudSpritesHide();
         }
         return;
     }

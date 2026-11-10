@@ -206,7 +206,7 @@ uint16_t gradient_colour(uint32_t n);
 
 void GradientBuildColours(int course);
 void GradientSetup(void);
-void GradientPointersToBank7F(void);
+void GradientStartsFromViews(void);
 
 /* ---- windows and colour maths ---- */
 
@@ -220,7 +220,7 @@ typedef struct {
     WindowBand band[WINDOW_BANDS_MAX];  /* $7F:F85B: a table of line counts and edges */
     uint8_t bands;
     WindowEdges normal;                 /* $7F:F857 */
-    WindowEdges ffd1, ffd5, ffd9, ffdd; /* $7F:FFD1, $FFD5, $FFD9, $FFDD */
+    WindowEdges view_edges, top_view_edges, bottom_view_edges, split_edges; /* the view's window, each half's, the split's (the original's $7F:FFD1, $FFD5, $FFD9, $FFDD) */
     uint8_t setup;                      /* $19A9: 0, 2, 4, 6 or 8 */
     uint8_t colours[6];                 /* $19AC-$19B1: the fixed colour's three parts for each half */
     uint8_t layout_request;             /* $19BD */
@@ -268,7 +268,7 @@ extern Windows windows;
 void WindowsInit(void);
 void WindowHdmaNormal(void);
 void WindowHdmaBands(void);
-void WindowHdmaFFD1(void);
+void WindowBandsView(void);
 void WindowLayoutStepForScreen(void);
 void WindowSlideOrOscillate(void);
 void WindowSweepIfOn(void);
@@ -281,14 +281,14 @@ const WindowEdges *window_edges_at(uint16_t addr);
 void WindowsColourAddBg12(void);
 void WindowsColourWindowOnly(void);
 void WindowsAllInverted(void);
-void WindowTable7F(void);
+void CourseWipeTable(void);
 void WindowEdgesStep(void);
-void ColourMathA3(void);
-void ColourMathA7Start(void);
+void ColourFadeBg12(void);
+void ColourFadeBg123Start(void);
 void ColourMathOff(void);
-void WindowHdmaFFD5(void);
-void WindowHdmaFFD9(void);
-void WindowHdmaFFDD(void);
+void WindowBandsTopView(void);
+void WindowBandsBottomView(void);
+void WindowBandsSplit(void);
 uint8_t FixedColourFromStep(void);
 
 /* ---- the backdrop and its scroll ---- */
@@ -303,15 +303,15 @@ void Bg2ScrollFromTable(int half);
 /* ---- tile sets and maps ---- */
 
 void RaceVideoInit(void);
-void TilemapPaletteCycle87(void);
-void TilemapPaletteCycle107(void);
-void TilemapPaletteCycle187(void);
-void TilemapRow87Palette5(void);
-void TilemapRow107Palette5(void);
-void TilemapRow187Palette5(void);
-void TilemapRow187Palette4(void);
-void TilemapRow207Palette4(void);
-void TilemapRow287Palette4(void);
+void QuitMenuRow1Cycle(void);
+void QuitMenuRow2Cycle(void);
+void QuitMenuRow3Cycle(void);
+void QuitMenuRow1Plain(void);
+void QuitMenuRow2Plain(void);
+void QuitMenuRow3Plain(void);
+void ResultsMenuRetryPlain(void);
+void ResultsMenuCoursePlain(void);
+void ResultsMenuCarPlain(void);
 void TilemapLevelColumns(void);
 void CarSettingsDigits(void);
 void VramNoiseTiles(void);
@@ -363,25 +363,25 @@ void OamAttr38x7(int first);
 void OamHideEntries3And9(int first);
 void OamHideEntries0To2(int first);
 void OamSetPalette(uint8_t bits, int count, int first);
-void OamPaletteFromTableE30F(void);
-void OamPaletteFromTableE26A(void);
-void OamPaletteFromTableE26AByMode(void);
-void OamPalettesE28D(void);
-void OamPaletteForD75(void);
-void OamBlock52Left(void);
-void OamBlock52Right(void);
-void OamBlock59Left(void);
-void OamBlock59Right(void);
-void OamBlock123Left(void);
-void OamBlock123Right(void);
+void StuntRecordsPagePalette(void);
+void SpeedRecordsPagePalette(void);
+void AllRecordsPagePalette(void);
+void BattleRecordsPagePalettes(void);
+void SpeedRecordsLinePalette(void);
+void PauseChoiceLeft(void);
+void PauseChoiceRight(void);
+void PauseChoiceLeftPad1(void);
+void PauseChoiceRightPad1(void);
+void PauseChoiceLeftPad2(void);
+void PauseChoiceRightPad2(void);
 void OamColumn8(int first, uint16_t pos, uint16_t tile);
-void OamHighBits18(void);
-void OamHighBits58(void);
-void OamHighBits18Park48(void);
-void OamHighBits58Park112(void);
-void OamHide36And96(void);
+void TopGaugeSpritesOff(void);
+void BottomGaugeSpritesOff(void);
+void TopHudSpritesOff(void);
+void BottomHudSpritesOff(void);
+void ChampionshipSpritesHide(void);
 void OamLargeColumns(void);
-void OamPlaceRows75And112(void);
+void HudSpritesPlace(void);
 void SpriteStrip4(uint16_t selector, int first, uint16_t pos);
 void SpriteStrip6(uint16_t selector, int first, uint16_t pos);
 int MetaspriteDraw(uint16_t group, int slot);              /* returns the sprites used */
@@ -390,20 +390,20 @@ void FlashingMetaspriteDraw0(void);
 void FlashingMetaspriteDrawByMode(void);
 void SpritePiecesAtLeft(uint16_t set, int slot);
 void SpritePiecesAtRight(uint16_t set, int slot);
-void SpritePiecesAt46Y71(uint16_t set, int slot);
-void SpritePiecesAt46Y82(uint16_t set, int slot);
-void SpritePiecesAt46Y93(uint16_t set, int slot);
-void SpritePiecesAt62Y71(uint16_t set, int slot);
-void SpritePiecesAt62Y83(uint16_t set, int slot);
-void SpritePiecesAt62Y95(uint16_t set, int slot);
-void SpritePiecesCarAt51(uint16_t car, int slot);
+void StuntRecordsRow1Car(uint16_t set, int slot);
+void StuntRecordsRow2Car(uint16_t set, int slot);
+void StuntRecordsRow3Car(uint16_t set, int slot);
+void AllRecordsRow1Car(uint16_t set, int slot);
+void AllRecordsRow2Car(uint16_t set, int slot);
+void AllRecordsRow3Car(uint16_t set, int slot);
+void RecordsBestTimeCar(uint16_t car, int slot);
 void SpritePiecesTwoCars(void);
 void SpritePiecesTwoCarsTop(void);
 void OverlaySpritesStep(void);
 void OamTextLine(int slot, uint8_t tile_base, uint8_t x, uint8_t y, uint8_t attr);
-void SpriteTextAt895E(void);
-void SpriteTextAt8152(void);
-void SpriteTextAt8952(void);
+void SpeedRecordsTextLine(void);
+void StuntBattleRecordsTextLine(void);
+void AllRecordsTextLine(void);
 
 /* wanted (menu/records_screen.c): a row's car, three pieces */
 void SpritePieces3(uint16_t x, uint8_t y, uint16_t set, uint16_t palette, int slot);
@@ -412,7 +412,7 @@ uint32_t race_block_unpack(uint16_t out, uint16_t in); /* a packed block to the 
 uint8_t SpriteYOnScreen(uint8_t y);                /* 7E:B005 */
 void SpriteBar4WithMarker(uint8_t value, uint16_t pos, int first);  /* from sprite `first` */
 void SpriteBar6WithMarker(uint8_t value, uint16_t pos, int first);
-void OamHide75Up(void);
+void HudSpritesHide(void);
 void OamHideForHudMode(void);
 
 #endif

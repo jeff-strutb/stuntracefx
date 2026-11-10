@@ -728,9 +728,14 @@ void TilemapPaletteCycle(unsigned at, int count)
     }
 }
 
-void TilemapPaletteCycle87(void) { TilemapPaletteCycle(0x87, 9); }
-void TilemapPaletteCycle107(void) { TilemapPaletteCycle(0x107, 13); }
-void TilemapPaletteCycle187(void) { TilemapPaletteCycle(0x187, 10); }
+/* The quit menu's three rows: the one under the cursor cycling its colours,
+   the others plain. */
+/* @routine 07:C293 TilemapPaletteCycle87 */
+void QuitMenuRow1Cycle(void) { TilemapPaletteCycle(0x87, 9); }
+/* @routine 07:C29F TilemapPaletteCycle107 */
+void QuitMenuRow2Cycle(void) { TilemapPaletteCycle(0x107, 13); }
+/* @routine 07:C2AB TilemapPaletteCycle187 */
+void QuitMenuRow3Cycle(void) { TilemapPaletteCycle(0x187, 10); }
 
 static void row_mark(unsigned at, int count, uint8_t bits, unsigned mark, uint8_t mark_bits)
 {
@@ -740,12 +745,19 @@ static void row_mark(unsigned at, int count, uint8_t bits, unsigned mark, uint8_
     m[mark] = (uint8_t)((m[mark] & 0xE3) | mark_bits);
 }
 
-void TilemapRow87Palette5(void) { row_mark(0x87, 9, 0x14, 0x8D, 0x10); }
-void TilemapRow107Palette5(void) { row_mark(0x107, 13, 0x14, 0x113, 0x10); }
-void TilemapRow187Palette5(void) { row_mark(0x187, 10, 0x14, 0x193, 0x10); }
-void TilemapRow187Palette4(void) { row_mark(0x187, 9, 0x10, 0x18D, 0x00); }
-void TilemapRow207Palette4(void) { row_mark(0x207, 13, 0x10, 0x213, 0x00); }
-void TilemapRow287Palette4(void) { row_mark(0x287, 10, 0x10, 0x293, 0x00); }
+/* @routine 07:C2B7 TilemapRow87Palette5 */
+void QuitMenuRow1Plain(void) { row_mark(0x87, 9, 0x14, 0x8D, 0x10); }
+/* @routine 07:C2D3 TilemapRow107Palette5 */
+void QuitMenuRow2Plain(void) { row_mark(0x107, 13, 0x14, 0x113, 0x10); }
+/* @routine 07:C2EF TilemapRow187Palette5 */
+void QuitMenuRow3Plain(void) { row_mark(0x187, 10, 0x14, 0x193, 0x10); }
+/* The menu after the race: its retry, course and car rows plain. */
+/* @routine 07:CE97 TilemapRow187Palette4 */
+void ResultsMenuRetryPlain(void) { row_mark(0x187, 9, 0x10, 0x18D, 0x00); }
+/* @routine 07:CEAF TilemapRow207Palette4 */
+void ResultsMenuCoursePlain(void) { row_mark(0x207, 13, 0x10, 0x213, 0x00); }
+/* @routine 07:CEC7 TilemapRow287Palette4 */
+void ResultsMenuCarPlain(void) { row_mark(0x287, 10, 0x10, 0x293, 0x00); }
 
 /* Twelve 4-row columns filled to a level, full rows from the ROM, empty ones from the second map. */
 void TilemapLevelColumns(void)
@@ -974,7 +986,7 @@ void RaceVideoUpload2P(void)
     pic.main_screen = SHOW_BG1 | SHOW_BG2 | SHOW_SPRITES;
     pic.blend.fixed_bgr15 = fixed_from(windows.colours);
     WindowsSetupSelect();
-    GradientPointersToBank7F();
+    GradientStartsFromViews();
 }
 
 /* The two-player screen's work at the split: the lower half's backdrop or
@@ -1118,7 +1130,7 @@ void RaceCourseUpload(void)
     pic.blend.fixed_bgr15 = (uint16_t)(level | level << 5 | level << 10);
     pic.bg[1].scroll_y = g.course_scroll_top;
     nshvc_map_write_snes(race_video.course_map, 0, 0, 32, 64, backdrop_map(0));
-    WindowTable7F();
+    CourseWipeTable();
 }
 
 /* ---- what the race loads before its first frame ---- */

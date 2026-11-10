@@ -84,7 +84,7 @@ static void stage_replay_end(void)
 {
     if (!timer_out()) {
         if (g.panel_delay == 0x01)
-            OamPlaceRows75And112();
+            HudSpritesPlace();
         return;
     }
     g.gauge_place[6] = 0x93;            /* $0E14 */
@@ -181,7 +181,7 @@ static void stage_choice(void)
     if (pressed & 0x9000)
         choice_made(1);
     else
-        choice_move(pressed, OamBlock52Left, OamBlock52Right);
+        choice_move(pressed, PauseChoiceLeft, PauseChoiceRight);
 }
 
 /* @routine 07:BD8D PauseStageChoiceP1 */
@@ -192,7 +192,7 @@ static void stage_choice_p1(void)
     if (pressed & 0x9000)
         choice_made(0);
     else
-        choice_move(pressed, OamBlock59Left, OamBlock59Right);
+        choice_move(pressed, PauseChoiceLeftPad1, PauseChoiceRightPad1);
 }
 
 /* @routine 07:BDFB PauseStageChoiceP2 */
@@ -203,7 +203,7 @@ static void stage_choice_p2(void)
     if (pressed & 0x9000)
         choice_made(0);
     else
-        choice_move(pressed, OamBlock123Left, OamBlock123Right);
+        choice_move(pressed, PauseChoiceLeftPad2, PauseChoiceRightPad2);
 }
 
 static void continue_wait(uint8_t owner)
@@ -241,7 +241,7 @@ static void stage_quit_menu_p2(void)
     g.pause_player = 0xFF;
     g.panel_bottom = 0x01;
     g.split_stage = 0x0E;
-    OamHighBits58Park112();
+    BottomHudSpritesOff();
     quit_menu_open();
 }
 
@@ -253,7 +253,7 @@ static void stage_quit_menu(void)
     g.pause_player = 0x00;
     g.panel_top = 0x01;
     g.split_stage = 0x0C;
-    OamHighBits18Park48();
+    TopHudSpritesOff();
     quit_menu_open();
 }
 
@@ -307,9 +307,9 @@ static void quit_menu(int pad, uint8_t *panel, uint8_t stage, void (*park)(void)
             SoundPort0QueuePush(0x45);
             g.records_cursor = 0x02;
         }
-        TilemapPaletteCycle87();
-        TilemapRow107Palette5();
-        TilemapRow187Palette5();
+        QuitMenuRow1Cycle();
+        QuitMenuRow2Plain();
+        QuitMenuRow3Plain();
         return;
     case 0x02:
         if (pressed & 0x0400) {
@@ -319,9 +319,9 @@ static void quit_menu(int pad, uint8_t *panel, uint8_t stage, void (*park)(void)
             SoundPort0QueuePush(0x45);
             g.records_cursor = 0x00;
         }
-        TilemapRow87Palette5();
-        TilemapPaletteCycle107();
-        TilemapRow187Palette5();
+        QuitMenuRow1Plain();
+        QuitMenuRow2Cycle();
+        QuitMenuRow3Plain();
         return;
     case 0x04:
         if (pressed & 0x0800) {
@@ -336,21 +336,21 @@ static void quit_menu(int pad, uint8_t *panel, uint8_t stage, void (*park)(void)
     default:
         return;
     }
-    TilemapPaletteCycle187();
-    TilemapRow107Palette5();
-    TilemapRow87Palette5();
+    QuitMenuRow3Cycle();
+    QuitMenuRow2Plain();
+    QuitMenuRow1Plain();
 }
 
 /* @routine 07:BFC9 PauseQuitMenu */
 static void stage_pause_quit_menu(void)
 {
-    quit_menu(0, &g.panel_bottom, 0x0E, OamHighBits58Park112, SpritePiecesTwoCars);
+    quit_menu(0, &g.panel_bottom, 0x0E, BottomHudSpritesOff, SpritePiecesTwoCars);
 }
 
 /* @routine 07:BEDB PauseQuitMenuP2 */
 static void stage_pause_quit_menu_p2(void)
 {
-    quit_menu(1, &g.panel_top, 0x0C, OamHighBits18Park48, SpritePiecesTwoCarsTop);
+    quit_menu(1, &g.panel_top, 0x0C, TopHudSpritesOff, SpritePiecesTwoCarsTop);
 }
 
 /* @routine 07:BC1C PauseReplayStages: the table at 07:BC24. */
@@ -433,7 +433,7 @@ int PauseOnStart(void)
     g.pause_player = 0;
     SoundPort1QueuePush(0x15);
     windows.layout_request = 0x01;
-    OamHide75Up();
+    HudSpritesHide();
     OamLargeColumns();
     g.pause_stage_b--;
     g.finish_mark = 0;
@@ -468,7 +468,7 @@ int OamStagePause(void)
 {
     if (!(frame_state.pressed_copy[0] & 0x1000))
         return 0;
-    pause_pad_start(0x00, OamHighBits18, PAUSE_PAD_1);
+    pause_pad_start(0x00, TopGaugeSpritesOff, PAUSE_PAD_1);
     return 1;
 }
 
@@ -477,7 +477,7 @@ int OamStagePause2(void)
 {
     if (!(frame_state.pressed_copy[1] & 0x1000))
         return 0;
-    pause_pad_start(0xFF, OamHighBits58, PAUSE_PAD_2);
+    pause_pad_start(0xFF, BottomGaugeSpritesOff, PAUSE_PAD_2);
     return 1;
 }
 

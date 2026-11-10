@@ -85,7 +85,7 @@ static void records_menu_go(void)
 {
     sound_port0_push(0x46);
     g.course_screen_state = 0x0A;
-    ColourMathA7Start();
+    ColourFadeBg123Start();
     OamBufferHideLarge();
 }
 
@@ -405,7 +405,7 @@ static void best_time(const SaveBest *table, int first, int d_time, int d_rest)
     if (r->time != 0xFFFF) {
         time_digits_large(r->time, s_time);
         name_letters_large(r->name, s_time);
-        SpritePiecesCarAt51(r->car, s_rest);
+        RecordsBestTimeCar(r->car, s_rest);
         return;
     }
     sprite_y_set(s_rest, 0x0F);
@@ -449,7 +449,7 @@ static void speed_records_page(void)
     old = g.course;
     v = g.times_step ? (uint8_t)(g.course_class * 4 + g.times_step - 1) : 0x1C;
     g.course = v;
-    SpriteTextAt895E();
+    SpeedRecordsTextLine();
     g.course = old;
 }
 
@@ -466,8 +466,8 @@ void SpeedRecordsScreen(void)
         md_next(GROUP_COUNTS + 0x66, S_73, S_75, 0x0000);
         g.oam_first_free = g.sprite_row_d75;
         OamClassName();
-        SpriteTextAt895E();
-        OamPaletteForD75();
+        SpeedRecordsTextLine();
+        SpeedRecordsLinePalette();
         menu_speed_alt();
         return;
     }
@@ -480,7 +480,7 @@ void SpeedRecordsScreen(void)
     md_next(GROUP_COUNTS + 0x12, S_79, S_7B, 0x0000);
     OamClassName();
     speed_records_page();
-    OamPaletteFromTableE26A();
+    SpeedRecordsPagePalette();
     if (!g.champ_stage) {
         menu_two();
         return;
@@ -488,7 +488,7 @@ void SpeedRecordsScreen(void)
     if (pad() & (PAD_B | PAD_START)) {
         sound_port0_push(0x46);
         g.course_screen_state = 0x0A;
-        ColourMathA7Start();
+        ColourFadeBg123Start();
     }
 }
 
@@ -513,7 +513,7 @@ void StuntRecordsScreen(void)
         md_next(GROUP_COUNTS + 0x56, -1, S_73, 0x0013);
         md_next(GROUP_COUNTS + 0x4E, S_73, S_75, 0x0014);
         best_time(save.stunt, 0x0017, 0, 1);
-        SpriteTextAt8152();
+        StuntBattleRecordsTextLine();
         menu_two();
         return;
     }
@@ -523,11 +523,11 @@ void StuntRecordsScreen(void)
     md_next(GROUP_COUNTS + 0x1E, S_73, S_75, 0x0008);
     md_next(GROUP_COUNTS + 0x22, S_75, S_77, 0x0009);
     md_next(GROUP_COUNTS + 0x26, S_77, S_79, 0x0006);
-    SpriteTextAt8152();
-    special_row(*slot_at(S_77), 2, 1, SpritePiecesAt46Y93);
-    special_row(*slot_at(S_75), 1, 1, SpritePiecesAt46Y82);
-    special_row(*slot_at(S_73), 0, 1, SpritePiecesAt46Y71);
-    OamPaletteFromTableE30F();
+    StuntBattleRecordsTextLine();
+    special_row(*slot_at(S_77), 2, 1, StuntRecordsRow3Car);
+    special_row(*slot_at(S_75), 1, 1, StuntRecordsRow2Car);
+    special_row(*slot_at(S_73), 0, 1, StuntRecordsRow1Car);
+    StuntRecordsPagePalette();
     menu_stunt_three();
 }
 
@@ -543,8 +543,8 @@ void BattleRecordsScreen(void)
     md_next(GROUP_COUNTS + 0x32, S_73, S_75, 0x000B);
     SpritePiecesAtLeft((uint16_t)((g.car[0] * 3) & 0xFF), *slot_at(S_73));
     SpritePiecesAtRight((uint16_t)((g.car[1] * 3) & 0xFF), *slot_at(S_73) + 3);
-    SpriteTextAt8152();
-    OamPalettesE28D();
+    StuntBattleRecordsTextLine();
+    BattleRecordsPagePalettes();
     menu_two();
 }
 
@@ -560,7 +560,7 @@ void AllRecordsScreen(void)
         md_next(GROUP_COUNTS + 0x62, -1, S_73, 0x0016);
         md_next(GROUP_COUNTS + 0x5A, S_73, S_75, 0x0017);
         best_time(save.special, 0x0014, -1, 0);
-        SpriteTextAt8952();
+        AllRecordsTextLine();
         menu_two();
         return;
     }
@@ -570,11 +570,11 @@ void AllRecordsScreen(void)
     md_next(GROUP_COUNTS + 0x3E, S_73, S_75, 0x0010);
     md_next(GROUP_COUNTS + 0x42, S_75, S_77, 0x0011);
     md_next(GROUP_COUNTS + 0x46, S_77, S_79, 0x000E);
-    SpriteTextAt8952();
-    OamPaletteFromTableE26AByMode();
-    special_row(*slot_at(S_77), 2, 0, SpritePiecesAt62Y95);
-    special_row(*slot_at(S_75), 1, 0, SpritePiecesAt62Y83);
-    special_row(*slot_at(S_73), 0, 0, SpritePiecesAt62Y71);
+    AllRecordsTextLine();
+    AllRecordsPagePalette();
+    special_row(*slot_at(S_77), 2, 0, AllRecordsRow3Car);
+    special_row(*slot_at(S_75), 1, 0, AllRecordsRow2Car);
+    special_row(*slot_at(S_73), 0, 0, AllRecordsRow1Car);
     menu_all();
 }
 

@@ -8,7 +8,7 @@ Folded into other converted code
   7F:1278 PlayerVehicleRaised -> race_video.c player_vehicle_raised
   7E:E011 ColourMathSub83Windowed -> windows.c WindowsSetupSelect, setup 2
   7E:E048 WindowsColourSubtract3 -> windows.c WindowsSetupSelect, setup 4 (its table entry)
-  03:FE53 ColourMathA3Long -> windows.c ColourMathA3
+  03:FE53 ColourMathA3Long -> windows.c ColourFadeBg12
   03:FE5F ColourMathOffLong -> windows.c ColourMathOff
   03:ED34 GradientExpandFirst -> gradient.c expand_runs (GradientBuildColours)
   03:ED46 GradientExpandSecond -> gradient.c expand_runs (GradientBuildColours)
@@ -28,7 +28,7 @@ Folded into other converted code
          VRAM $0000-$5FFF and $7C00-$7FFF with zero, from $03:F881)
   02:D928 SpriteSlotFirstLong -> sprites.c SpriteSlotFirst
   07:AA60 OamTextLineLong -> sprites.c OamTextLine
-  02:FBFA SpriteTextAt8152B -> sprites.c SpriteTextAt8152 (the same entry)
+  02:FBFA SpriteTextAt8152B -> sprites.c StuntBattleRecordsTextLine (the same entry)
   03:ED89 TilemapRowFromGsuRam -> race_video.c course_map_rows
   03:EAF3 VramFillGradient -> race_video.c screen_frame_and_pictures
   03:EA76 VramFrameRows2B0 -> race_video.c screen_frame_and_pictures

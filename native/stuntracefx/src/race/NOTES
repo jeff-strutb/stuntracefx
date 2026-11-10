@@ -62,7 +62,7 @@ Folded into other converted code
   08:83E8 ScaleDp02Dp94Long -> math/math.c AreaCellOf
   0B:E2C5 ApproachTargetFull -> frame_state.brightness_target = 15 where the menus set it
   0B:E2CF ApproachTargetZero -> frame_state.brightness_target = 0 where the menus set it
-  7E:A467 WindowTable7FLong -> video WindowTable7F
+  7E:A467 WindowTable7FLong -> video CourseWipeTable
   7E:E1E1 FrameObjectsWhileGsuRuns -> race/race_frame.c, the objects' work beside the frame program
   7F:0FDC HalfRateApproach -> system/frame.c brightness_step
 
