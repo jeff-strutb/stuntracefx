@@ -625,7 +625,14 @@ static void ground_survey(unsigned course, const double eye[3], const double m[9
     }
 }
 
-/* ---- the land drawn: terrain.shade over the whole view ----
+/* ---- the land drawn: a few planes, terrain.shade colouring them ----
+
+   The land is 24 triangles: a 3 x 3 lattice of the survey's heights over
+   the course's grid (8), and a ring from the lattice's edge out to near the
+   horizon at the edge's heights (16), each clipped and projected as the
+   water's plane is, drawn farthest first, the course's own polygons over
+   them. Each triangle's plane goes to the shader as 1/depth = a x + b y + c
+   over the view's pixels, so each pixel's ground point is exact.
 
    The image (RGBA, T_W across, each texel a word; terrain.shade reads it
    the same way): the header's words (T_*), floats; the kind's 64 x 16 cell
@@ -667,14 +674,65 @@ static double grid_height(double x, double z)
     return (grid.h[a] * (1 - fx) + grid.h[a + 1] * fx) * (1 - fz) + (grid.h[a + grid.nx] * (1 - fx) + grid.h[a + grid.nx + 1] * fx) * fz;
 }
 
+/* The land's triangles in world space, 24 of them (see above). */
+enum { LAND_TRIS = 24 };
+
+static int land_triangles(double reach, double t[LAND_TRIS][3][3])
+{
+    static const int ring[8] = { 0, 1, 2, 5, 8, 7, 6, 3 };       /* the lattice's edge, in order round */
+    double lx0 = grid.x0 + 0.5 * grid.cell, lx1 = grid.x0 + (grid.nx - 0.5) * grid.cell;
+    double lz0 = grid.z0 + 0.5 * grid.cell, lz1 = grid.z0 + (grid.nz - 0.5) * grid.cell;
+    double cx = (lx0 + lx1) / 2, cz = (lz0 + lz1) / 2, pt[9][3], far_[8][3];
+    int i, j, k, n = 0;
+
+    for (j = 0; j < 3; j++)
+        for (i = 0; i < 3; i++) {
+            double x = lx0 + (lx1 - lx0) * i / 2, z = lz0 + (lz1 - lz0) * j / 2;
+
+            pt[j * 3 + i][0] = x;
+            pt[j * 3 + i][1] = grid_height(x, z);
+            pt[j * 3 + i][2] = z;
+        }
+    for (k = 0; k < 8; k++) {           /* each edge point carried out from the lattice's middle */
+        const double *b = pt[ring[k]];
+        double dx = b[0] - cx, dz = b[2] - cz, len = sqrt(dx * dx + dz * dz);
+
+        if (len < 1)
+            return 0;
+        far_[k][0] = b[0] + dx / len * reach;
+        far_[k][1] = b[1];
+        far_[k][2] = b[2] + dz / len * reach;
+    }
+#define TRI(a, b, c) (memcpy(t[n][0], a, sizeof t[n][0]), memcpy(t[n][1], b, sizeof t[n][1]), memcpy(t[n][2], c, sizeof t[n][2]), n++)
+    for (j = 0; j < 2; j++)
+        for (i = 0; i < 2; i++) {
+            const double *a = pt[j * 3 + i], *b = pt[j * 3 + i + 1], *c = pt[(j + 1) * 3 + i], *d = pt[(j + 1) * 3 + i + 1];
+
+            TRI(a, b, d);
+            TRI(a, d, c);
+        }
+    for (k = 0; k < 8; k++) {
+        const double *b0 = pt[ring[k]], *b1 = pt[ring[(k + 1) % 8]], *f0 = far_[k], *f1 = far_[(k + 1) % 8];
+
+        TRI(b0, b1, f1);
+        TRI(b0, f1, f0);
+    }
+#undef TRI
+    return n;
+}
+
 static void land_draw(int kind, const double eye[3], const double m[9], int p)
 {
-    double left = (int16_t)ram_word(0x0038), right = (int16_t)ram_word(0x003A) + 1, top = (int16_t)ram_word(0x003C), bottom = (int16_t)ram_word(0x003E);
+    double top = (int16_t)ram_word(0x003C), bottom = (int16_t)ram_word(0x003E);
+    double vcx = (int16_t)ram_word(0x0034), vcy = (int16_t)ram_word(0x0036);
     double h_eye = grid_height(eye[0], eye[2]) - eye[1];        /* > 0: the eye above the ground */
-    FxCorner c[6];
+    static double world[LAND_TRIS][3][3], view[LAND_TRIS][3][3];
+    static FxCorner c[64];
+    double depth[LAND_TRIS];
+    int order[LAND_TRIS], ntri;
     float in[8] = { 0 }, sx, sy, scale, hz_x, hz_row, hz_slope;
     unsigned i, x, y, first, rows;
-    int slot, ox, oy;
+    int slot, ox, oy, t, a, b, k;
 
     if (!grid.nx || h_eye < 16)         /* not while the eye is under the ground (a tunnel) */
         return;
@@ -707,7 +765,6 @@ static void land_draw(int kind, const double eye[3], const double m[9], int p)
     land_words[T_HZ_SLOPE] = float_word(hz_slope);
     for (i = 0; i < 3; i++)
         land_words[T_EYE + i] = float_word((float)eye[i]);
-    land_words[T_FAR] = float_word(1048576.0f);
     land_words[T_EYE_HEIGHT] = float_word((float)EYE_OVER_ROAD);
     first = top > 0 ? (unsigned)top : 0;
     rows = (unsigned)(bottom - first) + 1;
@@ -742,16 +799,52 @@ static void land_draw(int kind, const double eye[3], const double m[9], int p)
     if (!land_shader.id)
         land_shader = nshvc_shader_load("terrain");
     nshvc_image_write(land_image[slot], land_words);
-    /* the whole view, the shader deciding each pixel */
-    c[0].x = (float)left; c[0].y = (float)top;
-    c[1].x = (float)right; c[1].y = (float)top;
-    c[2].x = (float)right; c[2].y = (float)bottom;
-    c[3] = c[0];
-    c[4] = c[2];
-    c[5].x = (float)left; c[5].y = (float)bottom;
-    for (i = 0; i < 6; i++)
-        c[i].u = c[i].v = 0;
-    fx_draw_surface(c, 6, land_image[slot], land_shader, in, 0, 0);
+    /* the triangles in view space (world axis k turns to row k, as the
+       water's plane does), farthest first */
+    ntri = land_triangles(128.0 * h_eye * scale / HORIZON_GAP, world);
+    for (t = 0; t < ntri; t++) {
+        depth[t] = 0;
+        for (a = 0; a < 3; a++) {
+            double w[3] = { world[t][a][0] - eye[0], world[t][a][1] - eye[1], world[t][a][2] - eye[2] };
+
+            for (k = 0; k < 3; k++)
+                view[t][a][k] = w[0] * m[k] + w[1] * m[3 + k] + w[2] * m[6 + k];
+            depth[t] += view[t][a][2];
+        }
+        order[t] = t;
+    }
+    for (a = 1; a < ntri; a++)
+        for (b = a; b > 0 && depth[order[b - 1]] < depth[order[b]]; b--) {
+            int s = order[b];
+
+            order[b] = order[b - 1];
+            order[b - 1] = s;
+        }
+    for (a = 0; a < ntri; a++) {
+        const double (*v)[3] = (const double (*)[3])view[order[a]];
+        double e1[3], e2[3], n[3], d;
+        uint32_t nc;
+
+        /* the plane n . V = d; along the ray V = Z ((x - cx) / 128, (y - cy) / 128, 1),
+           1/Z = (n . ((x - cx) / 128, (y - cy) / 128, 1)) / d */
+        for (k = 0; k < 3; k++) {
+            e1[k] = v[1][k] - v[0][k];
+            e2[k] = v[2][k] - v[0][k];
+        }
+        n[0] = e1[1] * e2[2] - e1[2] * e2[1];
+        n[1] = e1[2] * e2[0] - e1[0] * e2[2];
+        n[2] = e1[0] * e2[1] - e1[1] * e2[0];
+        d = n[0] * v[0][0] + n[1] * v[0][1] + n[2] * v[0][2];
+        if (fabs(d) < 1e-9)
+            continue;                   /* edge on through the eye */
+        nc = fx_face_triangles_d(v, 3, c, sizeof c / sizeof c[0]);
+        if (!nc)
+            continue;
+        in[0] = (float)(n[0] / (128.0 * d));
+        in[1] = (float)(n[1] / (128.0 * d));
+        in[2] = (float)((n[2] - (n[0] * vcx + n[1] * vcy) / 128.0) / d);
+        fx_draw_surface(c, nc, land_image[slot], land_shader, in, 0, 0);
+    }
 }
 
 void fx_ground_draw(void)

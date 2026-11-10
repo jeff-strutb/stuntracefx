@@ -1,13 +1,12 @@
-/* terrain.shade: the race's land as a surface over the course's own heights
-   (fx/fx_ground.c). uv is the pixel's place on the screen, in the view's
-   pixels. Each pixel's ray from the eye goes out over the height grid until
-   it passes under the ground (world y is down), then is narrowed to the
-   meeting point: the pixel shows the ground there, with the kind's marks
+/* terrain.shade: the race's land, a few planes over the course's own
+   heights (fx/fx_ground.c), coloured here. uv is the pixel's place on the
+   screen, in the view's pixels; inputs 0-2 the plane being drawn, as
+   1/depth = i0 x + i1 y + i2. The pixel's ray from the eye meets the plane
+   at that depth: the pixel shows the ground there, with the kind's marks
    over it: rock in the shade the course gives a rock face facing its way,
    other land in the band's colour for its distance, lit a little by its
-   slope; a ray
-   that meets no ground leaves the pixel. Past the grid the ground is at its
-   edge's height. The image (RGBA, 256 across, each texel a word):
+   slope (the grid's heights about that place). Past the grid the ground is
+   at its edge's height. The image (RGBA, 256 across, each texel a word):
      words 0-31     the header (fx_ground.c's T_*), floats;
      words 32-1055  the kind's 64 x 16 cell, alpha set on a mark;
      from 1056      the band's colour on each screen row from the first row;
@@ -51,30 +50,10 @@ vec4 shade(vec2 uv) {
                     dot(vec3(header(3), header(4), header(5)), d),
                     dot(vec3(header(6), header(7), header(8)), d));
     vec3 eye = vec3(header(19), header(20), header(21));
-    float far_t = header(22), t = 8.0, last = t;
-    bool hit = false;
-    for (int i = 0; i < 400; i++) {
-        vec3 p = eye + dir * t;
-        if (p.y >= height_at(g, p.x, p.z)) {
-            hit = true;
-            break;
-        }
-        last = t;
-        t += max(g.cell * 0.25, t * 0.02);
-        if (t > far_t)
-            break;
-    }
-    if (!hit)
+    float inv = nshvc_input(0) * uv.x + nshvc_input(1) * uv.y + nshvc_input(2);
+    if (inv <= 0.0)
         return vec4(0.0);
-    float lo = last, hi = t;            /* narrowed to the meeting point */
-    for (int i = 0; i < 10; i++) {
-        float mid = 0.5 * (lo + hi);
-        vec3 q = eye + dir * mid;
-        if (q.y >= height_at(g, q.x, q.z))
-            hi = mid;
-        else
-            lo = mid;
-    }
+    float hi = 1.0 / inv;               /* the depth: d's z is 1, so the ray's own length */
     vec3 p = eye + dir * hi;
     /* the land's colour for the depth: the row a flat ground at the
        camera's usual height below the eye would show this depth on, under
