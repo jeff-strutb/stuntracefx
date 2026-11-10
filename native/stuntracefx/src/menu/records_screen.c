@@ -36,6 +36,10 @@ static uint16_t *slot_at(int s)
     }
 }
 
+/* The metasprite groups' sprite counts, a word each in bank $04: a page's
+   next group starts that many sprites past the last. */
+#define GROUP_COUNTS 0x04EDCBu
+
 /* A slot's sprite buffer offset for the OamByteSet calls. */
 static uint16_t y_of(int s) { return (uint16_t)(s * 4); }
 
@@ -467,8 +471,8 @@ void SpeedRecordsScreen(void)
     if (g.time_override) {
         origin(0x89, 0x89);
         md_first(0x001A);
-        md_next(0x04EE31 + 4, -1, S_73, 0x0019);
-        md_next(0x04EE31, S_73, S_75, 0x0000);
+        md_next(GROUP_COUNTS + 0x6A, -1, S_73, 0x0019);
+        md_next(GROUP_COUNTS + 0x66, S_73, S_75, 0x0000);
         g.oam_first_free = g.sprite_row_d75;
         OamClassName();
         SpriteTextAt895E();
@@ -478,11 +482,11 @@ void SpeedRecordsScreen(void)
     }
     origin(0x89, 0x89);
     md_first(g.champ_stage ? 0x001B : 0x0005);
-    md_next(0x04EDDD + 4, -1, S_73, 0x0001);
-    md_next(0x04EDCB + 6, S_73, S_75, 0x0002);
-    md_next(0x04EDCB + 10, S_75, S_77, 0x0003);
-    md_next(0x04EDCB + 14, S_77, S_79, 0x0004);
-    md_next(0x04EDDD, S_79, S_7B, 0x0000);
+    md_next(GROUP_COUNTS + 0x16, -1, S_73, 0x0001);
+    md_next(GROUP_COUNTS + 0x06, S_73, S_75, 0x0002);
+    md_next(GROUP_COUNTS + 0x0A, S_75, S_77, 0x0003);
+    md_next(GROUP_COUNTS + 0x0E, S_77, S_79, 0x0004);
+    md_next(GROUP_COUNTS + 0x12, S_79, S_7B, 0x0000);
     OamClassName();
     speed_records_page();
     OamPaletteFromTableE26A();
@@ -515,8 +519,8 @@ void StuntRecordsScreen(void)
             g.course = g.course <= 0x17 ? 0x1A : (uint8_t)(g.course - 1);
         }
         md_first(0x0015);
-        md_next(0x04EE21, -1, S_73, 0x0013);
-        md_next(0x04EE0D + 0xC, S_73, S_75, 0x0014);
+        md_next(GROUP_COUNTS + 0x56, -1, S_73, 0x0013);
+        md_next(GROUP_COUNTS + 0x4E, S_73, S_75, 0x0014);
         best_time(save.stunt, 0x0017, 0, 1);
         SpriteTextAt8152();
         menu_two();
@@ -524,10 +528,10 @@ void StuntRecordsScreen(void)
     }
     origin(0x81, 0x89);
     md_first(0x0012);
-    md_next(0x04EDED + 8, -1, S_73, 0x0007);
-    md_next(0x04EDDD + 0xC, S_73, S_75, 0x0008);
-    md_next(0x04EDED, S_75, S_77, 0x0009);
-    md_next(0x04EDED + 4, S_77, S_79, 0x0006);
+    md_next(GROUP_COUNTS + 0x2A, -1, S_73, 0x0007);
+    md_next(GROUP_COUNTS + 0x1E, S_73, S_75, 0x0008);
+    md_next(GROUP_COUNTS + 0x22, S_75, S_77, 0x0009);
+    md_next(GROUP_COUNTS + 0x26, S_77, S_79, 0x0006);
     SpriteTextAt8152();
     special_row(*slot_at(S_77), 2, 1, SpritePiecesAt46Y93);
     special_row(*slot_at(S_75), 1, 1, SpritePiecesAt46Y82);
@@ -544,8 +548,8 @@ void BattleRecordsScreen(void)
 {
     origin(0x81, 0x89);
     md_first(0x000D);
-    md_next(0x04EDFD + 4, -1, S_73, 0x000C);
-    md_next(0x04EDFD, S_73, S_75, 0x000B);
+    md_next(GROUP_COUNTS + 0x36, -1, S_73, 0x000C);
+    md_next(GROUP_COUNTS + 0x32, S_73, S_75, 0x000B);
     SpritePiecesAtLeft((uint16_t)((g.car[0] * 3) & 0xFF), *slot_at(S_73));
     SpritePiecesAtRight((uint16_t)((g.car[1] * 3) & 0xFF), *slot_at(S_73) + 3);
     SpriteTextAt8152();
@@ -562,8 +566,8 @@ void AllRecordsScreen(void)
     if (g.time_override) {
         origin(0x89, 0x89);
         md_first(0x0018);
-        md_next(0x04EE21 + 0xC, -1, S_73, 0x0016);
-        md_next(0x04EE21 + 4, S_73, S_75, 0x0017);
+        md_next(GROUP_COUNTS + 0x62, -1, S_73, 0x0016);
+        md_next(GROUP_COUNTS + 0x5A, S_73, S_75, 0x0017);
         best_time(save.special, 0x0014, -1, 0);
         SpriteTextAt8952();
         menu_two();
@@ -571,10 +575,10 @@ void AllRecordsScreen(void)
     }
     origin(0x89, 0x89);
     md_first(0x0012);
-    md_next(0x04EDFD + 8, -1, S_73, 0x000F);
-    md_next(0x04EDFD + 0xC, S_73, S_75, 0x0010);
-    md_next(0x04EE0D, S_75, S_77, 0x0011);
-    md_next(0x04EE0D + 4, S_77, S_79, 0x000E);
+    md_next(GROUP_COUNTS + 0x3A, -1, S_73, 0x000F);
+    md_next(GROUP_COUNTS + 0x3E, S_73, S_75, 0x0010);
+    md_next(GROUP_COUNTS + 0x42, S_75, S_77, 0x0011);
+    md_next(GROUP_COUNTS + 0x46, S_77, S_79, 0x000E);
     SpriteTextAt8952();
     OamPaletteFromTableE26AByMode();
     special_row(*slot_at(S_77), 2, 0, SpritePiecesAt62Y95);
