@@ -17,6 +17,9 @@ void race_frame_art_draw(nshvc_draw_list l) { (void)l; }
 void race_frame_art_draw_over(nshvc_draw_list l) { (void)l; }
 int race_full_window(void) { return 0; }
 int race_two_full_window(void) { return 0; }
+int race_course_full_window(void) { return 0; }
+#include "video/picture.h"
+Picture pic;
 void screen_two_rect(int player, int *x, int *y, int *w, int *h) { (void)player; *x = *y = 0; *w = 256; *h = 224; }
 void screen_two_anchor(int player, int x0, int x1, int y0, int y1, int *dx, int *dy) { (void)player; (void)x0; (void)x1; (void)y0; (void)y1; *dx = *dy = 0; }
 #include "object/object.h"

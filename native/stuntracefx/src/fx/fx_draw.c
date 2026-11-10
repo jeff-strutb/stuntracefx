@@ -14,6 +14,7 @@
 #include "fx/fx_draw.h"
 #include "fx/fx_face.h"
 #include "system/state.h"
+#include "video/picture.h"
 #include "video/video.h"
 
 uint8_t fx_ram[0x20000];
@@ -453,7 +454,11 @@ static void screen_list_size(uint32_t *w, uint32_t *h)
 {
     nshvc_display d;
     const ScreenShape *sh = screen_shape();
-    int full = race_full_window() || race_two_full_window();
+    /* the race in the full window, a menu screen over the whole window (its
+       picture's place carried by the origin), or the course screen (video
+       lays its static over the whole screen in this list): the screen's
+       shape, as video_draw sets it */
+    int full = race_full_window() || race_two_full_window() || (pic.fills_window && !pic.race.on) || race_course_full_window();
     int sw = full ? sh->width : 256, shh = full ? sh->height : 224;
     double pw = 4.0 * sw, ph = 4.0 * shh, k;
 
@@ -1008,9 +1013,13 @@ static uint16_t noise_step(uint16_t s)
     return r;
 }
 
-void fx_noise_row(uint16_t x, uint16_t y, uint16_t n, uint16_t seed, uint16_t ramp)
+/* the seed each line of the static's 16 x 128 block was last drawn with */
+static uint16_t static_seed[128];
+
+/* The static's square of noise (video lays the course screen's static out
+   from it over the whole window), made once. */
+nshvc_image fx_noise_image(void)
 {
-    (void)ramp;
     if (!noise_image.id) {
         static uint8_t t[256 * 256];
         uint16_t s = 0x1234;
@@ -1023,7 +1032,19 @@ void fx_noise_row(uint16_t x, uint16_t y, uint16_t n, uint16_t seed, uint16_t ra
         noise_image = nshvc_image_create(256, 256, NSHVC_IMAGE_INDEXED);
         nshvc_image_write(noise_image, t);
     }
-    quad(noise_image, x, x + n, y, y + 1, seed & 0xFF, 1, (seed >> 8) + 0.5, 0);
+    return noise_image;
+}
+
+uint16_t fx_static_seed(int line)
+{
+    return static_seed[line & 127];
+}
+
+void fx_noise_row(uint16_t x, uint16_t y, uint16_t n, uint16_t seed, uint16_t ramp)
+{
+    (void)ramp;
+    static_seed[y & 127] = seed;
+    quad(fx_noise_image(), x, x + n, y, y + 1, seed & 0xFF, 1, (seed >> 8) + 0.5, 0);
 }
 
 /* The rows of an object sprite are sent whole by fx_sprite_shrink and
