@@ -1,0 +1,22 @@
+/* pause_blur.shade: the picture behind the pause screen: the last picture
+   before the pause (the material's image), blurred by a Gaussian of
+   nshvc_input(0) of its pixels, taken over 2.5 of them either way, at most
+   12 pixels. uv is a point in the image's pixels; each pixel weighs by its
+   centre's distance from it, so the blur is smooth at any size it is drawn. */
+vec4 shade(vec2 uv) {
+    float s = max(nshvc_input(0), 0.5);
+    int r = min(int(ceil(2.5 * s)), 12);
+    ivec2 c = ivec2(floor(uv));
+    vec3 sum = vec3(0.0);
+    float total = 0.0;
+    for (int dy = -r; dy <= r; dy++) {
+        for (int dx = -r; dx <= r; dx++) {
+            ivec2 p = c + ivec2(dx, dy);
+            vec2 d = vec2(p) + 0.5 - uv;
+            float w = exp(-dot(d, d) / (2.0 * s * s));
+            sum += nshvc_image(p).rgb * w;
+            total += w;
+        }
+    }
+    return vec4(sum / total, 1.0);
+}

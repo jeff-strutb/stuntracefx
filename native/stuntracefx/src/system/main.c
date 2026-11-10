@@ -36,6 +36,8 @@ static void update(const nshvc_input *input)
 
 static void draw(float between)
 {
+    if (pause_draw())
+        return;                         /* the pause screen's picture: the last one, blurred */
     if (pause_holding())
         between = 1.0f;                 /* the picture as the game's last update left it */
     fx_tween_draw(between);             /* the race's 3D at the step's progress, between steps */

@@ -66,6 +66,14 @@
 #define TINT 0xFF0A0E1Au                /* a navy laid over the picture */
 #define TINT_ALPHA 0.55f
 #define FILL 0.94f                      /* of the safe area the panel may take, each way */
+/* The blur behind the panel: a Gaussian of 3 of the picture's pixels, the
+   earlier pause screen's (three box blurs of 10 points come to a Gaussian of
+   11.25 points, about 3 of the picture's 224 lines in an 800-point window),
+   drawn at twice the picture's pixels each way (a draw list is composed at
+   the window's pixels by nearest, so the steps are finer than one shows). */
+#define BLUR_SIGMA 3.0f
+#define BLUR_SCALE 2
+
 /* The overlays, the game's only ones: the tint, the panel, the tags, the
    item chosen, the hint, the corner button, in that order upward. */
 enum { O_TINT = 12, O_PANEL, O_TAGS, O_LIT = O_TAGS + PAUSE_CONTROLS, O_HINT, O_BUTTON, O_END };
@@ -109,6 +117,13 @@ static struct {
     int32_t touch_id[10];
     int touches;
 
+    /* the blur: the last picture before the pause as an image, its size
+       (0: none read), the shader (tried once) and the list it is drawn in */
+    nshvc_image shot;
+    int shot_w, shot_h, shot_ok;
+    nshvc_shader blur;
+    int blur_tried;
+    nshvc_draw_list list;
 } p = { .asking = -1 };
 
 /* ---- the keys ---- */
@@ -536,8 +551,100 @@ static int move(int i, uint16_t dir)
 
 /* ---- the screen ---- */
 
+/* Whether the game's build packed the blur: the engine's shader tool writes
+   NAME.spv, NAME.metal and NAME.dxil into the package's shaders folder, and
+   loading a shader the package lacks is an error the engine reports. */
+static int blur_packed(void)
+{
+    static const char *const ext[3] = { "spv", "metal", "dxil" };
+    int i;
+
+    for (i = 0; i < 3; i++) {
+        char path[64];
+        nshvc_asset a;
+
+        snprintf(path, sizeof path, "shaders/pause_blur.%s", ext[i]);
+        a = nshvc_asset_open(path);
+        if (a.id) {
+            nshvc_asset_close(a);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* The last finished picture, read back once from the renderer into an image
+   for the blur (the read waits for the GPU: once, as the screen opens); none
+   where the renderer keeps no picture or the shader is not in the game's
+   package (the tint alone then, over the game's own). */
+static void shot_take(void)
+{
+    const uint32_t *px;
+    int w = 0, h = 0;
+
+    p.shot_ok = 0;
+    if (!(px = nshvc_picture_read(&w, &h)) || w <= 0 || h <= 0)
+        return;
+    if (!p.blur_tried) {
+        p.blur_tried = 1;
+        if (blur_packed())
+            p.blur = nshvc_shader_load("pause_blur");
+        if (p.blur.id)
+            p.list = nshvc_draw_list_create();
+    }
+    if (!p.blur.id || !p.list.id)
+        return;
+    if (!p.shot.id || w != p.shot_w || h != p.shot_h) {
+        p.shot = nshvc_image_create((uint32_t)w, (uint32_t)h, NSHVC_IMAGE_RGBA);
+        p.shot_w = w;
+        p.shot_h = h;
+    }
+    if (!p.shot.id)
+        return;
+    nshvc_image_write(p.shot, px);      /* 0xFFRRGGBB: the image's 0xAARRGGBB, whole */
+    p.shot_ok = 1;
+}
+
+int pause_draw(void)
+{
+    nshvc_screen s;
+    nshvc_layer l;
+    nshvc_material m;
+    nshvc_rect r;
+    uint32_t lw, lh;
+
+    if (!p.open || !p.shot_ok)
+        return 0;
+    /* the screen the picture was: its size (this game draws neither hires
+       nor interlace, so the picture's pixels are the screen's), its own
+       brightness already in it */
+    memset(&s, 0, sizeof s);
+    s.width = p.shot_w;
+    s.height = p.shot_h;
+    s.brightness = 15;
+    nshvc_screen_set(&s);
+    nshvc_mode_set(1, 0, 0);
+    lw = (uint32_t)p.shot_w * BLUR_SCALE;
+    lh = (uint32_t)p.shot_h * BLUR_SCALE;
+    nshvc_draw_list_clear(p.list, lw, lh);
+    memset(&m, 0, sizeof m);
+    m.shader = p.blur;
+    m.inputs[0] = BLUR_SIGMA;
+    r.x0 = 0;
+    r.y0 = 0;
+    r.x1 = (float)lw;
+    r.y1 = (float)lh;
+    nshvc_draw_image(p.list, p.shot, &r, &m);
+    memset(&l, 0, sizeof l);
+    l.enabled_main = 1;
+    l.draw_list = p.list;
+    nshvc_layer_set(0, &l);
+    return 1;
+}
+
 static void screen_open(void)
 {
+    shot_take();
     p.open = 1;
     p.chosen = PAUSE_RESUME;
     p.asking = -1;

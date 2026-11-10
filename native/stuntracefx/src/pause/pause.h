@@ -16,6 +16,11 @@ const nshvc_input *pause_update(const nshvc_input *input);
    update the game ran left it (draw's `between` at 1). */
 int pause_holding(void);
 
+/* In draw, first: 1 when the pause screen has set the whole picture (the
+   last picture before the pause, blurred on the GPU), so the game sets
+   none; 0 when the game draws its own (not paused, or no blur here). */
+int pause_draw(void);
+
 /* The game's own updates: nshvc_updates() less those the pause screen held.
    The clock for whatever the game times by updates (the race's pictures
    between steps), so that a pause stops it. */
