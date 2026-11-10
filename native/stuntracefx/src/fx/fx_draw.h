@@ -52,6 +52,11 @@ void fx_draw_tween_on(void);
 void fx_draw_tween_shown(void);
 void fx_draw_tween_off(void);
 void fx_draw_recompose(void);
+/* The horizon of picture n as composed now (its picture between steps when
+   one is shown): the line through (x, row), in the screen's pixels, rising
+   `slope` rows a column (the view's roll). For the hills and the sky to sit
+   on the 3D's horizon. 0 when no view is known. */
+int fx_draw_horizon(int picture, float *x, float *row, float *slope);
 int fx_draw_shown_picture(void);
 /* The step's end; the picture the last step drew its panel n into (-1:
    none). */

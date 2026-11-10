@@ -38,6 +38,10 @@ typedef struct {
     uint32_t gen;               /* moves on with every change of its shapes */
     int ox, oy;                 /* the picture's place on the screen its shapes were recorded at */
     uint32_t hud_from;          /* its shapes from here on came after the frame program: the HUD's */
+    /* its view's horizon in the screen's pixels: through (horizon_x,
+       horizon_row), rising horizon_slope rows a column; known or not */
+    float horizon_x, horizon_row, horizon_slope;
+    int horizon_known;
 } Recording;
 
 static nshvc_draw_list target;  /* a list drawn into directly (the checks) */
@@ -228,8 +232,44 @@ int fx_draw_step_picture(int panel)
 
 /* The frame program's shapes are the picture's 3D; what is drawn after it
    (the HUD's programs) is the HUD, which a picture between steps keeps. */
+/* The horizon of the view the frame program draws with: where the plane
+   through the eye level with the world meets the picture. The world's up
+   axis in view space is row 1 of the matrix at $00E4 (n), the view's centre
+   ($0034, $0036) and focal length 128 give the line
+   n.x (x - cx) + n.y (y - cy) + 128 n.z = 0. */
+static void horizon_of_view(Recording *r)
+{
+    double nx = (int16_t)(fx_ram[0x00EA] | fx_ram[0x00EB] << 8) / 32768.0;
+    double ny = (int16_t)(fx_ram[0x00EC] | fx_ram[0x00ED] << 8) / 32768.0;
+    double nz = (int16_t)(fx_ram[0x00EE] | fx_ram[0x00EF] << 8) / 32768.0;
+    double cx = (int16_t)(fx_ram[0x0034] | fx_ram[0x0035] << 8), cy = (int16_t)(fx_ram[0x0036] | fx_ram[0x0037] << 8);
+
+    r->horizon_known = fabs(ny) > 1e-6;
+    if (!r->horizon_known)
+        return;
+    r->horizon_x = (float)(cx + r->ox);
+    r->horizon_row = (float)(cy - 128.0 * nz / ny + r->oy);
+    r->horizon_slope = (float)(-nx / ny);
+}
+
+int fx_draw_horizon(int picture, float *x, float *row, float *slope)
+{
+    const Recording *r;
+
+    picture &= 1;
+    r = between_on[picture] ? &between[picture] : &recordings[picture];
+    if (!r->horizon_known)
+        return 0;
+    *x = r->horizon_x;
+    *row = r->horizon_row;
+    *slope = r->horizon_slope;
+    return 1;
+}
+
 void fx_draw_part(int hud)
 {
+    if (recording && !hud)
+        horizon_of_view(recording);
     if (recording && hud)
         recording->hud_from = recording->ns;
 }
