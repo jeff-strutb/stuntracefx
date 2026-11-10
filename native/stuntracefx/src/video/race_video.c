@@ -42,7 +42,8 @@ static uint16_t bank7f_words[2 * 0x1400 + 2 * 0x220];
    with the sky tile above and below them, so a tall screen shows sky and
    ground (colour 1 by line) and the band once. */
 enum { WIDE_COLUMNS = 128, WIDE_ROWS = 192, WIDE_DROP = 64, SKY_TILE = 0x20C0 };
-static struct { int map; uint16_t heading, pitch, row_adjust; } wide_band[2];   /* what BackdropRowsUpdate took, by buffer */
+typedef struct { int map; uint16_t heading, pitch, row_adjust; } WideBand;
+static WideBand wide_band[2];           /* what BackdropRowsUpdate took, by buffer (written with the update's art) */
 static int shown_buffer;
 
 /* The one-player race fills the window: its screen, not the course
@@ -99,20 +100,27 @@ static uint16_t backdrop_two_words[4][0x400];
 static uint16_t panel_words[0x400];
 static int two_images_stale = 1;
 
+/* A copy the pictures are drawn from marked to be cut again; with the
+   writes of an update, at the next update's start (video_copy). */
+static void stale(int *flag)
+{
+    static const int one = 1;
+
+    video_copy(flag, &one, sizeof one);
+}
+
 /* every tile and map zero, as the original cleared VRAM */
 static void clear_all(void)
 {
-    static const uint8_t tile_zero[32];
+    static const uint8_t zero_art[1024 * 32];
     static const uint16_t zero_words[32 * 32];
-    int i, p;
+    int p;
 
-    for (i = 0; i < 1024; i++) {
-        nshvc_tiles_write(race_video.tiles, (uint32_t)i, tile_zero, 1, NSHVC_TILES_PLANAR);
-    }
+    video_tiles_write(race_video.tiles, 0, zero_art, 1024, NSHVC_TILES_PLANAR, sizeof zero_art);
     frame_art_clear();
     for (p = 0; p < 2; p++)
-        nshvc_map_write_snes(race_video.backdrop_one, 0, (uint32_t)p * 32u, 32, 32, zero_words);
-    nshvc_map_write_snes(race_video.frame_map_two, 0, 0, 32, 32, zero_words);
+        video_map_write(race_video.backdrop_one, 0, (uint32_t)p * 32u, 32, 32, zero_words);
+    video_map_write(race_video.frame_map_two, 0, 0, 32, 32, zero_words);
 }
 
 /* The race art from `character` on (32 bytes a character): the tile set
@@ -122,10 +130,10 @@ void race_art_write(unsigned character, const uint8_t *data, uint32_t bytes)
 {
     if (character * 32u + bytes > sizeof race_art_bytes)
         return;
-    nshvc_tiles_write(race_video.tiles, character, data, bytes / 32u, NSHVC_TILES_PLANAR);
-    memcpy(race_art_bytes + character * 32u, data, bytes);
-    two_images_stale = 1;
-    memset(sprite_atlas_made, 0, sizeof sprite_atlas_made);
+    video_tiles_write(race_video.tiles, character, data, bytes / 32u, NSHVC_TILES_PLANAR, bytes);
+    video_copy(race_art_bytes + character * 32u, data, bytes);
+    stale(&two_images_stale);
+    video_fill(sprite_atlas_made, 0, sizeof sprite_atlas_made);
 }
 
 static uint8_t frame_art_8[1024 * 64];       /* the one-player frame and HUD art, 8bpp, as loaded */
@@ -134,13 +142,13 @@ static int frame_image_stale = 1;
 
 static void frame_art_clear(void)
 {
-    memset(frame_art_8, 0, sizeof frame_art_8);
-    memset(race_art_bytes, 0, sizeof race_art_bytes);
-    memset(backdrop_two_words, 0, sizeof backdrop_two_words);
-    memset(panel_words, 0, sizeof panel_words);
-    two_images_stale = 1;
-    memset(frame_words_1p, 0, sizeof frame_words_1p);
-    frame_image_stale = 1;
+    video_fill(frame_art_8, 0, sizeof frame_art_8);
+    video_fill(race_art_bytes, 0, sizeof race_art_bytes);
+    video_fill(backdrop_two_words, 0, sizeof backdrop_two_words);
+    video_fill(panel_words, 0, sizeof panel_words);
+    stale(&two_images_stale);
+    video_fill(frame_words_1p, 0, sizeof frame_words_1p);
+    stale(&frame_image_stale);
 }
 
 /* The one-player frame's 8bpp art from `character` on (64 bytes a character). */
@@ -148,8 +156,8 @@ void race_frame_art_write(unsigned character, const uint8_t *data, uint32_t byte
 {
     if (character * 64u + bytes > sizeof frame_art_8)
         return;
-    memcpy(frame_art_8 + character * 64u, data, bytes);
-    frame_image_stale = 1;
+    video_copy(frame_art_8 + character * 64u, data, bytes);
+    stale(&frame_image_stale);
 }
 
 /* With two players, BG1's art from `character` on: the halves' 3D characters
@@ -157,21 +165,21 @@ void race_frame_art_write(unsigned character, const uint8_t *data, uint32_t byte
    RACE_FRAME_TWO_FRAME; kept too for the full window's boxes. */
 void race_frame_two_art_write(unsigned character, const uint8_t *data, uint32_t bytes)
 {
-    nshvc_tiles_write(race_video.frame_tiles_two, character, data, bytes / 32u, NSHVC_TILES_PLANAR);
+    video_tiles_write(race_video.frame_tiles_two, character, data, bytes / 32u, NSHVC_TILES_PLANAR, bytes);
     if (character * 32u + bytes <= sizeof frame_two_bytes)
-        memcpy(frame_two_bytes + character * 32u, data, bytes);
-    two_boxes_stale = 1;
+        video_copy(frame_two_bytes + character * 32u, data, bytes);
+    stale(&two_boxes_stale);
 }
 
 /* The course screen's art from `character` on, and its map's first `rows` rows. */
 void race_course_screen_art_write(unsigned character, const uint8_t *data, uint32_t bytes)
 {
-    nshvc_tiles_write(race_video.course_tiles, character, data, bytes / 32u, NSHVC_TILES_PLANAR);
+    video_tiles_write(race_video.course_tiles, character, data, bytes / 32u, NSHVC_TILES_PLANAR, bytes);
 }
 
 void race_course_screen_map_write(const uint16_t *words, unsigned rows)
 {
-    nshvc_map_write_snes(race_video.course_map, 0, 0, 32, rows, words);
+    video_map_write(race_video.course_map, 0, 0, 32, rows, words);
 }
 
 /* ---- the results' and the quit menu's uploads, by what they hold ---- */
@@ -209,8 +217,8 @@ void race_half_characters_write(int half, const uint8_t *characters)
    drawn as an image into the list, from the shared art at tile $300 on. */
 void race_panel_map_write(const uint16_t *words)
 {
-    memcpy(panel_words, words, sizeof panel_words);
-    two_images_stale = 1;
+    video_copy(panel_words, words, sizeof panel_words);
+    stale(&two_images_stale);
 }
 
 /* BG1 of the two-player screen holds only the frame and panels at their own
@@ -222,9 +230,9 @@ void race_frame_map_two_write(const uint16_t *words)
 
     for (i = 0; i < 32 * 32; i++)
         frame_only[i] = (words[i] & 0x3FF) >= 0x168 ? words[i] : 0;
-    nshvc_map_write_snes(race_video.frame_map_two, 0, 0, 32, 32, frame_only);
-    memcpy(frame_two_words, frame_only, sizeof frame_two_words);
-    two_boxes_stale = 1;
+    video_map_write(race_video.frame_map_two, 0, 0, 32, 32, frame_only);
+    video_copy(frame_two_words, frame_only, sizeof frame_two_words);
+    stale(&two_boxes_stale);
 }
 
 /* `n` pages of the two-player backdrop from `first`. */
@@ -239,8 +247,8 @@ void race_backdrop_two_pages_write(int first, const uint16_t *words, uint32_t n)
 /* A page of the two-player backdrop's own four. */
 void race_backdrop_two_write(int page, const uint16_t *words)
 {
-    memcpy(backdrop_two_words[page], words, sizeof backdrop_two_words[page]);
-    two_images_stale = 1;
+    video_copy(backdrop_two_words[page], words, sizeof backdrop_two_words[page]);
+    stale(&two_images_stale);
 }
 
 /* ---- one unpacked block to the art or a map ---- */
@@ -273,8 +281,8 @@ enum { FRAME_HUD = 0x2B0, FRAME_HUD_PIECES = 0x2D6, FRAME_HUD_CAR = 0x2DA };
 void race_map_page_write(int page, const uint16_t *words)
 {
     if (page == 0) {
-        memcpy(frame_words_1p, words, sizeof frame_words_1p);
-        frame_image_stale = 1;
+        video_copy(frame_words_1p, words, sizeof frame_words_1p);
+        stale(&frame_image_stale);
     }
 }
 
@@ -539,10 +547,15 @@ void BackdropRowsUpdate(void)
     g.backdrop_x[buf] = (uint16_t)(((g.backdrop_heading >> 1) & 7) - 0x18);
     row_step = (unsigned)(((uint16_t)(h + g.backdrop_row_adjust) >> 3) & 0x3F) * 0x140u;
     x = ((g.backdrop_heading >> 3) & 0xFE) + row_step;
-    wide_band[buf].map = (g.picture_effects & 0x40) ? 1 : 0;
-    wide_band[buf].heading = g.backdrop_heading;
-    wide_band[buf].pitch = h;
-    wide_band[buf].row_adjust = g.backdrop_row_adjust;
+    {
+        WideBand band;
+
+        band.map = (g.picture_effects & 0x40) ? 1 : 0;
+        band.heading = g.backdrop_heading;
+        band.pitch = h;
+        band.row_adjust = g.backdrop_row_adjust;
+        video_copy(&wide_band[buf], &band, sizeof band);
+    }
     for (n = 0; n < 17; n++) {
         if (x >= 0x2800) {
             while (at < 0x220)
@@ -566,7 +579,7 @@ void race_backdrop_rows_upload(int buffer)
        the 3D has to stay in front of it (see race_screen_layers) */
     for (i = 0; i < 0x220; i++)
         adjusted[i] = (uint16_t)((backdrop_rows(buffer)[i] & 0xDC00) | (((backdrop_rows(buffer)[i] & 0x3FF) + 0x200) & 0x3FF));
-    nshvc_map_write_snes(race_video.backdrop_one, 0, buffer ? 47 : 30, 32, 17, adjusted);
+    video_map_write(race_video.backdrop_one, 0, buffer ? 47 : 30, 32, 17, adjusted);
 }
 
 void BackdropAnglesFromView(void)
@@ -607,7 +620,7 @@ void race_picture_shown(int buffer)
     pic.bg[1].scroll_x = pic.race.backdrop_x[0];
     pic.bg[1].scroll_y = pic.race.backdrop_y[0];
     race_backdrop_rows_upload(buffer);
-    shown_buffer = buffer;
+    video_copy(&shown_buffer, &buffer, sizeof shown_buffer);
 }
 
 /* The full window's hills and sky from the view's angles, as
@@ -844,12 +857,14 @@ static uint8_t course_static_cells[32 * 32];
 
 void VramNoiseTiles(void)
 {
+    uint8_t cells[sizeof course_static_cells];
     int i;
 
     for (i = 0; i < 0x400; i++) {
         RandomWordStep();
-        course_static_cells[i] = (uint8_t)(g.random_word & 0x1F);
+        cells[i] = (uint8_t)(g.random_word & 0x1F);
     }
+    video_copy(course_static_cells, cells, sizeof cells);   /* the random numbers now; the static shown with the update's art */
 }
 
 /* The course screen fills the window once the static can be laid out
@@ -1051,7 +1066,7 @@ void ResultsMapRowsUpload(void)
 
             row[i] = (uint16_t)((w & 0xDC00) | (((w & 0x3FF) + 0x200) & 0x3FF));
         }
-        nshvc_map_write_snes(race_video.backdrop_one, 0, (uint32_t)(32 + r), 26, 1, row);
+        video_map_write(race_video.backdrop_one, 0, (uint32_t)(32 + r), 26, 1, row);
     }
     Bg2ScrollFromTable(0);
 }
@@ -1149,7 +1164,7 @@ void RaceCourseUpload(void)
     pic.blend.layers = windows.maths.layers;
     pic.blend.fixed_bgr15 = (uint16_t)(level | level << 5 | level << 10);
     pic.bg[1].scroll_y = g.course_scroll_top;
-    nshvc_map_write_snes(race_video.course_map, 0, 0, 32, 64, backdrop_map(0));
+    video_map_write(race_video.course_map, 0, 0, 32, 64, backdrop_map(0));
     CourseWipeTable();
 }
 

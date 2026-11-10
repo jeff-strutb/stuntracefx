@@ -31,21 +31,31 @@ void video_init(void)
     pic.blank = 1;
 }
 
+/* a menu map write: with the update's other writes once the menus draw
+   whole frames of the update before (video_between_menu_was_set) */
+static void menu_map_write(nshvc_map m, uint32_t x, const uint16_t *w)
+{
+    if (video_between_menus_whole())
+        video_map_write(m, x, 0, 32, 32, w);
+    else
+        nshvc_map_write_snes(m, x, 0, 32, 32, w);
+}
+
 void menu_page_write(int page, const void *words)
 {
     const uint16_t *w = (const uint16_t *)words;
 
     if (page == 0) {
-        nshvc_map_write_snes(menu_video.page_0, 0, 0, 32, 32, w);
-        nshvc_map_write_snes(menu_video.pages_0_1, 0, 0, 32, 32, w);
+        menu_map_write(menu_video.page_0, 0, w);
+        menu_map_write(menu_video.pages_0_1, 0, w);
     } else if (page == 1) {
-        nshvc_map_write_snes(menu_video.pages_0_1, 32, 0, 32, 32, w);
-        nshvc_map_write_snes(menu_video.pages_1_2, 0, 0, 32, 32, w);
+        menu_map_write(menu_video.pages_0_1, 32, w);
+        menu_map_write(menu_video.pages_1_2, 0, w);
     } else if (page == 2) {
-        nshvc_map_write_snes(menu_video.pages_1_2, 32, 0, 32, 32, w);
-        nshvc_map_write_snes(menu_video.pages_2_3, 0, 0, 32, 32, w);
+        menu_map_write(menu_video.pages_1_2, 32, w);
+        menu_map_write(menu_video.pages_2_3, 0, w);
     } else {
-        nshvc_map_write_snes(menu_video.pages_2_3, 32, 0, 32, 32, w);
+        menu_map_write(menu_video.pages_2_3, 32, w);
     }
 }
 
@@ -122,16 +132,15 @@ static void gradient_lines_send(void)
 /* a window edge moving further between updates: set anew */
 enum { LINE_EDGE_FAR = 64 };
 
-/* The window bands: a row's edges for each line of the table. */
-static void window_lines_send(void)
+/* The window bands' edges, a row's for each line of the table. */
+static void window_band_values(int32_t l1[224], int32_t r1[224], int32_t l2[224], int32_t r2[224])
 {
-    int32_t l1[224], r1[224], l2[224], r2[224];
     int band, line = 0;
 
-    memset(l1, 0, sizeof l1);
-    memset(r1, 0, sizeof r1);
-    memset(l2, 0, sizeof l2);
-    memset(r2, 0, sizeof r2);
+    memset(l1, 0, 224 * sizeof *l1);
+    memset(r1, 0, 224 * sizeof *r1);
+    memset(l2, 0, 224 * sizeof *l2);
+    memset(r2, 0, 224 * sizeof *r2);
     for (band = 0; band < WINDOW_BANDS_MAX && windows.band[band].lines && line < 224; band++) {
         uint8_t c = windows.band[band].lines;
         int repeat = c >= 0x81, n = repeat ? c - 0x80 : c, i;
@@ -152,13 +161,106 @@ static void window_lines_send(void)
         l2[line] = line ? l2[line - 1] : 0;
         r2[line] = line ? r2[line - 1] : 0;
     }
-    {                                   /* the bands' edges as they move, between updates */
-        static TweenTable keep[4];
+}
 
-        tween_table(&keep[0], l1, 224, LINE_EDGE_FAR, 0);
-        tween_table(&keep[1], r1, 224, LINE_EDGE_FAR, 0);
-        tween_table(&keep[2], l2, 224, LINE_EDGE_FAR, 0);
-        tween_table(&keep[3], r2, 224, LINE_EDGE_FAR, 0);
+/* The course screen's BG2 scroll by line: in bands, by its table when the
+   table is on. */
+static void course_scroll_values(int32_t v[224])
+{
+    int r, at = 0, line = 0;
+    int32_t scroll = g.course_scroll_top;
+
+    for (r = 0; r < 55; r++)
+        v[r] = scroll;
+    scroll = (g.course_scroll_low & 0xFF) | (g.course_scroll_top & 0xFF00);
+    for (; r < 224; r++)
+        v[r] = scroll;
+    if (g.line_effects.course_scroll) {
+        const uint8_t *t = g.course_scroll_table;
+
+        while (t[at] && line < 224) {
+            int32_t value = t[at + 1] | t[at + 2] << 8;
+            int n = t[at];
+
+            for (r = line; r < line + n && r < 224; r++)
+                v[r] = value;
+            line += n;
+            at += 3;
+        }
+        for (r = line; line && r < 224; r++)
+            v[r] = v[line - 1];
+    }
+}
+
+/* The course screen's wipe: window 1's edges by line from its table, in
+   the screen's columns. */
+static void course_wipe_values(int32_t l1[224], int32_t r1[224], int origin_x)
+{
+    const uint8_t *t = windows.wipe_table;
+    int r, at = 0, line = 0;
+
+    while (at + 2 < (int)sizeof windows.wipe_table && t[at] && line < 224) {
+        int n = t[at];
+
+        for (r = line; r < line + n && r < 224; r++) {
+            l1[r] = t[at + 1];
+            r1[r] = t[at + 2];
+        }
+        line += n;
+        at += 3;
+    }
+    for (r = line; r < 224; r++) {
+        l1[r] = line ? l1[line - 1] : 1;
+        r1[r] = line ? r1[line - 1] : 0;
+    }
+    for (r = 0; r < 224; r++) {
+        l1[r] += origin_x;
+        r1[r] += origin_x;
+    }
+}
+
+/* A picture between two updates draws the update before's world; its
+   moving per-line tables are eased towards the newest world's, worked out
+   here at the picture's start, before that world goes out
+   (video_between_begin). Each is eased only when the newest world has it
+   too. */
+static struct {
+    int ready, bands, course, wipe;
+    int32_t band[4][224], scroll[224], wipe_edges[2][224];
+} newest_lines;
+
+void video_newest_lines_take(void)
+{
+    const Picture *now = video_between_newest();
+
+    newest_lines.ready = 0;
+    if (!video_between_eased())
+        return;
+    screen_update();
+    newest_lines.bands = now->race.on && (now->race.split || g.line_effects.window_bands);
+    if (newest_lines.bands)
+        window_band_values(newest_lines.band[0], newest_lines.band[1], newest_lines.band[2], newest_lines.band[3]);
+    newest_lines.course = now->race.on && now->race.course_screen;
+    newest_lines.wipe = newest_lines.course && g.line_effects.course_wipe;
+    if (newest_lines.course)
+        course_scroll_values(newest_lines.scroll);
+    if (newest_lines.wipe)
+        course_wipe_values(newest_lines.wipe_edges[0], newest_lines.wipe_edges[1],
+                           race_course_full_window() ? screen_shape()->origin_x : 0);
+    newest_lines.ready = 1;
+}
+
+/* The window bands: a row's edges for each line of the table. */
+static void window_lines_send(void)
+{
+    int32_t l1[224], r1[224], l2[224], r2[224];
+
+    window_band_values(l1, r1, l2, r2);
+    if (newest_lines.ready && newest_lines.bands) {     /* the bands' edges as they move, between updates */
+        tween_lines(l1, newest_lines.band[0], 224, LINE_EDGE_FAR, 0);
+        tween_lines(r1, newest_lines.band[1], 224, LINE_EDGE_FAR, 0);
+        tween_lines(l2, newest_lines.band[2], 224, LINE_EDGE_FAR, 0);
+        tween_lines(r2, newest_lines.band[3], 224, LINE_EDGE_FAR, 0);
     }
     nshvc_lines(0, 224, NSHVC_LINE_WIN1_LEFT, l1);
     nshvc_lines(0, 224, NSHVC_LINE_WIN1_RIGHT, r1);
@@ -219,8 +321,7 @@ static void split_half_send(void)
 static void course_lines_send(int full, int origin_x)
 {
     int32_t v[224], l1[224], r1[224];
-    int r, at = 0, line = 0;
-    int32_t scroll = g.course_scroll_top;
+    int r;
 
     if (!full) {                        /* in the whole window no line is blanked for the uploads */
         for (r = 0; r < 224; r++)
@@ -229,60 +330,15 @@ static void course_lines_send(int full, int origin_x)
     }
     nshvc_line(0, NSHVC_LINE_SPRITES_MAIN, 0);
     nshvc_line(55, NSHVC_LINE_SPRITES_MAIN, 1);
-    for (r = 0; r < 55; r++)
-        v[r] = scroll;
-    scroll = (g.course_scroll_low & 0xFF) | (g.course_scroll_top & 0xFF00);
-    for (; r < 224; r++)
-        v[r] = scroll;
-    if (g.line_effects.course_scroll) {
-        const uint8_t *t = g.course_scroll_table;
-
-        while (t[at] && line < 224) {
-            int32_t value = t[at + 1] | t[at + 2] << 8;
-            int n = t[at];
-
-            for (r = line; r < line + n && r < 224; r++)
-                v[r] = value;
-            line += n;
-            at += 3;
-        }
-        for (r = line; line && r < 224; r++)
-            v[r] = v[line - 1];
-    }
-    {                                   /* the bands' scroll as it moves, between updates */
-        static TweenTable keep;
-
-        tween_table(&keep, v, 224, 0, TWEEN_SCROLL);
-    }
+    course_scroll_values(v);
+    if (newest_lines.ready && newest_lines.course)     /* the bands' scroll as it moves, between updates */
+        tween_lines(v, newest_lines.scroll, 224, 0, TWEEN_SCROLL);
     nshvc_lines(0, 224, (nshvc_line_field)(NSHVC_LINE_SCROLL_Y + 1), v);
     if (g.line_effects.course_wipe) {
-        const uint8_t *t = windows.wipe_table;
-
-        at = 0;
-        line = 0;
-        while (at + 2 < (int)sizeof windows.wipe_table && t[at] && line < 224) {
-            int n = t[at];
-
-            for (r = line; r < line + n && r < 224; r++) {
-                l1[r] = t[at + 1];
-                r1[r] = t[at + 2];
-            }
-            line += n;
-            at += 3;
-        }
-        for (r = line; r < 224; r++) {
-            l1[r] = line ? l1[line - 1] : 1;
-            r1[r] = line ? r1[line - 1] : 0;
-        }
-        for (r = 0; r < 224; r++) {     /* the window's edges are the screen's columns */
-            l1[r] += origin_x;
-            r1[r] += origin_x;
-        }
-        {                               /* the wipe as it moves, between updates */
-            static TweenTable keep[2];
-
-            tween_table(&keep[0], l1, 224, LINE_EDGE_FAR, 0);
-            tween_table(&keep[1], r1, 224, LINE_EDGE_FAR, 0);
+        course_wipe_values(l1, r1, origin_x);
+        if (newest_lines.ready && newest_lines.wipe) {  /* the wipe as it moves, between updates */
+            tween_lines(l1, newest_lines.wipe_edges[0], 224, LINE_EDGE_FAR, 0);
+            tween_lines(r1, newest_lines.wipe_edges[1], 224, LINE_EDGE_FAR, 0);
         }
         nshvc_lines(0, 224, NSHVC_LINE_WIN1_LEFT, l1);
         nshvc_lines(0, 224, NSHVC_LINE_WIN1_RIGHT, r1);
@@ -362,7 +418,7 @@ static int32_t full_sky_at(int row, int origin_y)
  * read their bands about their middles; the original's screens read their
  * bands by line. Rows past a band's end give its last.
  */
-uint16_t race_ground_colour(int panel, float row)
+static uint16_t ground_colour(int panel, float row)
 {
     int r = (int)floorf(row), line = r - screen_shape()->origin_y;
 
@@ -375,6 +431,21 @@ uint16_t race_ground_colour(int panel, float row)
     if (race_full_window())
         return full_sky_colour(race_sky_offset_now(), line);
     return band_line_colour(line);
+}
+
+/* (asked during the 3D's compose too: the picture's game state, g, taken
+   in for the read and the caller's put back) */
+uint16_t race_ground_colour(int panel, float row)
+{
+    int took = !video_between_world_is_in();
+    uint16_t c;
+
+    if (took)
+        video_between_world_in();
+    c = ground_colour(panel, row);
+    if (took)
+        video_between_world_out();
+    return c;
 }
 
 /* Whether each window of the band table covers any of the screen: the
@@ -483,7 +554,19 @@ static void full_two_draw(const ScreenShape *sh)
     }
 }
 
+static void draw_picture(void);
+
+/* The picture: between two updates the update before's game state drawn
+   (video_between_world_in), its moving per-line tables eased towards the
+   newest world's (video_newest_lines_take). */
 void video_draw(void)
+{
+    video_between_world_in();
+    draw_picture();
+    video_between_world_out();
+}
+
+static void draw_picture(void)
 {
     nshvc_screen s;
     const ScreenShape *sh;

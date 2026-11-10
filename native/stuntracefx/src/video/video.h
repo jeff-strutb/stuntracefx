@@ -64,6 +64,7 @@ uint16_t fx_static_seed(int line);             /* fx_draw.c: the seed line 0-127
 void race_two_full_window_ready(int on);       /* interim: the 3D's side turns it on with its two-player rectangles */
 void race_hills_full(void);                    /* its hills and sky for the picture shown, or one between steps */
 uint16_t sky_colour_at(int at);                /* colour 1 at place `at` of the day and night lists */
+void video_newest_lines_take(void);                 /* picture.c, from video_between_begin */
 uint16_t race_ground_colour(int panel, float row);   /* colour 1 shown on a screen row of a player's view (picture.c) */
 uint16_t race_sky_offset_now(void);                 /* the full window's sky place for the picture being drawn */
 uint16_t race_two_sky_colour(int player, int row);  /* two players' colour 1 on a screen row */

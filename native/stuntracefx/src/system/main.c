@@ -31,8 +31,10 @@ static void update(const nshvc_input *input)
     input = pause_update(input);        /* the pause screen; NULL while it holds the game */
     if (!input)
         return;
+    video_update_begin();               /* the update before's world kept, its art and maps written */
     input_read(input);
     session_update();
+    video_update_end();
 }
 
 static void draw(float between)
