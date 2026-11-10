@@ -69,7 +69,8 @@ extern const int fx_art_picture_count;
 uint8_t fx_art_rom(uint8_t bank, uint16_t at);
 
 /* tile set n's unpacked 4-bit tiles, 32 bytes a tile, the SNES's planes
-   (the game's: the video blocks it unpacks; a tool's own); NULL if none */
+   (the game's: video's blocks 0 on, the menus' pictures 32 on; a tool's
+   own); NULL if none */
 const uint8_t *fx_art_tile_set(uint16_t n, uint32_t *bytes);
 
 /* ---- the geometry, shared with the fitting tool ---- */

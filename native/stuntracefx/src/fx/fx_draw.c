@@ -14,6 +14,7 @@
 #include "fx/fx_art.h"
 #include "fx/fx_draw.h"
 #include "fx/fx_face.h"
+#include "data/menu_tables.h"
 #include "data/video_tables.h"
 #include "system/state.h"
 #include "video/picture.h"
@@ -1089,20 +1090,23 @@ uint8_t fx_art_rom(uint8_t bank, uint16_t at)
     return fx_rom_read(bank, at);
 }
 
-/* The console art's tile sets: video's blocks, unpacked the first time asked for. */
+/* The console art's tile sets: video's blocks (0 on) and the menus' pictures
+   (32 on), unpacked the first time asked for. */
 const uint8_t *fx_art_tile_set(uint16_t n, uint32_t *bytes)
 {
-    enum { SETS = 32, ROOM = 0x20000 };
-    static uint8_t *set[SETS];
-    static uint32_t size[SETS];
+    enum { SETS = 32, ROOM = 0x40000 };
+    static uint8_t *set[2 * SETS];
+    static uint32_t size[2 * SETS];
 
-    if (n >= SETS || n > VIDEO_BLOCK_RESULTS_CARS)
+    /* 0 on: video's blocks; 32 on: the menus' pictures */
+    if (n >= 2 * SETS || (n < SETS && n > VIDEO_BLOCK_RESULTS_CARS) || (n >= SETS && n - SETS >= MENU_PICS))
         return NULL;
     if (!set[n]) {
         set[n] = malloc(ROOM);
         if (!set[n])
             abort();
-        size[n] = video_block_unpack((VideoBlock)n, set[n], ROOM);
+        size[n] = n < SETS ? video_block_unpack((VideoBlock)n, set[n], ROOM)
+                           : menu_picture_unpack((MenuPicture)(n - SETS), set[n], ROOM);
     }
     *bytes = size[n];
     return set[n];

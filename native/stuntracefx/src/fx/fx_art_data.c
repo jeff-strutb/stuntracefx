@@ -1255,6 +1255,238 @@ static const FxArtLoop sprite_shared_mini_map_2[] = { { 36, sprite_shared_mini_m
 static const FxArtLayer sprite_shared_mini_map_fill[] = { { 15, 23, sprite_shared_mini_map_0, 0.0f }, { 2, 2, sprite_shared_mini_map_1, 0.0f }, { 4, 2, sprite_shared_mini_map_2, 0.0f } };
 static const uint16_t sprite_shared_mini_map_tiles[] = { 8, 9, 10, 11, 24, 25, 26, 27, 12, 13, 14, 15, 28, 29, 30, 31 };
 
+/* ---- the menus' 8 x 16 font (menu picture 10, the sprites; tile set 42): console art, each glyph the 16 x 32 set's design (the K the 24 x 40 set's) scaled into its box and fitted ---- */
+
+/* the menus' 8 x 16 glyph '0' ($FF:$002A): 2 loops, 8 corners (4 sharp), radii 3, 3.1; 0 off, the 16 x 32 glyph's design scaled and fitted */
+static const FxArtCorner menu_0_0[] = { { 7.08f, 1.02f, 3.11f }, { 7.08f, 13.98f, 3.11f }, { 0.94f, 13.98f, 3.04f }, { 0.94f, 1.02f, 3.04f } };
+static const FxArtCorner menu_0_1[] = { { 3.0f, 11.0f, 0.0f }, { 5.0f, 11.0f, 0.0f }, { 5.0f, 3.99f, 0.0f }, { 3.0f, 3.99f, 0.0f } };
+static const FxArtLoop menu_0[] = { { 4, menu_0_0 }, { 4, menu_0_1 } };
+static const FxArtLayer menu_0_fill[] = { { 3, 2, menu_0 } };
+static const uint16_t menu_0_tiles[] = { 0, 16 };
+
+/* the menus' 8 x 16 glyph '1' ($FF:$002A): 1 loop, 10 corners (3 sharp), radii 0.3, 0.5, 1.4, 1.6, 1.7; 3 off, the 16 x 32 glyph's design scaled and fitted */
+static const FxArtCorner menu_1_0[] = { { 5.0f, 0.99f, 1.44f }, { 5.0f, 10.83f, 0.0f }, { 6.08f, 11.22f, 0.5f }, { 6.08f, 14.04f, 1.72f }, { 1.93f, 14.04f, 1.68f }, { 1.93f, 11.24f, 0.3f }, { 3.0f, 10.81f, 0.0f }, { 3.0f, 4.19f, 0.0f }, { 1.93f, 3.76f, 0.3f }, { 1.93f, 0.99f, 1.63f } };
+static const FxArtLoop menu_1[] = { { 10, menu_1_0 } };
+static const FxArtLayer menu_1_fill[] = { { 3, 1, menu_1 } };
+static const uint16_t menu_1_tiles[] = { 1, 17 };
+
+/* the menus' 8 x 16 glyph '2' ($FF:$002A): 1 loop, 12 corners (2 sharp), radii 0, 0.1, 0.9, 1.5, 1.6, 3.1, 3.2; 0 off, the 16 x 32 glyph's design scaled and fitted */
+static const FxArtCorner menu_2_0[] = { { 7.03f, 0.97f, 3.16f }, { 7.03f, 9.03f, 3.16f }, { 3.0f, 9.03f, 0.01f }, { 3.0f, 10.98f, 0.0f }, { 7.04f, 10.98f, 0.9f }, { 7.04f, 14.01f, 1.56f }, { 0.98f, 14.01f, 1.52f }, { 0.98f, 5.97f, 3.12f }, { 5.0f, 5.97f, 0.0f }, { 5.0f, 4.02f, 0.09f }, { 0.96f, 4.02f, 0.9f }, { 0.96f, 0.97f, 1.6f } };
+static const FxArtLoop menu_2[] = { { 12, menu_2_0 } };
+static const FxArtLayer menu_2_fill[] = { { 3, 1, menu_2 } };
+static const uint16_t menu_2_tiles[] = { 2, 18 };
+
+/* the menus' 8 x 16 glyph '3' ($FF:$002A): 1 loop, 15 corners (1 sharp), radii 0.5, 0.8, 1.4, 1.5, 3, 3.2, 3.6; 2 off, the 16 x 32 glyph's design scaled and fitted */
+static const FxArtCorner menu_3_0[] = { { 7.03f, 0.97f, 3.21f }, { 7.03f, 6.63f, 3.58f }, { 5.77f, 7.71f, 0.0f }, { 7.07f, 8.78f, 3.0f }, { 7.07f, 14.02f, 3.24f }, { 0.97f, 14.02f, 1.5f }, { 0.97f, 10.98f, 0.51f }, { 5.11f, 10.98f, 0.5f }, { 5.11f, 8.94f, 0.75f }, { 1.81f, 8.94f, 1.44f }, { 1.81f, 6.06f, 1.44f }, { 5.11f, 6.06f, 0.75f }, { 5.11f, 4.02f, 0.5f }, { 0.97f, 4.02f, 0.51f }, { 0.97f, 0.97f, 1.51f } };
+static const FxArtLoop menu_3[] = { { 15, menu_3_0 } };
+static const FxArtLayer menu_3_fill[] = { { 3, 1, menu_3 } };
+static const uint16_t menu_3_tiles[] = { 3, 19 };
+
+/* the menus' 8 x 16 glyph '4' ($FF:$002A): 2 loops, 14 corners (4 sharp), radii 0.3, 0.9, 1, 1.1, 1.4, 3.1, 15; 4 off, the 16 x 32 glyph's design scaled and fitted */
+static const FxArtCorner menu_4_0[] = { { 1.01f, 1.17f, 1.12f }, { 7.0f, 1.17f, 1.13f }, { 7.0f, 9.11f, 0.3f }, { 7.0f, 9.48f, 0.0f }, { 7.0f, 11.72f, 1.0f }, { 7.02f, 12.56f, 0.3f }, { 7.02f, 13.93f, 1.36f }, { 5.01f, 13.93f, 0.3f }, { 5.01f, 11.03f, 0.0f }, { 0.98f, 11.03f, 3.13f }, { 0.98f, 7.86f, 15.0f } };
+static const FxArtCorner menu_4_1[] = { { 2.85f, 9.01f, 0.0f }, { 4.98f, 9.01f, 0.0f }, { 4.98f, -44.3f, 0.92f } };
+static const FxArtLoop menu_4[] = { { 11, menu_4_0 }, { 3, menu_4_1 } };
+static const FxArtLayer menu_4_fill[] = { { 3, 2, menu_4 } };
+static const uint16_t menu_4_tiles[] = { 4, 20 };
+
+/* the menus' 8 x 16 glyph '5' ($FF:$002A): 1 loop, 12 corners (2 sharp), radii 0, 0.9, 1, 1.5, 1.6, 3.2; 0 off, the 16 x 32 glyph's design scaled and fitted */
+static const FxArtCorner menu_5_0[] = { { 7.05f, 0.99f, 1.58f }, { 7.05f, 4.03f, 0.96f }, { 3.0f, 4.03f, 0.0f }, { 3.0f, 5.97f, 0.0f }, { 7.03f, 5.97f, 3.16f }, { 7.03f, 14.03f, 3.15f }, { 0.97f, 14.03f, 1.58f }, { 0.97f, 10.99f, 0.86f }, { 5.0f, 10.99f, 0.01f }, { 5.0f, 9.01f, 0.02f }, { 0.99f, 9.01f, 1.49f }, { 0.99f, 0.99f, 1.5f } };
+static const FxArtLoop menu_5[] = { { 12, menu_5_0 } };
+static const FxArtLayer menu_5_fill[] = { { 3, 1, menu_5 } };
+static const uint16_t menu_5_tiles[] = { 5, 21 };
+
+/* the menus' 8 x 16 glyph '6' ($FF:$002A): 2 loops, 12 corners (6 sharp), radii 0.3, 1.6, 3, 3.1; 1 off, the 16 x 32 glyph's design scaled and fitted */
+static const FxArtCorner menu_6_0[] = { { 7.04f, 0.97f, 1.6f }, { 7.04f, 4.02f, 0.3f }, { 3.0f, 4.02f, 0.0f }, { 3.0f, 5.97f, 0.0f }, { 7.02f, 5.97f, 3.13f }, { 7.02f, 14.0f, 3.03f }, { 0.99f, 14.0f, 3.0f }, { 0.99f, 0.97f, 3.11f } };
+static const FxArtCorner menu_6_1[] = { { 3.0f, 11.01f, 0.0f }, { 5.0f, 11.01f, 0.0f }, { 5.0f, 9.0f, 0.0f }, { 3.0f, 9.0f, 0.0f } };
+static const FxArtLoop menu_6[] = { { 8, menu_6_0 }, { 4, menu_6_1 } };
+static const FxArtLayer menu_6_fill[] = { { 3, 2, menu_6 } };
+static const uint16_t menu_6_tiles[] = { 6, 22 };
+
+/* the menus' 8 x 16 glyph '7' ($FF:$002A): 1 loop, 8 corners (0 sharp), radii 0.3, 0.6, 0.8, 0.9, 1.2, 1.5, 1.6; 0 off, the 16 x 32 glyph's design scaled and fitted */
+static const FxArtCorner menu_7_0[] = { { 7.01f, 0.99f, 1.49f }, { 7.01f, 6.57f, 1.16f }, { 3.29f, 14.01f, 0.79f }, { 1.03f, 14.01f, 0.65f }, { 1.03f, 13.28f, 0.3f }, { 5.76f, 4.0f, 0.93f }, { 0.94f, 4.0f, 0.95f }, { 0.94f, 0.99f, 1.62f } };
+static const FxArtLoop menu_7[] = { { 8, menu_7_0 } };
+static const FxArtLayer menu_7_fill[] = { { 3, 1, menu_7 } };
+static const uint16_t menu_7_tiles[] = { 7, 23 };
+
+/* the menus' 8 x 16 glyph '8' ($FF:$002A): 3 loops, 18 corners (2 sharp), radii 0.5, 0.7, 3, 3.1, 3.2, 3.5; 0 off, the 16 x 32 glyph's design scaled and fitted */
+static const FxArtCorner menu_8_0[] = { { 7.13f, 1.03f, 3.17f }, { 7.13f, 6.23f, 3.23f }, { 5.71f, 7.3f, 0.0f }, { 7.11f, 8.35f, 3.5f }, { 7.11f, 13.99f, 3.17f }, { 0.94f, 13.99f, 3.0f }, { 0.94f, 8.22f, 3.0f }, { 2.27f, 7.32f, 0.0f }, { 0.9f, 6.32f, 3.01f }, { 0.9f, 1.03f, 3.06f } };
+static const FxArtCorner menu_8_1[] = { { 2.87f, 6.02f, 0.73f }, { 5.11f, 6.02f, 0.73f }, { 5.11f, 3.98f, 0.73f }, { 2.87f, 3.98f, 0.73f } };
+static const FxArtCorner menu_8_2[] = { { 2.87f, 11.03f, 0.73f }, { 5.11f, 11.03f, 0.73f }, { 5.11f, 8.99f, 0.5f }, { 2.87f, 8.99f, 0.73f } };
+static const FxArtLoop menu_8[] = { { 10, menu_8_0 }, { 4, menu_8_1 }, { 4, menu_8_2 } };
+static const FxArtLayer menu_8_fill[] = { { 3, 3, menu_8 } };
+static const uint16_t menu_8_tiles[] = { 8, 24 };
+
+/* the menus' 8 x 16 glyph '9' ($FF:$002A): 2 loops, 12 corners (6 sharp), radii 0.3, 1.5, 3, 3.1; 1 off, the 16 x 32 glyph's design scaled and fitted */
+static const FxArtCorner menu_9_0[] = { { 7.01f, 1.0f, 3.0f }, { 7.01f, 14.03f, 3.1f }, { 1.03f, 14.03f, 1.49f }, { 1.03f, 11.02f, 0.3f }, { 5.0f, 11.02f, 0.0f }, { 5.0f, 9.03f, 0.0f }, { 0.98f, 9.03f, 3.14f }, { 0.98f, 1.0f, 3.03f } };
+static const FxArtCorner menu_9_1[] = { { 3.0f, 6.0f, 0.0f }, { 5.0f, 6.0f, 0.0f }, { 5.0f, 4.0f, 0.0f }, { 3.0f, 4.0f, 0.0f } };
+static const FxArtLoop menu_9[] = { { 8, menu_9_0 }, { 4, menu_9_1 } };
+static const FxArtLayer menu_9_fill[] = { { 3, 2, menu_9 } };
+static const uint16_t menu_9_tiles[] = { 9, 25 };
+
+/* the menus' 8 x 16 glyph 'A' ($FF:$002A): 2 loops, 12 corners (4 sharp), radii 0.3, 0.5, 1.3, 1.5, 3; 2 off, the 16 x 32 glyph's design scaled and fitted */
+static const FxArtCorner menu_a_0[] = { { 7.0f, 0.99f, 3.0f }, { 7.0f, 13.94f, 1.32f }, { 5.02f, 13.94f, 0.3f }, { 5.02f, 10.0f, 0.0f }, { 2.98f, 10.0f, 0.0f }, { 2.98f, 13.97f, 0.3f }, { 0.99f, 13.97f, 1.49f }, { 0.99f, 0.99f, 3.01f } };
+static const FxArtCorner menu_a_1[] = { { 2.99f, 7.0f, 0.0f }, { 5.01f, 7.0f, 0.0f }, { 5.01f, 3.94f, 0.5f }, { 2.99f, 3.94f, 0.5f } };
+static const FxArtLoop menu_a[] = { { 8, menu_a_0 }, { 4, menu_a_1 } };
+static const FxArtLayer menu_a_fill[] = { { 3, 2, menu_a } };
+static const uint16_t menu_a_tiles[] = { 10, 26 };
+
+/* the menus' 8 x 16 glyph 'B' ($FF:$002A): 3 loops, 15 corners (5 sharp), radii 1.2, 1.3, 1.4, 1.5, 3.2; 0 off, the 16 x 32 glyph's design scaled and fitted */
+static const FxArtCorner menu_b_0[] = { { 7.03f, 0.97f, 3.15f }, { 7.03f, 5.98f, 1.24f }, { 5.76f, 7.32f, 0.0f }, { 7.04f, 9.24f, 1.28f }, { 7.04f, 14.03f, 3.16f }, { 1.0f, 14.03f, 1.53f }, { 1.0f, 0.97f, 1.53f } };
+static const FxArtCorner menu_b_1[] = { { 3.0f, 5.98f, 0.0f }, { 4.96f, 5.98f, 1.42f }, { 4.96f, 3.01f, 1.42f }, { 3.0f, 3.01f, 0.0f } };
+static const FxArtCorner menu_b_2[] = { { 3.0f, 11.99f, 0.0f }, { 4.98f, 11.99f, 1.46f }, { 4.98f, 9.0f, 1.51f }, { 3.0f, 9.0f, 0.0f } };
+static const FxArtLoop menu_b[] = { { 7, menu_b_0 }, { 4, menu_b_1 }, { 4, menu_b_2 } };
+static const FxArtLayer menu_b_fill[] = { { 3, 3, menu_b } };
+static const uint16_t menu_b_tiles[] = { 11, 27 };
+
+/* the menus' 8 x 16 glyph 'C' ($FF:$002A): 1 loop, 8 corners (0 sharp), radii 0.2, 0.3, 1.5, 3.1; 2 off, the 16 x 32 glyph's design scaled and fitted */
+static const FxArtCorner menu_c_0[] = { { 6.97f, 0.97f, 1.45f }, { 6.97f, 3.98f, 0.3f }, { 3.0f, 3.98f, 0.21f }, { 3.0f, 11.02f, 0.18f }, { 6.97f, 11.02f, 0.3f }, { 6.97f, 14.02f, 1.45f }, { 0.99f, 14.02f, 3.1f }, { 0.99f, 0.97f, 3.11f } };
+static const FxArtLoop menu_c[] = { { 8, menu_c_0 } };
+static const FxArtLayer menu_c_fill[] = { { 3, 1, menu_c } };
+static const uint16_t menu_c_tiles[] = { 12, 28 };
+
+/* the menus' 8 x 16 glyph 'D' ($FF:$002A): 2 loops, 8 corners (2 sharp), radii 1.5, 1.6, 3.1; 0 off, the 16 x 32 glyph's design scaled and fitted */
+static const FxArtCorner menu_d_0[] = { { 7.01f, 0.97f, 3.11f }, { 7.01f, 14.02f, 3.1f }, { 1.0f, 14.02f, 1.52f }, { 1.0f, 0.97f, 1.53f } };
+static const FxArtCorner menu_d_1[] = { { 3.0f, 11.01f, 0.0f }, { 5.0f, 11.01f, 1.6f }, { 5.0f, 3.99f, 1.6f }, { 3.0f, 3.99f, 0.0f } };
+static const FxArtLoop menu_d[] = { { 4, menu_d_0 }, { 4, menu_d_1 } };
+static const FxArtLayer menu_d_fill[] = { { 3, 2, menu_d } };
+static const uint16_t menu_d_tiles[] = { 13, 29 };
+
+/* the menus' 8 x 16 glyph 'E' ($FF:$002A): 1 loop, 12 corners (4 sharp), radii 0.9, 1.5; 0 off, the 16 x 32 glyph's design scaled and fitted */
+static const FxArtCorner menu_e_0[] = { { 7.03f, 0.99f, 1.54f }, { 7.03f, 4.02f, 0.9f }, { 2.98f, 4.02f, 0.0f }, { 2.98f, 5.99f, 0.0f }, { 6.02f, 5.99f, 1.51f }, { 6.02f, 9.01f, 1.51f }, { 2.98f, 9.01f, 0.0f }, { 2.98f, 10.98f, 0.0f }, { 7.03f, 10.98f, 0.9f }, { 7.03f, 14.01f, 1.54f }, { 1.0f, 14.01f, 1.49f }, { 1.0f, 0.99f, 1.49f } };
+static const FxArtLoop menu_e[] = { { 12, menu_e_0 } };
+static const FxArtLayer menu_e_fill[] = { { 3, 1, menu_e } };
+static const uint16_t menu_e_tiles[] = { 14, 30 };
+
+/* the menus' 8 x 16 glyph 'F' ($FF:$002A): 1 loop, 10 corners (3 sharp), radii 0.3, 0.8, 1.4, 1.5; 1 off, the 16 x 32 glyph's design scaled and fitted */
+static const FxArtCorner menu_f_0[] = { { 7.01f, 0.99f, 1.52f }, { 7.01f, 4.01f, 0.79f }, { 3.0f, 4.01f, 0.0f }, { 3.0f, 5.99f, 0.0f }, { 6.02f, 5.99f, 1.5f }, { 6.02f, 9.01f, 1.52f }, { 2.99f, 9.01f, 0.0f }, { 2.99f, 13.94f, 0.3f }, { 1.0f, 13.94f, 1.37f }, { 1.0f, 0.99f, 1.5f } };
+static const FxArtLoop menu_f[] = { { 10, menu_f_0 } };
+static const FxArtLayer menu_f_fill[] = { { 3, 1, menu_f } };
+static const uint16_t menu_f_tiles[] = { 15, 31 };
+
+/* the menus' 8 x 16 glyph 'G' ($FF:$002A): 1 loop, 12 corners (2 sharp), radii 0.2, 0.3, 1.5, 3, 3.1; 2 off, the 16 x 32 glyph's design scaled and fitted */
+static const FxArtCorner menu_g_0[] = { { 6.98f, 0.96f, 1.55f }, { 6.98f, 3.98f, 0.3f }, { 3.0f, 3.98f, 0.0f }, { 3.0f, 11.01f, 0.25f }, { 5.01f, 11.01f, 0.25f }, { 5.01f, 9.2f, 0.0f }, { 3.99f, 8.86f, 0.3f }, { 3.99f, 6.03f, 0.3f }, { 6.99f, 6.03f, 0.3f }, { 6.99f, 14.01f, 2.98f }, { 0.99f, 14.01f, 3.02f }, { 0.99f, 0.96f, 3.12f } };
+static const FxArtLoop menu_g[] = { { 12, menu_g_0 } };
+static const FxArtLayer menu_g_fill[] = { { 3, 1, menu_g } };
+static const uint16_t menu_g_tiles[] = { 32, 48 };
+
+/* the menus' 8 x 16 glyph 'H' ($FF:$002A): 1 loop, 12 corners (4 sharp), radii 0.3, 0.6, 1.3, 1.4; 2 off, the 16 x 32 glyph's design scaled and fitted */
+static const FxArtCorner menu_h_0[] = { { 3.0f, 1.02f, 0.62f }, { 3.0f, 6.0f, 0.0f }, { 5.0f, 6.0f, 0.0f }, { 5.0f, 1.02f, 0.61f }, { 7.0f, 1.02f, 1.38f }, { 7.0f, 13.92f, 1.31f }, { 5.0f, 13.92f, 0.3f }, { 5.0f, 9.0f, 0.0f }, { 3.0f, 9.0f, 0.0f }, { 3.0f, 13.92f, 0.3f }, { 1.0f, 13.92f, 1.32f }, { 1.0f, 1.02f, 1.38f } };
+static const FxArtLoop menu_h[] = { { 12, menu_h_0 } };
+static const FxArtLayer menu_h_fill[] = { { 3, 1, menu_h } };
+static const uint16_t menu_h_tiles[] = { 33, 49 };
+
+/* the menus' 8 x 16 glyph 'I' ($FF:$002A): 1 loop, 12 corners (4 sharp), radii 0.3, 0.9, 1.5, 1.6; 0 off, the 16 x 32 glyph's design scaled and fitted */
+static const FxArtCorner menu_i_0[] = { { 6.03f, 0.97f, 1.59f }, { 6.03f, 3.84f, 0.94f }, { 5.0f, 4.09f, 0.0f }, { 5.0f, 10.86f, 0.0f }, { 6.03f, 11.26f, 0.95f }, { 6.03f, 14.02f, 1.58f }, { 1.98f, 14.02f, 1.54f }, { 1.98f, 11.47f, 0.3f }, { 3.0f, 10.75f, 0.0f }, { 3.0f, 4.25f, 0.0f }, { 1.98f, 3.53f, 0.3f }, { 1.98f, 0.97f, 1.56f } };
+static const FxArtLoop menu_i[] = { { 12, menu_i_0 } };
+static const FxArtLayer menu_i_fill[] = { { 3, 1, menu_i } };
+static const uint16_t menu_i_tiles[] = { 34, 50 };
+
+/* the menus' 8 x 16 glyph 'J' ($FF:$002A): 1 loop, 8 corners (2 sharp), radii 0.3, 1, 1.2, 1.5, 3; 2 off */
+static const FxArtCorner menu_j_0[] = { { 4.79f, 9.0f, 1.2f }, { 3.0f, 11.0f, 0.0f }, { 5.0f, 11.0f, 0.0f }, { 5.0f, 1.0f, 0.3f }, { 7.0f, 1.0f, 1.5f }, { 7.0f, 14.0f, 3.0f }, { 1.0f, 14.0f, 3.0f }, { 1.0f, 9.0f, 1.0f } };
+static const FxArtLoop menu_j[] = { { 8, menu_j_0 } };
+static const FxArtLayer menu_j_fill[] = { { 3, 1, menu_j } };
+static const uint16_t menu_j_tiles[] = { 35, 51 };
+
+/* the menus' 8 x 16 glyph 'K' ($FF:$002A): 1 loop, 13 corners (3 sharp), radii 0.3, 1, 1.3, 1.9; 2 off, the 24 x 40 glyph's design scaled and fitted */
+static const FxArtCorner menu_k_0[] = { { 1.0f, 1.08f, 1.32f }, { 2.99f, 1.08f, 0.3f }, { 2.99f, 6.5f, 0.0f }, { 5.74f, 0.95f, 0.3f }, { 7.05f, 0.95f, 0.98f }, { 7.05f, 2.58f, 1.92f }, { 4.46f, 7.5f, 0.0f }, { 7.06f, 12.42f, 1.92f }, { 7.06f, 14.07f, 1.02f }, { 5.86f, 14.07f, 0.3f }, { 2.99f, 9.11f, 0.0f }, { 2.99f, 13.92f, 0.3f }, { 1.0f, 13.92f, 1.32f } };
+static const FxArtLoop menu_k[] = { { 13, menu_k_0 } };
+static const FxArtLayer menu_k_fill[] = { { 3, 1, menu_k } };
+static const uint16_t menu_k_tiles[] = { 36, 52 };
+
+/* the menus' 8 x 16 glyph 'L' ($FF:$002A): 1 loop, 6 corners (1 sharp), radii 0.3, 1.3, 1.4, 1.5; 2 off, the 16 x 32 glyph's design scaled and fitted */
+static const FxArtCorner menu_l_0[] = { { 3.0f, 1.08f, 0.3f }, { 3.0f, 11.02f, 0.0f }, { 6.97f, 11.02f, 0.3f }, { 6.97f, 14.01f, 1.41f }, { 1.0f, 14.01f, 1.48f }, { 1.0f, 1.08f, 1.31f } };
+static const FxArtLoop menu_l[] = { { 6, menu_l_0 } };
+static const FxArtLayer menu_l_fill[] = { { 3, 1, menu_l } };
+static const uint16_t menu_l_tiles[] = { 37, 53 };
+
+/* the menus' 8 x 16 glyph 'M' ($FF:$002A): 1 loop, 12 corners (3 sharp), radii 0.3, 0.5, 1.2, 1.8; 9 off, the 16 x 32 glyph's design scaled and fitted */
+static const FxArtCorner menu_m_0[] = { { 0.98f, 1.33f, 0.3f }, { 2.17f, 1.33f, 1.84f }, { 3.78f, 3.38f, 0.0f }, { 5.71f, 1.09f, 0.46f }, { 7.0f, 1.09f, 0.3f }, { 7.0f, 13.9f, 1.25f }, { 5.0f, 13.9f, 0.3f }, { 5.0f, 4.9f, 0.0f }, { 3.75f, 6.67f, 0.3f }, { 2.0f, 5.04f, 0.0f }, { 2.0f, 13.87f, 0.3f }, { 0.98f, 13.87f, 0.3f } };
+static const FxArtLoop menu_m[] = { { 12, menu_m_0 } };
+static const FxArtLayer menu_m_fill[] = { { 3, 1, menu_m } };
+static const uint16_t menu_m_tiles[] = { 38, 54 };
+
+/* the menus' 8 x 16 glyph 'N' ($FF:$002A): 1 loop, 12 corners (4 sharp), radii 0.3, 0.6, 1.3, 1.4; 5 off, built by hand */
+static const FxArtCorner menu_n_0[] = { { 1.0f, 1.01f, 1.4f }, { 2.97f, 1.01f, 0.57f }, { 2.97f, 4.98f, 0.0f }, { 5.0f, 7.0f, 0.0f }, { 5.0f, 1.08f, 0.3f }, { 7.0f, 1.08f, 1.32f }, { 7.0f, 13.93f, 1.33f }, { 5.01f, 13.93f, 0.3f }, { 5.01f, 11.43f, 0.0f }, { 3.0f, 7.58f, 0.0f }, { 3.0f, 13.92f, 0.3f }, { 1.0f, 13.92f, 1.32f } };
+static const FxArtLoop menu_n[] = { { 12, menu_n_0 } };
+static const FxArtLayer menu_n_fill[] = { { 3, 1, menu_n } };
+static const uint16_t menu_n_tiles[] = { 39, 55 };
+
+/* the menus' 8 x 16 glyph 'O' ($FF:$002A): 2 loops, 8 corners (4 sharp), radii 3, 3.1; 0 off, the 16 x 32 glyph's design scaled and fitted */
+static const FxArtCorner menu_o_0[] = { { 7.08f, 1.02f, 3.11f }, { 7.08f, 13.98f, 3.11f }, { 0.94f, 13.98f, 3.04f }, { 0.94f, 1.02f, 3.04f } };
+static const FxArtCorner menu_o_1[] = { { 3.0f, 11.0f, 0.0f }, { 5.0f, 11.0f, 0.0f }, { 5.0f, 3.99f, 0.0f }, { 3.0f, 3.99f, 0.0f } };
+static const FxArtLoop menu_o[] = { { 4, menu_o_0 }, { 4, menu_o_1 } };
+static const FxArtLayer menu_o_fill[] = { { 3, 2, menu_o } };
+static const uint16_t menu_o_tiles[] = { 40, 56 };
+
+/* the menus' 8 x 16 glyph 'P' ($FF:$002A): 2 loops, 10 corners (2 sharp), radii 0.1, 0.6, 1.4, 1.5, 3.1; 0 off, the 16 x 32 glyph's design scaled and fitted */
+static const FxArtCorner menu_p_0[] = { { 7.02f, 0.97f, 3.14f }, { 7.02f, 10.03f, 3.14f }, { 3.0f, 10.03f, 0.0f }, { 3.0f, 13.98f, 0.61f }, { 1.0f, 13.98f, 1.39f }, { 1.0f, 0.97f, 1.53f } };
+static const FxArtCorner menu_p_1[] = { { 3.0f, 7.0f, 0.14f }, { 5.0f, 7.0f, 0.11f }, { 5.0f, 4.0f, 0.07f }, { 3.0f, 4.0f, 0.0f } };
+static const FxArtLoop menu_p[] = { { 6, menu_p_0 }, { 4, menu_p_1 } };
+static const FxArtLayer menu_p_fill[] = { { 3, 2, menu_p } };
+static const uint16_t menu_p_tiles[] = { 41, 57 };
+
+/* the menus' 8 x 16 glyph 'Q' ($FF:$002A): 2 loops, 13 corners (6 sharp), radii 0.3, 0.7, 1.5, 3, 4.9; 5 off */
+static const FxArtCorner menu_q_0[] = { { 7.0f, 1.0f, 3.0f }, { 7.0f, 10.68f, 1.47f }, { 5.78f, 10.89f, 0.0f }, { 5.81f, 11.03f, 1.45f }, { 5.81f, 12.05f, 0.0f }, { 7.01f, 10.99f, 0.72f }, { 7.01f, 13.9f, 0.3f }, { 0.95f, 13.9f, 4.91f }, { 0.95f, 1.0f, 3.04f } };
+static const FxArtCorner menu_q_1[] = { { 3.0f, 10.0f, 0.0f }, { 5.0f, 10.0f, 0.0f }, { 5.0f, 4.0f, 0.0f }, { 3.0f, 4.0f, 0.0f } };
+static const FxArtLoop menu_q[] = { { 9, menu_q_0 }, { 4, menu_q_1 } };
+static const FxArtLayer menu_q_fill[] = { { 3, 2, menu_q } };
+static const uint16_t menu_q_tiles[] = { 42, 58 };
+
+/* the menus' 8 x 16 glyph 'R' ($FF:$002A): 2 loops, 14 corners (4 sharp), radii 0.2, 0.3, 0.5, 0.7, 1, 1.4, 1.5, 3, 3.2; 1 off, the 16 x 32 glyph's design scaled and fitted */
+static const FxArtCorner menu_r_0[] = { { 1.0f, 0.97f, 1.54f }, { 7.06f, 0.97f, 3.22f }, { 7.06f, 6.32f, 2.97f }, { 4.75f, 8.07f, 0.0f }, { 7.0f, 12.33f, 0.5f }, { 7.0f, 14.01f, 0.73f }, { 5.67f, 14.01f, 0.96f }, { 2.99f, 8.46f, 0.0f }, { 2.99f, 13.94f, 0.3f }, { 1.0f, 13.94f, 1.37f } };
+static const FxArtCorner menu_r_1[] = { { 5.01f, 4.0f, 0.25f }, { 3.0f, 4.0f, 0.0f }, { 3.0f, 6.0f, 0.0f }, { 5.01f, 6.0f, 1.55f } };
+static const FxArtLoop menu_r[] = { { 10, menu_r_0 }, { 4, menu_r_1 } };
+static const FxArtLayer menu_r_fill[] = { { 3, 2, menu_r } };
+static const uint16_t menu_r_tiles[] = { 43, 59 };
+
+/* the menus' 8 x 16 glyph 'S' ($FF:$002A): 1 loop, 12 corners (1 sharp), radii 0, 0.2, 0.3, 1.5, 3.1, 3.2; 2 off, the 16 x 32 glyph's design scaled and fitted */
+static const FxArtCorner menu_s_0[] = { { 6.97f, 0.97f, 1.46f }, { 6.97f, 3.98f, 0.3f }, { 2.99f, 3.98f, 0.18f }, { 2.99f, 5.97f, 0.21f }, { 7.03f, 5.97f, 3.15f }, { 7.03f, 14.02f, 3.14f }, { 1.03f, 14.02f, 1.45f }, { 1.03f, 11.02f, 0.3f }, { 5.0f, 11.02f, 0.0f }, { 5.0f, 9.03f, 0.04f }, { 0.97f, 9.03f, 3.16f }, { 0.97f, 0.97f, 3.15f } };
+static const FxArtLoop menu_s[] = { { 12, menu_s_0 } };
+static const FxArtLayer menu_s_fill[] = { { 3, 1, menu_s } };
+static const uint16_t menu_s_tiles[] = { 44, 60 };
+
+/* the menus' 8 x 16 glyph 'T' ($FF:$002A): 1 loop, 8 corners (2 sharp), radii 0.3, 0.9, 1.3, 1.5; 1 off, the 16 x 32 glyph's design scaled and fitted */
+static const FxArtCorner menu_t_0[] = { { 7.03f, 0.99f, 1.55f }, { 7.03f, 4.01f, 0.86f }, { 5.0f, 4.01f, 0.0f }, { 5.0f, 13.92f, 1.31f }, { 3.0f, 13.92f, 0.3f }, { 3.0f, 4.01f, 0.0f }, { 0.97f, 4.01f, 0.86f }, { 0.97f, 0.99f, 1.55f } };
+static const FxArtLoop menu_t[] = { { 8, menu_t_0 } };
+static const FxArtLayer menu_t_fill[] = { { 3, 1, menu_t } };
+static const uint16_t menu_t_tiles[] = { 45, 61 };
+
+/* the menus' 8 x 16 glyph 'U' ($FF:$002A): 1 loop, 8 corners (0 sharp), radii 0.3, 0.4, 1.3, 3; 2 off, the 16 x 32 glyph's design scaled and fitted */
+static const FxArtCorner menu_u_0[] = { { 3.0f, 1.08f, 0.3f }, { 3.0f, 11.01f, 0.39f }, { 5.0f, 11.01f, 0.39f }, { 5.0f, 1.08f, 0.3f }, { 7.0f, 1.08f, 1.31f }, { 7.0f, 14.0f, 3.0f }, { 1.0f, 14.0f, 3.0f }, { 1.0f, 1.08f, 1.31f } };
+static const FxArtLoop menu_u[] = { { 8, menu_u_0 } };
+static const FxArtLayer menu_u_fill[] = { { 3, 1, menu_u } };
+static const uint16_t menu_u_tiles[] = { 46, 62 };
+
+/* the menus' 8 x 16 glyph 'V' ($FF:$002A): 1 loop, 11 corners (3 sharp), radii 0.3, 0.5, 0.6, 1.4; 4 off, built by hand */
+static const FxArtCorner menu_v_0[] = { { 1.0f, 1.05f, 1.4f }, { 2.99f, 1.05f, 0.3f }, { 2.99f, 8.76f, 0.0f }, { 4.0f, 9.2f, 0.0f }, { 5.01f, 8.76f, 0.0f }, { 5.01f, 1.05f, 0.3f }, { 7.0f, 1.05f, 1.4f }, { 7.0f, 8.65f, 0.3f }, { 4.32f, 13.95f, 0.49f }, { 3.67f, 13.95f, 0.57f }, { 1.0f, 8.64f, 0.3f } };
+static const FxArtLoop menu_v[] = { { 11, menu_v_0 } };
+static const FxArtLayer menu_v_fill[] = { { 3, 1, menu_v } };
+static const uint16_t menu_v_tiles[] = { 47, 63 };
+
+/* the menus' 8 x 16 glyph 'W' ($FF:$002A): 1 loop, 12 corners (3 sharp), radii 0.3, 0.4, 0.9, 1.3; 5 off, the 16 x 32 glyph's design scaled and fitted */
+static const FxArtCorner menu_w_0[] = { { 1.0f, 1.15f, 0.3f }, { 2.0f, 1.15f, 0.3f }, { 2.0f, 11.23f, 0.0f }, { 3.49f, 9.02f, 0.3f }, { 5.0f, 11.22f, 0.0f }, { 5.0f, 1.08f, 0.3f }, { 7.0f, 1.08f, 1.31f }, { 7.0f, 13.93f, 0.3f }, { 5.81f, 13.93f, 0.88f }, { 3.32f, 11.16f, 0.0f }, { 1.67f, 13.91f, 0.4f }, { 1.0f, 13.91f, 0.3f } };
+static const FxArtLoop menu_w[] = { { 12, menu_w_0 } };
+static const FxArtLayer menu_w_fill[] = { { 3, 1, menu_w } };
+static const uint16_t menu_w_tiles[] = { 64, 80 };
+
+/* the menus' 8 x 16 glyph 'X' ($FF:$002A): 1 loop, 16 corners (4 sharp), radii 0.3, 0.4, 0.7, 0.9, 1, 3.9, 5.8; 0 off, the 16 x 32 glyph's design scaled and fitted */
+static const FxArtCorner menu_x_0[] = { { 0.9f, 0.98f, 0.97f }, { 2.4f, 0.98f, 0.74f }, { 3.99f, 5.83f, 0.0f }, { 5.63f, 0.99f, 0.3f }, { 7.1f, 0.99f, 0.96f }, { 7.1f, 3.52f, 5.84f }, { 4.96f, 7.5f, 0.0f }, { 7.06f, 11.44f, 3.93f }, { 7.06f, 14.03f, 0.92f }, { 5.6f, 14.03f, 0.74f }, { 4.01f, 9.18f, 0.0f }, { 2.37f, 14.02f, 0.38f }, { 0.94f, 14.02f, 0.91f }, { 0.94f, 11.42f, 3.92f }, { 3.05f, 7.5f, 0.0f }, { 0.9f, 3.53f, 5.84f } };
+static const FxArtLoop menu_x[] = { { 16, menu_x_0 } };
+static const FxArtLayer menu_x_fill[] = { { 3, 1, menu_x } };
+static const uint16_t menu_x_tiles[] = { 65, 81 };
+
+/* the menus' 8 x 16 glyph 'Y' ($FF:$002A): 1 loop, 16 corners (5 sharp), radii 0, 0.3, 1.3; 3 off, the 16 x 32 glyph's design scaled and fitted */
+static const FxArtCorner menu_y_0[] = { { 2.99f, 1.07f, 0.3f }, { 2.99f, 4.39f, 0.0f }, { 3.01f, 4.48f, 0.3f }, { 3.0f, 6.5f, 0.0f }, { 5.0f, 6.5f, 0.01f }, { 4.99f, 4.48f, 0.3f }, { 5.01f, 4.43f, 0.0f }, { 5.01f, 1.07f, 0.3f }, { 7.0f, 1.07f, 1.33f }, { 7.0f, 5.7f, 0.3f }, { 5.0f, 9.4f, 0.0f }, { 5.0f, 13.92f, 1.32f }, { 3.01f, 13.92f, 0.3f }, { 3.01f, 9.42f, 0.0f }, { 1.0f, 5.7f, 0.3f }, { 1.0f, 1.07f, 1.33f } };
+static const FxArtLoop menu_y[] = { { 16, menu_y_0 } };
+static const FxArtLayer menu_y_fill[] = { { 3, 1, menu_y } };
+static const uint16_t menu_y_tiles[] = { 66, 82 };
+
+/* the menus' 8 x 16 glyph 'Z' ($FF:$002A): 1 loop, 10 corners (2 sharp), radii 0.3, 1.2, 1.4, 1.5; 2 off, the 16 x 32 glyph's design scaled and fitted */
+static const FxArtCorner menu_z_0[] = { { 6.9f, 1.0f, 1.23f }, { 6.9f, 2.58f, 0.3f }, { 3.94f, 11.03f, 0.0f }, { 6.98f, 11.03f, 0.3f }, { 6.98f, 14.01f, 1.45f }, { 1.04f, 14.01f, 1.35f }, { 1.04f, 12.6f, 0.3f }, { 4.05f, 3.97f, 0.0f }, { 1.02f, 3.97f, 0.3f }, { 1.02f, 1.0f, 1.45f } };
+static const FxArtLoop menu_z[] = { { 10, menu_z_0 } };
+static const FxArtLayer menu_z_fill[] = { { 3, 1, menu_z } };
+static const uint16_t menu_z_tiles[] = { 67, 83 };
+
 const FxArtPicture fx_art_pictures[] = {
     { "the 16 x 32 glyph '0'", 0x15, 0x8000, 16, 32, FX_ART_OUTLINED, 1, 1, big16_0_fill, 0 },
     { "the 16 x 32 glyph '1'", 0x15, 0x8004, 16, 32, FX_ART_OUTLINED, 1, 1, big16_1_fill, 7 },
@@ -1409,5 +1641,41 @@ const FxArtPicture fx_art_pictures[] = {
     { "the race sprites' picture 'letter 9 O'", 0xFF, 0x0000, 8, 16, FX_ART_LAYERED, 0, 2, sprite_letter_9_o_fill, 0, sprite_letter_9_o_tiles, { 0 } },
     { "the race sprites' picture 'shared panel corner'", 0xFF, 0x0001, 56, 16, FX_ART_LAYERED, 0, 3, sprite_shared_panel_corner_fill, 0, sprite_shared_panel_corner_tiles, { 0 } },
     { "the race sprites' picture 'shared MINI MAP'", 0xFF, 0x0001, 32, 32, FX_ART_LAYERED, 0, 3, sprite_shared_mini_map_fill, 0, sprite_shared_mini_map_tiles, { 0 } },
+    { "the menus' 8 x 16 glyph '0'", 0xFF, 0x002A, 8, 16, FX_ART_OUTLINED, 0, 1, menu_0_fill, 0, menu_0_tiles, { 0, 0xA, 0xD, 0xB } },
+    { "the menus' 8 x 16 glyph '1'", 0xFF, 0x002A, 8, 16, FX_ART_OUTLINED, 0, 1, menu_1_fill, 3, menu_1_tiles, { 0, 0xA, 0xD, 0xB } },
+    { "the menus' 8 x 16 glyph '2'", 0xFF, 0x002A, 8, 16, FX_ART_OUTLINED, 0, 1, menu_2_fill, 0, menu_2_tiles, { 0, 0xA, 0xD, 0xB } },
+    { "the menus' 8 x 16 glyph '3'", 0xFF, 0x002A, 8, 16, FX_ART_OUTLINED, 0, 1, menu_3_fill, 2, menu_3_tiles, { 0, 0xA, 0xD, 0xB } },
+    { "the menus' 8 x 16 glyph '4'", 0xFF, 0x002A, 8, 16, FX_ART_OUTLINED, 0, 1, menu_4_fill, 4, menu_4_tiles, { 0, 0xA, 0xD, 0xB } },
+    { "the menus' 8 x 16 glyph '5'", 0xFF, 0x002A, 8, 16, FX_ART_OUTLINED, 0, 1, menu_5_fill, 0, menu_5_tiles, { 0, 0xA, 0xD, 0xB } },
+    { "the menus' 8 x 16 glyph '6'", 0xFF, 0x002A, 8, 16, FX_ART_OUTLINED, 0, 1, menu_6_fill, 1, menu_6_tiles, { 0, 0xA, 0xD, 0xB } },
+    { "the menus' 8 x 16 glyph '7'", 0xFF, 0x002A, 8, 16, FX_ART_OUTLINED, 0, 1, menu_7_fill, 0, menu_7_tiles, { 0, 0xA, 0xD, 0xB } },
+    { "the menus' 8 x 16 glyph '8'", 0xFF, 0x002A, 8, 16, FX_ART_OUTLINED, 0, 1, menu_8_fill, 0, menu_8_tiles, { 0, 0xA, 0xD, 0xB } },
+    { "the menus' 8 x 16 glyph '9'", 0xFF, 0x002A, 8, 16, FX_ART_OUTLINED, 0, 1, menu_9_fill, 1, menu_9_tiles, { 0, 0xA, 0xD, 0xB } },
+    { "the menus' 8 x 16 glyph 'A'", 0xFF, 0x002A, 8, 16, FX_ART_OUTLINED, 0, 1, menu_a_fill, 2, menu_a_tiles, { 0, 0xA, 0xD, 0xB } },
+    { "the menus' 8 x 16 glyph 'B'", 0xFF, 0x002A, 8, 16, FX_ART_OUTLINED, 0, 1, menu_b_fill, 0, menu_b_tiles, { 0, 0xA, 0xD, 0xB } },
+    { "the menus' 8 x 16 glyph 'C'", 0xFF, 0x002A, 8, 16, FX_ART_OUTLINED, 0, 1, menu_c_fill, 2, menu_c_tiles, { 0, 0xA, 0xD, 0xB } },
+    { "the menus' 8 x 16 glyph 'D'", 0xFF, 0x002A, 8, 16, FX_ART_OUTLINED, 0, 1, menu_d_fill, 0, menu_d_tiles, { 0, 0xA, 0xD, 0xB } },
+    { "the menus' 8 x 16 glyph 'E'", 0xFF, 0x002A, 8, 16, FX_ART_OUTLINED, 0, 1, menu_e_fill, 0, menu_e_tiles, { 0, 0xA, 0xD, 0xB } },
+    { "the menus' 8 x 16 glyph 'F'", 0xFF, 0x002A, 8, 16, FX_ART_OUTLINED, 0, 1, menu_f_fill, 1, menu_f_tiles, { 0, 0xA, 0xD, 0xB } },
+    { "the menus' 8 x 16 glyph 'G'", 0xFF, 0x002A, 8, 16, FX_ART_OUTLINED, 0, 1, menu_g_fill, 2, menu_g_tiles, { 0, 0xA, 0xD, 0xB } },
+    { "the menus' 8 x 16 glyph 'H'", 0xFF, 0x002A, 8, 16, FX_ART_OUTLINED, 0, 1, menu_h_fill, 2, menu_h_tiles, { 0, 0xA, 0xD, 0xB } },
+    { "the menus' 8 x 16 glyph 'I'", 0xFF, 0x002A, 8, 16, FX_ART_OUTLINED, 0, 1, menu_i_fill, 0, menu_i_tiles, { 0, 0xA, 0xD, 0xB } },
+    { "the menus' 8 x 16 glyph 'J'", 0xFF, 0x002A, 8, 16, FX_ART_OUTLINED, 0, 1, menu_j_fill, 2, menu_j_tiles, { 0, 0xA, 0xD, 0xB } },
+    { "the menus' 8 x 16 glyph 'K'", 0xFF, 0x002A, 8, 16, FX_ART_OUTLINED, 0, 1, menu_k_fill, 2, menu_k_tiles, { 0, 0xA, 0xD, 0xB } },
+    { "the menus' 8 x 16 glyph 'L'", 0xFF, 0x002A, 8, 16, FX_ART_OUTLINED, 0, 1, menu_l_fill, 2, menu_l_tiles, { 0, 0xA, 0xD, 0xB } },
+    { "the menus' 8 x 16 glyph 'M'", 0xFF, 0x002A, 8, 16, FX_ART_OUTLINED, 0, 1, menu_m_fill, 9, menu_m_tiles, { 0, 0xA, 0xD, 0xB } },
+    { "the menus' 8 x 16 glyph 'N'", 0xFF, 0x002A, 8, 16, FX_ART_OUTLINED, 0, 1, menu_n_fill, 5, menu_n_tiles, { 0, 0xA, 0xD, 0xB } },
+    { "the menus' 8 x 16 glyph 'O'", 0xFF, 0x002A, 8, 16, FX_ART_OUTLINED, 0, 1, menu_o_fill, 0, menu_o_tiles, { 0, 0xA, 0xD, 0xB } },
+    { "the menus' 8 x 16 glyph 'P'", 0xFF, 0x002A, 8, 16, FX_ART_OUTLINED, 0, 1, menu_p_fill, 0, menu_p_tiles, { 0, 0xA, 0xD, 0xB } },
+    { "the menus' 8 x 16 glyph 'Q'", 0xFF, 0x002A, 8, 16, FX_ART_OUTLINED, 0, 1, menu_q_fill, 5, menu_q_tiles, { 0, 0xA, 0xD, 0xB } },
+    { "the menus' 8 x 16 glyph 'R'", 0xFF, 0x002A, 8, 16, FX_ART_OUTLINED, 0, 1, menu_r_fill, 1, menu_r_tiles, { 0, 0xA, 0xD, 0xB } },
+    { "the menus' 8 x 16 glyph 'S'", 0xFF, 0x002A, 8, 16, FX_ART_OUTLINED, 0, 1, menu_s_fill, 2, menu_s_tiles, { 0, 0xA, 0xD, 0xB } },
+    { "the menus' 8 x 16 glyph 'T'", 0xFF, 0x002A, 8, 16, FX_ART_OUTLINED, 0, 1, menu_t_fill, 1, menu_t_tiles, { 0, 0xA, 0xD, 0xB } },
+    { "the menus' 8 x 16 glyph 'U'", 0xFF, 0x002A, 8, 16, FX_ART_OUTLINED, 0, 1, menu_u_fill, 2, menu_u_tiles, { 0, 0xA, 0xD, 0xB } },
+    { "the menus' 8 x 16 glyph 'V'", 0xFF, 0x002A, 8, 16, FX_ART_OUTLINED, 0, 1, menu_v_fill, 4, menu_v_tiles, { 0, 0xA, 0xD, 0xB } },
+    { "the menus' 8 x 16 glyph 'W'", 0xFF, 0x002A, 8, 16, FX_ART_OUTLINED, 0, 1, menu_w_fill, 5, menu_w_tiles, { 0, 0xA, 0xD, 0xB } },
+    { "the menus' 8 x 16 glyph 'X'", 0xFF, 0x002A, 8, 16, FX_ART_OUTLINED, 0, 1, menu_x_fill, 0, menu_x_tiles, { 0, 0xA, 0xD, 0xB } },
+    { "the menus' 8 x 16 glyph 'Y'", 0xFF, 0x002A, 8, 16, FX_ART_OUTLINED, 0, 1, menu_y_fill, 3, menu_y_tiles, { 0, 0xA, 0xD, 0xB } },
+    { "the menus' 8 x 16 glyph 'Z'", 0xFF, 0x002A, 8, 16, FX_ART_OUTLINED, 0, 1, menu_z_fill, 2, menu_z_tiles, { 0, 0xA, 0xD, 0xB } },
 };
 const int fx_art_picture_count = (int)(sizeof fx_art_pictures / sizeof fx_art_pictures[0]);

@@ -686,8 +686,16 @@ filtered or scaled; one path for every backend.
   grown from it; built by hand) and the 8 x 16 letters of RETRY? YES NO (each colour a region over the one before).
   The picture table reads these from the tile sets (`fx_art_tile_set`); how the console's layers draw them is not this
   table's (Jeff: not this job's concern), so nothing draws them yet; the sheet tool runs their check.
-- **Not done yet:** the other console tile sets (the race frame's panels and lettering, the shared set's MINI/MAP labels,
-  the two-player sets), the menu screens, and a census of the 3D faces' textures beyond the patterns.
+- **Console art, more:** the shared sprite set's minimap panel corner (0 off) and MINI MAP label (0); lettering a texel
+  thick kept as its strokes, corners eased, diagonal neighbours joined. **The menus' 8 x 16 font** (menu picture 10; 36,
+  76 off): each glyph the 16 x 32 set's design (K the 24 x 40 set's) scaled into its box and fitted to its texels, V and
+  N built by hand: 0 0, 1 3, 2 0, 3 2, 4 4, 5 0, 6 1, 7 0, 8 0, 9 1, A 2, B 0, C 2, D 0, E 0, F 1, G 2, H 2, I 0, J 2,
+  K 2, L 2, M 9, N 5, O 0, P 0, Q 5, R 1, S 2, T 1, U 2, V 4, W 5, X 0, Y 3, Z 2.
+- **Not done yet:** the race frame's background panels (blocks 2, 3, 6 and their maps), the two-player sets, the menus'
+  other flat-colour art (the mode words SPEED / STUNT / BATTLE / FREE TRAX, frames and arrows, the small lettering), and a
+  census of the 3D faces' textures beyond the patterns. Artwork left as drawn (not flat colours bounded by edges, so
+  not this method's): the title logo and characters, the granite backdrop, the championship's 8-bit picture, the course
+  pictures, the cars' pictures and icons.
 
 ### Stage 11. Whole game
 Finder zero on `native/stuntracefx`; section 8's criteria; every play through `nshvc-check`; every reachable platform.
