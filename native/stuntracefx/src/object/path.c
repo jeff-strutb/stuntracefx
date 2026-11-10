@@ -27,7 +27,7 @@ static uint16_t halve(uint16_t v)
  */
 int ObjectPathCommand(Object *o)
 {
-    uint16_t t = o->word29, cmd = path16(t);
+    uint16_t t = o->director.path, cmd = path16(t);
     Camera *cam = camera_of(o->link);
 
     if (cmd == 3) {
@@ -36,16 +36,16 @@ int ObjectPathCommand(Object *o)
             cam->place[i] = cam->place_base[i];
         }
         o->vx = o->vy = o->vz = 0;
-        o->link27 = 0;
-        o->word29 = (uint16_t)(o->word29 + 8);
+        o->director.steps = 0;
+        o->director.path = (uint16_t)(o->director.path + 8);
     } else if (cmd == 2) {
         cam->mode = path16((uint16_t)(t + 2));
-        o->word29 = (uint16_t)(o->word29 + 4);
+        o->director.path = (uint16_t)(o->director.path + 4);
     } else if (cmd == 1) {
         uint16_t diff[3];
         unsigned n = cart8(0x08, (uint16_t)(PATH_TABLE + t + 3));
 
-        o->link27 = path16((uint16_t)(t + 2)) & 0x00FF;
+        o->director.steps = path16((uint16_t)(t + 2)) & 0x00FF;
         for (int i = 0; i < 3; i++)
             diff[i] = (uint16_t)(path16((uint16_t)(t + 4 + 2 * i)) - cam->place_base[i]);
         while (n--)
@@ -54,7 +54,7 @@ int ObjectPathCommand(Object *o)
         o->vx = diff[0];
         o->vy = diff[1];
         o->vz = diff[2];
-        o->word29 = (uint16_t)(o->word29 + 10);
+        o->director.path = (uint16_t)(o->director.path + 10);
     } else {
         return 1;
     }
@@ -68,6 +68,6 @@ int ObjectPathCommand(Object *o)
  */
 int ObjectPathStart(Object *o, uint16_t path)
 {
-    o->word29 = path;
+    o->director.path = path;
     return ObjectPathCommand(o);
 }

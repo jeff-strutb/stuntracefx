@@ -12,13 +12,12 @@
 #include "object/object.h"
 
 /* the low byte of a word field used as a byte */
-#define SET_LOW(field, v) ((field) = (uint16_t)(((field) & 0xFF00) | (uint8_t)(v)))
 
 /* the shown frame to the record's +$12, then the record marked */
 static void frames_to_record(Object *o)
 {
     if (o->record)
-        rec_put(o->record, 0x0012, o->frame5a & 0x7F);
+        rec_put(o->record, 0x0012, o->shown_frame & 0x7F);
     GsuRecordKeep(o);
 }
 
@@ -41,7 +40,7 @@ void ObjectFlagsRecord(Object *o)
     if (!GsuRecordNewStill(o))
         return;
     rec_or(o->record, FXREC_FLAGS16, o->script_flags);
-    rec_or(o->record, FXREC_FLAGS16, o->link27);
+    rec_or(o->record, FXREC_FLAGS16, o->flags_record.record_flags);
     GsuRecordKeep(o);
 }
 
@@ -59,7 +58,7 @@ static void flags_record_tail(Object *o)
  */
 void ObjectFlagsRecordSetup(Object *o)
 {
-    o->link27 = 0;
+    o->flags_record.record_flags = 0;
     ObjectSetHandler(o, H_RECORD_FLAG4_STEP);
     flags_record_tail(o);
 }
@@ -70,7 +69,7 @@ void ObjectFlagsRecordSetup(Object *o)
  */
 void ObjectFlagsRecordFrame(Object *o)
 {
-    o->frame5a = (uint8_t)(o->count48 | 0x80);
+    o->shown_frame = (uint8_t)(o->flags_record.frame | 0x80);
     ObjectFlagsRecordSetup(o);
 }
 
@@ -85,32 +84,32 @@ void ObjectFrameSwingStep(Object *o)
 {
     uint8_t last;
 
-    if ((uint8_t)o->vx) {
-        SET_LOW(o->vx, (uint8_t)o->vx - 1);
+    if (o->frame_swing.paused) {
+        o->frame_swing.paused--;
         frames_to_record(o);
         return;
     }
-    o->frame5a = (uint8_t)((uint8_t)o->vy | 0x80);
-    last = (uint8_t)(o->count48 - 1);
-    o->byte4b++;
-    if (o->byte4b != o->byte49) {
+    o->shown_frame = (uint8_t)(o->frame_swing.frame | 0x80);
+    last = (uint8_t)(o->frame_swing.frames - 1);
+    o->frame_swing.waited++;
+    if (o->frame_swing.waited != o->frame_swing.wait) {
         frames_to_record(o);
         return;
     }
-    o->byte4b = 0;
-    if (o->flags25 & 0x01) {
-        if (o->frame5a & 0x7F) {
-            SET_LOW(o->vy, (uint8_t)o->vy - 1);
+    o->frame_swing.waited = 0;
+    if (o->frame_swing.state & SWING_BACK) {
+        if (o->shown_frame & 0x7F) {
+            o->frame_swing.frame--;
             frames_to_record(o);
             return;
         }
-    } else if ((o->frame5a & 0x7F) != last) {
-        SET_LOW(o->vy, (uint8_t)o->vy + 1);
+    } else if ((o->shown_frame & 0x7F) != last) {
+        o->frame_swing.frame++;
         frames_to_record(o);
         return;
     }
-    o->flags25 ^= 0x01;
-    SET_LOW(o->vx, o->byte4a);
+    o->frame_swing.state ^= SWING_BACK;
+    o->frame_swing.paused = o->frame_swing.pause;
     frames_to_record(o);
 }
 
@@ -122,7 +121,7 @@ void ObjectFrameSwingStep(Object *o)
 void ObjectFrameSwingSetup(Object *o)
 {
     ObjectSetHandler(o, H_FRAME_SWING_STEP);
-    o->frame5a = 0x80;
-    SET_LOW(o->vx, o->byte4a);
+    o->shown_frame = 0x80;
+    o->frame_swing.paused = o->frame_swing.pause;
     flags_record_tail(o);
 }

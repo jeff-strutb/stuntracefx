@@ -98,7 +98,7 @@ void StuntScoreUp(Object *o)
 {
     uint8_t v = g.stunt_score_high;
 
-    o->flags25 |= 0x01;
+    o->bonus_marker.state |= MARKER_SCORED;
     v = (uint8_t)(((v & 0x0F) == 9) ? ((v & 0xF0) + 0x10) : (v + 1));
     if ((v & 0xF0) == 0xA0)
         v = 0;

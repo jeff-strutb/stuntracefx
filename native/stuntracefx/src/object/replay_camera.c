@@ -79,16 +79,16 @@ void CameraOverheadStep(Object *o)
     uint16_t rec = car_of(o)->record;
     const Object *t;
 
-    if (o->count48) {
-        o->count48--;
+    if (o->director.frames) {
+        o->director.frames--;
         rec_or(rec, FXREC_SIDES, 0x1010);
     } else {
         rec_and(rec, FXREC_SIDES, 0xEFFF);
     }
-    if (o->flags25 & 0x01) {
+    if (o->director.state & DIRECTOR_CUE) {
         uint8_t v;
 
-        o->flags25 &= 0xFE;
+        o->director.state &= (uint8_t)~DIRECTOR_CUE;
         v = (uint8_t)(c->byte34 + 1);
         if (!((uint8_t)(v - 0x02) & 0x80)) {
             c->byte34 = 0;
@@ -126,7 +126,7 @@ void CameraOverhead(Object *o)
     set_mode(o, 0x0003);
     CameraFollowLink(o);
     ObjectSetHandler(o, H_CAMERA_OVERHEAD_STEP);
-    o->count48 = 0x0A;
+    o->director.frames = 0x0A;
     CameraOverheadStep(o);
 }
 
@@ -182,11 +182,11 @@ static void drift_frame(Object *o, uint16_t ty, void (*done)(Object *))
     o->vx = ApproachEighthMin8(o->vx, 0x0000, &moved);
     o->vy = ApproachEighthMin8(o->vy, ty, &moved);
     o->vz = ApproachEighthMin8(o->vz, 0x0000, &moved);
-    if (!o->count48) {
+    if (!o->director.frames) {
         done(o);
         return;
     }
-    o->count48--;
+    o->director.frames--;
     tail(o);
 }
 
@@ -194,7 +194,7 @@ static void drift_shot(Object *o, uint16_t handler, uint8_t count, int flat)
 {
     ObjectSetHandler(o, handler);
     set_mode(o, 0x0003);
-    o->count48 = count;
+    o->director.frames = count;
     ObjectVelocityFromRecordOf(o, car_of(o));
     if (flat)
         o->vy = 0;
@@ -303,11 +303,11 @@ void CameraEnd(Object *o)
 void CameraStillStep(Object *o)
 {
     rec_put(car_of(o)->record, FXREC_SIDES, 0x0410);
-    if (!o->count48) {
+    if (!o->director.frames) {
         CameraEnd(o);
         return;
     }
-    o->count48--;
+    o->director.frames--;
     CameraPointFromTable(o);
     tail(o);
 }
@@ -316,7 +316,7 @@ void CameraStillStep(Object *o)
 void CameraStill(Object *o)
 {
     ObjectSetHandler(o, H_CAMERA_STILL_STEP);
-    o->count48 = 0x0A;
+    o->director.frames = 0x0A;
     cam_of(o)->word37 = 0x8000;
     CameraStillStep(o);
 }

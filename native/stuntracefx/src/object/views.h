@@ -192,12 +192,12 @@ enum { MARKER_SCORED = 0x01 };
 /* A car (the players', the rivals', the demo and pace cars): its script
    (FxCarNew), its kind (0-3, the menu's order: its looks), the attachment
    list FxCarNew is given, its list (list_kind); a two-player race's idle
-   frames before the camera cue (set to $FFFF once the player drives); a demo
-   car's frames before its record is held (car_of_kind writes the same byte,
-   read by nothing then). ObjectCarRecordTake writes 3 at +$46 and 1 at +$4D,
-   which nothing reads. */
+   frames before the camera cue (set to $FFFF once the player drives); the
+   frames it waits (`wait`) before its record follows the freeze
+   (ObjectRecordHoldWhileFrozen) or, a demo car's, is held. ObjectCarRecordTake
+   writes 3 at +$46 and 1 at +$4D, which nothing reads. */
 #define CAR_B uint16_t car_script; uint16_t idle_frames; uint8_t b_unused[3];
-#define CAR_D uint8_t d_unused1[4]; uint8_t unread1; uint8_t d_unused2; uint8_t demo_frames, kind, attachments; uint8_t d_unused3[2]; uint8_t unread2; uint8_t d_unused4;
+#define CAR_D uint8_t d_unused1[4]; uint8_t unread1; uint8_t d_unused2; uint8_t wait, kind, attachments; uint8_t d_unused3[2]; uint8_t unread2; uint8_t d_unused4;
 typedef struct { OBJECT_VIEW(OBJECT_A_UNUSED, OBJECT_S_STATE, CAR_B, OBJECT_V_VELOCITY, OBJECT_C_UNUSED, CAR_D) } CarObject;
 enum {
     CAR_LOOSE = 0x04,                   /* hit: its children come loose, a part flies */
@@ -235,11 +235,13 @@ typedef struct { OBJECT_VIEW(OBJECT_A_UNUSED, OBJECT_S_UNUSED, CHILD_B, OBJECT_V
 typedef struct { OBJECT_VIEW(OBJECT_A_UNUSED, OBJECT_S_STATE, BREAK_OFF_B, OBJECT_V_VELOCITY, OBJECT_C_UNUSED, BREAK_OFF_D) } BreakOffObject;
 enum { PIECE_LONG = 0x01 };
 
-/* A car's eye: its own turn (up a sixteenth a step while it spins), the
-   count its size rises and falls by (ObjectSizeRiseFall), its blink's step
-   (0-4); EYE_BOUNCING while it bounces (its sprite turn then $8C). */
+/* A car's eye, an attachment: its offset on the car (as AttachedObject's),
+   its own turn (up a sixteenth a step while it spins), the count its size
+   rises and falls by (ObjectSizeRiseFall), its blink's step (0-4);
+   EYE_BOUNCING while it bounces (its sprite turn then $8C). */
+#define OFFSET_V int16_t on_x, on_y, on_z;
 #define EYE_D uint8_t d_unused1[6]; uint8_t turn, size_count; uint8_t d_unused2; uint8_t blink; uint8_t d_unused3[3];
-typedef struct { OBJECT_VIEW(OBJECT_A_UNUSED, OBJECT_S_STATE, OBJECT_B_UNUSED, OBJECT_V_VELOCITY, OBJECT_C_UNUSED, EYE_D) } EyeObject;
+typedef struct { OBJECT_VIEW(OBJECT_A_UNUSED, OBJECT_S_STATE, OBJECT_B_UNUSED, OFFSET_V, OBJECT_C_UNUSED, EYE_D) } EyeObject;
 enum { EYE_BOUNCING = 0x01 };
 
 /* The sign over a car (the original's routines call it an exhaust flame):
@@ -259,7 +261,6 @@ typedef struct { OBJECT_VIEW(OBJECT_A_UNUSED, OBJECT_S_UNUSED, OBJECT_B_UNUSED, 
 
 /* A ring's part: its offset on the ring (turned by the ring's roll and
    heading, times 16) and its life. */
-#define OFFSET_V int16_t on_x, on_y, on_z;
 typedef struct { OBJECT_VIEW(OBJECT_A_UNUSED, OBJECT_S_UNUSED, OBJECT_B_UNUSED, OFFSET_V, OBJECT_C_UNUSED, TIMED_D) } RingPartObject;
 
 /* An attachment on its parent (ObjectAttachSpawn's: its offset from the
@@ -292,6 +293,12 @@ typedef struct { OBJECT_VIEW(PUFF_A, OBJECT_S_UNUSED, PUFF_B, OBJECT_V_VELOCITY,
    at +$48, which nothing reads. */
 #define SIGNAL_D uint8_t d_unused1[6]; uint8_t unread; uint8_t d_unused2[6];
 typedef struct { OBJECT_VIEW(OBJECT_A_UNUSED, OBJECT_S_UNUSED, OBJECT_B_UNUSED, OBJECT_V_VELOCITY, OBJECT_C_UNUSED, SIGNAL_D) } SignalObject;
+
+/* A wheel of the bonus truck's (ObjectSpark*): its offset on the truck's
+   attachment and its look, drawn tilted (ObjectBillboardTilt reads the look
+   at +$29 as a child's). */
+#define WHEEL_B uint8_t b_unused1[2]; uint16_t look; uint8_t b_unused2[3];
+typedef struct { OBJECT_VIEW(OBJECT_A_UNUSED, OBJECT_S_UNUSED, WHEEL_B, OFFSET_V, OBJECT_C_UNUSED, OBJECT_D_UNUSED) } WheelObject;
 
 /* ---- the replay cameras ---- */
 
@@ -334,7 +341,7 @@ typedef struct { OBJECT_VIEW(OBJECT_A_UNUSED, OBJECT_S_UNUSED, SCRIPT_ARGS_B, OB
     EyeObject eye; RankSignObject rank_sign; TimedObject timed; RingPartObject ring_part;    \
     AttachedObject attached; RingObject ring; EmitterObject emitter; SparkleObject sparkle; \
     PuffObject puff; SignalObject signal; DirectorObject director; FlagsRecordObject flags_record; \
-    FrameSwingObject frame_swing; ScriptArgsObject script_args;
+    FrameSwingObject frame_swing; ScriptArgsObject script_args; WheelObject wheel;
 
 #define OBJECT_VIEW_MEMBERS OBJECT_VIEW_MEMBERS_09 OBJECT_VIEW_MEMBERS_08
 
@@ -348,8 +355,9 @@ typedef struct { OBJECT_VIEW(OBJECT_A_UNUSED, OBJECT_S_UNUSED, SCRIPT_ARGS_B, OB
     OBJECT_VIEW_ASSERTS(PuffObject, puff); OBJECT_VIEW_ASSERTS(SignalObject, signal);       \
     OBJECT_VIEW_ASSERTS(DirectorObject, director); OBJECT_VIEW_ASSERTS(FlagsRecordObject, flags_record); \
     OBJECT_VIEW_ASSERTS(FrameSwingObject, frame_swing); OBJECT_VIEW_ASSERTS(ScriptArgsObject, script_args); \
+    OBJECT_VIEW_ASSERTS(WheelObject, wheel); \
     _Static_assert(offsetof(Object, car.car_script) == 0x27 && offsetof(Object, car.idle_frames) == 0x29 \
-                   && offsetof(Object, car.unread1) == 0x46 && offsetof(Object, car.demo_frames) == 0x48 \
+                   && offsetof(Object, car.unread1) == 0x46 && offsetof(Object, car.wait) == 0x48 \
                    && offsetof(Object, car.kind) == 0x49 && offsetof(Object, car.attachments) == 0x4A \
                    && offsetof(Object, car.unread2) == 0x4D && offsetof(Object, car_part.life) == 0x27 \
                    && offsetof(Object, car_part.offset_on_car) == 0x48 && offsetof(Object, car_part.steps) == 0x4B \
@@ -368,6 +376,7 @@ typedef struct { OBJECT_VIEW(OBJECT_A_UNUSED, OBJECT_S_UNUSED, SCRIPT_ARGS_B, OB
                    && offsetof(Object, flags_record.record_flags) == 0x27 && offsetof(Object, flags_record.frame) == 0x48 \
                    && offsetof(Object, frame_swing.paused) == 0x2E && offsetof(Object, frame_swing.frame) == 0x30 \
                    && offsetof(Object, frame_swing.waited) == 0x4B && offsetof(Object, script_args.number) == 0x29 \
-                   && offsetof(Object, script_args.counter) == 0x4A, "the cars', pieces' and cameras' views' fields")
+                   && offsetof(Object, script_args.counter) == 0x4A && offsetof(Object, wheel.look) == 0x29 \
+                   && offsetof(Object, eye.on_x) == 0x2E, "the cars', pieces' and cameras' views' fields")
 
 #define OBJECT_VIEW_CHECKS OBJECT_VIEW_CHECKS_09; OBJECT_VIEW_CHECKS_08

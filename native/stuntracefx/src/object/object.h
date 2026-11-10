@@ -38,7 +38,7 @@ typedef uint16_t ObjRef;
         uint16_t script_flags;          /* +06 from the course script: bit 9 adds the model record's offsets */ \
     };                                                                                      \
     uint8_t unused1;                    /* +08: no routine uses it */                      \
-    uint8_t flags09;                    /* +09: bit 0 lifts the depth key by $1F40 */      \
+    uint8_t depth_lift;                 /* +09: bit 0 lifts the depth key by $1F40 (drawn behind) */ \
     A                                   /* +0A-+0B */                                      \
     uint16_t x, y, z;                   /* +0C the place */                                \
     uint8_t unused2[2];                 /* +12 */                                          \
@@ -51,7 +51,7 @@ typedef uint16_t ObjRef;
     uint8_t handler2_bank;              /* +1F */                                          \
     uint16_t script;                    /* +20 the record the script named, an address in its data */ \
     uint16_t record;                    /* +22 the object's Super FX record, 0 for none */ \
-    uint8_t flags24;                    /* +24 how it is drawn: bit 7 absolute, 6 one side of a split, 5 hidden, 3 a sprite, 2 an effect emitter */ \
+    uint8_t draw_flags;                 /* +24 how it is drawn: bit 7 placed in view space, 6 one side of a split, 5 hidden, 3 a sprite, 2 an effect emitter; 1 copied from its record's +$1C bit 1 at a sync and cleared by a near draw record (what the chip does with it is not worked out here) */ \
     S                                   /* +25 */                                          \
     uint8_t list_kind;                  /* +26 a car's (copied to its children and eyes): 1 player 1's, 2 player 2's (the split's sides), else a rival's or the course's */ \
     B                                   /* +27-+2D */                                      \
@@ -59,7 +59,7 @@ typedef uint16_t ObjRef;
     uint8_t unused4[2];                 /* +34 */                                          \
     uint8_t timer;                      /* +36 $FF runs the far handler, 1 clears the record, 0 stopped */ \
     C                                   /* +37-+39 */                                      \
-    uint8_t byte3a;                     /* +3A */                                          \
+    uint8_t material;                   /* +3A its draw record's +$1B: a sprite's material (its colour), a model's FX_MODEL_1B6 byte */ \
     uint8_t unused5;                    /* +3B */                                          \
     ObjRef bucket_next, bucket_prev;    /* +3C */                                          \
     uint16_t bucket;                    /* +40 the map cell's bucket key, doubled */       \
@@ -68,19 +68,12 @@ typedef uint16_t ObjRef;
     uint8_t unused6[2];                 /* +51 */                                          \
     uint16_t offset_x, offset_y, offset_z; /* +53 */                                       \
     uint8_t made_mark;                  /* +59 $69 from ObjectInit; nothing reads it */    \
-    uint8_t frame5a;                    /* +5A the frame the object shows when bit 7 is set, else the game's */ \
+    uint8_t shown_frame;                /* +5A the frame the object shows when bit 7 is set, else the game's */ \
     uint8_t unused7[2];                 /* +5B */                                          \
     uint16_t anim;                      /* +5D */                                          \
-    uint8_t byte5f, byte60;             /* +5F */                                          \
+    uint8_t size;                       /* +5F its draw record's +$1C: a sprite's own size, a model's texture U offset */ \
+    uint8_t texture_v;                  /* +60 its draw record's +$1D: a model's texture V offset (nothing sets it: 0) */ \
     uint8_t unused8;                    /* +61 */
-
-/* the regions while the kinds are being given their views: the record's
-   own byte names (interim; each kind's code moves to its view) */
-#define OBJECT_A_BYTES uint8_t byte0a, byte0b;
-#define OBJECT_S_BYTES uint8_t flags25;
-#define OBJECT_B_BYTES uint16_t link27; uint16_t word29; uint16_t word2b; uint8_t byte2d;
-#define OBJECT_C_BYTES uint8_t byte37, byte38, byte39;
-#define OBJECT_D_BYTES uint8_t bytes42[4]; uint8_t byte46, byte47; uint8_t count48, byte49, byte4a, byte4b; uint8_t byte4c, byte4d, byte4e;
 
 /* a region a kind does not use; the velocity most keep at V */
 #define OBJECT_A_UNUSED uint8_t a_unused[2];
@@ -94,20 +87,19 @@ typedef uint16_t ObjRef;
 #include "object/views.h"
 
 typedef union Object {
-    struct { OBJECT_VIEW(OBJECT_A_BYTES, OBJECT_S_BYTES, OBJECT_B_BYTES, OBJECT_V_VELOCITY, OBJECT_C_BYTES, OBJECT_D_BYTES) };
+    struct { OBJECT_VIEW(OBJECT_A_UNUSED, OBJECT_S_UNUSED, OBJECT_B_UNUSED, OBJECT_V_VELOCITY, OBJECT_C_UNUSED, OBJECT_D_UNUSED) }; /* what every object keeps */
     OBJECT_VIEW_MEMBERS
 } Object;
 #pragma pack(pop)
 
 #define OBJECT_VIEW_ASSERTS(T, view)                                                        \
     _Static_assert(sizeof(T) == OBJECT_SIZE, #T " record");                               \
-    _Static_assert(offsetof(Object, view.x) == 0x0C && offsetof(Object, view.flags24) == 0x24 \
-                   && offsetof(Object, view.unused4) == 0x34 && offsetof(Object, view.byte3a) == 0x3A \
-                   && offsetof(Object, view.link) == 0x4F && offsetof(Object, view.frame5a) == 0x5A \
+    _Static_assert(offsetof(Object, view.x) == 0x0C && offsetof(Object, view.draw_flags) == 0x24 \
+                   && offsetof(Object, view.unused4) == 0x34 && offsetof(Object, view.material) == 0x3A \
+                   && offsetof(Object, view.link) == 0x4F && offsetof(Object, view.shown_frame) == 0x5A \
                    && offsetof(Object, view.list_kind) == 0x26 && offsetof(Object, view.timer) == 0x36 \
                    && offsetof(Object, view.made_mark) == 0x59 && offsetof(Object, view.unused8) == 0x61, #T " regions")
 OBJECT_VIEW_CHECKS;
-_Static_assert(offsetof(Object, count48) == 0x48 && offsetof(Object, link27) == 0x27 && offsetof(Object, vx) == 0x2E, "the record's bytes");
 _Static_assert(sizeof(Object) == OBJECT_SIZE, "Object record");
 
 #pragma pack(push, 1)

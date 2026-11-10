@@ -66,14 +66,14 @@ static int parked_child(const Object *o, uint16_t at[3], uint8_t turn[3])
     r = o->record;
     if (!cr || !r)
         return 0;
-    if (!(o->flags24 & 0x20)) {
+    if (!(o->draw_flags & 0x20)) {
         if (!ObjectsDrawnBetween() && !(rec_get(cr, FXREC_FLAGS16) & 0x0400)) {   /* a step's own: its car's and its records together */
             h = rec_get(cr, FXREC_HEADING) * (2 * M_PI / 65536);
             c = cos(h), s = sin(h);
             x = (int16_t)(uint16_t)(rec_get(r, FXREC_POS_X) + rec_get(r, 0x004A) - rec_get(cr, FXREC_POS_X));
             z = (int16_t)(uint16_t)(rec_get(r, FXREC_POS_Z) + rec_get(r, 0x004E) - rec_get(cr, FXREC_POS_Z));
             child_seat[k].at[0] = (int16_t)lround(x * c + z * s);
-            child_seat[k].at[1] = (int16_t)(uint16_t)(rec_get(r, FXREC_POS_Y) + rec_get(r, 0x004C) - o->byte5f - 0x0014
+            child_seat[k].at[1] = (int16_t)(uint16_t)(rec_get(r, FXREC_POS_Y) + rec_get(r, 0x004C) - o->size - 0x0014
                                                       - rec_get(cr, FXREC_POS_Y));
             child_seat[k].at[2] = (int16_t)lround(z * c - x * s);
             child_seat[k].a14 = o->pitch;
@@ -105,7 +105,7 @@ static int parked_child(const Object *o, uint16_t at[3], uint8_t turn[3])
    the same record, the object left as it is and not counted. */
 static uint8_t *draw_record(Object *o, uint8_t *r, int far)
 {
-    if (o->flags24 & 0x80) {
+    if (o->draw_flags & 0x80) {
         put16(r, 0x12, o->x);
         put16(r, 0x10, o->y);
         put16(r, 0x14, o->z);
@@ -116,7 +116,7 @@ static uint8_t *draw_record(Object *o, uint8_t *r, int far)
         put16(r, 0x10, dy);
         if (dy & 0x8000)
             dy = (uint16_t)(~dy + 1);
-        put16(r, 0x02, (uint16_t)((uint16_t)(dy << 1) + ((o->flags09 & 0x01) ? 0x1F40 : 0x0000)));
+        put16(r, 0x02, (uint16_t)((uint16_t)(dy << 1) + ((o->depth_lift & 0x01) ? 0x1F40 : 0x0000)));
         put16(r, 0x12, (uint16_t)(o->x - g.view_pos[0]));
         put16(r, 0x14, (uint16_t)(o->z - g.view_pos[2]));
     }
@@ -124,22 +124,22 @@ static uint8_t *draw_record(Object *o, uint8_t *r, int far)
     r[0x04] = o->pitch;
     r[0x05] = o->heading;
     r[0x06] = o->roll;
-    if (o->flags24 & 0x04) {
+    if (o->draw_flags & 0x04) {
         put16(r, 0x0A, obj_ref(o));
-        r[0x0C] = o->count48;
-        r[0x0D] = o->byte49;
-        r[0x0E] = o->byte4a;
+        r[0x0C] = o->emitter.count;
+        r[0x0D] = o->emitter.effect_x;
+        r[0x0E] = o->emitter.kind;
     } else {
         r[0x18] = 0;
     }
-    r[0x07] = o->flags24;
+    r[0x07] = o->draw_flags;
     if (!far)
-        o->flags24 &= 0xFD;
-    r[0x19] = frame_byte(o->frame5a);
+        o->draw_flags &= 0xFD;
+    r[0x19] = frame_byte(o->shown_frame);
     r[0x1A] = frame_byte(g.draw_side ? o->sprite_turn[1] : o->sprite_turn[0]);
-    r[0x1B] = o->byte3a;
-    r[0x1C] = o->byte5f;
-    r[0x1D] = o->byte60;
+    r[0x1B] = o->material;
+    r[0x1C] = o->size;
+    r[0x1D] = o->texture_v;
     put16(r, 0x16, o->anim);
     ObjectRecordLook(o, r, far);        /* what it is drawn with besides its own (animate.c) */
     if (far)
@@ -156,9 +156,9 @@ static uint8_t *draw_record(Object *o, uint8_t *r, int far)
    side; never model none */
 static int drawable(const Object *o, int hidden_ok)
 {
-    if ((o->flags24 & 0x20) && !hidden_ok)
+    if ((o->draw_flags & 0x20) && !hidden_ok)
         return 0;
-    if ((o->flags24 & 0x40) && (o->list_kind == 0x02 ? g.draw_side != 0 : g.draw_side == 0))
+    if ((o->draw_flags & 0x40) && (o->list_kind == 0x02 ? g.draw_side != 0 : g.draw_side == 0))
         return 0;
     return o->model != MODEL_NONE;
 }
@@ -183,7 +183,7 @@ static void far_record(Object *o, uint16_t at, const uint16_t *place, const uint
     if (place) {
         int16_t dy = (int16_t)(uint16_t)(place[1] - g.view_pos[1]);
 
-        put16(r, 0x02, (uint16_t)(((dy < 0 ? -dy : dy) << 1) + ((o->flags09 & 0x01) ? 0x1F40 : 0)));
+        put16(r, 0x02, (uint16_t)(((dy < 0 ? -dy : dy) << 1) + ((o->depth_lift & 0x01) ? 0x1F40 : 0)));
         r[0x04] = turn[0];
         r[0x05] = turn[1];
         r[0x06] = turn[2];
@@ -196,7 +196,7 @@ static void far_record(Object *o, uint16_t at, const uint16_t *place, const uint
         put16(r, FX_FAR_PLACE + 4 * k, (uint16_t)d[k]);
         put16(r, FX_FAR_PLACE + 4 * k + 2, (uint16_t)((uint32_t)d[k] >> 16));
     }
-    r[FX_FAR_LIFT] = (uint8_t)(o->flags09 & 0x01);
+    r[FX_FAR_LIFT] = (uint8_t)(o->depth_lift & 0x01);
     /* a parked tyre of a car in the near list: drawn among the near ones */
     r[FX_FAR_PARKED] = (uint8_t)(place && near_drawn[obj_slot(obj_at(o->parent))]);
 }
@@ -219,11 +219,11 @@ static void far_records(void)
             uint8_t turn[3];
             int parked;
 
-            if (near_drawn[obj_slot(o)] || (o->flags24 & 0x84) || n >= FX_FAR_MAX)
+            if (near_drawn[obj_slot(o)] || (o->draw_flags & 0x84) || n >= FX_FAR_MAX)
                 continue;
             if (ObjectFarLeftOut(o))    /* waiting for its set-up, or a short life stopped (animate.c) */
                 continue;
-            parked = (o->flags24 & 0x20) && parked_child(o, place, turn);
+            parked = (o->draw_flags & 0x20) && parked_child(o, place, turn);
             if (!drawable(o, parked) || o->model < 0x8000)
                 continue;
             far_record(o, (uint16_t)(FX_FAR_RECORDS + n * FX_FAR_SIZE), parked ? place : NULL, turn);

@@ -32,9 +32,9 @@ static uint16_t abs16(uint16_t w) { return (w & 0x8000) ? (uint16_t)-w : w; }
 /* +$48: whether it has run out; otherwise it counts down */
 static int count_down(Object *o)
 {
-    if (!o->count48)
+    if (!o->timed.frames)
         return 1;
-    o->count48--;
+    o->timed.frames--;
     return 0;
 }
 
@@ -96,7 +96,7 @@ void ObjectBurstPieceStart(Object *o)
     o->vy = (uint16_t)-o->vy;
     SET_LOW(o->vz, RandomStep() & 0x3F);
     o->vz = (uint16_t)(o->vz - 0x001F);
-    o->count48 = 0x28;
+    o->timed.frames = 0x28;
     o->heading = RandomStep();
     o->pitch = RandomStep();
     GsuRecordNewFallingPart(o);
@@ -130,17 +130,17 @@ void ObjectBlinkerFade(Object *o)
         ObjectRelease(o);
         return;
     }
-    if (!(o->frame5a & 0x7F)) {
+    if (!(o->shown_frame & 0x7F)) {
         player1_record_42(0x1010, o);
         return;
     }
-    v = (uint8_t)(o->frame5a - 1);
+    v = (uint8_t)(o->shown_frame - 1);
     if (!(v & 0x80))
         v = (uint8_t)(v + 0x10);
     v &= 0x7F;
     if (v >= 0x10)
         v = (uint8_t)(v - 0x10);
-    o->frame5a = (uint8_t)(v | 0x80);
+    o->shown_frame = (uint8_t)(v | 0x80);
     player1_record_42(0x1000, o);
 }
 
@@ -155,7 +155,7 @@ void ObjectBlinkerRise(Object *o)
         player1_record_42(0x1000, o);
         return;
     }
-    o->count48 = 0x28;
+    o->timed.frames = 0x28;
     ObjectSetHandler(o, H_BLINKER_FADE);
     ObjectBlinkerFade(o);
 }
@@ -182,8 +182,8 @@ void ObjectBlinkerStart(Object *o)
         ObjectRebucket(n);
     }
     ObjectSetHandler(o, H_BLINKER_RISE);
-    o->count48 = 0x32;
-    o->frame5a = 0x8F;
+    o->timed.frames = 0x32;
+    o->shown_frame = 0x8F;
     o->script = OBJECT_SCRIPT_BLINKER;
     if (!GsuRecordNewStill(o))
         return;
@@ -216,8 +216,8 @@ void ObjectPaceCarStep(Object *o)
         return;
     }
     rec_or(rec, FXREC_FLAGS1C, 0x0010);
-    o->flags24 |= 0x20;
-    o->flags24 |= 0x08;
+    o->draw_flags |= 0x20;
+    o->draw_flags |= 0x08;
     o->y = (uint16_t)(o->y + 0xB1E0);
     o->handler = 0;
     o->handler_bank = 0;
@@ -247,20 +247,20 @@ void ObjectSignalStep(Object *o)
         uint8_t v;
 
         child->model = MODEL_SIGNAL_LIGHT_COUNTING;
-        if ((child->frame5a & 0x7F) == 0x07) {
+        if ((child->shown_frame & 0x7F) == 0x07) {
             obj_at(g.player_car)->model = MODEL_PLAYER_AT_GO;
             ObjectRelease(child);
             ObjectRelease(o);
             g.pace_signal = 0x02;
             return;
         }
-        v = (uint8_t)(child->frame5a + 1);
+        v = (uint8_t)(child->shown_frame + 1);
         if (!(v & 0x80))
             v = (uint8_t)(v + 0x08);
         v &= 0x7F;
         if (v >= 0x08)
             v = (uint8_t)(v - 0x08);
-        child->frame5a = (uint8_t)(v | 0x80);
+        child->shown_frame = (uint8_t)(v | 0x80);
     }
     ObjectSyncFromRecord(o);
     o->timer = 3;
@@ -288,14 +288,14 @@ void ObjectPaceCarSetup(Object *o)
     ObjectCopyPosition(n, o);
     n->z = (uint16_t)(n->z + 0xF254);
     n->y = 0;
-    n->link27 = g.selection_handler[0];
+    n->car.car_script = g.selection_handler[0];
     ObjectSetHandler(n, H_PACE_CAR_START);
     n = ObjectSpawn(MODEL_SIGNAL_LIGHT);
     if (!n)
         return;
     ObjectCopyPosition(n, o);
     n->y = (uint16_t)(n->y + 0x0032);
-    n->frame5a = 0x80;
+    n->shown_frame = 0x80;
     ObjectRebucket(n);
     o->parent = obj_ref(n);
     ObjectSetHandler(o, H_SIGNAL_STEP);
@@ -303,7 +303,7 @@ void ObjectPaceCarSetup(Object *o)
     if (!GsuRecordNewStill(o))
         return;
     record_place(o, 0x0640, 0x0640, 0x0640, 0xC100);
-    o->count48 = 0x14;
+    o->signal.unread = 0x14;
     ObjectSignalStep(o);
 }
 
@@ -329,7 +329,7 @@ static Object *ObjectBreakOffChance(Object *child)
     if (!n)
         return NULL;
     ObjectCopyPosition(n, child);
-    n->link27 = child->parent;
+    n->break_off.car = child->parent;
     return n;
 }
 
@@ -339,7 +339,7 @@ static void child_break_off(Object *o, const Object *p, uint16_t own)
     uint16_t d, car_flags, w;
     Object *n;
 
-    if (p->flags24 & 0x40)
+    if (p->draw_flags & 0x40)
         return;
     car_flags = rec_get(p->record, FXREC_FLAGS40);
     if (!(rec_get(p->record, FXREC_FLAGS64) & 0x0003))
@@ -394,15 +394,15 @@ void ObjectChildFollow(Object *o)
     p = obj_at(o->parent);
     if (rec_get(p->record, FXREC_FLAGS16) & 0x0400) {
         rec_or(o->record, FXREC_FLAGS16, 0x0480);
-        o->flags24 |= 0x20;
+        o->draw_flags |= 0x20;
         return;
     }
-    o->flags24 &= 0xDF;
+    o->draw_flags &= 0xDF;
     rec_and(o->record, FXREC_FLAGS16, 0xFB7F);
     own = o->record;
     child_break_off(o, p, own);
     o->x = (uint16_t)(rec_get(own, FXREC_POS_X) + rec_get(own, 0x004A));
-    o->y = (uint16_t)(0xFFEC - o->byte5f + rec_get(own, FXREC_POS_Y) + rec_get(own, 0x004C));
+    o->y = (uint16_t)(0xFFEC - o->size + rec_get(own, FXREC_POS_Y) + rec_get(own, 0x004C));
     o->z = (uint16_t)(rec_get(own, FXREC_POS_Z) + rec_get(own, 0x004E));
     ObjectTurnFromRecord(own, o);
 }
@@ -431,12 +431,12 @@ void ObjectChildrenSpawn(Object *o)
         if (!n)
             continue;
         if (look) {
-            n->flags24 |= 0x08;
-            n->byte3a = 0;
-            n->byte5f = (uint8_t)object_data16(t, DATA_SIZE);
-            n->word29 = look;
+            n->draw_flags |= 0x08;
+            n->material = 0;
+            n->size = (uint8_t)object_data16(t, DATA_SIZE);
+            n->child.look = look;
             if (g.split_screen)
-                n->word29 = (uint16_t)(n->word29 + 2);
+                n->child.look = (uint16_t)(n->child.look + 2);
         }
         ObjectSetHandler(n, H_CHILD_START);
         n->record = rec;
@@ -449,11 +449,11 @@ static void child_flags(Object *o)
 {
     Object *p = obj_at(o->parent);
 
-    o->flags24 &= 0xBF;
-    if (p->flags24 & 0x08)
-        o->flags24 |= 0x20;
-    else if (p->flags24 & 0x40)
-        o->flags24 |= 0x40;
+    o->draw_flags &= 0xBF;
+    if (p->draw_flags & 0x08)
+        o->draw_flags |= 0x20;
+    else if (p->draw_flags & 0x40)
+        o->draw_flags |= 0x40;
     o->timer = 3;
 }
 
@@ -465,7 +465,7 @@ static void child_flags(Object *o)
 void ObjectChildStep(Object *o)
 {
     ObjectChildFollow(o);
-    if (obj_at(o->parent)->flags25 & 0x04)
+    if (obj_at(o->parent)->car.state & CAR_LOOSE)
         ObjectSetHandler(o, H_CHILD_LOOSE);
     child_flags(o);
 }
@@ -484,15 +484,15 @@ void ObjectChildStart(Object *o)
 /* back on the parent: its record again, then the normal step's flags */
 static void child_back(Object *o)
 {
-    o->record = o->link27;
+    o->record = o->child.own_record;
     ObjectSetHandler(o, H_CHILD_STEP);
     child_flags(o);
 }
 
 /* below the parent by the child's +$5F and $14 */
-static uint16_t child_y(uint8_t byte5f, uint16_t a)
+static uint16_t child_y(uint8_t size, uint16_t a)
 {
-    return (uint16_t)((uint16_t)-byte5f + 0xFFEC + a);
+    return (uint16_t)((uint16_t)-size + 0xFFEC + a);
 }
 
 /*
@@ -504,12 +504,12 @@ static uint16_t child_y(uint8_t byte5f, uint16_t a)
 void ObjectChildReturn(Object *o)
 {
     Object *p = obj_at(o->parent);
-    uint16_t rec = o->link27, tx, ty, tz;
+    uint16_t rec = o->child.own_record, tx, ty, tz;
     int moved;
 
     ObjectVelocityFromRecordOf(o, p);
     tx = (uint16_t)(rec_get(rec, FXREC_POS_X) + rec_get(rec, 0x004A));
-    ty = (uint16_t)(child_y(o->byte5f, rec_get(rec, FXREC_POS_Y)) + rec_get(rec, 0x004C));
+    ty = (uint16_t)(child_y(o->size, rec_get(rec, FXREC_POS_Y)) + rec_get(rec, 0x004C));
     tz = (uint16_t)(rec_get(rec, FXREC_POS_Z) + rec_get(rec, 0x004E));
     ObjectTurnFromRecord(rec, o);
     o->x = ApproachQuarterMin4(o->x, tx, &moved);
@@ -517,7 +517,7 @@ void ObjectChildReturn(Object *o)
     o->z = ApproachQuarterMin4(o->z, tz, &moved);
     ObjectApplyVelocity(o);
     ObjectRebucket(o);
-    if (!(p->flags25 & 0x04)) {
+    if (!(p->car.state & CAR_LOOSE)) {
         child_back(o);
         return;
     }
@@ -536,13 +536,13 @@ void ObjectChildFlying(Object *o)
 
     if (!ObjectSyncFromRecord(o)) {
         p = obj_at(o->parent);
-        if ((p->flags25 & 0x10) && (RecordContactSummary(o) & 0x80)) {
+        if ((p->car.state & CAR_WRECKED) && (RecordContactSummary(o) & 0x80)) {
             ObjectBreakOffContact(o);
             return;
         }
     }
     p = obj_at(o->parent);
-    if ((p->flags25 & 0x10) && !o->byte4b) {
+    if ((p->car.state & CAR_WRECKED) && !o->child.flight) {
         if (rec_get(p->record, FXREC_FLAGS64) & 0x0010) {
             ObjectRelease(o);
             return;
@@ -551,13 +551,13 @@ void ObjectChildFlying(Object *o)
         child_flags(o);
         return;
     }
-    if (!o->byte4b) {
+    if (!o->child.flight) {
         ObjectSetHandler(o, H_CHILD_RETURN);
         ObjectChildReturn(o);
         return;
     }
-    o->byte4b--;
-    o->y = child_y(o->byte5f, o->y);
+    o->child.flight--;
+    o->y = child_y(o->size, o->y);
     ObjectPieceSprayChance(o);
     child_flags(o);
 }
@@ -573,15 +573,15 @@ void ObjectChildLoose(Object *o)
     Object *p;
 
     ObjectSetHandler(o, H_CHILD_FLYING);
-    o->link27 = o->record;
+    o->child.own_record = o->record;
     GsuRecordNewFallingPart(o);
     p = obj_at(o->parent);
     ObjectVelocityFromRecordOf(o, p);
-    o->vx = asr1(rec_get(o->link27, 0x0036));
+    o->vx = asr1(rec_get(o->child.own_record, 0x0036));
     o->vy = 0xFFCE;
-    o->vz = asr1(rec_get(o->link27, 0x003A));
+    o->vz = asr1(rec_get(o->child.own_record, 0x003A));
     GsuRecordVelocity(o);
-    o->byte4b = (uint8_t)((RandomStep() & 0x0F) + 0x0A);
+    o->child.flight = (uint8_t)((RandomStep() & 0x0F) + 0x0A);
     ObjectChildFlying(o);
 }
 
@@ -593,13 +593,13 @@ void ObjectChildLoose(Object *o)
 void ObjectPieceFall(Object *o)
 {
     ObjectRebucket(o);
-    o->sprite_turn[0] = (uint8_t)(o->count48 | 0x80);
+    o->sprite_turn[0] = (uint8_t)(o->break_off.frame | 0x80);
     o->sprite_turn[1] = o->sprite_turn[0];
-    if (o->count48 == o->byte49) {
+    if (o->break_off.frame == o->break_off.last_frame) {
         ObjectRelease(o);
         return;
     }
-    o->count48++;
+    o->break_off.frame++;
     ObjectApplyVelocity(o);
     o->timer = 3;
 }
@@ -608,13 +608,13 @@ void ObjectPieceFall(Object *o)
 static void piece_handler(Object *o, uint8_t end)
 {
     ObjectSetHandler(o, H_PIECE_FALL);
-    o->count48 = 0;
+    o->break_off.frame = 0;
     if (end == 0x06) {
-        o->byte49 = 0x06;
+        o->break_off.last_frame = 0x06;
         return;
     }
-    o->flags25 |= 0x01;
-    o->byte49 = end;
+    o->break_off.state |= PIECE_LONG;
+    o->break_off.last_frame = end;
 }
 
 static void piece_look(Object *o, uint16_t look, int adv, uint8_t f5)
@@ -622,9 +622,9 @@ static void piece_look(Object *o, uint16_t look, int adv, uint8_t f5)
     o->anim = look;
     if (adv)
         ObjectLookForSplit(o);
-    o->flags24 |= 0x08;
-    o->byte3a = 0;
-    o->byte5f = f5;
+    o->draw_flags |= 0x08;
+    o->material = 0;
+    o->size = f5;
 }
 
 static void piece_drop(Object *o) { o->y = (uint16_t)(o->y + 0x0028); }
@@ -676,9 +676,9 @@ static void break_off_f(Object *o, uint8_t f5)
 {
     o->anim = LOOK_BREAK_OFF_E_FLAT;
     ObjectLookForSplit(o);
-    o->flags24 |= 0x08;
-    o->byte3a = 0;
-    o->byte5f = f5;
+    o->draw_flags |= 0x08;
+    o->material = 0;
+    o->size = f5;
     piece_drop(o);
     piece_fall4(o);
 }
@@ -695,7 +695,7 @@ void ObjectBreakOffContact(Object *o)
 /* @routine 08:D33F ObjectBreakOffF: +$5F = half the parent's record speed + $14, at most $78 */
 void ObjectBreakOffF(Object *o)
 {
-    uint16_t size = (uint16_t)(asr1(abs16(rec_get(obj_at(o->link27)->record, FXREC_SPEED))) + 0x0014);
+    uint16_t size = (uint16_t)(asr1(abs16(rec_get(obj_at(o->break_off.car)->record, FXREC_SPEED))) + 0x0014);
 
     if (!below(size, 0x0078))
         size = 0x0078;
@@ -736,7 +736,7 @@ void ObjectPieceSpray(Object *o)
     piece_handler(o, 0x06);
     dz = (uint16_t)((RandomStep() & 0x0F) + 0xFFD8);
     piece_look(o, LOOK_STAR_SPARKLE, 0, 0x0A);
-    p = obj_at(o->link27);
+    p = obj_at(o->break_off.car);
     RotateXZFrom08(0, (int8_t)(uint8_t)dz, p->pitch, &v.y, &v.z);
     RotateXZ(0, (int8_t)v.z, p->heading, &v.x, &v.z);
     o->x = (uint16_t)(o->x + (uint16_t)((uint16_t)v.x << 1));
@@ -751,7 +751,7 @@ void ObjectPieceSpray(Object *o)
 /* hidden, +$36 = 3 */
 static void attach_hide(Object *o)
 {
-    o->flags24 |= 0x20;
+    o->draw_flags |= 0x20;
     o->timer = 3;
 }
 
@@ -760,7 +760,7 @@ static int attach_parent_gone(Object *o)
 {
     const Object *p = obj_at(o->parent);
 
-    if ((p->flags24 & 0x08) || (p->flags25 & 0x04)) {
+    if ((p->draw_flags & 0x08) || (p->car.state & CAR_LOOSE)) {
         attach_hide(o);
         return 1;
     }
@@ -772,7 +772,7 @@ static int attach_parent_gone(Object *o)
    Without the pitch turn when with14 is 0. */
 static void offset_on_parent(Object *o, const Object *p, int sh, int with14)
 {
-    Vec16 v = {sx8((uint8_t)o->vx), sx8((uint8_t)o->vy), sx8((uint8_t)o->vz)};
+    Vec16 v = {sx8((uint8_t)o->attached.on_x), sx8((uint8_t)o->attached.on_y), sx8((uint8_t)o->attached.on_z)};
 
     RotateXY((int8_t)v.x, (int8_t)v.y, p->roll, &v.x, &v.y);
     if (with14)
@@ -809,14 +809,14 @@ void ObjectAttachSpawn(Object *o)
         a->handler = object_data16(k, DATA_HANDLER);
         a->handler_bank = (uint8_t)object_data16(k, DATA_HANDLER_BANK);
         if (look) {
-            a->flags24 |= 0x08;
-            a->byte3a = 0;
-            a->byte5f = (uint8_t)object_data16(k, DATA_SIZE);
+            a->draw_flags |= 0x08;
+            a->material = 0;
+            a->size = (uint8_t)object_data16(k, DATA_SIZE);
             a->anim = look;
         }
-        a->vx = (uint16_t)sx8(object_list8((uint16_t)(i + 2)));
-        a->vy = (uint16_t)sx8(object_list8((uint16_t)(i + 3)));
-        a->vz = (uint16_t)sx8(object_list8((uint16_t)(i + 4)));
+        a->attached.on_x = (uint16_t)sx8(object_list8((uint16_t)(i + 2)));
+        a->attached.on_y = (uint16_t)sx8(object_list8((uint16_t)(i + 3)));
+        a->attached.on_z = (uint16_t)sx8(object_list8((uint16_t)(i + 4)));
     }
 }
 
@@ -846,10 +846,10 @@ void ObjectAttachFollow(Object *o)
     o->heading = fx_ram[(uint16_t)(rec + 0x0025)];
     ObjectApplyVelocity(o);
     ObjectRebucket(o);
-    o->flags24 &= 0xDF;
-    o->flags24 &= 0xBF;
-    if (obj_at(o->parent)->flags24 & 0x40) {
-        o->flags24 |= 0x40;
+    o->draw_flags &= 0xDF;
+    o->draw_flags &= 0xBF;
+    if (obj_at(o->parent)->draw_flags & 0x40) {
+        o->draw_flags |= 0x40;
         o->timer = 3;
     }
 }
@@ -895,9 +895,9 @@ static void spark(Object *o, uint16_t vx, uint16_t vz)
         return;
     n->parent = obj_ref(o);
     ObjectSetHandler(n, H_SPARK_START);
-    n->vx = vx;
-    n->vy = 0x000A;
-    n->vz = vz;
+    n->wheel.on_x = vx;
+    n->wheel.on_y = 0x000A;
+    n->wheel.on_z = vz;
 }
 
 /*
@@ -936,11 +936,11 @@ void ObjectSparkStep(Object *o)
  */
 void ObjectSparkStart(Object *o)
 {
-    o->flags24 |= 0x08;
-    o->byte3a = 0;
-    o->byte5f = 0x6E;
+    o->draw_flags |= 0x08;
+    o->material = 0;
+    o->size = 0x6E;
     ObjectSetHandler(o, H_SPARK_STEP);
-    o->word29 = LOOK_WHEEL;
+    o->wheel.look = LOOK_WHEEL;
     ObjectSparkStep(o);
 }
 
@@ -995,64 +995,64 @@ void ObjectExhaustStep(Object *o)
     uint8_t v;
     int clear;
 
-    if (o->byte4b) {
-        o->byte4b--;
-        o->count48 = (uint8_t)GsuRecordParentRank(o);
+    if (o->rank_sign.settle) {
+        o->rank_sign.settle--;
+        o->rank_sign.rank = (uint8_t)GsuRecordParentRank(o);
     }
     p = obj_at(o->parent);
-    if ((p->flags25 & 0x08) || (p->flags25 & 0x10) || ObjectParentRecordBit8(o)) {
+    if ((p->car.state & CAR_EVENT_TAKEN) || (p->car.state & CAR_WRECKED) || ObjectParentRecordBit8(o)) {
         attach_hide(o);
         return;
     }
-    if (o->byte39 == 0x01) {
+    if (o->rank_sign.state == 0x01) {
         v = (uint8_t)GsuRecordParentRank(o);
-        if (v != o->count48) {
-            o->count48 = v;
-            o->byte39 = 0x02;
-            o->byte49 = 0x08;
+        if (v != o->rank_sign.rank) {
+            o->rank_sign.rank = v;
+            o->rank_sign.state = 0x02;
+            o->rank_sign.shown = 0x08;
         }
         v = (uint8_t)GsuRecordParentSegment(o, &clear);
         {
-            uint8_t w = (uint8_t)(v - o->byte4a);
+            uint8_t w = (uint8_t)(v - o->rank_sign.segment);
             int small_drop = !clear && (w & 0x80) && ((uint8_t)(0 - w - 0x02) & 0x80);
 
             if (!clear && (w & 0x80) && !small_drop && ((uint8_t)(0 - w - 0x0A) & 0x80)) {
-                o->byte39 = 0x03;
-                o->byte49 = 0x08;
+                o->rank_sign.state = 0x03;
+                o->rank_sign.shown = 0x08;
                 SoundPort0QueuePush(0x3B);
             }
             if (!small_drop)
-                o->byte4a = v;
+                o->rank_sign.segment = v;
         }
     }
-    if (o->byte39 == 0x02)
+    if (o->rank_sign.state == 0x02)
         o->sprite_turn[0] = (uint8_t)((uint8_t)GsuRecordParentRank(o) | 0x80);
-    if (o->byte39 == 0x03) {
+    if (o->rank_sign.state == 0x03) {
         o->sprite_turn[0] = 0x84;
-        o->byte4a = (uint8_t)GsuRecordParentSegment(o, &clear);
+        o->rank_sign.segment = (uint8_t)GsuRecordParentSegment(o, &clear);
     }
-    v = o->byte49;
+    v = o->rank_sign.shown;
     if (!v) {
         attach_hide(o);
         return;
     }
     v--;
     if (!v) {
-        o->byte49 = 0;
-        o->byte39 = 0x01;
+        o->rank_sign.shown = 0;
+        o->rank_sign.state = 0x01;
         attach_hide(o);
         return;
     }
-    o->byte49 = v;
+    o->rank_sign.shown = v;
     if (!(v & 0x03)) {
         attach_hide(o);
         return;
     }
-    o->flags24 &= 0xDF;
+    o->draw_flags &= 0xDF;
     p = obj_at(o->parent);
     ObjectCopyPosition(o, p);
     ObjectApplyVelocity(o);
-    o->flags24 &= 0x7F;
+    o->draw_flags &= 0x7F;
     {
         const Camera *cam = camera_of(obj_at(p->link)->link);
 
@@ -1060,7 +1060,7 @@ void ObjectExhaustStep(Object *o)
             o->x = 0x0000;
             o->y = 0xFF9C;
             o->z = 0x01F4;
-            o->flags24 |= 0x80;
+            o->draw_flags |= 0x80;
             o->x = (uint16_t)(o->x + cam->x);
             o->y = (uint16_t)(o->y + cam->y);
             o->z = (uint16_t)(o->z + cam->z);
@@ -1088,11 +1088,11 @@ void ObjectExhaustStart(Object *o)
         int clear;
 
         ObjectSetHandler(o, H_EXHAUST_STEP);
-        o->byte4a = (uint8_t)GsuRecordParentSegment(o, &clear);
-        o->byte49 = 0;
+        o->rank_sign.segment = (uint8_t)GsuRecordParentSegment(o, &clear);
+        o->rank_sign.shown = 0;
         o->vy = (uint16_t)((uint16_t)sx8((uint8_t)o->vy) << 1);
-        o->byte4b = 0x0A;
-        o->byte39 = 0x01;
+        o->rank_sign.settle = 0x0A;
+        o->rank_sign.state = 0x01;
         ObjectExhaustStep(o);
         return;
     }
@@ -1126,7 +1126,7 @@ void PlayerCarEvents(Object *o)
     uint8_t v;
     int found;
 
-    if (!(o->flags25 & 0x10)) {
+    if (!(o->car.state & CAR_WRECKED)) {
         if (!(rec_get(rec, FXREC_FLAGS40) & 0x0100)) {
             if (g.course_flags & 0x0020) {
                 uint16_t r = rec_get(rec, 0x003E);
@@ -1200,19 +1200,19 @@ void PlayerCarEvents(Object *o)
                     SoundPort0QueuePush(0x19);
             }
             if (!below(w, 0x0046)) {
-                o->flags25 |= 0x20;
+                o->car.state |= CAR_JOLTED;
                 ObjectSpawnAttached(o, 0x0A, 0x00);
             }
         }
         w = rec_get(rec, FXREC_FLAGS40);
         if (w & 0x0001) {
             if (!CarCrashParts(o, 0x01)) {
-                o->flags25 |= 0x10;
+                o->car.state |= CAR_WRECKED;
                 if (!g.split_screen)
                     ObjectBurstSpawn(o);
             }
         } else if (w & 0x0040) {
-            o->flags25 |= 0x20;
+            o->car.state |= CAR_JOLTED;
             ObjectSpawnSparklePair(o);
             CarCrashParts(o, 0x00);
         } else if (w & 0x0020) {
@@ -1220,7 +1220,7 @@ void PlayerCarEvents(Object *o)
             if (!g.split_screen)
                 ObjectBurstSpawn(o);
         }
-        if (!(o->flags24 & 0x40)) {
+        if (!(o->draw_flags & 0x40)) {
             if (rec_get(rec, FXREC_FLAGS40) & 0x0002) {
                 ObjectSpawnTrail(o);
                 ObjectPieceSprayUnlessSplit(o);
@@ -1235,19 +1235,19 @@ void PlayerCarEvents(Object *o)
                     SoundPort0QueuePush(0x3D);
                     *f |= 0x0020;
                 }
-                if (!(o->flags25 & 0x04) && RandomStep() >= 0x4C)
+                if (!(o->car.state & CAR_LOOSE) && RandomStep() >= 0x4C)
                     ObjectPieceSprayUnlessSplit(o);
             }
         }
     }
-    if (o->flags25 & 0x84)
-        o->flags24 |= 0x20;
+    if (o->car.state & (CAR_LOOSE | CAR_DETACHING))
+        o->draw_flags |= 0x20;
     else
-        o->flags24 &= 0xDF;
+        o->draw_flags &= 0xDF;
     if (camera_of(obj_at(o->link)->link)->mode & 0x4000)
-        o->flags24 |= 0x40;
+        o->draw_flags |= 0x40;
     else
-        o->flags24 &= 0xBF;
+        o->draw_flags &= 0xBF;
 }
 
 /*
@@ -1259,13 +1259,13 @@ void ObjectOffsetOnParent2(Object *o)
 {
     Object *p = obj_at(o->parent);
 
-    if ((p->flags24 & 0x08) || (p->flags24 & 0x20)) {
+    if ((p->draw_flags & 0x08) || (p->draw_flags & 0x20)) {
         attach_hide(o);
         return;
     }
     o->sprite_turn[0] = 0x80;
     offset_on_parent(o, p, 1, 1);
-    o->flags24 &= 0xDF;
+    o->draw_flags &= 0xDF;
     ObjectRebucket(o);
 }
 
@@ -1277,23 +1277,23 @@ static void lamp_place(Object *o)
 
     ObjectPlaceOnParent(p, o);
     ObjectRebucket(o);
-    o->flags24 &= 0xDF;
-    o->flags24 &= 0xBF;
+    o->draw_flags &= 0xDF;
+    o->draw_flags &= 0xBF;
     p = obj_at(o->parent);
-    if (p->flags24 & 0x40)
-        o->flags24 |= 0x40;
+    if (p->draw_flags & 0x40)
+        o->draw_flags |= 0x40;
     o->timer = 3;
 }
 
 /* with the parent's +$25 bit 4 released; otherwise the drop */
 static void lamp_drop_start(Object *o)
 {
-    if (obj_at(o->parent)->flags25 & 0x10) {
+    if (obj_at(o->parent)->car.state & CAR_WRECKED) {
         ObjectRelease(o);
         return;
     }
     ObjectSetHandler(o, H_LAMP_DROP);
-    o->byte49 = 0;
+    o->eye.size_count = 0;
     ObjectLampDrop(o);
 }
 
@@ -1306,13 +1306,13 @@ void ObjectLampOnParent(Object *o)
 {
     Object *p = obj_at(o->parent);
 
-    if (p->flags24 & 0x08) {
+    if (p->draw_flags & 0x08) {
         attach_hide(o);
-    } else if (p->flags25 & 0x04) {
+    } else if (p->car.state & CAR_LOOSE) {
         lamp_drop_start(o);
-    } else if (p->flags25 & 0x20) {
+    } else if (p->car.state & CAR_JOLTED) {
         ObjectLampDropBStart(o);
-    } else if (p->flags25 & 0x40) {
+    } else if (p->car.state & CAR_STARTLED) {
         o->anim = LOOK_EYE_STARTLED;
         lamp_drop_start(o);
     } else {
@@ -1323,10 +1323,10 @@ void ObjectLampOnParent(Object *o)
 /* one step of a lamp's look: unless its count is 4 */
 static void lamp_look_step(Object *o, uint16_t table)
 {
-    if (o->byte4b == 0x04)
+    if (o->eye.blink == 0x04)
         return;
-    o->byte4b++;
-    o->anim = cart16(0x08, (uint16_t)(table + (uint8_t)(o->byte4b << 1)));
+    o->eye.blink++;
+    o->anim = cart16(0x08, (uint16_t)(table + (uint8_t)(o->eye.blink << 1)));
 }
 
 /*
@@ -1342,7 +1342,7 @@ void ObjectLampAnimate(Object *o)
     case 0x0C: lamp_look_step(o, EYE_BLINK_TO_PLAIN); break;
     case 0x1C: lamp_look_step(o, EYE_BLINK_STARTLED); break;
     case 0x10: o->anim = LOOK_EYE_PLAIN; break;
-    default: o->byte4b = 0; break;
+    default: o->eye.blink = 0; break;
     }
     ObjectLampOnParent(o);
 }
@@ -1355,7 +1355,7 @@ void ObjectLampAnimate(Object *o)
 void ObjectLampWait(Object *o)
 {
     if (g.lamp_lights & 0x20) {
-        o->byte4b = 0;
+        o->eye.blink = 0;
         ObjectSetHandler(o, H_LAMP_ANIMATE);
         ObjectLampAnimate(o);
         return;
@@ -1382,9 +1382,9 @@ void ObjectLampStart(Object *o)
  */
 void ObjectLampDrop(Object *o)
 {
-    o->count48 = (uint8_t)(o->count48 + 0x10);
+    o->eye.turn = (uint8_t)(o->eye.turn + 0x10);
     if (ObjectSizeRiseFall(o, 0x08, 0x10, 0x05)) {
-        o->count48 = 0;
+        o->eye.turn = 0;
         ObjectSetHandler(o, H_LAMP_WAIT);
     }
     lamp_place(o);
@@ -1398,9 +1398,9 @@ void ObjectLampDrop(Object *o)
 void ObjectLampDropB(Object *o)
 {
     if (ObjectSizeRiseFall(o, 0x03, 0x06, 0x0A)) {
-        o->byte49 = 0;
+        o->eye.size_count = 0;
         ObjectSetHandler(o, H_LAMP_WAIT);
-        o->flags25 &= 0xFE;
+        o->eye.state &= (uint8_t)~EYE_BOUNCING;
     }
     lamp_place(o);
 }
@@ -1409,8 +1409,8 @@ void ObjectLampDropB(Object *o)
 void ObjectLampDropBStart(Object *o)
 {
     ObjectSetHandler(o, H_LAMP_DROP_B);
-    o->byte49 = 0;
-    o->flags25 |= 0x01;
+    o->eye.size_count = 0;
+    o->eye.state |= EYE_BOUNCING;
     ObjectLampDropB(o);
 }
 
@@ -1426,14 +1426,14 @@ void CameraPointFromTable(Object *o)
     uint16_t point, off[3];
     int moved;
 
-    if (!(c->mode & 0x0020) && (o->flags25 & 0x01)) {
+    if (!(c->mode & 0x0020) && (o->director.state & DIRECTOR_CUE)) {
         uint8_t count = object_list8(c->word32);
         uint8_t back = object_list8((uint16_t)(c->word32 + 1));
         uint8_t v;
 
-        o->flags25 &= 0xFE;
+        o->director.state &= (uint8_t)~DIRECTOR_CUE;
         SoundPort0QueuePush(0x24);
-        if ((o->flags25 & 0x02) && (o->flags25 &= 0xFD, back)) {
+        if ((o->director.state & DIRECTOR_BACK) && (o->director.state &= (uint8_t)~DIRECTOR_BACK, back)) {
             v = (uint8_t)(back + count - 1);
             if (v == c->byte34)
                 v = 0;
@@ -1443,10 +1443,10 @@ void CameraPointFromTable(Object *o)
                 v = 0;
         }
         c->byte34 = v;
-        o->link27 = 0x0007;
+        o->director.steps = 0x0007;
     }
-    if (obj_at(o->parent)->flags25 & 0x04) {
-        o->link27 = 0x0007;
+    if (obj_at(o->parent)->car.state & CAR_LOOSE) {
+        o->director.steps = 0x0007;
         point = 0x0000;
     } else {
         point = (uint16_t)((uint16_t)(c->byte34 << 3) + c->word32);
@@ -1457,8 +1457,8 @@ void CameraPointFromTable(Object *o)
     off[1] = object_list16((uint16_t)(point + 4));
     off[2] = object_list16((uint16_t)(point + 6));
     if (c->mode & 0x0080) {
-        if (o->link27) {
-            o->link27--;
+        if (o->director.steps) {
+            o->director.steps--;
             c->mode |= 0x8201;
             off[0] = 0x0000;
             off[1] = 0x0000;
@@ -1487,14 +1487,14 @@ static int ring_parts(Object *o)
     if (!rec)                           /* the original then runs off an 8-bit store as 16 bits */
         return 0;
     o->y = (uint16_t)(rec_get(rec, FXREC_POS_Y) + 0xE4A8);
-    o->link27 = (uint16_t)(rec_get(rec, FXREC_POS_Y) + 0xFE0C);
+    o->ring.target_y = (uint16_t)(rec_get(rec, FXREC_POS_Y) + 0xFE0C);
     for (int i = 0; i < 4; i++) {
         Object *n = ObjectSpawn(ring_model[i]);
 
         if (!n)
             continue;
         ObjectSetHandler(n, H_RING_PART_START);
-        n->vx = ring_vx[i];
+        n->ring_part.on_x = ring_vx[i];
         n->parent = obj_ref(o);
         made++;
     }
@@ -1550,7 +1550,7 @@ void ObjectRingSpin(Object *o)
     int moved;
 
     ObjectApplyVelocity(o);
-    o->y = ApproachQuarterMin4(o->y, o->link27, &moved);
+    o->y = ApproachQuarterMin4(o->y, o->ring.target_y, &moved);
     o->roll = (uint8_t)(o->roll + 0xFA);
     o->heading = (uint8_t)(o->heading + 0xFF);
     ObjectRebucket(o);
@@ -1572,11 +1572,11 @@ void ObjectRingPartStep(Object *o)
     o->heading = p->heading;
     ObjectRebucket(o);
     o->timer = 3;
-    if (!o->count48) {
+    if (!o->ring_part.frames) {
         ObjectRelease(o);
         return;
     }
-    o->count48--;
+    o->ring_part.frames--;
 }
 
 /*
@@ -1585,7 +1585,7 @@ void ObjectRingPartStep(Object *o)
  */
 void ObjectRingPartStart(Object *o)
 {
-    o->count48 = 0x28;
+    o->ring_part.frames = 0x28;
     ObjectSetHandler(o, H_RING_PART_STEP);
     ObjectRingPartStep(o);
 }
@@ -1598,8 +1598,8 @@ void ObjectRingPartStart(Object *o)
 void ObjectDemoCarStep(Object *o)
 {
     ObjectCarLookByKind(o, (uint8_t)g.selection_out[0]);
-    if (o->count48)
-        o->count48--;
+    if (o->car.wait)
+        o->car.wait--;
     else
         rec_or(o->record, FXREC_FLAGS1C, 0x0010);
     ObjectRebucket(o);
@@ -1639,7 +1639,7 @@ void ObjectDemoCarStart(Object *o)
             fprintf(stderr, "ObjectDemoCarStart: a fifth demo car (%u)\n", n);
     }
     g.demo_car_count++;
-    o->count48 = 0x04;
+    o->car.wait = 0x04;
     ObjectDemoCarStep(o);
 }
 
@@ -1657,8 +1657,8 @@ int CameraApproachTarget(Object *o)
 
     for (int i = 0; i < 3; i++)
         c->place[i] = ApproachEighthMin8(c->place[i], c->place_base[i], &moved);
-    if (o->link27) {
-        o->link27--;
+    if (o->director.steps) {
+        o->director.steps--;
         c->place_base[0] = (uint16_t)(c->place_base[0] + o->vx);
         c->place_base[1] = (uint16_t)(c->place_base[1] + o->vy);
         c->place_base[2] = (uint16_t)(c->place_base[2] + o->vz);
@@ -1715,7 +1715,7 @@ static void director_place(Object *o, uint16_t entry, uint16_t dx, uint16_t dy, 
 
 static void director_still(Object *o)
 {
-    o->link27 = 0;
+    o->director.steps = 0;
     o->vx = o->vy = o->vz = 0;
 }
 
@@ -1745,15 +1745,15 @@ void CameraDirectorTrack(Object *o)
 
             c->word04 = e;
             director_place(o, next, 0x03E8, 0xFA24, 0x03E8);
-            o->link27 = 0x0018;
+            o->director.steps = 0x0018;
             TrackTableEntryPlace(TrackTableEntryNext(next), out);
             o->vx = slope((uint16_t)(out[0] - c->x));
             o->vy = slope((uint16_t)(out[1] - c->y));
             o->vz = slope((uint16_t)(out[2] - c->z));
         }
     }
-    if (o->link27) {
-        o->link27--;
+    if (o->director.steps) {
+        o->director.steps--;
         c = camera_of(o->link);
         c->y = (uint16_t)(c->y + 0x0019);
     }
@@ -1839,8 +1839,8 @@ void CameraDirectorTableStart(Object *o)
 
     c->word04 = 0;
     c->byte34 = 0;
-    o->flags25 &= 0xFE;
-    o->flags25 &= 0xFD;
+    o->director.state &= (uint8_t)~DIRECTOR_CUE;
+    o->director.state &= (uint8_t)~DIRECTOR_BACK;
     ObjectSetHandler(o, H_DIRECTOR_TABLE);
     CameraDirectorTable(o);
 }
@@ -1887,11 +1887,11 @@ void CameraDirectorPathStart(Object *o)
  */
 void CameraDirectorWait(Object *o)
 {
-    if (!o->count48) {
+    if (!o->director.frames) {
         CameraDirectorTableStart(o);
         return;
     }
-    o->count48--;
+    o->director.frames--;
     director_tail(o);
 }
 
@@ -1909,7 +1909,7 @@ void CameraDirectorBehind(Object *o)
     c->place_base[2] = 0xFE0C;
     CameraSnapToCar(o);
     ObjectSetHandler(o, H_DIRECTOR_WAIT);
-    o->count48 = 0x50;
+    o->director.frames = 0x50;
     CameraDirectorWait(o);
 }
 

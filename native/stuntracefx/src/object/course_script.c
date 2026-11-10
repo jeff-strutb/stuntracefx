@@ -79,22 +79,22 @@ void CourseScriptRun(uint8_t bank, uint16_t at)
             break;
         case SCRIPT_SPAWN_FLAGGED:
             o = ObjectSpawnFromScript(entry, bank);
-            o->flags09 |= 0x01;
+            o->depth_lift |= 0x01;
             at = (uint16_t)(entry + 0x16);
             break;
         case SCRIPT_SPAWN_NUMBERED:
             o = ObjectSpawnFromScript(entry, bank);
-            o->link27 = script16(bank, entry, ENTRY_LINK);
-            o->word29 = ++g.spawn_counter;
+            o->script_args.entry_link = script16(bank, entry, ENTRY_LINK);
+            o->script_args.number = ++g.spawn_counter;
             at = (uint16_t)(entry + 0x18);
             break;
         case SCRIPT_SPAWN_COUNTED:
             o = ObjectSpawnFromScript(entry, bank);
             v = script8(bank, entry, ENTRY_COUNT);
-            o->count48 = v;
-            o->frame5a = (uint8_t)(v | 0x80);
-            o->byte49 = script8(bank, entry, ENTRY_STEP);
-            o->byte4a = script8(bank, entry, ENTRY_COUNTER);
+            o->script_args.count = v;
+            o->shown_frame = (uint8_t)(v | 0x80);
+            o->script_args.step = script8(bank, entry, ENTRY_STEP);
+            o->script_args.counter = script8(bank, entry, ENTRY_COUNTER);
             at = (uint16_t)(entry + 0x19);
             break;
         case SCRIPT_CLEAR:
@@ -131,7 +131,7 @@ void CourseScriptRun(uint8_t bank, uint16_t at)
                 g.player2_car = obj_ref(o);
             o->timer = 4;
             o->heading = script8(bank, entry, ENTRY_HEADING);
-            o->link27 = script16(bank, entry, ENTRY_LINK);
+            o->car.car_script = script16(bank, entry, ENTRY_LINK);
             n = objects.place_count;    /* bytes: two an object, at most four */
             if (n != 0x0008) {
                 objects.place_count = (uint16_t)(n + 2);

@@ -22,7 +22,7 @@ static uint16_t gauge_table_index(uint16_t value)
 {
     static const uint16_t kinds[5] = {0x81B9, 0x853D, 0x8411, 0x82E5, 0x8669};
     static const uint16_t offsets[5] = {0x0000, 0x0098, 0x0130, 0x01C8, 0x0260};
-    uint16_t kind = obj_at(g.player_car)->link27;
+    uint16_t kind = obj_at(g.player_car)->car.car_script;
     int i;
 
     for (i = 0; i < 5; i++)

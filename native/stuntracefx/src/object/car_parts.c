@@ -17,8 +17,8 @@
 #include "system/state.h"
 
 /* the life byte of a flying part, in the low byte of +$27 */
-static uint8_t part_life(const Object *o) { return (uint8_t)o->link27; }
-static void part_life_set(Object *o, uint8_t v) { o->link27 = (uint16_t)((o->link27 & 0xFF00) | v); }
+static uint8_t part_life(const Object *o) { return o->car_part.life; }
+static void part_life_set(Object *o, uint8_t v) { o->car_part.life = v; }
 
 /*
  * @routine 08:AB71 PartOffset
@@ -27,7 +27,7 @@ static void part_life_set(Object *o, uint8_t v) { o->link27 = (uint16_t)((o->lin
  */
 static Vec16 PartOffset(const Object *part, const Object *car)
 {
-    Vec16 v = ObjectTurnVector(car, (int8_t)part->count48, (int8_t)part->byte49, (int8_t)part->byte4a);
+    Vec16 v = ObjectTurnVector(car, part->car_part.offset_on_car[0], part->car_part.offset_on_car[1], part->car_part.offset_on_car[2]);
 
     v.x = (int16_t)(uint16_t)((uint16_t)v.x << 1);
     v.y = (int16_t)(uint16_t)((uint16_t)v.y << 1);
@@ -64,15 +64,15 @@ void PartDetachStep(Object *o)
     Vec16 v;
     uint8_t n;
 
-    if (o->byte4b == 0x08) {
+    if (o->car_part.steps == 0x08) {
         ObjectRelease(o);
         return;
     }
-    if (o->byte4b == 0x07)
-        car->flags25 &= 0x7F;
-    o->byte4b++;
+    if (o->car_part.steps == 0x07)
+        car->car.state &= (uint8_t)~CAR_DETACHING;
+    o->car_part.steps++;
     v = part_on_car(o, car);
-    n = o->byte4b;
+    n = o->car_part.steps;
     if (!((uint8_t)(n - 0x04) & 0x80)) {
         n = (uint8_t)(n - 0x09);
         if (!n) {
@@ -97,9 +97,9 @@ void PartDetach(Object *o)
 {
     Object *car = obj_at(o->parent);
 
-    car->flags25 |= 0x80;
-    ObjectCarLookByKind(o, car->byte49);
-    o->byte4b = 0x00;
+    car->car.state |= CAR_DETACHING;
+    ObjectCarLookByKind(o, car->car.kind);
+    o->car_part.steps = 0x00;
     ObjectSetHandler(o, H_PART_DETACH_STEP);
     PartDetachStep(o);
 }
@@ -129,18 +129,18 @@ void PartReturnStep(Object *o)
     o->heading = ApproachQuarterMin4Byte(o->heading, car->heading, &moved);
     o->roll = ApproachQuarterMin4Byte(o->roll, car->roll, &moved);
     ObjectApplyVelocity(o);
-    if (o->byte4b == 0x01)
-        SoundPort0QueuePush((o->flags25 & 0x02) ? 0x4D : 0x4E);
+    if (o->car_part.steps == 0x01)
+        SoundPort0QueuePush((o->car_part.state & PART_MARKED) ? 0x4D : 0x4E);
     ObjectRebucket(o);
     o->timer = 3;
-    if (o->byte4b) {
-        o->byte4b--;
+    if (o->car_part.steps) {
+        o->car_part.steps--;
         return;
     }
-    if (!(car->flags25 & 0x04))
+    if (!(car->car.state & CAR_LOOSE))
         ObjectSetHandler(o, H_RELEASE);
-    if (o->flags25 & 0x01)
-        car->flags25 &= 0xFB;
+    if (o->car_part.state & PART_HIT)
+        car->car.state &= (uint8_t)~CAR_LOOSE;
 }
 
 /*
@@ -150,8 +150,8 @@ void PartReturnStep(Object *o)
 void PartReturn(Object *o)
 {
     ObjectSetHandler(o, H_PART_RETURN_STEP);
-    o->byte4b = 0x0A;
-    SoundPort0QueuePush((o->flags25 & 0x02) ? 0x4C : 0x4B);
+    o->car_part.steps = 0x0A;
+    SoundPort0QueuePush((o->car_part.state & PART_MARKED) ? 0x4C : 0x4B);
     PartReturnStep(o);
 }
 
@@ -170,19 +170,19 @@ void PartFlyStep(Object *o)
     o->timer = 3;
     if (!ObjectSyncFromRecord(o)) {
         car = obj_at(o->parent);
-        if ((car->flags25 & 0x10) && (RecordContactSummary(o) & 0x80)) {
+        if ((car->car.state & CAR_WRECKED) && (RecordContactSummary(o) & 0x80)) {
             ObjectBreakOffContact(o);
             return;
         }
     }
     o->timer = 3;
     car = obj_at(o->parent);
-    if (!(car->flags25 & 0x10) || o->byte4b) {
-        if (!o->byte4b) {
+    if (!(car->car.state & CAR_WRECKED) || o->car_part.steps) {
+        if (!o->car_part.steps) {
             PartReturn(o);
             return;
         }
-        o->byte4b--;
+        o->car_part.steps--;
         o->pitch = (uint8_t)(o->pitch + 0x08);
         o->heading = (uint8_t)(o->heading + 0x04);
     }
@@ -210,14 +210,14 @@ void PartKnockOff(Object *o)
     Object *car = obj_at(o->parent);
     Vec16 v;
 
-    ObjectCarLookByKind(o, car->byte49);
+    ObjectCarLookByKind(o, car->car.kind);
     v = part_on_car(o, car);
     add_vector(o, v);
     ObjectVelocityFromRecordOf(o, car);
     if (!GsuRecordNewFallingPart(o)) {
-        if (o->flags25 & 0x01) {
-            car->flags25 &= 0xFB;
-            car->flags25 &= 0xEF;
+        if (o->car_part.state & PART_HIT) {
+            car->car.state &= (uint8_t)~CAR_LOOSE;
+            car->car.state &= (uint8_t)~CAR_WRECKED;
         }
         ObjectRelease(o);
         return;
@@ -240,8 +240,8 @@ void PartKnockOff(Object *o)
 void PartHit(Object *o)
 {
     FxPoolsMergeProgram();
-    o->flags25 |= 0x01;
-    obj_at(o->parent)->flags25 |= 0x04;
+    o->car_part.state |= PART_HIT;
+    obj_at(o->parent)->car.state |= CAR_LOOSE;
     PartKnockOff(o);
 }
 
@@ -266,9 +266,9 @@ void PlayerCar1Step(Object *o)
 {
     g.current_player = 0;
     player_drive(o);
-    o->flags24 &= 0xFD;
+    o->draw_flags &= 0xFD;
     if (rec_get(o->record, FXREC_FLAGS1C) & 0x0002)
-        o->flags24 |= 0x02;
+        o->draw_flags |= 0x02;
 }
 
 /* A player car's record; with one, it is the record at `match` and gets
@@ -287,9 +287,9 @@ static void player_attach(Object *o, uint16_t h, ObjRef bare)
 {
     ObjectSetHandler(o, h);
     ObjectAttachLinked(o, obj_at(bare));
-    ObjectCarLookByKind(o, o->byte49);
+    ObjectCarLookByKind(o, o->car.kind);
     g.player_flags[0] = 0;
-    o->word29 = 0;
+    o->car.idle_frames = 0;
 }
 
 /*
@@ -304,7 +304,7 @@ void PlayerCar1(Object *o)
     ObjectListAppend(o);
     o->y = (uint16_t)(o->y + 0xFF60);
     if (g.hud_mode == 0 && obj_at(g.director[0])->handler == H_DIRECTOR_PATH_START)
-        o->link27 = CAR_BONUS_TRUCK;
+        o->car.car_script = CAR_BONUS_TRUCK;
     player_record(o, 0x0001, FXIN_PLAYER1_RECORD);
     player_attach(o, H_PLAYER_CAR_1_STEP, g.director[0]);
     PlayerCar1Step(o);
@@ -350,7 +350,7 @@ void ObjectCarSpawnListed(Object *o)
 
 static void car_of_kind(Object *o, uint8_t v, uint8_t k)
 {
-    o->count48 = v;
+    o->car.wait = v;
     o->list_kind = k;
     ObjectCarSpawnListed(o);
 }
@@ -401,14 +401,14 @@ static int shed(Object *car, const ShedPart *part, uint8_t flags, int first)
 
     if (!n)
         return first;
-    n->count48 = part->o48;
-    n->byte49 = part->o49;
-    n->byte4a = part->o4a;
+    n->car_part.offset_on_car[0] = (int8_t)part->o48;
+    n->car_part.offset_on_car[1] = (int8_t)part->o49;
+    n->car_part.offset_on_car[2] = (int8_t)part->o4a;
     n->parent = obj_ref(car);
-    n->byte4b = part->count;
+    n->car_part.steps = part->count;
     part_life_set(n, (flags & 0x02) ? 0x14 : 0xFF);
     if (part->mark)
-        n->flags25 |= 0x02;
+        n->car_part.state |= PART_MARKED;
     if (!(flags & 0x01)) {
         ObjectSetHandler(n, H_PART_DETACH);
         return 0;
@@ -419,7 +419,7 @@ static int shed(Object *car, const ShedPart *part, uint8_t flags, int first)
     }
     ObjectSetHandler(n, H_PART_HIT);
     ObjectCallHandler(n);
-    return !(car->flags25 & 0x04);
+    return !(car->car.state & CAR_LOOSE);
 }
 
 /*
@@ -435,9 +435,9 @@ int CarCrashParts(Object *o, uint8_t flags)
     static const uint16_t model[8] = {CAR_F_TYPE, CAR_COUPE, CAR_4WD, CAR_2WD, CAR_RIVAL_F_TYPE, CAR_RIVAL_COUPE, CAR_RIVAL_4WD, CAR_RIVAL_2WD};
     int i;
 
-    if (o->flags25 & 0x84)
+    if (o->car.state & (CAR_LOOSE | CAR_DETACHING))
         return 1;
-    for (i = 0; i < 8 && o->link27 != model[i]; i++)
+    for (i = 0; i < 8 && o->car.car_script != model[i]; i++)
         ;
     if (i == 8)
         return 1;
@@ -470,15 +470,15 @@ void ObjectRivalCarStep(Object *o)
     if (RandomStep() >= 0xF2)
         rec_put(rec, FXREC_DIRECTION, (uint16_t)(rec_get(rec, FXREC_DIRECTION) ^ 0x0002));
     if (rec_get(rec, 0x002C) & 0x0004) {
-        o->flags25 |= 0x10;
+        o->car.state |= CAR_WRECKED;
         if (!CarCrashParts(o, 0x03)) {
             g.rivals_left--;
             rec_or(rec, FXREC_FLAGS16, 0x0020);
             rec_or(rec, FXREC_FLAGS1C, 0x0010);
         }
     }
-    if (o->flags25 & 0x04)
-        o->flags24 |= 0x20;
+    if (o->car.state & CAR_LOOSE)
+        o->draw_flags |= 0x20;
     ObjectCarFrame(o);
 }
 
@@ -490,7 +490,7 @@ void ObjectRivalCarStep(Object *o)
 void ObjectRivalCar(Object *o)
 {
     g.rivals_left++;
-    o->count48 = 0;
+    o->car.wait = 0;
     o->list_kind = 0;
     ObjectCarSpawnListed(o);
     rec_or(o->record, FXREC_FLAGS64, 0x0010);

@@ -191,7 +191,7 @@ void GsuRecordFromObject(Object *o)
     rec_put(rec, FXREC_POS_Y, o->y);
     rec_put(rec, FXREC_POS_Z, o->z);
     rec_put(rec, FXREC_HEADING, (uint16_t)(o->heading << 8));
-    rec_put(rec, 0x0012, o->frame5a & 0x7F);
+    rec_put(rec, 0x0012, o->shown_frame & 0x7F);
 }
 
 /*
@@ -202,7 +202,7 @@ void GsuRecordFromObject(Object *o)
  */
 void ObjectVelocityFromRecordScaled(Object *o)
 {
-    uint16_t rec = obj_at(o->link27)->record;
+    uint16_t rec = obj_at(o->break_off.car)->record;
 
     o->vx = ScaleThreeQuarters(asr3(rec_get(rec, FXREC_VEL_X)));
     o->vz = ScaleThreeQuarters(asr3(rec_get(rec, FXREC_VEL_Z)));
@@ -317,7 +317,7 @@ int ObjectSyncFromRecord(Object *o)
 
     ObjectRebucket(o);
     GsuRecordKeep(o);
-    o->flags24 &= 0xFD;
+    o->draw_flags &= 0xFD;
     rec = o->record;
     record_contacts.no_record = !rec;
     if (!rec) {
@@ -326,13 +326,13 @@ int ObjectSyncFromRecord(Object *o)
     }
     record_contacts.next = rec_get(rec, FXREC_LIST);
     rec_put(rec, FXREC_HEADING, (uint16_t)(o->heading << 8));
-    rec_put(rec, 0x0012, o->frame5a & 0x7F);
+    rec_put(rec, 0x0012, o->shown_frame & 0x7F);
     o->x = rec_get(rec, FXREC_POS_X);
     o->y = rec_get(rec, FXREC_POS_Y);
     o->z = rec_get(rec, FXREC_POS_Z);
     if (rec_get(rec, FXREC_FLAGS1C) & 0x0002) {
-        o->flags24 |= 0x02;
-        odd = o->flags24 & 0x01;
+        o->draw_flags |= 0x02;
+        odd = o->draw_flags & 0x01;
     }
     return record_contacts.next != 0 || odd;
 }
@@ -357,7 +357,7 @@ int ObjectSyncToRecord(Object *o)
         return 0;
     }
     rec_put(rec, FXREC_HEADING, (uint16_t)(o->heading << 8));
-    rec_put(rec, 0x0012, o->frame5a & 0x7F);
+    rec_put(rec, 0x0012, o->shown_frame & 0x7F);
     record_contacts.next = rec_get(rec, FXREC_LIST);
     rec_put(rec, FXREC_POS_X, o->x);
     rec_put(rec, FXREC_POS_Y, o->y);
@@ -533,7 +533,7 @@ void CarControlsToRecord(Object *o, uint16_t held, uint16_t prev, int player)
 {
     uint16_t rec = o->record, v;
 
-    if (o->flags25 & 0x04) {
+    if (o->car.state & CAR_LOOSE) {
         if (rec) {
             rec_or(rec, FXREC_FLAGS40, 0x0200);
             v = rec_get(rec, FXREC_SIDES);
@@ -549,26 +549,26 @@ void CarControlsToRecord(Object *o, uint16_t held, uint16_t prev, int player)
         if (!(prev & 0x2000)) {
             Object *linked = obj_at(o->link);
 
-            linked->flags25 |= 0x01;
+            linked->director.state |= DIRECTOR_CUE;
             if ((held & 0x0020) && (held & 0x0010))
-                linked->flags25 |= 0x02;
+                linked->director.state |= DIRECTOR_BACK;
         }
     }
     if (g.split_screen) {
         uint16_t limit = (uint16_t)((RandomStep() & 0x0003) + 0x006E);
 
-        if (!(o->word29 & 0x8000)) {
-            if ((uint16_t)(o->word29 - limit) & 0x8000) {
-                o->word29++;
-                if (!((uint16_t)(o->word29 - 0x000A) & 0x8000)
+        if (!(o->car.idle_frames & 0x8000)) {
+            if ((uint16_t)(o->car.idle_frames - limit) & 0x8000) {
+                o->car.idle_frames++;
+                if (!((uint16_t)(o->car.idle_frames - 0x000A) & 0x8000)
                     && (held & 0x8000 || held & 0x4000 || held & 0x0080 || held & 0x0040))
-                    o->word29 = 0xFFFF;
+                    o->car.idle_frames = 0xFFFF;
             } else if (!(rec_get(rec, FXREC_FLAGS64) & 0x0008)) {
                 Object *linked = obj_at(o->link);
 
                 rec_or(rec, FXREC_FLAGS64, 0x0008);
-                linked->flags25 |= 0x01;
-                linked->flags25 |= 0x02;
+                linked->director.state |= DIRECTOR_CUE;
+                linked->director.state |= DIRECTOR_BACK;
             }
         }
     }
@@ -648,7 +648,7 @@ void ObjectPoseFromRecord(Object *o)
 {
     uint16_t rec;
 
-    o->flags25 &= 0x9F;
+    o->car.state &= (uint8_t)~(CAR_JOLTED | CAR_STARTLED);
     if (o->timer == 1) {
         o->timer = 2;
         rec_or(o->record, FXREC_FLAGS16, 0x0400);

@@ -158,7 +158,7 @@ static void records_take_fractions(void)
 
         for (k = 0; k < OBJECT_COUNT; k++) {
             const Object *o = &objects.object[k];
-            int absolute = (o->flags24 & 0x80) != 0;
+            int absolute = (o->draw_flags & 0x80) != 0;
 
             if (!(object_frac[k][0] | object_frac[k][1] | object_frac[k][2]))
                 continue;

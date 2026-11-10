@@ -176,7 +176,7 @@ void ObjectTurn(const Object *o, int run)
             l->on = l->colour = 1;
             l->off = real;
             l->spd = setup ? 2 : o->bonus_marker.bounce_speed;
-            l->col = setup ? 0 : (uint8_t)(o->frame5a & 0x7F);
+            l->col = setup ? 0 : (uint8_t)(o->shown_frame & 0x7F);
             if (!setup)
                 return;                 /* first seen set up: its own look this step */
         }
@@ -230,7 +230,7 @@ static void setup_look(const Object *o, uint8_t *r, uint32_t h)
     case 0x09C5FE: r[0x05] = 0xE0; break;
     case 0x09C605: r[0x05] = 0xA0; break;
     case 0x09C60C: r[0x05] = 0x20; break;
-    case 0x08CA45: r[0x19] = (uint8_t)(o->count48 & 0x7F); break;
+    case 0x08CA45: r[0x19] = (uint8_t)(o->flags_record.frame & 0x7F); break;
     case 0x08CAF6: r[0x19] = 0x00; break;
     case 0x09C244: case 0x09C280: case 0x09C2C5:
         r[0x19] = 0x00;

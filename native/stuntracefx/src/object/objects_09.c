@@ -36,9 +36,9 @@ static int below16(uint16_t a, uint16_t b) { return ((uint16_t)(a - b) & 0x8000)
 
 static void lamp(Object *o, uint8_t t)
 {
-    o->flags24 |= 0x08;
-    o->byte3a = 0;
-    o->byte5f = t;
+    o->draw_flags |= 0x08;
+    o->material = 0;
+    o->size = t;
 }
 
 /* a 16-bit add at an angle byte, the next byte taking the carry */
@@ -64,7 +64,7 @@ void ObjectLampTower(Object *o)
     o->anim = LOOK_LAMP_LIGHT;
     lamp(o, 0x3C);
     o->model = MODEL_LAMP_TOWER;
-    o->flags09 &= 0xFE;
+    o->depth_lift &= 0xFE;
     n = ObjectSpawn(MODEL_LAMP_TOWER_LIGHT);
     if (n) {
         lamp(n, 0x64);
@@ -133,7 +133,7 @@ void ObjectScoreGate(Object *o)
         n->z = (uint16_t)(n->z + 0x0F00);
         n->heading = 0x20;
         n->roll = 0x00;
-        n->frame5a = 0x80;
+        n->shown_frame = 0x80;
         n->score_counter.count = 0;
         n->score_counter.slide = 0x50;
     }
@@ -145,7 +145,7 @@ static void counter_show(Object *o)
 {
     if (o->score_counter.count)
         o->score_counter.count--;
-    o->frame5a = (uint8_t)(o->score_counter.count | 0x80);
+    o->shown_frame = (uint8_t)(o->score_counter.count | 0x80);
 }
 
 /* every third frame, following its gate */
@@ -167,7 +167,7 @@ static void counter_tick(Object *o)
     }
     if (o->score_counter.count != 0x09)
         o->score_counter.count++;
-    o->frame5a = (uint8_t)(o->score_counter.count | 0x80);
+    o->shown_frame = (uint8_t)(o->score_counter.count | 0x80);
 }
 
 static void counter_slide(Object *o)
@@ -416,7 +416,7 @@ void ObjectSwitchStep(Object *o)
 {
     if (o->switch_.state & SWITCH_ON)
         ease8(&o->switch_.frame, 0x03, ApproachSixteenthMin16Byte);
-    o->frame5a = (uint8_t)(o->switch_.frame | 0x80);
+    o->shown_frame = (uint8_t)(o->switch_.frame | 0x80);
     if (o->switch_.state & SWITCH_ON)
         return;
     if (!hit(o))
@@ -439,7 +439,7 @@ void ObjectSwitchRecord(Object *o)
 void ObjectSwitch(Object *o)
 {
     handlers2(o, H9_SWITCH_RECORD, H9_SWITCH_STEP);
-    o->frame5a = 0x80;
+    o->shown_frame = 0x80;
     ObjectSwitchRecord(o);
 }
 
@@ -1536,7 +1536,7 @@ void ObjectCountMarker(Object *o)
 {
     handlers2(o, H9_COUNT_MARKER_RECORD, H9_COUNT_MARKER_STEP);
     o->script = OBJECT_SCRIPT_MARKER;
-    o->frame5a = 0x80;
+    o->shown_frame = 0x80;
     o->meter.frame = 0x04;
     ObjectCountMarkerRecord(o);
 }
@@ -1601,7 +1601,7 @@ static void count_up_to_2(Object *o)
 {
     if (o->lap_light.frame != 0x02)
         o->lap_light.frame++;
-    o->frame5a = (uint8_t)(o->lap_light.frame | 0x80);
+    o->shown_frame = (uint8_t)(o->lap_light.frame | 0x80);
 }
 
 static void life_down(Object *o)
@@ -1884,7 +1884,7 @@ static void orbiter(Object *o, uint16_t centre_handler, uint16_t frame)
    whether it came to n */
 static uint8_t colour_next(const Object *o, uint8_t n, int *reached)
 {
-    uint8_t v = (uint8_t)(o->frame5a + 1);
+    uint8_t v = (uint8_t)(o->shown_frame + 1);
 
     if (!(v & 0x80))
         v = (uint8_t)(v + n);
@@ -1900,7 +1900,7 @@ static void colour_cycle(Object *o, uint8_t n)
 
     if (reached)
         v = (uint8_t)(v - n);
-    o->frame5a = (uint8_t)(v | 0x80);
+    o->shown_frame = (uint8_t)(v | 0x80);
 }
 
 /* @routine 09:C9F0 ObjectRingStep */
@@ -1935,7 +1935,7 @@ void ObjectSpinnerStep(Object *o)
 /* @routine 09:CAB1 ObjectSpinner */
 void ObjectSpinner(Object *o)
 {
-    o->frame5a = 0x80;
+    o->shown_frame = 0x80;
     orbiter(o, H9_SPINNER_CENTRE_STEP, H9_SPINNER_STEP);
     ObjectSpinnerStep(o);
 }
@@ -2056,7 +2056,7 @@ void RailRiseStep(Object *o)
 void RailRise(Object *o)
 {
     o->rail.target_z = (uint16_t)(o->z + 0x0500);
-    o->frame5a = rail_colour();
+    o->shown_frame = rail_colour();
     o->model = MODEL_RAIL_RISING;
     handler(o, H9_RAIL_RISE_STEP);
     RailRiseStep(o);
@@ -2072,7 +2072,7 @@ void RailDropStep(Object *o)
         RailRise(o);
         return;
     }
-    o->frame5a = (uint8_t)(v | 0x80);
+    o->shown_frame = (uint8_t)(v | 0x80);
     o->z = (uint16_t)(o->z + 0x0040);
     ObjectSyncToRecord(o);
 }
@@ -2080,7 +2080,7 @@ void RailDropStep(Object *o)
 /* @routine 09:D40C RailDrop */
 void RailDrop(Object *o)
 {
-    o->frame5a = rail_colour();
+    o->shown_frame = rail_colour();
     o->model = MODEL_RAIL_DROPPING;
     handler(o, H9_RAIL_DROP_STEP);
     RailDropStep(o);
@@ -2092,7 +2092,7 @@ static void rail(Object *o, uint16_t dx, uint16_t dz, uint16_t travel)
 
     if (!n)
         return;
-    n->frame5a = rail_colour();
+    n->shown_frame = rail_colour();
     n->heading = 0x80;
     ObjectCopyPosition(n, o);
     n->x = (uint16_t)(n->x + dx);
@@ -2433,7 +2433,7 @@ void ObjectSlideMeterStep(Object *o)
         } else if (o->meter.frame) {
             o->meter.frame--;
         }
-        o->frame5a = (uint8_t)(o->meter.frame | 0x80);
+        o->shown_frame = (uint8_t)(o->meter.frame | 0x80);
     }
     ObjectRebucket(o);
 }
@@ -2443,7 +2443,7 @@ void ObjectSlideMeter(Object *o)
 {
     handler(o, H9_SLIDE_METER_STEP);
     o->meter.frame = 0x00;
-    o->frame5a = 0x80;
+    o->shown_frame = 0x80;
     ObjectSlideMeterStep(o);
 }
 
@@ -2718,7 +2718,7 @@ static void lap_light(Object *o, uint8_t turn)
 {
     if (released_by_hud(o))
         return;
-    o->frame5a = 0x80;
+    o->shown_frame = 0x80;
     o->lap_light.lap = 0x04;
     o->heading = (uint8_t)(o->heading + turn);
     handlers2(o, H9_LAP_LIGHT_RECORD, H9_LAP_LIGHT_STEP);
@@ -2736,7 +2736,7 @@ void ObjectLapLightStep(Object *o)
 {
     if (g.laps_counted[0] != o->lap_light.lap) {
         o->lap_light.state &= (uint8_t)~LAP_LIGHT_LIT;
-        o->frame5a = 0x80;
+        o->shown_frame = 0x80;
         o->lap_light.frame = 0x00;
     }
     if (o->lap_light.state & LAP_LIGHT_LIT) {
@@ -2797,7 +2797,7 @@ static void bonus_marker_frame(Object *o, void (*shatter_it)(Object *), uint16_t
 
 static void bonus_marker_init(Object *o)
 {
-    o->frame5a = 0x80;
+    o->shown_frame = 0x80;
     o->bonus_marker.bounce = 0x0000;
     o->bonus_marker.bounce_speed = 0x0002;
 }
@@ -2847,7 +2847,7 @@ static void hit_lamp(Object *o, uint16_t record_handler, uint16_t step)
 {
     handlers2(o, record_handler, step);
     o->script = OBJECT_SCRIPT_MARKER;
-    o->frame5a = 0x80;
+    o->shown_frame = 0x80;
     o->meter.frame = 0x04;
 }
 
