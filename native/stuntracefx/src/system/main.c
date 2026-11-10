@@ -9,6 +9,7 @@
 #include "data/cart.h"
 #include "fx/fx_draw.h"
 #include "nshvc/nshvc.h"
+#include "pause/pause.h"
 #include "system/game.h"
 #include "video/picture.h"
 #include "video/video.h"
@@ -26,12 +27,17 @@ static void update(const nshvc_input *input)
 {
     if (system_stopped())
         return;
+    input = pause_update(input);        /* the pause screen; NULL while it holds the game */
+    if (!input)
+        return;
     input_read(input);
     session_update();
 }
 
 static void draw(float between)
 {
+    if (pause_holding())
+        between = 1.0f;                 /* the picture as the game's last update left it */
     fx_tween_draw(between);             /* the race's 3D at the step's progress, between steps */
     video_draw();
 }
