@@ -50,19 +50,36 @@ static uint8_t split_byte(unsigned i)
     return i < 9 ? g.lap_splits[i] : g.race_time_kept[i - 9];
 }
 
-/* A Super FX picture (program $01:CF42, the unpacker) to the chip's RAM at `at`. */
-static void picture_unpack(uint8_t bank, uint16_t end, uint16_t at)
+/* A packed picture in the cartridge: its bank and its address there. */
+typedef struct { uint8_t bank; uint16_t at; } Packed;
+
+static const Packed RACE_RESULTS_PANEL = {0x1F, 0xFA39}, STUNT_RESULTS_PANEL = {0x1F, 0xFAB5},
+                    TIMED_RESULTS_PANEL = {0x1C, 0xF38E}, STUNT_RECORDS_PANEL = {0x1F, 0xFB21},
+                    TIMED_RECORDS_PANEL = {0x1C, 0xF3F2}, RESULTS_MENU_PANEL = {0x1F, 0xFB99},
+                    RESULTS_PICTURE = {0x18, 0xC770};
+
+/* The results' tables in bank 7: each car's picture word and choice byte,
+   the five letters of the word over the totals; the championship screen's
+   palette (bank $1F). */
+enum {
+    RESULTS_BANK = 0x07, CAR_PICTURES = 0xCCB7, CAR_CHOICE_BYTES = 0xCE93, TOTALS_WORD_LETTERS = 0xD5AD,
+    CHAMPION_PALETTE_BANK = 0x1F, CHAMPION_PALETTE = 0x8600,
+    UNPACK_ROOM = 0xC000                /* the chip's RAM from the unpack area on */
+};
+
+/* A Super FX picture (program $01:CF42, the unpacker) to the chip's RAM at `to`. */
+static void picture_unpack(Packed p, uint16_t to)
 {
-    unpack((uint32_t)bank << 16 | end, fx_ram + at, 0xC000);
+    unpack((uint32_t)p.bank << 16 | p.at, fx_ram + to, UNPACK_ROOM);
 }
 
-/* A panel: picture `end` in bank `bank` unpacked to $70:3000, its $440 bytes
-   copied into the map buffer, then the name's digits. */
-static void panel(uint8_t bank, uint16_t end)
+/* A panel: the picture unpacked to the unpack area, its $440 bytes copied
+   into the map buffer, then the name's digits. */
+static void panel(Packed p)
 {
     unsigned i;
 
-    picture_unpack(bank, end, FX_UNPACK_AREA);
+    picture_unpack(p, FX_UNPACK_AREA);
     for (i = 0; i < 0x440; i++)
         map_byte_set((uint16_t)i, fx_ram[FX_UNPACK_AREA + i]);
     DigitTiles1184();
@@ -197,7 +214,7 @@ static void StuntRecordsDraw(void)
 {
     unsigned n;
 
-    panel(0x1F, 0xFB21);
+    panel(STUNT_RECORDS_PANEL);
     for (n = 0; n < 3 && g.record_times[n]; n++) {
         score_tiles((uint16_t)(0x0190 + 0xC0 * n), g.record_times[n]);
         name_tiles((uint16_t)(0x0190 + 0xC0 * n + 26), g.record_names[n]);
@@ -211,7 +228,7 @@ static void TimedRecordsDraw(void)
 {
     unsigned n;
 
-    panel(0x1C, 0xF3F2);
+    panel(TIMED_RECORDS_PANEL);
     for (n = 0; n < 3 && g.record_times[n] != 0xFFFF; n++) {
         time_tiles((uint16_t)(0x0194 + 0xC0 * n), g.record_times[n]);
         name_tiles((uint16_t)(0x0194 + 0xC0 * n + 16), g.record_names[n]);
@@ -221,9 +238,9 @@ static void TimedRecordsDraw(void)
 }
 
 /* @routine 07:CAD5 ResultsPanelFAB5 */
-static void ResultsPanelStunt(void) { panel(0x1F, 0xFAB5); step_next(); }
+static void ResultsPanelStunt(void) { panel(STUNT_RESULTS_PANEL); step_next(); }
 /* @routine 07:CB7C ResultsPanelF38E */
-static void ResultsPanelTimed(void) { panel(0x1C, 0xF38E); step_next(); }
+static void ResultsPanelTimed(void) { panel(TIMED_RESULTS_PANEL); step_next(); }
 
 /* B or START on the records: to `skip` for a placed player, else the next step. */
 static void records_choice(uint8_t skip, int check_skipped)
@@ -254,7 +271,7 @@ static void ResultsMenuPanel(void)
     g.split_stage = 0;
     g.race_again = 0;
     palettes.tile_cycle = 0;
-    panel(0x1F, 0xFB99);
+    panel(RESULTS_MENU_PANEL);
     step_next();
     g.split_stage = 0x02;
 }
@@ -267,7 +284,7 @@ static void RecordTimeTiles(void);
 /* @routine 07:CC4A ResultsPanelFA39 */
 static void ResultsPanelRace(void)
 {
-    panel(0x1F, 0xFA39);
+    panel(RACE_RESULTS_PANEL);
     if (g.race_time[2])
         ResultsTotalTiles();
     if (g.times_bcd[3][2] != 0xFF)
@@ -278,7 +295,7 @@ static void ResultsPanelRace(void)
 /* @routine 07:CC83 ResultsPicture4000: picture $18:C770 to $70:4000. */
 static void ResultsPictureLoad(void)
 {
-    picture_unpack(0x18, 0xC770, 0x4000);
+    picture_unpack(RESULTS_PICTURE, FX_RESULTS_PICTURE);
     step_next();
     g.overlay_state = 0;
 }
@@ -286,7 +303,7 @@ static void ResultsPictureLoad(void)
 /* $10A0 = the car's picture word from the table at $07:CCB7. */
 static void car_picture(void)
 {
-    g.overlay_picture = cart16(0x07, (uint16_t)(0xCCB7 + g.car[0] * 2));
+    g.overlay_picture = cart16(RESULTS_BANK, (uint16_t)(CAR_PICTURES + g.car[0] * 2));
 }
 
 /* @routine 07:CC9B ResultsCarPicture */
@@ -330,7 +347,7 @@ static void car_change(int right)
             c = car3_open() ? 0x03 : 0x02;
     }
     g.car[0] = c;
-    g.choice_p1 = (uint16_t)((g.choice_p1 & 0xFF00) | cart8(0x07, (uint16_t)(0xCE93 + c)));
+    g.choice_p1 = (uint16_t)((g.choice_p1 & 0xFF00) | cart8(RESULTS_BANK, (uint16_t)(CAR_CHOICE_BYTES + c)));
     SelectionSave();
     g.split_stage = 0x12;
     car_picture();
@@ -435,7 +452,7 @@ static void champion_palette(void)
     int i;
 
     for (i = 0; i < 256; i++)
-        palettes.buffer[i] = cart16(0x1F, (uint16_t)(0x8600 + 2 * i));
+        palettes.buffer[i] = cart16(CHAMPION_PALETTE_BANK, (uint16_t)(CHAMPION_PALETTE + 2 * i));
 }
 
 /* BG2 at (-24, -32), showing the results' page of its map ($5C00). */
@@ -497,7 +514,7 @@ static void OamWordRow5(void)
 
         OamByteSet(at, (uint8_t)(0xA5 + 8 * i));
         OamByteSet((uint16_t)(at + 1), 0x4E);
-        OamByteSet((uint16_t)(at + 2), (uint8_t)(cart8(0x07, (uint16_t)(0xD5AD + i)) + 0xC0));
+        OamByteSet((uint16_t)(at + 2), (uint8_t)(cart8(RESULTS_BANK, (uint16_t)(TOTALS_WORD_LETTERS + i)) + 0xC0));
         OamByteSet((uint16_t)(at + 3), 0x38);
     }
 }
@@ -833,7 +850,7 @@ void ChampionshipStagePicture(void)
 
     g.race_again = 0;
     palettes.tile_cycle = 0;
-    picture_unpack(0x1F, 0xFB99, FX_UNPACK_AREA);
+    picture_unpack(RESULTS_MENU_PANEL, FX_UNPACK_AREA);
     for (i = 0; i < 0x440; i++)
         map_byte_set((uint16_t)i, fx_ram[FX_UNPACK_AREA + i]);
     DigitTiles1184();

@@ -65,7 +65,8 @@ enum { FX_SHADE_BASE_RACE = 0xA545, FX_SHADE_BASE_HUD = 0xA325 };
 
 /* The chip's RAM the main CPU lays out: its two picture buffers (the frame
    program's screen start), and where a packed screen is unpacked. */
-enum { FX_PICTURE_0 = 0x2C00, FX_PICTURE_1 = 0x9400, FX_PICTURE_0_CLEARED_END = 0x6000, FX_UNPACK_AREA = 0x3000 };
+enum { FX_PICTURE_0 = 0x2C00, FX_PICTURE_1 = 0x9400, FX_PICTURE_0_CLEARED_END = 0x6000, FX_UNPACK_AREA = 0x3000,
+       FX_RESULTS_PICTURE = 0x4000 /* the results' picture, unpacked for the screen's overlay */ };
 
 /* The renderer's inputs that only the glyph programs read: the colours. */
 void GlyphColours(uint8_t b1, uint8_t b2, uint8_t b3);

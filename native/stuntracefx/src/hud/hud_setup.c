@@ -67,6 +67,16 @@ static const HudByte battle_p2_sprites[6] = {
     {0x00F0, 0xE6}, {0x00F1, 0xB8}, {0x00F3, 0x36}, {0x00F4, 0xE6}, {0x00F5, 0xC0}, {0x00F7, 0x36},
 };
 
+/* The HUD's tables in bank 3: the sprite lists (four bytes an entry); for
+   the split screen, its panel sprites' places and tiles (a word each, four
+   bytes an entry), its map sprites' the same, their five size bytes, and
+   its art block's two records (where it goes; where its packed data is). */
+enum {
+    HUD_SETUP_BANK = 0x03, SPRITE_LISTS = 0xF883,
+    SPLIT_PANEL_SPRITES = 0xE7EA, SPLIT_MAP_SPRITES = 0xE80F, SPLIT_SPRITE_SIZES = 0xE80A,
+    TO_SPLIT_ART = 0xF845, PACKED_SPLIT_ART = 0xF804
+};
+
 /* The sprite list's entries from `list` on, four bytes each, into the high
    table of sizes: $FF ends it, $FE is a hidden entry. */
 static void oam_high_table_from_list(uint16_t list)
@@ -74,14 +84,14 @@ static void oam_high_table_from_list(uint16_t list)
     uint16_t at = 0x0200;
     uint8_t v;
 
-    while ((v = cart8(0x03, (uint16_t)(0xF883 + list))) != 0xFF) {
+    while ((v = cart8(HUD_SETUP_BANK, (uint16_t)(SPRITE_LISTS + list))) != 0xFF) {
         if (v == 0xFE) {
             OamByteSet((uint16_t)(at + 1), 0xFE);
         } else {
             OamByteSet(at, v);
-            OamByteSet((uint16_t)(at + 1), cart8(0x03, (uint16_t)(0xF884 + list)));
-            OamByteSet((uint16_t)(at + 2), cart8(0x03, (uint16_t)(0xF885 + list)));
-            OamByteSet((uint16_t)(at + 3), cart8(0x03, (uint16_t)(0xF886 + list)));
+            OamByteSet((uint16_t)(at + 1), cart8(HUD_SETUP_BANK, (uint16_t)(SPRITE_LISTS + 1 + list)));
+            OamByteSet((uint16_t)(at + 2), cart8(HUD_SETUP_BANK, (uint16_t)(SPRITE_LISTS + 2 + list)));
+            OamByteSet((uint16_t)(at + 3), cart8(HUD_SETUP_BANK, (uint16_t)(SPRITE_LISTS + 3 + list)));
             list = (uint16_t)(list + 3);
         }
         list = (uint16_t)(list + 1);
@@ -245,7 +255,7 @@ void RaceHudSetup(void)
     (void)SoundFromTableD89();
     fx16_set(FXIN_SHADE_BASE, FX_SHADE_BASE_HUD);
     OamBufferClear();
-    OamFromList(0x03, &slot, &list);
+    OamFromList(HUD_SETUP_BANK, &slot, &list);
     oam_high_table_from_list(0x01AA);
     switch (g.hud_mode) {
     case 3:
@@ -298,11 +308,11 @@ void RaceHudSetupTwoPlayers(void)
     PaletteCourseLoad(g.course);
     x = 0x00BC;
     for (uint16_t y = 0; y < 0x0020; y = (uint16_t)(y + 4), x = (uint16_t)(x + 4)) {
-        v = (uint16_t)(cart16(0x03, (uint16_t)(0xE7EA + y)) - 0x0800);
+        v = (uint16_t)(cart16(HUD_SETUP_BANK, (uint16_t)(SPLIT_PANEL_SPRITES + y)) - 0x0800);
         oam_word_set(x, v);
         v = (uint16_t)(v + 0x6850);
         oam_word_set((uint16_t)(x + 0x100), v);
-        v = cart16(0x03, (uint16_t)(0xE7EC + y));
+        v = cart16(HUD_SETUP_BANK, (uint16_t)(SPLIT_PANEL_SPRITES + 2 + y));
         oam_word_set((uint16_t)(x + 2), v);
         oam_word_set((uint16_t)(x + 0x102), v);
     }
@@ -315,20 +325,20 @@ void RaceHudSetupTwoPlayers(void)
     }
     x = 0x00DC;
     for (uint16_t y = 0; y < 0x0024; y = (uint16_t)(y + 4), x = (uint16_t)(x + 4)) {
-        oam_word_set(x, (uint16_t)(cart16(0x03, (uint16_t)(0xE80F + y)) + 0x2C28));
-        oam_word_set((uint16_t)(x + 2), cart16(0x03, (uint16_t)(0xE811 + y)));
+        oam_word_set(x, (uint16_t)(cart16(HUD_SETUP_BANK, (uint16_t)(SPLIT_MAP_SPRITES + y)) + 0x2C28));
+        oam_word_set((uint16_t)(x + 2), cart16(HUD_SETUP_BANK, (uint16_t)(SPLIT_MAP_SPRITES + 2 + y)));
     }
     x = 0x01DC;
     for (uint16_t y = 0; y < 0x0024; y = (uint16_t)(y + 4), x = (uint16_t)(x + 4)) {
-        oam_word_set(x, (uint16_t)(cart16(0x03, (uint16_t)(0xE80F + y)) + 0x9476));
-        oam_word_set((uint16_t)(x + 2), cart16(0x03, (uint16_t)(0xE811 + y)));
+        oam_word_set(x, (uint16_t)(cart16(HUD_SETUP_BANK, (uint16_t)(SPLIT_MAP_SPRITES + y)) + 0x9476));
+        oam_word_set((uint16_t)(x + 2), cart16(HUD_SETUP_BANK, (uint16_t)(SPLIT_MAP_SPRITES + 2 + y)));
     }
     for (int i = 0; i < 5; i++) {
-        uint8_t s = cart8(0x03, (uint16_t)(0xE80A + i));
+        uint8_t s = cart8(HUD_SETUP_BANK, (uint16_t)(SPLIT_SPRITE_SIZES + i));
 
         OamByteSet((uint16_t)(0x0200 + 0x0B + i), s);
         OamByteSet((uint16_t)(0x0210 + 0x0B + i), s);
     }
-    race_unpacked_to_art(0xF845, 0xF804);
+    race_unpacked_to_art(TO_SPLIT_ART, PACKED_SPLIT_ART);
     RaceVarsReset();
 }
