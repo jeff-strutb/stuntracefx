@@ -369,8 +369,9 @@ void actors_run(void)
     menu_typing_run_end();
 }
 
-/* Adds a sprite if it is on the screen: X from -16 to 255, Y from -16 to 223. */
-static void sprite_add(uint16_t sx, uint16_t sy, uint16_t attr, int large)
+/* Adds a sprite if it is on the screen: X from -16 to 255, Y from -16 to 223;
+   `key` says who drew it. */
+static void sprite_add(uint16_t sx, uint16_t sy, uint16_t attr, int large, uint16_t key)
 {
     nshvc_sprite *s;
 
@@ -378,6 +379,7 @@ static void sprite_add(uint16_t sx, uint16_t sy, uint16_t attr, int large)
         return;
     if ((sy & 0x8000) ? sy < 0xFFF0 : sy >= 0x00E0)
         return;
+    actors.sprite_key[pic.sprite_count] = key;
     s = &pic.sprites[pic.sprite_count++];
     s->x = (int16_t)sx;
     s->y = (int16_t)sy;
@@ -405,7 +407,7 @@ void actors_build_sprites(void)
     for (i = actors.live_count - 1; i >= 0; i--) {
         const Actor *a = &actors.actor[actors.live[i]];
         uint16_t px, py, at;
-        int n;
+        int n, k;
 
         if (a->hidden == 0xFFFF || a->group == 0xFFFF)
             continue;
@@ -413,14 +415,15 @@ void actors_build_sprites(void)
         py = (uint16_t)(a->y - actors.scroll_y);
         if (a->group == 0) {
             if (pic.sprite_count < 128)
-                sprite_add(px, py, (uint16_t)(a->tile | a->hidden), a->large & 1);
+                sprite_add(px, py, (uint16_t)(a->tile | a->hidden), a->large & 1, (uint16_t)(actors.live[i] << 8));
             continue;
         }
         at = a->group;
         n = (int16_t)group_word(at);
         at = (uint16_t)(at + 2);
-        for (; n >= 0 && pic.sprite_count < 128; n--, at = (uint16_t)(at + 8))
+        for (k = 1; n >= 0 && pic.sprite_count < 128; n--, k++, at = (uint16_t)(at + 8))
             sprite_add((uint16_t)(group_word(at) + px), (uint16_t)(group_word((uint16_t)(at + 2)) + py),
-                       group_word((uint16_t)(at + 4)), group_word((uint16_t)(at + 6)) & 1);
+                       group_word((uint16_t)(at + 4)), group_word((uint16_t)(at + 6)) & 1,
+                       (uint16_t)(actors.live[i] << 8 | (k & 0xFF)));
     }
 }

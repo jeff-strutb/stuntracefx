@@ -30,7 +30,10 @@ static uint16_t granite_cell(int col, int row)
     return (uint16_t)(0x0100 + ((row & 3) << 2) + (col & 3));
 }
 
-enum { WIDE_CELLS = 1024 / 8 + 4 };     /* the screen's largest side, in cells, and the scroll's spare */
+enum {
+    EASE_CELLS = 9,                     /* cells written past the screen: a scroll eased by up to 64 pixels */
+    WIDE_CELLS = 1024 / 8 + 2 + 2 * EASE_CELLS + 4   /* the map's side: the screen's largest, those, and spare */
+};
 
 static struct {
     uint8_t kept;                       /* KEEP_ bits of the current screen */
@@ -94,53 +97,40 @@ static void window_move(nshvc_window *w)
     w->right = menu_window_right(w->right);
 }
 
-/* the 8-pixel cell offset and the part under a cell that place map cell
-   boundaries on the original's at scroll s, the picture starting at o */
-static void cell_place(int32_t s, int o, int32_t *scroll, int *offset)
-{
-    int fine = ((s % 8) + 8) % 8;
+static int floor_div8(int32_t v) { return (int)(v >= 0 ? v / 8 : -((-v + 7) / 8)); }
+static int wide_index(int v) { return ((v % WIDE_CELLS) + WIDE_CELLS) % WIDE_CELLS; }
 
-    *scroll = fine + 8 * ((o + 7) / 8);
-    *offset = (int)((s - *scroll) / 8);
-}
-
-/* BG1's map at the window's size: the original's cells (64 x 32, wrapped)
-   where they show on the picture, the granite elsewhere */
+/* BG1's map at the window's size, at the original's own scroll: the cell
+   the screen shows at map column c and row r (map pixel x - origin + scroll
+   across, y - origin + 1 + scroll down, as a layer shows its map) is the
+   original's (64 x 32, wrapped) where it shows on the picture, the granite
+   elsewhere; kept at c and r modulo the map's size. The cells a few beyond
+   the screen are written too, for a scroll eased between two updates. */
 static void granite_build(void)
 {
     const ScreenShape *sh = screen_shape();
-    int32_t sx, sy;
-    int kx, ky, cw, ch, cx, cy;
+    int32_t sx = pic.bg[0].scroll_x, sy = pic.bg[0].scroll_y;
+    int c0 = floor_div8(sx - sh->origin_x) - EASE_CELLS, c1 = floor_div8(sx - sh->origin_x + sh->width - 1) + EASE_CELLS;
+    int r0 = floor_div8(sy - sh->origin_y + 1) - EASE_CELLS, r1 = floor_div8(sy - sh->origin_y + sh->height) + EASE_CELLS;
+    int c, r;
 
     if (!mw.wide.id)
         mw.wide = nshvc_map_create(WIDE_CELLS, WIDE_CELLS);
-    cell_place(pic.bg[0].scroll_x, sh->origin_x, &sx, &kx);
-    cell_place(pic.bg[0].scroll_y, sh->origin_y, &sy, &ky);
-    cw = (sh->width + sx - sh->origin_x) / 8 + 2;
-    ch = (sh->height + sy - sh->origin_y) / 8 + 2;
-    if (cw > WIDE_CELLS)
-        cw = WIDE_CELLS;
-    if (ch > WIDE_CELLS)
-        ch = WIDE_CELLS;
-    for (cy = 0; cy < ch; cy++) {
-        /* the picture's row the cell's first line shows on: a layer shows
-           its map's line (row + 1 + scroll), as the original's did */
-        int y0 = 8 * cy - sy - 1, row = cy + ky;
+    for (r = r0; r <= r1; r++) {
+        int y0 = 8 * r - sy - 1;        /* the picture's row the cell's first line shows on */
 
-        for (cx = 0; cx < cw; cx++) {
-            int x0 = 8 * cx - sx, col = cx + kx;
+        for (c = c0; c <= c1; c++) {
+            int x0 = 8 * c - sx;
             /* the page's rows from 28 on were never filled (the original's
                last line showed the first of them, black): the granite */
-            int inside = x0 > -8 && x0 < 256 && y0 > -8 && y0 < 224 && (row & 31) < 28;
+            int inside = x0 > -8 && x0 < 256 && y0 > -8 && y0 < 224 && (r & 31) < 28;
 
-            mw.cells[cy * cw + cx] = inside ? mw.pages[(col >> 5) & 1][((row & 31) << 5) | (col & 31)]
-                                            : granite_cell(col, row);
+            mw.cells[wide_index(r) * WIDE_CELLS + wide_index(c)] =
+                inside ? mw.pages[(c >> 5) & 1][((r & 31) << 5) | (c & 31)] : granite_cell(c, r);
         }
     }
-    nshvc_map_write_snes(mw.wide, 0, 0, (uint32_t)cw, (uint32_t)ch, mw.cells);
-    pic.bg[0].map = mw.wide;
-    pic.bg[0].scroll_x = sx;
-    pic.bg[0].scroll_y = sy;
+    nshvc_map_write_snes(mw.wide, 0, 0, WIDE_CELLS, WIDE_CELLS, mw.cells);
+    pic.bg[0].map = mw.wide;            /* the scroll stays the original's */
 }
 
 void menu_window_frame_end(void)
