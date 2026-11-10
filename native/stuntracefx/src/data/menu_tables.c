@@ -5,8 +5,10 @@
  */
 #include <string.h>
 
+#include "audio/sound.h"
 #include "data/cart.h"
 #include "data/menu_tables.h"
+#include "data/unpack.h"
 
 enum {
     SINE = 0x0016FE,                    /* bytes, by angle */
@@ -23,6 +25,69 @@ enum {
     CHOICE_RIGHT = 0x05C827,            /* words, by choice */
     PAIR_ANIMATIONS = 0x05C862,         /* two words a pair */
     BUTTON_SEQUENCE = 0x05D66D          /* words, by step */
+};
+
+/* the results', the two-player race screen's and the records' tables */
+enum {
+    PLACE_CAR_ANIMATIONS = 0x05DA0F,    /* words, by car */
+    LEADER_CAR_ANIMATIONS = 0x05DA17,   /* words, by car */
+    LEADER_PALETTES = 0x05DA86,         /* words, by step */
+    LETTER_TILES = 0x05DDD3,            /* words, by letter */
+    COURSE_SPRITE_LISTS = 0x05FCA2,     /* words */
+    RECORD_TAGS = 0x03B4EB,             /* words, by entry */
+    PANEL_ROWS_STUNT = 0x03D8D4,        /* words, by row */
+    PANEL_COLUMNS_STUNT = 0x03D8DC,     /* bytes, by character */
+    PANEL_ROWS = 0x03D8E3,
+    PANEL_COLUMNS = 0x03D8EB
+};
+
+/* the sprite lists' places among COURSE_SPRITE_LISTS */
+static const uint16_t course_sprite_lists[] = {
+    [MENU_COURSE_SPRITES_0] = 0x0000, [MENU_COURSE_SPRITES_0_SIZES] = 0x0154,
+    [MENU_COURSE_SPRITES_64] = 0x00A8, [MENU_COURSE_SPRITES_64_SIZES] = 0x0162
+};
+
+/* the screens' pictures (packed: where each ends), tiles, palettes and sounds */
+static const uint32_t pictures[MENU_PICS] = {
+    [MENU_PIC_TITLE_SPRITES] = 0x0E5C38,
+    [MENU_PIC_TITLE_BG2_PAGE2] = 0x0E49DC,
+    [MENU_PIC_TITLE_BG1_TILES] = 0x0E3ABC,
+    [MENU_PIC_TITLE_BG1_MAP] = 0x0E3E58,
+    [MENU_PIC_TITLE_BG2_TILES] = 0x0E4664,
+    [MENU_PIC_TITLE_BG2_PAGE1] = 0x0E4818,
+    [MENU_PIC_TITLE_CHECKS_MAP] = 0x0E3ECC,
+    [MENU_PIC_GRANITE_MAP] = 0x0E5C8C,
+    [MENU_PIC_MENU_BG2_TILES] = 0x0BCC78,
+    [MENU_PIC_MENU_BG2_MAP] = 0x0BCE78,
+    [MENU_PIC_MENU_SPRITES] = 0x0BDD8C,
+    [MENU_PIC_GRANITE_FRAMES] = 0x0E9068,
+    [MENU_PIC_SPRITE_FRAMES] = 0x0BF8E8,
+    [MENU_PIC_CHAMPION_FRAMES] = 0x026BCB,
+    [MENU_PIC_CHAMPION_SPRITES] = 0x0C4770,
+    [MENU_PIC_CHAMPION_8BPP] = 0x0C198C,
+    [MENU_PIC_CHAMPION_BG2_TILES] = 0x0E189C,
+    [MENU_PIC_CHAMPION_MAP] = 0x02687B,
+    [MENU_PIC_COURSE_PICTURES] = 0x0ED970
+};
+enum {
+    SPRITE_FRAMES_ART = 0x3FD7,         /* the frame art's names for the two sets of frames: */
+    GRANITE_FRAMES_ART = 0xA7D7,        /* where the original unpacked them in its RAM */
+    LOGO_SPRITES = 0x0E5C8C, TITLE_TEXT_TILES = 0x0E3E58, LOADER_TILES = 0x05D56C,
+    PALETTE_TITLE = 0x0E189C, PALETTE_MENU = 0x0E63AC, PALETTE_CHAMPION = 0x026BCB,
+    SOUND_TITLE_SET = 0x0F73B5,           /* packed */
+    SOUND_CHAMPION_SET = 0x0EF884,        /* packed */
+    SOUND_LOGO_SET = 0x0CC27C, SOUND_SAMPLES_A = 0x0D85F8, SOUND_SAMPLES_B = 0x0C9A98,
+    CONTROL_BY_CHOICE = 0x01B6F1,         /* words, by choice */
+    CONTROL_BY_SETTING = 0x01B704,        /* words, by setting */
+    CHOICE_SAVED = 0x01B540,              /* words, by choice */
+    PAIR_MODELS = 0x01B464,               /* words, by choice */
+    PAIR_ROWS = 0x01B46C,                 /* words, 4 a choice, by model */
+    CURSOR_COLUMNS = 0x016B49,            /* bytes, by stage */
+    CHAMPION_FRAME_STEPS = 0x05DFCB,      /* words, by step */
+    CHAMPION_FRAME_CHOICES = 0x05DFD3,    /* words, by choice */
+    CHAMPION_CLASS_CELLS = 0x05ED9F,      /* 16 bytes a class: first tile and attributes, by entry */
+    CHAMPION_ENTRY_PLACES = 0x05EDCF,     /* words: the four entries' cells, then their map places */
+    CHAMPION_CHOICE_ATTRS = 0x05EDDF      /* words, by choice */
 };
 
 /* the objects' block, and their tables in the cartridge */
@@ -89,6 +154,122 @@ uint8_t menu_selection_row(int choice) { return byte_at(SELECTION_ROWS + (uint32
 uint8_t menu_selection_model(int choice, int row) { return byte_at(SELECTION_MODELS + (uint32_t)(choice * 4 + row)); }
 uint16_t menu_setting_animation(int setting, int row) { return word_at(SETTING_ANIMATIONS + (uint32_t)(setting * 8 + row * 2)); }
 uint16_t menu_setting_object(int i) { return word_at(SETTING_OBJECTS + (uint32_t)i * 2); }
+
+uint16_t menu_place_car_animation(int leader, int car)
+{
+    return word_at((leader ? LEADER_CAR_ANIMATIONS : PLACE_CAR_ANIMATIONS) + (uint32_t)(car & 3) * 2);
+}
+
+uint16_t menu_leader_palette(int step) { return word_at(LEADER_PALETTES + (uint32_t)step * 2); }
+uint16_t menu_letter_tile(int letter) { return word_at(LETTER_TILES + (uint32_t)letter * 2); }
+
+uint16_t menu_course_sprite_word(MenuSpriteList list, int k)
+{
+    return word_at(COURSE_SPRITE_LISTS + course_sprite_lists[list] + (uint32_t)k * 2);
+}
+
+uint16_t records_first_tag(int entry) { return word_at(RECORD_TAGS + (uint32_t)entry * 2); }
+
+uint16_t records_panel_row_start(int stunt, int row)
+{
+    return word_at((stunt ? PANEL_ROWS_STUNT : PANEL_ROWS) + (uint32_t)row * 2);
+}
+
+uint8_t records_panel_column(int stunt, int character)
+{
+    return byte_at((stunt ? PANEL_COLUMNS_STUNT : PANEL_COLUMNS) + (uint32_t)character);
+}
+
+/* the unpacker's and the sound driver's uploads take a bank and address */
+static uint32_t bank_address(uint32_t image) { return (image >> 15) << 16 | 0x8000 | (image & 0x7FFF); }
+
+uint32_t menu_picture_unpack(MenuPicture p, uint8_t *to, uint32_t room)
+{
+    return unpack(bank_address(pictures[p]), to, room);
+}
+
+MenuFrames menu_frames_place(uint16_t art, uint32_t *at)
+{
+    if (art >= GRANITE_FRAMES_ART) {
+        *at = (uint32_t)(art - GRANITE_FRAMES_ART);
+        return MENU_FRAMES_GRANITE;
+    }
+    *at = (uint32_t)(art - SPRITE_FRAMES_ART);
+    return MENU_FRAMES_SPRITES;
+}
+
+const uint8_t *menu_tiles(MenuTiles t)
+{
+    static const uint32_t places[] = { [MENU_TILES_LOGO_SPRITES] = LOGO_SPRITES, [MENU_TILES_TITLE_TEXT] = TITLE_TEXT_TILES,
+                                       [MENU_TILES_LOADER] = LOADER_TILES };
+
+    return &cart[places[t]];
+}
+
+uint16_t menu_palette_colour(MenuPalette p, int i)
+{
+    static const uint32_t places[] = { [MENU_PALETTE_TITLE] = PALETTE_TITLE, [MENU_PALETTE_MENU] = PALETTE_MENU,
+                                       [MENU_PALETTE_CHAMPION] = PALETTE_CHAMPION };
+
+    return word_at(places[p] + (uint32_t)i * 2);
+}
+
+static void sound_cart(uint32_t image)
+{
+    uint32_t r = bank_address(image);
+
+    sound_upload_cart((uint8_t)(r >> 16), (uint16_t)r);
+}
+
+static void sound_packed(uint32_t image)
+{
+    uint32_t r = bank_address(image);
+
+    sound_upload_packed((uint16_t)r, (uint8_t)(r >> 16));
+}
+
+void menu_sounds_upload(MenuSounds s)
+{
+    switch (s) {
+    case MENU_SOUNDS_LOGO:
+        sound_cart(SOUND_LOGO_SET);
+        break;
+    case MENU_SOUNDS_TITLE:
+    case MENU_SOUNDS_CHAMPION:
+        sound_packed(s == MENU_SOUNDS_TITLE ? SOUND_TITLE_SET : SOUND_CHAMPION_SET);
+        sound_cart(SOUND_SAMPLES_A);
+        sound_cart(SOUND_SAMPLES_B);
+        break;
+    }
+}
+
+uint16_t selection_control_by_choice(int choice) { return word_at(CONTROL_BY_CHOICE + (uint32_t)choice * 2); }
+uint16_t selection_control_by_setting(int setting) { return word_at(CONTROL_BY_SETTING + (uint32_t)setting * 2); }
+uint16_t selection_choice_saved(int choice) { return word_at(CHOICE_SAVED + (uint32_t)(choice & 3) * 2); }
+uint16_t selection_pair_model(int choice) { return word_at(PAIR_MODELS + (uint32_t)choice * 2); }
+uint16_t selection_pair_row(int choice, int model) { return word_at(PAIR_ROWS + (uint32_t)((choice << 2) + model) * 2); }
+uint8_t menu_cursor_column(int stage) { return byte_at(CURSOR_COLUMNS + (uint32_t)stage); }
+
+uint16_t menu_champion_frame(int step, int choice)
+{
+    return (uint16_t)(word_at(CHAMPION_FRAME_STEPS + (uint32_t)step * 2) + word_at(CHAMPION_FRAME_CHOICES + (uint32_t)(choice & 3) * 2));
+}
+
+void menu_champion_panel_cells(int class_, int entry, uint16_t *first_tile, uint16_t *attributes)
+{
+    uint32_t at = CHAMPION_CLASS_CELLS + (uint32_t)(class_ * 16 + entry * 4);
+
+    *first_tile = word_at(at);
+    *attributes = word_at(at + 2);
+}
+
+void menu_champion_entry_places(int entry, uint16_t *cells, uint16_t *map_at)
+{
+    *cells = word_at(CHAMPION_ENTRY_PLACES + (uint32_t)entry * 2);
+    *map_at = word_at(CHAMPION_ENTRY_PLACES + 8 + (uint32_t)entry * 2);
+}
+
+uint16_t menu_champion_choice_attributes(int choice) { return word_at(CHAMPION_CHOICE_ATTRS + (uint32_t)(choice & 3) * 2); }
 
 void menu_block_load(uint8_t *block)
 {

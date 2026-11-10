@@ -7,8 +7,7 @@
 #include <string.h>
 
 #include "audio/sound.h"
-#include "data/cart.h"
-#include "data/unpack.h"
+#include "data/menu_tables.h"
 #include "fx/fx_draw.h"
 #include "menu/actors.h"
 #include "menu/menu.h"
@@ -36,91 +35,26 @@ static uint8_t frames_tiles[0x2000];
 /* the championship's selection frames, from $04:EBCB */
 static uint8_t champion_frames[0x800];
 
-const uint8_t *menu_frame_data(uint16_t address)
+const uint8_t *menu_frame_data(uint16_t art)
 {
-    if (address >= 0xA7D7)
-        return &frames_tiles[address - 0xA7D7];
-    return &frames_sprites[address - 0x3FD7];
+    uint32_t at;
+
+    if (menu_frames_place(art, &at) == MENU_FRAMES_GRANITE)
+        return &frames_tiles[at];
+    return &frames_sprites[at];
 }
 
-/* The cartridge's data the menu screens load, each named once by where it
-   is (bank and address as one number; a packed picture by where it ends). */
-enum {
-    /* the logo and the title */
-    PALETTE_TITLE = 0x1C989C,
-    LOGO_SPRITES = 0x1CDC8C,            /* raw, 0x720 bytes */
-    PIC_TITLE_SPRITES = 0x1CDC38,
-    PIC_TITLE_BG2_PAGE2 = 0x1CC9DC,
-    TITLE_TEXT_TILES = 0x1CBE58,        /* raw, the checks' four tiles */
-    PIC_TITLE_BG1_TILES = 0x1CBABC,
-    PIC_TITLE_BG1_MAP = 0x1CBE58,
-    PIC_TITLE_BG2_TILES = 0x1CC664,
-    PIC_TITLE_BG2_PAGE1 = 0x1CC818,
-    PIC_TITLE_CHECKS_MAP = 0x1CBECC,
-    SOUND_TITLE_SET = 0x1EF3B5,         /* packed: bank and set */
-    SOUND_SAMPLES_A = 0x1B85F8,
-    SOUND_SAMPLES_B = 0x199A98,
-    SOUND_LOGO_SET = 0x19C27C,
-    /* the loader and the course menu */
-    LOADER_TILES = 0x0BD56C,            /* raw, four tiles */
-    PIC_GRANITE_MAP = 0x1CDC8C,
-    PIC_MENU_BG2_TILES = 0x17CC78,
-    PIC_MENU_BG2_MAP = 0x17CE78,
-    PIC_MENU_SPRITES = 0x17DD8C,
-    PIC_GRANITE_FRAMES = 0x1D9068,      /* the granite's eight animated frames */
-    PIC_SPRITE_FRAMES = 0x17F8E8,       /* the objects' animation frames */
-    PALETTE_MENU = 0x1CE3AC,
-    /* the championship's closing screen */
-    SOUND_CHAMPION_SET = 0x1DF884,      /* packed: bank and set */
-    PALETTE_CHAMPION = 0x04EBCB,
-    PIC_CHAMPION_FRAMES = 0x04EBCB,
-    PIC_CHAMPION_SPRITES = 0x18C770,
-    PIC_CHAMPION_8BPP = 0x18998C,
-    PIC_CHAMPION_BG2_TILES = 0x1C989C,
-    PIC_CHAMPION_MAP = 0x04E87B
-};
-
-/* The tables, by bank and place. */
-enum {
-    COURSE_BANK = 0x02, SELECTION_BANK = 0x03, MENU_BANK = 0x0B, PALETTE_BANK = 0x1C,
-    CURSOR_COLUMNS = 0xEB49,            /* bank 2: the class cursor's column by stage */
-    SELECTION_PAIR_MODELS = 0xB464,     /* bank 3: player 2's model when both choose the same */
-    SELECTION_PAIR_ROWS = 0xB46C,       /* bank 3: a player's word by choice and model */
-    SELECTION_SAVED = 0xB540,           /* bank 3: a choice as the save keeps it */
-    CONTROL_BY_CHOICE = 0xB6F1,         /* bank 3: the control handler by choice */
-    CONTROL_BY_SETTING = 0xB704,        /* bank 3: and by setting */
-    CHAMPION_FRAME_STEPS = 0xDFCB,      /* the selection frames' offset by step */
-    CHAMPION_FRAME_CHOICES = 0xDFD3,    /* and by choice */
-    CHAMPION_CLASS_CELLS = 0xED9F,      /* the panels' first tile and attributes by class */
-    CHAMPION_ENTRY_PLACES = 0xEDCF,     /* the four entries' cells and map places */
-    CHAMPION_CHOICE_ATTRS = 0xEDDF      /* the chosen car's cell attributes */
-};
-
-static uint32_t picture_unpack(uint32_t end)
+static uint32_t picture_unpack(MenuPicture p)
 {
-    return unpack(end, picture, sizeof picture);
+    return menu_picture_unpack(p, picture, sizeof picture);
 }
 
-static void palette_load(uint8_t bank, uint16_t addr);
-
-static void palette_from(uint32_t at)
+static void palette_from(MenuPalette p)
 {
-    palette_load((uint8_t)(at >> 16), (uint16_t)at);
-}
+    int i;
 
-static void sound_from(uint32_t at)
-{
-    sound_upload_cart((uint8_t)(at >> 16), (uint16_t)at);
-}
-
-static void sound_set_from(uint32_t at)
-{
-    sound_upload_packed((uint16_t)at, (uint8_t)(at >> 16));
-}
-
-static const uint8_t *cart_ref(uint32_t at)
-{
-    return cart_at((uint8_t)(at >> 16), (uint16_t)at);
+    for (i = 0; i < 256; i++)
+        pic.palette[i] = menu_palette_colour(p, i);
 }
 
 static void tiles_from_picture(nshvc_tiles set, uint32_t first, uint32_t bytes, uint32_t per_tile)
@@ -142,14 +76,6 @@ static void pages_from_picture(int first, uint32_t bytes)
 
     for (i = 0; i < bytes / 0x800; i++)
         page_write(first + (int)i, picture + i * 0x800);
-}
-
-static void palette_load(uint8_t bank, uint16_t addr)
-{
-    int i;
-
-    for (i = 0; i < 256; i++)
-        pic.palette[i] = cart16(bank, (uint16_t)(addr + i * 2));
 }
 
 /*
@@ -207,9 +133,9 @@ static void logo_open(void)
     menu_common_mode();
     sound_queue_reset();
     menu_scroll_reset();
-    palette_from(PALETTE_TITLE);
+    palette_from(MENU_PALETTE_TITLE);
     pic.palette[0] = 0;
-    video_tiles_write(menu_video.sprites, 0, cart_ref(LOGO_SPRITES), 0x720 / 32, NSHVC_TILES_PLANAR, 0x720);
+    video_tiles_write(menu_video.sprites, 0, menu_tiles(MENU_TILES_LOGO_SPRITES), 0x720 / 32, NSHVC_TILES_PLANAR, 0x720);
     actors.fast_animation = 0;
     actors.exit_request = 0;
     menu_objects_start(0);
@@ -231,25 +157,23 @@ static void title_open(void)
     pic.sub_screen = SHOW_BG2;
     pic.blend.use_fixed = 0;
     sound_upload_begin();
-    sound_set_from(SOUND_TITLE_SET);
-    sound_from(SOUND_SAMPLES_A);
-    sound_from(SOUND_SAMPLES_B);
+    menu_sounds_upload(MENU_SOUNDS_TITLE);
     sound_upload_end();
     sound_queue_reset();
     sound_set_port0(1);
     menu_scroll_reset();
-    palette_from(PALETTE_TITLE);
+    palette_from(MENU_PALETTE_TITLE);
     memcpy(pic.palette_saved, pic.palette, sizeof pic.palette);
     menu_palette_scale(0x40, 0x40, 1);
     menu_palette_scale(0x0C, 4, 32);
-    tiles_from_picture(menu_video.sprites, 0, picture_unpack(PIC_TITLE_SPRITES), 32);
-    pages_from_picture(2, picture_unpack(PIC_TITLE_BG2_PAGE2));
-    video_tiles_write(menu_video.tiles_text, 0, cart_ref(TITLE_TEXT_TILES), 0x40 / 16, NSHVC_TILES_PLANAR, 0x40);
-    tiles_from_picture(menu_video.tiles_a, 0, picture_unpack(PIC_TITLE_BG1_TILES), 32);
-    pages_from_picture(0, picture_unpack(PIC_TITLE_BG1_MAP));
-    tiles_from_picture(menu_video.tiles_b, 0, picture_unpack(PIC_TITLE_BG2_TILES), 32);
-    pages_from_picture(1, picture_unpack(PIC_TITLE_BG2_PAGE1));
-    n = picture_unpack(PIC_TITLE_CHECKS_MAP);
+    tiles_from_picture(menu_video.sprites, 0, picture_unpack(MENU_PIC_TITLE_SPRITES), 32);
+    pages_from_picture(2, picture_unpack(MENU_PIC_TITLE_BG2_PAGE2));
+    video_tiles_write(menu_video.tiles_text, 0, menu_tiles(MENU_TILES_TITLE_TEXT), 0x40 / 16, NSHVC_TILES_PLANAR, 0x40);
+    tiles_from_picture(menu_video.tiles_a, 0, picture_unpack(MENU_PIC_TITLE_BG1_TILES), 32);
+    pages_from_picture(0, picture_unpack(MENU_PIC_TITLE_BG1_MAP));
+    tiles_from_picture(menu_video.tiles_b, 0, picture_unpack(MENU_PIC_TITLE_BG2_TILES), 32);
+    pages_from_picture(1, picture_unpack(MENU_PIC_TITLE_BG2_PAGE1));
+    n = picture_unpack(MENU_PIC_TITLE_CHECKS_MAP);
     for (i = 0; n >= 0x800 && i < 1; i++)
         video_map_write(menu_video.text, 0, 0, 32, 32, (const uint16_t *)picture);
     frame_state.menu_pressed[0] = 0;
@@ -269,7 +193,7 @@ static void title_open(void)
  */
 void menu_load_screen_open(void)
 {
-    video_tiles_write(tiles_load, 0, cart_ref(LOADER_TILES), 4, NSHVC_TILES_PLANAR, 4 * 32);
+    video_tiles_write(tiles_load, 0, menu_tiles(MENU_TILES_LOADER), 4, NSHVC_TILES_PLANAR, 4 * 32);
     pic.mode = 3;
     pic.bg[1].tiles = tiles_load;
     pic.bg[1].map = menu_video.text;
@@ -292,7 +216,7 @@ void menu_grid_load(uint16_t first_tile, int page)
     int x, y;
 
     memset(w, 0, sizeof w);
-    picture_unpack(PIC_GRANITE_MAP);
+    picture_unpack(MENU_PIC_GRANITE_MAP);
     memcpy(w, picture, 0x700);
     for (y = 0; y < 28; y++)
         for (x = 0; x < 32; x++)
@@ -318,25 +242,25 @@ void menu_load_step(Actor *a)
 
     switch (a->count++) {
     case 0:                             /* D1F7 */
-        tiles_from_picture(tiles_menu, 0, picture_unpack(PIC_MENU_BG2_TILES), 32);
+        tiles_from_picture(tiles_menu, 0, picture_unpack(MENU_PIC_MENU_BG2_TILES), 32);
         break;
     case 1:                             /* D234 */
-        n = picture_unpack(PIC_MENU_BG2_MAP);
+        n = picture_unpack(MENU_PIC_MENU_BG2_MAP);
         pages_from_picture(2, n);
         break;
     case 2:                             /* D26F */
         menu_grid_load(0x0000, 0);
         break;
     case 3:                             /* D2C9, and the next three steps upload it */
-        n = picture_unpack(PIC_MENU_SPRITES);
+        n = picture_unpack(MENU_PIC_MENU_SPRITES);
         tiles_from_picture(menu_video.sprites, 0, n < 0x4000 ? n : 0x4000, 32);
         break;
     case 4: case 5: case 6:             /* D304, D333, D362 */
         break;
     case 7:                             /* D391 */
-        n = picture_unpack(PIC_GRANITE_FRAMES);
+        n = picture_unpack(MENU_PIC_GRANITE_FRAMES);
         memcpy(frames_tiles, picture, sizeof frames_tiles);
-        n = picture_unpack(PIC_SPRITE_FRAMES);
+        n = picture_unpack(MENU_PIC_SPRITE_FRAMES);
         memcpy(frames_sprites, picture, sizeof frames_sprites);
         (void)n;
         break;
@@ -522,7 +446,7 @@ static void preview_full_mode(void)
 /* The palette and its full colours for the course menu. */
 static void preview_palette(void)
 {
-    palette_from(PALETTE_MENU);
+    palette_from(MENU_PALETTE_MENU);
     pic.palette[0] = 0;
     memcpy(pic.palette_saved, pic.palette, sizeof pic.palette);
     menu_palette_scale(0x90, 8, 0x20);
@@ -549,16 +473,16 @@ static void preview_open(void)
     preview_full_mode();
     pic.bg[0].scroll_x = 0x0100;        /* the second page */
     preview_palette();
-    tiles_from_picture(tiles_menu, 0, picture_unpack(PIC_MENU_BG2_TILES), 32);
-    pages_from_picture(2, picture_unpack(PIC_MENU_BG2_MAP));
+    tiles_from_picture(tiles_menu, 0, picture_unpack(MENU_PIC_MENU_BG2_TILES), 32);
+    pages_from_picture(2, picture_unpack(MENU_PIC_MENU_BG2_MAP));
     menu_grid_load(0x0000, 0);
     {
-        uint32_t n = picture_unpack(PIC_MENU_SPRITES);
+        uint32_t n = picture_unpack(MENU_PIC_MENU_SPRITES);
 
         tiles_from_picture(menu_video.sprites, 0, n < 0x4000 ? n : 0x4000, 32);
-        picture_unpack(PIC_GRANITE_FRAMES);
+        picture_unpack(MENU_PIC_GRANITE_FRAMES);
         memcpy(frames_tiles, picture, sizeof frames_tiles);
-        picture_unpack(PIC_SPRITE_FRAMES);
+        picture_unpack(MENU_PIC_SPRITE_FRAMES);
         memcpy(frames_sprites, picture, sizeof frames_sprites);
     }
     sound_hold_a = 0;
@@ -580,7 +504,7 @@ static void preview_fade_begin(void)
     actors_spawn_list(0x10);
     memset(pic.palette, 0, 12 * 2);
     for (i = 0; i < 12; i++)
-        pic.palette_saved[i] = cart16(PALETTE_BANK, (uint16_t)((uint16_t)PALETTE_MENU + i * 2));
+        pic.palette_saved[i] = menu_palette_colour(MENU_PALETTE_MENU, i);
     menu_window_car_origin();
     RaceStart();
     menu.slide_top = menu.slide_top_next = 0;
@@ -643,7 +567,7 @@ int MenuScreen0Run(void)
     switch (state) {
     case S_SOUND_START:
         sound_upload_begin();
-        sound_from(SOUND_LOGO_SET);
+        menu_sounds_upload(MENU_SOUNDS_LOGO);
         sound_upload_end();
         state = S_LOGO_OPEN;
         /* fall through */
@@ -862,9 +786,6 @@ int CourseMenuRun(void)
 
 /* --- selection results, kept in the save ------------------------------- */
 
-static uint16_t handler_table_a(uint16_t i) { return cart16(SELECTION_BANK, (uint16_t)(CONTROL_BY_CHOICE + i * 2)); }
-static uint16_t handler_table_b(uint16_t i) { return cart16(SELECTION_BANK, (uint16_t)(CONTROL_BY_SETTING + i * 2)); }
-
 /*
  * @routine 03:B548 SelectionCommit
  * WHAT IT DOES: Records the two players' choices: their handler addresses,
@@ -875,18 +796,17 @@ void SelectionCommit(void)
 {
     uint16_t v;
 
-    g.selection_handler[0] = handler_table_a(g.choice_p1);    /* $18DB */
-    g.selection_handler[1] = handler_table_a(g.choice_p2);    /* $18DD */
-    v = (uint16_t)((cart16(SELECTION_BANK, (uint16_t)(SELECTION_SAVED + ((g.choice_p2 & 3) << 1))) << 4)
-                   | cart16(SELECTION_BANK, (uint16_t)(SELECTION_SAVED + ((g.choice_p1 & 3) << 1))));
+    g.selection_handler[0] = selection_control_by_choice(g.choice_p1);    /* $18DB */
+    g.selection_handler[1] = selection_control_by_choice(g.choice_p2);    /* $18DD */
+    v = (uint16_t)(selection_choice_saved(g.choice_p2) << 4 | selection_choice_saved(g.choice_p1));
     save.cars_battle = (uint8_t)v;
     SaveChecksum();
     g.selection_out[0] = 0;
     g.selection_out[1] = 0;
     if (g.choice_p1 == g.choice_p2)
-        g.selection_out[1] = cart16(SELECTION_BANK, (uint16_t)(SELECTION_PAIR_MODELS + g.choice_p2 * 2));
-    g.selection_derived[0] = cart16(SELECTION_BANK, (uint16_t)(SELECTION_PAIR_ROWS + ((g.choice_p1 << 2) + g.selection_out[0]) * 2));
-    g.selection_derived[1] = cart16(SELECTION_BANK, (uint16_t)(SELECTION_PAIR_ROWS + ((g.choice_p2 << 2) + g.selection_out[1]) * 2));
+        g.selection_out[1] = selection_pair_model(g.choice_p2);
+    g.selection_derived[0] = selection_pair_row(g.choice_p1, g.selection_out[0]);
+    g.selection_derived[1] = selection_pair_row(g.choice_p2, g.selection_out[1]);
 }
 
 /*
@@ -896,15 +816,15 @@ void SelectionCommit(void)
  */
 void SelectionSave(void)
 {
-    uint16_t entry = cart16(SELECTION_BANK, (uint16_t)(SELECTION_SAVED + ((g.choice_p1 & 3) << 1)));
+    uint16_t entry = selection_choice_saved(g.choice_p1);
 
-    g.selection_handler[0] = handler_table_a(g.choice_p1);
-    g.selection_handler[1] = handler_table_b(g.choices[0]);
-    g.selection_handler[2] = handler_table_b(g.choices[1]);
-    g.selection_handler[3] = handler_table_b(g.choices[2]);
+    g.selection_handler[0] = selection_control_by_choice(g.choice_p1);
+    g.selection_handler[1] = selection_control_by_setting(g.choices[0]);
+    g.selection_handler[2] = selection_control_by_setting(g.choices[1]);
+    g.selection_handler[3] = selection_control_by_setting(g.choices[2]);
     SelectionDerive();
     if (g.menu_mode == 3)
-        save.car_mode3 = (uint8_t)cart16(SELECTION_BANK, (uint16_t)(SELECTION_SAVED + ((g.choice_p1 & 3) << 1)));
+        save.car_mode3 = (uint8_t)selection_choice_saved(g.choice_p1);
     else if (g.menu_mode == 1)
         save.cars_mode01 = (uint8_t)((save.cars_mode01 & 0x03) | (entry << 4));
     else
@@ -996,7 +916,7 @@ void MenuCursorFourWay(void)
     if (g.time_override) {
         g.flash_sprite_pos = (uint16_t)((g.flash_sprite_pos & 0xFF00) | 0x88);
     } else {
-        g.cursor_column_x = cart8(COURSE_BANK, (uint16_t)(CURSOR_COLUMNS + g.champ_stage));
+        g.cursor_column_x = menu_cursor_column(g.champ_stage);
         g.flash_sprite_pos = (uint16_t)((g.flash_sprite_pos & 0xFF00) | g.cursor_column_x);
     }
 }
@@ -1013,8 +933,7 @@ static int champion_state = C_OPEN;
  */
 void menu_champion_frames_tile(uint16_t step)
 {
-    uint16_t off = (uint16_t)(cart16(MENU_BANK, (uint16_t)(CHAMPION_FRAME_STEPS + step * 2))
-                              + cart16(MENU_BANK, (uint16_t)(CHAMPION_FRAME_CHOICES + (g.choice_p1 & 3) * 2)));
+    uint16_t off = menu_champion_frame(step, g.choice_p1);
 
     video_tiles_write(menu_video.tiles_a, 0x15C, &champion_frames[off], 4, NSHVC_TILES_PLANAR, 4 * 32);
 }
@@ -1073,9 +992,7 @@ static void champion_open(void)
     menu_lines_set(MENU_LINES_CHAMPION, 0);
 
     sound_upload_begin();
-    sound_set_from(SOUND_CHAMPION_SET);
-    sound_from(SOUND_SAMPLES_A);
-    sound_from(SOUND_SAMPLES_B);
+    menu_sounds_upload(MENU_SOUNDS_CHAMPION);
     sound_upload_end();
     sound_queue_reset();
     sound_set_port0(1);
@@ -1085,7 +1002,7 @@ static void champion_open(void)
         save.progress = (uint8_t)(save.progress | (1 << g.course_class));
     SaveChecksum();
 
-    palette_from(PALETTE_CHAMPION);
+    palette_from(MENU_PALETTE_CHAMPION);
     memcpy(pic.palette_saved, pic.palette, sizeof pic.palette);
 
     /* the table entries the window step and the blink change, as they start */
@@ -1093,9 +1010,9 @@ static void champion_open(void)
     *menu_table_byte(MENU_TABLE_CHAMPION_WINDOW_B, 5) = 0;     /* the third run's value */
     *menu_table_byte(MENU_TABLE_CHAMPION_WINDOW_B, 7) = 0;     /* the fourth run's */
 
-    picture_unpack(PIC_GRANITE_FRAMES);
+    picture_unpack(MENU_PIC_GRANITE_FRAMES);
     memcpy(frames_tiles, picture, sizeof frames_tiles);
-    n = picture_unpack(PIC_GRANITE_MAP);
+    n = picture_unpack(MENU_PIC_GRANITE_MAP);
     {
         uint16_t w[0x400];
 
@@ -1104,27 +1021,25 @@ static void champion_open(void)
             w[x] = (uint16_t)(w[x] + 0x0100);
         page_write(0, w);
     }
-    tiles_from_picture(menu_video.sprites, 0, picture_unpack(PIC_CHAMPION_SPRITES), 32);
+    tiles_from_picture(menu_video.sprites, 0, picture_unpack(MENU_PIC_CHAMPION_SPRITES), 32);
     /* one picture at video word $2000, which both backgrounds read: BG1's
        8-bit tiles from $100 and BG2's 4-bit tiles from $200 (the courses'
        names in the panels' boxes) */
-    n = picture_unpack(PIC_CHAMPION_8BPP);
+    n = picture_unpack(MENU_PIC_CHAMPION_8BPP);
     tiles_from_picture(tiles_8bpp, 0x100, n, 64);
     tiles_from_picture(menu_video.tiles_a, 0x200, n, 32);
-    tiles_from_picture(menu_video.tiles_a, 0, picture_unpack(PIC_CHAMPION_BG2_TILES), 32);
+    tiles_from_picture(menu_video.tiles_a, 0, picture_unpack(MENU_PIC_CHAMPION_BG2_TILES), 32);
 
-    n = picture_unpack(PIC_CHAMPION_MAP);
+    n = picture_unpack(MENU_PIC_CHAMPION_MAP);
     map = picture;
     {
-        uint16_t tbl_off = (uint16_t)(g.course_class << 4);
-
         /* the four panel entries, coloured for the class */
         for (rowi = 3, rows = 0; rowi >= 0; rowi--, rows++) {
-            uint16_t base = cart16(MENU_BANK, (uint16_t)(CHAMPION_CLASS_CELLS + tbl_off));
-            uint16_t attr = cart16(MENU_BANK, (uint16_t)(CHAMPION_CLASS_CELLS + 2 + tbl_off));
-            uint16_t at = cart16(MENU_BANK, (uint16_t)(CHAMPION_ENTRY_PLACES + 8 + rowi * 2));
-            uint16_t cells = cart16(MENU_BANK, (uint16_t)(CHAMPION_ENTRY_PLACES + rowi * 2));
+            uint16_t base, attr, at, cells;
             int y, c;
+
+            menu_champion_panel_cells(g.course_class, rows, &base, &attr);
+            menu_champion_entry_places(rowi, &cells, &at);
 
             for (y = 0; y <= 4; y++) {
                 for (c = 0; c <= 0x0B; c++) {
@@ -1155,15 +1070,14 @@ static void champion_open(void)
                     v++;
                 }
             }
-            tbl_off = (uint16_t)(tbl_off + 4);
         }
     }
-    cell_attributes(map, 0x0628, cart16(MENU_BANK, (uint16_t)(CHAMPION_CHOICE_ATTRS + (g.choice_p1 & 3) * 2)));
-    cell_attributes(map, 0x052E, cart16(MENU_BANK, (uint16_t)(CHAMPION_CHOICE_ATTRS + (g.choice_p1 & 3) * 2)));
+    cell_attributes(map, 0x0628, menu_champion_choice_attributes(g.choice_p1));
+    cell_attributes(map, 0x052E, menu_champion_choice_attributes(g.choice_p1));
     for (x = 0; x < 2; x++)
         page_write(1 + x, map + x * 0x800);
 
-    picture_unpack(PIC_CHAMPION_FRAMES);
+    picture_unpack(MENU_PIC_CHAMPION_FRAMES);
     memcpy(champion_frames, picture, sizeof champion_frames);
 
     menu_state_clear();

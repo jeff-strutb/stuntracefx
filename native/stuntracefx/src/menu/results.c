@@ -5,7 +5,7 @@
 #include <stdio.h>
 
 #include "audio/sound.h"
-#include "data/cart.h"
+#include "data/menu_tables.h"
 #include "menu/actors.h"
 #include "menu/menu.h"
 #include "menu/menu_tables.h"
@@ -13,15 +13,6 @@
 #include "system/game.h"
 #include "system/state.h"
 #include "video/picture.h"
-
-/* The results' tables in bank $0B. */
-enum {
-    MENU_BANK = 0x0B,
-    CAR_ANIMATIONS = 0xDA0F,            /* a place's car animation by car */
-    LEADER_CAR_ANIMATIONS = 0xDA17,     /* the leader's */
-    LEADER_PALETTES = 0xDA86,           /* the leader marker's two palettes */
-    LETTER_TILES = 0xDDD3               /* a letter's tile, 0-31 */
-};
 
 /*
  * @routine 0B:D8A9 ResultsWaitThenRise
@@ -151,10 +142,9 @@ static void results_place_wait(Actor *a)
  */
 static void results_place_car(Actor *a)
 {
-    uint16_t base = (g.leader_place == a->vy) ? LEADER_CAR_ANIMATIONS : CAR_ANIMATIONS;
     uint8_t car = save.class_names[g.course_class][(a->vy - 1) * 3 + 2];
 
-    a->anim = cart16(MENU_BANK, (uint16_t)(base + (car & 3) * 2));
+    a->anim = menu_place_car_animation(g.leader_place == a->vy, car);
     wait_then_animate(a);
 }
 
@@ -170,7 +160,7 @@ static void results_leader_blink(Actor *a)
         a->count = 5;
         a->vy = (uint16_t)((a->vy + 1) & 1);
     }
-    group_palette_set(a, cart16(MENU_BANK, (uint16_t)(LEADER_PALETTES + a->vy * 2)));
+    group_palette_set(a, menu_leader_palette(a->vy));
     menu.leader_timer = a->count;
     menu.leader_step = a->vy;
 }
@@ -284,7 +274,7 @@ static void tile_at(uint16_t *at, uint16_t tile)
  */
 static void letter_tiles(uint16_t *at, uint16_t letter)
 {
-    uint16_t tile = cart16(MENU_BANK, (uint16_t)(LETTER_TILES + letter * 2));
+    uint16_t tile = menu_letter_tile(letter);
 
     tile_at(at, tile);
     tile_at(at, (uint16_t)(tile + 0x10));

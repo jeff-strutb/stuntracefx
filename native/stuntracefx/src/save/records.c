@@ -5,7 +5,7 @@
 #include <string.h>
 
 #include "audio/sound.h"
-#include "data/cart.h"
+#include "data/menu_tables.h"
 #include "hud/hud.h"
 #include "race/race.h"
 #include "nshvc/nshvc.h"
@@ -15,16 +15,6 @@
 SaveFile save;
 
 static const char SAVE_NAME[] = "save";
-
-/* The tables the records read, in bank $07. */
-enum {
-    RECORDS_BANK = 0x07,
-    RECORD_TAGS = 0xB4EB,               /* each sorted entry's first tag */
-    PANEL_ROWS_STUNT = 0xD8D4,          /* the Stunt Trax records panel: each row's start in the map */
-    PANEL_COLUMNS_STUNT = 0xD8DC,       /* and each character's column */
-    PANEL_ROWS = 0xD8E3,                /* the other courses' panel */
-    PANEL_COLUMNS = 0xD8EB
-};
 
 void save_commit(void)
 {
@@ -321,7 +311,7 @@ static void records_load_sorted(int course, int descending)
     for (i = 0; i < 12; i++) {
         g.record_times[i] = save.blocks[course][i].value;
         g.record_names[i] = save.blocks[course][i].name;
-        g.record_tags[i] = cart16(RECORDS_BANK, (uint16_t)(RECORD_TAGS + i * 2));
+        g.record_tags[i] = records_first_tag(i);
     }
     for (i = 10; i >= 0; i--) {
         int x = i;
@@ -663,10 +653,9 @@ void RecordCompareTime1(void) { record_compare_by_mode(3); }
 
 /* The tilemap offset of a character: the row's start, plus place * 64 for
    the place, plus the character's column. */
-static uint16_t records_char_offset(uint16_t row_table, uint16_t char_table, int row, int place, int character)
+static uint16_t records_char_offset(int stunt, int row, int place, int character)
 {
-    return (uint16_t)(cart16(RECORDS_BANK, (uint16_t)(row_table + row * 2)) + place * 64
-                      + cart8(RECORDS_BANK, (uint16_t)(char_table + character)));
+    return (uint16_t)(records_panel_row_start(stunt, row) + place * 64 + records_panel_column(stunt, character));
 }
 
 /*
@@ -729,7 +718,7 @@ static uint16_t time_char_tile(const SaveEntry *e, int character)
  */
 void RecordsCharDrawStunt(void)
 {
-    uint16_t off = records_char_offset(PANEL_ROWS_STUNT, PANEL_COLUMNS_STUNT, g.panel_row, g.panel_place, g.panel_char);
+    uint16_t off = records_char_offset(1, g.panel_row, g.panel_place, g.panel_char);
     const SaveEntry *e = records_entry(g.panel_row, g.panel_place);
 
     if (e->value)
@@ -745,7 +734,7 @@ void RecordsCharDrawStunt(void)
  */
 void RecordsCharDrawAll(void)
 {
-    uint16_t off = records_char_offset(PANEL_ROWS, PANEL_COLUMNS, g.panel_row, g.panel_place, g.panel_char);
+    uint16_t off = records_char_offset(0, g.panel_row, g.panel_place, g.panel_char);
     const SaveEntry *e = records_entry(g.panel_row, g.panel_place);
 
     if (e->value != 0xFFFF)

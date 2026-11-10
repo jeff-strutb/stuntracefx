@@ -6,16 +6,12 @@
 #include <stdint.h>
 
 #include "audio/sound.h"
-#include "data/cart.h"
-#include "data/unpack.h"
+#include "data/menu_tables.h"
 #include "menu/menu.h"
 #include "race/race.h"
 #include "system/chip.h"
 #include "system/state.h"
 #include "video/video.h"
-
-/* the sprite-table word lists, in bank $0B */
-enum { MENU_BANK = 0x0B, SPRITE_LISTS = 0xFCA2 };
 
 /* where the chip unpacks a picture in its RAM, and the course pictures'
    places in it by course (a table in the data block, as the original's) */
@@ -38,29 +34,28 @@ static void sprite_word(int n, int look, uint16_t w)
  * WHAT IT DOES: Copies words from a list at $0B:FCA2 into the sprites from
  * sprite `first`, a place then a look each, until a $FFFF word.
  */
-static void sprites_from_list(int first, uint16_t list)
+static void sprites_from_list(int first, MenuSpriteList list)
 {
     uint16_t w;
     int k = 0;
 
-    while ((w = cart16(MENU_BANK, (uint16_t)(SPRITE_LISTS + list))) != 0xFFFF) {
+    while ((w = menu_course_sprite_word(list, k)) != 0xFFFF) {
         sprite_word(first + k / 2, k & 1, w);
         k++;
-        list = (uint16_t)(list + 2);
     }
 }
 
 /* The same into the sprites' X ninth bits and sizes from sprite `first`:
    each word eight sprites' (the original's high table, two bytes). */
-static void sprite_highs_from_list(int first, uint16_t list)
+static void sprite_highs_from_list(int first, MenuSpriteList list)
 {
     uint16_t w;
+    int k = 0;
 
-    while ((w = cart16(MENU_BANK, (uint16_t)(SPRITE_LISTS + list))) != 0xFFFF) {
+    while ((w = menu_course_sprite_word(list, k++)) != 0xFFFF) {
         sprite_high_set(first, (uint8_t)w);
         sprite_high_set(first + 4, (uint8_t)(w >> 8));
         first += 8;
-        list = (uint16_t)(list + 2);
     }
 }
 
@@ -103,12 +98,12 @@ void MenuCourseScreenSetup(void)
     for (i = 0; i < 128; i += 4)        /* every X ninth bit set, every sprite small */
         sprite_high_set(i, 0x55);
     /* four sprite groups: the first half's from sprite 0, the second's from 64 */
-    sprites_from_list(0, 0x0000);
-    sprite_highs_from_list(0, 0x0154);
-    sprites_from_list(64, 0x00A8);
-    sprite_highs_from_list(64, 0x0162);
+    sprites_from_list(0, MENU_COURSE_SPRITES_0);
+    sprite_highs_from_list(0, MENU_COURSE_SPRITES_0_SIZES);
+    sprites_from_list(64, MENU_COURSE_SPRITES_64);
+    sprite_highs_from_list(64, MENU_COURSE_SPRITES_64_SIZES);
     OamDmaAll();
-    unpack((uint32_t)0x1D << 16 | 0xD970, fx_ram + 0x3000, 0xC000);
+    menu_picture_unpack(MENU_PIC_COURSE_PICTURES, fx_ram + CHIP_PICTURE, 0xC000);
     course_picture_to_art();
     sprites_use_tiles(race_video.tiles, 0x200, 0x300);
     g.raster_chain = RASTER_TWO_PLAYERS;    /* the original's stage $08 */

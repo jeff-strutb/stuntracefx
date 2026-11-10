@@ -23,6 +23,51 @@ uint8_t menu_selection_model(int choice, int row);      /* a racer's model by it
 uint16_t menu_setting_animation(int setting, int row);  /* the animation that shows a setting's value */
 uint16_t menu_setting_object(int i);                    /* the kind of the object that shows setting i */
 
+/* --- the screens' pictures, tiles, palettes and sounds -------------------- */
+
+typedef enum {
+    MENU_PIC_TITLE_SPRITES, MENU_PIC_TITLE_BG2_PAGE2, MENU_PIC_TITLE_BG1_TILES, MENU_PIC_TITLE_BG1_MAP,
+    MENU_PIC_TITLE_BG2_TILES, MENU_PIC_TITLE_BG2_PAGE1, MENU_PIC_TITLE_CHECKS_MAP,
+    MENU_PIC_GRANITE_MAP, MENU_PIC_MENU_BG2_TILES, MENU_PIC_MENU_BG2_MAP, MENU_PIC_MENU_SPRITES,
+    MENU_PIC_GRANITE_FRAMES,            /* the granite's eight animated frames */
+    MENU_PIC_SPRITE_FRAMES,             /* the objects' animation frames */
+    MENU_PIC_CHAMPION_FRAMES,           /* the championship's selection frames */
+    MENU_PIC_CHAMPION_SPRITES, MENU_PIC_CHAMPION_8BPP, MENU_PIC_CHAMPION_BG2_TILES, MENU_PIC_CHAMPION_MAP,
+    MENU_PIC_COURSE_PICTURES,           /* the two-player race screen's course pictures */
+    MENU_PICS
+} MenuPicture;
+uint32_t menu_picture_unpack(MenuPicture p, uint8_t *to, uint32_t room);   /* its size, 0 if `room` is short */
+
+/* the two sets of animation frames, as the objects' frame art names its place in them */
+typedef enum { MENU_FRAMES_SPRITES, MENU_FRAMES_GRANITE } MenuFrames;
+MenuFrames menu_frames_place(uint16_t art, uint32_t *at);
+
+typedef enum {
+    MENU_TILES_LOGO_SPRITES,            /* the logo's sprites, $720 bytes */
+    MENU_TILES_TITLE_TEXT,              /* the title's checks, four tiles */
+    MENU_TILES_LOADER                   /* the loading screen's four */
+} MenuTiles;
+const uint8_t *menu_tiles(MenuTiles t);                 /* raw 4-bit tiles */
+
+typedef enum { MENU_PALETTE_TITLE, MENU_PALETTE_MENU, MENU_PALETTE_CHAMPION } MenuPalette;
+uint16_t menu_palette_colour(MenuPalette p, int i);     /* colour i, 0-255 */
+
+typedef enum { MENU_SOUNDS_LOGO, MENU_SOUNDS_TITLE, MENU_SOUNDS_CHAMPION } MenuSounds;
+void menu_sounds_upload(MenuSounds s);                  /* between sound_upload_begin and sound_upload_end */
+
+/* --- the selection and the championship's screens -------------------------- */
+
+uint16_t selection_control_by_choice(int choice);       /* the control a car's choice gives (a reference the race resolves) */
+uint16_t selection_control_by_setting(int setting);     /* and a setting's */
+uint16_t selection_choice_saved(int choice);            /* a choice (0-3) as the save keeps it */
+uint16_t selection_pair_model(int choice);              /* player 2's model when both choose the same */
+uint16_t selection_pair_row(int choice, int model);     /* a player's word by choice and model */
+uint8_t menu_cursor_column(int stage);                  /* the class cursor's column by championship stage */
+uint16_t menu_champion_frame(int step, int choice);     /* a selection frame's place in the frames, by step and choice (0-3) */
+void menu_champion_panel_cells(int class_, int entry, uint16_t *first_tile, uint16_t *attributes);  /* entry 0-3 */
+void menu_champion_entry_places(int entry, uint16_t *cells, uint16_t *map_at);   /* entry 0-3's cells and map place */
+uint16_t menu_champion_choice_attributes(int choice);   /* the chosen car's cell attributes, by choice (0-3) */
+
 /* --- the objects ---------------------------------------------------------- */
 
 /* The objects' block: their sprite groups and the screens' per-line tables,
@@ -67,6 +112,26 @@ typedef enum {
 uint32_t menu_table_place(MenuTable t);                 /* its place in the block */
 enum { MENU_LINE_TABLES_BYTES = 0x81 };                 /* the block's bytes the per-line tables are in, */
 uint32_t menu_line_tables_place(void);                  /* from here */
+
+/* --- the championship's results, the two-player race screen ---------------- */
+
+uint16_t menu_place_car_animation(int leader, int car); /* a place's car animation by car (0-3), the leader's or the others' */
+uint16_t menu_leader_palette(int step);                 /* the leader marker's palette bits, by its blink's step (0-1) */
+uint16_t menu_letter_tile(int letter);                  /* a results name's letter tile, 0-31 */
+
+/* the two-player race screen's sprite lists: places and looks of sprites 0
+   and 64 up, then their X ninth bits and sizes; each ended by $FFFF */
+typedef enum {
+    MENU_COURSE_SPRITES_0, MENU_COURSE_SPRITES_0_SIZES,
+    MENU_COURSE_SPRITES_64, MENU_COURSE_SPRITES_64_SIZES
+} MenuSpriteList;
+uint16_t menu_course_sprite_word(MenuSpriteList list, int k);  /* word k of the list */
+
+/* --- the records ---------------------------------------------------------- */
+
+uint16_t records_first_tag(int entry);                  /* each sorted entry's first tag, 0-11 */
+uint16_t records_panel_row_start(int stunt, int row);   /* a records panel's row in the map, Stunt Trax's or the others' */
+uint8_t records_panel_column(int stunt, int character); /* and a character's column in it */
 
 /* the menus' words a per-line table's run names */
 typedef enum {
