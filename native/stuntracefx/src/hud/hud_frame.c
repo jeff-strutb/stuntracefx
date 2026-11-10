@@ -219,21 +219,21 @@ void HudSlideOut(void)
 /* The slide plus the panel's offset, into its sprites' X (the field at the
    start of each sprite's four bytes, where the original wrote it): sprites
    in the table below plus the panel's first sprite `base`. */
-static void hud_sprites_y(uint8_t y_offset, int base)
+static void hud_panel_sprites_x(uint8_t x_offset, int base)
 {
     static const int row[4][2] = {{39, 43}, {40, 44}, {41, 45}, {42, 46}};
     static const struct { uint8_t add; int clc; int sprite; } tail[3] = {
         {0x0A, 0, 36}, {0x18, 0, 37}, {0x26, 1, 38}};
-    uint8_t v0 = (uint8_t)(g.hud_slide + y_offset), v = v0, y;
+    uint8_t v0 = (uint8_t)(g.hud_slide + x_offset), v = v0, x;
 
     for (int i = 0; i < 4; i++) {
         if (i)
             v = (uint8_t)(v + 0x10);
-        y = SpriteYOnScreen(v);
-        sprite_x_set(row[i][0] + base, y);
-        sprite_x_set(row[i][1] + base, y);
+        x = SpriteYOnScreen(v);
+        sprite_x_set(row[i][0] + base, x);
+        sprite_x_set(row[i][1] + base, x);
     }
-    /* The tail's first two sit a line lower after a sprite at or past line
+    /* The tail's first two sit a pixel further after a sprite at or past X
        $B0 (the original's add took the carry of the test before it); the
        third does not. */
     for (int i = 0; i < 3; i++) {
@@ -244,7 +244,7 @@ static void hud_sprites_y(uint8_t y_offset, int base)
     }
 }
 
-static void hud_panel_slide(uint8_t y_offset, int base, int panel_a)
+static void hud_panel_slide(uint8_t x_offset, int base, int panel_a)
 {
     if (g.start_light < 0x08)
         return;
@@ -257,7 +257,7 @@ static void hud_panel_slide(uint8_t y_offset, int base, int panel_a)
             HudSlideOut();
         }
     }
-    hud_sprites_y(y_offset, base);
+    hud_panel_sprites_x(x_offset, base);
 }
 
 /* @routine 7E:AE18 HudPanelASlide */
@@ -266,9 +266,9 @@ void HudPanelASlide(void) { hud_panel_slide(0xF8, 8, 1); }
 void HudPanelBSlide(void) { hud_panel_slide(0x4A, 0x48, 0); }
 
 /* Panel B's place for its two sprite pairs, $70-$73: into their X, where the original wrote it. */
-static void hud_panel_b_y(void)
+static void hud_panel_b_x(void)
 {
-    uint8_t v = (uint8_t)(g.hud_panel_b_y - 0x0D);
+    uint8_t v = (uint8_t)(g.hud_panel_b_x - 0x0D);
 
     sprite_x_set(0x70, v);
     sprite_x_set(0x72, v);
@@ -279,15 +279,15 @@ static void hud_panel_b_y(void)
 
 /* The map marker's place and the column of places after it, $FF once a
    step carries: into sprites $74-$7F's X, where the original wrote it. */
-static void hud_marker_y(void)
+static void hud_marker_x(void)
 {
     static const struct { uint8_t add; int sprite[2]; int n; } step[6] = {
         {0x08, {0x74, 0}, 1}, {0x06, {0x7A, 0x7B}, 2}, {0x08, {0x7C, 0x7D}, 2},
         {0x08, {0x75, 0}, 1}, {0x08, {0x76, 0x77}, 2}, {0x08, {0x78, 0x79}, 2}};
-    unsigned sum = g.hud_marker_y;
+    unsigned sum = g.hud_marker_x;
 
-    sprite_x_set(0x7E, g.hud_marker_y);
-    sprite_x_set(0x7F, g.hud_marker_y);
+    sprite_x_set(0x7E, g.hud_marker_x);
+    sprite_x_set(0x7F, g.hud_marker_x);
     for (int i = 0; i < 6; i++) {
         unsigned r = (sum & 0xFF) + step[i].add;
 
@@ -335,7 +335,7 @@ static void hud_gauge_b_x(void)
 /*
  * @routine 7E:AE5E HudPanelsStep
  * WHAT IT DOES: The HUD panels' stage: the map marker up to $AC, gauge B's
- * X right to $1F, panel B's Y down to $2A, then slid in or out.
+ * X right to $1F, panel B's X out to $2A, then slid in or out.
  */
 void HudPanelsStep(void)
 {
@@ -343,11 +343,11 @@ void HudPanelsStep(void)
 
     switch (g.start_light) {
     case 0x02:
-        v = (uint8_t)(g.hud_marker_y - 0x04);
+        v = (uint8_t)(g.hud_marker_x - 0x04);
         if (v < 0xAC)
             v = 0xAC;
-        g.hud_marker_y = v;
-        hud_marker_y();
+        g.hud_marker_x = v;
+        hud_marker_x();
         break;
     case 0x04:
         v = (uint8_t)(g.gauge_place[4] + 0x04);
@@ -357,13 +357,13 @@ void HudPanelsStep(void)
         hud_gauge_b_x();
         break;
     case 0x06:
-        v = (uint8_t)(g.hud_panel_b_y + 0x04);
+        v = (uint8_t)(g.hud_panel_b_x + 0x04);
         if (!(v & 0x80) && v >= 0x2A) {
             g.hud_map_y_b = 0x7C;
             v = 0x2A;
         }
-        g.hud_panel_b_y = v;
-        hud_panel_b_y();
+        g.hud_panel_b_x = v;
+        hud_panel_b_x();
         break;
     case 0x08:
     case 0x0A:
@@ -371,7 +371,7 @@ void HudPanelsStep(void)
             HudSlideIn();
         else
             HudSlideOut();
-        hud_sprites_y(0, 0);
+        hud_panel_sprites_x(0, 0);
         break;
     default:
         break;

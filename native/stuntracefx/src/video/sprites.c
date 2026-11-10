@@ -168,7 +168,7 @@ void OamDirectStage(void)
     }
     switch (g.start_light) {
     case 0x02:
-        if (g.hud_marker_y == 0xAC)
+        if (g.hud_marker_x == 0xAC)
             g.start_light = (uint8_t)(g.start_light + 2);
         /* fall through */
     case 0x00:
@@ -180,7 +180,7 @@ void OamDirectStage(void)
         memcpy(&pic.sprites[band[1].first], &sprites[band[1].first], band[1].count * sizeof sprites[0]);
         break;
     case 0x06:
-        if (g.hud_panel_b_y == 0x2A) {
+        if (g.hud_panel_b_x == 0x2A) {
             g.end_panel_in = 0x2A;
             g.start_light = 0;
         }

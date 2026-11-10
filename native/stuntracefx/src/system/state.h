@@ -254,12 +254,12 @@ typedef struct {
     uint16_t hud_hold;                  /* $0E5D: the HUD's hold, bit 15 and low byte used apart */
     uint16_t time_sprite_base;          /* $0E60: table offset of the time's first sprite */
     uint8_t hud_slide;                  /* $0D57: the sliding panel's offset, $10 fully shown */
-    uint8_t hud_panel_b_y;              /* $0E0B */
+    uint8_t hud_panel_b_x;              /* $0E0B: panel B's X as it slides out to $2A */
     uint8_t hud_map_origin_x[2];        /* $0E09 panel B, $0E0A panel A */
     uint8_t hud_map_y_b, hud_map_y_a;   /* $0E0C, $0E0D */
     uint8_t gauge_place[8];             /* $0E0E-$0E15: the gauges' X and Y bytes */
     uint8_t gauge_one[2];               /* $0DF9, $0DFA: each panel's four-sprite gauge value */
-    uint8_t hud_marker_y;               /* $0E16 */
+    uint8_t hud_marker_x;               /* $0E16: the map marker's X as it slides in to $AC */
     uint16_t slide_value, slide_step, slide_target, slide_direction; /* $19F6, $19F8, $19FA, $19FC */
     uint16_t oam_first_free;            /* $0D7B */
     uint16_t hud_point_index;           /* $0D6B */
