@@ -119,8 +119,8 @@ void HitsCollect(uint16_t rec)
     if (g.time_up_shown)
         return;
     sound_port0_push(0x35);
-    GsuRecordRaise6A(rec, 0x7F);
-    GsuRecordLower82(rec, 0x7F);
+    GsuRecordBoostRaise(rec, 0x7F);
+    GsuRecordRepair(rec, 0x7F);
     HitsToScoreAdd();
 }
 

@@ -85,8 +85,8 @@ void ObjectLampLow(Object *o)
     handler_none(o);
 }
 
-/* @routine 09:8C0F ObjectScale40 */
-void ObjectScale40(Object *o)
+/* @routine 09:8C0F ObjectScale40: heading $40, a quarter turn */
+void ObjectHeading90(Object *o)
 {
     o->heading = 0x40;
 }
@@ -104,8 +104,8 @@ void ObjectScoreGateStep(Object *o)
 /* @routine 09:8CAF ObjectScoreGateRecord */
 void ObjectScoreGateRecord(Object *o)
 {
-    GsuRecordNew42D(o);
-    GsuRecordFlag10(o);
+    GsuRecordNewTrigger(o);
+    GsuRecordSolid(o);
     GsuRecordPosition(o, 0x0F00, 0x0F00, 0x0F00);
     ObjectScoreGateStep(o);
 }
@@ -217,7 +217,7 @@ void ObjectFlyingPieceStep(Object *o)
 void ObjectFlyingPiece(Object *o)
 {
     handler(o, H9_FLYING_PIECE_STEP);
-    if (!GsuRecordNew424Piece(o)) {
+    if (!GsuRecordNewBouncing(o)) {
         ObjectRelease(o);
         return;
     }
@@ -274,9 +274,9 @@ void ObjectFireworkShellStep(Object *o)
 /* @routine 09:8E2D ObjectFireworkShellRecord */
 void ObjectFireworkShellRecord(Object *o)
 {
-    GsuRecordNew424Piece(o);
+    GsuRecordNewBouncing(o);
     GsuRecordVelocity(o);
-    GsuRecordSet2AHigh(o, 0x08);
+    GsuRecordSetMass(o, 0x08);
     GsuRecordPosition(o, 0x0190, 0x0190, 0x0190);
     ObjectFireworkShellStep(o);
 }
@@ -331,8 +331,8 @@ void ObjectFinishGateStep(Object *o)
 /* @routine 09:9066 ObjectFinishGateRecord */
 void ObjectFinishGateRecord(Object *o)
 {
-    GsuRecordNew42D(o);
-    GsuRecordFlag10(o);
+    GsuRecordNewTrigger(o);
+    GsuRecordSolid(o);
     GsuRecordPosition(o, 0x1680, 0x1680, 0x1680);
     ObjectFinishGateStep(o);
 }
@@ -394,9 +394,9 @@ void ObjectBumperStep(Object *o)
 /* @routine 09:91E8 ObjectBumperRecord */
 void ObjectBumperRecord(Object *o)
 {
-    GsuRecordNew424(o);
-    GsuRecordFlag10(o);
-    GsuRecordSet2AHigh(o, 0x01);
+    GsuRecordNewFalling(o);
+    GsuRecordSolid(o);
+    GsuRecordSetMass(o, 0x01);
     ObjectBumperStep(o);
 }
 
@@ -429,9 +429,9 @@ void ObjectSwitchStep(Object *o)
 /* @routine 09:92AE ObjectSwitchRecord */
 void ObjectSwitchRecord(Object *o)
 {
-    GsuRecordNew424(o);
-    GsuRecordFlag10(o);
-    GsuRecordSet2AHigh(o, 0x01);
+    GsuRecordNewFalling(o);
+    GsuRecordSolid(o);
+    GsuRecordSetMass(o, 0x01);
     ObjectSwitchStep(o);
 }
 
@@ -454,8 +454,8 @@ void ObjectPostAStep(Object *o)
 
 static void post_record(Object *o, uint16_t v)
 {
-    GsuRecordNew42D(o);
-    GsuRecordFlag10(o);
+    GsuRecordNewTrigger(o);
+    GsuRecordSolid(o);
     GsuRecordPosition(o, v, v, v);
 }
 
@@ -607,7 +607,7 @@ void ObjectBallDropStep(Object *o)
         if (record_contacts.summary & 0x01)
             break;
     }
-    GsuRecordRaise6A(r, 0x40);
+    GsuRecordBoostRaise(r, 0x40);
     SoundPort0QueuePush(0x25);
     n = ObjectSpawn(MODEL_RAISE_BALL);
     if (n) {
@@ -625,9 +625,9 @@ void ObjectBallDropStep(Object *o)
 /* @routine 09:9652 ObjectBallDropRecord */
 void ObjectBallDropRecord(Object *o)
 {
-    GsuRecordNew42D(o);
-    GsuRecordFlag10(o);
-    GsuRecordSet2AHigh(o, 0x14);
+    GsuRecordNewTrigger(o);
+    GsuRecordSolid(o);
+    GsuRecordSetMass(o, 0x14);
     GsuRecordPosition(o, 0x00A0, 0x00A0, 0x00A0);
     ObjectBallDropStep(o);
 }
@@ -918,9 +918,9 @@ void ObjectLanternStep(Object *o)
 /* @routine 09:A0B2 ObjectLanternRecord */
 void ObjectLanternRecord(Object *o)
 {
-    GsuRecordNew424Alt(o);
-    GsuRecordFlag10(o);
-    GsuRecordSet2AHigh(o, 0x02);
+    GsuRecordNewSolidTrigger(o);
+    GsuRecordSolid(o);
+    GsuRecordSetMass(o, 0x02);
     ObjectLanternStep(o);
 }
 
@@ -948,7 +948,7 @@ static uint16_t next_contact(void)
     return 0;
 }
 
-static void gate42d(Object *o, uint16_t s)
+static void gate_trigger(Object *o, uint16_t s)
 {
     post_record(o, s);
 }
@@ -974,7 +974,7 @@ void ObjectChimeGateStep(Object *o)
 /* @routine 09:A2B1 ObjectChimeGateRecord */
 void ObjectChimeGateRecord(Object *o)
 {
-    gate42d(o, 0x0F00);
+    gate_trigger(o, 0x0F00);
     ObjectChimeGateStep(o);
 }
 
@@ -1007,7 +1007,7 @@ void ObjectBrightGateStep(Object *o) { flash_frame(o, 0x0020, 0x0200, 0x2000); }
 /* @routine 09:A34A ObjectBrightGateRecord */
 void ObjectBrightGateRecord(Object *o)
 {
-    gate42d(o, 0x0780);
+    gate_trigger(o, 0x0780);
     ObjectBrightGateStep(o);
 }
 
@@ -1024,7 +1024,7 @@ void ObjectDarkGateStep(Object *o) { flash_frame(o, 0xFFE0, 0xFE00, 0xFE00); }
 /* @routine 09:A3E1 ObjectDarkGateRecord */
 void ObjectDarkGateRecord(Object *o)
 {
-    gate42d(o, 0x0780);
+    gate_trigger(o, 0x0780);
     ObjectDarkGateStep(o);
 }
 
@@ -1049,9 +1049,9 @@ static void car_flag_frame(Object *o, int on, uint8_t snd)
     o->flags25 |= 0x01;
     if (!palettes.weather) {
         if (on)
-            GsuRecordFlags8ASet(r, 0x02);
+            GsuRecordCourseFlagsSet(r, 0x02);
         else
-            GsuRecordFlags8AClear(r, 0x02);
+            GsuRecordCourseFlagsClear(r, 0x02);
     }
     SoundPort1QueuePush(snd);
 }
@@ -1062,7 +1062,7 @@ void ObjectCarFlagOffGateStep(Object *o) { car_flag_frame(o, 0, 0x11); }
 /* @routine 09:A476 ObjectCarFlagOffGateRecord */
 void ObjectCarFlagOffGateRecord(Object *o)
 {
-    gate42d(o, 0x0780);
+    gate_trigger(o, 0x0780);
     ObjectCarFlagOffGateStep(o);
 }
 
@@ -1079,7 +1079,7 @@ void ObjectCarFlagOnGateStep(Object *o) { car_flag_frame(o, 1, 0x10); }
 /* @routine 09:A505 ObjectCarFlagOnGateRecord */
 void ObjectCarFlagOnGateRecord(Object *o)
 {
-    gate42d(o, 0x0780);
+    gate_trigger(o, 0x0780);
     ObjectCarFlagOnGateStep(o);
 }
 
@@ -1092,7 +1092,7 @@ void ObjectCarFlagOnGate(Object *o)
 
 /* the gate family: setup, restart (its record) and frame */
 #define GATE(Setup, Record, Step, hr, hs, size)             \
-    void Record(Object *o) { gate42d(o, size); Step(o); }   \
+    void Record(Object *o) { gate_trigger(o, size); Step(o); }   \
     void Setup(Object *o) { handlers2(o, hr, hs); Record(o); }
 
 /* the slide's step, target and direction */
@@ -1119,7 +1119,7 @@ void ObjectSlideGateStep(Object *o)
         return;
     o->flags25 |= 0x01;
     g.picture_effects |= 0xA0;
-    GsuRecordFlags8AClear(r, 0x02);
+    GsuRecordCourseFlagsClear(r, 0x02);
     fade_set(0x0020, 0x2000);
     slide_set(0x0040, 0xFFC0, 0x8000);
 }
@@ -1261,7 +1261,7 @@ void ObjectBonusMarkerStep(Object *o)
     if (!r || g.laps_counted[0] != 0x00)
         return;
     g.bonus_markers_taken++;
-    GsuRecordFlags8ASet(r, 0x01);
+    GsuRecordCourseFlagsSet(r, 0x01);
     if (((uint8_t)(g.clock_fraction >> 8) >> 4) & 0x03) {
         g.picture_effects |= 0x10;
         SoundPort0QueuePush(0x36);
@@ -1288,7 +1288,7 @@ void ObjectBonusGateStep(Object *o)
     SoundPort1QueuePush(0x10);
     if (g.laps_counted[0] != 0x00 || !g.bonus_markers_taken)
         return;
-    GsuRecordFlags8ASet(r, 0x01);
+    GsuRecordCourseFlagsSet(r, 0x01);
 }
 
 /* @routine 09:AABC ObjectBonusGate, 09:AADA ObjectBonusGateRecord */
@@ -1310,7 +1310,7 @@ void ObjectBonusEndGateStep(Object *o)
     SoundPort1QueuePush(0x0F);
     if (g.laps_counted[0] == 0x02 || !g.bonus_markers_taken)
         return;
-    GsuRecordFlags8AClear(r, 0x01);
+    GsuRecordCourseFlagsClear(r, 0x01);
 }
 
 /* @routine 09:AB56 ObjectBonusEndGate, 09:AB74 ObjectBonusEndGateRecord */
@@ -1392,11 +1392,11 @@ static void time_gate(Object *o, uint16_t record_handler)
 /* @routine 09:AC4F ObjectTimeGate */
 void ObjectTimeGate(Object *o) { time_gate(o, H9_TIME_GATE_RECORD); }
 /* @routine 09:AC83 ObjectTimeGateRecord */
-void ObjectTimeGateRecord(Object *o) { gate42d(o, 0x0780); }
+void ObjectTimeGateRecord(Object *o) { gate_trigger(o, 0x0780); }
 /* @routine 09:ACAB ObjectTimeGateSmall */
 void ObjectTimeGateSmall(Object *o) { time_gate(o, H9_TIME_GATE_SMALL_RECORD); }
 /* @routine 09:ACDF ObjectTimeGateSmallRecord */
-void ObjectTimeGateSmallRecord(Object *o) { gate42d(o, 0x03C0); }
+void ObjectTimeGateSmallRecord(Object *o) { gate_trigger(o, 0x03C0); }
 
 /* @routine 09:AD50 ObjectPopMarkerStep */
 void ObjectPopMarkerStep(Object *o)
@@ -1430,9 +1430,9 @@ static void spark_follow(uint16_t model)
 
 static void lap_ball_record(Object *o, uint16_t model)
 {
-    GsuRecordNew42D(o);
-    GsuRecordFlag10(o);
-    GsuRecordSet2AHigh(o, 0x14);
+    GsuRecordNewTrigger(o);
+    GsuRecordSolid(o);
+    GsuRecordSetMass(o, 0x14);
     o->model = lap_matches_0a(o) ? MODEL_NONE : model;
 }
 
@@ -1455,7 +1455,7 @@ void ObjectLapBallUpStep(Object *o)
     if (lap_matches_0a(o))
         return;
     lap_take_0a(o);
-    GsuRecordRaise6A(r, 0x40);
+    GsuRecordBoostRaise(r, 0x40);
     SoundPort0QueuePush(0x25);
     spark_follow(MODEL_RAISE_BALL);
 }
@@ -1485,7 +1485,7 @@ void ObjectLapBallDownStep(Object *o)
     if (!synced(o) || (r = next_contact()) == 0 || lap_matches_0a(o))
         return;
     lap_take_0a(o);
-    GsuRecordLower82(r, 0x40);
+    GsuRecordRepair(r, 0x40);
     SoundPort0QueuePush(0x1B);
     spark_follow(MODEL_LOWER_BALL);
 }
@@ -1522,16 +1522,16 @@ GATE(ObjectCountGate, ObjectCountGateRecord, ObjectCountGateStep, H9_COUNT_GATE_
 void ObjectCountMarkerStep(Object *o)
 {
     if (g.switches_hit[0])
-        ObjectStep48To8(o);
+        ObjectFrameCountTo8(o);
     ObjectSyncFromRecord(o);
 }
 
 /* @routine 09:B065 ObjectCountMarkerRecord */
 void ObjectCountMarkerRecord(Object *o)
 {
-    GsuRecordNew424Alt(o);
-    GsuRecordMode2(o);
-    GsuRecordSet2AHigh(o, 0x14);
+    GsuRecordNewSolidTrigger(o);
+    GsuRecordTouchesAll(o);
+    GsuRecordSetMass(o, 0x14);
     GsuRecordPosition(o, 0x0500, 0x0500, 0x0500);
     ObjectCountMarkerStep(o);
 }
@@ -1570,8 +1570,8 @@ void ObjectCountTriggerStep(Object *o)
 /* @routine 09:B0DC ObjectCountTriggerRecord */
 void ObjectCountTriggerRecord(Object *o)
 {
-    GsuRecordNew42D(o);
-    GsuRecordFlag10(o);
+    GsuRecordNewTrigger(o);
+    GsuRecordSolid(o);
     GsuRecordPosition(o, 0x03C0, 0x03C0, 0x03C0);
     ObjectCountTriggerStep(o);
 }
@@ -1641,12 +1641,12 @@ void ObjectBreakablePieceStep(Object *o)
 void ObjectBreakablePiece(Object *o)
 {
     handler(o, H9_BREAKABLE_PIECE_STEP);
-    if (!GsuRecordNew424Piece(o)) {
+    if (!GsuRecordNewBouncing(o)) {
         ObjectRelease(o);
         return;
     }
     GsuRecordVelocity(o);
-    GsuRecordSet2AHigh(o, 0x00);
+    GsuRecordSetMass(o, 0x00);
     ObjectBreakablePieceStep(o);
 }
 
@@ -1697,12 +1697,12 @@ void ObjectBreakableStep(Object *o)
 /* @routine 09:C531 ObjectBreakableRecord */
 void ObjectBreakableRecord(Object *o)
 {
-    if (!GsuRecordNew424Piece(o)) {
+    if (!GsuRecordNewBouncing(o)) {
         ObjectRelease(o);
         return;
     }
-    GsuRecordFlag10(o);
-    GsuRecordSet2AHigh(o, 0x46);
+    GsuRecordSolid(o);
+    GsuRecordSetMass(o, 0x46);
     GsuRecordPosition(o, 0x00C0, 0x00C0, 0x00C0);
     ObjectBreakableStep(o);
 }
@@ -1719,10 +1719,10 @@ void ObjectBreakable(Object *o)
 #define COLOUR(n) void ObjectColour##n(Object *o) { o->sprite_turn[0] = (uint8_t)(n | 0x80); }
 COLOUR(2) COLOUR(3) COLOUR(4) COLOUR(5) COLOUR(6) COLOUR(7)
 
-/* @routine 09:C5FE ObjectScaleE0, 09:C605 ObjectScaleA0, 09:C60C ObjectScale20 */
-void ObjectScaleE0(Object *o) { o->heading = 0xE0; }
-void ObjectScaleA0(Object *o) { o->heading = 0xA0; }
-void ObjectScale20(Object *o) { o->heading = 0x20; }
+/* @routine 09:C5FE ObjectScaleE0, 09:C605 ObjectScaleA0, 09:C60C ObjectScale20: the headings $E0, $A0 and $20 */
+void ObjectHeading315(Object *o) { o->heading = 0xE0; }
+void ObjectHeading225(Object *o) { o->heading = 0xA0; }
+void ObjectHeading45(Object *o) { o->heading = 0x20; }
 
 /* @routine 09:C62D ObjectSwingStep: it moves to one side with its heading
    eased, and every $50 frames turns to the other */
@@ -1821,7 +1821,7 @@ void ObjectLapCrowdGateStep(Object *o)
 /* @routine 09:C893 ObjectLapCrowdGateRecord */
 void ObjectLapCrowdGateRecord(Object *o)
 {
-    gate42d(o, 0x0780);
+    gate_trigger(o, 0x0780);
     ObjectLapCrowdGateStep(o);
 }
 
@@ -2178,7 +2178,7 @@ void ObjectBreakableGateStep(Object *o)
 /* @routine 09:D517 ObjectBreakableGateRecord */
 void ObjectBreakableGateRecord(Object *o)
 {
-    gate42d(o, 0x1E00);
+    gate_trigger(o, 0x1E00);
     ObjectBreakableGateStep(o);
 }
 
@@ -2212,7 +2212,7 @@ void ObjectBreakableGate2Step(Object *o)
 /* @routine 09:DD41 ObjectBreakableGate2Record */
 void ObjectBreakableGate2Record(Object *o)
 {
-    gate42d(o, 0x0780);
+    gate_trigger(o, 0x0780);
     ObjectBreakableGate2Step(o);
 }
 
@@ -2252,9 +2252,9 @@ void ObjectDuoGateStep(Object *o)
 
 static void record424alt(Object *o, uint8_t high)
 {
-    GsuRecordNew424Alt(o);
-    GsuRecordFlag10(o);
-    GsuRecordSet2AHigh(o, high);
+    GsuRecordNewSolidTrigger(o);
+    GsuRecordSolid(o);
+    GsuRecordSetMass(o, high);
 }
 
 /* @routine 09:E00A ObjectDuoGateRecord */
@@ -2385,9 +2385,9 @@ void ObjectBumpPostStep(Object *o)
 /* @routine 09:E383 ObjectBumpPostRecord */
 void ObjectBumpPostRecord(Object *o)
 {
-    GsuRecordNew424(o);
-    GsuRecordFlag10(o);
-    GsuRecordSet2AHigh(o, 0x01);
+    GsuRecordNewFalling(o);
+    GsuRecordSolid(o);
+    GsuRecordSetMass(o, 0x01);
     ObjectBumpPostStep(o);
 }
 
@@ -2428,7 +2428,7 @@ void ObjectSlideLapGateStep(Object *o)
 /* @routine 09:E41A ObjectSlideLapGateRecord */
 void ObjectSlideLapGateRecord(Object *o)
 {
-    gate42d(o, 0x2A80);
+    gate_trigger(o, 0x2A80);
     ObjectSlideLapGateStep(o);
 }
 
@@ -2772,8 +2772,8 @@ void ObjectLapLightStep(Object *o)
 /* @routine 09:C30A ObjectLapLightRecord */
 void ObjectLapLightRecord(Object *o)
 {
-    GsuRecordNew42D(o);
-    GsuRecordFlag10(o);
+    GsuRecordNewTrigger(o);
+    GsuRecordSolid(o);
     ObjectLapLightStep(o);
 }
 
@@ -2825,9 +2825,9 @@ void ObjectBonusMarker2Step(Object *o) { bonus_marker_frame(o, object_shatter, M
 /* @routine 09:BF26 ObjectBonusMarker2Record */
 void ObjectBonusMarker2Record(Object *o)
 {
-    GsuRecordNew42D(o);
-    GsuRecordFlag10(o);
-    GsuRecordSet2AHigh(o, 0x01);
+    GsuRecordNewTrigger(o);
+    GsuRecordSolid(o);
+    GsuRecordSetMass(o, 0x01);
     ObjectBonusMarker2Step(o);
 }
 
@@ -2846,8 +2846,8 @@ void ObjectBonusMarker5Step(Object *o) { bonus_marker_frame(o, object_shatter2, 
 /* @routine 09:BFEE ObjectBonusMarker5Record */
 void ObjectBonusMarker5Record(Object *o)
 {
-    GsuRecordNew42D(o);
-    GsuRecordFlag10(o);
+    GsuRecordNewTrigger(o);
+    GsuRecordSolid(o);
     ObjectBonusMarker5Step(o);
 }
 
@@ -2870,23 +2870,23 @@ static void hit_lamp(Object *o, uint16_t record_handler, uint16_t step)
 
 static void hit_lamp_record(Object *o)
 {
-    GsuRecordNew424Alt(o);
-    GsuRecordMode2(o);
-    GsuRecordSet2AHigh(o, 0x14);
+    GsuRecordNewSolidTrigger(o);
+    GsuRecordTouchesAll(o);
+    GsuRecordSetMass(o, 0x14);
     GsuRecordPosition(o, 0x0500, 0x0500, 0x0500);
 }
 
 static void hit_lamp_frame(Object *o, uint8_t lit)
 {
     if (lit)
-        ObjectStep48To8(o);
+        ObjectFrameCountTo8(o);
     ObjectSyncFromRecord(o);
 }
 
 static void hit_switch_record(Object *o)
 {
-    GsuRecordNew42D(o);
-    GsuRecordFlag10(o);
+    GsuRecordNewTrigger(o);
+    GsuRecordSolid(o);
     GsuRecordPosition(o, 0x03C0, 0x03C0, 0x03C0);
 }
 

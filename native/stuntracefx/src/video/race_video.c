@@ -540,7 +540,7 @@ void BackdropRowsUpdate(void)
     uint16_t *out = backdrop_rows(buf);
     unsigned at = 0, row_step;
 
-    ObjectLinkFlag4000Step();
+    BackdropPitchForCameraMode();
     s = (uint16_t)((uint16_t)(h << 1) + 0x42 + (h >> 15));
     gradient.view_offset[0] = s < 0x0300 ? s : 0x0300;
     g.backdrop_y[buf] = (uint16_t)((h & 7) - 0x20 + ram_code_7e16((uint16_t)(0xE811 + buf * 2)));

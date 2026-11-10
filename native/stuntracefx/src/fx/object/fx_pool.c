@@ -386,7 +386,7 @@ FxListSweepResult FxListSweep(uint16_t record_holding, uint16_t prior_next_rec, 
  * @routine 04:8B33 FxRecordNew426
  * WHAT IT DOES: A program: a new $34-byte record from the first pool with
  * mass +$2A = $40, flags +$16 = 8 and mode +$1A = $0426; its address (or
- * 0) to $238E. The S-CPU side is GsuRecordNew426 (object/fx_record.asm).
+ * 0) to $238E. The S-CPU side is GsuRecordNewFallingPart (object/fx_record.asm).
  * HOW: FxPoolTake with R10 = $0240, then three STWs through R2 and R0.
  * Entry: the S-CPU starts it. Exit: (at its STOP) R1 = the record; R0 = R1
  * + $1A; R2 = $0426; R11 = $8B41; OV, S, CY, Z from the last ADD; the last
@@ -417,7 +417,7 @@ void FxRecordNew426(void)
  * mode +$1A = $0422 and bits $0181 set in its flags +$16; it is counted at
  * $2482 and put at the head of the list at $2398 (the old head's +$26
  * pointing to it); its address (or 0) to $238E. The S-CPU side is
- * GsuRecordNew422 (object/fx_record.asm).
+ * GsuRecordNewStill (object/fx_record.asm).
  * HOW: FxPoolTake with R10 = $0240; the count is LM, INC, SBK; the flags
  * an LDW, OR and STW.
  * Entry: the S-CPU starts it. Exit: (at its STOP) R1 = the record; R0 = R1
@@ -457,7 +457,7 @@ void FxRecordNew422(void)
 /*
  * @routine 04:8C0A FxRecordNew424
  * WHAT IT DOES: A program: as FxRecordNew426 with mode $0424. The S-CPU
- * side is GsuRecordNew424 (object/fx_record.asm).
+ * side is GsuRecordNewFalling (object/fx_record.asm).
  * HOW: As FxRecordNew426.
  * Entry: the S-CPU starts it. Exit: (at its STOP) as FxRecordNew426; R2 =
  * $0424; R11 = $8C18.
@@ -540,7 +540,7 @@ void FxRecordNewCamera(void)
 /*
  * @routine 04:8C95 FxRecordNew42D
  * WHAT IT DOES: A program: as FxRecordNew426 with mass 0, flags $20 and
- * mode $042D. The S-CPU side is GsuRecordNew42D (object/fx_record.asm).
+ * mode $042D. The S-CPU side is GsuRecordNewTrigger (object/fx_record.asm).
  * HOW: As FxRecordNew426.
  * Entry: the S-CPU starts it. Exit: (at its STOP) as FxRecordNew426; R2 =
  * $042D; R11 = $8CA3.

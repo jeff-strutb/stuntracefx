@@ -19,7 +19,7 @@ static void frames_to_record(Object *o)
 {
     if (o->record)
         rec_put(o->record, 0x0012, o->frame5a & 0x7F);
-    GsuRecordFlag4(o);
+    GsuRecordKeep(o);
 }
 
 /*
@@ -28,7 +28,7 @@ static void frames_to_record(Object *o)
  */
 void ObjectRecordFlag4Step(Object *o)
 {
-    GsuRecordFlag4(o);
+    GsuRecordKeep(o);
 }
 
 /*
@@ -38,11 +38,11 @@ void ObjectRecordFlag4Step(Object *o)
  */
 void ObjectFlagsRecord(Object *o)
 {
-    if (!GsuRecordNew422(o))
+    if (!GsuRecordNewStill(o))
         return;
     rec_or(o->record, FXREC_FLAGS16, o->script_flags);
     rec_or(o->record, FXREC_FLAGS16, o->link27);
-    GsuRecordFlag4(o);
+    GsuRecordKeep(o);
 }
 
 /* +$1D = ObjectFlagsRecord, then the record */

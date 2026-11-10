@@ -53,7 +53,7 @@ void SpeedSampleAdd(uint16_t speed, int player)
  * @routine 07:DD60 PlayerStatsFromRecord
  * WHAT IT DOES: Unless the lap is being shown, copies the player's figures
  * from its car's record: the flags, the gauges, a speedometer sample, the
- * laps and the rank. Then GsuRecordBits60.
+ * laps and the rank. Then GsuRecordBobTriggers.
  */
 void PlayerStatsFromRecord(uint16_t rec, int player)
 {
@@ -75,7 +75,7 @@ void PlayerStatsFromRecord(uint16_t rec, int player)
         g.laps_done[player] = (uint8_t)rec_get(rec, FXREC_LAPS);
         g.player_rank[player] = (uint8_t)(rec_get(rec, FXREC_RANK) & 0x0F);
     }
-    GsuRecordBits60();
+    GsuRecordBobTriggers();
 }
 
 /* The figures are taken once a step: not again when a step goes on after a pause. */

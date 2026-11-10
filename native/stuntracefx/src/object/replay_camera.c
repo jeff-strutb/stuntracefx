@@ -347,19 +347,19 @@ static void path_go(Object *o, uint16_t path, int keep_mode)
 }
 
 /* @routine 08:9896 CameraPath8603 */
-void CameraPath8603(Object *o) { path_go(o, PATH_GO_1, 0); }
+void CameraPathGo1(Object *o) { path_go(o, PATH_GO_1, 0); }
 /* @routine 08:98CC CameraPath8679 */
-void CameraPath8679(Object *o) { path_go(o, PATH_GO_2, 0); }
+void CameraPathGo2(Object *o) { path_go(o, PATH_GO_2, 0); }
 /* @routine 08:98E7 CameraPath869B */
-void CameraPath869B(Object *o) { path_go(o, PATH_GO_3, 0); }
+void CameraPathGo3(Object *o) { path_go(o, PATH_GO_3, 0); }
 /* @routine 08:9902 CameraPath86B3 */
-void CameraPath86B3(Object *o) { path_go(o, PATH_GO_4, 0); }
+void CameraPathGo4(Object *o) { path_go(o, PATH_GO_4, 0); }
 /* @routine 08:991D CameraPath86CB */
-void CameraPath86CB(Object *o) { path_go(o, PATH_GO_5, 0); }
+void CameraPathGo5(Object *o) { path_go(o, PATH_GO_5, 0); }
 /* @routine 08:9946 CameraPath86E3 */
-void CameraPath86E3(Object *o) { path_go(o, PATH_GO_6, 0); }
+void CameraPathGo6(Object *o) { path_go(o, PATH_GO_6, 0); }
 /* @routine 08:9938 CameraPath8709: the camera's mode kept */
-void CameraPath8709(Object *o) { path_go(o, PATH_GO_7, 1); }
+void CameraPathGo7(Object *o) { path_go(o, PATH_GO_7, 1); }
 
 /*
  * @routine 08:9A25 CameraLowHoldStep
@@ -405,6 +405,6 @@ static void path_low(Object *o, uint16_t path)
 }
 
 /* @routine 08:99DC CameraPathLow87B7 */
-void CameraPathLow87B7(Object *o) { path_low(o, PATH_LOW_2); }
+void CameraPathLow2(Object *o) { path_low(o, PATH_LOW_2); }
 /* @routine 08:99E6 CameraPathLow875B */
-void CameraPathLow875B(Object *o) { path_low(o, PATH_LOW_1); }
+void CameraPathLow1(Object *o) { path_low(o, PATH_LOW_1); }

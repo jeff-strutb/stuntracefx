@@ -78,7 +78,7 @@ void ObjectSetHandler(Object *o, uint16_t handler)
  * @routine 03:89A8 ObjectLinkedSet1A
  * WHAT IT DOES: Stores the value as the handler of the object o links to.
  */
-uint16_t ObjectLinkedSet1A(Object *o, uint16_t handler)
+uint16_t ObjectLinkedHandlerSet(Object *o, uint16_t handler)
 {
     obj_at(o->link)->handler = handler;
     return o->link;
@@ -136,7 +136,7 @@ void ObjectPoolInit(void)
  * WHAT IT DOES: When player 1's camera has bit 14 of its mode set, adds 8
  * to the backdrop's pitch ($06CD).
  */
-void ObjectLinkFlag4000Step(void)
+void BackdropPitchForCameraMode(void)
 {
     const Object *director = obj_at(obj_at(g.player_car)->link);
 
@@ -149,7 +149,7 @@ void ObjectLinkFlag4000Step(void)
  * WHAT IT DOES: When the value is player 1's record, sets bit 6 of the
  * player's flags at +$25.
  */
-void ObjectFlag40IfMatch(uint16_t value)
+void PlayerStartleIfRecord(uint16_t value)
 {
     if (value == fxram_get(FXIN_PLAYER1_RECORD))
         obj_at(g.player_car)->flags25 |= 0x40;
@@ -160,7 +160,7 @@ void ObjectFlag40IfMatch(uint16_t value)
  * WHAT IT DOES: The byte of the table at $08:E8AF for (value + the object's
  * heading + base) / 8.
  */
-uint8_t ObjectTableE8AF(const Object *o, uint8_t base, uint8_t value)
+uint8_t ObjectFacingFrame32(const Object *o, uint8_t base, uint8_t value)
 {
     return cart8(0x08, (uint16_t)(FACING_FRAMES_32 + (uint8_t)(value + o->heading + base) / 8));
 }
@@ -182,7 +182,7 @@ uint16_t object_gaze(const Object *o, int side)
  * WHAT IT DOES: The byte of the table at $08:C056 for (the object's heading
  * - turn) / 4.
  */
-uint8_t ObjectTableC056(const Object *o, uint8_t turn)
+uint8_t ObjectFacingFrame64(const Object *o, uint8_t turn)
 {
     return cart8(0x08, (uint16_t)(FACING_FRAMES_64 + (uint8_t)(o->heading - turn) / 4));
 }
@@ -269,7 +269,7 @@ void ObjectVelocityFromRecord(Object *o)
  * @routine 08:B48E ObjectSet5DByKind
  * WHAT IT DOES: Sets the animation word by the kind: 1, 2 or 3, or any other.
  */
-uint16_t ObjectSet5DByKind(Object *o, uint8_t kind)
+uint16_t ObjectCarLookByKind(Object *o, uint8_t kind)
 {
     o->anim = kind == 1 ? LOOK_CAR_COUPE : kind == 2 ? LOOK_CAR_4WD : kind == 3 ? LOOK_CAR_2WD : LOOK_CAR_F_TYPE;
     return o->anim;
@@ -326,7 +326,7 @@ void ObjectPlaceAll(void)
  * `step`, then falls, and the routine returns true when the count reaches
  * `end`.
  */
-int ObjectCountStep5F(Object *o, uint8_t limit, uint8_t end, uint8_t step)
+int ObjectSizeRiseFall(Object *o, uint8_t limit, uint8_t end, uint8_t step)
 {
     uint8_t n = ++o->byte49;
 
@@ -351,7 +351,7 @@ void ObjectNearFocus(Object *o)
 {
     o->flags24 &= 0xF7;
     o->byte5f = 0;
-    ObjectSet5DByKind(o, o->byte49);
+    ObjectCarLookByKind(o, o->byte49);
 }
 
 /*
@@ -360,7 +360,7 @@ void ObjectNearFocus(Object *o)
  * it down; otherwise sets bit 2 of the record's word +$70 when frozen,
  * clears it when not.
  */
-void ObjectRecordFlag70Step(Object *o)
+void ObjectRecordHoldWhileFrozen(Object *o)
 {
     if (!g.freeze && o->count48) {
         o->count48--;
@@ -406,7 +406,7 @@ void ObjectLinkedHandlerByState(Object *o, uint8_t state)
     }
     ObjectSetHandler(obj_at(o->link), handler);
     if (!(g.course_options & 1))
-        GsuRecordWords88();
+        GsuRecordStarterRanks();
     o->flags25 |= 0x08;
 }
 
@@ -776,7 +776,7 @@ Object *ObjectSpawnFromScript(uint16_t entry, uint8_t bank)
  * @routine 09:B0A1 ObjectStep48To8
  * WHAT IT DOES: Counts +$48 up to 8, and shows it (with bit 7) as the frame.
  */
-void ObjectStep48To8(Object *o)
+void ObjectFrameCountTo8(Object *o)
 {
     if (o->count48 != 8)
         o->count48++;
@@ -788,7 +788,7 @@ void ObjectStep48To8(Object *o)
  * WHAT IT DOES: With a chance of 78 in 256, makes a new object of the
  * common model with handler $D460 at the object's place, tied to it.
  */
-void ObjectSpawnChanceD460(Object *o)
+void ObjectPieceSprayChance(Object *o)
 {
     Object *n;
 
@@ -804,9 +804,9 @@ void ObjectSpawnChanceD460(Object *o)
 
 /*
  * @routine 08:D14A ObjectSpawnD460UnlessFlag
- * WHAT IT DOES: As ObjectSpawnChanceD460 without the chance, unless split.
+ * WHAT IT DOES: As ObjectPieceSprayChance without the chance, unless split.
  */
-void ObjectSpawnD460UnlessFlag(Object *o)
+void ObjectPieceSprayUnlessSplit(Object *o)
 {
     Object *n;
 
@@ -824,7 +824,7 @@ void ObjectSpawnD460UnlessFlag(Object *o)
  * @routine 08:F911 ObjectAdvance5DIfFlag
  * WHAT IT DOES: Adds 2 to the animation word when the screen is split.
  */
-void ObjectAdvance5DIfFlag(Object *o)
+void ObjectLookForSplit(Object *o)
 {
     if (g.split_screen)
         o->anim = (uint16_t)(o->anim + 2);
@@ -1078,7 +1078,7 @@ void ObjectPlaceOnParent(Object *parent, Object *o)
         for (int i = 0; i < 2; i++) {
             uint8_t turn = (uint8_t)(cameras[i].turn >> 8);
 
-            o->sprite_turn[i] = (uint8_t)(ObjectTableE8AF(parent, base, turn) | 0x80);
+            o->sprite_turn[i] = (uint8_t)(ObjectFacingFrame32(parent, base, turn) | 0x80);
             objects.gaze[obj_slot(o)][i] = (uint16_t)(0x100 | (uint8_t)(turn + parent->heading + base));
         }
     }
@@ -1204,9 +1204,9 @@ void ObjectBillboardTilt(Object *o)
     if (!((uint8_t)(facing - 0x40) & 0x80))
         tilt = (uint8_t)-tilt;
     o->anim = (uint16_t)(sx8(tilt) + 8 + o->word29);
-    o->sprite_turn[0] = (uint8_t)(ObjectTableC056(o, turn) | 0x80);
+    o->sprite_turn[0] = (uint8_t)(ObjectFacingFrame64(o, turn) | 0x80);
     if (g.split_screen)
-        o->sprite_turn[1] = (uint8_t)(ObjectTableC056(o, (uint8_t)-(uint8_t)(cameras[1].turn >> 8)) | 0x80);
+        o->sprite_turn[1] = (uint8_t)(ObjectFacingFrame64(o, (uint8_t)-(uint8_t)(cameras[1].turn >> 8)) | 0x80);
 }
 
 /*
@@ -1247,7 +1247,7 @@ void ObjectCarFrame(Object *o)
         o->flags24 |= 0x20;
         return;
     }
-    ObjectRecordFlag70Step(o);
+    ObjectRecordHoldWhileFrozen(o);
     ObjectNearFocus(o);
     ObjectPoseFromRecord(o);
     ObjectRebucket(o);
@@ -1265,7 +1265,7 @@ static void ObjectCarSpawnPlace(Object *o)
     rec_or(o->record, FXREC_FLAGS64, 0x0008);
     rec_or(o->record, FXREC_FLAGS40, 0x0200);
     ObjectSetHandler(o, H_CAR_FRAME);
-    ObjectSet5DByKind(o, o->byte49);
+    ObjectCarLookByKind(o, o->byte49);
     ObjectCarFrame(o);
 }
 

@@ -23,9 +23,11 @@ static uint8_t rec_get8(uint16_t rec, uint16_t off) { return fx_ram[(uint16_t)(r
 
 /*
  * @routine 08:CCBE GsuRecordMode2
- * WHAT IT DOES: Sets the record's mode word (+$1A) to 2.
+ * WHAT IT DOES: Sets the record's mode word (+$1A), the bits of the other
+ * records' flags (+$16) whose contacts it does not take, to 2: it takes
+ * every contact but those of records with bit 1.
  */
-void GsuRecordMode2(Object *o)
+void GsuRecordTouchesAll(Object *o)
 {
     if (o->record)
         rec_put(o->record, FXREC_MODE, 0x0002);
@@ -43,9 +45,10 @@ void GsuRecordSetFlags(Object *o, uint16_t bits)
 
 /*
  * @routine 08:CCA3 GsuRecordFlag10
- * WHAT IT DOES: In the record's flags (+$16), sets bit 4 and clears bit 8.
+ * WHAT IT DOES: In the record's flags (+$16), sets bit 4 (a record touching
+ * it is pushed off it: FxCollidePush) and clears bit 8.
  */
-void GsuRecordFlag10(Object *o)
+void GsuRecordSolid(Object *o)
 {
     if (o->record)
         rec_put(o->record, FXREC_FLAGS16, (uint16_t)((rec_get(o->record, FXREC_FLAGS16) | 0x0010) & 0xFEFF));
@@ -69,7 +72,7 @@ void GsuRecordPosition(Object *o, uint16_t x, uint16_t y, uint16_t z)
  * WHAT IT DOES: The word at +$88 of the record of the object's +$06 object,
  * minus one.
  */
-uint16_t GsuRecordWord88(const Object *o)
+uint16_t GsuRecordParentRank(const Object *o)
 {
     return (uint16_t)(rec_get(obj_at(o->parent)->record, FXREC_RANK) - 1);
 }
@@ -79,7 +82,7 @@ uint16_t GsuRecordWord88(const Object *o)
  * WHAT IT DOES: The word at +$58 of the record of the object's +$06 object;
  * *clear says whether bits 4 and 10 of the record's +$42 are both clear.
  */
-uint16_t GsuRecordWord58(const Object *o, int *clear)
+uint16_t GsuRecordParentSegment(const Object *o, int *clear)
 {
     uint16_t rec = obj_at(o->parent)->record;
 
@@ -89,10 +92,11 @@ uint16_t GsuRecordWord58(const Object *o, int *clear)
 
 /*
  * @routine 08:D070 GsuRecordFlag4
- * WHAT IT DOES: Sets bit 2 of the record word at +$1C and returns 1; an
+ * WHAT IT DOES: Sets bit 2 of the record word at +$1C (the record is kept: a
+ * record running no handler is freed without it) and returns 1; an
  * object without a record gets $FF in its +$36 and returns 0.
  */
-int GsuRecordFlag4(Object *o)
+int GsuRecordKeep(Object *o)
 {
     if (!o->record) {
         o->timer = 0xFF;
@@ -122,7 +126,7 @@ int GsuRecordVelocity(Object *o)
  * WHAT IT DOES: For each starter, copies its record's +$88 into the list at
  * $7E:FFA6.
  */
-void GsuRecordWords88(void)
+void GsuRecordStarterRanks(void)
 {
     uint16_t n = (uint16_t)((objects.place_count >> 1) | (objects.place_count & 0x8000));
 
@@ -137,7 +141,7 @@ void GsuRecordWords88(void)
  * WHAT IT DOES: In a split screen, advances the record's word at +$6A by 1
  * (when its +$88 is 1) or 3, up to $180, unless bit 10 of +$42 is set.
  */
-void GsuRecordStep6A(Object *o)
+void GsuRecordBoostRecharge(Object *o)
 {
     uint16_t rec, s;
 
@@ -208,7 +212,7 @@ void ObjectVelocityFromRecordScaled(Object *o)
  * @routine 09:FBB2 GsuRecordBits60
  * WHAT IT DOES: Keeps bits 5-6 of each player's record's +$40.
  */
-void GsuRecordBits60(void)
+void GsuRecordBobTriggers(void)
 {
     g.bob_trigger[0] = rec_get(fxram_get(FXIN_PLAYER1_RECORD), FXREC_FLAGS40) & 0x0060;
     g.bob_trigger[1] = rec_get(fxram_get(FXIN_PLAYER2_RECORD), FXREC_FLAGS40) & 0x0060;
@@ -229,20 +233,20 @@ static int record_new(Object *o, uint16_t word0a)
     return 1;
 }
 
-/* @routine 08:CB98 GsuRecordNew422: a record from the second pool, +$0A 0 */
-int GsuRecordNew422(Object *o) { FxRecordNew422(); return record_new(o, FXRUN_NONE); }
-/* @routine 08:CBB2 GsuRecordNew42D */
-int GsuRecordNew42D(Object *o) { FxRecordNew42D(); return record_new(o, FXRUN_MARK_TOUCHED); }
-/* @routine 08:CBCC GsuRecordNew424Piece */
-int GsuRecordNew424Piece(Object *o) { FxRecordNew424(); return record_new(o, FXRUN_BOUNCE); }
-/* @routine 08:CBE6 GsuRecordNew424 */
-int GsuRecordNew424(Object *o) { FxRecordNew424(); return record_new(o, FXRUN_FALL); }
-/* @routine 08:CC18 GsuRecordNew424Alt */
-int GsuRecordNew424Alt(Object *o) { FxRecordNew424(); return record_new(o, FXRUN_MARK_TOUCHED); }
+/* @routine 08:CB98 GsuRecordNew422: a record that runs nothing, from the second pool (mode $0422) */
+int GsuRecordNewStill(Object *o) { FxRecordNew422(); return record_new(o, FXRUN_NONE); }
+/* @routine 08:CBB2 GsuRecordNew42D: a trigger: no mass, it marks what touches it (mode $042D) */
+int GsuRecordNewTrigger(Object *o) { FxRecordNew42D(); return record_new(o, FXRUN_MARK_TOUCHED); }
+/* @routine 08:CBCC GsuRecordNew424Piece: a piece that falls and bounces (mode $0424) */
+int GsuRecordNewBouncing(Object *o) { FxRecordNew424(); return record_new(o, FXRUN_BOUNCE); }
+/* @routine 08:CBE6 GsuRecordNew424: a body of mass $40 that falls while it touches something (mode $0424) */
+int GsuRecordNewFalling(Object *o) { FxRecordNew424(); return record_new(o, FXRUN_FALL); }
+/* @routine 08:CC18 GsuRecordNew424Alt: a trigger of mass $40, marking what touches it (mode $0424) */
+int GsuRecordNewSolidTrigger(Object *o) { FxRecordNew424(); return record_new(o, FXRUN_MARK_TOUCHED); }
 /* @routine 08:CC4A GsuRecordNewCamera */
 int GsuRecordNewCamera(Object *o) { FxRecordNewCamera(); return record_new(o, FXRUN_COLLIDE_ONLY); }
-/* @routine 08:CC63 GsuRecordNew426 */
-int GsuRecordNew426(Object *o) { FxRecordNew426(); return record_new(o, FXRUN_FALL); }
+/* @routine 08:CC63 GsuRecordNew426: as GsuRecordNewFalling, mode $0426: it also takes contacts with records whose +$16 has bit 1 */
+int GsuRecordNewFallingPart(Object *o) { FxRecordNew426(); return record_new(o, FXRUN_FALL); }
 
 /* the record and the amount (as the high byte) go to the Super FX */
 static void record_amount_args(uint16_t rec, uint8_t amount)
@@ -256,31 +260,32 @@ static void record_amount_args(uint16_t rec, uint8_t amount)
  * WHAT IT DOES: Lowers +$82 of the record by an amount; if it is player 1's
  * record, flags the object.
  */
-void GsuRecordLower82(uint16_t rec, uint8_t amount)
+void GsuRecordRepair(uint16_t rec, uint8_t amount)
 {
     record_amount_args(rec, amount);
-    ObjectFlag40IfMatch(rec);
+    PlayerStartleIfRecord(rec);
     FxRecordLower82();
 }
 
 /*
  * @routine 08:B72E GsuRecordFlags8ASet, 08:B743 GsuRecordFlags8AClear
- * WHAT IT DOES: Sets or clears the bits in +$8A of the record.
+ * WHAT IT DOES: Sets or clears the bits in +$8A of the record (FxCarFromScript
+ * starts it from the course's flags at $26F2).
  */
-void GsuRecordFlags8ASet(uint16_t rec, uint8_t bits) { rec_or(rec, FXREC_FLAGS8A, bits); }
-void GsuRecordFlags8AClear(uint16_t rec, uint8_t bits) { rec_and(rec, FXREC_FLAGS8A, (uint16_t)~bits & 0xFFFF); }
+void GsuRecordCourseFlagsSet(uint16_t rec, uint8_t bits) { rec_or(rec, FXREC_FLAGS8A, bits); }
+void GsuRecordCourseFlagsClear(uint16_t rec, uint8_t bits) { rec_and(rec, FXREC_FLAGS8A, (uint16_t)~bits & 0xFFFF); }
 
 /*
  * @routine 08:B7D6 GsuRecordRaise6A
  * WHAT IT DOES: Unless bit 0 of +$40 is set, raises +$6A by an amount, to
  * at most $180; if it is player 1's record, flags the object.
  */
-void GsuRecordRaise6A(uint16_t rec, uint8_t amount)
+void GsuRecordBoostRaise(uint16_t rec, uint8_t amount)
 {
     record_amount_args(rec, amount);
     if (rec_get(rec, FXREC_FLAGS40) & 0x0001)
         return;
-    ObjectFlag40IfMatch(fxram_get(GSU_RECORD_ARG));
+    PlayerStartleIfRecord(fxram_get(GSU_RECORD_ARG));
     FxRecordRaise6A();
 }
 
@@ -311,7 +316,7 @@ int ObjectSyncFromRecord(Object *o)
     int odd = 0;
 
     ObjectRebucket(o);
-    GsuRecordFlag4(o);
+    GsuRecordKeep(o);
     o->flags24 &= 0xFD;
     rec = o->record;
     record_contacts.no_record = !rec;
@@ -344,7 +349,7 @@ int ObjectSyncToRecord(Object *o)
     uint16_t rec;
 
     ObjectRebucket(o);
-    GsuRecordFlag4(o);
+    GsuRecordKeep(o);
     rec = o->record;
     record_contacts.no_record = !rec;
     if (!rec) {
@@ -665,7 +670,7 @@ void ObjectPoseFromRecord(Object *o)
  * WHAT IT DOES: Sets the record's +$2A to the value as the high byte, when
  * it has one.
  */
-void GsuRecordSet2AHigh(Object *o, uint8_t value)
+void GsuRecordSetMass(Object *o, uint8_t value)
 {
     if (o->record)
         rec_put(o->record, 0x002A, (uint16_t)(value << 8));

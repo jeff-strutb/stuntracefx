@@ -157,8 +157,8 @@ enum {
 
 /* the cartridge's tables the object code reads through */
 enum {
-    FACING_FRAMES_32 = 0xE8AF,          /* $08: a sprite's frame by its turn to the camera, 32 steps (ObjectTableE8AF) */
-    FACING_FRAMES_64 = 0xC056,          /* $08: the same by 64 steps (ObjectTableC056) */
+    FACING_FRAMES_32 = 0xE8AF,          /* $08: a sprite's frame by its turn to the camera, 32 steps (ObjectFacingFrame32) */
+    FACING_FRAMES_64 = 0xC056,          /* $08: the same by 64 steps (ObjectFacingFrame64) */
     JUMP_RISE = 0xB32B,                 /* $08: a rise by a car's jump timer (ObjectMoveForward) */
     EYE_BLINK = 0xE57F,                 /* $08: an eye's looks through a blink, from the second word: plain, half, shut, half, plain */
     EYE_BLINK_TO_STARTLED = 0xE5AD,     /* plain, half, shut, half startled, startled */
@@ -275,26 +275,26 @@ static inline uint16_t fxram_get(uint16_t at) { return rec_get(at, 0); }
 static inline void fxram_put(uint16_t at, uint16_t v) { rec_put(at, 0, v); }
 
 /* object.c */
-uint16_t ObjectLinkedSet1A(Object *o, uint16_t handler);
+uint16_t ObjectLinkedHandlerSet(Object *o, uint16_t handler);
 void ObjectCopyAnglesFrom(Object *to, const Object *from);   /* 03:D227 ObjectCopy14From (and D214) */
 void ObjectCopyPosition(Object *to, const Object *from);     /* 03:D1E6 ObjectCopyPositionTo, D1FD ...From */
 void ObjectApplyVelocity(Object *o);
 void ObjectPoolInit(void);
-void ObjectLinkFlag4000Step(void);
-void ObjectFlag40IfMatch(uint16_t value);
-uint8_t ObjectTableE8AF(const Object *o, uint8_t base, uint8_t value);
+void BackdropPitchForCameraMode(void);
+void PlayerStartleIfRecord(uint16_t value);
+uint8_t ObjectFacingFrame32(const Object *o, uint8_t base, uint8_t value);
 uint16_t object_gaze(const Object *o, int side);
-uint8_t ObjectTableC056(const Object *o, uint8_t turn);
+uint8_t ObjectFacingFrame64(const Object *o, uint8_t turn);
 int ObjectListAppend(Object *o);
 void ObjectBucketInsert(Object *o);
 void ObjectBucketRemove(Object *o);
 void ObjectRebucket(Object *o);
 void ObjectVelocityFromRecord(Object *o);
-uint16_t ObjectSet5DByKind(Object *o, uint8_t kind);
+uint16_t ObjectCarLookByKind(Object *o, uint8_t kind);
 void ObjectPlaceAll(void);
-int ObjectCountStep5F(Object *o, uint8_t limit, uint8_t end, uint8_t step);
+int ObjectSizeRiseFall(Object *o, uint8_t limit, uint8_t end, uint8_t step);
 void ObjectNearFocus(Object *o);
-void ObjectRecordFlag70Step(Object *o);
+void ObjectRecordHoldWhileFrozen(Object *o);
 void ObjectLinkedHandlerByState(Object *o, uint8_t state);
 void ObjectAttachLinked(Object *o, Object *other);
 void ObjectGroupsActivate(void);
@@ -324,9 +324,9 @@ static inline uint16_t script16(uint8_t bank, uint16_t entry, unsigned field) { 
 /* a model record's offsets: an object made with bit 9 of its entry's flags adds them */
 enum { MODEL_OFFSET_X = 0x0A, MODEL_OFFSET_Y = 0x0C, MODEL_OFFSET_Z = 0x0E };
 Object *ObjectSpawnFromScript(uint16_t entry, uint8_t bank);
-void ObjectStep48To8(Object *o);
-void ObjectSpawnChanceD460(Object *o);
-void ObjectAdvance5DIfFlag(Object *o);
+void ObjectFrameCountTo8(Object *o);
+void ObjectPieceSprayChance(Object *o);
+void ObjectLookForSplit(Object *o);
 void ObjectSpawnSparklePair(Object *o);
 void ObjectMoveForward(Object *o);
 void ObjectSpawnTrail(Object *o);
@@ -341,7 +341,7 @@ void ObjectSpawnPuff(Object *o);
 void ObjectCarFrame(Object *o);
 void ObjectCarSpawn(Object *o);
 void ObjectCarRecordNew(Object *o, uint16_t amount);
-void ObjectSpawnD460UnlessFlag(Object *o);
+void ObjectPieceSprayUnlessSplit(Object *o);
 void ObjectSetHandler(Object *o, uint16_t handler);
 Vec16 ObjectTurnVector(const Object *o, int8_t x, int8_t y, int8_t z);
 void ObjectSparkleStart(Object *o);
@@ -449,18 +449,18 @@ void CameraDirectorSkip3(Object *o);
 void CameraDirectorHold(Object *o);
 void CameraDirectorSkip5(Object *o);
 void CameraDirectorNext(Object *o);
-void CameraPath8603(Object *o);
-void CameraPath8679(Object *o);
-void CameraPath869B(Object *o);
-void CameraPath86B3(Object *o);
-void CameraPath86CB(Object *o);
-void CameraPath86E3(Object *o);
-void CameraPath8709(Object *o);
+void CameraPathGo1(Object *o);
+void CameraPathGo2(Object *o);
+void CameraPathGo3(Object *o);
+void CameraPathGo4(Object *o);
+void CameraPathGo5(Object *o);
+void CameraPathGo6(Object *o);
+void CameraPathGo7(Object *o);
 void CameraLowHoldStep(Object *o);
 void CameraLowHold(Object *o);
 void CameraPathLowStep(Object *o);
-void CameraPathLow87B7(Object *o);
-void CameraPathLow875B(Object *o);
+void CameraPathLow2(Object *o);
+void CameraPathLow1(Object *o);
 void CameraDirectorSkip2(Object *o);
 void CameraDirectorTableStart(Object *o);
 void CameraDirectorTable(Object *o);
@@ -469,8 +469,8 @@ void CameraDirectorPathStart(Object *o);
 void CameraDirectorWait(Object *o);
 void CameraDirectorBehind(Object *o);
 void CameraOnMarkedCar(Object *o);
-uint16_t GsuTableEntryNext(uint16_t entry);
-void GsuTableEntryTo1F4C(uint16_t entry, uint16_t out[3]);
+uint16_t TrackTableEntryNext(uint16_t entry);
+void TrackTableEntryPlace(uint16_t entry, uint16_t out[3]);
 
 /* replay_camera.c */
 void CameraSnapToCar(Object *o);
@@ -499,31 +499,31 @@ void CameraPathGoStep(Object *o);
 void CameraPathGo(Object *o);
 
 /* gsu_record.c */
-void GsuRecordMode2(Object *o);
+void GsuRecordTouchesAll(Object *o);
 void GsuRecordSetFlags(Object *o, uint16_t bits);
-void GsuRecordFlag10(Object *o);
+void GsuRecordSolid(Object *o);
 void GsuRecordPosition(Object *o, uint16_t x, uint16_t y, uint16_t z);
-uint16_t GsuRecordWord88(const Object *o);
-uint16_t GsuRecordWord58(const Object *o, int *clear);
-int GsuRecordFlag4(Object *o);
+uint16_t GsuRecordParentRank(const Object *o);
+uint16_t GsuRecordParentSegment(const Object *o, int *clear);
+int GsuRecordKeep(Object *o);
 int GsuRecordVelocity(Object *o);
-void GsuRecordWords88(void);
-void GsuRecordStep6A(Object *o);
+void GsuRecordStarterRanks(void);
+void GsuRecordBoostRecharge(Object *o);
 void ObjectVelocityFromRecordOf(Object *o, const Object *from);
 void GsuRecordFromObject(Object *o);
 void ObjectVelocityFromRecordScaled(Object *o);
-void GsuRecordBits60(void);
-int GsuRecordNew422(Object *o);
-int GsuRecordNew42D(Object *o);
-int GsuRecordNew424Piece(Object *o);
-int GsuRecordNew424(Object *o);
-int GsuRecordNew424Alt(Object *o);
+void GsuRecordBobTriggers(void);
+int GsuRecordNewStill(Object *o);
+int GsuRecordNewTrigger(Object *o);
+int GsuRecordNewBouncing(Object *o);
+int GsuRecordNewFalling(Object *o);
+int GsuRecordNewSolidTrigger(Object *o);
 int GsuRecordNewCamera(Object *o);
-int GsuRecordNew426(Object *o);
-void GsuRecordLower82(uint16_t rec, uint8_t amount);
-void GsuRecordFlags8ASet(uint16_t rec, uint8_t bits);
-void GsuRecordFlags8AClear(uint16_t rec, uint8_t bits);
-void GsuRecordRaise6A(uint16_t rec, uint8_t amount);
+int GsuRecordNewFallingPart(Object *o);
+void GsuRecordRepair(uint16_t rec, uint8_t amount);
+void GsuRecordCourseFlagsSet(uint16_t rec, uint8_t bits);
+void GsuRecordCourseFlagsClear(uint16_t rec, uint8_t bits);
+void GsuRecordBoostRaise(uint16_t rec, uint8_t amount);
 void ObjectTurnFromRecord(uint16_t rec, Object *o);
 int ObjectSyncFromRecord(Object *o);
 int ObjectSyncToRecord(Object *o);
@@ -534,18 +534,16 @@ uint16_t RecordContactSummary(const Object *o);
 void CarControlsToRecord(Object *o, uint16_t held, uint16_t prev, int player);
 void PlayerControlsFrame(void);
 void ObjectPoseFromRecord(Object *o);
-void GsuRecordSet2AHigh(Object *o, uint8_t value);
+void GsuRecordSetMass(Object *o, uint8_t value);
 
 /* object_links.c */
 void ObjectListTableFirst(uint8_t flag);
 void ObjectListFreeAll(void);
 void ObjectLinkChild(uint8_t tag, Object *parent, Object *child);
 Object *ObjectChildFindTag(uint8_t tag, Object *from);
-Object *ObjectSpawnA040(void);
 
 /* object_fields.c */
 void ObjectPlaceAtOffset(const Object *from, Object *to, int16_t dx, int16_t dz, int16_t dy);
-int ObjectStepByte17(Object *o, uint8_t step, uint8_t target);
 void ObjectStop(Object *o);
 
 /* orient.c */
@@ -557,15 +555,15 @@ int ObjectPathCommand(Object *o);
 /* The camera paths: their offsets into the path table at $08:85B9 (path.c) */
 enum {
     PATH_DEMO_SHOT = 0x0000,            /* $85B9: CameraPathB's in the attract demos */
-    PATH_GO_1 = 0x004A,                 /* $8603: CameraPath8603 */
-    PATH_GO_2 = 0x00C0,                 /* $8679: CameraPath8679 */
-    PATH_GO_3 = 0x00E2,                 /* $869B: CameraPath869B */
-    PATH_GO_4 = 0x00FA,                 /* $86B3: CameraPath86B3 */
-    PATH_GO_5 = 0x0112,                 /* $86CB: CameraPath86CB */
-    PATH_GO_6 = 0x012A,                 /* $86E3: CameraPath86E3 */
-    PATH_GO_7 = 0x0150,                 /* $8709: CameraPath8709 */
-    PATH_LOW_1 = 0x01A2,                /* $875B: CameraPathLow875B */
-    PATH_LOW_2 = 0x01FE,                /* $87B7: CameraPathLow87B7 */
+    PATH_GO_1 = 0x004A,                 /* $8603: CameraPathGo1 */
+    PATH_GO_2 = 0x00C0,                 /* $8679: CameraPathGo2 */
+    PATH_GO_3 = 0x00E2,                 /* $869B: CameraPathGo3 */
+    PATH_GO_4 = 0x00FA,                 /* $86B3: CameraPathGo4 */
+    PATH_GO_5 = 0x0112,                 /* $86CB: CameraPathGo5 */
+    PATH_GO_6 = 0x012A,                 /* $86E3: CameraPathGo6 */
+    PATH_GO_7 = 0x0150,                 /* $8709: CameraPathGo7 */
+    PATH_LOW_1 = 0x01A2,                /* $875B: CameraPathLow1 */
+    PATH_LOW_2 = 0x01FE,                /* $87B7: CameraPathLow2 */
     PATH_DIRECTOR = 0x0238,             /* $87F1: the replay director's (CameraDirectorPathStart) */
     PATH_SHOT_B = 0x0274,               /* $882D: CameraPathB's */
     PATH_SHOT_A = 0x02A6,               /* $885F: CameraPathA's */
@@ -618,7 +616,7 @@ void CrashWhite(void);
 /* object/objects_09.c: the handlers of bank $09 */
 void ObjectLampTower(Object *o);
 void ObjectLampLow(Object *o);
-void ObjectScale40(Object *o);
+void ObjectHeading90(Object *o);
 void ObjectScoreGateStep(Object *o);
 void ObjectScoreGateRecord(Object *o);
 void ObjectScoreGate(Object *o);
@@ -720,9 +718,9 @@ void ObjectBreakablePiece(Object *o);
 void ObjectBreakableStep(Object *o);
 void ObjectBreakableRecord(Object *o);
 void ObjectBreakable(Object *o);
-void ObjectScaleE0(Object *o);
-void ObjectScaleA0(Object *o);
-void ObjectScale20(Object *o);
+void ObjectHeading315(Object *o);
+void ObjectHeading225(Object *o);
+void ObjectHeading45(Object *o);
 void ObjectSwingStep(Object *o);
 void ObjectSwing(Object *o);
 void LapCrowdStep0(Object *o);

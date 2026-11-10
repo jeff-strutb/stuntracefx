@@ -98,7 +98,7 @@ void PartDetach(Object *o)
     Object *car = obj_at(o->parent);
 
     car->flags25 |= 0x80;
-    ObjectSet5DByKind(o, car->byte49);
+    ObjectCarLookByKind(o, car->byte49);
     o->byte4b = 0x00;
     ObjectSetHandler(o, H_PART_DETACH_STEP);
     PartDetachStep(o);
@@ -195,7 +195,7 @@ void PartFlyStep(Object *o)
         }
         part_life_set(o, v);
     }
-    ObjectSpawnChanceD460(o);
+    ObjectPieceSprayChance(o);
 }
 
 /*
@@ -210,11 +210,11 @@ void PartKnockOff(Object *o)
     Object *car = obj_at(o->parent);
     Vec16 v;
 
-    ObjectSet5DByKind(o, car->byte49);
+    ObjectCarLookByKind(o, car->byte49);
     v = part_on_car(o, car);
     add_vector(o, v);
     ObjectVelocityFromRecordOf(o, car);
-    if (!GsuRecordNew426(o)) {
+    if (!GsuRecordNewFallingPart(o)) {
         if (o->flags25 & 0x01) {
             car->flags25 &= 0xFB;
             car->flags25 &= 0xEF;
@@ -251,7 +251,7 @@ static void player_drive(Object *o)
     GsuRecordLand(o);
     PlayerCarEvents(o);
     ObjectPoseFromRecord(o);
-    GsuRecordStep6A(o);
+    GsuRecordBoostRecharge(o);
     ObjectMoveForward(o);
     ObjectRebucket(o);
     o->timer = 3;
@@ -287,7 +287,7 @@ static void player_attach(Object *o, uint16_t h, ObjRef bare)
 {
     ObjectSetHandler(o, h);
     ObjectAttachLinked(o, obj_at(bare));
-    ObjectSet5DByKind(o, o->byte49);
+    ObjectCarLookByKind(o, o->byte49);
     g.player_flags[0] = 0;
     o->word29 = 0;
 }

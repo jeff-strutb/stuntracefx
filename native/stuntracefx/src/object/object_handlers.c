@@ -99,7 +99,7 @@ void ObjectBurstPieceStart(Object *o)
     o->count48 = 0x28;
     o->heading = RandomStep();
     o->pitch = RandomStep();
-    GsuRecordNew426(o);
+    GsuRecordNewFallingPart(o);
     GsuRecordVelocity(o);
     ObjectBurstPieceStep(o);
 }
@@ -185,7 +185,7 @@ void ObjectBlinkerStart(Object *o)
     o->count48 = 0x32;
     o->frame5a = 0x8F;
     o->script = OBJECT_SCRIPT_BLINKER;
-    if (!GsuRecordNew422(o))
+    if (!GsuRecordNewStill(o))
         return;
     record_place(o, 0x02D0, 0x0190, 0x02D0, 0x4000);
     ObjectBlinkerRise(o);
@@ -212,7 +212,7 @@ void ObjectPaceCarStep(Object *o)
         rec_and(rec, FXREC_SIDES, 0xF7FF);
         if (below(rec_get(rec, FXREC_SPEED), 0x001E))
             rec_or(rec, FXREC_SIDES, 0x0800);
-        GsuRecordFlag4(o);
+        GsuRecordKeep(o);
         return;
     }
     rec_or(rec, FXREC_FLAGS1C, 0x0010);
@@ -300,7 +300,7 @@ void ObjectPaceCarSetup(Object *o)
     o->parent = obj_ref(n);
     ObjectSetHandler(o, H_SIGNAL_STEP);
     o->script = OBJECT_SCRIPT_SIGNAL;
-    if (!GsuRecordNew422(o))
+    if (!GsuRecordNewStill(o))
         return;
     record_place(o, 0x0640, 0x0640, 0x0640, 0xC100);
     o->count48 = 0x14;
@@ -547,7 +547,7 @@ void ObjectChildFlying(Object *o)
             ObjectRelease(o);
             return;
         }
-        ObjectSpawnChanceD460(o);
+        ObjectPieceSprayChance(o);
         child_flags(o);
         return;
     }
@@ -558,7 +558,7 @@ void ObjectChildFlying(Object *o)
     }
     o->byte4b--;
     o->y = child_y(o->byte5f, o->y);
-    ObjectSpawnChanceD460(o);
+    ObjectPieceSprayChance(o);
     child_flags(o);
 }
 
@@ -574,7 +574,7 @@ void ObjectChildLoose(Object *o)
 
     ObjectSetHandler(o, H_CHILD_FLYING);
     o->link27 = o->record;
-    GsuRecordNew426(o);
+    GsuRecordNewFallingPart(o);
     p = obj_at(o->parent);
     ObjectVelocityFromRecordOf(o, p);
     o->vx = asr1(rec_get(o->link27, 0x0036));
@@ -621,7 +621,7 @@ static void piece_look(Object *o, uint16_t look, int adv, uint8_t f5)
 {
     o->anim = look;
     if (adv)
-        ObjectAdvance5DIfFlag(o);
+        ObjectLookForSplit(o);
     o->flags24 |= 0x08;
     o->byte3a = 0;
     o->byte5f = f5;
@@ -675,7 +675,7 @@ void ObjectBreakOffE(Object *o)
 static void break_off_f(Object *o, uint8_t f5)
 {
     o->anim = LOOK_BREAK_OFF_E_FLAT;
-    ObjectAdvance5DIfFlag(o);
+    ObjectLookForSplit(o);
     o->flags24 |= 0x08;
     o->byte3a = 0;
     o->byte5f = f5;
@@ -744,7 +744,7 @@ void ObjectPieceSpray(Object *o)
     o->y = (uint16_t)(o->y + (uint16_t)((uint16_t)v.y << 1));
     ObjectVelocityFromRecordScaled(o);
     o->vy = (uint16_t)(o->vy + 0xFFEC);
-    ObjectAdvance5DIfFlag(o);
+    ObjectLookForSplit(o);
     ObjectPieceFall(o);
 }
 
@@ -952,7 +952,7 @@ void ObjectCarAttachedStep(Object *o)
 {
     ObjectRebucket(o);
     ObjectPoseFromRecord(o);
-    GsuRecordFlag4(o);
+    GsuRecordKeep(o);
 }
 
 /*
@@ -997,7 +997,7 @@ void ObjectExhaustStep(Object *o)
 
     if (o->byte4b) {
         o->byte4b--;
-        o->count48 = (uint8_t)GsuRecordWord88(o);
+        o->count48 = (uint8_t)GsuRecordParentRank(o);
     }
     p = obj_at(o->parent);
     if ((p->flags25 & 0x08) || (p->flags25 & 0x10) || ObjectParentRecordBit8(o)) {
@@ -1005,13 +1005,13 @@ void ObjectExhaustStep(Object *o)
         return;
     }
     if (o->byte39 == 0x01) {
-        v = (uint8_t)GsuRecordWord88(o);
+        v = (uint8_t)GsuRecordParentRank(o);
         if (v != o->count48) {
             o->count48 = v;
             o->byte39 = 0x02;
             o->byte49 = 0x08;
         }
-        v = (uint8_t)GsuRecordWord58(o, &clear);
+        v = (uint8_t)GsuRecordParentSegment(o, &clear);
         {
             uint8_t w = (uint8_t)(v - o->byte4a);
             int small_drop = !clear && (w & 0x80) && ((uint8_t)(0 - w - 0x02) & 0x80);
@@ -1026,10 +1026,10 @@ void ObjectExhaustStep(Object *o)
         }
     }
     if (o->byte39 == 0x02)
-        o->sprite_turn[0] = (uint8_t)((uint8_t)GsuRecordWord88(o) | 0x80);
+        o->sprite_turn[0] = (uint8_t)((uint8_t)GsuRecordParentRank(o) | 0x80);
     if (o->byte39 == 0x03) {
         o->sprite_turn[0] = 0x84;
-        o->byte4a = (uint8_t)GsuRecordWord58(o, &clear);
+        o->byte4a = (uint8_t)GsuRecordParentSegment(o, &clear);
     }
     v = o->byte49;
     if (!v) {
@@ -1088,7 +1088,7 @@ void ObjectExhaustStart(Object *o)
         int clear;
 
         ObjectSetHandler(o, H_EXHAUST_STEP);
-        o->byte4a = (uint8_t)GsuRecordWord58(o, &clear);
+        o->byte4a = (uint8_t)GsuRecordParentSegment(o, &clear);
         o->byte49 = 0;
         o->vy = (uint16_t)((uint16_t)sx8((uint8_t)o->vy) << 1);
         o->byte4b = 0x0A;
@@ -1223,7 +1223,7 @@ void PlayerCarEvents(Object *o)
         if (!(o->flags24 & 0x40)) {
             if (rec_get(rec, FXREC_FLAGS40) & 0x0002) {
                 ObjectSpawnTrail(o);
-                ObjectSpawnD460UnlessFlag(o);
+                ObjectPieceSprayUnlessSplit(o);
             } else if ((rec_get(rec, FXREC_SIDES) & 0x0400) && RandomStep() >= 0xF2) {
                 ObjectSpawnTrail(o);
             }
@@ -1236,7 +1236,7 @@ void PlayerCarEvents(Object *o)
                     *f |= 0x0020;
                 }
                 if (!(o->flags25 & 0x04) && RandomStep() >= 0x4C)
-                    ObjectSpawnD460UnlessFlag(o);
+                    ObjectPieceSprayUnlessSplit(o);
             }
         }
     }
@@ -1383,7 +1383,7 @@ void ObjectLampStart(Object *o)
 void ObjectLampDrop(Object *o)
 {
     o->count48 = (uint8_t)(o->count48 + 0x10);
-    if (ObjectCountStep5F(o, 0x08, 0x10, 0x05)) {
+    if (ObjectSizeRiseFall(o, 0x08, 0x10, 0x05)) {
         o->count48 = 0;
         ObjectSetHandler(o, H_LAMP_WAIT);
     }
@@ -1397,7 +1397,7 @@ void ObjectLampDrop(Object *o)
  */
 void ObjectLampDropB(Object *o)
 {
-    if (ObjectCountStep5F(o, 0x03, 0x06, 0x0A)) {
+    if (ObjectSizeRiseFall(o, 0x03, 0x06, 0x0A)) {
         o->byte49 = 0;
         ObjectSetHandler(o, H_LAMP_WAIT);
         o->flags25 &= 0xFE;
@@ -1597,7 +1597,7 @@ void ObjectRingPartStart(Object *o)
  */
 void ObjectDemoCarStep(Object *o)
 {
-    ObjectSet5DByKind(o, (uint8_t)g.selection_out[0]);
+    ObjectCarLookByKind(o, (uint8_t)g.selection_out[0]);
     if (o->count48)
         o->count48--;
     else
@@ -1605,7 +1605,7 @@ void ObjectDemoCarStep(Object *o)
     ObjectRebucket(o);
     ObjectPoseFromRecord(o);
     o->timer = 3;
-    GsuRecordFlag4(o);
+    GsuRecordKeep(o);
 }
 
 /*
@@ -1697,7 +1697,7 @@ static uint16_t director_entry(const Object *o, unsigned n)
     uint16_t e = rec_get(obj_at(o->parent)->record, FXREC_SEGMENT);
 
     while (n--)
-        e = GsuTableEntryNext(e);
+        e = TrackTableEntryNext(e);
     return e;
 }
 
@@ -1707,7 +1707,7 @@ static void director_place(Object *o, uint16_t entry, uint16_t dx, uint16_t dy, 
     uint16_t out[3];
     Camera *c = camera_of(o->link);
 
-    GsuTableEntryTo1F4C(entry, out);
+    TrackTableEntryPlace(entry, out);
     c->x = (uint16_t)(out[0] + dx);
     c->y = (uint16_t)(out[1] + dy);
     c->z = (uint16_t)(out[2] + dz);
@@ -1741,12 +1741,12 @@ void CameraDirectorTrack(Object *o)
     if (e) {
         c = camera_of(o->link);
         if (e != c->word04 && !(e & 0x0003)) {
-            uint16_t next = GsuTableEntryNext(e), out[3];
+            uint16_t next = TrackTableEntryNext(e), out[3];
 
             c->word04 = e;
             director_place(o, next, 0x03E8, 0xFA24, 0x03E8);
             o->link27 = 0x0018;
-            GsuTableEntryTo1F4C(GsuTableEntryNext(next), out);
+            TrackTableEntryPlace(TrackTableEntryNext(next), out);
             o->vx = slope((uint16_t)(out[0] - c->x));
             o->vy = slope((uint16_t)(out[1] - c->y));
             o->vz = slope((uint16_t)(out[2] - c->z));
@@ -1931,7 +1931,7 @@ void CameraOnMarkedCar(Object *o)
 }
 
 /* the camera table a course's record follows (gsu/params.c) */
-uint16_t GsuTableEntryNext(uint16_t entry)
+uint16_t TrackTableEntryNext(uint16_t entry)
 {
     uint8_t bank = fx_ram[FX_TRACK_TABLE_BANK];
     uint16_t last = cart16(bank, fxram_get(FX_TRACK_TABLE));
@@ -1941,7 +1941,7 @@ uint16_t GsuTableEntryNext(uint16_t entry)
     return (uint16_t)(entry + 1);
 }
 
-void GsuTableEntryTo1F4C(uint16_t entry, uint16_t out[3])
+void TrackTableEntryPlace(uint16_t entry, uint16_t out[3])
 {
     uint8_t bank = fx_ram[FX_TRACK_TABLE_BANK];
     uint16_t at = (uint16_t)((uint16_t)((uint16_t)(entry - 1) << 3) + fxram_get(FX_TRACK_TABLE) + 2);

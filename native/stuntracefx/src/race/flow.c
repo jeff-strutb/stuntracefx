@@ -687,7 +687,7 @@ static int demo_commands(void)
 
         switch (c) {
         case 0x01:
-            ObjectLinkedSet1A(obj_at(g.player_car), demo16((uint16_t)(at + 1)));
+            ObjectLinkedHandlerSet(obj_at(g.player_car), demo16((uint16_t)(at + 1)));
             flow.demo_at = (uint16_t)(at + 3);
             continue;
         case 0x02:

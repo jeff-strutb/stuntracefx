@@ -226,7 +226,7 @@ FxRecordAlignmentResult FxRecordAlignment(uint16_t pose_aux, uint16_t record, ui
  * $0180.
  * HOW: ROMB, RAMB 0; FMULT of $0300 (R2 doubled) by the amount, ADD, and
  * the cap by CMP and the sign; SBK stores to the field's address, the last
- * loaded. The S-CPU side is GsuRecordRaise6A (object/fx_record.asm).
+ * loaded. The S-CPU side is GsuRecordBoostRaise (object/fx_record.asm).
  * Entry: the S-CPU starts it. Exit: (at its STOP) R0 = the new +$6A; R1 =
  * the old; R2 = $0180; R6 = the amount; R8 = the record; ROMBR = RAMBR = 0;
  * OV, S, CY, Z from the CMP; the last RAM address R8 + $6A.
@@ -260,7 +260,7 @@ void FxRecordRaise6A(void)
  * than 0.
  * HOW: ROMB, RAMB 0; FMULT of $0400 (R2 doubled) by the amount, SUB from
  * the field, and SUB R0 for 0 when negative; SBK stores to the field's
- * address, the last loaded. The S-CPU side is GsuRecordLower82
+ * address, the last loaded. The S-CPU side is GsuRecordRepair
  * (object/fx_record.asm).
  * Entry: the S-CPU starts it. Exit: (at its STOP) R0 = the new +$82; R1 =
  * the old; R2 = $0200; R6 = the amount; R8 = the record; ROMBR = RAMBR = 0;

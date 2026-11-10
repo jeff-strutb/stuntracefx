@@ -44,16 +44,16 @@ void object_handler_call(Object *o, uint32_t handler)
     case 0x08951B: CameraStill(o); return;
     case 0x08953C: CameraStillStep(o); return;
     case 0x08958C: CameraEndStep(o); return;
-    case 0x089896: CameraPath8603(o); return;
-    case 0x0898CC: CameraPath8679(o); return;
-    case 0x0898E7: CameraPath869B(o); return;
-    case 0x089902: CameraPath86B3(o); return;
-    case 0x08991D: CameraPath86CB(o); return;
-    case 0x089938: CameraPath8709(o); return;
-    case 0x089946: CameraPath86E3(o); return;
+    case 0x089896: CameraPathGo1(o); return;
+    case 0x0898CC: CameraPathGo2(o); return;
+    case 0x0898E7: CameraPathGo3(o); return;
+    case 0x089902: CameraPathGo4(o); return;
+    case 0x08991D: CameraPathGo5(o); return;
+    case 0x089938: CameraPathGo7(o); return;
+    case 0x089946: CameraPathGo6(o); return;
     case 0x08998B: CameraPathGoStep(o); return;
-    case 0x0899DC: CameraPathLow87B7(o); return;
-    case 0x0899E6: CameraPathLow875B(o); return;
+    case 0x0899DC: CameraPathLow2(o); return;
+    case 0x0899E6: CameraPathLow1(o); return;
     case 0x089A0D: CameraPathLowStep(o); return;
     case 0x089A25: CameraLowHoldStep(o); return;
     case 0x089BD9: ObjectRingStartZ(o); return;
@@ -140,7 +140,7 @@ void object_handler_call(Object *o, uint32_t handler)
     case 0x08F927: ObjectRelease(o); return;
     case 0x098B3B: ObjectLampTower(o); return;
     case 0x098BD4: ObjectLampLow(o); return;
-    case 0x098C0F: ObjectScale40(o); return;
+    case 0x098C0F: ObjectHeading90(o); return;
     case 0x098C16: ObjectScoreGate(o); return;
     case 0x098CAF: ObjectScoreGateRecord(o); return;
     case 0x098CD6: ObjectScoreGateStep(o); return;
@@ -294,9 +294,9 @@ void object_handler_call(Object *o, uint32_t handler)
     case 0x09C5E3: ObjectColour5(o); return;
     case 0x09C5EC: ObjectColour6(o); return;
     case 0x09C5F5: ObjectColour7(o); return;
-    case 0x09C5FE: ObjectScaleE0(o); return;
-    case 0x09C605: ObjectScaleA0(o); return;
-    case 0x09C60C: ObjectScale20(o); return;
+    case 0x09C5FE: ObjectHeading315(o); return;
+    case 0x09C605: ObjectHeading225(o); return;
+    case 0x09C60C: ObjectHeading45(o); return;
     case 0x09C613: ObjectSwing(o); return;
     case 0x09C62D: ObjectSwingStep(o); return;
     case 0x09C7C9: LapCrowdStep0(o); return;
@@ -412,12 +412,12 @@ int handler_runs_from_start(uint32_t handler)
     switch (handler) {
     case 0x089BD9: case 0x089BF7: case 0x089C15: case 0x089C33: /* ObjectRingStart Z, X, BackZ, BackX */
     case 0x098B3B: case 0x098BD4:                                /* ObjectLampTower, ObjectLampLow */
-    case 0x098C0F: case 0x098CF8:                                /* ObjectScale40, ObjectScoreCounterStep */
+    case 0x098C0F: case 0x098CF8:                                /* ObjectHeading90, ObjectScoreCounterStep */
     case 0x099520: case 0x099ACB: case 0x099AE8: case 0x099E9A: /* sky ball, cannon balls left and right, wave ball */
     case 0x09ABF3:                                               /* ObjectPopMarker */
     case 0x09C244: case 0x09C280: case 0x09C2C5:                 /* ObjectLapLight, Left, Right */
     case 0x09C5C8: case 0x09C5D1: case 0x09C5DA: case 0x09C5E3: case 0x09C5EC: case 0x09C5F5: /* ObjectColour2-7 */
-    case 0x09C5FE: case 0x09C605: case 0x09C60C:                 /* ObjectScaleE0, A0, 20 */
+    case 0x09C5FE: case 0x09C605: case 0x09C60C:                 /* ObjectHeading315, A0, 20 */
     case 0x09C613:                                               /* ObjectSwing */
     case 0x09C7C9: case 0x09C7FC: case 0x09C83D:                 /* LapCrowdStep0-2 */
     case 0x09E4D6:                                               /* ObjectSlideMeter */

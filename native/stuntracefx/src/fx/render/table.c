@@ -15,7 +15,7 @@
  * @routine 04:CD83 FxTableEntryWords
  * WHAT IT DOES: Returns the address of the words of entry R0 of the table
  * whose address is the word at $1092: the Super FX side of
- * GsuTableEntryTo1F4C.
+ * TrackTableEntryPlace.
  * HOW: (entry - 1) * 8 with LMULT (R6 = 8; R4 takes the low word of the
  * product), then the table address + 2 + that.
  * Entry: R0 = entry; R11 = return address. Exit: R5 = the address; R0 and

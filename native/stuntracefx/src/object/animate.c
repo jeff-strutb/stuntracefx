@@ -100,7 +100,7 @@ static int look_known(uint32_t h)
     switch (h) {
     case 0x000000: case 0x08CD2D:       /* no handler; ObjectFlagsRecordSetup */
     case 0x09C5C8: case 0x09C5D1: case 0x09C5DA: case 0x09C5E3: case 0x09C5EC: case 0x09C5F5: /* ObjectColour2-7 */
-    case 0x098C0F: case 0x09C5FE: case 0x09C605: case 0x09C60C: /* ObjectScale40, E0, A0, 20 */
+    case 0x098C0F: case 0x09C5FE: case 0x09C605: case 0x09C60C: /* ObjectHeading90, E0, A0, 20 */
     case 0x09C90C:                      /* ObjectFloaterSpawner: its scale $40 (its floater is its trigger's) */
     case 0x08CA45: case 0x08CAF6:       /* ObjectFlagsRecordFrame, ObjectFrameSwingSetup: a frame shown */
     case 0x09C244: case 0x09C280: case 0x09C2C5: /* ObjectLapLight, Left, Right */
