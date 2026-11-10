@@ -125,7 +125,7 @@ static const uint8_t *cart_ref(uint32_t at)
 
 static void tiles_from_picture(nshvc_tiles set, uint32_t first, uint32_t bytes, uint32_t per_tile)
 {
-    nshvc_tiles_write(set, first, picture, bytes / per_tile, NSHVC_TILES_PLANAR);
+    video_tiles_write(set, first, picture, bytes / per_tile, NSHVC_TILES_PLANAR, bytes / per_tile * per_tile);
 }
 
 /* A menu page written, and kept for the granite's map at the window's size. */
@@ -209,7 +209,7 @@ static void logo_open(void)
     menu_scroll_reset();
     palette_from(PALETTE_TITLE);
     pic.palette[0] = 0;
-    nshvc_tiles_write(menu_video.sprites, 0, cart_ref(LOGO_SPRITES), 0x720 / 32, NSHVC_TILES_PLANAR);
+    video_tiles_write(menu_video.sprites, 0, cart_ref(LOGO_SPRITES), 0x720 / 32, NSHVC_TILES_PLANAR, 0x720);
     actors.fast_animation = 0;
     actors.exit_request = 0;
     menu_objects_start(0);
@@ -244,14 +244,14 @@ static void title_open(void)
     menu_palette_scale(0x0C, 4, 32);
     tiles_from_picture(menu_video.sprites, 0, picture_unpack(PIC_TITLE_SPRITES), 32);
     pages_from_picture(2, picture_unpack(PIC_TITLE_BG2_PAGE2));
-    nshvc_tiles_write(menu_video.tiles_text, 0, cart_ref(TITLE_TEXT_TILES), 0x40 / 16, NSHVC_TILES_PLANAR);
+    video_tiles_write(menu_video.tiles_text, 0, cart_ref(TITLE_TEXT_TILES), 0x40 / 16, NSHVC_TILES_PLANAR, 0x40);
     tiles_from_picture(menu_video.tiles_a, 0, picture_unpack(PIC_TITLE_BG1_TILES), 32);
     pages_from_picture(0, picture_unpack(PIC_TITLE_BG1_MAP));
     tiles_from_picture(menu_video.tiles_b, 0, picture_unpack(PIC_TITLE_BG2_TILES), 32);
     pages_from_picture(1, picture_unpack(PIC_TITLE_BG2_PAGE1));
     n = picture_unpack(PIC_TITLE_CHECKS_MAP);
     for (i = 0; n >= 0x800 && i < 1; i++)
-        nshvc_map_write_snes(menu_video.text, 0, 0, 32, 32, (const uint16_t *)picture);
+        video_map_write(menu_video.text, 0, 0, 32, 32, (const uint16_t *)picture);
     frame_state.menu_pressed[0] = 0;
     actors.fast_animation = 0;
     actors.exit_request = 0;
@@ -269,7 +269,7 @@ static void title_open(void)
  */
 void menu_load_screen_open(void)
 {
-    nshvc_tiles_write(tiles_load, 0, cart_ref(LOADER_TILES), 4, NSHVC_TILES_PLANAR);
+    video_tiles_write(tiles_load, 0, cart_ref(LOADER_TILES), 4, NSHVC_TILES_PLANAR, 4 * 32);
     pic.mode = 3;
     pic.bg[1].tiles = tiles_load;
     pic.bg[1].map = menu_video.text;
@@ -356,7 +356,7 @@ void menu_load_step(Actor *a)
 void menu_frames_vram_tick(void)
 {
     menu.animated_offset = (uint16_t)((menu.animated_offset + 0x0400) & 0x1FFF);
-    nshvc_tiles_write(tiles_8bpp, 0x100, &frames_tiles[menu.animated_offset], 16, NSHVC_TILES_PLANAR);
+    video_tiles_write(tiles_8bpp, 0x100, &frames_tiles[menu.animated_offset], 16, NSHVC_TILES_PLANAR, 16 * 64);
 }
 
 /*
@@ -1016,7 +1016,7 @@ void menu_champion_frames_tile(uint16_t step)
     uint16_t off = (uint16_t)(cart16(MENU_BANK, (uint16_t)(CHAMPION_FRAME_STEPS + step * 2))
                               + cart16(MENU_BANK, (uint16_t)(CHAMPION_FRAME_CHOICES + (g.choice_p1 & 3) * 2)));
 
-    nshvc_tiles_write(menu_video.tiles_a, 0x15C, &champion_frames[off], 4, NSHVC_TILES_PLANAR);
+    video_tiles_write(menu_video.tiles_a, 0x15C, &champion_frames[off], 4, NSHVC_TILES_PLANAR, 4 * 32);
 }
 
 /* A cell's attributes in the picture: `word` over the tile number. */
@@ -1240,7 +1240,7 @@ int menu_on_stage20(void)
 
 void session_start(void)
 {
-    video_between_menu_set(menu_tween);
+    video_between_menu_was_set(menu_tween);
     state = S_SOUND_START;
     actors_load();
     menu_video_more_init();

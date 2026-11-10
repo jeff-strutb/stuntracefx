@@ -19,6 +19,50 @@ enum { LINES = 225 };
 static int set_now;
 static uint8_t channels_now;
 
+/* What the per-line tables are worked out from: the tables' bytes in the
+   data block, the words the indirect ones name, the set and its channels.
+   Kept at each menus' update's end (menu_lines_keep), so a picture between
+   update N-1 and N works out N-1's tables and eases their moving lines
+   toward N's (the whole-frame rule of video/between.h). */
+enum { TABLES_FROM = MT_CHAMPION_SCROLL_X, TABLES_TO = MT_PREVIEW_WINDOW + 3 };
+enum { W_SLIDE_TOP, W_SLIDE_LOW, W_PANEL_CLASS, W_PANEL_TOP, W_PANEL_LOW, W_PANEL_STILL, WORDS };
+typedef struct {
+    uint32_t update;
+    int set;
+    uint8_t channels;
+    uint8_t tables[TABLES_TO - TABLES_FROM];
+    int32_t words[WORDS];
+} LinesState;
+
+static LinesState kept[2];              /* [0] update N-1's, [1] update N's */
+static const LinesState *from;          /* the state being worked out */
+
+static void take(LinesState *k)
+{
+    k->update = menu_window_updates();
+    k->set = set_now;
+    k->channels = channels_now;
+    memcpy(k->tables, menu_table_byte(TABLES_FROM), sizeof k->tables);
+    k->words[W_SLIDE_TOP] = menu.slide_top;
+    k->words[W_SLIDE_LOW] = menu.slide_low;
+    k->words[W_PANEL_CLASS] = menu.panel_class_scroll;
+    k->words[W_PANEL_TOP] = menu.panel_top_scroll;
+    k->words[W_PANEL_LOW] = menu.panel_low_scroll;
+    k->words[W_PANEL_STILL] = menu.panel_still_scroll;
+}
+
+void menu_lines_keep(void)
+{
+    kept[0] = kept[1];
+    take(&kept[1]);
+}
+
+/* a byte of the tables as `from` has them; 0 (a table's end) outside them */
+static uint8_t tb(uint16_t at)
+{
+    return at >= TABLES_FROM && at < TABLES_TO ? from->tables[at - TABLES_FROM] : 0;
+}
+
 void menu_lines_set(int set, uint8_t channels)
 {
     /* the window-mask channel going off leaves the last value it wrote: 0 */
@@ -33,21 +77,23 @@ void menu_lines_set(int set, uint8_t channels)
    leaving lines before its first entry at `before`. */
 static void table_bytes(uint16_t at, int32_t *values, int32_t before, int width)
 {
-    const uint8_t *t = menu_table_byte(at);
+    uint16_t t = at;
     int v = 0;
     int32_t last = before;
 
-    while (*t && v < LINES) {
-        int n = *t & 0x7F, repeat = *t & 0x80, i;
+    while (tb(t) && v < LINES) {
+        int n = tb(t) & 0x7F, repeat = tb(t) & 0x80, i;
 
         t++;
         for (i = 0; i < n && v < LINES; i++, v++) {
             if (i == 0 || repeat) {
-                last = width == 2 ? (t[i * width] | t[i * width + 1] << 8) : t[i * width];
+                uint16_t e = (uint16_t)(t + i * width);
+
+                last = width == 2 ? (tb(e) | tb((uint16_t)(e + 1)) << 8) : tb(e);
             }
             values[v] = last;
         }
-        t += repeat ? n * width : width;
+        t = (uint16_t)(t + (repeat ? n * width : width));
     }
     for (; v < LINES; v++)
         values[v] = last;
@@ -63,28 +109,28 @@ enum {
 /* An indirect table: a line count and the address of a word to read. */
 static void table_indirect(uint16_t at, int32_t *values, int32_t before)
 {
-    const uint8_t *t = menu_table_byte(at);
+    uint16_t t = at;
     int v = 0;
     int32_t last = before;
 
-    while (*t && v < LINES) {
-        int n = *t & 0x7F, i;
-        uint16_t addr = (uint16_t)(t[1] | t[2] << 8);
+    while (tb(t) && v < LINES) {
+        int n = tb(t) & 0x7F, i;
+        uint16_t addr = (uint16_t)(tb((uint16_t)(t + 1)) | tb((uint16_t)(t + 2)) << 8);
         int32_t value;
 
         switch (addr) {
-        case WORD_SLIDE_TOP: value = menu.slide_top; break;
-        case WORD_SLIDE_LOW: value = menu.slide_low; break;
-        case WORD_PANEL_CLASS: value = menu.panel_class_scroll; break;
-        case WORD_PANEL_TOP: value = menu.panel_top_scroll; break;
-        case WORD_PANEL_LOW: value = menu.panel_low_scroll; break;
-        case WORD_PANEL_STILL: value = menu.panel_still_scroll; break;
+        case WORD_SLIDE_TOP: value = from->words[W_SLIDE_TOP]; break;
+        case WORD_SLIDE_LOW: value = from->words[W_SLIDE_LOW]; break;
+        case WORD_PANEL_CLASS: value = from->words[W_PANEL_CLASS]; break;
+        case WORD_PANEL_TOP: value = from->words[W_PANEL_TOP]; break;
+        case WORD_PANEL_LOW: value = from->words[W_PANEL_LOW]; break;
+        case WORD_PANEL_STILL: value = from->words[W_PANEL_STILL]; break;
         default: value = last; break;
         }
         for (i = 0; i < n && v < LINES; i++, v++)
             values[v] = value;
         last = value;
-        t += 3;
+        t = (uint16_t)(t + 3);
     }
     for (; v < LINES; v++)
         values[v] = last;
@@ -100,13 +146,15 @@ enum { FIELDS = 128 };
 static int32_t line0[FIELDS];
 static uint8_t sent[FIELDS];
 
-/* The positional lines (scrolls and window edges), eased between the last
-   two updates' tables as menu_tween eases the rest (video's tween_table). */
-enum { EASED = 12, FAR_LINE = 64 };
+/* The moving lines (scrolls and window edges) of update N, kept by a first
+   pass over its tables; the second pass sends N-1's, those lines eased
+   toward N's (tween_lines), the rest as N-1 had them. */
+enum { NEWEST = 12, FAR_LINE = 64 };
 static struct {
     int used, field;
-    TweenTable keep;
-} eased[EASED];
+    int32_t v[LINES];
+} newest[NEWEST];
+static int collecting;                  /* the first pass: nothing sent */
 
 static int is_scroll(int field)
 {
@@ -118,21 +166,22 @@ static int positional(int field)
     return is_scroll(field) || (field >= NSHVC_LINE_WIN1_LEFT && field <= NSHVC_LINE_WIN2_RIGHT);
 }
 
-static void ease_lines(int field, int32_t *values)
+static int32_t *newest_lines(int field, int make)
 {
-    int e, free_e = -1;
+    int e;
 
-    for (e = 0; e < EASED && !(eased[e].used && eased[e].field == field); e++)
-        if (!eased[e].used && free_e < 0)
-            free_e = e;
-    if (e == EASED) {
-        if (free_e < 0)
-            return;
-        e = free_e;
-        eased[e].used = 1;
-        eased[e].field = field;
-    }
-    tween_table(&eased[e].keep, values, LINES, FAR_LINE, is_scroll(field) ? TWEEN_SCROLL : 0);
+    for (e = 0; e < NEWEST; e++)
+        if (newest[e].used && newest[e].field == field)
+            return newest[e].v;
+    if (!make)
+        return NULL;
+    for (e = 0; e < NEWEST; e++)
+        if (!newest[e].used) {
+            newest[e].used = 1;
+            newest[e].field = field;
+            return newest[e].v;
+        }
+    return NULL;
 }
 
 static void send(nshvc_line_field field, const int32_t *values)
@@ -150,12 +199,23 @@ static void send(nshvc_line_field field, const int32_t *values)
             moved[v] = left ? menu_window_left(values[v]) : menu_window_right(values[v]);
         values = moved;
     }
-    if (positional(field) && video_between_drawing()) {
-        if (values != moved) {
-            memcpy(moved, values, sizeof moved);
-            values = moved;
+    if (collecting) {
+        int32_t *keep = positional(field) ? newest_lines(field, 1) : NULL;
+
+        if (keep)
+            memcpy(keep, values, sizeof moved);
+        return;
+    }
+    if (positional(field)) {
+        const int32_t *towards = newest_lines(field, 0);
+
+        if (towards) {
+            if (values != moved) {
+                memcpy(moved, values, sizeof moved);
+                values = moved;
+            }
+            tween_lines(moved, towards, LINES, FAR_LINE, is_scroll(field) ? TWEEN_SCROLL : 0);
         }
-        ease_lines(field, moved);
     }
     if ((int)field < FIELDS) {
         line0[field] = values[1];
@@ -201,14 +261,14 @@ static void title_lines(void)
 
     for (v = 0; v < LINES; v++)
         tm[v] = pic.main_screen;
-    if (channels_now & LINES_TM_C)
+    if (from->channels & LINES_TM_C)
         table_bytes(MT_TITLE_MAIN_C, tm, pic.main_screen, 1);
-    if (channels_now & LINES_TM_B)
+    if (from->channels & LINES_TM_B)
         table_bytes(MT_TITLE_MAIN_B, tm, pic.main_screen, 1);
-    if (channels_now & LINES_TM_A)
+    if (from->channels & LINES_TM_A)
         table_bytes(MT_TITLE_MAIN_A, tm, pic.main_screen, 1);
     send_tm(tm);
-    if (channels_now & LINES_WINDOW) {
+    if (from->channels & LINES_WINDOW) {
         int32_t left[LINES], right[LINES];
 
         table_bytes(MT_TITLE_WINDOW, wh, 0, 2);
@@ -225,11 +285,11 @@ static void preview_lines(void)
 {
     int32_t a[LINES];
 
-    if (channels_now & 0x80) {          /* BG2's horizontal scroll */
+    if (from->channels & 0x80) {          /* BG2's horizontal scroll */
         table_indirect(MT_PREVIEW_SCROLL_X, a, 0);
         send(NSHVC_LINE_SCROLL_X + 1, a);
     }
-    if (channels_now & 0x40) {          /* the colour maths' prevent and clip */
+    if (from->channels & 0x40) {          /* the colour maths' prevent and clip */
         int32_t b[LINES], c[LINES];
         int v;
 
@@ -247,10 +307,10 @@ static void preview_lines(void)
            BG2 is masked inside the window on the picture's rows. */
         int under_picture = pic.bg[2].draw_list.id && pic.windows.layer_use[1] == NSHVC_WIN1;
 
-        if ((channels_now & 0x20) || under_picture) {
+        if ((from->channels & 0x20) || under_picture) {
             int v;
 
-            if (channels_now & 0x20) {
+            if (from->channels & 0x20) {
                 table_bytes(MT_PREVIEW_MASK, a, 0, 1);
             } else {
                 int32_t bits = 0;
@@ -277,7 +337,7 @@ static void preview_lines(void)
             send_tmw(a);
         }
     }
-    if (channels_now & 0x10) {          /* window 1's left edge */
+    if (from->channels & 0x10) {          /* window 1's left edge */
         table_bytes(MT_PREVIEW_WINDOW, a, 0, 1);
         send(NSHVC_LINE_WIN1_LEFT, a);
     }
@@ -287,23 +347,23 @@ static void champion_lines(void)
 {
     int32_t a[LINES];
 
-    if (channels_now & 0x80) {          /* BG2's horizontal scroll */
+    if (from->channels & 0x80) {          /* BG2's horizontal scroll */
         table_bytes(MT_CHAMPION_SCROLL_X, a, 0, 2);
         send(NSHVC_LINE_SCROLL_X + 1, a);
     }
-    if (channels_now & 0x40) {          /* BG2's vertical scroll */
+    if (from->channels & 0x40) {          /* BG2's vertical scroll */
         table_indirect(MT_CHAMPION_SCROLL_Y, a, 0);
         send(NSHVC_LINE_SCROLL_Y + 1, a);
     }
-    if (channels_now & 0x20) {
+    if (from->channels & 0x20) {
         table_bytes(MT_CHAMPION_MAIN, a, pic.main_screen, 1);
         send_tm(a);
     }
-    if (channels_now & 0x10) {          /* window 1's right edge */
+    if (from->channels & 0x10) {          /* window 1's right edge */
         table_bytes(MT_CHAMPION_WINDOW, a, 0, 1);
         send(NSHVC_LINE_WIN1_RIGHT, a);
     }
-    if (channels_now & 0x08) {          /* window 1's right edge, the second set */
+    if (from->channels & 0x08) {          /* window 1's right edge, the second set */
         table_bytes(MT_CHAMPION_WINDOW_B, a, 0, 1);
         send(NSHVC_LINE_WIN1_RIGHT, a);
     }
@@ -339,13 +399,30 @@ static void line0_as_frame(void)
     nshvc_blend_set(&b);
 }
 
-void menu_lines_send(void)
+static void lines_from(const LinesState *k)
 {
-    memset(sent, 0, sizeof sent);
-    switch (set_now) {
+    from = k;
+    switch (k->set) {
     case MENU_LINES_TITLE: title_lines(); break;
     case MENU_LINES_PREVIEW: preview_lines(); break;
     default: champion_lines(); break;
+    }
+}
+
+void menu_lines_send(void)
+{
+    static LinesState live;
+
+    memset(sent, 0, sizeof sent);
+    memset(newest, 0, sizeof newest);
+    if (video_between_eased() && kept[1].update == menu_window_updates() && kept[0].update + 1 == kept[1].update) {
+        collecting = 1;                 /* N's moving lines */
+        lines_from(&kept[1]);
+        collecting = 0;
+        lines_from(&kept[0]);           /* N-1's, eased toward them */
+    } else {
+        take(&live);                    /* the newest as it stands */
+        lines_from(&live);
     }
     if (pic.fills_window)
         line0_as_frame();

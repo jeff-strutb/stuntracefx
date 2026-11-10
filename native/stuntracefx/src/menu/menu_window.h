@@ -39,6 +39,8 @@ uint32_t menu_window_updates(void);
 /* the menu screens' moving 2D eased in place for a picture between two
    updates (menu_tween.c); video calls it while it draws */
 void menu_tween(Picture *shown, float between);
+void menu_tween_keep(void);             /* at an update's end: who drew its sprites */
+void menu_lines_keep(void);             /* at an update's end: what its per-line tables are made from */
 
 /* A window's edge from the original's columns to the screen's: the left
    edge at column 0 and the right at 255 reach the screen's edges. */

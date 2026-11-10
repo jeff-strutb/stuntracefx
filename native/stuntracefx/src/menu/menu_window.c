@@ -20,6 +20,7 @@
 #include <string.h>
 
 #include "menu/menu_window.h"
+#include "video/between.h"
 #include "video/picture.h"
 #include "video/video.h"
 #include "fx/fx_draw.h"
@@ -129,7 +130,7 @@ static void granite_build(void)
                 inside ? mw.pages[(c >> 5) & 1][((r & 31) << 5) | (c & 31)] : granite_cell(c, r);
         }
     }
-    nshvc_map_write_snes(mw.wide, 0, 0, WIDE_CELLS, WIDE_CELLS, mw.cells);
+    video_map_write(mw.wide, 0, 0, WIDE_CELLS, WIDE_CELLS, mw.cells);
     pic.bg[0].map = mw.wide;            /* the scroll stays the original's */
 }
 
@@ -156,6 +157,8 @@ void menu_window_frame_end(void)
     window_move(&pic.windows.w[1]);
     if (mw.granite && pic.bg[0].map.id == menu_video.pages_0_1.id && !pic.bg[0].draw_list.id)
         granite_build();
+    menu_tween_keep();                  /* who drew this update's sprites */
+    menu_lines_keep();                  /* and what its per-line tables are made from */
 }
 
 void menu_window_frame_begin(void)

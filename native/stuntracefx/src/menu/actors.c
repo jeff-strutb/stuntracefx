@@ -9,6 +9,7 @@
 #include "menu/actors.h"
 #include "menu/menu.h"
 #include "system/game.h"
+#include "video/between.h"
 #include "video/picture.h"
 
 Actors actors;
@@ -292,8 +293,8 @@ void actors_rows_flush(void)
 {
     while (rows_n > 0) {
         rows_n--;
-        nshvc_tiles_write(menu_video.sprites, rows[rows_n].tile, menu_frame_data(rows[rows_n].src), 2,
-                          NSHVC_TILES_PLANAR);
+        video_tiles_write(menu_video.sprites, rows[rows_n].tile, menu_frame_data(rows[rows_n].src), 2,
+                          NSHVC_TILES_PLANAR, 2 * 32);
     }
 }
 
