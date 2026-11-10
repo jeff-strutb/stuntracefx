@@ -97,6 +97,11 @@ uint16_t fx_sprite_shrink(uint16_t size, uint16_t c8, uint16_t step, uint16_t le
 uint16_t fx_sprite_magnify(uint16_t c8, uint16_t step, uint16_t left, uint16_t top, uint16_t bank, uint16_t base, uint16_t mask);
 void fx_flat_row(uint16_t x, uint16_t y, uint16_t n);
 void fx_bitmap_row(uint16_t x, uint16_t y, uint16_t n, uint16_t palette, uint16_t base);
+/* The HUD's glyph rows by value (fx/render/hud.c): fx_bitmap_row's and
+   fx_scaled_row's with the ROM bank, the glyphs' start and the four colours
+   given, not read from the chip's state and RAM. */
+void fx_glyph_row(uint16_t x, uint16_t y, uint16_t n, uint8_t bank, uint16_t base, const uint8_t colours[4]);
+void fx_glyph_scaled_row(uint16_t x, uint16_t y, uint16_t n, uint16_t tu, uint16_t du, uint8_t bank, uint16_t start, uint16_t base, const uint8_t colours[4]);
 void fx_scaled_row_start(void);
 void fx_scaled_row(uint16_t x, uint16_t y, uint16_t n, uint16_t tu, uint16_t du, uint16_t base, uint16_t palette);
 void fx_noise_row(uint16_t x, uint16_t y, uint16_t n, uint16_t seed, uint16_t ramp);

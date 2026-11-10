@@ -941,15 +941,13 @@ static void blocks_flush(void)
 
 void fx_draw_flush(void) { blocks_flush(); }
 
-void fx_bitmap_row(uint16_t x, uint16_t y, uint16_t n, uint16_t palette, uint16_t base)
+/* A glyph row of n pixels at (x, y) from the 2-bit row at `base` in ROM
+   bank `bank`, through its four colours: gathered into blocks of rows. */
+void fx_glyph_row(uint16_t x, uint16_t y, uint16_t n, uint8_t bank, uint16_t base, const uint8_t colours[4])
 {
-    uint8_t colours[4];
     uint16_t next;
-    int i;
 
-    for (i = 0; i < 4; i++)
-        colours[i] = fx_ram[(uint16_t)(palette + i)];
-    if (block.open && block.x == x && block.width == n && block.bank == fxs.rombr
+    if (block.open && block.x == x && block.width == n && block.bank == bank
         && !memcmp(block.colours, colours, 4) && y == (uint16_t)(block.y + block.rows)) {
         next = (uint16_t)(base - block.base);
         if (block.rows == 1)
@@ -961,7 +959,7 @@ void fx_bitmap_row(uint16_t x, uint16_t y, uint16_t n, uint16_t palette, uint16_
     }
     blocks_flush();
     block.open = 1;
-    block.bank = fxs.rombr;
+    block.bank = bank;
     memcpy(block.colours, colours, 4);
     block.x = x;
     block.y = y;
@@ -971,29 +969,47 @@ void fx_bitmap_row(uint16_t x, uint16_t y, uint16_t n, uint16_t palette, uint16_
     block.stride = 0;
 }
 
+void fx_bitmap_row(uint16_t x, uint16_t y, uint16_t n, uint16_t palette, uint16_t base)
+{
+    uint8_t colours[4];
+    int i;
+
+    for (i = 0; i < 4; i++)
+        colours[i] = fx_ram[(uint16_t)(palette + i)];
+    fx_glyph_row(x, y, n, fxs.rombr, base, colours);
+}
+
 /* The scaled glyphs call fx_scaled_row at every pixel of a row, each time
    with the whole row's width: the row is sent once, at its first pixel. */
 static int scaled_row_open;
 
 void fx_scaled_row_start(void) { scaled_row_open = 1; }
 
-/* One row of a glyph drawn scaled: pixel k shows column ((tu + k) du) / 256 of the row at base. */
-void fx_scaled_row(uint16_t x, uint16_t y, uint16_t n, uint16_t tu, uint16_t du, uint16_t base, uint16_t palette)
+/* One row of a glyph drawn scaled: pixel k shows column ((tu + k) du) / 256
+   of the row at base, of the glyphs from `start` in ROM bank `bank`,
+   through their four colours. */
+void fx_glyph_scaled_row(uint16_t x, uint16_t y, uint16_t n, uint16_t tu, uint16_t du, uint8_t bank, uint16_t start, uint16_t base, const uint8_t colours[4])
 {
-    uint8_t colours[4];
-    uint16_t start = (uint16_t)(fx_ram[0x0216] | fx_ram[0x0217] << 8);
-    int i, row;
+    int row;
     nshvc_image image;
 
     if (!scaled_row_open || (!target.id && !recording) || !n)
         return;
     scaled_row_open = 0;
     blocks_flush();
+    row = (uint16_t)(base - start) / 32;
+    image = glyph_image(bank, start, 128, GLYPH_ROWS, 32, colours);
+    quad(image, x, x + n, y, y + 1, (double)((uint32_t)tu * du) / 256.0, du / 256.0, row + 0.5, 0);
+}
+
+void fx_scaled_row(uint16_t x, uint16_t y, uint16_t n, uint16_t tu, uint16_t du, uint16_t base, uint16_t palette)
+{
+    uint8_t colours[4];
+    int i;
+
     for (i = 0; i < 4; i++)
         colours[i] = fx_ram[(uint16_t)(palette + i)];
-    row = (uint16_t)(base - start) / 32;
-    image = glyph_image(fxs.rombr, start, 128, GLYPH_ROWS, 32, colours);
-    quad(image, x, x + n, y, y + 1, (double)((uint32_t)tu * du) / 256.0, du / 256.0, row + 0.5, 0);
+    fx_glyph_scaled_row(x, y, n, tu, du, fxs.rombr, (uint16_t)(fx_ram[0x0216] | fx_ram[0x0217] << 8), base, colours);
 }
 
 /* The static: rows from a square of noise, the original's own generator's,
