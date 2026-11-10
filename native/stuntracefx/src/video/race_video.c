@@ -18,6 +18,7 @@
 #include "system/chip.h"
 #include "system/game.h"
 #include "system/state.h"
+#include "video/between.h"
 #include "video/picture.h"
 #include "video/video.h"
 
@@ -1837,11 +1838,41 @@ void race_frame_art_draw_over(nshvc_draw_list list)
 
 /* The two-player list, composed again when a half's scroll or panel has moved
    (asking for the other picture number makes the compose run; both are in it). */
+/* Two players, a picture between steps: each half's hills and sky from
+   the picture's angles (fx_tween's, each panel's), worked out as
+   BackdropScrollFromView and GradientStartsFromViews work out the step's
+   own, so they turn with the 3D. A half showing its panel keeps its
+   scrolls. Only while a picture is drawn: pic is the game's again after. */
+static void two_halves_between(void)
+{
+    uint16_t heading[2], pitch[2];
+    int half;
+
+    if (!video_between_drawing() || !race_two_full_window() || !fx_tween_backdrop_angles(heading, pitch))
+        return;
+    for (half = 0; half < 2; half++) {
+        uint16_t h, t;
+        unsigned s;
+
+        if (pic.race.panel[half])
+            continue;
+        h = (uint16_t)(player_vehicle_raised(half) + pitch[half] + 0x18);
+        s = (unsigned)(uint16_t)(h << 1) + 0xEF99 + (h >> 15);
+        t = (uint16_t)s;
+        if (t >= 0xF257)
+            t = 0xF257;
+        pic.race.backdrop_x[half] = (int16_t)(uint16_t)(heading[half] >> 2);
+        pic.race.backdrop_y[half] = (int16_t)(uint16_t)(h + ram_code_7e16((uint16_t)(0xE920 + half * 2)));
+        pic.race.gradient_start[half] = (uint16_t)(GRADIENT_AT_DAY + (uint16_t)(t - 0xEF57) / 2);
+    }
+}
+
 void race_two_player_list(void)
 {
     static struct { int32_t x[2], y[2]; uint8_t panel[2]; uint16_t sky[2]; } shown;
     static int which;
 
+    two_halves_between();
     if (memcmp(shown.x, pic.race.backdrop_x, sizeof shown.x) || memcmp(shown.y, pic.race.backdrop_y, sizeof shown.y)
         || memcmp(shown.panel, pic.race.panel, sizeof shown.panel)
         || (race_two_full_window() && memcmp(shown.sky, pic.race.gradient_start, sizeof shown.sky))) {

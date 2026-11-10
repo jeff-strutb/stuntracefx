@@ -11,6 +11,7 @@
 #include "nshvc/nshvc.h"
 #include "pause/pause.h"
 #include "system/game.h"
+#include "video/between.h"
 #include "video/picture.h"
 #include "video/video.h"
 
@@ -40,8 +41,10 @@ static void draw(float between)
         return;                         /* the pause screen's picture: the last one, blurred */
     if (pause_holding())
         between = 1.0f;                 /* the picture as the game's last update left it */
+    video_between_begin(between);       /* the moving 2D between the last two updates (pic eased in place) */
     fx_tween_draw(between);             /* the race's 3D at the step's progress, between steps */
     video_draw();
+    video_between_end();                /* the game's own pic back */
 }
 
 int main(int argc, char **argv)

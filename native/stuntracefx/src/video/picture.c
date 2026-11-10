@@ -7,6 +7,7 @@
 
 #include "fx/fx_draw.h"
 #include "system/state.h"
+#include "video/between.h"
 #include "video/picture.h"
 #include "video/video.h"
 
@@ -118,6 +119,9 @@ static void gradient_lines_send(void)
     nshvc_lines(0, 224, (nshvc_line_field)(NSHVC_LINE_PALETTE + 1), v);
 }
 
+/* a window edge moving further between updates: set anew */
+enum { LINE_EDGE_FAR = 64 };
+
 /* The window bands: a row's edges for each line of the table. */
 static void window_lines_send(void)
 {
@@ -147,6 +151,14 @@ static void window_lines_send(void)
         r1[line] = line ? r1[line - 1] : 0;
         l2[line] = line ? l2[line - 1] : 0;
         r2[line] = line ? r2[line - 1] : 0;
+    }
+    {                                   /* the bands' edges as they move, between updates */
+        static TweenTable keep[4];
+
+        tween_table(&keep[0], l1, 224, LINE_EDGE_FAR, 0);
+        tween_table(&keep[1], r1, 224, LINE_EDGE_FAR, 0);
+        tween_table(&keep[2], l2, 224, LINE_EDGE_FAR, 0);
+        tween_table(&keep[3], r2, 224, LINE_EDGE_FAR, 0);
     }
     nshvc_lines(0, 224, NSHVC_LINE_WIN1_LEFT, l1);
     nshvc_lines(0, 224, NSHVC_LINE_WIN1_RIGHT, r1);
@@ -237,6 +249,11 @@ static void course_lines_send(int full, int origin_x)
         for (r = line; line && r < 224; r++)
             v[r] = v[line - 1];
     }
+    {                                   /* the bands' scroll as it moves, between updates */
+        static TweenTable keep;
+
+        tween_table(&keep, v, 224, 0, TWEEN_SCROLL);
+    }
     nshvc_lines(0, 224, (nshvc_line_field)(NSHVC_LINE_SCROLL_Y + 1), v);
     if (g.line_effects.course_wipe) {
         const uint8_t *t = windows.wipe_table;
@@ -260,6 +277,12 @@ static void course_lines_send(int full, int origin_x)
         for (r = 0; r < 224; r++) {     /* the window's edges are the screen's columns */
             l1[r] += origin_x;
             r1[r] += origin_x;
+        }
+        {                               /* the wipe as it moves, between updates */
+            static TweenTable keep[2];
+
+            tween_table(&keep[0], l1, 224, LINE_EDGE_FAR, 0);
+            tween_table(&keep[1], r1, 224, LINE_EDGE_FAR, 0);
         }
         nshvc_lines(0, 224, NSHVC_LINE_WIN1_LEFT, l1);
         nshvc_lines(0, 224, NSHVC_LINE_WIN1_RIGHT, r1);
