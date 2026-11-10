@@ -84,6 +84,9 @@ A working recipe for all of these from one image is in the old port's `ports/stu
 
 ## 6. Antialiased draw lists (Jeff, 2026-11-09: "That black arrow on yellow is still a bit aliased")
 
+Done in nativeshvc 3800784 (API 4.7), Jeff's choice "on by default, game can override per list": 8 samples a pixel unless
+`nshvc_draw_samples` says otherwise. Seen on the turn and S-bend signs replayed at 8 times the screen (edges shaded).
+
 Every polygon edge a draw list fills is aliased: `NSHVC_FILL_SMOOTH` gives sub-pixel vertices, but each pixel is wholly in
 or out, because a draw list is filled into a one-value-a-pixel texture (`R32Uint` on Metal: a palette index or
 `0xFFRRGGBB`) and composed per window pixel from it. The game cannot smooth an edge from its side: a pixel holds one
