@@ -378,8 +378,8 @@ static void finish_alone(int player, uint16_t colour, uint8_t phase, uint8_t t)
 static void lap_override(void)
 {
     uint8_t frac = (uint8_t)(g.clock_fraction >> 8), secs = (uint8_t)g.clock_seconds, mins = (uint8_t)g.clock_minutes;
-    uint16_t saved, packed, best;
-    uint16_t entry;
+    uint16_t packed, best;
+    SaveBest *record = &save.special[g.course - 0x14];   /* the override runs courses $14-$16 */
 
     sound_port0_push(0x35);
     g.laps_counted[0]++;
@@ -387,17 +387,15 @@ static void lap_override(void)
     g.lap_mark[0] = frac;
     g.lap_mark[1] = secs;
     g.lap_mark[2] = mins;
-    entry = RecordOffsetAllCourses();
-    saved = fx16((uint16_t)(0xFC5E + entry));
-    g.packed_time_a = saved;
+    g.packed_time_a = record->time;
     packed = TimePackBcd(g.lap_splits[0], g.lap_splits[1], g.lap_splits[2]);
     g.packed_time_b = packed;
-    best = fx16((uint16_t)(0xFC5E + entry));
+    best = record->time;
     if (packed < best) {
-        fx16_set((uint16_t)(0xFC5E + entry), packed);
+        record->time = packed;
         HudBestTimeDigits(packed);
-        fx16_set((uint16_t)(0xFC60 + entry), g.player_name);
-        fx8_set((uint16_t)(0xFC62 + entry), g.car[0]);
+        record->name = g.player_name;
+        record->car = g.car[0];
         SaveSumsRecordsB();
         g.lead = 0x01;
     } else if (packed != best) {

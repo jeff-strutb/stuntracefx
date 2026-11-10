@@ -164,12 +164,6 @@ void HudBestTimeDigits(uint16_t packed)
     hud_best_time_sprites();
 }
 
-/* @routine 03:DEFD RecordOffsetAllCourses: (course - $14) * 5. */
-uint16_t RecordOffsetAllCourses(void)
-{
-    return (uint8_t)((g.course - 0x14) * 5);
-}
-
 static void no_time(void) { HUD_BYTES(no_time_sprites); }
 static void flags(void) { HUD_BYTES(flag_sprites); }
 
@@ -181,7 +175,9 @@ static int mode_all(void)
     g.hud_marker_x = 0xEC;
     palettes.target = 0x7FFF;
     if (g.time_override) {
-        uint16_t t = fx16((uint16_t)(0xFC5E + RecordOffsetAllCourses()));
+        /* @routine 03:DEFD RecordOffsetAllCourses ((course - $14) * 5) is
+           this index: the override runs courses $14-$16 */
+        uint16_t t = save.special[g.course - 0x14].time;
 
         if (t == 0xFFFF)
             no_time();
@@ -210,7 +206,7 @@ static void mode_stunt(void)
         palettes.target = 0x7FFF;
         g.hud_marker_x = 0xAC;
         HUD_BYTES(stunt_record_sprites);
-        t = fx16((uint16_t)(0xFC4A + (uint16_t)((g.course - 0x17) * 5)));
+        t = save.stunt[g.course - 0x17].time;  /* Stunt Trax: courses $17-$1A */
         if (t == 0xFFFF) {
             no_time();
         } else {

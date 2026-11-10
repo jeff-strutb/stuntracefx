@@ -174,7 +174,6 @@ void RaceEndCountdown(void);
 void RaceEndCountdownFade(void);
 
 /* hud_setup.c */
-uint16_t RecordOffsetAllCourses(void);
 void HudBestTimeDigits(uint16_t packed);
 uint16_t TimePackBcd(uint8_t hundredths, uint8_t seconds, uint8_t minutes);
 
