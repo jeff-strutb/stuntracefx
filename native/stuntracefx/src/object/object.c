@@ -338,35 +338,20 @@ int ObjectCountStep5F(Object *o, uint8_t limit, uint8_t end, uint8_t step)
     return n == end;
 }
 
-/* The magnitude as EOR / INC does it ($8000 stays $8000). */
-static uint16_t magnitude(uint16_t v) { return (v & 0x8000) ? (uint16_t)-v : v; }
 
 /*
  * @routine 08:B5FA ObjectNearFocus
- * WHAT IT DOES: Switches the object between near and far by its distance
- * from camera 1: near clears bit 3 of +$24, zeroes +$5F and sets the
- * animation by its kind; far sets bit 3, +$5F = $32, the far animation
- * word, and a direction into the sprite turn.
+ * WHAT IT DOES: Keeps a car near: clears bit 3 of +$24, zeroes +$5F and sets
+ * the animation by its kind. The original turned it far, a sprite (bit 3,
+ * +$5F = $32, the far animation word at $99A3 by its kind, a direction
+ * into the sprite turn), once camera 1 was $1194 or more away along x and z;
+ * the game draws it as a model however far, as the remaster's Enhanced did.
  */
 void ObjectNearFocus(Object *o)
 {
-    uint16_t dx = magnitude((uint16_t)(cameras[0].x - o->x));
-    uint16_t dz = magnitude((uint16_t)(cameras[0].z - o->z));
-    uint8_t k;
-
-    if ((uint16_t)((uint16_t)(dz + dx) - 0x1194) & 0x8000) {
-        o->flags24 &= 0xF7;
-        o->byte5f = 0;
-        ObjectSet5DByKind(o, o->byte49);
-        return;
-    }
-    k = (uint8_t)(o->sprite_turn[0] & 0x03);
-    k = (uint8_t)(((uint8_t)((cameras[0].turn >> 8) + o->heading) >> 3 & 0xFC) | 0x80 | k);
-    o->sprite_turn[0] = k;
-    o->flags24 |= 0x08;
-    o->byte3a = 0;
-    o->byte5f = 0x32;
-    o->anim = (uint16_t)(LOOKS_FAR + (uint16_t)(o->byte49 << 1));
+    o->flags24 &= 0xF7;
+    o->byte5f = 0;
+    ObjectSet5DByKind(o, o->byte49);
 }
 
 /*
@@ -475,6 +460,7 @@ void ObjectGroupsActivate(void)
             r = o->bucket_next;
         }
     }
+    ObjectsKeepRunning();               /* the far ones that move only themselves (animate.c) */
 }
 
 /*
@@ -572,6 +558,7 @@ void ObjectInit(Object *o)
 {
     objects.slot_changes[obj_slot(o)]++;
     objects.gaze[obj_slot(o)][0] = objects.gaze[obj_slot(o)][1] = 0;
+    ObjectMade(o);
     memset(&o->model, 0, sizeof(Object) - offsetof(Object, model));
     ObjectBucketInsert(o);
     o->byte59 = 0x69;
@@ -696,6 +683,7 @@ void ObjectsRunHandlers(void)
     ObjRef r = objects.used_head;
 
     g.object_frames++;
+    ObjectsStepStart();
     while (r) {
         Object *o = obj_at(r);
         uint8_t v = o->timer;
@@ -709,6 +697,7 @@ void ObjectsRunHandlers(void)
                 o->timer = (uint8_t)(v - 1);
                 ObjectRunHandlerA(o);
             }
+            ObjectTurn(o, 1);
             if (objects.free_requests) {
                 ObjRef next = o->next;
 
@@ -716,9 +705,12 @@ void ObjectsRunHandlers(void)
                 r = next;
                 continue;
             }
-        } else if (v) {
-            o->record = 0;
-            o->timer = 0;
+        } else {
+            ObjectTurn(o, 0);
+            if (v) {
+                o->record = 0;
+                o->timer = 0;
+            }
         }
         r = o->next;
     }

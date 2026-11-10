@@ -10,6 +10,7 @@
  * ones (fx/fx_far.c). The objects are not touched by it: what is activated,
  * and when, stays the trigger list's.
  */
+#include <math.h>
 #include <string.h>
 
 #include "fx/fx_far.h"
@@ -33,6 +34,70 @@ static uint8_t frame_byte(uint8_t v)
 
 /* the objects given a near record this list, by slot */
 static uint8_t near_drawn[OBJECT_COUNT];
+
+/*
+ * A car's child on its record (a tyre: ObjectChildStep, $08:BB2E), which
+ * ObjectChildFollow hides (+$24 bit 5) while its car's record has bit 10 of
+ * +$16 (ObjectPoseFromRecord: the car's countdown +$36 at 1, the car leaving
+ * the active cells), is left where it was, its record put on its car's
+ * place. The far view draws the car all the same, so the child is drawn
+ * with it, as a far record of its own where it sits on its car: its place
+ * on the car's record in the record's turn (its heading +$24), learnt from
+ * each step's near record while the game places it (ObjectChildFollow: its
+ * record's place plus its offset +$4A-$4E, Y less its +$5F and $14); put on
+ * the car as drawn (its place, its heading +$15), turned as it was (+$14,
+ * +$16) with its steer on the car's heading (its record's +$25 on the car
+ * record's). A seat is its car's and record's (a slot is used again).
+ * Nothing of the game's is written: only the far record has it.
+ */
+static struct { int16_t at[3]; ObjRef car; uint16_t rec; uint8_t a14, steer, a16, known; } child_seat[OBJECT_COUNT];
+
+static int parked_child(const Object *o, uint16_t at[3], uint8_t turn[3])
+{
+    unsigned k = obj_slot(o);
+    const Object *car;
+    uint16_t cr, r;
+    double h, c, s, x, z;
+
+    if (((uint32_t)o->handler_bank << 16 | o->handler) != 0x08BB2E || !o->parent)
+        return 0;
+    car = obj_at(o->parent);
+    cr = car->record;
+    r = o->record;
+    if (!cr || !r)
+        return 0;
+    if (!(o->flags24 & 0x20)) {
+        if (!ObjectsDrawnBetween() && !(rec_get(cr, FXREC_FLAGS16) & 0x0400)) {   /* a step's own: its car's and its records together */
+            h = rec_get(cr, FXREC_HEADING) * (2 * M_PI / 65536);
+            c = cos(h), s = sin(h);
+            x = (int16_t)(uint16_t)(rec_get(r, FXREC_POS_X) + rec_get(r, 0x004A) - rec_get(cr, FXREC_POS_X));
+            z = (int16_t)(uint16_t)(rec_get(r, FXREC_POS_Z) + rec_get(r, 0x004E) - rec_get(cr, FXREC_POS_Z));
+            child_seat[k].at[0] = (int16_t)lround(x * c + z * s);
+            child_seat[k].at[1] = (int16_t)(uint16_t)(rec_get(r, FXREC_POS_Y) + rec_get(r, 0x004C) - o->byte5f - 0x0014
+                                                      - rec_get(cr, FXREC_POS_Y));
+            child_seat[k].at[2] = (int16_t)lround(z * c - x * s);
+            child_seat[k].a14 = o->pitch;
+            child_seat[k].steer = (uint8_t)(fx_ram[(uint16_t)(r + FXREC_HEADING + 1)] - fx_ram[(uint16_t)(cr + FXREC_HEADING + 1)]);
+            child_seat[k].a16 = o->roll;
+            child_seat[k].car = o->parent;
+            child_seat[k].rec = r;
+            child_seat[k].known = 1;
+        }
+        return 0;
+    }
+    if (!(rec_get(cr, FXREC_FLAGS16) & 0x0400) || !child_seat[k].known || child_seat[k].car != o->parent || child_seat[k].rec != r)
+        return 0;
+    h = car->heading * (2 * M_PI / 256);
+    c = cos(h), s = sin(h);
+    x = child_seat[k].at[0], z = child_seat[k].at[2];
+    at[0] = (uint16_t)(car->x + (int16_t)lround(x * c - z * s));
+    at[1] = (uint16_t)(car->y + child_seat[k].at[1]);
+    at[2] = (uint16_t)(car->z + (int16_t)lround(z * c + x * s));
+    turn[0] = child_seat[k].a14;
+    turn[1] = (uint8_t)(car->heading + child_seat[k].steer);
+    turn[2] = child_seat[k].a16;
+    return 1;
+}
 
 /* Object o's draw record at r: place relative to the view unless bit 7 of
    +$24 says absolute, its depth key, model, angles, link fields, flags,
@@ -76,19 +141,22 @@ static uint8_t *draw_record(Object *o, uint8_t *r, int far)
     r[0x1C] = o->byte5f;
     r[0x1D] = o->byte60;
     put16(r, 0x16, o->anim);
+    ObjectRecordLook(o, r, far);        /* what it is drawn with besides its own (animate.c) */
     if (far)
         return r + FX_FAR_SIZE;
     near_drawn[obj_slot(o)] = 1;
-    objects.record_gaze[g.frame_record_count] = object_gaze(o, g.draw_side ? 1 : 0);
+    (void)parked_child(o, NULL, NULL);  /* a tyre's seat on its car, learnt */
+    objects.record_gaze[g.frame_record_count] = ObjectGazeBetween(o, g.draw_side ? 1 : 0, object_gaze(o, g.draw_side ? 1 : 0));
     g.frame_record_count++;
     return r + RECORD_SIZE;
 }
 
-/* by the object itself: not when bit 5 of +$24 is set; with bit 6, kind 2
-   only on the near side and the rest only on the far side; never model none */
-static int drawable(const Object *o)
+/* by the object itself: not when bit 5 of +$24 is set (unless `hidden_ok`);
+   with bit 6, kind 2 only on the near side and the rest only on the far
+   side; never model none */
+static int drawable(const Object *o, int hidden_ok)
 {
-    if (o->flags24 & 0x20)
+    if ((o->flags24 & 0x20) && !hidden_ok)
         return 0;
     if ((o->flags24 & 0x40) && (o->byte26 == 0x02 ? g.draw_side != 0 : g.draw_side == 0))
         return 0;
@@ -98,26 +166,39 @@ static int drawable(const Object *o)
 /* in the near list: drawable, and at most $31 records */
 static int drawn(const Object *o)
 {
-    return (int16_t)(g.frame_record_count - RECORD_MAX) < 0 && drawable(o);
+    return (int16_t)(g.frame_record_count - RECORD_MAX) < 0 && drawable(o, 0);
 }
 
 /* A far record: the object's record, its place from the view in 32 bits
-   and its key's lift, at `at` in the chip's second 64 KB. */
-static void far_record(Object *o, uint16_t at)
+   and its key's lift, at `at` in the chip's second 64 KB; a parked tyre's
+   on its car (`place`, `turn`), its key's height part from there. */
+static void far_record(Object *o, uint16_t at, const uint16_t *place, const uint8_t *turn)
 {
     uint8_t *r = &fx_ram[FX_FAR_BANK + at];
+    uint16_t p[3] = {o->x, o->y, o->z};
     int32_t d[3];
     unsigned k;
 
     draw_record(o, r, 1);
-    d[0] = (int32_t)(int16_t)o->x - (int16_t)g.view_pos[0];
-    d[1] = (int32_t)(int16_t)o->y - (int16_t)g.view_pos[1];
-    d[2] = (int32_t)(int16_t)o->z - (int16_t)g.view_pos[2];
+    if (place) {
+        int16_t dy = (int16_t)(uint16_t)(place[1] - g.view_pos[1]);
+
+        put16(r, 0x02, (uint16_t)(((dy < 0 ? -dy : dy) << 1) + ((o->flags09 & 0x01) ? 0x1F40 : 0)));
+        r[0x04] = turn[0];
+        r[0x05] = turn[1];
+        r[0x06] = turn[2];
+        p[0] = place[0], p[1] = place[1], p[2] = place[2];
+    }
+    d[0] = (int32_t)(int16_t)p[0] - (int16_t)g.view_pos[0];
+    d[1] = (int32_t)(int16_t)p[1] - (int16_t)g.view_pos[1] + ObjectLookDy(o);
+    d[2] = (int32_t)(int16_t)p[2] - (int16_t)g.view_pos[2];
     for (k = 0; k < 3; k++) {
         put16(r, FX_FAR_PLACE + 4 * k, (uint16_t)d[k]);
         put16(r, FX_FAR_PLACE + 4 * k + 2, (uint16_t)((uint32_t)d[k] >> 16));
     }
     r[FX_FAR_LIFT] = (uint8_t)(o->flags09 & 0x01);
+    /* a parked tyre of a car in the near list: drawn among the near ones */
+    r[FX_FAR_PARKED] = (uint8_t)(place && near_drawn[obj_slot(obj_at(o->parent))]);
 }
 
 /* Every object of every cell the near list did not draw and would: by its
@@ -134,11 +215,18 @@ static void far_records(void)
             Object *o = obj_at(ref);
 
             ref = o->bucket_next;
+            uint16_t place[3];
+            uint8_t turn[3];
+            int parked;
+
             if (near_drawn[obj_slot(o)] || (o->flags24 & 0x84) || n >= FX_FAR_MAX)
                 continue;
-            if (!drawable(o) || o->model < 0x8000)
+            if (ObjectFarLeftOut(o))    /* waiting for its set-up, or a short life stopped (animate.c) */
                 continue;
-            far_record(o, (uint16_t)(FX_FAR_RECORDS + n * FX_FAR_SIZE));
+            parked = (o->flags24 & 0x20) && parked_child(o, place, turn);
+            if (!drawable(o, parked) || o->model < 0x8000)
+                continue;
+            far_record(o, (uint16_t)(FX_FAR_RECORDS + n * FX_FAR_SIZE), parked ? place : NULL, turn);
             n++;
         }
     }

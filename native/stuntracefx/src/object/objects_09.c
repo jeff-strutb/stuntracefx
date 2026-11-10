@@ -1996,7 +1996,7 @@ static void fan_frame(Object *o, int all_three, uint16_t lit, uint8_t sound)
         o->model = lit;
         if (!(o->flags25 & 0x01)) {
             o->flags25 |= 0x01;
-            if (sound)
+            if (sound && !ObjectKept(o))    /* not when kept running far (animate.c) */
                 SoundPort0QueuePush(sound);
         }
     }

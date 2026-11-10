@@ -226,7 +226,6 @@ enum {
     LOOK_STAR_SPARKLE = 0x997C,
     LOOK_BREAK_OFF_A = 0x998D,          /* the pieces' looks, by the routine that breaks them off */
     LOOK_SPARKLE = 0x9998,
-    LOOKS_FAR = 0x99A3,                 /* an object's far look, a word for each kind (+$49) */
     LOOK_EYE_PLAIN = 0x9AAF,            /* a car's eyes: plain */
     LOOK_EYE_STARTLED = 0x9AB1,         /* startled: more white, the pupil small */
     LOOK_BREAK_OFF_H = 0x9B40,
@@ -586,6 +585,23 @@ void ObjectDrawListBuild(void);
    byte is still the one that read gave; 0 otherwise. Indexed as
    ObjectDrawListBuild writes g.frame_records; rebuilt with them. */
 uint16_t draw_record_gaze(int record);
+
+/* animate.c: the objects as the far view and the pictures between steps
+   show them */
+void ObjectMade(Object *o);
+void ObjectsStepStart(void);
+void ObjectsKeepRunning(void);
+int ObjectKept(const Object *o);
+void ObjectTurn(const Object *o, int run);
+int ObjectFarLeftOut(const Object *o);
+/* whether a picture between steps is being drawn (fx_tween_t) */
+int ObjectsDrawnBetween(void);
+void ObjectRecordLook(const Object *o, uint8_t *r, int far);
+int32_t ObjectLookDy(const Object *o);
+uint16_t ObjectGazeBetween(const Object *o, int side, uint16_t gaze);
+/* a piece circling its centre between steps: 1 and the offset to add to the
+   place set t of the way along a line from was's to end's (0 at both ends) */
+int ObjectOrbitBetween(int slot, const ObjectTable *was, const ObjectTable *end, float t, int16_t add[3]);
 
 /* the handler numbers the objects and data store, and the dispatch to them
    (object_handlers.c, objects_09.c and the rest) */

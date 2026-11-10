@@ -198,50 +198,91 @@ list are skipped, with a comment where each is: ring_spawn, the track
 director with no entry, ObjectFree with no next, the sky ball when the spawn
 fails, ObjectPlaceAll and GsuRecordWords88 with a count of 0.
 
-Enhanced calls left out (stage 10 brings them back), by original function
--------------------------------------------------------------------------
-car_parts.c rm_eased16: rm_eased16, rm_share_by, rm_sharing
-car_parts.c rm_eased8: rm_eased8, rm_share_by, rm_sharing
-car_parts.c return_frame: rm_eased16, rm_eased8
-draw_list.c parked_child: rm_enhanced, rm_redrawing
-draw_list.c draw_record: rm_record_look (rm_gaze_of's gaze is back:
-  object_gaze and draw_record_gaze, for the fx session's solid eyes)
-draw_list.c far_record: rm_look_dy
-draw_list.c far_records: rm_far_left_out
-draw_list.c ObjectDrawListBuild: rm_enhanced, rm_whole_steps
-object.c apply_velocity: rm_share
-object.c ObjectInit: rm_object_made
-object.c ObjectNearFocus: rm_enhanced
-object.c ObjectGroupsActivate: rm_objects_keep_running
-object.c ObjectsRunHandlers: rm_object_turn, rm_share
-object_handlers.c rm_eased16: rm_eased16, rm_share_by, rm_sharing
-object_handlers.c rm_eased8: rm_eased8, rm_share_by, rm_sharing
-object_handlers.c count_down: rm_step_due
-object_handlers.c ObjectBlinkerFade: rm_step_due
-object_handlers.c ObjectChildReturn: rm_eased16
-object_handlers.c ObjectPieceFall: rm_step_due
-object_handlers.c PlayerCarEvents: rm_step_due
-object_handlers.c ObjectLampDrop: rm_step_due
-object_handlers.c CameraApproachTarget: rm_eased16, rm_share, rm_step_due
-object_handlers.c CameraDirectorWait: rm_step_due
-objects_09.c counter_tick: rm_step_due
-objects_09.c add8s: rm_share
-objects_09.c add16s: rm_share
-objects_09.c add16_vias: rm_share, rm_sharing
-objects_09.c dec8s: rm_step_due
-objects_09.c inc8s: rm_step_due
-objects_09.c ease8s: rm_share_by, rm_sharing
-objects_09.c bob_frame: rm_step_due
-objects_09.c swing_frame: rm_step_due
-objects_09.c ObjectFloaterStep: rm_step_due
-objects_09.c fan_frame: rm_object_kept
-objects_09.c colour_cycle6: rm_step_due
-objects_09.c rail_slide: rm_share
-objects_09.c rail_drop_frame: rm_step_due
-objects_09.c GateSlideStep: rm_share
-objects_09.c colour_cycle: rm_step_due
-objects_09.c bounce_colour: rm_step_due
-objects_09.c ObjectShardStep: rm_share
-orient.c ease_half: rm_share_by
-orient.c ObjectFaceTied: rm_share_by
-replay_camera.c zoom_frame: rm_share_by, rm_sharing
+The earlier remaster's Enhanced calls: what became of each (2026-11-09)
+-----------------------------------------------------------------------
+The game runs a whole step every 6 updates (4 on the course menu) and draws
+the 3D between steps from places and angles set between the last two
+steps' ends (fx/fx_tween.c: the cameras' places and angles, the objects'
+places and angles, the Super FX records' places and angles, a car's parts'
+places). With whole steps the remaster's sharing calls (rm_share,
+rm_share_by, rm_sharing, rm_eased8/16, rm_step_due) gave the step's change
+unchanged, so the code without them is the remaster's whole-step game.
+Each such site changes either a place or an angle, which the pictures
+between set, or a frame, colour, count or timer, which steps once a step in
+the original and in the remaster's whole steps alike: a picture's or a
+colour's number has no value between two.
+
+Covered: places and angles, set between by fx_tween
+- car_parts.c rm_eased16, rm_eased8, return_frame (PartDetachStep, a part
+  going back): its place and angles.
+- object.c apply_velocity (rm_share): its place.
+- object_handlers.c rm_eased16, rm_eased8, ObjectChildReturn: a child's
+  place and angles.
+- object_handlers.c CameraApproachTarget (rm_eased16, rm_share): the
+  camera's place offsets, which the step makes the camera's place; its
+  count is below.
+- objects_09.c add8s, add16s, add16_vias, ease8s: places (+$0C-$10) and
+  angles (+$14-$16); where they change +$27, +$29 (a bob's offset and
+  speed, a ball's target), +$48, +$49 or +$0A, those are counts and timers.
+- objects_09.c rail_slide, GateSlideStep, ObjectShardStep,
+  ObjectFloaterStep, swing_frame: places and angles (the floater's and the
+  swing's +$0A are timers).
+- orient.c ease_half, ObjectFaceTied; replay_camera.c zoom_frame: the
+  camera's angles.
+
+Covered: once a step, as in the original
+- object.c ObjectsRunHandlers (rm_share): the run count +$36 and the
+  objects' frame count (the frames chosen by it).
+- object_handlers.c count_down, CameraDirectorWait, CameraApproachTarget's
+  count: counts.
+- object_handlers.c ObjectBlinkerFade: a colour step and the record flag.
+- object_handlers.c ObjectPieceFall: its frame (the sprite turn) and life;
+  its place is set between.
+- object_handlers.c PlayerCarEvents: sounds and the records' events.
+- object_handlers.c ObjectLampDrop: a startled eye's spin (+$48) and size
+  (+$5F), a step at a time as the remaster had them; its place on the car
+  is set between, its gaze goes between (ObjectGazeBetween, below).
+- objects_09.c counter_tick, dec8s, inc8s, colour_cycle, colour_cycle6,
+  rail_drop_frame, bounce_colour: counts, frames and colours (the bounce's
+  offset moves a marker's height, which is set between).
+- objects_09.c bob_frame: only ObjectBob (dead) and its step, reached from
+  it alone, use it.
+
+Done in object/animate.c (the remaster's animate.c) and draw_list.c
+- object.c ObjectInit (rm_object_made): ObjectMade.
+- object.c ObjectsRunHandlers (rm_object_turn): ObjectTurn: whether it
+  ran; the lap balls', bumpers' and bonus markers' looks go on while they
+  do not run.
+- object.c ObjectGroupsActivate (rm_objects_keep_running):
+  ObjectsKeepRunning: the dolphins, rings, spinners and their centres, the
+  swing, the floater and the pop marker run wherever they are.
+- objects_09.c fan_frame (rm_object_kept): ObjectKept: no sound from one
+  kept running.
+- draw_list.c far_records (rm_far_left_out): ObjectFarLeftOut: not drawn
+  far before its set-up has run (unless its look is known) or while a short
+  life is stopped.
+- draw_list.c draw_record (rm_record_look): ObjectRecordLook: a set-up's
+  known look, far; the looks that go on. The angles' fractions between
+  steps are fx_tween's own (records_take_fractions).
+- draw_list.c far_record (rm_look_dy): ObjectLookDy.
+- draw_list.c parked_child (rm_enhanced, rm_redrawing): parked_child: a
+  parked car's tyres drawn on it, far.
+- draw_list.c ObjectDrawListBuild (rm_enhanced, rm_whole_steps): the far
+  records (56ea23c6), in every 3D scene.
+- object.c ObjectNearFocus (rm_enhanced): a car stays near, a model, however
+  far.
+- draw_list.c draw_record (rm_gaze_of): object_gaze and draw_record_gaze;
+  between steps the gaze goes from the last step's to this one's
+  (ObjectGazeBetween).
+
+With the 3D session's 306606ed
+- The looks and gazes between steps go by fx_tween_t (how far through its
+  step a picture is).
+- A parked tyre of a car in the near list is marked (FX_FAR_PARKED); until
+  fx_far.c draws such tyres among the near ones, it is drawn in the far
+  pass.
+
+Waiting on the 3D session (fx/fx_tween.c; asked 2026-11-09)
+- ObjectOrbitBetween: fx_tween to add it to a circling piece's place between
+  steps (the remaster's rm_orbit_between). Until then the dolphins, rings
+  and spinners go straight from place to place, across their circle.
