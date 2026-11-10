@@ -63,6 +63,7 @@ static struct {
     int offset_x, offset_y;
 } before_tween;
 static int offset_x, offset_y;
+static int drawing_3d;          /* the recording's 3D is being drawn: from its frame program's start to the HUD's */
 static int origin_x, origin_y;  /* where a screen other than the race's puts the picture; 0, 0: none */
 static int palette_row;         /* the 16 colours a 4-bit picture's tiles show it in */
 /* The list's pixels per screen pixel (target: the checks' list; screen: the
@@ -111,6 +112,7 @@ void fx_draw_set_target(nshvc_draw_list list, uint32_t width, uint32_t height)
     target_sx = width / 256.0f;
     target_sy = height / 224.0f;
     recording = NULL;
+    drawing_3d = 0;
     offset_x = offset_y = 0;
 }
 
@@ -124,6 +126,7 @@ void fx_draw_init(void)
 void fx_draw_begin(int picture)
 {
     picture &= 1;
+    drawing_3d = 0;                     /* its view is known at its frame program's start */
     target.id = 0;
     recording = tweening ? &between[picture] : &recordings[picture];
     if (tweening)
@@ -266,8 +269,28 @@ int fx_draw_horizon(int picture, float *x, float *row, float *slope)
     return 1;
 }
 
+int fx_draw_horizon_now(int panel, float *x, float *row, float *slope)
+{
+    int two = g.split_screen != 0, picture;
+
+    panel &= 1;
+    /* two players: a panel is its half, whose picture has the half's number
+       (fx_draw_begin's offsets); one player: the one view */
+    if (drawing_3d && recording && (!two || recording == &recordings[panel] || recording == &between[panel])) {
+        if (!recording->horizon_known)
+            return 0;
+        *x = recording->horizon_x;
+        *row = recording->horizon_row;
+        *slope = recording->horizon_slope;
+        return 1;
+    }
+    picture = two ? panel : fx_draw_shown_picture();
+    return picture >= 0 && fx_draw_horizon(picture, x, row, slope);
+}
+
 void fx_draw_part(int hud)
 {
+    drawing_3d = recording && !hud;
     if (recording && !hud)
         horizon_of_view(recording);
     if (recording && hud)

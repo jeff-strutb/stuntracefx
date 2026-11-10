@@ -57,6 +57,13 @@ void fx_draw_recompose(void);
    `slope` rows a column (the view's roll). For the hills and the sky to sit
    on the 3D's horizon. 0 when no view is known. */
 int fx_draw_horizon(int picture, float *x, float *row, float *slope);
+/* The same for player `panel`'s view as drawn now: while a picture's 3D is
+   being drawn for that panel (its frame program, a picture between steps
+   included, up to the HUD), that picture's horizon, else the one shown in
+   that panel (two players: that half's; one player: the one view). The
+   rows are the screen's pixels, the picture's place on the screen
+   included (two players: the half's rectangle). 0 when no view is known. */
+int fx_draw_horizon_now(int panel, float *x, float *row, float *slope);
 int fx_draw_shown_picture(void);
 /* The step's end; the picture the last step drew its panel n into (-1:
    none). */
