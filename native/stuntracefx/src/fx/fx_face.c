@@ -29,6 +29,7 @@
 #include "fx/fx.h"
 #include "fx/fx_draw.h"
 #include "fx/fx_face.h"
+#include "fx/fx_pattern.h"
 
 enum {
     POINTS = 256,               /* a model's point records ($04E4 + 6i, i a byte) */
@@ -216,6 +217,32 @@ static uint32_t ncorners;
 
 static void commit(uint16_t end);
 
+/* ---- pattern faces (fx_pattern.c): kept whole, with their view, and cut
+   when drawn with the draw list's texture offsets ---- */
+
+enum { PATTERN_FACES = 256 };
+
+static struct {
+    const FxPattern *pattern;
+    View view;
+    int n;
+    Corner3 c[MOST];
+} pattern_faces[PATTERN_FACES];
+static int npatterns;
+
+/* The texture's key from the face's draw-list entry, laid out as
+   FxDrawList reads it: the kind, the bank, the colour and options word,
+   the base and the mask. */
+static const FxPattern *entry_pattern(uint16_t entry)
+{
+    uint16_t p = (uint16_t)(entry + 1);
+    uint8_t bank = fx_ram[p], options = (uint8_t)(fx_ram[(uint16_t)(p + 2)] & 0x1F);
+    uint16_t base = (uint16_t)(fx_ram[(uint16_t)(p + 3)] | fx_ram[(uint16_t)(p + 4)] << 8);
+    uint16_t mask = (uint16_t)(fx_ram[(uint16_t)(p + 5)] | fx_ram[(uint16_t)(p + 6)] << 8);
+
+    return fx_pattern_find(bank, base, mask, options);
+}
+
 /* The face noted last is settled: kept when the queue's end has moved past
    its entry (the chip queued it), dropped when it has not. */
 static void settle_face(void)
@@ -271,6 +298,7 @@ void fx_face_settle(void)
 
 void fx_face_reset(void)
 {
+    npatterns = 0;
     face.open = 0;
     nshapes = 0;
     ncorners = 0;
@@ -513,6 +541,18 @@ static void commit(uint16_t end)
     s->entry = face.entry;
     s->end = end;
     s->line = face.n == 2;
+    s->pattern = 0;
+    if (!s->line && face.textured && npatterns < PATTERN_FACES) {
+        const FxPattern *pattern = entry_pattern(face.entry);
+
+        if (pattern) {
+            pattern_faces[npatterns].pattern = pattern;
+            pattern_faces[npatterns].view = face.view;
+            pattern_faces[npatterns].n = face.n;
+            memcpy(pattern_faces[npatterns].c, face.c, sizeof(Corner3) * (size_t)face.n);
+            s->pattern = (uint16_t)++npatterns;
+        }
+    }
     if (s->line) {
         ok = line(face.c, &face.view);
     } else {
@@ -558,6 +598,88 @@ static void commit(uint16_t end)
     s->first = first;
     s->count = ncorners - first;
     nshapes++;
+}
+
+/* ---- a pattern face's pieces ---- */
+
+typedef struct {
+    const View *view;
+    FxCorner *out;
+    uint8_t *values;
+    uint32_t room, made;
+    int full;
+} Cut;
+
+/* A flat piece: near clip, projection, the view's rectangle, fanned. */
+static void cut_piece(void *context, const double (*p)[3], int n, uint8_t value)
+{
+    Cut *cut = (Cut *)context;
+    Corner3 a[WORK], b[WORK];
+    Corner2 c[WORK], d[WORK];
+    int i, m;
+
+    if (n > MOST || cut->full)
+        return;
+    for (i = 0; i < n; i++) {
+        a[i].x = p[i][0];
+        a[i].y = p[i][1];
+        a[i].z = p[i][2];
+        a[i].u = a[i].v = 0;
+    }
+    m = clip_depth(a, n, b, NEAR_Z, 1);
+    if (m < 3)
+        return;
+    project(b, m, c, cut->view);
+    m = clip_side(c, m, d, 0, cut->view->left, 1);
+    m = clip_side(d, m, c, 0, cut->view->right, 0);
+    m = clip_side(c, m, d, 1, cut->view->top, 1);
+    m = clip_side(d, m, c, 1, cut->view->bottom, 0);
+    if (m < 3)
+        return;
+    if (cut->made + (uint32_t)(m - 2) * 3 > cut->room) {
+        cut->full = 1;
+        return;
+    }
+    for (i = 1; i + 1 < m; i++) {
+        const Corner2 *t[3] = { &c[0], &c[i], &c[i + 1] };
+        int j;
+
+        for (j = 0; j < 3; j++) {
+            FxCorner *o = &cut->out[cut->made];
+
+            o->x = (float)t[j]->x;
+            o->y = (float)t[j]->y;
+            o->u = o->v = 0;
+            cut->values[cut->made++] = value;
+        }
+    }
+}
+
+uint32_t fx_face_pattern(const FxShape *sh, double u_off, double v_off, FxCorner *out, uint8_t *values, uint32_t room)
+{
+    double xyz[MOST][3], uv[MOST][2];
+    Cut cut;
+    int i, k;
+
+    if (!sh->pattern || sh->pattern > npatterns)
+        return 0;
+    k = sh->pattern - 1;
+    for (i = 0; i < pattern_faces[k].n; i++) {
+        xyz[i][0] = pattern_faces[k].c[i].x;
+        xyz[i][1] = pattern_faces[k].c[i].y;
+        xyz[i][2] = pattern_faces[k].c[i].z;
+        uv[i][0] = pattern_faces[k].c[i].u + u_off;
+        uv[i][1] = pattern_faces[k].c[i].v + v_off;
+    }
+    cut.view = &pattern_faces[k].view;
+    cut.out = out;
+    cut.values = values;
+    cut.room = room;
+    cut.made = 0;
+    cut.full = 0;
+    if (!fx_pattern_cut(pattern_faces[k].pattern, (const double (*)[3])xyz, (const double (*)[2])uv, pattern_faces[k].n, cut_piece, &cut) || cut.full)
+        return 0;
+    return cut.made;
 }
 
 /* ---- scaled sprites ---- */

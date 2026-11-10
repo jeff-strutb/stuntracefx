@@ -1207,6 +1207,55 @@ static void textured_polygon(uint16_t p, int n)
         emit(v, (uint32_t)out, m.image.id, 0);
 }
 
+/* ---- pattern faces (fx_pattern.c) ---- */
+
+/* A pattern piece's texel value made into a colour as texture() makes its
+   texels': the colour register's high four bits over a four-bit part, the
+   transparency rule, the palette row and depth mask. */
+static uint8_t pattern_colour(uint8_t value, uint8_t colour, uint8_t options)
+{
+    uint8_t c = (options & 0x0C) ? (uint8_t)((colour & 0xF0) | value) : value;
+
+    if (!(options & 0x01) && ((options & 0x08) ? !(c & 0x0F) : !c))
+        c = 0;
+    return ink(c);
+}
+
+/* A pattern face drawn as its flat pieces; 0 when it keeps its texture. */
+static int pattern_draw(const FxShape *sh, uint8_t colour, uint8_t options, double u_off, double v_off)
+{
+    enum { ROOM = 16383 };
+    static FxCorner c[ROOM];
+    static uint8_t value[ROOM];
+    nshvc_vertex v[48];
+    uint32_t n = fx_face_pattern(sh, u_off, v_off, c, value, ROOM), i, k = 0;
+
+    if (!n)
+        return 0;
+    memset(v, 0, sizeof v);
+    for (i = 0; i + 2 < n; i += 3) {
+        uint8_t ink_c = pattern_colour(value[i], colour, options);
+        int j;
+
+
+        if (!ink_c)
+            continue;
+        for (j = 0; j < 3; j++) {
+            v[k].x = c[i + j].x;
+            v[k].y = c[i + j].y;
+            v[k].colour = ink_c;
+            k++;
+        }
+        if (k == 48) {
+            emit(v, k, 0, 0);
+            k = 0;
+        }
+    }
+    if (k)
+        emit(v, k, 0, 0);
+    return 1;
+}
+
 /* A face's shape in floats (fx_face.c) in place of the chip's entries for
    it, in the material of its first entry (p, after the kind byte). */
 static void shape_draw(const FxShape *sh, uint16_t p, int8_t type)
@@ -1228,6 +1277,8 @@ static void shape_draw(const FxShape *sh, uint16_t p, int8_t type)
             return;
         u_off = (int16_t)rd(0x00C0) / 256.0;
         v_off = (int16_t)rd(0x00C2) / 256.0;
+        if (sh->pattern && pattern_draw(sh, colour, fxs.por, u_off, v_off))
+            return;                     /* drawn as the pattern's flat pieces */
         image = texture(bank, base, mask, colour, fxs.por).id;
         colour = 1;
     } else {

@@ -19,6 +19,7 @@ typedef struct {
     uint16_t entry, end;
     uint8_t line;
     uint32_t first, count;
+    uint16_t pattern;           /* a pattern face's place among them (fx_face_pattern), plus one; 0 none */
 } FxShape;
 
 /* The faces committed since the queue was last drawn are made into shapes. */
@@ -28,6 +29,12 @@ const FxShape *fx_face_shape(uint16_t entry);
 const FxCorner *fx_face_corners(void);
 /* The queue was drawn: its shapes are gone. */
 void fx_face_reset(void);
+
+/* A pattern face's pieces (fx_pattern.c) with the texture's offsets the
+   draw list adds: triangles' corners in `out` and each corner's texel value
+   in `values`; the count made, 0 when the face is drawn with its texture
+   (too many tiles, no area, or no room). */
+uint32_t fx_face_pattern(const FxShape *sh, double u_off, double v_off, FxCorner *out, uint8_t *values, uint32_t room);
 
 /* What the checks count: vertices of faces wholly on the screen, and those
    more than 1.02 pixels from the chip's own. */
