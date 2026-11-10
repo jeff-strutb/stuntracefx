@@ -14,6 +14,9 @@
 #include "system/state.h"
 #include "video/video.h"
 
+/* the sprite-table word lists, in bank $0B */
+enum { MENU_BANK = 0x0B, SPRITE_LISTS = 0xFCA2 };
+
 static void oam_word(uint16_t offset, uint16_t w)
 {
     OamByteSet(offset, (uint8_t)w);
@@ -29,7 +32,7 @@ static void oam_from_list(uint16_t offset, uint16_t list)
 {
     uint16_t w;
 
-    while ((w = cart16(0x0B, (uint16_t)(0xFCA2 + list))) != 0xFFFF) {
+    while ((w = cart16(MENU_BANK, (uint16_t)(SPRITE_LISTS + list))) != 0xFFFF) {
         oam_word(offset, w);
         offset = (uint16_t)(offset + 2);
         list = (uint16_t)(list + 2);

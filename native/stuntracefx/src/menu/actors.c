@@ -20,7 +20,13 @@ enum {
     TEMPLATE_AT = 0xEA0F,
     SPAWN_LISTS = 0xE4E7, SPAWN_ENTRIES = 0xE547,
     ANIMATIONS = 0xAB60,
-    FIRST_FREE_GROUP = 0x2881
+    FIRST_FREE_GROUP = 0x2881,
+    MENU_BANK = 0x0B,                           /* the bank of the tables below */
+    UPLOAD_SLOTS = 0xCCBC,                      /* each sprite's art slot */
+    UPLOAD_BASES = 0xCD14,                      /* each sprite's art in the frames */
+    UPLOAD_FRAMES = 0xCC7C,                     /* a frame's offset, bit 15 its vertical flip */
+    SPRITE_TILES_SLOT = 0x4000,                 /* the slot of the sprite tile set's tile 0 */
+    CROSS_FADE_LEVELS = 0xCFE5                  /* the cross-fade's factor by step */
 };
 
 /* the block is modified as objects run: this is the copy */
@@ -82,7 +88,7 @@ static Actor *actor_new(void)
        half lands on the following record. For the last record it would run
        past the records, which needs a full pool; no play has one. */
     for (i = 0; i < 44 && n + (i >= 22) < ACTOR_COUNT; i++)
-        ((uint16_t *)&actors.actor[n + (i >= 22)])[i % 22] = cart16(0x0B, (uint16_t)(TEMPLATE_AT + i * 2));
+        ((uint16_t *)&actors.actor[n + (i >= 22)])[i % 22] = cart16(MENU_BANK, (uint16_t)(TEMPLATE_AT + i * 2));
     return &actors.actor[n];
 }
 
@@ -110,8 +116,8 @@ Actor *actor_spawn(uint16_t entry)
 
     if (!a)
         return NULL;
-    while (!((f = cart16(0x0B, (uint16_t)(SPAWN_ENTRIES + entry))) & 0x8000)) {
-        ((uint16_t *)a)[f / 2] = cart16(0x0B, (uint16_t)(SPAWN_ENTRIES + entry + 2));
+    while (!((f = cart16(MENU_BANK, (uint16_t)(SPAWN_ENTRIES + entry))) & 0x8000)) {
+        ((uint16_t *)a)[f / 2] = cart16(MENU_BANK, (uint16_t)(SPAWN_ENTRIES + entry + 2));
         entry = (uint16_t)(entry + 4);
     }
     return a;
@@ -126,7 +132,7 @@ void actors_spawn_list(uint16_t list)
 {
     uint16_t e;
 
-    while (!((e = cart16(0x0B, (uint16_t)(SPAWN_LISTS + list))) & 0x8000)) {
+    while (!((e = cart16(MENU_BANK, (uint16_t)(SPAWN_LISTS + list))) & 0x8000)) {
         actor_spawn(e);
         list = (uint16_t)(list + 2);
     }
@@ -177,13 +183,13 @@ static void actor_animate(Actor *a)
         return;
     a->anim_pos = (uint16_t)(a->anim_pos + 4);
     at = (uint16_t)(a->anim_pos + a->anim);
-    d = cart16(0x0B, (uint16_t)(ANIMATIONS + at));
+    d = cart16(MENU_BANK, (uint16_t)(ANIMATIONS + at));
     if (d & 0x8000) {
         a->anim_pos = 0;
         at = a->anim;
-        d = cart16(0x0B, (uint16_t)(ANIMATIONS + at));
+        d = cart16(MENU_BANK, (uint16_t)(ANIMATIONS + at));
     }
-    a->group = cart16(0x0B, (uint16_t)(ANIMATIONS + 2 + at));
+    a->group = cart16(MENU_BANK, (uint16_t)(ANIMATIONS + 2 + at));
     a->anim_timer = (uint16_t)(d - 1);
 }
 
@@ -219,7 +225,7 @@ void actor_start_animation(Actor *a, uint16_t anim)
  */
 void actor_copy_group(Actor *a)
 {
-    uint16_t src = cart16(0x0B, (uint16_t)(ANIMATIONS + 2 + a->anim));
+    uint16_t src = cart16(MENU_BANK, (uint16_t)(ANIMATIONS + 2 + a->anim));
     uint16_t size = (uint16_t)(((uint16_t)(group_word(src) + 1) << 3) + 2);
     uint16_t dst = actors.next_group;
     int i;
@@ -304,10 +310,10 @@ void actors_upload_frames(Actor *a, uint16_t frame, uint16_t first)
     int n = (int16_t)group_word(a->group);
 
     for (; n >= 0; n--, e = (uint16_t)(e + 8), i = (uint16_t)(i + 2), f = (uint16_t)((f + 2) & 0x003F)) {
-        uint16_t slot = cart16(0x0B, (uint16_t)(0xCCBC + i));
-        uint16_t base = cart16(0x0B, (uint16_t)(0xCD14 + i));
-        uint16_t v = cart16(0x0B, (uint16_t)(0xCC7C + f));
-        uint16_t tile = (uint16_t)((slot - 0x4000) / 16);
+        uint16_t slot = cart16(MENU_BANK, (uint16_t)(UPLOAD_SLOTS + i));
+        uint16_t base = cart16(MENU_BANK, (uint16_t)(UPLOAD_BASES + i));
+        uint16_t v = cart16(MENU_BANK, (uint16_t)(UPLOAD_FRAMES + f));
+        uint16_t tile = (uint16_t)((slot - SPRITE_TILES_SLOT) / 16);
         uint16_t src = (uint16_t)((v & 0x7FFF) + base);
 
         group_word_set((uint16_t)(e + 4), (uint16_t)((group_word((uint16_t)(e + 4)) & 0x7FFF) | (v & 0x8000)));
@@ -339,7 +345,7 @@ void menu_palette_scale(int first, int count, uint16_t factor)
    by (32 - f) / 32 (the second factor as the original makes it). */
 void cross_fade(uint16_t n)
 {
-    uint16_t f = cart16(0x0B, (uint16_t)(0xCFE5 + (n & 0xFFFE))), g;
+    uint16_t f = cart16(MENU_BANK, (uint16_t)(CROSS_FADE_LEVELS + (n & 0xFFFE))), g;
 
     menu_palette_scale(0x40, 0x40, f);
     g = (uint16_t)(((uint16_t)(f - 1) ^ 0x001F) + 1);

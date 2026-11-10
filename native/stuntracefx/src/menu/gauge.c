@@ -9,6 +9,9 @@
 #include "system/game.h"
 #include "system/state.h"
 
+/* the needle's sprite by speed band, in bank $0B */
+enum { MENU_BANK = 0x0B, GAUGE_NEEDLE = 0xB158 };
+
 static uint16_t menu_gauge;             /* $117E */
 static uint16_t gauge2 = 0;             /* $1180 */
 
@@ -45,7 +48,7 @@ static uint16_t gauge_from_speed(uint16_t offset)
     if (a >= 0x0257)
         a = 0x0257;
     a = (uint16_t)(a >> 2);
-    return cart8(0x0B, (uint16_t)(0xB158 + gauge_table_index(a)));
+    return cart8(MENU_BANK, (uint16_t)(GAUGE_NEEDLE + gauge_table_index(a)));
 }
 
 /*

@@ -17,6 +17,25 @@
 #include "system/state.h"
 #include "video/picture.h"
 
+/* The cartridge's tables the handlers read, by bank and place. */
+enum {
+    MATH_BANK = 0x00, SELECTION_BANK = 0x03, MENU_BANK = 0x0B,
+    SINE_TABLE = 0x96FE,                /* bank 0: the signed sine, a byte an angle */
+    SELECTION_DERIVED = 0xB7B1,         /* bank 3: player 1's choice's setting row */
+    SELECTION_MODELS = 0xB7B5,          /* bank 3: a racer's model by choice and setting row */
+    CHOICE_SETTINGS = 0xB00C,           /* each choice's settings table, in the block at $B014 */
+    SETTINGS_ROWS = 0xB014,             /* the settings' rows, three bytes a setting combination */
+    SAVED_CHOICE = 0xB9BA,              /* a saved 2-bit choice as the choice's word */
+    CHOICE_OBJECT_KINDS = 0xC15E,       /* the three objects that show the car settings */
+    SETTING_ANIMATIONS = 0xC1B0,        /* an object's animation by setting and row */
+    INITIAL_TILES = 0xC528,             /* a letter's tile, A-Z */
+    CHOICE_REPEAT = 0xC758,             /* player 2's model word when both choose the same */
+    CHOICE_LEFT = 0xC81F,               /* the choice a left press steps to */
+    CHOICE_RIGHT = 0xC827,              /* and a right press */
+    PAIR_ANIMATIONS = 0xC862,           /* animation pairs for the objects of kinds 3 and 5 */
+    BUTTON_SEQUENCE = 0xD66D            /* the title's button sequence, a button each step */
+};
+
 /* --- the title's handlers ---------------------------------------------- */
 
 /* BG1's vertical scroll follows the object's height and its sprite follows too. */
@@ -101,7 +120,7 @@ static void button_sequence(Actor *a)
         a->count = 0;
         menu_idle = 0;
     }
-    if (!(pressed & cart16(0x0B, (uint16_t)(0xD66D + (uint16_t)(a->count << 1))))) {
+    if (!(pressed & cart16(MENU_BANK, (uint16_t)(BUTTON_SEQUENCE + (uint16_t)(a->count << 1))))) {
         a->count = 0;
         select_confirm(a);
         return;
@@ -250,7 +269,7 @@ static void sprite_palettes_scale(uint16_t factor)
    $80 added, kept to 8 bits, then step added. */
 static void sine_position(const Actor *a, int step)
 {
-    uint8_t t = cart8(0x00, (uint16_t)(0x96FE + ((a->count - 0x40) & 0xFF)));
+    uint8_t t = cart8(MATH_BANK, (uint16_t)(SINE_TABLE + ((a->count - 0x40) & 0xFF)));
     int v = (int8_t)t;
 
     v = (v + 0x80) & 0xFF;
@@ -344,8 +363,8 @@ static uint16_t car_object(uint16_t i)
 
 static void set_pair_animations(uint16_t pair)
 {
-    uint16_t first = cart16(0x0B, (uint16_t)(0xC862 + (pair << 2)));
-    uint16_t second = cart16(0x0B, (uint16_t)(0xC862 + (pair << 2) + 2));
+    uint16_t first = cart16(MENU_BANK, (uint16_t)(PAIR_ANIMATIONS + (pair << 2)));
+    uint16_t second = cart16(MENU_BANK, (uint16_t)(PAIR_ANIMATIONS + (pair << 2) + 2));
     Actor *a = actor_find(0x0005);
 
     if (a)
@@ -370,7 +389,7 @@ static void choice_repeat(void)
 {
     g.selection_out[0] = 0;
     if (g.choice_p1 == g.choice_p2)
-        g.selection_out[0] = cart16(0x0B, (uint16_t)(0xC758 + g.choice_p2 * 2));
+        g.selection_out[0] = cart16(MENU_BANK, (uint16_t)(CHOICE_REPEAT + g.choice_p2 * 2));
 }
 
 /*
@@ -384,13 +403,13 @@ static void choice_step_p1(uint16_t press)
     int dir;
 
     for (dir = 0; dir < 2; dir++) {
-        uint16_t bit = dir ? 0x0100 : 0x0200, table = dir ? 0xC827 : 0xC81F, instead = dir ? 0x0001 : 0x0002;
+        uint16_t bit = dir ? PAD_RIGHT : PAD_LEFT, table = dir ? CHOICE_RIGHT : CHOICE_LEFT, instead = dir ? 0x0001 : 0x0002;
         uint16_t s;
 
         if (!(press & bit))
             continue;
         sound_port0_push(0x45);
-        g.choice_p1 = cart16(0x0B, (uint16_t)(table + g.choice_p1 * 2));
+        g.choice_p1 = cart16(MENU_BANK, (uint16_t)(table + g.choice_p1 * 2));
         s = save.progress;
         if ((!s || (!(s & 0x0004) && g.menu_mode != 3)) && g.choice_p1 == 3)
             g.choice_p1 = instead;
@@ -408,13 +427,13 @@ static void choice_step_p2(uint16_t press)
     int dir;
 
     for (dir = 0; dir < 2; dir++) {
-        uint16_t bit = dir ? 0x0100 : 0x0200, table = dir ? 0xC827 : 0xC81F, instead = dir ? 0x0001 : 0x0002;
+        uint16_t bit = dir ? PAD_RIGHT : PAD_LEFT, table = dir ? CHOICE_RIGHT : CHOICE_LEFT, instead = dir ? 0x0001 : 0x0002;
         uint16_t c;
 
         if (!(press & bit))
             continue;
         sound_port0_push(0x45);
-        g.choice_p2 = cart16(0x0B, (uint16_t)(table + g.choice_p2 * 2));
+        g.choice_p2 = cart16(MENU_BANK, (uint16_t)(table + g.choice_p2 * 2));
         if (!(save.progress & 0x0004) && g.choice_p2 == 3)
             g.choice_p2 = instead;
         c = g.choice_p2;
@@ -455,7 +474,7 @@ static void choice_presses(int player)
  */
 static uint16_t choice_from_saved(uint8_t byte, int shift)
 {
-    return cart16(0x0B, (uint16_t)(0xB9BA + (((byte >> shift) & 3) << 1)));
+    return cart16(MENU_BANK, (uint16_t)(SAVED_CHOICE + (((byte >> shift) & 3) << 1)));
 }
 
 static void choices_from_save(uint16_t mode)
@@ -653,9 +672,9 @@ static void row_blink_settings(Actor *a)
     if (k) {
         Actor *row = (Actor *)k;
 
-        actor_tile_set(row, 0x002A, cart16(0x0B, (uint16_t)(0xC528 + g.settings_row[0] * 2)));
-        actor_tile_set(row, 0x001A, cart16(0x0B, (uint16_t)(0xC528 + g.settings_row[1] * 2)));
-        actor_tile_set(row, 0x000A, cart16(0x0B, (uint16_t)(0xC528 + g.settings_row[2] * 2)));
+        actor_tile_set(row, 0x002A, cart16(MENU_BANK, (uint16_t)(INITIAL_TILES + g.settings_row[0] * 2)));
+        actor_tile_set(row, 0x001A, cart16(MENU_BANK, (uint16_t)(INITIAL_TILES + g.settings_row[1] * 2)));
+        actor_tile_set(row, 0x000A, cart16(MENU_BANK, (uint16_t)(INITIAL_TILES + g.settings_row[2] * 2)));
     }
 }
 
@@ -686,18 +705,18 @@ static void row_palette5(void)
  */
 void SelectionTables18CB(void)
 {
-    uint16_t base = cart16(0x0B, (uint16_t)(0xB00C + g.choice_p1 * 2));
+    uint16_t base = cart16(MENU_BANK, (uint16_t)(CHOICE_SETTINGS + g.choice_p1 * 2));
     uint16_t x = (uint16_t)(base + g.choices[0] * 3 + g.choices[1] * 9 + g.choices[2] * 27);
     int i;
 
-    g.selection_derived[1] = cart8(0x0B, (uint16_t)(0xB014 + x)) & 3;           /* $18E5 */
-    g.selection_derived[2] = cart8(0x0B, (uint16_t)(0xB014 + x + 1)) & 3;      /* $18E7 */
-    g.selection_derived[3] = cart8(0x0B, (uint16_t)(0xB014 + x + 2)) & 3;      /* $18E9 */
-    g.selection_derived[0] = cart8(0x03, (uint16_t)(0xB7B1 + g.choice_p1)) & 3; /* $18E3 */
+    g.selection_derived[1] = cart8(MENU_BANK, (uint16_t)(SETTINGS_ROWS + x)) & 3;           /* $18E5 */
+    g.selection_derived[2] = cart8(MENU_BANK, (uint16_t)(SETTINGS_ROWS + x + 1)) & 3;      /* $18E7 */
+    g.selection_derived[3] = cart8(MENU_BANK, (uint16_t)(SETTINGS_ROWS + x + 2)) & 3;      /* $18E9 */
+    g.selection_derived[0] = cart8(SELECTION_BANK, (uint16_t)(SELECTION_DERIVED + g.choice_p1)) & 3; /* $18E3 */
     for (i = 0; i < 4; i++) {
         uint16_t choice = i == 0 ? g.choice_p1 : g.choices[i - 1];
 
-        g.selection_out[i] = cart8(0x03, (uint16_t)(0xB7B5 + choice * 4 + g.selection_derived[i])) & 3; /* $18D3 + 2i */
+        g.selection_out[i] = cart8(SELECTION_BANK, (uint16_t)(SELECTION_MODELS + choice * 4 + g.selection_derived[i])) & 3; /* $18D3 + 2i */
     }
 }
 
@@ -711,8 +730,8 @@ static void choice_animations(void)
     int i;
 
     for (i = 0; i < 3; i++) {
-        uint16_t anim = cart16(0x0B, (uint16_t)(0xC1B0 + g.choices[i] * 8 + g.selection_derived[1 + i] * 2));
-        Actor *a = actor_find(cart16(0x0B, (uint16_t)(0xC15E + i * 2)));
+        uint16_t anim = cart16(MENU_BANK, (uint16_t)(SETTING_ANIMATIONS + g.choices[i] * 8 + g.selection_derived[1 + i] * 2));
+        Actor *a = actor_find(cart16(MENU_BANK, (uint16_t)(CHOICE_OBJECT_KINDS + i * 2)));
 
         if (a)
             actor_start_animation(a, anim);
