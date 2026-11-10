@@ -6,16 +6,20 @@
  * (music_pause). Over the picture lie a navy tint and a panel: Jeff's
  * controller with a tag beside each button naming the key that makes it.
  *
- * The pad moves among the tags and the panel's two buttons; B, A or Start
- * chooses. A tag chosen asks for its button's new key, and the next key
- * pressed takes it (Escape or Select + Start cancels); a key another button
- * had goes over to the button whose key was taken, so every button keeps
- * one. The keys are kept in the save folder ("keys") and laid out at the
- * game's first update. RESUME, Escape or Select + Start again goes on;
- * DEFAULT KEYS puts the engine's own keys back; AUTO-ACCELERATE turns the
- * option over (on a touch screen the gas is held while driving; the menus'
- * save keeps it, option_auto_accelerate_set). Buttons held as the screen
- * closes reach the game only once let go.
+ * The pad moves among the tags and the panel's buttons; B, A or Start
+ * chooses. A tag chosen asks for its button's new key or controller button,
+ * and the next key pressed, or button pressed on player 1's controller,
+ * takes it (Escape or Select + Start cancels, so the controller buttons that
+ * give Select and Start are the screen's own, as Escape is). A key or
+ * controller button another button had goes over to the button whose own
+ * was taken, so every button keeps one of each. The keys and the controller
+ * buttons are kept in the save folder ("keys", "buttons") and laid out at
+ * the game's first update. RESUME, Escape or Select + Start again goes on;
+ * DEFAULTS puts the engine's own keys and buttons back; AUTO-ACCELERATE
+ * turns the option over (on a touch screen the gas is held while driving;
+ * the menus' save keeps it, option_auto_accelerate_set). Buttons held as the
+ * screen closes reach the game only once let go. Each tag names what is
+ * bound on the device the player last used (nshvc_control_name).
  *
  * Every picture is drawn once into an image (pause_art.c) and laid over the
  * window as an overlay the GPU blends. What changes is its own image (a tag,
@@ -29,8 +33,9 @@
  * Keys as keys (Escape, the key pressed for a button), the pointer and the
  * touches come with the engine's input of 4.5; built on an engine before it,
  * the screen opens with Select + Start alone, no key can be changed and
- * there is no corner button. Rebinding is the keyboard's: the engine binds
- * keys, not a controller's buttons.
+ * there is no corner button. A controller's buttons are rebound from the
+ * engine's 4.6 on (nshvc_control_bind_controller); before it, only keys.
+ * The left stick always steers.
  */
 #include <math.h>
 #include <stdio.h>
@@ -43,6 +48,7 @@
 #include "save/save.h"
 
 #define KEY_EVENTS (NSHVC_VERSION_MAJOR > 4 || (NSHVC_VERSION_MAJOR == 4 && NSHVC_VERSION_MINOR >= 5))
+#define CONTROLLER_BIND (NSHVC_VERSION_MAJOR > 4 || (NSHVC_VERSION_MAJOR == 4 && NSHVC_VERSION_MINOR >= 6))
 
 #if defined(__APPLE__)
 #include <TargetConditionals.h>
@@ -84,13 +90,18 @@ enum { O_TINT = 12, O_PANEL, O_TAGS, O_LIT = O_TAGS + PAUSE_CONTROLS, O_OPTION, 
 _Static_assert(O_END <= NSHVC_OVERLAYS, "the pause screen's overlays fit the engine's");
 
 /* the buttons in the engine's order (its input.c), which the save keeps, and
-   the engine's own keys for them, which DEFAULT KEYS puts back */
+   the engine's own keys for them, which DEFAULTS puts back */
 #define BUTTONS 12
 static const uint16_t k_buttons[BUTTONS] = { NSHVC_B, NSHVC_Y, NSHVC_SELECT, NSHVC_START, NSHVC_UP, NSHVC_DOWN,
                                              NSHVC_LEFT, NSHVC_RIGHT, NSHVC_A, NSHVC_X, NSHVC_L, NSHVC_R };
 static const uint8_t k_default_keys[BUTTONS] = { 'Z', 'A', 0x10, 0x0D, 0x26, 0x28, 0x25, 0x27, 'X', 'S', 'Q', 'W' };
+/* the controller's buttons for them, the engine's own (its input.c pad_bit) */
+static const uint16_t k_default_ctl[BUTTONS] = { NSHVC_CTL_SOUTH, NSHVC_CTL_WEST, NSHVC_CTL_BACK, NSHVC_CTL_MENU,
+                                                 NSHVC_CTL_UP, NSHVC_CTL_DOWN, NSHVC_CTL_LEFT, NSHVC_CTL_RIGHT,
+                                                 NSHVC_CTL_EAST, NSHVC_CTL_NORTH, NSHVC_CTL_LB, NSHVC_CTL_RB };
+enum { B_SELECT = 2, B_START = 3 };     /* their places in k_buttons */
 
-static const char SAVE_NAME[] = "keys";
+static const char SAVE_NAME[] = "keys", SAVE_NAME_CTL[] = "buttons";
 enum { SAVE_VERSION = 1 };
 
 static struct {
@@ -102,6 +113,9 @@ static struct {
     uint16_t last[2];                   /* the pads at the last update */
     uint16_t swallow[2];                /* after the screen: buttons kept from the game until let go */
     uint8_t keys[BUTTONS];              /* each button's key, in k_buttons' order */
+    uint16_t ctl[BUTTONS];              /* each button's button on player 1's controller (one NSHVC_CTL_* bit) */
+    uint16_t ctl_last;                  /* that controller's buttons at the last update */
+    int ctl_on;                         /* it is connected */
     nshvc_input copy;
 
     /* the pictures: made at `density` pixels a point; 0 none yet */
@@ -173,23 +187,80 @@ static void keys_save(void)
     nshvc_save_write(SAVE_NAME, f, sizeof f);
 }
 
+/* one NSHVC_CTL_* bit each, all different */
+static int ctl_valid(const uint16_t *ctl)
+{
+    int i, j;
+
+    for (i = 0; i < BUTTONS; i++) {
+        if (!ctl[i] || (ctl[i] & (ctl[i] - 1)))
+            return 0;
+        for (j = 0; j < i; j++)
+            if (ctl[j] == ctl[i])
+                return 0;
+    }
+    return 1;
+}
+
+/* Every button its controller button: all different, so as keys_apply. */
+static void ctl_apply(void)
+{
+#if CONTROLLER_BIND
+    int b;
+
+    for (b = 0; b < BUTTONS; b++)
+        nshvc_control_bind_controller(0, k_buttons[b], p.ctl[b]);
+#endif
+}
+
+static void ctl_save(void)
+{
+    uint8_t f[1 + 2 * BUTTONS];
+    int b;
+
+    f[0] = SAVE_VERSION;
+    for (b = 0; b < BUTTONS; b++) {
+        f[1 + 2 * b] = (uint8_t)p.ctl[b];
+        f[2 + 2 * b] = (uint8_t)(p.ctl[b] >> 8);
+    }
+    nshvc_save_write(SAVE_NAME_CTL, f, sizeof f);
+}
+
 static void keys_load(void)
 {
-    uint8_t f[1 + BUTTONS];
+    uint8_t f[1 + BUTTONS], c[1 + 2 * BUTTONS];
+    uint16_t ctl[BUTTONS];
+    int b;
 
     p.ready = 1;
     memcpy(p.keys, k_default_keys, BUTTONS);
+    memcpy(p.ctl, k_default_ctl, sizeof p.ctl);
     if (nshvc_save_read(SAVE_NAME, f, sizeof f) == (int)sizeof f && f[0] == SAVE_VERSION && keys_valid(f + 1)) {
         memcpy(p.keys, f + 1, BUTTONS);
         keys_apply();
     }
+    if (nshvc_save_read(SAVE_NAME_CTL, c, sizeof c) == (int)sizeof c && c[0] == SAVE_VERSION) {
+        for (b = 0; b < BUTTONS; b++)
+            ctl[b] = (uint16_t)(c[1 + 2 * b] | c[2 + 2 * b] << 8);
+        if (ctl_valid(ctl)) {
+            memcpy(p.ctl, ctl, sizeof p.ctl);
+            ctl_apply();
+        }
+    }
 }
 
+/* DEFAULTS: the engine's own keys and controller buttons, the saves gone */
 static void keys_default(void)
 {
     memcpy(p.keys, k_default_keys, BUTTONS);
+    memcpy(p.ctl, k_default_ctl, sizeof p.ctl);
+#if CONTROLLER_BIND
+    nshvc_control_defaults(0);
+#else
     keys_apply();
+#endif
     nshvc_save_delete(SAVE_NAME);
+    nshvc_save_delete(SAVE_NAME_CTL);
 }
 
 static int button_index(uint16_t button)
@@ -222,6 +293,40 @@ static void rebind(int c, int vk)
     keys_save();
 }
 
+/* control c's controller button becomes ctl; the button that had ctl takes
+   c's old one, as rebind does for keys */
+static void rebind_ctl(int c, uint16_t ctl)
+{
+#if CONTROLLER_BIND
+    int b = button_index(pause_controls[c].button), j, other = -1;
+    uint16_t old = p.ctl[b];
+
+    if (old == ctl)
+        return;
+    for (j = 0; j < BUTTONS; j++)
+        if (j != b && p.ctl[j] == ctl)
+            other = j;
+    p.ctl[b] = ctl;
+    nshvc_control_bind_controller(0, k_buttons[b], ctl);
+    if (other >= 0) {
+        p.ctl[other] = old;
+        nshvc_control_bind_controller(0, k_buttons[other], old);
+    }
+    ctl_save();
+#else
+    (void)c, (void)ctl;
+#endif
+}
+
+/* the first controller button gone down this update that may take a
+   button (not those giving Select and Start, the screen's own); 0 none */
+static uint16_t ctl_taken(uint16_t pressed)
+{
+    uint16_t free_ = (uint16_t)(pressed & ~(p.ctl[B_SELECT] | p.ctl[B_START]));
+
+    return CONTROLLER_BIND ? (uint16_t)(free_ & (uint16_t)-free_) : 0;
+}
+
 #if KEY_EVENTS
 static int key_pressed(const nshvc_input *in, int vk) { return (int)NSHVC_KEY_PRESSED(in, vk); }
 
@@ -236,7 +341,7 @@ static int key_taken(const nshvc_input *in)
     return 0;
 }
 
-static int can_ask(void) { return nshvc_display_info().keyboard; }
+static int can_ask(void) { return nshvc_display_info().keyboard || (CONTROLLER_BIND && p.ctl_on); }
 #else
 static int key_pressed(const nshvc_input *in, int vk) { (void)in, (void)vk; return 0; }
 static int key_taken(const nshvc_input *in) { (void)in; return 0; }
@@ -366,14 +471,16 @@ static void hint_refresh(void)
     PauseImg m;
 
     if (p.asking >= 0) {
-        snprintf(line1, sizeof line1, "PRESS A KEY FOR %s", pause_controls[p.asking].name);
-        snprintf(line2, sizeof line2, "ESCAPE TO CANCEL");
+        snprintf(line1, sizeof line1, "PRESS A %s FOR %s",
+                 !(CONTROLLER_BIND && p.ctl_on) ? "KEY" : nshvc_display_info().keyboard ? "KEY OR BUTTON" : "BUTTON",
+                 pause_controls[p.asking].name);
+        snprintf(line2, sizeof line2, "%s", KEY_EVENTS ? "ESCAPE OR SELECT + START TO CANCEL" : "SELECT + START TO CANCEL");
         colour = GOLD;
     } else if (p.chosen == PAUSE_OPTION) {
         snprintf(line1, sizeof line1, "TOUCH: THE GAS HELD WHILE YOU DRIVE");
         snprintf(line2, sizeof line2, "%s", KEY_EVENTS ? "ESCAPE OR SELECT + START TO RESUME" : "SELECT + START TO RESUME");
     } else {
-        snprintf(line1, sizeof line1, "%s", can_ask() ? "CHOOSE A BUTTON TO CHANGE ITS KEY" : "KEYS ARE CHANGED FROM A KEYBOARD");
+        snprintf(line1, sizeof line1, "%s", can_ask() ? "CHOOSE A BUTTON TO CHANGE IT" : "CHANGED FROM A KEYBOARD OR PAD");
         snprintf(line2, sizeof line2, "%s", KEY_EVENTS ? "ESCAPE OR SELECT + START TO RESUME" : "SELECT + START TO RESUME");
     }
     if (!p.hint.id || (!strcmp(line1, p.hint_shown[0]) && !strcmp(line2, p.hint_shown[1])))
@@ -568,7 +675,7 @@ static int control_at(int right, int row)
 }
 
 /* the item a direction leads to from item i: the tags in their two columns;
-   under them a row of RESUME (under the left), DEFAULT KEYS and
+   under them a row of RESUME (under the left), DEFAULTS and
    AUTO-ACCELERATE (under the right), left and right going round */
 static int move(int i, uint16_t dir)
 {
@@ -745,11 +852,20 @@ uint64_t pause_game_updates(void) { return nshvc_updates() - held; }
 
 static const nshvc_input *pause_step(const nshvc_input *in)
 {
-    uint16_t pad[2], press[2], nav;
+    uint16_t pad[2], press[2], nav, ctl_press = 0, ctl;
     int i, toggle = 0, vk;
 
     if (!p.ready)
         keys_load();
+#if CONTROLLER_BIND
+    {
+        uint16_t now = in->controller[0].on ? in->controller[0].buttons : 0;
+
+        ctl_press = (uint16_t)(now & ~p.ctl_last);
+        p.ctl_last = now;
+        p.ctl_on = in->controller[0].on;
+    }
+#endif
     for (i = 0; i < 2; i++) {
         pad[i] = in->pad[i];
         press[i] = (uint16_t)(pad[i] & ~p.last[i]);
@@ -780,6 +896,10 @@ static const nshvc_input *pause_step(const nshvc_input *in)
             rebind(p.asking, vk);
             p.asking = -1;
             p.wait_release = 1;         /* the key may now make a button: not a press here */
+        } else if ((ctl = ctl_taken(ctl_press)) != 0) {
+            rebind_ctl(p.asking, ctl);
+            p.asking = -1;
+            p.wait_release = 1;
         }
         show();
         return NULL;

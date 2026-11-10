@@ -2,7 +2,7 @@
  * pause_art.c: the pause screen's pictures (pause_art.h): a dark plate edged
  * in gold, the title between a racing flag's checks, Jeff's controller
  * (pad_art.c) with a tag beside it for each of its buttons and a line from
- * the tag to the button, the hint below, RESUME and DEFAULT KEYS. Each is
+ * the tag to the button, the hint below, RESUME and DEFAULTS. Each is
  * drawn once into an image; pause.c lays the images over the window and the
  * GPU shows them. What changes (a key's name on its tag, the item chosen,
  * the hint) is its own image over the panel's, redrawn only when it changes
@@ -234,7 +234,7 @@ static const struct {
     float x, y, w, h;
 } k_button[3] = {
     { "RESUME", 79, 356, 112, 30 },
-    { "DEFAULT KEYS", 203, 356, 136, 30 },
+    { "DEFAULTS", 203, 356, 136, 30 },
     { "AUTO-ACCELERATE", 351, 356, 210, 30 }, /* its value after the name (pause_draw_option) */
 };
 

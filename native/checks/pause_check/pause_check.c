@@ -6,7 +6,7 @@
  *       drawing at SCALE pixels: 1000 SCALE x 600 SCALE, 0xAARRGGBB straight
  *       alpha, raw (check.py holds it against rsvg-convert's)
  *   pause_check panel DENSITY ITEM OUT.ppm   the overlays as the GPU lays them,
- *       ITEM lit (0-11 a control, 12 RESUME, 13 DEFAULT KEYS; -1 none), the
+ *       ITEM lit (0-11 a control, 12 RESUME, 13 DEFAULTS; -1 none), the
  *       tags with the engine's default keys, over a grey checkerboard, to look at
  *
  * Each says on stderr how long its drawing took.
