@@ -109,7 +109,7 @@ void StuntScoreUp(Object *o)
 /* @routine 09:C0AB HudCountMove19EECopy */
 void HitsToScoreAdd(void)
 {
-    g.stunt_score_add = (uint8_t)g.hits_bcd;
+    g.stunt_score_add = g.hits_bcd;     /* the original's 16-bit copy: the hundreds too */
     g.hits_bcd = 0;
 }
 

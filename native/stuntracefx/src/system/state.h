@@ -42,7 +42,8 @@ typedef struct {
     uint8_t best_digits[5];             /* $0F69: minutes, seconds, hundredths as digits */
     uint16_t record_tag, record_place;  /* $10C7, $10C9 */
     uint8_t race_time[3];               /* $0EED: hundredths, seconds, minutes */
-    uint8_t stunt_score_high, stunt_score_add; /* $19EC, $19F0 */
+    uint8_t stunt_score_high;           /* $19EC */
+    uint16_t stunt_score_add;           /* $19F0: the hit count moved over whole (four BCD digits), counted into the time */
     uint8_t leader_place;               /* $0FAC */
     uint16_t panel_row, panel_place, panel_char; /* $0FA8, $0FAA, $0FA6: where the records panel is being drawn */
     uint16_t player_name;               /* $0F11: three 5-bit letters */

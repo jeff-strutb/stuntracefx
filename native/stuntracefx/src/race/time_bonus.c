@@ -344,7 +344,7 @@ void TimeBonusTransfer(void)
         uint16_t left;
 
         left = BcdSub(g.stunt_score_add, step);
-        g.stunt_score_add = (uint8_t)left;
+        g.stunt_score_add = left;
         g.digit_pair = left;
         g.time_left = BcdAdd(g.time_left, step);
         if (!g.tally_state)
