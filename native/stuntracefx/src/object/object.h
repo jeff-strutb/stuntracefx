@@ -87,29 +87,11 @@ typedef uint16_t ObjRef;
 #define OBJECT_D_UNUSED uint8_t d_unused[13];
 #define OBJECT_E_UNUSED uint8_t e_unused;
 
-/* A gate, switch, post or lamp a car's touch sets off (bank $09's course
-   objects): its state latches. */
-#define GATE_B uint8_t state; uint8_t b_unused[8];
-typedef struct { OBJECT_VIEW(OBJECT_A_UNUSED, GATE_B, OBJECT_C_UNUSED, OBJECT_D_UNUSED, OBJECT_E_UNUSED) } GateObject;
-enum {
-    GATE_DONE = 0x01,                   /* its effect done: for most cleared when no car touches it,
-                                           for those that act once a race or a lap never cleared */
-    CHIME_IN = 0x01, CHIME_OUT = 0x02,  /* a chime gate's (ObjectChimeGate, ObjectSlideGateUp): its
-                                           sound played on going in, on coming out */
-    SLIDE_CHIME_SLID = 0x01, SLIDE_CHIME_IN = 0x02, SLIDE_CHIME_OUT = 0x04, /* ObjectSlideChimeGate's:
-                                           the second lap's slide set off; the in and out sounds played */
-    LAP_FLASH_FLASHED = 0x01, LAP_FLASH_FADED = 0x02, /* ObjectLapFlashGate's: the flash on the first
-                                           two laps, the fade on the last */
-    POST_COUNTED = 0x01, POST_BALL_LAUNCHED = 0x02, /* ObjectPostB's: its hit counted, the sky ball sent */
-    LAMP_POST_RANG = 0x01, LAMP_POST_BURST = 0x04, /* ObjectLampPost's: its sound for this touch, its
-                                           pieces (once) */
-    DUO_FIRST = 0x01, DUO_SECOND = 0x02 /* ObjectDuoGate's: the first and the second of a touch's two
-                                           contacts (summary bits 0 and 1), each once a touch */
-};
+#include "object/views.h"
 
 typedef union Object {
     struct { OBJECT_VIEW(OBJECT_A_BYTES, OBJECT_B_BYTES, OBJECT_C_BYTES, OBJECT_D_BYTES, OBJECT_E_BYTES) };
-    GateObject gate;
+    OBJECT_VIEW_MEMBERS
 } Object;
 #pragma pack(pop)
 
@@ -119,8 +101,7 @@ typedef union Object {
                    && offsetof(Object, view.vx) == 0x2E && offsetof(Object, view.byte3a) == 0x3A \
                    && offsetof(Object, view.link) == 0x4F && offsetof(Object, view.frame5a) == 0x5A \
                    && offsetof(Object, view.unused8) == 0x61, #T " regions")
-OBJECT_VIEW_ASSERTS(GateObject, gate);
-_Static_assert(offsetof(Object, gate.state) == 0x25, "a gate's state");
+OBJECT_VIEW_CHECKS;
 _Static_assert(offsetof(Object, count48) == 0x48 && offsetof(Object, link27) == 0x27 && offsetof(Object, byte59) == 0x59, "the record's bytes");
 _Static_assert(sizeof(Object) == OBJECT_SIZE, "Object record");
 
@@ -767,7 +748,6 @@ void ObjectCountTriggerStep(Object *o);
 void ObjectCountTriggerRecord(Object *o);
 void ObjectCountTrigger(Object *o);
 void ObjectSparkFollow(Object *o);
-void ObjectBobStep(Object *o);
 void ObjectBreakablePieceStep(Object *o);
 void ObjectBreakablePiece(Object *o);
 void ObjectBreakableStep(Object *o);

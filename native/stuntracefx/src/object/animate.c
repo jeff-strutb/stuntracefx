@@ -170,12 +170,12 @@ void ObjectTurn(const Object *o, int run)
             l->a15 += 0x0C << 8;
     } else if (marker(h)) {
         int setup = marker_setup(h);    /* not set up: its set-up's offset 0, speed 2 */
-        int16_t real = setup ? 0 : (int16_t)o->link27;
+        int16_t real = setup ? 0 : o->bonus_marker.bounce;
 
         if (!l->on) {
             l->on = l->colour = 1;
             l->off = real;
-            l->spd = setup ? 2 : (int16_t)o->word29;
+            l->spd = setup ? 2 : o->bonus_marker.bounce_speed;
             l->col = setup ? 0 : (uint8_t)(o->frame5a & 0x7F);
             if (!setup)
                 return;                 /* first seen set up: its own look this step */
@@ -330,8 +330,8 @@ int ObjectOrbitBetween(int slot, const ObjectTable *was, const ObjectTable *end,
     for (i = 0; i < sizeof orbits / sizeof orbits[0]; i++)
         if (orbits[i].h == h)
             b = &orbits[i];
-    if (!b || h != handler_of(ow) || oe->link27 != ow->link27 || !oe->link27
-        || oe->link27 >= 1 + OBJECT_COUNT * OBJECT_SIZE || (oe->link27 - 1) % OBJECT_SIZE)
+    if (!b || h != handler_of(ow) || oe->orbiter.centre != ow->orbiter.centre || !oe->orbiter.centre
+        || oe->orbiter.centre >= 1 + OBJECT_COUNT * OBJECT_SIZE || (oe->orbiter.centre - 1) % OBJECT_SIZE)
         return 0;
     for (i = 0; i < 3; i++) {
         uint16_t pw[3] = {ow->x, ow->y, ow->z}, pe[3] = {oe->x, oe->y, oe->z};
@@ -340,8 +340,8 @@ int ObjectOrbitBetween(int slot, const ObjectTable *was, const ObjectTable *end,
         if (d > 0x0800 || d < -0x0800)  /* not set between (fx_tween's FAR) */
             return 0;
     }
-    cw = &was->object[(oe->link27 - 1) / OBJECT_SIZE];
-    ce = &end->object[(oe->link27 - 1) / OBJECT_SIZE];
+    cw = &was->object[(oe->orbiter.centre - 1) / OBJECT_SIZE];
+    ce = &end->object[(oe->orbiter.centre - 1) / OBJECT_SIZE];
     for (i = 0; i < 3; i++) {           /* +$14, +$15, +$16: each the short way round */
         uint8_t angw[3] = {cw->pitch, cw->heading, cw->roll}, ange[3] = {ce->pitch, ce->heading, ce->roll};
         int d = (int8_t)(uint8_t)(ange[i] - angw[i]);

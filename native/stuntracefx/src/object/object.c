@@ -778,9 +778,9 @@ Object *ObjectSpawnFromScript(uint16_t entry, uint8_t bank)
  */
 void ObjectFrameCountTo8(Object *o)
 {
-    if (o->count48 != 8)
-        o->count48++;
-    o->frame5a = (uint8_t)(o->count48 | 0x80);
+    if (o->meter.frame != 8)
+        o->meter.frame++;
+    o->frame5a = (uint8_t)(o->meter.frame | 0x80);
 }
 
 /*

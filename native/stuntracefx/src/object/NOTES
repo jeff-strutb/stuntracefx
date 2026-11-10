@@ -23,7 +23,7 @@ LapSignStep1, 09:D030 ObjectWheelStepXSign, 03:D289 ObjectSet39To4Continue,
 caller or setter among the live routines. Should the race ever run one, the
 handler table reports it once on stderr.
 
-228 routines.
+229 routines.
 
 car_parts.c (1)
   08:B0B1 ObjectRivalCarB
@@ -133,7 +133,7 @@ objects_09.c (80)
   ObjectShatter2Shard6XSign, 09:BD4C ObjectShatter2Shard6YSign, 09:C0BE
   ObjectRiderSpawn, 09:C0FE ObjectRiderStep, 09:C17C MarkerBounceX, 09:C1D9
   ObjectShatterMarker, 09:C217 ObjectShatterMarkerRecord, 09:C225
-  ObjectShatterMarkerStep, 09:C3ED ObjectPuffFollow, 09:C455 ObjectBob,
+  ObjectShatterMarkerStep, 09:C3ED ObjectPuffFollow, 09:C455 ObjectBob, 09:C478 ObjectBobStep (its frame, set by ObjectBob alone),
   09:C5B6 ObjectColour0, 09:C5BF ObjectColour1, 09:C9FD ObjectRingStepXSign,
   09:CA0F ObjectRingStepYSign, 09:CA22 ObjectRingStepZSign, 09:CB05
   ObjectSpinnerStepXSign, 09:CB17 ObjectSpinnerStepYSign, 09:CB2A

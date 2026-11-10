@@ -125,17 +125,17 @@ void ObjectScoreGate(Object *o)
     n = ObjectSpawn(MODEL_NONE);
     if (n) {
         ObjectCopyPosition(n, o);
-        n->link27 = obj_ref(o);
+        n->score_counter.gate = obj_ref(o);
         handler(n, H9_SCORE_COUNTER_STEP);
-        n->byte49 = 0x02;
+        n->score_counter.tick = 0x02;
         n->x = (uint16_t)(n->x + 0xF920);
         n->y = (uint16_t)(n->y + 0x00A0);
         n->z = (uint16_t)(n->z + 0x0F00);
         n->heading = 0x20;
         n->roll = 0x00;
         n->frame5a = 0x80;
-        n->count48 = 0;
-        n->byte0a = 0x50;
+        n->score_counter.count = 0;
+        n->score_counter.slide = 0x50;
     }
     ObjectScoreGateRecord(o);
 }
@@ -143,39 +143,39 @@ void ObjectScoreGate(Object *o)
 /* the count down, shown at +$5A with bit 7 */
 static void counter_show(Object *o)
 {
-    if (o->count48)
-        o->count48--;
-    o->frame5a = (uint8_t)(o->count48 | 0x80);
+    if (o->score_counter.count)
+        o->score_counter.count--;
+    o->frame5a = (uint8_t)(o->score_counter.count | 0x80);
 }
 
 /* every third frame, following its gate */
 static void counter_tick(Object *o)
 {
-    if (o->byte49) {
-        o->byte49--;
+    if (o->score_counter.tick) {
+        o->score_counter.tick--;
         return;
     }
-    o->byte49 = 0x02;
-    if (!(obj_at(o->link27)->flags25 & 0x01)) {
-        o->flags25 &= 0xFE;
+    o->score_counter.tick = 0x02;
+    if (!(obj_at(o->score_counter.gate)->gate.state & GATE_DONE)) {
+        o->score_counter.state &= (uint8_t)~COUNTER_COUNTING;
         counter_show(o);
         return;
     }
-    if (!(o->flags25 & 0x01)) {
-        o->flags25 |= 0x01;
+    if (!(o->score_counter.state & COUNTER_COUNTING)) {
+        o->score_counter.state |= COUNTER_COUNTING;
         SoundPort0QueuePush(0x32);
     }
-    if (o->count48 != 0x09)
-        o->count48++;
-    o->frame5a = (uint8_t)(o->count48 | 0x80);
+    if (o->score_counter.count != 0x09)
+        o->score_counter.count++;
+    o->frame5a = (uint8_t)(o->score_counter.count | 0x80);
 }
 
 static void counter_slide(Object *o)
 {
-    if (o->byte0a) {
+    if (o->score_counter.slide) {
         int moved;
 
-        o->byte0a--;
+        o->score_counter.slide--;
         o->heading = ApproachQuarterMin4Byte(o->heading, 0x40, &moved);
         o->x = (uint16_t)(o->x + 0x005A);
     }
@@ -190,8 +190,8 @@ void ObjectScoreCounterStep(Object *o)
 {
     if (g.laps_counted[0]) {
         if (g.laps_counted[0] == 0x01) {
-            if (!(o->flags25 & 0x02)) {
-                o->flags25 |= 0x02;
+            if (!(o->score_counter.state & COUNTER_ON)) {
+                o->score_counter.state |= COUNTER_ON;
                 o->model = MODEL_SCORE_COUNTER_ON;
             }
             counter_tick(o);
@@ -206,7 +206,7 @@ void ObjectScoreCounterStep(Object *o)
 void ObjectFlyingPieceStep(Object *o)
 {
     ObjectSyncFromRecord(o);
-    if (--o->byte0a == 0)
+    if (--o->piece.life == 0)
         ObjectRelease(o);
 }
 
@@ -238,7 +238,7 @@ static void spark(Object *o, uint8_t t, uint16_t vx, uint16_t vy, uint16_t vz)
     n->vx = vx;
     n->vy = vy;
     n->vz = vz;
-    n->byte0a = 0x0F;
+    n->piece.life = 0x0F;
 }
 
 /* the shell's burst: four sparks */
@@ -257,7 +257,7 @@ static void firework_burst(Object *o)
  */
 void ObjectFireworkShellStep(Object *o)
 {
-    if (--o->byte0a == 0)
+    if (--o->piece.life == 0)
         ObjectRelease(o);
     add_word_at(&o->pitch, 0x000C);
     add_word_at(&o->heading, 0x000C);
@@ -307,7 +307,7 @@ static void shell(Object *o, uint16_t dx, uint8_t pitch, uint8_t heading, uint8_
     n->pitch = pitch;
     n->heading = heading;
     n->roll = roll;
-    n->byte0a = 0x1E;
+    n->piece.life = 0x1E;
 }
 
 /* the record's sync and its contact summary both with bit 0 */
@@ -371,24 +371,24 @@ static void handlers2(Object *o, uint16_t record_handler, uint16_t frame)
  */
 void ObjectBumperStep(Object *o)
 {
-    if (o->count48) {
+    if (o->bumper.bulge) {
         o->heading = (uint8_t)(o->heading + 0x06);
         o->pitch = (uint8_t)(o->pitch + 0x0A);
         o->roll = (uint8_t)(o->roll + 0x0A);
-        o->count48 = (uint8_t)(o->count48 + 0xFF);
+        o->bumper.bulge = (uint8_t)(o->bumper.bulge + 0xFF);
     } else if (!ease8(&o->pitch, 0x00, ApproachHalfMin2Byte)) {
         ease8(&o->roll, 0x00, ApproachHalfMin2Byte);
         o->heading = (uint8_t)(o->heading + 0x0C);
     }
     if (!hit(o)) {
-        o->flags25 &= 0xFE;
+        o->bumper.state &= (uint8_t)~GATE_DONE;
         return;
     }
-    if (o->flags25 & 0x01)
+    if (o->bumper.state & GATE_DONE)
         return;
-    o->flags25 |= 0x01;
+    o->bumper.state |= GATE_DONE;
     SoundPort0QueuePush(0x54);
-    o->count48 = 0x06;
+    o->bumper.bulge = 0x06;
 }
 
 /* @routine 09:91E8 ObjectBumperRecord */
@@ -414,14 +414,14 @@ void ObjectBumper(Object *o)
  */
 void ObjectSwitchStep(Object *o)
 {
-    if (o->flags25 & 0x01)
-        ease8(&o->count48, 0x03, ApproachSixteenthMin16Byte);
-    o->frame5a = (uint8_t)(o->count48 | 0x80);
-    if (o->flags25 & 0x01)
+    if (o->switch_.state & SWITCH_ON)
+        ease8(&o->switch_.frame, 0x03, ApproachSixteenthMin16Byte);
+    o->frame5a = (uint8_t)(o->switch_.frame | 0x80);
+    if (o->switch_.state & SWITCH_ON)
         return;
     if (!hit(o))
         return;
-    o->flags25 |= 0x01;
+    o->switch_.state |= SWITCH_ON;
     o->heading = (uint8_t)(o->heading + 0x0C);
     SoundPort0QueuePush(0x55);
 }
@@ -473,26 +473,26 @@ void ObjectPostA(Object *o)
     ObjectPostARecord(o);
 }
 
-/* the sky ball launched from post o */
-static Object *sky_ball(Object *o)
+/* the sky ball launched from post o, rising toward target_z (the
+   original stores the post there first and its caller then the target) */
+static void sky_ball(Object *o, uint16_t target_z)
 {
     Object *n = ObjectSpawn(MODEL_BALL);
 
     if (!n)
-        return NULL;
+        return;
     ObjectCopyPosition(n, o);
-    n->link27 = obj_ref(o);
+    n->sky_ball.target_z = target_z;
     handler(n, H9_SKY_BALL_STEP);
     n->y = (uint16_t)(n->y + 0xFF40);
     n->z = (uint16_t)(n->z + 0x2BC0);
     n->heading = 0x80;
-    n->count48 = 0;
-    n->word29 = 0;
-    n->word2b = 0;
-    n->byte0a = 0x0A;
-    n->byte49 = 0x0A;
+    n->sky_ball.unread3 = 0;
+    n->sky_ball.unread1 = 0;
+    n->sky_ball.unread2 = 0;
+    n->sky_ball.life = 0x0A;
+    n->sky_ball.follow = 0x0A;
     SoundPort0QueuePush(0x0E);
-    return n;
 }
 
 /*
@@ -512,12 +512,7 @@ void ObjectPostBStep(Object *o)
     if (g.posts_hit != 0x03 || (o->gate.state & POST_BALL_LAUNCHED))
         return;
     o->gate.state |= POST_BALL_LAUNCHED;
-    {
-        Object *n = sky_ball(o);
-
-        if (n)
-            n->link27 = (uint16_t)(o->z + 0xDD00);
-    }
+    sky_ball(o, (uint16_t)(o->z + 0xDD00));
 }
 
 /* @routine 09:940B ObjectPostBRecord */
@@ -560,15 +555,15 @@ static void ball_drop(Object *o, uint16_t dz, uint16_t dy, uint8_t t)
  */
 void ObjectSkyBallStep(Object *o)
 {
-    if (o->link27 == o->z || below16(o->link27, o->z)) {
-        if (o->byte49) {
-            o->byte49--;
+    if (o->sky_ball.target_z == o->z || below16(o->sky_ball.target_z, o->z)) {
+        if (o->sky_ball.follow) {
+            o->sky_ball.follow--;
             ball_follow(o);
         } else {
-            if (!(o->flags25 & 0x01)) {
+            if (!(o->sky_ball.state & SKY_BALL_DROPPED)) {
                 Object *n;
 
-                o->flags25 |= 0x01;
+                o->sky_ball.state |= SKY_BALL_DROPPED;
                 n = ObjectSpawn(MODEL_RAISE_BALL);
                 if (n) {
                     ObjectCopyPosition(n, o);
@@ -579,7 +574,7 @@ void ObjectSkyBallStep(Object *o)
         }
     } else {
         ball_drop(o, 0xFFB0, 0xFF10, 0xC0);
-        if (--o->byte0a == 0)
+        if (--o->sky_ball.life == 0)
             ObjectRelease(o);
     }
     ObjectRebucket(o);
@@ -613,10 +608,10 @@ void ObjectBallDropStep(Object *o)
     if (n) {
         Object *p = obj_at(g.player_car);
 
-        n->byte0a = 0x0A;
+        n->follow_spark.life = 0x0A;
         ObjectCopyPosition(n, p);
-        n->link27 = 0;
-        n->word29 = g.player_car;
+        n->follow_spark.rise = 0;
+        n->follow_spark.followed = g.player_car;
         handler(n, H9_BALL_SPARK);
     }
     ObjectRelease(o);
@@ -647,17 +642,17 @@ static void cannon_ball(Object *o, uint16_t h, uint16_t dx, uint16_t dy, uint16_
     if (!n)
         return;
     ObjectCopyPosition(n, o);
-    n->link27 = obj_ref(o);
+    n->cannon_ball.gate = obj_ref(o);
     handler(n, h);
     n->x = (uint16_t)(n->x + dx);
     n->y = (uint16_t)(n->y + dy);
     n->z = (uint16_t)(n->z + dz);
     n->heading = s;
-    n->count48 = 0;
-    n->word29 = rise;
-    n->word2b = drift;
-    n->byte0a = life;
-    n->byte49 = home;
+    n->cannon_ball.unread = 0;
+    n->cannon_ball.rise = rise;
+    n->cannon_ball.drift = drift;
+    n->cannon_ball.life = life;
+    n->cannon_ball.homing = home;
     SoundPort0QueuePush(0x0E);
 }
 
@@ -674,9 +669,9 @@ void ObjectCannonGateStep(Object *o)
     if (!hit(o))
         return;
     lap = g.laps_counted[0];
-    if (lap == o->byte0a)
+    if (lap == o->lap_gate.lap)
         return;
-    o->byte0a = lap;
+    o->lap_gate.lap = lap;
     if (lap == 0x00) {
         cannon_ball(o, H9_CANNON_BALL_LEFT, 0xC400, 0xF880, 0x0500, 0xC0, 0xFD60, 0x0000, 0x05, 0x09);
         cannon_ball(o, H9_CANNON_BALL_LEFT, 0xC400, 0xFC40, 0xF880, 0xC0, 0xFD40, 0xFE00, 0x05, 0x09);
@@ -699,7 +694,7 @@ void ObjectCannonGateRecord(Object *o)
 void ObjectCannonGate(Object *o)
 {
     handlers2(o, H9_CANNON_GATE_RECORD, H9_CANNON_GATE_STEP);
-    o->byte0a = 0x04;
+    o->lap_gate.lap = 0x04;
     ObjectCannonGateRecord(o);
 }
 
@@ -707,20 +702,20 @@ void ObjectCannonGate(Object *o)
    flies off (dx a frame) until its life runs out; rebucketed */
 static void cannon_ball_frame(Object *o, uint16_t dx)
 {
-    if (o->byte49) {
-        const Object *gate = obj_at(o->link27);
+    if (o->cannon_ball.homing) {
+        const Object *gate = obj_at(o->cannon_ball.gate);
         int moved;
 
-        o->byte49--;
+        o->cannon_ball.homing--;
         o->x = ApproachQuarterMin4(o->x, gate->x, &moved);
         o->z = ApproachQuarterMin4(o->z, gate->z, &moved);
-        o->z = (uint16_t)(o->z + o->word2b);
+        o->z = (uint16_t)(o->z + o->cannon_ball.drift);
         o->y = ApproachHalfMin2(o->y, gate->y, &moved);
-        o->y = (uint16_t)(o->y + o->word29);
+        o->y = (uint16_t)(o->y + o->cannon_ball.rise);
     } else {
-        o->z = (uint16_t)(o->z + o->word2b);
+        o->z = (uint16_t)(o->z + o->cannon_ball.drift);
         o->x = (uint16_t)(o->x + dx);
-        if (--o->byte0a == 0)
+        if (--o->cannon_ball.life == 0)
             ObjectRelease(o);
     }
     ObjectRebucket(o);
@@ -745,16 +740,16 @@ static void wave_ball(Object *o, uint16_t h, uint16_t dx, uint16_t dy, uint16_t 
     if (!n)
         return;
     ObjectCopyPosition(n, o);
-    n->link27 = obj_ref(o);
+    n->wave_ball.gate = obj_ref(o);
     handler(n, h);
     n->x = (uint16_t)(n->x + dx);
     n->y = (uint16_t)(n->y + dy);
     n->z = (uint16_t)(n->z + dz);
     n->heading = s;
-    n->word29 = rise;
+    n->wave_ball.rise = rise;
     o->x = (uint16_t)(o->x + gx);
     o->z = (uint16_t)(o->z + gz);
-    n->byte0a = life;
+    n->wave_ball.life = life;
     SoundPort0QueuePush(0x0E);
 }
 
@@ -805,15 +800,15 @@ static void wave_home(Object *o, const Object *gate)
     o->x = ApproachQuarterMin4(o->x, gate->x, &moved);
     o->z = ApproachQuarterMin4(o->z, gate->z, &moved);
     o->y = ApproachQuarterMin4(o->y, gate->y, &moved);
-    o->y = (uint16_t)(o->y + o->word29);
-    if (--o->byte0a == 0)
+    o->y = (uint16_t)(o->y + o->wave_ball.rise);
+    if (--o->wave_ball.life == 0)
         ObjectRelease(o);
 }
 
 /* @routine 09:9E9A ObjectWaveBallStep */
 void ObjectWaveBallStep(Object *o)
 {
-    wave_home(o, obj_at(o->link27));
+    wave_home(o, obj_at(o->wave_ball.gate));
     ObjectRebucket(o);
 }
 
@@ -822,7 +817,7 @@ void ObjectStarSparkleStep(Object *o)
 {
     uint8_t v;
 
-    if (--o->byte0a == 0)
+    if (--o->piece.life == 0)
         ObjectRelease(o);
     v = (uint8_t)(o->sprite_turn[0] + 1);
     if (!(v & 0x80))
@@ -846,14 +841,14 @@ static void sparkle(Object *o)
     lamp(n, 0x64);
     ObjectCopyPosition(n, o);
     n->z = (uint16_t)(n->z + 0xFF38);
-    n->byte0a = 0x08;
+    n->piece.life = 0x08;
     handler(n, H9_STAR_SPARKLE_STEP);
 }
 
 /* @routine 09:9F63 ObjectWaveBallBigStep */
 void ObjectWaveBallBigStep(Object *o)
 {
-    if (o->flags25 & 0x01) {
+    if (o->wave_ball.state & WAVE_BALL_HIT) {
         o->roll = (uint8_t)(o->roll + 0x18);
         o->heading = (uint8_t)(o->heading + 0x18);
         o->z = (uint16_t)(o->z + 0xFFCE);
@@ -861,13 +856,13 @@ void ObjectWaveBallBigStep(Object *o)
         o->y = (uint16_t)(o->y + 0xFF06);
         sparkle(o);
     } else {
-        wave_home(o, obj_at(o->link27));
+        wave_home(o, obj_at(o->wave_ball.gate));
     }
     if (!hit_to(o))
         return;
-    if (o->flags25 & 0x01)
+    if (o->wave_ball.state & WAVE_BALL_HIT)
         return;
-    o->flags25 |= 0x01;
+    o->wave_ball.state |= WAVE_BALL_HIT;
     SoundPort0QueuePush(0x59);
 }
 
@@ -882,7 +877,7 @@ void ObjectWaveBallBigRecord(Object *o)
 void ObjectWaveBallBigSetup(Object *o)
 {
     handlers2(o, H9_WAVE_BALL_BIG_RECORD, H9_WAVE_BALL_BIG_STEP);
-    o->word29 = 0xFFB0;
+    o->wave_ball.rise = 0xFFB0;
     ObjectWaveBallBigRecord(o);
 }
 
@@ -1374,9 +1369,9 @@ static uint16_t bcd_add_bonus(uint16_t v, uint8_t add)
    counts it, sound $41, adds the bonus to the race time */
 void ObjectTimeGateStep(Object *o)
 {
-    if (!hit(o) || g.laps_counted[0] == o->count48)
+    if (!hit(o) || g.laps_counted[0] == o->lap_count.lap)
         return;
-    o->count48 = g.laps_counted[0];
+    o->lap_count.lap = g.laps_counted[0];
     SoundPort0QueuePush(0x41);
     g.time_left = bcd_add_bonus(g.time_left, g.time_gate_bonus);
 }
@@ -1386,7 +1381,7 @@ static void time_gate(Object *o, uint16_t record_handler)
     if (released_by_hud(o))
         return;
     handlers2(o, record_handler, H9_TIME_GATE_STEP);
-    o->count48 = 0x04;
+    o->lap_count.lap = 0x04;
 }
 
 /* @routine 09:AC4F ObjectTimeGate */
@@ -1405,11 +1400,11 @@ void ObjectPopMarkerStep(Object *o)
     ObjectRebucket(o);
 }
 
-static int lap_matches_0a(const Object *o) { return g.laps_counted[0] == o->byte0a; }
+static int lap_matches_0a(const Object *o) { return g.laps_counted[0] == o->lap_gate.lap; }
 
 static void lap_take_0a(Object *o)
 {
-    o->byte0a = g.laps_counted[0];
+    o->lap_gate.lap = g.laps_counted[0];
     o->model = MODEL_NONE;
 }
 
@@ -1420,10 +1415,10 @@ static void spark_follow(uint16_t model)
     ObjRef p = g.player_car;
 
     if (n) {
-        n->byte0a = 0x0A;
+        n->follow_spark.life = 0x0A;
         ObjectCopyPosition(n, obj_at(p));
-        n->link27 = 0;
-        n->word29 = p;
+        n->follow_spark.rise = 0;
+        n->follow_spark.followed = p;
         handler(n, H9_BALL_SPARK);
     }
 }
@@ -1471,7 +1466,7 @@ void ObjectLapBallUpRecord(Object *o)
 void ObjectLapBallUp(Object *o)
 {
     handlers2(o, H9_LAP_BALL_UP_RECORD, H9_LAP_BALL_UP_STEP);
-    o->byte0a = 0x04;
+    o->lap_gate.lap = 0x04;
     ObjectLapBallUpRecord(o);
 }
 
@@ -1501,7 +1496,7 @@ void ObjectLapBallDownRecord(Object *o)
 void ObjectLapBallDown(Object *o)
 {
     handlers2(o, H9_LAP_BALL_DOWN_RECORD, H9_LAP_BALL_DOWN_STEP);
-    o->byte0a = 0x04;
+    o->lap_gate.lap = 0x04;
     ObjectLapBallDownRecord(o);
 }
 
@@ -1542,7 +1537,7 @@ void ObjectCountMarker(Object *o)
     handlers2(o, H9_COUNT_MARKER_RECORD, H9_COUNT_MARKER_STEP);
     o->script = OBJECT_SCRIPT_MARKER;
     o->frame5a = 0x80;
-    o->count48 = 0x04;
+    o->meter.frame = 0x04;
     ObjectCountMarkerRecord(o);
 }
 
@@ -1590,12 +1585,12 @@ void ObjectCountTrigger(Object *o)
  */
 void ObjectSparkFollow(Object *o)
 {
-    ObjectCopyPosition(o, obj_at(o->word29));
-    if (--o->byte0a == 0)
+    ObjectCopyPosition(o, obj_at(o->follow_spark.followed));
+    if (--o->follow_spark.life == 0)
         ObjectRelease(o);
     o->y = (uint16_t)(o->y + 0xFF40);
-    o->link27 = (uint16_t)(o->link27 + 0xFFD8);
-    o->y = (uint16_t)(o->y + o->link27);
+    o->follow_spark.rise = (uint16_t)(o->follow_spark.rise + 0xFFD8);
+    o->y = (uint16_t)(o->y + o->follow_spark.rise);
     o->heading = (uint8_t)(o->heading + 0x10);
     o->pitch = (uint8_t)(o->pitch + 0x10);
     ObjectRebucket(o);
@@ -1604,26 +1599,14 @@ void ObjectSparkFollow(Object *o)
 /* @routine 09:C438 ObjectCountUpTo2: +$48 up to at most 2, shown at +$5A */
 static void count_up_to_2(Object *o)
 {
-    if (o->count48 != 0x02)
-        o->count48++;
-    o->frame5a = (uint8_t)(o->count48 | 0x80);
-}
-
-/* @routine 09:C478 ObjectBobStep: the offset +$27 moves by the speed +$29,
-   which turns round at $10 and -$10; the height moves by the offset */
-void ObjectBobStep(Object *o)
-{
-    o->link27 = (uint16_t)(o->link27 + o->word29);
-    if (o->link27 == 0x0010 || o->link27 == 0xFFF0)
-        o->word29 = (uint16_t)(0 - o->word29);
-    o->y = (uint16_t)(o->y + o->link27);
-    o->heading = (uint8_t)(o->heading + 0x04);
-    ObjectRebucket(o);
+    if (o->lap_light.frame != 0x02)
+        o->lap_light.frame++;
+    o->frame5a = (uint8_t)(o->lap_light.frame | 0x80);
 }
 
 static void life_down(Object *o)
 {
-    if (--o->byte0a == 0)
+    if (--o->piece.life == 0)
         ObjectRelease(o);
 }
 
@@ -1662,7 +1645,7 @@ static void burst_piece(Object *o, uint16_t kind, uint16_t dy, uint16_t vx, uint
     n->vx = vx;
     n->vy = vy;
     n->vz = vz;
-    n->byte0a = 0x0F;
+    n->piece.life = 0x0F;
 }
 
 /* @routine 09:D79C ObjectBreakableBurst: eight pieces */
@@ -1730,18 +1713,18 @@ void ObjectSwingStep(Object *o)
 {
     int moved;
 
-    if (o->flags25 & 0x01) {
+    if (o->sway.state & SWAY_BACK) {
         o->x = (uint16_t)(o->x + 0x0028);
         o->heading = ApproachEighthMin8Byte(o->heading, 0xC0, &moved);
     } else {
         o->x = (uint16_t)(o->x + 0xFFD8);
         o->heading = ApproachEighthMin8Byte(o->heading, 0x40, &moved);
     }
-    if (o->byte0a) {
-        o->byte0a--;
+    if (o->sway.wait) {
+        o->sway.wait--;
     } else {
-        o->flags25 ^= 0x01;
-        o->byte0a = 0x50;
+        o->sway.state ^= SWAY_BACK;
+        o->sway.wait = 0x50;
     }
     ObjectRebucket(o);
 }
@@ -1750,7 +1733,7 @@ void ObjectSwingStep(Object *o)
 void ObjectSwing(Object *o)
 {
     o->heading = 0x00;
-    o->byte0a = 0x28;
+    o->sway.wait = 0x28;
     handler(o, H9_SWING_STEP);
     ObjectSwingStep(o);
 }
@@ -1768,7 +1751,7 @@ static void crowd_spawn(Object *o, uint16_t dx, uint16_t dy, uint16_t dz, uint8_
     n->z = (uint16_t)(n->z + dz);
     n->heading = heading;
     n->pitch = 0xF8;
-    n->byte0a = life;
+    n->piece.life = life;
     handler(n, h);
     SoundPort0QueuePush(0x52);
 }
@@ -1807,9 +1790,9 @@ void ObjectLapCrowdGateStep(Object *o)
 {
     uint8_t lap = g.laps_counted[0];
 
-    if (!ObjectSyncToRecord(o) || !(RecordContactSummary(o) & 0x01) || lap == o->count48)
+    if (!ObjectSyncToRecord(o) || !(RecordContactSummary(o) & 0x01) || lap == o->lap_count.lap)
         return;
-    o->count48 = lap;
+    o->lap_count.lap = lap;
     if (lap == 0x00)
         crowd_spawn(o, 0x0F00, 0xFE40, 0xD800, 0x40, 0x1C, H9_CROWD_STEP_0);
     else if (lap == 0x01)
@@ -1829,7 +1812,7 @@ void ObjectLapCrowdGateRecord(Object *o)
 void ObjectLapCrowdGate(Object *o)
 {
     handlers2(o, H9_LAP_CROWD_RECORD, H9_LAP_CROWD_STEP);
-    o->count48 = 0x04;
+    o->lap_count.lap = 0x04;
     ObjectLapCrowdGateRecord(o);
 }
 
@@ -1847,7 +1830,7 @@ void ObjectFloaterSpawner(Object *o)
         return;
     ObjectCopyPosition(n, o);
     n->y = (uint16_t)(n->y + 0x06E0);
-    n->byte0a = 0x28;
+    n->sway.wait = 0x28;
     handler(n, H9_FLOATER_STEP);
 }
 
@@ -1856,20 +1839,20 @@ void ObjectFloaterStep(Object *o)
 {
     ObjectRebucket(o);
     o->heading = (uint8_t)(o->heading + 0x08);
-    o->y = (uint16_t)(o->y + ((o->flags25 & 0x01) ? 0xFFEC : 0x0014));
-    if (o->byte0a) {
-        o->byte0a--;
+    o->y = (uint16_t)(o->y + ((o->sway.state & SWAY_BACK) ? 0xFFEC : 0x0014));
+    if (o->sway.wait) {
+        o->sway.wait--;
         return;
     }
-    o->flags25 ^= 0x01;
-    o->byte0a = 0x28;
+    o->sway.state ^= SWAY_BACK;
+    o->sway.wait = 0x28;
 }
 
 /* The orbit: the vector turned by the centre's angles (roll only without
    `all_three`), times 32 from the centre's place. Returns the centre. */
 static const Object *orbit(Object *o, int8_t x, int8_t y, int8_t z, int all_three)
 {
-    const Object *c = obj_at(o->link27);
+    const Object *c = obj_at(o->orbiter.centre);
     Vec16 v;
 
     if (all_three) {
@@ -1891,7 +1874,7 @@ static void orbiter(Object *o, uint16_t centre_handler, uint16_t frame)
 
     if (c) {
         ObjectCopyPosition(c, o);
-        o->link27 = obj_ref(c);
+        o->orbiter.centre = obj_ref(c);
         handler(c, centre_handler);
     }
     handler(o, frame);
@@ -1991,11 +1974,11 @@ static void fan_frame(Object *o, int all_three, uint16_t lit, uint8_t sound)
     roll = o->roll;
     if (roll == 0x3A || ((uint8_t)(roll - 0x3A) & 0x80) || !(roll == 0xC0 || ((uint8_t)(roll - 0xC0) & 0x80))) {
         o->model = MODEL_NONE;
-        o->flags25 &= 0xFE;
+        o->orbiter.state &= (uint8_t)~ORBITER_LIT;
     } else {
         o->model = lit;
-        if (!(o->flags25 & 0x01)) {
-            o->flags25 |= 0x01;
+        if (!(o->orbiter.state & ORBITER_LIT)) {
+            o->orbiter.state |= ORBITER_LIT;
             if (sound && !ObjectKept(o))    /* not when kept running far (animate.c) */
                 SoundPort0QueuePush(sound);
         }
@@ -2046,9 +2029,9 @@ static uint8_t rail_colour(void) { return (uint8_t)(g.frame_stage_00 | 0x80); }
    there. */
 static int rail_slide(Object *o, uint16_t step)
 {
-    if (o->z == o->link27)
+    if (o->z == o->rail.target_z)
         return 1;
-    o->z = (uint16_t)(((uint16_t)(o->z - o->link27) & 0x8000) ? o->z + step : o->z - step);
+    o->z = (uint16_t)(((uint16_t)(o->z - o->rail.target_z) & 0x8000) ? o->z + step : o->z - step);
     ObjectSyncToRecord(o);
     return 0;
 }
@@ -2072,7 +2055,7 @@ void RailRiseStep(Object *o)
 /* @routine 09:D460 RailRise */
 void RailRise(Object *o)
 {
-    o->link27 = (uint16_t)(o->z + 0x0500);
+    o->rail.target_z = (uint16_t)(o->z + 0x0500);
     o->frame5a = rail_colour();
     o->model = MODEL_RAIL_RISING;
     handler(o, H9_RAIL_RISE_STEP);
@@ -2114,7 +2097,7 @@ static void rail(Object *o, uint16_t dx, uint16_t dz, uint16_t travel)
     ObjectCopyPosition(n, o);
     n->x = (uint16_t)(n->x + dx);
     n->z = (uint16_t)(n->z + dz);
-    n->link27 = (uint16_t)(n->z + travel);
+    n->rail.target_z = (uint16_t)(n->z + travel);
     handler(n, H9_RAIL_STEP);
 }
 
@@ -2153,15 +2136,15 @@ static void breakable_put(Object *o, uint16_t dy, uint16_t dz, uint16_t dx, uint
     o->pitch = size;
     o->heading = size;
     o->roll = size;
-    n->byte0a = 0x1C;
+    n->piece.life = 0x1C;
 }
 
 /* the lap a gate has not counted yet (+$0A): counts it and returns 1 */
 static int new_lap_0a(Object *o)
 {
-    if (!hit(o) || g.laps_counted[0] == o->byte0a)
+    if (!hit(o) || g.laps_counted[0] == o->lap_gate.lap)
         return 0;
-    o->byte0a = g.laps_counted[0];
+    o->lap_gate.lap = g.laps_counted[0];
     return 1;
 }
 
@@ -2186,7 +2169,7 @@ void ObjectBreakableGateRecord(Object *o)
 void ObjectBreakableGate(Object *o)
 {
     handlers2(o, H9_BREAKABLE_GATE_RECORD, H9_BREAKABLE_GATE_STEP);
-    o->byte0a = 0x04;
+    o->lap_gate.lap = 0x04;
     ObjectBreakableGateRecord(o);
 }
 
@@ -2220,7 +2203,7 @@ void ObjectBreakableGate2Record(Object *o)
 void ObjectBreakableGate2(Object *o)
 {
     handlers2(o, H9_BREAKABLE_GATE2_RECORD, H9_BREAKABLE_GATE2_STEP);
-    o->byte0a = 0x04;
+    o->lap_gate.lap = 0x04;
     ObjectBreakableGate2Record(o);
 }
 
@@ -2367,19 +2350,19 @@ void ObjectLampPostLight(Object *o)
 /* @routine 09:E391 ObjectBumpPostStep */
 void ObjectBumpPostStep(Object *o)
 {
-    if (o->count48) {
+    if (o->bumper.bulge) {
         o->heading = (uint8_t)(o->heading + 0x06);
-        o->count48--;
+        o->bumper.bulge--;
     }
     if (!hit(o)) {
-        o->flags25 &= 0xFE;
+        o->bumper.state &= (uint8_t)~GATE_DONE;
         return;
     }
-    if (o->flags25 & 0x01)
+    if (o->bumper.state & GATE_DONE)
         return;
-    o->flags25 |= 0x01;
+    o->bumper.state |= GATE_DONE;
     SoundPort0QueuePush(0x59);
-    o->count48 = 0x06;
+    o->bumper.bulge = 0x06;
 }
 
 /* @routine 09:E383 ObjectBumpPostRecord */
@@ -2395,23 +2378,23 @@ void ObjectBumpPostRecord(Object *o)
 void ObjectBumpPost(Object *o)
 {
     handlers2(o, H9_BUMP_POST_RECORD, H9_BUMP_POST_STEP);
-    o->count48 = 0x00;
+    o->bumper.bulge = 0x00;
     ObjectBumpPostRecord(o);
 }
 
 /* @routine 09:E47D GateSlideStep */
 static void gate_slide_step(Object *o)
 {
-    if (!(o->flags25 & 0x01)) {
-        o->flags25 |= 0x01;
+    if (!(o->slide_lap.state & SLIDE_LAP_STARTED)) {
+        o->slide_lap.state |= SLIDE_LAP_STARTED;
         g.slide_gate_state = 0x01;
         SoundPort0QueuePush(0x5F);
     }
-    if (o->x == o->link27) {
+    if (o->x == o->slide_lap.target_x) {
         g.slide_gate_state = 0x02;
         return;
     }
-    o->x = (uint16_t)(((uint16_t)(o->x - o->link27) & 0x8000) ? o->x + 0x0280 : o->x - 0x0280);
+    o->x = (uint16_t)(((uint16_t)(o->x - o->slide_lap.target_x) & 0x8000) ? o->x + 0x0280 : o->x - 0x0280);
 }
 
 /* @routine 09:E441 ObjectSlideLapGateStep */
@@ -2436,7 +2419,7 @@ void ObjectSlideLapGateRecord(Object *o)
 void ObjectSlideLapGate(Object *o)
 {
     handlers2(o, H9_SLIDE_LAP_RECORD, H9_SLIDE_LAP_STEP);
-    o->link27 = (uint16_t)(o->x + 0xDF80);
+    o->slide_lap.target_x = (uint16_t)(o->x + 0xDF80);
     ObjectSlideLapGateRecord(o);
 }
 
@@ -2445,12 +2428,12 @@ void ObjectSlideMeterStep(Object *o)
 {
     if (g.slide_gate_state) {
         if (g.slide_gate_state == 0x01) {
-            if (o->count48 != 0x07)
-                o->count48++;
-        } else if (o->count48) {
-            o->count48--;
+            if (o->meter.frame != 0x07)
+                o->meter.frame++;
+        } else if (o->meter.frame) {
+            o->meter.frame--;
         }
-        o->frame5a = (uint8_t)(o->count48 | 0x80);
+        o->frame5a = (uint8_t)(o->meter.frame | 0x80);
     }
     ObjectRebucket(o);
 }
@@ -2459,7 +2442,7 @@ void ObjectSlideMeterStep(Object *o)
 void ObjectSlideMeter(Object *o)
 {
     handler(o, H9_SLIDE_METER_STEP);
-    o->count48 = 0x00;
+    o->meter.frame = 0x00;
     o->frame5a = 0x80;
     ObjectSlideMeterStep(o);
 }
@@ -2480,13 +2463,13 @@ static void trail_frame(Object *o, uint16_t dz, uint16_t dx, uint16_t drift)
         o->heading = (uint8_t)(p->heading + 0x80);
         o->z = (uint16_t)(ApproachHalfMin2(o->z, p->z, &moved) + dz);
         o->x = (uint16_t)(ApproachQuarterMin4(o->x, p->x, &moved) + dx);
-        o->byte0a = 0x1A;
+        o->trail.drift = 0x1A;
         /* @routine 09:E59D TrailFlip */
         if (rec_get(p->record, FXREC_SPEED) & 0x8000)
             add_word_at(&o->heading, 0x0080);
         o->roll = 0x00;
-    } else if (o->byte0a) {
-        o->byte0a--;
+    } else if (o->trail.drift) {
+        o->trail.drift--;
         o->z = (uint16_t)(o->z + 0xFF00);
         o->x = (uint16_t)(o->x + drift);
     }
@@ -2655,16 +2638,16 @@ static void shard(Object *o, uint16_t kind, uint8_t s48, uint8_t s49, uint8_t s4
 
     if (!n)
         return;
-    n->count48 = s48;
-    n->byte49 = s49;
-    n->byte4a = s4a;
+    n->shard.drift_x = s48;
+    n->shard.drift_y = s49;
+    n->shard.unread = s4a;
     ObjectCopyPosition(n, o);
     ObjectCopyAnglesFrom(n, o);
     v = ObjectTurnVector(o, x, y, (int8_t)g.frame_stage_00);
     n->x = (uint16_t)(o->x + (uint16_t)(v.x * 4));
     n->z = (uint16_t)(o->z + (uint16_t)(v.z * 4));
     n->y = (uint16_t)(o->y + (uint16_t)(v.y * 4));
-    n->byte0a = 0x06;
+    n->shard.life = 0x06;
     handler(n, H9_SHARD_STEP);
 }
 
@@ -2708,7 +2691,7 @@ static void object_shatter2(Object *o)
    by pitch then heading, times 4 */
 void ObjectShardStep(Object *o)
 {
-    Vec16 v = {(int8_t)o->count48, (int8_t)o->byte49, (int8_t)g.frame_stage_00};
+    Vec16 v = {(int8_t)o->shard.drift_x, (int8_t)o->shard.drift_y, (int8_t)g.frame_stage_00};
 
     RotateXZFrom08((int8_t)v.y, (int8_t)v.z, o->pitch, &v.y, &v.z);
     RotateXZ((int8_t)v.x, (int8_t)v.z, o->heading, &v.x, &v.z);
@@ -2723,10 +2706,10 @@ void ObjectShardStep(Object *o)
 /* @routine 09:C11F MarkerBounceY */
 static void marker_bounce_y(Object *o)
 {
-    o->link27 = (uint16_t)(o->link27 + o->word29);
-    if (o->link27 == 0x000E || o->link27 == 0xFFF2)
-        o->word29 = (uint16_t)(0 - o->word29);
-    o->y = (uint16_t)(o->y + o->link27);
+    o->bonus_marker.bounce = (int16_t)(o->bonus_marker.bounce + o->bonus_marker.bounce_speed);
+    if (o->bonus_marker.bounce == 14 || o->bonus_marker.bounce == -14)
+        o->bonus_marker.bounce_speed = (int16_t)-o->bonus_marker.bounce_speed;
+    o->y = (uint16_t)(o->y + o->bonus_marker.bounce);
     colour_cycle(o, 0x0A);
     o->heading = (uint8_t)(o->heading + 0x08);
 }
@@ -2736,7 +2719,7 @@ static void lap_light(Object *o, uint8_t turn)
     if (released_by_hud(o))
         return;
     o->frame5a = 0x80;
-    o->byte0a = 0x04;
+    o->lap_light.lap = 0x04;
     o->heading = (uint8_t)(o->heading + turn);
     handlers2(o, H9_LAP_LIGHT_RECORD, H9_LAP_LIGHT_STEP);
 }
@@ -2751,21 +2734,21 @@ void ObjectLapLightRight(Object *o) { lap_light(o, 0x20); }
 /* @routine 09:C312 ObjectLapLightStep */
 void ObjectLapLightStep(Object *o)
 {
-    if (g.laps_counted[0] != o->byte0a) {
-        o->flags25 &= 0xFE;
+    if (g.laps_counted[0] != o->lap_light.lap) {
+        o->lap_light.state &= (uint8_t)~LAP_LIGHT_LIT;
         o->frame5a = 0x80;
-        o->count48 = 0x00;
+        o->lap_light.frame = 0x00;
     }
-    if (o->flags25 & 0x01) {
+    if (o->lap_light.state & LAP_LIGHT_LIT) {
         ObjectSyncFromRecord(o);
         count_up_to_2(o);
         return;
     }
     if (!hit(o))
         return;
-    o->byte0a = g.laps_counted[0];
+    o->lap_light.lap = g.laps_counted[0];
     SoundPort0QueuePush(0x5C);
-    o->flags25 |= 0x01;
+    o->lap_light.state |= LAP_LIGHT_LIT;
     ObjectSpawnPuff(obj_at(g.player_car));
 }
 
@@ -2780,11 +2763,11 @@ void ObjectLapLightRecord(Object *o)
 /* @routine 09:BE92 ObjectRisingSpark */
 void ObjectRisingSpark(Object *o)
 {
-    ObjectCopyPosition(o, obj_at(o->word29));
+    ObjectCopyPosition(o, obj_at(o->follow_spark.followed));
     life_down(o);
     o->y = (uint16_t)(o->y + 0xFF80);
-    o->link27 = (uint16_t)(o->link27 + 0xFFD8);
-    o->y = (uint16_t)(o->y + o->link27);
+    o->follow_spark.rise = (uint16_t)(o->follow_spark.rise + 0xFFD8);
+    o->y = (uint16_t)(o->y + o->follow_spark.rise);
     o->heading = (uint8_t)(o->heading + 0x12);
     ObjectRebucket(o);
 }
@@ -2802,10 +2785,10 @@ static void bonus_marker_frame(Object *o, void (*shatter_it)(Object *), uint16_t
     shatter_it(o);
     n = ObjectSpawn(kind);
     if (n) {
-        n->byte0a = 0x0A;
+        n->follow_spark.life = 0x0A;
         ObjectCopyPosition(n, obj_at(g.player_car));
-        n->link27 = 0x0000;
-        n->word29 = g.player_car;
+        n->follow_spark.rise = 0x0000;
+        n->follow_spark.followed = g.player_car;
         handler(n, H9_RISING_SPARK);
     }
     g.hits_bcd = bcd_add_bonus(g.hits_bcd, bonus);
@@ -2815,8 +2798,8 @@ static void bonus_marker_frame(Object *o, void (*shatter_it)(Object *), uint16_t
 static void bonus_marker_init(Object *o)
 {
     o->frame5a = 0x80;
-    o->link27 = 0x0000;
-    o->word29 = 0x0002;
+    o->bonus_marker.bounce = 0x0000;
+    o->bonus_marker.bounce_speed = 0x0002;
 }
 
 /* @routine 09:BF34 ObjectBonusMarker2Step */
@@ -2835,7 +2818,7 @@ void ObjectBonusMarker2Record(Object *o)
 void ObjectBonusMarker2(Object *o)
 {
     bonus_marker_init(o);
-    o->count48 = 0x01;
+    o->bonus_marker.unread = 0x01;
     handlers2(o, H9_BONUS_MARKER2_RECORD, H9_BONUS_MARKER2_STEP);
     ObjectBonusMarker2Record(o);
 }
@@ -2856,7 +2839,7 @@ void ObjectBonusMarker5(Object *o)
 {
     bonus_marker_init(o);
     handlers2(o, H9_BONUS_MARKER5_RECORD, H9_BONUS_MARKER5_STEP);
-    o->count48 = 0x01;
+    o->bonus_marker.unread = 0x01;
     ObjectBonusMarker5Record(o);
 }
 
@@ -2865,7 +2848,7 @@ static void hit_lamp(Object *o, uint16_t record_handler, uint16_t step)
     handlers2(o, record_handler, step);
     o->script = OBJECT_SCRIPT_MARKER;
     o->frame5a = 0x80;
-    o->count48 = 0x04;
+    o->meter.frame = 0x04;
 }
 
 static void hit_lamp_record(Object *o)
