@@ -766,7 +766,7 @@ static void make(const FxArtPicture *p, Made *m)
     if (p->style == FX_ART_LAYERED) {
         for (k = 0; k < p->layers && k < 4; k++) {
             set_init(&layer[k]);
-            trace_layer(&p->layer[k], 0, 0, 0, layer[k].p, layer[k].len, &layer[k].loops, &layer[k].used);
+            trace_layer(&p->layer[k], p->layer[k].grow, 0, 0, layer[k].p, layer[k].len, &layer[k].loops, &layer[k].used);
             set_tag(&layer[k], 0, 0);
         }
         wrong = check(p, NULL, NULL, NULL, layer);

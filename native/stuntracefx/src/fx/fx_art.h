@@ -27,6 +27,7 @@ typedef struct {
     uint8_t value;              /* the picture's colour number it shows (1-3) */
     int loops;
     const FxArtLoop *loop;
+    float grow;                 /* layered: its loops grown by this (an outline drawn from its fill) */
 } FxArtLayer;
 
 enum {
