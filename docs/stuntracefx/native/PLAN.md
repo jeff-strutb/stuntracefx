@@ -697,7 +697,13 @@ filtered or scaled; one path for every backend.
   (slabs, a framed box, triangles; the in-between colour along a slope taken as the outline's edge) and a gem.
 - **Not done yet:** the race frame's background panels (blocks 2, 3, 6 and their maps: mostly flat rectangles on the
   texel lines), the two-player sets (blocks 10-12), the menus' other pictures (the title's and the championship's sprite
-  sets, the menus' background tiles: not yet classified), and a census of the 3D faces' textures beyond the patterns. Artwork left as drawn (not flat colours bounded by edges, so
+  sets, the menus' background tiles: not yet classified), and the 3D textures the census below found.
+- **Census of the 3D texture banks (2026-11-10)**, every 32 x 32 tile of banks $06, $12 and $13, both nibbles, with two to
+  four colours and stair corners (slanted or curved edges): besides the eight patterns done, a second diagonal-stripe tile
+  ($12:$A0A0 high), a zig-zag arrow ($13:$A000 low), a curved arrow ($13:$A020 high), triangle-sign variants ($12:$E000
+  high, $13:$A040 high) and clouds ($13:$E0E0 high and low). Not yet known whether these are drawn on faces (the pattern
+  path) or as object sprites; not done. The other 15 found are effects (sparks, fire, debris, dust) and dithered bands:
+  not flat colours bounded by edges. Artwork left as drawn (not flat colours bounded by edges, so
   not this method's): the title logo and characters, the granite backdrop, the championship's 8-bit picture, the course
   pictures, the cars' pictures and icons.
 
