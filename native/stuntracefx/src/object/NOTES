@@ -265,8 +265,10 @@ Done in object/animate.c (the remaster's animate.c) and draw_list.c
   known look, far; the looks that go on. The angles' fractions between
   steps are fx_tween's own (records_take_fractions).
 - draw_list.c far_record (rm_look_dy): ObjectLookDy.
-- draw_list.c parked_child (rm_enhanced, rm_redrawing): parked_child: a
-  parked car's tyres drawn on it, far.
+- draw_list.c parked_child (rm_enhanced, rm_redrawing): seat_place: a
+  parked car's tyres drawn on it, far; and the step after the course runs
+  the car (its tyres placed at its centre), drawn on it, near or far, and
+  kept so for the pictures between (ObjectsKeptForPictures).
 - draw_list.c ObjectDrawListBuild (rm_enhanced, rm_whole_steps): the far
   records (56ea23c6), in every 3D scene.
 - object.c ObjectNearFocus (rm_enhanced): a car stays near, a model, however

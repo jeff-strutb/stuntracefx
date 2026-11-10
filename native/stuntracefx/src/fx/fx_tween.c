@@ -67,6 +67,7 @@ int fx_tween_backdrop_angles(uint16_t heading[2], uint16_t pitch[2])
 static void keep_end(Ends *e)
 {
     memcpy(&e->objects, &objects, sizeof objects);
+    ObjectsKeptForPictures(&e->objects);    /* a car's tyres where this end drew them (object/draw_list.c) */
     memcpy(e->cameras, cameras, sizeof e->cameras);
     memcpy(e->fx, fx_ram, sizeof fx_ram);
 }

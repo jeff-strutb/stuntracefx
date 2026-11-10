@@ -155,8 +155,10 @@ void ObjectTurn(const Object *o, int run)
     uint32_t h = handler_of(o);
     Look *l = &look[k];
 
-    if (run)
+    if (run) {
         ran[k] = 1;
+        ObjectChildPlaced(o);           /* a car's tyre: its seat (draw_list.c) */
+    }
     ran_now[k] = (uint8_t)run;
     if (lap_ball(h)) {
         l->on = 1;
@@ -201,8 +203,6 @@ int ObjectFarLeftOut(const Object *o)
         return 1;                       /* waiting for its set-up: its trigger */
     return !ran_now[k] && short_lived(h);
 }
-
-int ObjectsDrawnBetween(void) { return fx_tween_t() >= 0.0f; }
 
 /* a value of the drawn-only look at the picture's place in its step */
 static int32_t between(int32_t was, int32_t now)

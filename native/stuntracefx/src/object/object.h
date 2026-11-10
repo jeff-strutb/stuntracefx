@@ -607,6 +607,12 @@ void ObjectDrawListBuild(void);
    byte is still the one that read gave; 0 otherwise. Indexed as
    ObjectDrawListBuild writes g.frame_records; rebuilt with them. */
 uint16_t draw_record_gaze(int record);
+/* after an object's handler ran (ObjectTurn): a car's child's seat on its
+   car learnt, or that it was placed at its car's centre (draw_list.c) */
+void ObjectChildPlaced(const Object *o);
+/* fx_tween's copy of a step's end for the pictures between steps: a car's
+   parked or unseated children in it on their seats, as that end drew them */
+void ObjectsKeptForPictures(ObjectTable *kept);
 
 /* animate.c: the objects as the far view and the pictures between steps
    show them */
@@ -616,8 +622,6 @@ void ObjectsKeepRunning(void);
 int ObjectKept(const Object *o);
 void ObjectTurn(const Object *o, int run);
 int ObjectFarLeftOut(const Object *o);
-/* whether a picture between steps is being drawn (fx_tween_t) */
-int ObjectsDrawnBetween(void);
 void ObjectRecordLook(const Object *o, uint8_t *r, int far);
 int32_t ObjectLookDy(const Object *o);
 uint16_t ObjectGazeBetween(const Object *o, int side, uint16_t gaze);
