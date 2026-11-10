@@ -6,15 +6,20 @@
  * straight edges, drawn as stairs at the chip's texel size. Each is given
  * here once, in its tile's texel space (a texel x, y covers [x, x+1) x
  * [y, y+1)), as convex regions bounded by the straight edges the stairs
- * stand for, each region showing one texel value. The table is checked
- * against the tile's every texel when first used: each texel's centre must
- * lie in a region of its own value, or the pattern is not used.
+ * stand for, each region showing one texel value. The regions are laid in
+ * order, a later one over an earlier (a sign's frame line passing behind
+ * its arrow), and a place no region covers shows nothing (the texture's
+ * see-through texels). The table is checked against the tile's every texel
+ * when first used: the last region holding a texel's centre must show its
+ * value, a centre no region holds must be a 0 texel, or the pattern is not
+ * used. A pattern with such holes is used only where the options make 0
+ * see-through.
  *
  * A face with such a texture is laid with the regions instead: fanned from
  * its first corner, each triangle mapping texel coordinates to view space
  * by its own three corners, as the GPU lays the texture; each region of
  * each tile a triangle covers is clipped to it and handed on as a flat
- * piece in view space. Nothing here makes a pixel.
+ * piece in view space, in the regions' order. Nothing here makes a pixel.
  */
 #include <math.h>
 #include <stdio.h>
@@ -24,21 +29,17 @@
 #include "fx/fx_pattern.h"
 
 enum {
-    BOUNDS = 4,                 /* a region's edges */
-    REGIONS = 8,                /* a pattern's regions */
-    POLY = 16,                  /* a clipped piece's corners: a square, two edges and a triangle's three add 5 */
+    CORNERS = 8,                /* a region's corners */
+    POLY = 16,                  /* a clipped piece's corners: a triangle's three edges add 3 */
     MOST_TILES = 64             /* a face over more tiles keeps its texture */
 };
 
-/* The side a x + b y <= c of an edge. */
+/* A convex region of the tile, its corners in order, and the texel value
+   it shows. */
 typedef struct {
-    double a, b, c;
-} Edge;
-
-typedef struct {
-    uint8_t value;              /* the texel value it shows */
-    int edges;
-    Edge edge[BOUNDS];
+    uint8_t value;
+    int n;
+    double p[CORNERS][2];
 } Region;
 
 enum { PART_BYTE, PART_HIGH, PART_LOW };
@@ -49,11 +50,9 @@ struct FxPattern {
     uint8_t part;               /* which part of the byte the texture reads */
     const char *name;
     int regions;
-    Region region[REGIONS];
+    const Region *region;
     /* made when first used */
-    int made, good, w, h;
-    int corners[REGIONS];
-    double poly[REGIONS][POLY][2];
+    int made, good, holes, w, h;
 };
 
 /* The yellow and black stripes (the barriers' walls). A 32 x 32 tile of two
@@ -61,12 +60,72 @@ struct FxPattern {
    every 4 rows (the first and last steps 2 rows, the tile's middle the
    steps' middle). The edges through the middle of each step are
    X = 8k - Y / 4: $A where X + Y / 4 lies in [16k, 16k + 8), else $F. */
-#define STRIPE(k, v) { (v), 2, { { -1, -0.25, -8.0 * (k) }, { 1, 0.25, 8.0 * (k) + 8 } } }
+static const Region stripes[] = {
+    { 0xA, 3, { { 0, 0 }, { 8, 0 }, { 0, 32 } } },
+    { 0xF, 4, { { 8, 0 }, { 16, 0 }, { 8, 32 }, { 0, 32 } } },
+    { 0xA, 4, { { 16, 0 }, { 24, 0 }, { 16, 32 }, { 8, 32 } } },
+    { 0xF, 4, { { 24, 0 }, { 32, 0 }, { 24, 32 }, { 16, 32 } } },
+    { 0xA, 3, { { 32, 0 }, { 32, 32 }, { 24, 32 } } },
+};
+
+/* The chevrons (the corners' boards; two tiles, the same shape in two
+   colours). A 32 x 32 tile: the fill reaches one texel further right each
+   row down to rows 15 and 16, which it fills, then one less each row; the
+   edges through the steps' corners are X - Y = 16.5 above and X + Y = 48.5
+   below, the light value right of them. */
+#define CHEVRON(fill, light) \
+    { (fill), 6, { { 0, 0 }, { 16.5, 0 }, { 32, 15.5 }, { 32, 16.5 }, { 16.5, 32 }, { 0, 32 } } }, \
+    { (light), 3, { { 16.5, 0 }, { 32, 0 }, { 32, 15.5 } } }, \
+    { (light), 3, { { 32, 16.5 }, { 32, 32 }, { 16.5, 32 } } }
+
+static const Region chevron_red[] = { CHEVRON(0x2, 0xE) };
+static const Region chevron_blue[] = { CHEVRON(0x4, 0xE) };
+
+/* The sign with a chevron (">") over four panes. A 32 x 32 tile: the
+   frame's lines, as their texels lie, under the chevron; the chevron's
+   white from row 6 to row 24 between X - Y = -0.5 and 11.5 above its
+   point (Y = 15.5) and between X + Y = 30.5 and 42.5 below it, its fill
+   from row 7 to row 23 between X - Y = 1.5 and 9.5 and X + Y = 32.5 and
+   40.5 (each edge through the middle of the texels' steps). The panes are
+   see-through. */
+static const Region sign[] = {
+    { 0xE, 4, { { 0, 0 }, { 1, 0 }, { 1, 1 }, { 0, 1 } } },
+    { 0xB, 4, { { 1, 0 }, { 31, 0 }, { 31, 1 }, { 1, 1 } } },
+    { 0xC, 4, { { 31, 0 }, { 32, 0 }, { 32, 32 }, { 31, 32 } } },
+    { 0xB, 4, { { 0, 1 }, { 1, 1 }, { 1, 15 }, { 0, 15 } } },
+    { 0xC, 4, { { 1, 1 }, { 15, 1 }, { 15, 2 }, { 1, 2 } } },
+    { 0xB, 4, { { 15, 1 }, { 16, 1 }, { 16, 15 }, { 15, 15 } } },
+    { 0xC, 4, { { 16, 1 }, { 30, 1 }, { 30, 2 }, { 16, 2 } } },
+    { 0xB, 4, { { 30, 1 }, { 31, 1 }, { 31, 31 }, { 30, 31 } } },
+    { 0xC, 4, { { 1, 2 }, { 2, 2 }, { 2, 15 }, { 1, 15 } } },
+    { 0xC, 4, { { 16, 2 }, { 17, 2 }, { 17, 15 }, { 16, 15 } } },
+    { 0xE, 4, { { 0, 15 }, { 1, 15 }, { 1, 16 }, { 0, 16 } } },
+    { 0xB, 4, { { 1, 15 }, { 14, 15 }, { 14, 16 }, { 1, 16 } } },
+    { 0xC, 4, { { 14, 15 }, { 15, 15 }, { 15, 16 }, { 14, 16 } } },
+    { 0xB, 4, { { 15, 15 }, { 30, 15 }, { 30, 16 }, { 15, 16 } } },
+    { 0xB, 4, { { 0, 16 }, { 1, 16 }, { 1, 30 }, { 0, 30 } } },
+    { 0xC, 4, { { 1, 16 }, { 30, 16 }, { 30, 17 }, { 1, 17 } } },
+    { 0xC, 4, { { 1, 17 }, { 2, 17 }, { 2, 30 }, { 1, 30 } } },
+    { 0xB, 4, { { 15, 17 }, { 16, 17 }, { 16, 30 }, { 15, 30 } } },
+    { 0xC, 4, { { 16, 17 }, { 17, 17 }, { 17, 30 }, { 16, 30 } } },
+    { 0xB, 4, { { 0, 30 }, { 31, 30 }, { 31, 31 }, { 0, 31 } } },
+    { 0xC, 4, { { 0, 31 }, { 31, 31 }, { 31, 32 }, { 0, 32 } } },
+    /* the chevron's white, above its point and below */
+    { 0xE, 4, { { 5.5, 6 }, { 17.5, 6 }, { 27, 15.5 }, { 15, 15.5 } } },
+    { 0xE, 4, { { 15, 15.5 }, { 27, 15.5 }, { 17.5, 25 }, { 5.5, 25 } } },
+    /* its fill */
+    { 0x2, 4, { { 8.5, 7 }, { 16.5, 7 }, { 25, 15.5 }, { 17, 15.5 } } },
+    { 0x2, 4, { { 17, 15.5 }, { 25, 15.5 }, { 16.5, 24 }, { 8.5, 24 } } },
+};
+
+#define PATTERN(bank, base, mask, part, name, regions) \
+    { (bank), (base), (mask), (part), (name), (int)(sizeof (regions) / sizeof (regions)[0]), (regions), 0, 0, 0, 0, 0 }
 
 static FxPattern patterns[] = {
-    { 0x12, 0xA040, 0x1F1F, PART_HIGH, "the yellow and black stripes", 5,
-      { STRIPE(0, 0x0A), STRIPE(1, 0x0F), STRIPE(2, 0x0A), STRIPE(3, 0x0F), STRIPE(4, 0x0A) },
-      0, 0, 0, 0, { 0 }, { { { 0 } } } },
+    PATTERN(0x12, 0xA040, 0x1F1F, PART_HIGH, "the yellow and black stripes", stripes),
+    PATTERN(0x12, 0xE040, 0x1F1F, PART_HIGH, "the red chevron", chevron_red),
+    PATTERN(0x12, 0xA080, 0x1F1F, PART_HIGH, "the blue chevron", chevron_blue),
+    PATTERN(0x12, 0xE000, 0x1F1F, PART_LOW, "the chevron sign", sign),
 };
 
 /* The part of a convex polygon on the side a x + b y <= c. */
@@ -101,17 +160,26 @@ static uint8_t tile_texel(const FxPattern *p, int x, int y)
     return p->part == PART_HIGH ? (uint8_t)(v >> 4) : p->part == PART_LOW ? (uint8_t)(v & 0x0F) : v;
 }
 
+/* A point in a convex region, its edges counted in. */
 static int inside(const Region *r, double x, double y)
 {
-    int k;
+    int k, side = 0;
 
-    for (k = 0; k < r->edges; k++)
-        if (r->edge[k].a * x + r->edge[k].b * y > r->edge[k].c + 1e-9)
+    for (k = 0; k < r->n; k++) {
+        const double *p = r->p[k], *q = r->p[(k + 1) % r->n];
+        double cross = (q[0] - p[0]) * (y - p[1]) - (q[1] - p[1]) * (x - p[0]);
+
+        if (fabs(cross) < 1e-9)
+            continue;
+        if (!side)
+            side = cross > 0 ? 1 : -1;
+        else if ((cross > 0) != (side > 0))
             return 0;
+    }
     return 1;
 }
 
-/* The regions cut to the tile, and the tile's every texel checked. */
+/* The tile's every texel checked against the regions. */
 static void make(FxPattern *p)
 {
     int r, x, y, wrong = 0;
@@ -119,29 +187,24 @@ static void make(FxPattern *p)
     p->made = 1;
     p->w = (p->mask & 0xFF) + 1;
     p->h = (p->mask >> 8) + 1;
-    for (r = 0; r < p->regions; r++) {
-        double a[POLY][2] = { { 0, 0 }, { p->w, 0 }, { p->w, p->h }, { 0, p->h } }, b[POLY][2];
-        int n = 4, k;
-
-        for (k = 0; k < p->region[r].edges; k++) {
-            n = clip((const double (*)[2])a, n, b, p->region[r].edge[k].a, p->region[r].edge[k].b, p->region[r].edge[k].c);
-            memcpy(a, b, sizeof(double) * 2 * (size_t)n);
-        }
-        p->corners[r] = n;
-        memcpy(p->poly[r], a, sizeof(double) * 2 * (size_t)n);
-    }
     for (y = 0; y < p->h; y++)
         for (x = 0; x < p->w; x++) {
             uint8_t want = tile_texel(p, x, y);
-            int found = 0;
+            int shown = -1;
 
-            for (r = 0; r < p->regions && !found; r++)
-                found = p->region[r].value == want && inside(&p->region[r], x + 0.5, y + 0.5);
-            wrong += !found;
+            for (r = 0; r < p->regions; r++)
+                if (inside(&p->region[r], x + 0.5, y + 0.5))
+                    shown = p->region[r].value;
+            if (shown < 0) {
+                p->holes = 1;
+                wrong += want != 0;
+            } else {
+                wrong += shown != want;
+            }
         }
     p->good = !wrong;
     if (wrong)
-        fprintf(stderr, "stuntracefx: %s: %d of %d texels outside their regions; the texture is drawn as it is\n",
+        fprintf(stderr, "stuntracefx: %s: %d of %d texels not in a region of their value; the texture is drawn as it is\n",
                 p->name, wrong, p->w * p->h);
 }
 
@@ -157,7 +220,8 @@ const FxPattern *fx_pattern_find(uint8_t bank, uint16_t base, uint16_t mask, uin
             continue;
         if (!p->made)
             make(p);
-        return p->good ? p : NULL;
+        /* holes are see-through only where 0 is (options bit 0 clear) */
+        return p->good && !(p->holes && (options & 0x01)) ? p : NULL;
     }
     return NULL;
 }
@@ -190,30 +254,31 @@ int fx_pattern_cut(const FxPattern *pattern, const double (*xyz)[3], const doubl
         double det = du1 * dv2 - du2 * dv1, sign = det > 0 ? 1 : -1;
         double u0 = fmin(ta[0][0], fmin(ta[1][0], ta[2][0])), u1 = fmax(ta[0][0], fmax(ta[1][0], ta[2][0]));
         double v0 = fmin(ta[0][1], fmin(ta[1][1], ta[2][1])), v1 = fmax(ta[0][1], fmax(ta[1][1], ta[2][1]));
-        Edge side[3];
+        double side[3][3];
         int i, j, e, r;
 
         /* the triangle's inside: left of each edge when its corners turn
-           counter-clockwise in u, v, right when clockwise */
+           counter-clockwise in u, v, right when clockwise; a x + b y <= c */
         for (e = 0; e < 3; e++) {
             const double *p = ta[e], *q = ta[(e + 1) % 3];
 
-            side[e].a = sign * (q[1] - p[1]);
-            side[e].b = -sign * (q[0] - p[0]);
-            side[e].c = side[e].a * p[0] + side[e].b * p[1];
+            side[e][0] = sign * (q[1] - p[1]);
+            side[e][1] = -sign * (q[0] - p[0]);
+            side[e][2] = side[e][0] * p[0] + side[e][1] * p[1];
         }
         for (j = (int)floor(v0 / pattern->h); j <= (int)floor(v1 / pattern->h); j++)
             for (i = (int)floor(u0 / pattern->w); i <= (int)floor(u1 / pattern->w); i++)
                 for (r = 0; r < pattern->regions; r++) {
+                    const Region *g = &pattern->region[r];
                     double a[POLY][2], b[POLY][2], p[POLY][3], area = 0;
-                    int m = pattern->corners[r], k;
+                    int m = g->n, k;
 
                     for (k = 0; k < m; k++) {
-                        a[k][0] = pattern->poly[r][k][0] + (double)i * pattern->w;
-                        a[k][1] = pattern->poly[r][k][1] + (double)j * pattern->h;
+                        a[k][0] = g->p[k][0] + (double)i * pattern->w;
+                        a[k][1] = g->p[k][1] + (double)j * pattern->h;
                     }
                     for (e = 0; e < 3 && m >= 3; e++) {
-                        m = clip((const double (*)[2])a, m, b, side[e].a, side[e].b, side[e].c);
+                        m = clip((const double (*)[2])a, m, b, side[e][0], side[e][1], side[e][2]);
                         memcpy(a, b, sizeof(double) * 2 * (size_t)m);
                     }
                     if (m < 3)
@@ -231,7 +296,7 @@ int fx_pattern_cut(const FxPattern *pattern, const double (*xyz)[3], const doubl
                         p[k][1] = pa[1] + s * (pb[1] - pa[1]) + q * (pc[1] - pa[1]);
                         p[k][2] = pa[2] + s * (pb[2] - pa[2]) + q * (pc[2] - pa[2]);
                     }
-                    piece(context, (const double (*)[3])p, m, pattern->region[r].value);
+                    piece(context, (const double (*)[3])p, m, g->value);
                 }
     }
     return 1;

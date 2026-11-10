@@ -532,6 +532,17 @@ backend.
   straight edges the stairs stand for, checked against every texel of the tile when the table is made (each texel's centre
   falls in the region of its own value). Found by the texture's key as the face's draw-list entry gives it: ROM bank, base,
   mask, and which part of the byte the options read (all eight bits, the high or the low four).
+- **Regions in order, and holes.** Regions are convex polygons laid in order, a later one over an earlier (a sign's frame line
+  passing behind its arrow); a place no region covers shows nothing, as the texture's see-through texels. The check: the last
+  region holding a texel's centre shows its value, a centre no region holds is a 0 texel. A pattern with holes is used only
+  where the options make 0 see-through.
+- **Done (2026-11-09):** the stripes below; the red and the blue chevron boards (bank $12, bases $E040 and $A080, the high
+  four bits: the fill left of X - Y = 16.5 and X + Y = 48.5); the chevron sign ($12:$E000, the low four bits: the frame's
+  lines, then the chevron between X - Y = -0.5 and 11.5 and X + Y = 30.5 and 42.5, its fill between 1.5 and 9.5 and 32.5
+  and 40.5; four see-through panes). Each checked against all 1,024 texels of its tile. Not done: the curved arrow signs
+  (the U-turns $12:$C0A0 and $E060, the S-bend $C0C0, the turn $C0E0, all the high four bits), whose edges are curves, and
+  any pattern on a course no recording or demo has visited (banks $06, $12 and $13 looked at as a whole: no other tile with
+  slanted edges and few colours).
 - **The first: the yellow and black stripes** (bank $12, base $A040, mask $1F1F, the high four bits; the barriers' walls, Aqua Tunnel's among them). Tile
   32 x 32 texels, two values ($A, $F), stripes 8 texels wide that move one texel left every 4 rows. Their edges are the lines
   X = 8k - Y/4 (through the middle of each step); value $A where X + Y/4 mod 16 is below 8, else $F. The texel centres
