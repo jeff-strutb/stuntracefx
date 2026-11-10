@@ -35,6 +35,7 @@ typedef struct {
     Shape *s;
     uint32_t nv, ns, cap_v, cap_s;
     uint32_t gen;               /* moves on with every change of its shapes */
+    int ox, oy;                 /* the picture's place on the screen its shapes were recorded at */
     uint32_t hud_from;          /* its shapes from here on came after the frame program: the HUD's */
 } Recording;
 
@@ -132,6 +133,11 @@ void fx_draw_begin(int picture)
         /* the view's words are the screen's (fx_view_words): its pixels */
         offset_x = 0;
         offset_y = 0;
+    } else if (race_two_full_window()) {
+        /* each player's words are its rectangle's, from its top left */
+        int w, h;
+
+        screen_two_rect(picture, &offset_x, &offset_y, &w, &h);
     } else if (!g.split_screen) {
         offset_x = 24;
         offset_y = 32;
@@ -146,6 +152,8 @@ void fx_draw_begin(int picture)
         offset_x = origin_x;
         offset_y = origin_y;
     }
+    recording->ox = offset_x;
+    recording->oy = offset_y;
     recording->gen++;
 }
 
@@ -302,7 +310,7 @@ static void emit(const nshvc_vertex *v, uint32_t count, uint32_t image, int line
    of static) stays where it was drawn. */
 enum { PIECES = 1024 };
 
-static void hud_pieces(const Recording *r, uint32_t from, uint32_t to, float *dx, float *dy)
+static void hud_pieces(const Recording *r, uint32_t from, uint32_t to, int player, float *dx, float *dy)
 {
     static float box[PIECES][4];
     static int group[PIECES];
@@ -362,7 +370,20 @@ static void hud_pieces(const Recording *r, uint32_t from, uint32_t to, float *dx
             y0 = box[j][2] < y0 ? box[j][2] : y0;
             y1 = box[j][3] > y1 ? box[j][3] : y1;
         }
-        if (x1 - x0 > 208 || y1 - y0 > 128) {
+        if (player >= 0) {
+            /* two players: the piece in its player's original 144 x 80 view
+               (its recorded place less the picture's), moved where video's
+               anchor puts that view for it */
+            int px0 = (int)x0 - r->ox, px1 = (int)x1 - r->ox, py0 = (int)y0 - r->oy, py1 = (int)y1 - r->oy, ax, ay;
+
+            if (x1 - x0 > 144 || y1 - y0 > 80) {
+                dx[i] = dy[i] = 0;
+            } else {
+                screen_two_anchor(player, px0, px1 - 1, py0, py1 - 1, &ax, &ay);
+                dx[i] = (float)(ax - r->ox);
+                dy[i] = (float)(ay - r->oy);
+            }
+        } else if (x1 - x0 > 208 || y1 - y0 > 128) {
             dx[i] = dy[i] = 0;
         } else {
             dx[i] = 24.0f + (float)screen_view_anchor_x((int)x0 + 24, (int)x1 + 24 - 1);
@@ -376,8 +397,9 @@ static void hud_pieces(const Recording *r, uint32_t from, uint32_t to, float *dx
 }
 
 /* Shapes [from, to) of a recording into the screen's list, scaled to its
-   pixels; anchored: as the full window's HUD pieces. */
-static void compose_recording(const Recording *r, uint32_t from, uint32_t to, int anchored)
+   pixels; anchored: as the full window's HUD pieces, player -1 the one
+   player's, else that of two. */
+static void compose_recording(const Recording *r, uint32_t from, uint32_t to, int anchored, int player)
 {
     static nshvc_vertex *scaled;
     static uint32_t cap;
@@ -396,7 +418,7 @@ static void compose_recording(const Recording *r, uint32_t from, uint32_t to, in
     if (from >= to)
         return;
     if (anchored)
-        hud_pieces(r, from, to, dx, dy);
+        hud_pieces(r, from, to, player, dx, dy);
     for (i = from; i < to; i++) {
         const Shape *sh = &r->s[i];
         float ox = 0, oy = 0;
@@ -431,7 +453,8 @@ static void screen_list_size(uint32_t *w, uint32_t *h)
 {
     nshvc_display d;
     const ScreenShape *sh = screen_shape();
-    int sw = race_full_window() ? sh->width : 256, shh = race_full_window() ? sh->height : 224;
+    int full = race_full_window() || race_two_full_window();
+    int sw = full ? sh->width : 256, shh = full ? sh->height : 224;
     double pw = 4.0 * sw, ph = 4.0 * shh, k;
 
     d = nshvc_display_info();
@@ -460,13 +483,13 @@ static void screen_list_size(uint32_t *w, uint32_t *h)
 static void compose_picture(int p)
 {
     const Recording *r = &recordings[p];
-    int full = race_full_window() && !origin_x && !origin_y;
+    int other = origin_x || origin_y, one = race_full_window() && !other, two = race_two_full_window() && !other;
 
     if (between_on[p])
-        compose_recording(&between[p], 0, between[p].ns, 0);
+        compose_recording(&between[p], 0, between[p].ns, 0, -1);
     else
-        compose_recording(r, 0, r->hud_from, 0);
-    compose_recording(r, r->hud_from, r->ns, full);
+        compose_recording(r, 0, r->hud_from, 0, -1);
+    compose_recording(r, r->hud_from, r->ns, one || two, two ? p : -1);
 }
 
 static uint64_t picture_key(int p)
@@ -1010,6 +1033,15 @@ void fx_row_close(uint16_t x) {}
 
 void fx_plot(uint8_t x, uint8_t y) { fx_flat_row(x, y, 1); }
 
+/* Whether the picture is of eight bits a pixel (the whole palette): a
+   solid's colours are the 8-bit palette's (two players' 4-bit pictures,
+   their colours a palette row's, keep their sprites: seen wrong in a run,
+   the tyres' greys showing as the row's pinks and yellows). */
+int fx_draw_full_colour(void)
+{
+    return depth_mask() == 0xFF;
+}
+
 /* A solid's triangles (fx_solid.c), flat in palette colour c. */
 void fx_draw_flat(const FxCorner *c, uint32_t n, uint8_t colour)
 {
@@ -1034,12 +1066,6 @@ void fx_draw_flat(const FxCorner *c, uint32_t n, uint8_t colour)
     }
 }
 
-/* Whether the picture is of eight bits a pixel (the whole palette): a
-   solid's colours are the 8-bit palette's. */
-int fx_draw_full_colour(void)
-{
-    return depth_mask() == 0xFF;
-}
 uint8_t fx_rpix(uint8_t x, uint8_t y) { (void)x; (void)y; return 0; }
 
 /* ---- the queue ---- */
