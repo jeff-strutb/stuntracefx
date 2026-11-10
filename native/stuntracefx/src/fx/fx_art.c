@@ -617,8 +617,25 @@ static Made *made;
 
 static uint8_t texel(const FxArtPicture *p, int x, int y)
 {
-    uint8_t b = fx_art_rom(p->bank, (uint16_t)(p->at + y * 32 + x / 4));
+    uint8_t b;
 
+    if (p->bank == FX_ART_TILES) {
+        uint32_t bytes = 0;
+        const uint8_t *set = fx_art_tile_set(p->at, &bytes);
+        uint32_t t = p->tiles[(y / 8) * (p->w / 8) + x / 8], o = t * 32 + (uint32_t)(y & 7) * 2;
+        int s = 7 - (x & 7), v, k;
+
+        if (!set || o + 17 >= bytes)
+            return 0;
+        v = ((set[o] >> s) & 1) | ((set[o + 1] >> s) & 1) << 1 | ((set[o + 16] >> s) & 1) << 2 | ((set[o + 17] >> s) & 1) << 3;
+        if (p->style == FX_ART_LAYERED)
+            return (uint8_t)v;
+        for (k = 1; k < 4; k++)
+            if (v && p->colour[k] == v)
+                return (uint8_t)k;
+        return v ? 0xFF : 0;    /* a colour the style has no place for: never matches */
+    }
+    b = fx_art_rom(p->bank, (uint16_t)(p->at + y * 32 + x / 4));
     return (uint8_t)((b >> (2 * (x & 3))) & 3);
 }
 

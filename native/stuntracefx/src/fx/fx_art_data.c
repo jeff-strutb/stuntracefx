@@ -415,25 +415,25 @@ static const FxArtCorner small8_dot_0[] = { { 5.02f, 10.98f, 0.0f }, { 5.02f, 14
 static const FxArtLoop small8_dot[] = { { 4, small8_dot_0 } };
 static const FxArtLayer small8_dot_fill[] = { { 3, 1, small8_dot } };
 
-/* the 8 x 16 glyph ''' ($15:$980A), its colours each a region over the one before (1: 1 loop, 8 corners (0 sharp), radii 0.2, 0.4, 0.6, 1.6, 3; 2: 1 loop, 8 corners (0 sharp), radii 0.2, 0.4, 0.6, 1.6, 3; 3: 1 loop, 8 corners (0 sharp), radii 0.2, 0.3, 1.2, 2, 2.4); 0 off, built by hand */
-static const FxArtCorner small8_quote_0_0[] = { { 2.0f, 0.62f, 0.4f }, { 5.33f, 0.62f, 1.63f }, { 5.33f, 6.26f, 2.98f }, { 1.97f, 6.26f, 0.39f }, { 1.97f, 4.1f, 0.2f }, { 3.1f, 4.1f, 0.6f }, { 3.1f, 2.9f, 0.6f }, { 2.0f, 2.9f, 0.2f } };
+/* the 8 x 16 glyph ''' ($15:$980A), its colours each a region over the one before (1: 1 loop, 8 corners (1 sharp), radii 0.3, 0.4, 0.5, 0.6, 1.1, 1.6; 2: 1 loop, 8 corners (1 sharp), radii 0.3, 0.4, 0.5, 0.6, 1.1, 1.6; 3: 1 loop, 6 corners (1 sharp), radii 0.1, 0.6, 0.9, 1.3, 2.2); 0 off, built by hand */
+static const FxArtCorner small8_quote_0_0[] = { { 2.02f, 0.85f, 0.6f }, { 5.26f, 0.85f, 1.11f }, { 5.26f, 4.51f, 1.6f }, { 3.58f, 6.17f, 0.4f }, { 2.0f, 6.17f, 0.3f }, { 2.0f, 4.0f, 0.4f }, { 3.0f, 3.4f, 0.0f }, { 2.02f, 2.9f, 0.5f } };
 static const FxArtLoop small8_quote_0[] = { { 8, small8_quote_0_0 } };
-static const FxArtCorner small8_quote_1_0[] = { { 2.0f, 0.62f, 0.4f }, { 5.33f, 0.62f, 1.63f }, { 5.33f, 6.26f, 2.98f }, { 1.97f, 6.26f, 0.39f }, { 1.97f, 4.1f, 0.2f }, { 3.1f, 4.1f, 0.6f }, { 3.1f, 2.9f, 0.6f }, { 2.0f, 2.9f, 0.2f } };
+static const FxArtCorner small8_quote_1_0[] = { { 2.02f, 0.85f, 0.6f }, { 5.26f, 0.85f, 1.11f }, { 5.26f, 4.51f, 1.6f }, { 3.58f, 6.17f, 0.4f }, { 2.0f, 6.17f, 0.3f }, { 2.0f, 4.0f, 0.4f }, { 3.0f, 3.4f, 0.0f }, { 2.02f, 2.9f, 0.5f } };
 static const FxArtLoop small8_quote_1[] = { { 8, small8_quote_1_0 } };
-static const FxArtCorner small8_quote_2_0[] = { { 2.2f, 1.08f, 0.3f }, { 4.72f, 1.08f, 2.01f }, { 4.72f, 5.63f, 2.38f }, { 2.11f, 5.63f, 0.24f }, { 2.11f, 4.7f, 0.2f }, { 3.7f, 4.7f, 1.2f }, { 3.7f, 2.3f, 1.2f }, { 2.2f, 2.3f, 0.2f } };
-static const FxArtLoop small8_quote_2[] = { { 8, small8_quote_2_0 } };
+static const FxArtCorner small8_quote_2_0[] = { { 2.18f, 0.97f, 0.87f }, { 4.18f, 0.97f, 1.26f }, { 5.2f, 3.45f, 2.18f }, { 1.88f, 6.19f, 0.13f }, { 3.71f, 3.53f, 0.0f }, { 2.32f, 2.15f, 0.6f } };
+static const FxArtLoop small8_quote_2[] = { { 6, small8_quote_2_0 } };
 static const FxArtLayer small8_quote_fill[] = { { 1, 1, small8_quote_0, 1.0f }, { 2, 1, small8_quote_1, 0.0f }, { 3, 1, small8_quote_2, 0.0f } };
 
-/* the 8 x 16 glyph '\"' ($15:$980C), its colours each a region over the one before (1: 2 loops, 16 corners (0 sharp), radii 0.2, 0.3, 0.4, 0.6, 1.6, 2.5, 2.7; 2: 2 loops, 16 corners (0 sharp), radii 0.2, 0.3, 0.4, 0.6, 1.6, 2.5, 2.7; 3: 2 loops, 16 corners (0 sharp), radii 0.2, 0.3, 1.2, 1.9, 2, 2.3); 0 off, built by hand */
-static const FxArtCorner small8_quotes_0_0[] = { { 0.84f, 1.0f, 0.35f }, { 3.68f, 1.0f, 2.5f }, { 3.68f, 6.0f, 2.5f }, { 0.84f, 6.0f, 0.35f }, { 0.84f, 4.14f, 0.21f }, { 2.09f, 4.14f, 0.58f }, { 2.09f, 2.97f, 0.58f }, { 0.84f, 2.97f, 0.21f } };
-static const FxArtCorner small8_quotes_0_1[] = { { 4.0f, 0.62f, 0.4f }, { 7.31f, 0.62f, 1.61f }, { 7.31f, 6.14f, 2.7f }, { 4.0f, 6.14f, 0.4f }, { 4.0f, 4.1f, 0.2f }, { 5.13f, 4.1f, 0.58f }, { 5.13f, 2.88f, 0.58f }, { 4.0f, 2.88f, 0.2f } };
+/* the 8 x 16 glyph '\"' ($15:$980C), its colours each a region over the one before (1: 2 loops, 16 corners (2 sharp), radii 0.3, 0.4, 0.5, 0.6, 1.1, 1.6, 1.7; 2: 2 loops, 16 corners (2 sharp), radii 0.3, 0.4, 0.5, 0.6, 1.1, 1.6, 1.7; 3: 2 loops, 12 corners (2 sharp), radii 0.1, 0.6, 0.8, 1.2, 2.2, 2.4); 1 off, built by hand */
+static const FxArtCorner small8_quotes_0_0[] = { { 0.98f, 0.84f, 0.6f }, { 3.56f, 0.84f, 1.6f }, { 3.56f, 4.0f, 1.68f }, { 2.35f, 5.97f, 0.4f }, { 1.0f, 5.97f, 0.3f }, { 1.0f, 4.0f, 0.4f }, { 2.0f, 3.4f, 0.0f }, { 0.98f, 2.9f, 0.5f } };
+static const FxArtCorner small8_quotes_0_1[] = { { 4.01f, 0.85f, 0.6f }, { 7.26f, 0.85f, 1.12f }, { 7.26f, 4.51f, 1.6f }, { 5.58f, 6.17f, 0.4f }, { 4.0f, 6.17f, 0.3f }, { 4.0f, 4.0f, 0.4f }, { 5.0f, 3.4f, 0.0f }, { 4.01f, 2.9f, 0.5f } };
 static const FxArtLoop small8_quotes_0[] = { { 8, small8_quotes_0_0 }, { 8, small8_quotes_0_1 } };
-static const FxArtCorner small8_quotes_1_0[] = { { 0.84f, 1.0f, 0.35f }, { 3.68f, 1.0f, 2.5f }, { 3.68f, 6.0f, 2.5f }, { 0.84f, 6.0f, 0.35f }, { 0.84f, 4.14f, 0.21f }, { 2.09f, 4.14f, 0.58f }, { 2.09f, 2.97f, 0.58f }, { 0.84f, 2.97f, 0.21f } };
-static const FxArtCorner small8_quotes_1_1[] = { { 4.0f, 0.62f, 0.4f }, { 7.31f, 0.62f, 1.61f }, { 7.31f, 6.14f, 2.7f }, { 4.0f, 6.14f, 0.4f }, { 4.0f, 4.1f, 0.2f }, { 5.13f, 4.1f, 0.58f }, { 5.13f, 2.88f, 0.58f }, { 4.0f, 2.88f, 0.2f } };
+static const FxArtCorner small8_quotes_1_0[] = { { 0.98f, 0.84f, 0.6f }, { 3.56f, 0.84f, 1.6f }, { 3.56f, 4.0f, 1.68f }, { 2.35f, 5.97f, 0.4f }, { 1.0f, 5.97f, 0.3f }, { 1.0f, 4.0f, 0.4f }, { 2.0f, 3.4f, 0.0f }, { 0.98f, 2.9f, 0.5f } };
+static const FxArtCorner small8_quotes_1_1[] = { { 4.01f, 0.85f, 0.6f }, { 7.26f, 0.85f, 1.12f }, { 7.26f, 4.51f, 1.6f }, { 5.58f, 6.17f, 0.4f }, { 4.0f, 6.17f, 0.3f }, { 4.0f, 4.0f, 0.4f }, { 5.0f, 3.4f, 0.0f }, { 4.01f, 2.9f, 0.5f } };
 static const FxArtLoop small8_quotes_1[] = { { 8, small8_quotes_1_0 }, { 8, small8_quotes_1_1 } };
-static const FxArtCorner small8_quotes_2_0[] = { { 1.16f, 1.04f, 0.29f }, { 3.38f, 1.04f, 1.93f }, { 3.38f, 5.67f, 2.03f }, { 1.08f, 5.67f, 0.27f }, { 1.08f, 4.7f, 0.2f }, { 2.7f, 4.7f, 1.2f }, { 2.7f, 2.3f, 1.2f }, { 1.16f, 2.3f, 0.2f } };
-static const FxArtCorner small8_quotes_2_1[] = { { 4.2f, 1.1f, 0.3f }, { 6.7f, 1.1f, 1.93f }, { 6.7f, 5.63f, 2.32f }, { 4.1f, 5.63f, 0.28f }, { 4.1f, 4.7f, 0.2f }, { 5.7f, 4.7f, 1.2f }, { 5.7f, 2.3f, 1.2f }, { 4.2f, 2.3f, 0.2f } };
-static const FxArtLoop small8_quotes_2[] = { { 8, small8_quotes_2_0 }, { 8, small8_quotes_2_1 } };
+static const FxArtCorner small8_quotes_2_0[] = { { 1.16f, 1.04f, 0.81f }, { 2.87f, 1.04f, 1.18f }, { 3.86f, 3.39f, 2.38f }, { 0.9f, 6.22f, 0.11f }, { 2.68f, 3.49f, 0.0f }, { 1.31f, 2.15f, 0.58f } };
+static const FxArtCorner small8_quotes_2_1[] = { { 4.17f, 1.0f, 0.84f }, { 6.2f, 1.0f, 1.25f }, { 7.2f, 3.44f, 2.2f }, { 3.88f, 6.19f, 0.12f }, { 5.72f, 3.53f, 0.0f }, { 4.32f, 2.16f, 0.58f } };
+static const FxArtLoop small8_quotes_2[] = { { 6, small8_quotes_2_0 }, { 6, small8_quotes_2_1 } };
 static const FxArtLayer small8_quotes_fill[] = { { 1, 2, small8_quotes_0, 1.0f }, { 2, 2, small8_quotes_1, 0.0f }, { 3, 2, small8_quotes_2, 0.0f } };
 
 /* ---- the big sprites' 24 x 40 letters (bank $15 from $A000) ---- */
@@ -849,7 +849,7 @@ const FxArtPicture fx_art_pictures[] = {
     { "the 8 x 16 glyph 'Z'", 0x15, 0x9806, 8, 16, FX_ART_BEVELLED, 0, 1, small8_Z_fill, 6 },
     { "the 8 x 16 glyph '.'", 0x15, 0x9808, 8, 16, FX_ART_BEVELLED, 0, 1, small8_dot_fill, 0 },
     { "the 8 x 16 glyph '''", 0x15, 0x980A, 8, 16, FX_ART_LAYERED, 0, 3, small8_quote_fill, 0 },
-    { "the 8 x 16 glyph '\"'", 0x15, 0x980C, 8, 16, FX_ART_LAYERED, 0, 3, small8_quotes_fill, 0 },
+    { "the 8 x 16 glyph '\"'", 0x15, 0x980C, 8, 16, FX_ART_LAYERED, 0, 3, small8_quotes_fill, 1 },
     { "the 24 x 40 letter 'A'", 0x15, 0xA000, 24, 40, FX_ART_OUTLINED, 2, 1, banner24_A_fill, 10 },
     { "the 24 x 40 letter 'C'", 0x15, 0xA006, 24, 40, FX_ART_OUTLINED, 2, 1, banner24_C_fill, 12 },
     { "the 24 x 40 letter 'E'", 0x15, 0xA00C, 24, 40, FX_ART_OUTLINED, 2, 1, banner24_E_fill, 24 },

@@ -53,13 +53,24 @@ typedef struct {
     int layers;
     const FxArtLayer *layer;
     int off;                    /* its texels the clean shapes leave on the other side, as fitted */
+    /* console art (bank FX_ART_TILES): its 8 x 8 tiles row by row from tile
+       set `at` (fx_art_tile_set), 4 bits a texel; and for an outlined or
+       bevelled picture the tile colours its values 1-3 are */
+    const uint16_t *tiles;
+    uint8_t colour[4];
 } FxArtPicture;
+
+#define FX_ART_TILES 0xFF
 
 extern const FxArtPicture fx_art_pictures[];
 extern const int fx_art_picture_count;
 
 /* the cartridge's byte (the game's fx_rom_read; a tool's own) */
 uint8_t fx_art_rom(uint8_t bank, uint16_t at);
+
+/* tile set n's unpacked 4-bit tiles, 32 bytes a tile, the SNES's planes
+   (the game's: the video blocks it unpacks; a tool's own); NULL if none */
+const uint8_t *fx_art_tile_set(uint16_t n, uint32_t *bytes);
 
 /* ---- the geometry, shared with the fitting tool ---- */
 

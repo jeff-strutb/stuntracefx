@@ -14,6 +14,7 @@
 #include "fx/fx_art.h"
 #include "fx/fx_draw.h"
 #include "fx/fx_face.h"
+#include "data/video_tables.h"
 #include "system/state.h"
 #include "video/picture.h"
 #include "video/video.h"
@@ -1086,6 +1087,25 @@ static nshvc_image glyph_image(uint8_t bank, uint16_t base, uint16_t width, uint
 uint8_t fx_art_rom(uint8_t bank, uint16_t at)
 {
     return fx_rom_read(bank, at);
+}
+
+/* The console art's tile sets: video's blocks, unpacked the first time asked for. */
+const uint8_t *fx_art_tile_set(uint16_t n, uint32_t *bytes)
+{
+    enum { SETS = 32, ROOM = 0x20000 };
+    static uint8_t *set[SETS];
+    static uint32_t size[SETS];
+
+    if (n >= SETS || n > VIDEO_BLOCK_RESULTS_CARS)
+        return NULL;
+    if (!set[n]) {
+        set[n] = malloc(ROOM);
+        if (!set[n])
+            abort();
+        size[n] = video_block_unpack((VideoBlock)n, set[n], ROOM);
+    }
+    *bytes = size[n];
+    return set[n];
 }
 
 /* The part [u0, u1) x [v0, v1) of picture p, its texel (u, v) at
