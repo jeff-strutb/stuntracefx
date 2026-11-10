@@ -200,6 +200,10 @@ static void split_picture(uint16_t word)
  * $0D23: the map rows, sprites, BG2's scroll and the palette; the results'
  * big picture; the turning picture; the menu's map; the car's picture.
  */
+/* The car picture table's words are where the original kept the three art
+   pictures in work RAM ($7F:63D7, race_pictures here). */
+enum { RACE_PICTURES_ORIGINAL = 0x63D7 };
+
 static void split_upload(void)
 {
     switch (g.split_stage) {
@@ -212,9 +216,9 @@ static void split_upload(void)
         CgramUploadAll();
         break;
     case 0x04:
-        race_vram_write(0x6C00, fx_ram + 0x4000, 0x0A00);
-        race_vram_write(0x6240, fx_ram + 0x4600, 0x0140);
-        race_vram_write(0x6340, fx_ram + 0x4800, 0x0140);
+        race_vram_write(0x6C00, fx_ram + FX_RESULTS_PICTURE, 0x0A00);
+        race_vram_write(0x6240, fx_ram + FX_RESULTS_PICTURE + 0x0600, 0x0140);
+        race_vram_write(0x6340, fx_ram + FX_RESULTS_PICTURE + 0x0800, 0x0140);
         g.split_stage = 0x00;
         break;
     case 0x0A:
@@ -234,7 +238,7 @@ static void split_upload(void)
         map_buffer_to_vram(0x7800, 0x0000, 0x0800);
         break;
     case 0x12:
-        race_vram_write(0x6600, race_pictures + (uint16_t)(g.overlay_picture - 0x63D7), 0x0C00);
+        race_vram_write(0x6600, race_pictures + (uint16_t)(g.overlay_picture - RACE_PICTURES_ORIGINAL), 0x0C00);
         g.split_stage = 0x02;
         break;
     default:
