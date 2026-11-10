@@ -184,10 +184,18 @@ bank's samples with `nshvc_sample_load`, then sends a message saying it is ready
 convert; they share code only where reading shows the behaviour is the same.
 
 **Data.** A tool reads the player's own ROM at build time, verified by checksum, and writes the game's data (not its code) to one
-asset, read through `nshvc_asset_*`. Correction to the first version of this plan, which promised no address lookup would remain: the
-game's tables, models and scripts refer to each other by bank and address in their own format, so that data stays in that format,
-read through one accessor (`data/cart.h`). Named tables replace addresses in the game's C where the code names them. `ports/stuntracefx/assets.csv`
-(2,052 ranges) is the starting inventory.
+asset, read through `nshvc_asset_*`. The game's tables, models and scripts refer to each other by bank and address in their own
+format, so that data stays in that format. How the game's C reaches it (ruled 2026-11-09, under section 8.2: a named address is still
+an SNES address under another name, so `cart8/16(BANK, NAMED_TABLE + i)` does not pass):
+- **Where tables live:** each table's place in the cartridge image is written once, in `data/` only, as the asset's index (as in
+  `assets.csv`).
+- **What game code sees:** each table is typed data with its own accessor or array, named for what it holds, for example a struct
+  array filled once at load, or `uint8_t course_lap_count(int course)`. Outside `data/` the game's C holds no bank, no address
+  constant and no `cart8`/`cart16` call.
+- **Data that points to other data** by bank and address in its own format (scripts, models, lists) is passed as an opaque reference
+  value that `data/` resolves. Such a reference is data, not a constant in code.
+
+`ports/stuntracefx/assets.csv` (2,052 ranges) is the starting inventory.
 
 **Saves and input.** `save/records.c`'s data as the game's own struct through `nshvc_save_*`, written where the SRAM was written.
 `nshvc_input` replaces the joypad code. The keyboard, touch and controller code in `ports/stuntracefx/front` goes, since the engine
