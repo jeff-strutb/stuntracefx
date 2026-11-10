@@ -123,11 +123,15 @@ static void granite_build(void)
     if (ch > WIDE_CELLS)
         ch = WIDE_CELLS;
     for (cy = 0; cy < ch; cy++) {
-        int y0 = 8 * cy - sy, row = cy + ky;
+        /* the picture's row the cell's first line shows on: a layer shows
+           its map's line (row + 1 + scroll), as the original's did */
+        int y0 = 8 * cy - sy - 1, row = cy + ky;
 
         for (cx = 0; cx < cw; cx++) {
             int x0 = 8 * cx - sx, col = cx + kx;
-            int inside = x0 > -8 && x0 < 256 && y0 > -8 && y0 < 224;
+            /* the page's rows from 28 on were never filled (the original's
+               last line showed the first of them, black): the granite */
+            int inside = x0 > -8 && x0 < 256 && y0 > -8 && y0 < 224 && (row & 31) < 28;
 
             mw.cells[cy * cw + cx] = inside ? mw.pages[(col >> 5) & 1][((row & 31) << 5) | (col & 31)]
                                             : granite_cell(col, row);
