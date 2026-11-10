@@ -52,10 +52,9 @@ typedef struct {
 
 _Static_assert(sizeof(SaveFile) == 1024, "the save is the cartridge's 1 KB");
 
-/* The save lives where it always did: the top of the Super FX RAM (the
-   race reads and writes parts of it by address there). */
-#include "system/chip.h"
-#define save (*(SaveFile *)&fx_ram[0xFC00])
+/* The save: the original's record ($70:FC00-$FFFF in its cartridge RAM), kept
+   by the game as its own struct and written to the save file. */
+extern SaveFile save;
 
 void save_load(void);                   /* at the game's start: reads the file and makes it valid */
 void save_commit(void);                 /* after any change */

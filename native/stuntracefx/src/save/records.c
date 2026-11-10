@@ -12,6 +12,8 @@
 #include "save/save.h"
 #include "system/state.h"
 
+SaveFile save;
+
 static const char SAVE_NAME[] = "save";
 
 /* The tables the records read, in bank $07. */
