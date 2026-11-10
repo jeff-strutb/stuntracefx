@@ -5902,3 +5902,48 @@ FxCarCollideResult FxCarCollide(uint16_t place_x, uint16_t place_y, uint16_t mod
     }
 }
 
+
+/* the push at a variant by its routine word: moved from fx/dispatch.c (the chip jumps through a register) */
+FxPushAtVariantResult FxPushAtVariant(uint16_t point_x, uint16_t point_y, uint16_t point_z, uint16_t push_x, uint16_t push_y, uint16_t model_record, uint16_t *stack, uint16_t count)
+{
+
+    switch (count) {
+    case 0x9A9B:
+        { FxPushAt4Result tr_ = FxPushAt4(point_x, point_y, point_z, stack); return (FxPushAtVariantResult){tr_.place_x, tr_.place_y, tr_.model_record}; }
+    case 0x99A1:
+        { FxPushAt2Result tr_ = FxPushAt2(point_x, point_y, point_z, stack); return (FxPushAtVariantResult){tr_.push_x, tr_.push_y, tr_.model_record}; }
+    case 0x99C9:
+        { FxPushAt1Result tr_ = FxPushAt1(point_x, point_y, point_z, stack); return (FxPushAtVariantResult){tr_.push_x_out, tr_.push_y_out, tr_.model_record}; }
+    case 0x99EE:
+        { FxPushAtHalfResult tr_ = FxPushAtHalf(point_x, point_y, point_z, stack); return (FxPushAtVariantResult){tr_.push_x, tr_.push_y, tr_.model_record}; }
+    case 0x9A19:
+        { FxPushAtQuarterResult tr_ = FxPushAtQuarter(point_x, point_y, point_z, stack); return (FxPushAtVariantResult){tr_.push_x, tr_.push_y, tr_.model_record}; }
+    case 0x9A4A:
+        { FxPushAt4TwistResult tr_ = FxPushAt4Twist(point_x, point_y, point_z, stack); return (FxPushAtVariantResult){tr_.push_x, tr_.push_y, tr_.model_record}; }
+    default:
+        fx_bad_dispatch(count);
+    }
+}
+
+
+/* a record's handler, by the word +$0A holds: moved from fx/dispatch.c (the chip jumps through a register) */
+FxRecordHandlerResult FxRecordHandler(uint16_t pose_cos, uint16_t pose_sin, uint16_t pose_aux, uint16_t record, uint16_t pose_matrix_ptr, uint16_t *stack, uint16_t count, uint16_t rom_at)
+{
+
+    switch (count) {
+    case 0x907A:
+        { FxObjectBounceResult tr_ = FxObjectBounce(pose_cos, pose_aux, record, stack, rom_at); return (FxRecordHandlerResult){tr_.world_sum_x_out, tr_.world_sum_y_out, tr_.push_flags_high_out, tr_.record_restored_out, tr_.working_record_out, tr_.rom_at_out, tr_.up ? tr_.up == 0 ? 0 : tr_.up - 0 : 0}; }
+    case 0x90E8:
+        { FxObjectMarkTouchedResult tr_ = FxObjectMarkTouched(pose_cos, pose_sin, pose_aux, record, pose_matrix_ptr, rom_at); return (FxRecordHandlerResult){tr_.pose_cos_out, tr_.pose_sin_out, tr_.pose_aux_out, tr_.record_out, tr_.pose_matrix_ptr_out, tr_.rom_at_out, 0}; }
+    case 0x910A:
+        { FxObjectFallResult tr_ = FxObjectFall(pose_cos, pose_aux, record, stack, rom_at); return (FxRecordHandlerResult){tr_.world_sum_x_out, tr_.world_sum_y_out, tr_.push_flags_high_out, tr_.record_restored_out, tr_.working_record_out, tr_.rom_at_out, tr_.up ? tr_.up == 0 ? 0 : tr_.up - 0 : 0}; }
+    case 0x916D:
+        { FxObjectCollideOnlyResult tr_ = FxObjectCollideOnly(pose_cos, pose_sin, pose_aux, record, stack, rom_at); return (FxRecordHandlerResult){tr_.last_collision_result, tr_.last_contact_ptr, tr_.last_other_ptr_out, tr_.record_restored, tr_.collided_record, tr_.rom_at_out, tr_.up ? tr_.up == 0 ? 0 : tr_.up - 0 : 0}; }
+    case 0x9185:
+        { FxObjectDropResult tr_ = FxObjectDrop(pose_cos, pose_aux, record, stack, rom_at); return (FxRecordHandlerResult){tr_.last_collision_result, tr_.last_contact_ptr, tr_.last_other_ptr_out, tr_.record_restored, tr_.collided_record, tr_.rom_at_out, tr_.up ? tr_.up == 0 ? 0 : tr_.up - 0 : 0}; }
+    case 0xB1A1:
+        { FxCarHandlerResult tr_ = FxCarHandler(pose_cos, pose_sin, pose_aux, record, pose_matrix_ptr, stack); return (FxRecordHandlerResult){tr_.course_x_part, tr_.next_entry_end_ptr, tr_.pose_aux_out, tr_.car_out, tr_.pose_matrix_ptr_out, tr_.rom_at, tr_.up ? tr_.up == 0 ? 0 : tr_.up - 0 : 0}; }
+    default:
+        fx_bad_dispatch(count);
+    }
+}
