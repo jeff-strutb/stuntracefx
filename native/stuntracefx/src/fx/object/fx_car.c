@@ -12,6 +12,7 @@
  * C: src/stuntracefx/object/fx_car.c.
  */
 
+#include "data/fx_handlers.h"
 #include "fx/fx.h"
 
 /*
@@ -460,7 +461,7 @@ FxCarPoseResult FxCarPose(uint16_t car_record, uint16_t *stack)
  * for +$5A, +$5C, +$16, +$40, +$1A, +$0C, +$0E, +$10, then (after $2396 =
  * the script offset from $8090 and 10 bytes skipped) +$2A and +$14. The
  * record also gets +$96 = $2392, +$24 = $0022, +$64 = the old $2390, +$66 =
- * the script, +$0A = $B1A1.
+ * the script, +$0A = the car's handler (FX_HANDLER_CAR).
  * Entry: the S-CPU starts it. Exit: (at its STOP) R1 = R8 = the car; R10
  * = $0240; the others as FxCarPose leaves them.
  */
@@ -583,7 +584,7 @@ void FxCarNew(void)
         amount = fx_ldw(GSU_IN_AMOUNT);
         fx_stw((uint16_t)(record + FXCAR_64), amount);
         fx_stw((uint16_t)(record + FXCAR_SCRIPT), record_arg);
-        fx_stw((uint16_t)(record + FXREC_HANDLER), 0xB1A1);
+        fx_stw((uint16_t)(record + FXREC_HANDLER), fx_handler_word(FX_HANDLER_CAR));
         amount_low_byte = fx_getb();
         script_ptr_1 = (uint16_t)(record_arg + 1);
         fx_r14(script_ptr_1);
