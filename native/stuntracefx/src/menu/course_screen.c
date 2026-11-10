@@ -13,9 +13,6 @@
 #include "system/state.h"
 #include "video/video.h"
 
-/* where the chip unpacks a picture in its RAM */
-enum { CHIP_PICTURE = 0x3000 };
-
 /* A sprite's place (X low byte, Y high) or look (character low, attributes high) from a word. */
 static void sprite_word(int n, int look, uint16_t w)
 {
@@ -59,25 +56,6 @@ static void sprite_highs_from_list(int first, MenuSpriteList list)
 }
 
 /*
- * @routine 7F:0B56 CoursePictureToVram
- * @routine 7F:0BCE VramWriteRowFromGsuRam
- * WHAT IT DOES: Four 64-word rows of the course's picture, as unpacked, to
- * the sprites' characters $48, $58, $4C and $5C (four each), from the
- * offset the table at $7F:0B96 gives for the course.
- */
-static void course_picture_to_art(void)
-{
-    static const unsigned to[4] = { RACE_ART_SPRITES + 0x48, RACE_ART_SPRITES + 0x58, RACE_ART_SPRITES + 0x4C, RACE_ART_SPRITES + 0x5C };
-    uint16_t w = menu_course_picture_place(g.course);
-    uint16_t t = (uint16_t)(w & 0xFFFC);
-    uint16_t src = (uint16_t)((uint16_t)((uint16_t)(t >> 8 | t << 8) << 1) + ((w & 3) << 7));
-    int i;
-
-    for (i = 0; i < 4; i++, src = (uint16_t)(src + 0x0200))
-        race_art_write(to[i], &fx_ram[CHIP_PICTURE + src], 0x80);
-}
-
-/*
  * @routine 0B:FA24 MenuCourseScreenSetup
  * WHAT IT DOES: Sets up the two-player race screen: the two players' sounds,
  * every sprite hidden, four sprite groups from the lists at $0B:FCA2, the
@@ -102,8 +80,8 @@ void MenuCourseScreenSetup(void)
     sprites_from_list(64, MENU_COURSE_SPRITES_64);
     sprite_highs_from_list(64, MENU_COURSE_SPRITES_64_SIZES);
     OamDmaAll();
-    menu_picture_unpack(MENU_PIC_COURSE_PICTURES, fx_ram + CHIP_PICTURE, 0xC000);
-    course_picture_to_art();
+    menu_picture_unpack(MENU_PIC_COURSE_PICTURES, fx_ram + FX_UNPACK_AREA, 0xC000);
+    race_course_picture_write();
     sprites_use_tiles(race_video.tiles, 0x200, 0x300);
     g.raster_chain = RASTER_TWO_PLAYERS;    /* the original's stage $08 */
     g.fx_upload_stage = 0x000C;
