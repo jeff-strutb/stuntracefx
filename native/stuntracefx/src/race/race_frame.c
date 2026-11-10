@@ -9,6 +9,7 @@
 #include "hud/hud.h"
 #include "menu/menu.h"
 #include "object/object.h"
+#include "pause/pause.h"
 #include "race/race.h"
 #include "save/save.h"
 #include "system/chip.h"
@@ -27,7 +28,7 @@ enum { STEP_NONE, STEP_COURSE_MENU, STEP_ONE_PLAYER, STEP_TWO_PLAYERS };
 
 static struct {
     int kind;
-    uint64_t at;                        /* nshvc_updates() during that step's update */
+    uint64_t at;                        /* pause_game_updates() during that step's update */
     uint8_t pace;
     unsigned steps;
 } step_clock;
@@ -50,14 +51,16 @@ static void step_end(int kind, uint8_t pace)
     fx_tween_step_end();
     step_clock.steps++;
     step_clock.kind = kind;
-    step_clock.at = nshvc_updates();
+    step_clock.at = pause_game_updates();
     step_clock.pace = pace;
 }
 
 /* How far a picture drawn now lies from the last step's end to the next:
    (updates since that step + between) / the step's updates, in [0, 1]. The
-   engine counts an update once update() returns, so in a draw after the
-   step's own update the count is one past `at`. */
+   updates are the game's own (pause_game_updates: the engine's less those
+   the pause screen held), so a pause stops the clock. The engine counts an
+   update once update() returns, so in a draw after the step's own update
+   the count is one past `at`. */
 float race_step_progress(float between)
 {
     float t;
@@ -66,7 +69,7 @@ float race_step_progress(float between)
         return 0.0f;
     if (step_clock.steps < 2)
         return 1.0f;                    /* the screen's first step: nothing before it */
-    t = ((float)((int64_t)(nshvc_updates() - step_clock.at) - 1) + between) / (float)step_clock.pace;
+    t = ((float)((int64_t)(pause_game_updates() - step_clock.at) - 1) + between) / (float)step_clock.pace;
     return t < 0.0f ? 0.0f : t > 1.0f ? 1.0f : t;
 }
 
