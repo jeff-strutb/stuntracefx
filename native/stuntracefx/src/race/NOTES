@@ -159,6 +159,8 @@ halts: debug code the shipped game never calls.
   07:E9BB RaceEndWaitBigSpritesRts  (ROM calls: 0)
   07:E9C0 LapBannerNone  (ROM calls: 0)
   07:EB0F RaceEndWindowStepsRts  (ROM calls: 0)
+  07:EE94 FxNoiseFillScreen  (a Super FX program in fx/render/hud.c: its
+      address as an S-CPU immediate or table word in asm/stuntracefx: 0)
   07:F7F4 FxGlyph16x32Double  (a Super FX program in fx/render/hud.c: its
       address as an S-CPU immediate or table word in asm/stuntracefx: 0;
       FxGlyph24x32Bank04 at $F3D2: 1, FxGlyph8x16 at $F329: 16)

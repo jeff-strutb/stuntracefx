@@ -9,7 +9,7 @@
  * pixel, each value one of the piece's four colours.
  *
  * Not yet converted, still as the generator wrote them on the chip's RAM:
- * the tile converters and the noise fills below. (The instruction after a
+ * the tile converters below. (The instruction after a
  * branch or LOOP in them, its delay slot, always runs.)
  */
 
@@ -143,166 +143,44 @@ void FxTiles2bppTo4bppLow(void)
 }
 
 
+/* The static's seed, kept between its fills (the original's $70:021C,
+   which only these programs read). */
+static uint16_t noise_seed;
+
+/* The static's random numbers: the seed's low byte XORed into its high byte
+   and the bytes swapped; twice the low byte of that XORed in, shifted down a
+   bit, XOR $FF00. The bit shifted out XORs in $8180; without it, $AA55
+   becomes 0. */
+static uint16_t noise_next(uint16_t seed)
+{
+    uint16_t t = (uint16_t)((uint16_t)((seed & 0xFF) << 8) ^ seed);
+    uint16_t mix = (uint16_t)(t << 8 | t >> 8);
+    uint16_t low = (uint16_t)((uint16_t)(mix << 8 | mix >> 8) & 0xFF);
+    uint16_t feedback = (uint16_t)((uint16_t)(low + low) ^ mix);
+    uint16_t next = (uint16_t)((feedback >> 1) ^ 0xFF00);
+
+    if (feedback & 1)
+        return (uint16_t)(next ^ 0x8180);
+    return (uint16_t)(next + 0x55AB) ? next : 0;
+}
+
 /*
  * @routine 07:EE88 FxNoiseFill
- * WHAT IT DOES: Fills the 16 x 128 pixels at the screen's top left with
- * random grey: each pixel's colour is one of the eight words at $70:3C00
- * (NoiseFillWithRamp writes $80, $90, ... $F0 there), picked by a random number
- * seeded from and saved back to $70:021C.
- * HOW: The generator (seed in R8): t = the seed with its low byte XORed into
- * its high byte, its bytes swapped; the new seed is (twice the old low byte
- * XOR t) >> 1, XOR $FF00; when the bit shifted out is set it is XORed with
- * $8180, and when not, a value of $AA55 becomes 0. Its low three bits pick
- * the colour. RPIX at the end writes the pixel caches out.
- * Entry: started by the S-CPU. Exit: R0 = the pixel at (0, 128); R1 = 0; R2
- * = 128; R3 = $FF00; R4 = $AA55; R5 = $8180; R6 = $3C00; R8 = the new seed;
- * R9 = 16; R10 = 0; R12 = 0; R13 = $EEBB; plot options 0; the colour of the
- * last pixel; the last RAM address $021C; CY set, OV clear, S, Z from the
- * RPIX.
+ * WHAT IT DOES: The static: the 16 x 128 pixels at the screen's top left,
+ * each row handed to the GPU with the seed at its start (fx_noise_row, whose
+ * image holds the colours), the seed stepped once a pixel and kept for the
+ * next fill. The original picked each pixel's colour from the ramp
+ * NoiseFillWithRamp writes; the GPU's image has the same ramp.
  */
 void FxNoiseFill(void)
 {
-    uint16_t count;
-    uint16_t plot_x;
-    uint16_t plot_y;
-    uint16_t noise_mix;
-    uint16_t row_count;
-    uint16_t rows_left;
-    uint16_t noise_next;
-    uint16_t noise_seed;
-    uint16_t fill_colour;
-    uint16_t colour_index;
-    uint16_t noise_feedback;
-    uint16_t noise_low_byte;
-
-    fx_cmode(0);
-    row_count = 0x0080;
-    noise_seed = fx_ldw(FX_NOISE_SEED);
-    plot_x = 0;
-    plot_y = 0;
-    for (;;) {
-        count = 0x0010;
-        fx_noise_row(plot_x, plot_y, 0x0010, noise_seed, 0x3C00);
-        for (;;) {
-            noise_mix = (uint16_t)(((uint16_t)((uint16_t)(noise_seed & 0xFF) << 8 | (uint16_t)(noise_seed & 0xFF) >> 8) ^ noise_seed) << 8 | ((uint16_t)((uint16_t)(noise_seed & 0xFF) << 8 | (uint16_t)(noise_seed & 0xFF) >> 8) ^ noise_seed) >> 8);
-            noise_low_byte = (uint16_t)((uint16_t)(noise_mix << 8 | noise_mix >> 8) & 0xFF);
-            noise_feedback = ((uint16_t)(noise_low_byte + noise_low_byte) ^ noise_mix);
-            noise_next = ((uint16_t)(noise_feedback >> 1) ^ 0xFF00);
-            if (!(noise_feedback & 1)) {
-                if ((uint16_t)(noise_next + 0x55AB) != 0) {
-                    noise_seed = noise_next;
-                } else {
-                    noise_next = 0;
-                    noise_seed = noise_next;
-                }
-            } else {
-                noise_next = (noise_next ^ 0x8180);
-                noise_seed = noise_next;
-            }
-            colour_index = (noise_next & 7);
-            fill_colour = fx_ldw((uint16_t)((uint16_t)(colour_index + colour_index) + 0x3C00));
-            fx_color((uint8_t)fill_colour);
-            count = (uint16_t)(count - 1);
-            plot_x = (uint16_t)(plot_x + 1);
-            if (count != 0) {
-                continue;
-            } else {
-                break;
-            }
-        }
-        plot_x = 0;
-        rows_left = (uint16_t)(row_count - 1);
-        row_count = rows_left;
-        plot_y = (uint16_t)(plot_y + 1);
-        if (rows_left != 0) {
-            continue;
-        } else {
-            break;
-        }
+    for (uint16_t y = 0; y < 128; y++) {
+        fx_noise_row(0, y, 16, noise_seed, 0);   /* the ramp argument is unused (fx_draw.c) */
+        for (int i = 0; i < 16; i++)
+            noise_seed = noise_next(noise_seed);
     }
-    fx_rpix((uint8_t)plot_x, (uint8_t)plot_y);
-    fx_stw(FX_NOISE_SEED, noise_seed);
-    return;
 }
 
-
-/*
- * @routine 07:EE94 FxNoiseFillScreen
- * WHAT IT DOES: FxNoiseFill over the whole screen: $70:003A pixels across
- * and $70:003E + 1 lines down.
- * HOW: The width and height into R9 and R10, then FxNoiseFill's body. No
- * script has started it yet.
- * Entry: started by the S-CPU. Exit: as FxNoiseFill, with R9 = the width and
- * R2 = the lines drawn.
- */
-void FxNoiseFillScreen(void)
-{
-    uint16_t count;
-    uint16_t plot_x;
-    uint16_t plot_y;
-    uint16_t last_row;
-    uint16_t noise_mix;
-    uint16_t row_count;
-    uint16_t rows_left;
-    uint16_t noise_next;
-    uint16_t noise_seed;
-    uint16_t fill_colour;
-    uint16_t colour_index;
-    uint16_t screen_width;
-    uint16_t noise_feedback;
-    uint16_t noise_low_byte;
-
-    fx_cmode(0);
-    screen_width = fx_ldw(0x003A);
-    last_row = fx_ldw(0x003E);
-    row_count = (uint16_t)(last_row + 1);
-    noise_seed = fx_ldw(FX_NOISE_SEED);
-    plot_x = 0;
-    plot_y = 0;
-    for (;;) {
-        count = screen_width;
-        fx_noise_row(plot_x, plot_y, screen_width, noise_seed, 0x3C00);
-        for (;;) {
-            noise_mix = (uint16_t)(((uint16_t)((uint16_t)(noise_seed & 0xFF) << 8 | (uint16_t)(noise_seed & 0xFF) >> 8) ^ noise_seed) << 8 | ((uint16_t)((uint16_t)(noise_seed & 0xFF) << 8 | (uint16_t)(noise_seed & 0xFF) >> 8) ^ noise_seed) >> 8);
-            noise_low_byte = (uint16_t)((uint16_t)(noise_mix << 8 | noise_mix >> 8) & 0xFF);
-            noise_feedback = ((uint16_t)(noise_low_byte + noise_low_byte) ^ noise_mix);
-            noise_next = ((uint16_t)(noise_feedback >> 1) ^ 0xFF00);
-            if (!(noise_feedback & 1)) {
-                if ((uint16_t)(noise_next + 0x55AB) != 0) {
-                    noise_seed = noise_next;
-                } else {
-                    noise_next = 0;
-                    noise_seed = noise_next;
-                }
-            } else {
-                noise_next = (noise_next ^ 0x8180);
-                noise_seed = noise_next;
-            }
-            colour_index = (noise_next & 7);
-            fill_colour = fx_ldw((uint16_t)((uint16_t)(colour_index + colour_index) + 0x3C00));
-            fx_color((uint8_t)fill_colour);
-            count = (uint16_t)(count - 1);
-            plot_x = (uint16_t)(plot_x + 1);
-            if (count != 0) {
-                continue;
-            } else {
-                break;
-            }
-        }
-        plot_x = 0;
-        rows_left = (uint16_t)(row_count - 1);
-        row_count = rows_left;
-        plot_y = (uint16_t)(plot_y + 1);
-        if (rows_left != 0) {
-            continue;
-        } else {
-            break;
-        }
-    }
-    fx_rpix((uint8_t)plot_x, (uint8_t)plot_y);
-    fx_stw(FX_NOISE_SEED, noise_seed);
-    return;
-}
 
 /* ---- the HUD's pieces: glyphs, the banner's picture and scaled sprites ---- */
 

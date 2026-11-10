@@ -192,7 +192,6 @@ _Noreturn void fx_bad_dispatch(uint16_t at);
 #define FX_NEAR_SIDE 0x2644
 #define FX_NEAR_X 0x264C
 #define FX_NEAR_Z 0x264A
-#define FX_NOISE_SEED 0x021C
 #define FX_OBJECT_KIND 0x0048
 #define FX_OBJECT_MATRIX_1 0x00E6
 #define FX_OBJECT_MATRIX_2 0x00E8
@@ -610,7 +609,6 @@ FxModelSpriteResult FxModelSprite(uint16_t draw_list_start, uint16_t draw_list_e
 FxModelSpriteColourResult FxModelSpriteColour(uint16_t draw_list_start, uint16_t rom_at);
 void FxNearestCar(uint16_t prev_nearest_car, uint16_t *stack);
 void FxNoiseFill(void);
-void FxNoiseFillScreen(void);
 void FxNopReturn(void);
 void FxNopReturnCache(void);
 FxObjectBounceResult FxObjectBounce(uint16_t place_x, uint16_t pose_aux, uint16_t record, uint16_t *stack, uint16_t rom_at);

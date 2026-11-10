@@ -120,7 +120,9 @@ void ViewMatrixMake(void)
 /*
  * @routine 03:FE8D GsuEE88Ramp
  * WHAT IT DOES: Writes the ramp $80, $90, ... $F0 to the chip's RAM and
- * runs program $07:EE88.
+ * runs program $07:EE88. The program no longer reads the ramp (the GPU's
+ * noise image has its own); the writes stay, because $3C00 lies in the
+ * unpack area and picture 0, until the chip's RAM images are settled.
  */
 void NoiseFillWithRamp(void)
 {

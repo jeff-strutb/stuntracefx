@@ -1647,18 +1647,6 @@ static void entry_FxTiles2bppTo4bppLow(void)
     FxTiles2bppTo4bppLow();
 }
 
-static void entry_FxNoiseFill(void)
-{
-
-    FxNoiseFill();
-}
-
-static void entry_FxNoiseFillScreen(void)
-{
-
-    FxNoiseFillScreen();
-}
-
 static void entry_FxMatrixTranspose(void)
 {
     uint16_t ret = gsu.r[11];
@@ -2697,7 +2685,5 @@ const FxEntry fx_entries[] = {
     {0x04CF08, entry_FxNearestCar, "FxNearestCar"},
     {0x07EE50, entry_FxTiles2bppTo4bppHigh, "FxTiles2bppTo4bppHigh"},
     {0x07EE59, entry_FxTiles2bppTo4bppLow, "FxTiles2bppTo4bppLow"},
-    {0x07EE88, entry_FxNoiseFill, "FxNoiseFill"},
-    {0x07EE94, entry_FxNoiseFillScreen, "FxNoiseFillScreen"},
     {0, 0, 0}
 };
