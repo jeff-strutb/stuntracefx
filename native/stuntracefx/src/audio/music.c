@@ -9,7 +9,7 @@
 #include "driver_sfx.h"
 #include "music.h"
 
-enum { MESSAGE_BANK, MESSAGE_STOP, MESSAGE_PUSH, MESSAGE_QUEUES_RESET, MESSAGE_PORT0, MESSAGE_FRAME };
+enum { MESSAGE_BANK, MESSAGE_STOP, MESSAGE_PUSH, MESSAGE_QUEUES_RESET, MESSAGE_PORT0, MESSAGE_FRAME, MESSAGE_PAUSE };
 
 typedef struct {
     uint8_t kind, battle;
@@ -31,6 +31,7 @@ typedef struct {
 static Queue queue[2];
 static uint8_t wire[4];                 /* what the game has on the four ports */
 static uint32_t samples;
+static uint8_t paused;                  /* the pause screen: the sound silent, the driver held */
 
 /* Whether the echo on ports 0 and 1 answers what they now carry: a count of
    the changes to each port, the count a music tick's exchange took in, the
@@ -173,11 +174,15 @@ void music_tick(void)
         case MESSAGE_FRAME:
             ports_send(&m);
             break;
+        case MESSAGE_PAUSE:
+            paused = m.value;
+            nshvc_sound_mute(paused);
+            break;
         default:
             break;
         }
     }
-    if (d.bank)
+    if (d.bank && !paused)
         music_pass();
 }
 
@@ -233,6 +238,16 @@ void music_stop(void)
 
     memset(&m, 0, sizeof m);
     m.kind = MESSAGE_STOP;
+    send(&m);
+}
+
+void music_pause(int on)
+{
+    Message m;
+
+    memset(&m, 0, sizeof m);
+    m.kind = MESSAGE_PAUSE;
+    m.value = (uint8_t)(on != 0);
     send(&m);
 }
 
