@@ -75,6 +75,18 @@ uint16_t hud_frame_middle_width(uint16_t at);                   /* the time fram
 uint16_t hud_frame_middle_step(uint16_t at);
 uint8_t hud_laps_to_go_height(uint16_t step);
 
+/* The HUD's glyphs: what hud_piece.glyph takes, each a picture in the
+   cartridge. ' ' is none (the programs that check draw nothing for it). */
+uint16_t hud_glyph_16x32(char c);       /* '0'-'9', 'A'-'Z', '.', '\'' and '"' (the time's marks), '!' */
+uint16_t hud_glyph_8x16(char c);        /* '0'-'9', 'A'-'Z', '.', '\'' and '"' */
+uint16_t hud_glyph_8x16_number(uint8_t n);  /* the same set by number: 0-9 the digits, 10-35 the letters */
+uint16_t hud_glyph_24x40(char c);       /* the big sprites' letters: A C E F G H I K L M N O P R S T U V */
+uint16_t hud_place_glyph(char c);       /* the finishing places' 24 x 32 glyphs in bank $04: "1st", "2nd", "3rd" */
+uint16_t hud_pieces_at(uint16_t x, uint16_t line);  /* the HUD's pieces picture (the time frame, its tails,
+                                                       the grids): the piece from pixel x (a multiple of 4), line */
+typedef enum { HUD_RANK_FIRST, HUD_RANK_OTHER, HUD_STUNT_MARK, HUD_STUNT_MARK_USED } HudPicture;
+uint16_t hud_picture(HudPicture p);     /* the rank badges (24 x 16) and Stunt Trax's marks (16 x 16) */
+
 /* the countdown digit's shape: its size, its scale and its place */
 typedef struct { uint16_t size, scale, x, y; } HudShape;
 HudShape hud_countdown_shape(uint16_t n);

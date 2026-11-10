@@ -406,7 +406,7 @@ static void lap_override(void)
 /* 07:E7DC: the last lap done. */
 static void lap_finish(int player)
 {
-    uint16_t w;
+    const char *place;                  /* the finishing place the glyph sprites spell */
 
     g.finish_mark = 0;
     g.lap_shown--;
@@ -431,15 +431,9 @@ static void lap_finish(int player)
         finish_both();
         return;
     }
-    if (g.player_rank[0] < 0x02)
-        w = 0x8000;
-    else if (g.player_rank[0] == 0x02)
-        w = 0x8006;
-    else
-        w = 0x800C;
-    g.glyph_sprite_glyph[0] = w;
-    g.glyph_sprite_glyph[1] = (uint16_t)(w + 0x0400);
-    g.glyph_sprite_glyph[2] = w == 0x8000 ? 0x8012 : 0x8018;
+    place = g.player_rank[0] < 0x02 ? "1st" : g.player_rank[0] == 0x02 ? "2nd" : "3rd";
+    for (int k = 0; k < 3; k++)
+        g.glyph_sprite_glyph[k] = hud_place_glyph(place[k]);
     g.glyph_sprite_step[0] = 0x0021;
     g.glyph_sprite_step[1] = 0x001D;
     g.glyph_sprite_step[2] = 0x0019;

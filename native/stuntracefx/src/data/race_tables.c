@@ -111,6 +111,77 @@ uint16_t hud_frame_middle_width(uint16_t at) { return word_at(FRAME_MIDDLE_WIDTH
 uint16_t hud_frame_middle_step(uint16_t at) { return word_at(FRAME_MIDDLE_STEPS, at); }
 uint8_t hud_laps_to_go_height(uint16_t step) { return byte_at(LAPS_TO_GO_HEIGHTS, step); }
 
+/* The glyphs' pictures in bank $15, each set a sheet of rows 32 bytes apart,
+   2 bits a pixel: the 16 x 32 set from $8000 (eight to a row of $400), the
+   8 x 16 set from $9400 (sixteen to a row of $200), the big sprites' 24 x 40
+   letters from $A000 (five to a row, the rows at $A000, $A500, $AA00 and
+   $B000), the HUD's pieces from $9A00
+   (the original names that one $1A00, the same bytes), the rank badges and
+   Stunt Trax's marks. A glyph's number in the first two sets: the digits,
+   then the letters, then the marks. */
+enum { SHEET_16X32 = 0x8000, SHEET_8X16 = 0x9400, SHEET_24X40 = 0xA000, SHEET_PIECES = 0x1A00 };
+static const uint16_t k_pictures[] = {
+    [HUD_RANK_FIRST] = 0x080E, [HUD_RANK_OTHER] = 0x0A0E,
+    [HUD_STUNT_MARK] = 0x0C08, [HUD_STUNT_MARK_USED] = 0x0E08,
+};
+static const char k_big_letters[] = "ACEFGHIKLMNOPRSTUV";
+
+/* the number of c among the digits, the letters and `marks` after them; -1 for ' ' */
+static int glyph_number(char c, const char *marks)
+{
+    int i;
+
+    if (c == ' ')
+        return -1;
+    if (c >= '0' && c <= '9')
+        return c - '0';
+    if (c >= 'A' && c <= 'Z')
+        return 10 + (c - 'A');
+    for (i = 0; marks[i]; i++)
+        if (marks[i] == c)
+            return 36 + i;
+    return -1;
+}
+
+uint16_t hud_glyph_16x32(char c)
+{
+    int n = glyph_number(c, ".'\"!");
+
+    return n < 0 ? 0 : (uint16_t)(SHEET_16X32 + (n / 8) * 0x400 + (n % 8) * 4);
+}
+uint16_t hud_glyph_8x16_number(uint8_t n) { return (uint16_t)(SHEET_8X16 + (n / 16) * 0x200 + (n % 16) * 2); }
+uint16_t hud_glyph_8x16(char c)
+{
+    int n = glyph_number(c, ".'\"");
+
+    return n < 0 ? 0 : hud_glyph_8x16_number((uint8_t)n);
+}
+uint16_t hud_glyph_24x40(char c)
+{
+    int n;
+
+    for (n = 0; k_big_letters[n] && k_big_letters[n] != c; n++)
+        ;
+    static const uint16_t rows[4] = {SHEET_24X40, 0xA500, 0xAA00, 0xB000};   /* the fourth row is not $500 on */
+
+    return c == ' ' || !k_big_letters[n] ? 0 : (uint16_t)(rows[n / 5] + (n % 5) * 6);
+}
+/* the places' sheet in bank $04, 24 x 32 glyphs six bytes apart: "123td" in
+   its first row, "snr" in the row $400 below */
+uint16_t hud_place_glyph(char c)
+{
+    static const char rows[2][6] = {"123td", "snr"};
+    int r, i;
+
+    for (r = 0; r < 2; r++)
+        for (i = 0; rows[r][i]; i++)
+            if (rows[r][i] == c)
+                return (uint16_t)(0x8000 + r * 0x400 + i * 6);
+    return 0;
+}
+uint16_t hud_pieces_at(uint16_t x, uint16_t line) { return (uint16_t)(SHEET_PIECES + line * 32 + x / 4); }
+uint16_t hud_picture(HudPicture p) { return k_pictures[p]; }
+
 HudShape hud_countdown_shape(uint16_t n)
 {
     uint16_t at = (uint16_t)(n * 8);

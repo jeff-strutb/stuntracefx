@@ -60,10 +60,10 @@ static void rank_badge(uint8_t kind)
 {
     if ((kind & 0x0F) == 1) {
         GlyphColours(0x0F, 0x05, 0x0E);
-        hud_piece.glyph = 0x080E;
+        hud_piece.glyph = hud_picture(HUD_RANK_FIRST);
     } else {
         GlyphColours(0x0F, 0x08, 0x0E);
-        hud_piece.glyph = 0x0A0E;
+        hud_piece.glyph = hud_picture(HUD_RANK_OTHER);
     }
     hud_piece.x = 0x0074;
     hud_piece.y = 0x003C;
@@ -123,10 +123,11 @@ static void word_at(uint16_t x, uint16_t y)
     hud_piece.y = y;
 }
 
-static void word_letters(const uint16_t *pieces, int n)
+/* a word in the 16 x 32 letters, each through FxGlyph16RowsFromTop (a space draws nothing) */
+static void word_letters(const char *word)
 {
-    for (int i = 0; i < n; i++) {
-        hud_piece.glyph = pieces[i];
+    for (; *word; word++) {
+        hud_piece.glyph = hud_glyph_16x32(*word);
         FxGlyph16RowsFromTop(&hud_piece);
     }
 }
@@ -134,85 +135,69 @@ static void word_letters(const uint16_t *pieces, int n)
 /* @routine 07:9883 GsuF15BThree */
 void ShowWordWin(void)
 {
-    static const uint16_t p[3] = {0x9000, 0x8808, 0x881C};
-
     word_at(0x0030, 0x0018);
     GlyphColours(0x0F, 0x04, 0x05);
-    word_letters(p, 3);
+    word_letters("WIN");
 }
 
 /* @routine 07:997F GsuF15BFive */
 void ShowWordCrash(void)
 {
-    static const uint16_t p[5] = {0x8410, 0x8C0C, 0x8408, 0x8C10, 0x8804};
-
     word_at(0x0018, 0x0018);
     GlyphColours(0x0F, 0x09, 0x0A);
-    word_letters(p, 5);
+    word_letters("CRASH");
 }
 
 /* @routine 07:98F4 GsuF15BFourA */
 void ShowWordLose(void)
 {
-    static const uint16_t p[4] = {0x8814, 0x8C00, 0x8C10, 0x8418};
-
     word_at(0x0028, 0x0018);
     GlyphColours(0x0F, 0x07, 0x08);
-    word_letters(p, 4);
+    word_letters("LOSE");
 }
 
 /* @routine 07:9A24 GsuF15BFourB */
 void ShowWordDraw(void)
 {
-    static const uint16_t p[4] = {0x8414, 0x8C0C, 0x8408, 0x9000};
-
     word_at(0x0028, 0x0018);
     GlyphColours(0x0F, 0x0D, 0x03);
-    word_letters(p, 4);
+    word_letters("DRAW");
 }
 
 /* @routine 07:8653 GsuF15BTwoLines: sixteen pieces, three from ($50, 8) and thirteen from (0, $2C). */
 void ShowGetAllTheStars(uint16_t input)
 {
-    static const uint16_t first[3] = {0x8800, 0x8418, 0x8C14};
-    static const uint16_t second[13] = {0x8408, 0x8814, 0x8814, 0x0000, 0x8C14, 0x8804, 0x8418,
-                                        0x0000, 0x8C10, 0x8C14, 0x8408, 0x8C0C, 0x8C10};
-
     hud_piece.h = input;
     hud_piece.w = 0x0010;
     hud_piece.x = 0x0050;
     hud_piece.y = 0x0008;
     GlyphColours(0xBF, 0xB7, 0xB6);
-    word_letters(first, 3);
+    word_letters("GET");
     hud_piece.x = 0x0000;
     hud_piece.y = 0x002C;
-    word_letters(second, 13);
+    word_letters("ALL THE STARS");
 }
 
-static void glyph_rows_at(uint16_t input, uint16_t x, const uint16_t *pieces, int n)
+static void glyph_rows_at(uint16_t input, uint16_t x, const char *word)
 {
     hud_piece.h = input;
     hud_piece.w = 0x0010;
     hud_piece.x = x;
     hud_piece.y = 0x0028;
     GlyphColours(0xBF, 0xB7, 0xB6);
-    word_letters(pieces, n);
+    word_letters(word);
 }
 
 /* @routine 07:8821 GlyphRowsAt32 */
 void GlyphRowsAt32(uint16_t input)
 {
-    static const uint16_t p[9] = {0x881C, 0x8418, 0x9004, 0x8C14, 0x0000, 0x8408, 0x8C0C, 0x8418, 0x8408};
-
-    glyph_rows_at(input, 0x0020, p, 9);
+    glyph_rows_at(input, 0x0020, "NEXT AREA");
 }
 
 /* @routine 07:8929 GlyphRowsAt56 */
 void GlyphRowsAt56(uint16_t input)
 {
-    static const uint16_t p[6] = {0x841C, 0x8808, 0x881C, 0x8808, 0x8C10, 0x8804};
-
-    glyph_rows_at(input, 0x0038, p, 6);
+    glyph_rows_at(input, 0x0038, "FINISH");
 }
 
 static void piece_scale(uint16_t w, uint16_t h, uint16_t u, uint16_t v)
@@ -246,7 +231,7 @@ void TimeFrameTailB(void)
         return;
     hud_piece.w = v;
     hud_piece.u = hud_frame_tail_b_step(g.hud_point_index);
-    hud_piece.glyph = 0x1E00;
+    hud_piece.glyph = hud_pieces_at(0, 32);
     FxScaledSprite13(&hud_piece, chip_view_right(), chip_view_bottom());
 }
 
@@ -265,7 +250,7 @@ void TimeFrameTailA(void)
         return;
     hud_piece.w = v;
     hud_piece.u = hud_frame_tail_a_step(g.hud_point_index);
-    hud_piece.glyph = 0x1C00;
+    hud_piece.glyph = hud_pieces_at(0, 16);
     FxScaledSprite12(&hud_piece, chip_view_right(), chip_view_bottom());
 }
 
@@ -275,10 +260,10 @@ void TimeFrameLeft(void)
     uint16_t x = (uint16_t)(g.hud_point_x - 8), y = g.hud_point_y;
 
     piece_scale(0x0100, 0x0100, 0x0100, 0x0100);
-    scaled_piece(x, y, 0x1A10);
-    scaled_piece(x, (uint16_t)(y + 0x18), 0x1B10);
+    scaled_piece(x, y, hud_pieces_at(64, 0));
+    scaled_piece(x, (uint16_t)(y + 0x18), hud_pieces_at(64, 8));
     piece_scale(0x0100, 0x0200, 0x0100, 0x0080);
-    scaled_piece(x, (uint16_t)(y + 8), 0x1A18);
+    scaled_piece(x, (uint16_t)(y + 8), hud_pieces_at(96, 0));
 }
 
 /* @routine 07:9486 GsuFA5AThreeShifted */
@@ -288,24 +273,24 @@ void TimeFrameLeftShifted(void)
     uint16_t y = g.hud_point_y;
 
     piece_scale(0x0100, 0x0100, 0x0100, 0x0100);
-    scaled_piece(x, y, 0x1A12);
-    scaled_piece(x, (uint16_t)(y + 0x18), 0x1B12);
+    scaled_piece(x, y, hud_pieces_at(72, 0));
+    scaled_piece(x, (uint16_t)(y + 0x18), hud_pieces_at(72, 8));
     piece_scale(0x0100, 0x0200, 0x0100, 0x0080);
-    scaled_piece(x, (uint16_t)(y + 8), 0x1C18);
+    scaled_piece(x, (uint16_t)(y + 8), hud_pieces_at(96, 16));
 }
 
 /* @routine 07:9366 GsuFA5ASix */
 void TimeFrameRight(void)
 {
     static const uint16_t dy[6] = {0x0000, 0x0008, 0x0010, 0x0018, 0x0008, 0x0010};
-    static const uint16_t piece[6] = {0x1A0E, 0x1A16, 0x1B16, 0x1B0E, 0x1A0E, 0x1B0E};
+    static const uint8_t piece_x[6] = {56, 88, 88, 56, 56, 56}, piece_line[6] = {0, 0, 8, 8, 0, 8};
     uint16_t x = (uint16_t)(hud_frame_x_offset(g.hud_point_index) + g.hud_point_x);
 
     piece_scale(0x0100, 0x0100, 0x0100, 0x0100);
     for (int i = 0; i < 6; i++) {
         if (i == 4)
             x = (uint16_t)(x + 8);
-        scaled_piece(x, (uint16_t)(g.hud_point_y + dy[i]), piece[i]);
+        scaled_piece(x, (uint16_t)(g.hud_point_y + dy[i]), hud_pieces_at(piece_x[i], piece_line[i]));
     }
 }
 
@@ -314,11 +299,11 @@ void TimeFrameRightMirrored(void)
 {
     static const uint16_t dy[6] = {0x0000, 0x0008, 0x0010, 0x0018, 0x0008, 0x0010};
     static const uint16_t dx[6] = {0xFFF8, 0xFFF8, 0xFFF8, 0xFFF8, 0xFFF0, 0xFFF0};
-    static const uint16_t piece[6] = {0x1A0C, 0x1A14, 0x1B14, 0x1B0C, 0x1A0C, 0x1B0C};
+    static const uint8_t piece_x[6] = {48, 80, 80, 48, 48, 48}, piece_line[6] = {0, 0, 8, 8, 0, 8};
 
     piece_scale(0x0100, 0x0100, 0x0100, 0x0100);
     for (int i = 0; i < 6; i++)
-        scaled_piece((uint16_t)(g.hud_point_x + dx[i]), (uint16_t)(g.hud_point_y + dy[i]), piece[i]);
+        scaled_piece((uint16_t)(g.hud_point_x + dx[i]), (uint16_t)(g.hud_point_y + dy[i]), hud_pieces_at(piece_x[i], piece_line[i]));
 }
 
 /* @routine 07:9660 GsuFA5AFromTables */
@@ -327,20 +312,19 @@ void TimeFrameMiddle(void)
     uint16_t i = g.hud_point_index;
 
     piece_scale(hud_frame_middle_width(i), 0x0100, hud_frame_middle_step(i), 0x0100);
-    scaled_piece(g.hud_point_x, g.hud_point_y, 0x1B18);
+    scaled_piece(g.hud_point_x, g.hud_point_y, hud_pieces_at(96, 8));
     hud_piece.h = 0x0100;
     hud_piece.v = 0x0100;
-    scaled_piece(g.hud_point_x, (uint16_t)(g.hud_point_y + 0x18), 0x1D18);
+    scaled_piece(g.hud_point_x, (uint16_t)(g.hud_point_y + 0x18), hud_pieces_at(96, 24));
     hud_piece.h = 0x0200;
     hud_piece.v = 0x0080;
-    scaled_piece(g.hud_point_x, (uint16_t)(g.hud_point_y + 8), 0x1A55);
+    scaled_piece(g.hud_point_x, (uint16_t)(g.hud_point_y + 8), hud_pieces_at(84, 2));
 }
 
 /* @routine 07:833B GsuPiecesStep10CB: steps the counter at $10CB and draws eleven pieces. */
 void ShowLapsToGo(void)
 {
-    static const uint16_t piece[11] = {0x800C, 0x8814, 0x8408, 0x8C04, 0x8C10, 0x0000,
-                                       0x8C14, 0x8C00, 0x0000, 0x8800, 0x8C00};
+    static const char words[] = "3LAPS TO GO";   /* the 3, then the rest four pixels further */
     uint16_t n = (uint16_t)(g.piece_step + 1);
 
     if (n >= 0x0014)
@@ -352,7 +336,7 @@ void ShowLapsToGo(void)
     GlyphColours(0xBF, 0xBA, 0xB9);
     hud_piece.h = hud_laps_to_go_height(n);
     for (int i = 0; i < 11; i++) {
-        hud_piece.glyph = piece[i];
+        hud_piece.glyph = hud_glyph_16x32(words[i]);
         if (n < 8)
             FxGlyph16RowsFromTop(&hud_piece);
         else
@@ -365,17 +349,15 @@ void ShowLapsToGo(void)
 /* @routine 07:9AB0 HudSixGlyphs */
 void HudSixGlyphs(void)
 {
-    static const uint16_t glyph[6] = {0x8C10, 0x8C04, 0x8814, 0x8408, 0x8C10, 0x8804};
-
     GlyphColours(0x0F, 0x06, 0x0E);
     word_at(0x0010, 0x0018);
-    word_letters(glyph, 6);
+    word_letters("SPLASH");
 }
 
-/* A 24 x 40 sprite, piece src. */
-static void sprite24x40(uint16_t src)
+/* A big sprite's letter, 24 x 40. */
+static void sprite24x40(char letter)
 {
-    hud_piece.glyph = src;
+    hud_piece.glyph = hud_glyph_24x40(letter);
     FxSprite24x40(&hud_piece, chip_view_right(), chip_view_bottom());
 }
 
@@ -386,7 +368,7 @@ static void sprite24x40(uint16_t src)
  */
 static void big_sprites_count_draw(void)
 {
-    static const uint16_t near_[4] = {0xA018, 0xA000, 0xA518, 0xA00C}, far_[4] = {0xAA06, 0xB00C, 0xA00C, 0xAA12};
+    static const char near_[] = "GAME", far_[] = "OVER";
     static const uint8_t need_far[3] = {7, 8, 9};
 
     hud_piece.u = 0x0100;
@@ -435,7 +417,7 @@ static void big_sprites_at(uint16_t x, uint16_t y)
 /* @routine 07:9D67 BigSpritesRow6 */
 void BigSpritesRow6(void)
 {
-    static const uint16_t first[4] = {0xB000, 0xA506, 0xA518, 0xA00C}, second[2] = {0xB006, 0xAA0C};
+    static const char first[] = "TIME", second[] = "UP";
 
     if (!big_sprites_start(0xBF, 0xB5, 0xBB))
         return;
@@ -450,7 +432,7 @@ void BigSpritesRow6(void)
 /* @routine 07:9C9F BigSpritesRow6B */
 void BigSpritesRow6B(void)
 {
-    static const uint16_t src[6] = {0xAA18, 0xAA0C, 0xA512, 0xA000, 0xAA18, 0xA500};
+    static const char src[] = "SPLASH";
 
     if (!big_sprites_start(0xBF, 0xB3, 0xBE))
         return;
@@ -462,7 +444,7 @@ void BigSpritesRow6B(void)
 /* @routine 07:9E3B BigSpritesRow5 */
 void BigSpritesRow5(void)
 {
-    static const uint16_t src[5] = {0xA006, 0xAA12, 0xA000, 0xAA18, 0xA500};
+    static const char src[] = "CRASH";
 
     if (!big_sprites_start(0xBF, 0xBC, 0xBD))
         return;
@@ -474,8 +456,7 @@ void BigSpritesRow5(void)
 /* @routine 07:9B6F BigSpritesNine */
 void BigSpritesNine(void)
 {
-    static const uint16_t first[3] = {0xAA06, 0xB006, 0xB000}, second[2] = {0xAA06, 0xA012};
-    static const uint16_t third[4] = {0xAA12, 0xA000, 0xAA00, 0xA50C};
+    static const char first[] = "OUT", second[] = "OF", third[] = "RANK";
 
     if (!big_sprites_start(0xBF, 0xB7, 0xB6))
         return;
@@ -495,11 +476,11 @@ void BigSpritesNine(void)
 static void time_digits(const uint8_t *digits)
 {
     small_digit(digits[0]);
-    hud_piece.glyph = 0x980A;
+    hud_piece.glyph = hud_glyph_8x16('\'');
     FxGlyph8x16(&hud_piece);
     small_digit(digits[1]);
     small_digit(digits[2]);
-    hud_piece.glyph = 0x980C;
+    hud_piece.glyph = hud_glyph_8x16('"');
     FxGlyph8x16(&hud_piece);
     small_digit(digits[3]);
     small_digit(digits[4]);
@@ -534,11 +515,10 @@ void GlyphAtY60(uint16_t glyph, uint16_t x)
 /* @routine 04:DD61 GlyphRowY60From0 and its entries DD6E, DD7B, DD88, DD95, DDA2 */
 static void glyph_row(int from)
 {
-    static const uint16_t xs[6] = {0x0078, 0x0070, 0x0068, 0x0060, 0x0058, 0x0050};
-    static const uint16_t gs[6] = {0x9808, 0x9808, 0x9808, 0x941A, 0x960E, 0x9414};
+    static const char text[] = "AND...";     /* its letters from x $50, 8 apart, drawn from the right */
 
     for (int i = from; i < 6; i++)
-        GlyphAtY60(gs[i], xs[i]);
+        GlyphAtY60(hud_glyph_8x16(text[5 - i]), (uint16_t)(0x0050 + 8 * (5 - i)));
 }
 
 /*
@@ -599,7 +579,7 @@ void GlyphSpritesInit(void)
 
 static uint16_t digit_glyph(uint8_t digit)
 {
-    return (uint16_t)(0x9400 + ((digit & 0x0F) << 1));
+    return hud_glyph_8x16_number((uint8_t)(digit & 0x0F));
 }
 
 /* The glyph list's next slot: a glyph of the time row at x, line $68. */
@@ -640,10 +620,10 @@ static void glyph_list_message_and_time(uint16_t index, uint8_t min, uint8_t sec
         k++;
     }
     time_glyph(&slot, digit_glyph(hund), 0x4C);
-    time_glyph(&slot, 0x980A, 0x54);
+    time_glyph(&slot, hud_glyph_8x16('\''), 0x54);
     time_glyph(&slot, digit_glyph((uint8_t)(sec >> 4)), 0x5C);
     time_glyph(&slot, digit_glyph(sec), 0x64);
-    time_glyph(&slot, 0x980C, 0x6C);
+    time_glyph(&slot, hud_glyph_8x16('"'), 0x6C);
     time_glyph(&slot, digit_glyph((uint8_t)(min >> 4)), 0x74);
     time_glyph(&slot, digit_glyph(min), 0x7C);
 }
@@ -651,18 +631,16 @@ static void glyph_list_message_and_time(uint16_t index, uint8_t min, uint8_t sec
 /* @routine 07:A03F GlyphWordAt1C28 */
 void ShowBonusTrax(void)
 {
-    static const uint16_t g1[5] = {0x840C, 0x8C00, 0x881C, 0x8C18, 0x8C10};
-    static const uint16_t g2[4] = {0x8C14, 0x8C0C, 0x8408, 0x9004};
-
     word_at(0x001C, 0x0028);
     GlyphColours(0xBF, 0xBC, 0xBD);
-    word_letters(g1, 5);
+    word_letters("BONUS");
     hud_piece.x = (uint16_t)(hud_piece.x + 4);
-    word_letters(g2, 4);
+    word_letters("TRAX");
 }
 
-/* Three rows of three 8 x 8 glyphs: the glyphs are row * $100 + $1A, $1C, $1E. */
-static void glyph_grid3(uint16_t first, int switch_colours)
+/* Three rows of three 8 x 8 pieces from the HUD's pieces picture, from
+   pixel 104 of line `line` on. */
+static void glyph_grid3(uint16_t line, int switch_colours)
 {
     for (int r = 0; r < 3; r++) {
         if (r) {
@@ -674,7 +652,7 @@ static void glyph_grid3(uint16_t first, int switch_colours)
         for (int c = 0; c < 3; c++) {
             if (r == 0 && c == 2 && switch_colours)
                 GlyphColours(0xBF, 0xBA, 0xB9);
-            hud_piece.glyph = (uint16_t)((first + r) << 8 | (0x1A + 2 * c));
+            hud_piece.glyph = hud_pieces_at((uint16_t)(104 + 8 * c), (uint16_t)(line + 8 * r));
             FxGlyph8x8(&hud_piece);
         }
     }
@@ -686,7 +664,7 @@ void GlyphGrid1A(void)
     hud_piece.x = 0x0038;
     hud_piece.y = 0x0030;
     GlyphColours(0xBF, 0xB7, 0xB6);
-    glyph_grid3(0x1A, 1);
+    glyph_grid3(0, 1);
 }
 
 /* @routine 07:A27D GlyphGrid1D */
@@ -695,7 +673,7 @@ void GlyphGrid1D(void)
     hud_piece.x = 0x0038;
     hud_piece.y = 0x0048;
     GlyphColours(0xBF, 0xBB, 0xBE);
-    glyph_grid3(0x1D, 0);
+    glyph_grid3(24, 0);
 }
 
 /* The next step of the times display. */
@@ -850,20 +828,14 @@ void GlyphSlideThree(void)
         hud_piece.x = x;
         hud_piece.y = 0x0050;
         hud_piece.glyph = g.glyph_sprite_glyph[i];
-        switch (g.glyph_sprite_glyph[i]) {
-        case 0x8000:
+        if (g.glyph_sprite_glyph[i] == hud_place_glyph('1'))     /* the place number's colours by place */
             GlyphColours(0xBF, 0xB7, 0xB6);
-            break;
-        case 0x8006:
+        else if (g.glyph_sprite_glyph[i] == hud_place_glyph('2'))
             GlyphColours(0xBF, 0xBC, 0xBD);
-            break;
-        case 0x800C:
+        else if (g.glyph_sprite_glyph[i] == hud_place_glyph('3'))
             GlyphColours(0xBF, 0xBA, 0xB9);
-            break;
-        default:
+        else
             GlyphColours(0xBF, 0xB3, 0xBE);
-            break;
-        }
         FxGlyph24x32Bank04(&hud_piece);
     }
 }
@@ -988,19 +960,18 @@ void HudTimesDraw(void)
 /* @routine 07:A7AE HudLeadWordDraw */
 void HudLeadWordDraw(void)
 {
-    static const uint16_t first[4] = {0x9416, 0x941C, 0x9618, 0x961A};
-    static const uint16_t rest[6] = {0x9616, 0x941C, 0x9418, 0x9610, 0x9616, 0x941A};
+    static const char first[] = "BEST", rest[] = "RECORD";
 
     GlyphColours(0xBF, 0x11, 0xBD);
     hud_piece.x = 0x003C;
     hud_piece.y = 0x0048;
     for (int i = 0; i < 4; i++) {
-        hud_piece.glyph = first[i];
+        hud_piece.glyph = hud_glyph_8x16(first[i]);
         FxGlyph8x16(&hud_piece);
     }
     hud_piece.x = (uint16_t)(hud_piece.x + 8);
     for (int i = 0; i < 6; i++) {
-        hud_piece.glyph = rest[i];
+        hud_piece.glyph = hud_glyph_8x16(rest[i]);
         FxGlyph8x16(&hud_piece);
     }
 }
@@ -1018,11 +989,11 @@ void HudLapDigitsDraw(void)
     hud_piece.x = 0x0030;
     hud_piece.y = 0x0028;
     lap_digit(g.best_digits[0]);
-    hud_piece.glyph = 0x9014;
+    hud_piece.glyph = hud_glyph_16x32('\'');
     FxSprite16x32(&hud_piece, chip_view_right(), chip_view_bottom());
     lap_digit(g.best_digits[1]);
     lap_digit(g.best_digits[2]);
-    hud_piece.glyph = 0x9018;
+    hud_piece.glyph = hud_glyph_16x32('"');
     FxSprite16x32(&hud_piece, chip_view_right(), chip_view_bottom());
     lap_digit(g.best_digits[3]);
     lap_digit(g.best_digits[4]);
@@ -1035,14 +1006,14 @@ void HudBlankDraw(void)
     uint16_t n;
 
     GlyphColours(0xBF, 0xBA, 0xBD);
-    hud_piece.glyph = 0x0C08;
+    hud_piece.glyph = hud_picture(HUD_STUNT_MARK);
     hud_piece.y = 0x006C;
     for (int i = 0; i < 3; i++) {
         hud_piece.x = xs[i];
         FxGlyph16x16(&hud_piece);
     }
     GlyphColours(0xBF, 0xB7, 0xB6);
-    hud_piece.glyph = 0x0E08;
+    hud_piece.glyph = hud_picture(HUD_STUNT_MARK_USED);
     n = g.rivals_left & 0x000F;
     if (n > 2)
         return;
@@ -1055,8 +1026,7 @@ void HudBlankDraw(void)
 /* The two words at the glyph sprites' places, 8 further after the third glyph. */
 static void glyph_slide_draw(void)
 {
-    static const uint16_t one[6] = {0x8804, 0x8808, 0x8C14, 0x8408, 0x8814, 0x8814};
-    static const uint16_t two[8] = {0x8C14, 0x8804, 0x8418, 0x8410, 0x8408, 0x8C0C, 0x8C10, 0x901C};
+    static const char one[] = "HITALL", two[] = "THECARS!";    /* HIT ALL and THE CARS!, the gap after the third */
 
     GlyphColours(0xBF, 0xB7, 0xB6);
     hud_piece.x = g.glyph_sprite_x[0];
@@ -1064,7 +1034,7 @@ static void glyph_slide_draw(void)
     for (int i = 0; i < 6; i++) {
         if (i == 3)
             hud_piece.x = (uint16_t)(hud_piece.x + 8);
-        hud_piece.glyph = one[i];
+        hud_piece.glyph = hud_glyph_16x32(one[i]);
         FxSprite16x32(&hud_piece, chip_view_right(), chip_view_bottom());
     }
     GlyphColours(0xBF, 0xBC, 0xBD);
@@ -1073,7 +1043,7 @@ static void glyph_slide_draw(void)
     for (int i = 0; i < 8; i++) {
         if (i == 3)
             hud_piece.x = (uint16_t)(hud_piece.x + 8);
-        hud_piece.glyph = two[i];
+        hud_piece.glyph = hud_glyph_16x32(two[i]);
         FxSprite16x32(&hud_piece, chip_view_right(), chip_view_bottom());
     }
 }
