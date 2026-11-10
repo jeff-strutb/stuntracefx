@@ -133,10 +133,15 @@ static void granite_build(void)
     pic.bg[0].map = mw.wide;            /* the scroll stays the original's */
 }
 
+static uint32_t updates;
+
+uint32_t menu_window_updates(void) { return updates; }
+
 void menu_window_frame_end(void)
 {
     int i;
 
+    updates++;
     pic.fills_window = 1;
     for (i = 0; i < 3; i++)
         pic.layer_clip[i] = (mw.kept >> i) & 1;

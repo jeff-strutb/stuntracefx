@@ -31,6 +31,10 @@ void menu_window_car_origin(void);
 void menu_window_frame_end(void);
 void menu_window_frame_begin(void);
 
+/* the menus' updates so far: a picture between two updates eases between
+   the last two (menu_tween.c) */
+uint32_t menu_window_updates(void);
+
 /* A window's edge from the original's columns to the screen's: the left
    edge at column 0 and the right at 255 reach the screen's edges. */
 int32_t menu_window_left(int32_t x);
