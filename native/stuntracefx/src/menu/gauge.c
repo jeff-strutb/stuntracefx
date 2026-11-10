@@ -2,7 +2,7 @@
  * gauge.c: the speed gauges: from a held button in the menus and the
  * attract, from the car's speed in a race.
  */
-#include "data/cart.h"
+#include "data/menu_tables.h"
 #include "fx/fx.h"
 #include "menu/menu.h"
 #include "object/object.h"
@@ -10,32 +10,14 @@
 #include "system/game.h"
 #include "system/state.h"
 
-/* the needle's sprite by speed band, in bank $0B */
-enum { MENU_BANK = 0x0B, GAUGE_NEEDLE = 0xB158 };
-
 static uint16_t menu_gauge;             /* $117E */
 static uint16_t gauge2 = 0;             /* $1180 */
-
-/* The bytes of the gauge table for the kind of the vehicle object $0346,
-   by the handler word at +$27 of it. */
-static uint16_t gauge_table_index(uint16_t value)
-{
-    static const uint16_t kinds[5] = {0x81B9, 0x853D, 0x8411, 0x82E5, 0x8669};
-    static const uint16_t offsets[5] = {0x0000, 0x0098, 0x0130, 0x01C8, 0x0260};
-    uint16_t kind = obj_at(g.player_car)->car.car_script;
-    int i;
-
-    for (i = 0; i < 5; i++)
-        if (kind == kinds[i])
-            return (uint16_t)(value + offsets[i]);
-    return value;
-}
 
 /*
  * @routine 7F:11E9 GaugeFromSpeed
  * WHAT IT DOES: The speed at Super FX RAM $4A + offset (made positive and
- * halved when negative), capped and divided by 4, through the table at
- * $0B:B158; 0 stays 0.
+ * halved when negative), capped and divided by 4, through the needle
+ * table for the player's car; 0 stays 0.
  */
 static uint16_t gauge_from_speed(uint16_t offset)
 {
@@ -49,7 +31,7 @@ static uint16_t gauge_from_speed(uint16_t offset)
     if (a >= 0x0257)
         a = 0x0257;
     a = (uint16_t)(a >> 2);
-    return cart8(MENU_BANK, (uint16_t)(GAUGE_NEEDLE + gauge_table_index(a)));
+    return menu_gauge_needle(obj_at(g.player_car)->car.car_script, a);
 }
 
 /*

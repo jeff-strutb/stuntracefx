@@ -34,6 +34,7 @@ enum {
     LEADER_PALETTES = 0x05DA86,         /* words, by step */
     LETTER_TILES = 0x05DDD3,            /* words, by letter */
     COURSE_SPRITE_LISTS = 0x05FCA2,     /* words */
+    GAUGE_NEEDLES = 0x05B158,           /* bytes, by car and band */
     RECORD_TAGS = 0x03B4EB,             /* words, by entry */
     PANEL_ROWS_STUNT = 0x03D8D4,        /* words, by row */
     PANEL_COLUMNS_STUNT = 0x03D8DC,     /* bytes, by character */
@@ -166,6 +167,22 @@ uint16_t menu_letter_tile(int letter) { return word_at(LETTER_TILES + (uint32_t)
 uint16_t menu_course_sprite_word(MenuSpriteList list, int k)
 {
     return word_at(COURSE_SPRITE_LISTS + course_sprite_lists[list] + (uint32_t)k * 2);
+}
+
+uint8_t menu_gauge_needle(uint16_t car_script, int band)
+{
+    /* the cars' course scripts, as the car record names them, and each one's needles */
+    static const uint16_t scripts[5] = {0x81B9, 0x853D, 0x8411, 0x82E5, 0x8669};
+    static const uint16_t needles[5] = {0x0000, 0x0098, 0x0130, 0x01C8, 0x0260};
+    uint16_t at = (uint16_t)band;
+    int i;
+
+    for (i = 0; i < 5; i++)
+        if (car_script == scripts[i]) {
+            at = (uint16_t)(band + needles[i]);
+            break;
+        }
+    return byte_at(GAUGE_NEEDLES + at);
 }
 
 uint16_t records_first_tag(int entry) { return word_at(RECORD_TAGS + (uint32_t)entry * 2); }

@@ -127,6 +127,10 @@ typedef enum {
 } MenuSpriteList;
 uint16_t menu_course_sprite_word(MenuSpriteList list, int k);  /* word k of the list */
 
+/* the speed gauge's needle sprite by speed band (0-$95), for the car its
+   course script makes (the four cars and the others) */
+uint8_t menu_gauge_needle(uint16_t car_script, int band);
+
 /* --- the records ---------------------------------------------------------- */
 
 uint16_t records_first_tag(int entry);                  /* each sorted entry's first tag, 0-11 */
