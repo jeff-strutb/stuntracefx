@@ -17,6 +17,10 @@
 /* the sprite-table word lists, in bank $0B */
 enum { MENU_BANK = 0x0B, SPRITE_LISTS = 0xFCA2 };
 
+/* where the chip unpacks a picture in its RAM, and the course pictures'
+   places in it by course (a table in the data block, as the original's) */
+enum { CHIP_PICTURE = 0x3000, COURSE_PICTURE_PLACES = 0x0B96 };
+
 /* A sprite's place (X low byte, Y high) or look (character low, attributes high) from a word. */
 static void sprite_word(int n, int look, uint16_t w)
 {
@@ -70,13 +74,13 @@ static void sprite_highs_from_list(int first, uint16_t list)
 static void course_picture_to_art(void)
 {
     static const unsigned to[4] = { RACE_ART_SPRITES + 0x48, RACE_ART_SPRITES + 0x58, RACE_ART_SPRITES + 0x4C, RACE_ART_SPRITES + 0x5C };
-    uint16_t w = ram_code_7f16((uint16_t)(0x0B96 + 2 * g.course));
+    uint16_t w = ram_code_7f16((uint16_t)(COURSE_PICTURE_PLACES + 2 * g.course));
     uint16_t t = (uint16_t)(w & 0xFFFC);
     uint16_t src = (uint16_t)((uint16_t)((uint16_t)(t >> 8 | t << 8) << 1) + ((w & 3) << 7));
     int i;
 
     for (i = 0; i < 4; i++, src = (uint16_t)(src + 0x0200))
-        race_art_write(to[i], &fx_ram[0x3000 + src], 0x80);
+        race_art_write(to[i], &fx_ram[CHIP_PICTURE + src], 0x80);
 }
 
 /*

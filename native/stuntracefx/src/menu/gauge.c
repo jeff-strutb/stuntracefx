@@ -3,6 +3,7 @@
  * attract, from the car's speed in a race.
  */
 #include "data/cart.h"
+#include "fx/fx.h"
 #include "menu/menu.h"
 #include "object/object.h"
 #include "system/chip.h"
@@ -42,7 +43,7 @@ static uint16_t gauge_from_speed(uint16_t offset)
 
     if (!offset)
         return 0;
-    a = fx16((uint16_t)(0x4A + offset));
+    a = fx16((uint16_t)(offset + FXREC_SPEED));
     if (a & 0x8000)
         a = (uint16_t)((uint16_t)(~a + 1) >> 1);
     if (a >= 0x0257)
@@ -122,10 +123,10 @@ void SpeedGauge2Update(uint16_t offset)
         g.speed_gauge[1] = 0;
         return;
     }
-    v = fx16((uint16_t)(0x4A + offset));
+    v = fx16((uint16_t)(offset + FXREC_SPEED));
     t = (v & 0x8000) ? 0 : (uint16_t)(v >> 2);
-    if ((uint16_t)(fx16((uint16_t)(0x44 + offset)) - 4) & 0x8000) {
-        t = (uint16_t)((fx16((uint16_t)(0x50 + offset)) >> 3) + t);
+    if ((uint16_t)(fx16((uint16_t)(offset + FXCAR_44)) - 4) & 0x8000) {
+        t = (uint16_t)((fx16((uint16_t)(offset + FXPART_50)) >> 3) + t);
     } else {
         t = (uint16_t)((v & 0x8000) | v >> 1);
         if (t & 0x8000)
