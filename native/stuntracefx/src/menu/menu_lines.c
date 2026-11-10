@@ -121,7 +121,10 @@ static void table_indirect(MenuTable table, int32_t *values, int32_t before)
         values[v] = last;
 }
 
-/* Output lines 0-223 are the original's lines 1-224. */
+/* A table's first entry is written during line 0 and shows from line 1;
+   each later entry shows from the line after the one it is written in. So
+   values[v], the table's v-th line, is the original's line v + 1 and the
+   picture's row v (rows 0-223 are the original's lines 1-224). */
 /* Each field sent by line this picture, as line 0 has it: on a larger
    screen the rows above the picture take the frame's own state, not the
    lines', so the window and colour-maths fields among these are made the
@@ -203,10 +206,10 @@ static void send(nshvc_line_field field, const int32_t *values)
         }
     }
     if ((int)field < FIELDS) {
-        line0[field] = values[1];
+        line0[field] = values[0];
         sent[field] = 1;
     }
-    nshvc_lines(0, 224, field, values + 1);
+    nshvc_lines(0, 224, field, values);
 }
 
 static void send_tm(const int32_t *tm)
@@ -309,10 +312,11 @@ static void preview_lines(void)
             if (under_picture) {
                 int32_t use[LINES];
 
-                /* window 2 is the picture's 104 columns, one short of window 1 */
+                /* window 2 is the picture's 104 columns, one short of window 1,
+                   on its rows 96-183 */
                 for (v = 0; v < LINES; v++)
                     use[v] = NSHVC_WIN1;
-                for (v = 97; v <= 184; v++) {
+                for (v = 96; v <= 183; v++) {
                     if (!(a[v] & 2))
                         use[v] = NSHVC_WIN2;
                     a[v] |= 2;
