@@ -7,7 +7,6 @@
 #include <string.h>
 
 #include "audio/sound.h"
-#include "data/cart.h"
 #include "fx/fx.h"
 #include "hud/hud.h"
 #include "math/math.h"

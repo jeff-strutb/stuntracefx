@@ -15,5 +15,12 @@ typedef struct { uint8_t bank; uint16_t addr; } CartRef;
    form (the Super FX's hand-offs) and for messages */
 static inline uint8_t cart_ref_bank(CartRef r) { return r.bank; }
 static inline uint16_t cart_ref_address(CartRef r) { return r.addr; }
+/* and back from that form, as a program's state keeps it (the Super FX's RAM) */
+static inline CartRef cart_ref(uint8_t bank, uint16_t address)
+{
+    CartRef r = {bank, address};
+
+    return r;
+}
 
 #endif

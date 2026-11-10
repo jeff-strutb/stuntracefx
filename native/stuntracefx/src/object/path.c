@@ -1,14 +1,12 @@
 /*
  * path.c: objects (the camera directors) that follow a path of commands in
- * the table at $08:85B9. The object's +$29 is its offset into the table; the
- * commands act on the object and on the camera its +$4F links to.
+ * the path table (data/object_tables). The object's +$29 is its offset into
+ * the table; the commands act on the object and on the camera its +$4F
+ * links to.
  */
-#include "data/cart.h"
 #include "object/object.h"
 
-enum { PATH_TABLE = 0x85B9 };
-
-static uint16_t path16(uint16_t at) { return cart16(0x08, (uint16_t)(PATH_TABLE + at)); }
+static uint16_t path16(uint16_t at) { return path_word(at); }
 
 /* One halving that rounds negative results toward zero. */
 static uint16_t halve(uint16_t v)
@@ -43,7 +41,7 @@ int ObjectPathCommand(Object *o)
         o->director.path = (uint16_t)(o->director.path + 4);
     } else if (cmd == 1) {
         uint16_t diff[3];
-        unsigned n = cart8(0x08, (uint16_t)(PATH_TABLE + t + 3));
+        unsigned n = path_byte((uint16_t)(t + 3));
 
         o->director.steps = path16((uint16_t)(t + 2)) & 0x00FF;
         for (int i = 0; i < 3; i++)

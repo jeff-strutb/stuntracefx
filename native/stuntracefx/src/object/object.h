@@ -12,7 +12,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "data/cart.h"
+#include "data/object_tables.h"
 #include "data/ref.h"
 #include "fx/fx.h"
 #include "math/math.h"
@@ -173,30 +173,16 @@ extern RecordContacts record_contacts;
 enum {
     FX_NEW_CAR_X = 0x0068, FX_NEW_CAR_Y = 0x002C, FX_NEW_CAR_Z = 0x002E, /* FxCarNew's place */
     FX_NEW_CAR_HEADING = 0x0022,        /* and its heading, as the high byte */
-    FX_CAR_ATTACHMENTS = 0x2392,        /* in: the car object's +$4A; out: its attachment list, from OBJECT_LISTS */
-    FX_CAR_CAMERA_POINTS = 0x2396,      /* the made car's camera point list, from OBJECT_LISTS */
+    FX_CAR_ATTACHMENTS = 0x2392,        /* in: the car object's +$4A; out: its attachment list, in the object lists */
+    FX_CAR_CAMERA_POINTS = 0x2396,      /* the made car's camera point list, in the object lists */
     FX_RECORDS_422 = 0x2482,            /* the number of mode $0422 records made (FxRecordNew422) */
     FX_REPLAY_FLAGS = 0x273C,
     FX_COURSE_FLAGS = 0x26F2, FX_TRACK_TABLE = 0x1092, FX_TRACK_TABLE_BANK = 0x1094
 };
 
-/* the cartridge's tables the object code reads through */
-enum {
-    FACING_FRAMES_32 = 0xE8AF,          /* $08: a sprite's frame by its turn to the camera, 32 steps (ObjectFacingFrame32) */
-    FACING_FRAMES_64 = 0xC056,          /* $08: the same by 64 steps (ObjectFacingFrame64) */
-    JUMP_RISE = 0xB32B,                 /* $08: a rise by a car's jump timer (ObjectMoveForward) */
-    EYE_BLINK = 0xE57F,                 /* $08: an eye's looks through a blink, from the second word: plain, half, shut, half, plain */
-    EYE_BLINK_TO_STARTLED = 0xE5AD,     /* plain, half, shut, half startled, startled */
-    EYE_BLINK_TO_PLAIN = 0xE5DB,        /* startled, half startled, shut, half, plain */
-    EYE_BLINK_STARTLED = 0xE609,        /* startled, half startled, shut, half startled, startled */
-    OBJECT_DATA = 0x8000,               /* $09: entries the data names by their offset from here */
-    OBJECT_LISTS = 0x8090               /* $09: lists the data names by their offset from here */
-};
-/* an entry at OBJECT_DATA: a child's or an attachment's */
+/* an entry of the object data (data/object_tables' object_entry_word): a
+   child's or an attachment's */
 enum { DATA_MODEL = 0, DATA_LOOK = 2, DATA_SIZE = 4, DATA_HANDLER = 6, DATA_HANDLER_BANK = 8 };
-static inline uint16_t object_data16(uint16_t at, unsigned field) { return cart16(0x09, (uint16_t)(OBJECT_DATA + at + field)); }
-static inline uint8_t object_list8(uint16_t at) { return cart8(0x09, (uint16_t)(OBJECT_LISTS + at)); }
-static inline uint16_t object_list16(uint16_t at) { return cart16(0x09, (uint16_t)(OBJECT_LISTS + at)); }
 
 /* Models: 28-byte records in the cartridge's table at $A040, each named by
    its number there; model 0 is none (drawn by its record or not at all). */

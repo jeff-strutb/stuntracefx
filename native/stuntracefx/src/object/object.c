@@ -20,7 +20,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "data/cart.h"
 #include "data/object_tables.h"
 #include "fx/fx.h"
 #include "math/math.h"
@@ -31,17 +30,6 @@
 
 ObjectTable objects;
 Camera cameras[2];
-
-/* The trigger areas, data in the block of code the original copies from the
-   cartridge's $02:8000 to work RAM and runs at $7E:A2D9; they name one
-   another by their place there. */
-enum {
-    CODE_BLOCK_RUN = 0xA2D9,            /* where the block runs: the places its data names are from here */
-    TRIGGER_AREAS_BY_HEIGHT = 0xC61D,   /* a word for each step of the view's height: its area */
-    TRIGGER_AREA_SPLIT = 0xC661,        /* the fixed area on the split screen or with course flag bit 7 */
-    TRIGGER_AREA_SINGLE = 0xC696        /* the fixed area otherwise */
-};
-static const uint8_t *code_block(uint16_t at) { return cart_at(0x02, (uint16_t)(0x8000 + (uint16_t)(at - CODE_BLOCK_RUN))); }
 
 static uint16_t asr1(uint16_t v) { return (uint16_t)((v >> 1) | (v & 0x8000)); }
 
@@ -163,7 +151,7 @@ void PlayerStartleIfRecord(uint16_t value)
  */
 uint8_t ObjectFacingFrame32(const Object *o, uint8_t base, uint8_t value)
 {
-    return cart8(0x08, (uint16_t)(FACING_FRAMES_32 + (uint8_t)(value + o->heading + base) / 8));
+    return facing_frame_32((uint8_t)(value + o->heading + base) / 8);
 }
 
 /* 0x100 | the byte ObjectPlaceOnParent last read the table at $08:E8AF by
@@ -173,7 +161,7 @@ uint16_t object_gaze(const Object *o, int side)
 {
     uint16_t gz = objects.gaze[obj_slot(o)][side];
 
-    if (!gz || o->sprite_turn[side] != (uint8_t)(cart8(0x08, (uint16_t)(FACING_FRAMES_32 + (uint8_t)gz / 8)) | 0x80))
+    if (!gz || o->sprite_turn[side] != (uint8_t)(facing_frame_32((uint8_t)gz / 8) | 0x80))
         return 0;
     return gz;
 }
@@ -185,7 +173,7 @@ uint16_t object_gaze(const Object *o, int side)
  */
 uint8_t ObjectFacingFrame64(const Object *o, uint8_t turn)
 {
-    return cart8(0x08, (uint16_t)(FACING_FRAMES_64 + (uint8_t)(o->heading - turn) / 4));
+    return facing_frame_64((uint8_t)(o->heading - turn) / 4);
 }
 
 /*
@@ -434,7 +422,7 @@ void ObjectAttachLinked(Object *o, Object *other)
         t = (uint16_t)(t + 8);
     else if (g.hud_mode == 3)
         t = (uint16_t)(t + 6);
-    cam->word32 = object_list16(t);
+    cam->word32 = object_list_word(t);
     cam->word35 = cam->word37 = cam->word39 = 0;
     memset(cam->turn_words, 0, sizeof cam->turn_words);
     cam->mode = 0x0005;
@@ -470,17 +458,17 @@ void ObjectGroupsActivate(void)
  * each cell inside the window and not $2E, an entry of its code and its
  * bucket number.
  */
-static void BucketTriggersFromArea(const uint8_t *rec)
+static void BucketTriggersFromArea(TriggerArea area)
 {
-    uint16_t row = (uint16_t)(((uint16_t)((rec[3] << 8) >> 2)) | (rec[3] & 0x80 ? 0xC000 : 0));
-    uint16_t col0 = (uint16_t)-(uint16_t)(rec[2] << 1);
-    const uint8_t *cell = rec + 4;
+    uint16_t row = (uint16_t)(((uint16_t)((area.top << 8) >> 2)) | (area.top & 0x80 ? 0xC000 : 0));
+    uint16_t col0 = (uint16_t)-(uint16_t)(area.left << 1);
+    const uint8_t *cell = area.cells;
     unsigned at = 0;
 
-    for (unsigned rows = rec[1]; rows; rows--) {
+    for (unsigned rows = area.rows; rows; rows--) {
         uint16_t col = col0;
 
-        for (unsigned cols = rec[0]; cols; cols--, col = (uint16_t)(col + 2)) {
+        for (unsigned cols = area.cols; cols; cols--, col = (uint16_t)(col + 2)) {
             uint8_t c = *cell++;
 
             if (((uint16_t)(col + g.bucket_origin[1]) & 0xFFC0) || ((uint16_t)(row + g.bucket_origin[2]) & 0xF800) || c == 0x2E)
@@ -503,11 +491,8 @@ static void BucketTriggersFromArea(const uint8_t *rec)
 void BucketTriggersFromView(void)
 {
     uint16_t at = (uint16_t)((((g.view_angles[1] >> 8 & 0xFF) >> 3) + 1) & 0xFE);
-    const uint8_t *entry = code_block((uint16_t)(TRIGGER_AREAS_BY_HEIGHT + at));
-    uint16_t area = (uint16_t)(entry[0] | entry[1] << 8);
-
     memcpy(g.bucket_origin, g.view_area_origin, sizeof g.bucket_origin);
-    BucketTriggersFromArea(code_block(area));
+    BucketTriggersFromArea(trigger_area(trigger_area_for_height(at)));
 }
 
 /*
@@ -518,7 +503,7 @@ void BucketTriggersFromView(void)
 void BucketTriggersFixedArea(void)
 {
     memcpy(g.bucket_origin, g.view_fixed_origin, sizeof g.bucket_origin);
-    BucketTriggersFromArea(code_block(g.split_screen || (g.course_flags & 0x0080) ? TRIGGER_AREA_SPLIT : TRIGGER_AREA_SINGLE));
+    BucketTriggersFromArea(trigger_area(trigger_area_fixed(g.split_screen || (g.course_flags & 0x0080) ? TRIGGER_FIXED_SPLIT : TRIGGER_FIXED_SINGLE)));
 }
 
 /*
@@ -918,7 +903,7 @@ Vec16 ObjectTurnVector(const Object *o, int8_t x, int8_t y, int8_t z)
  */
 void ObjectMoveForward(Object *o)
 {
-    uint8_t speed = cart8(0x08, (uint16_t)(JUMP_RISE + rec_get(o->record, FXCAR_JUMP_TIMER)));
+    uint8_t speed = jump_rise(rec_get(o->record, FXCAR_JUMP_TIMER));
     Vec16 v = ObjectTurnVector(o, 0, (int8_t)speed, 0);
 
     o->x = (uint16_t)(o->x + (uint16_t)(v.x * 4));

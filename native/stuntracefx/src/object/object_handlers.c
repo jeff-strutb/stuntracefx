@@ -10,7 +10,6 @@
 #include <string.h>
 
 #include "audio/sound.h"
-#include "data/cart.h"
 #include "fx/fx.h"
 #include "math/math.h"
 #include "race/race.h"
@@ -426,14 +425,14 @@ void ObjectChildrenSpawn(Object *o)
         if (rec_get(rec, FXPART_FLAGS) & 0x0200)
             continue;
         t = rec_get(rec, FXPART_CHILD);
-        look = object_data16(t, DATA_LOOK);
-        n = ObjectSpawn(object_data16(t, DATA_MODEL));
+        look = object_entry_word(t, DATA_LOOK);
+        n = ObjectSpawn(object_entry_word(t, DATA_MODEL));
         if (!n)
             continue;
         if (look) {
             n->draw_flags |= 0x08;
             n->material = 0;
-            n->size = (uint8_t)object_data16(t, DATA_SIZE);
+            n->size = (uint8_t)object_entry_word(t, DATA_SIZE);
             n->child.look = look;
             if (g.split_screen)
                 n->child.look = (uint16_t)(n->child.look + 2);
@@ -793,7 +792,7 @@ static void offset_on_parent(Object *o, const Object *p, int sh, int with14)
 void ObjectAttachSpawn(Object *o)
 {
     uint16_t i = fxram_get(FX_CAR_ATTACHMENTS);
-    unsigned n = object_list8(i);
+    unsigned n = object_list_byte(i);
 
     i = (uint16_t)(i + 1);
     for (; n; n--, i = (uint16_t)(i + 5)) {
@@ -803,20 +802,20 @@ void ObjectAttachSpawn(Object *o)
         if (!a)
             continue;
         a->parent = obj_ref(o);
-        k = object_list16(i);
-        a->model = object_data16(k, DATA_MODEL);
-        look = object_data16(k, DATA_LOOK);
-        a->handler = object_data16(k, DATA_HANDLER);
-        a->handler_bank = (uint8_t)object_data16(k, DATA_HANDLER_BANK);
+        k = object_list_word(i);
+        a->model = object_entry_word(k, DATA_MODEL);
+        look = object_entry_word(k, DATA_LOOK);
+        a->handler = object_entry_word(k, DATA_HANDLER);
+        a->handler_bank = (uint8_t)object_entry_word(k, DATA_HANDLER_BANK);
         if (look) {
             a->draw_flags |= 0x08;
             a->material = 0;
-            a->size = (uint8_t)object_data16(k, DATA_SIZE);
+            a->size = (uint8_t)object_entry_word(k, DATA_SIZE);
             a->anim = look;
         }
-        a->attached.on_x = (uint16_t)sx8(object_list8((uint16_t)(i + 2)));
-        a->attached.on_y = (uint16_t)sx8(object_list8((uint16_t)(i + 3)));
-        a->attached.on_z = (uint16_t)sx8(object_list8((uint16_t)(i + 4)));
+        a->attached.on_x = (uint16_t)sx8(object_list_byte((uint16_t)(i + 2)));
+        a->attached.on_y = (uint16_t)sx8(object_list_byte((uint16_t)(i + 3)));
+        a->attached.on_z = (uint16_t)sx8(object_list_byte((uint16_t)(i + 4)));
     }
 }
 
@@ -1321,12 +1320,12 @@ void ObjectLampOnParent(Object *o)
 }
 
 /* one step of a lamp's look: unless its count is 4 */
-static void lamp_look_step(Object *o, uint16_t table)
+static void lamp_look_step(Object *o, EyeBlink blink)
 {
     if (o->eye.blink == 0x04)
         return;
     o->eye.blink++;
-    o->anim = cart16(0x08, (uint16_t)(table + (uint8_t)(o->eye.blink << 1)));
+    o->anim = eye_blink_look(blink, o->eye.blink);
 }
 
 /*
@@ -1338,7 +1337,7 @@ void ObjectLampAnimate(Object *o)
 {
     switch (g.lamp_lights & 0x1C) {
     case 0x08: lamp_look_step(o, EYE_BLINK_TO_STARTLED); break;
-    case 0x04: lamp_look_step(o, EYE_BLINK); break;
+    case 0x04: lamp_look_step(o, EYE_BLINK_PLAIN); break;
     case 0x0C: lamp_look_step(o, EYE_BLINK_TO_PLAIN); break;
     case 0x1C: lamp_look_step(o, EYE_BLINK_STARTLED); break;
     case 0x10: o->anim = LOOK_EYE_PLAIN; break;
@@ -1427,8 +1426,8 @@ void CameraPointFromTable(Object *o)
     int moved;
 
     if (!(c->mode & 0x0020) && (o->director.state & DIRECTOR_CUE)) {
-        uint8_t count = object_list8(c->word32);
-        uint8_t back = object_list8((uint16_t)(c->word32 + 1));
+        uint8_t count = object_list_byte(c->word32);
+        uint8_t back = object_list_byte((uint16_t)(c->word32 + 1));
         uint8_t v;
 
         o->director.state &= (uint8_t)~DIRECTOR_CUE;
@@ -1452,10 +1451,10 @@ void CameraPointFromTable(Object *o)
         point = (uint16_t)((uint16_t)(c->byte34 << 3) + c->word32);
     }
     point = (uint16_t)(point + 2);
-    c->mode = object_list16(point);
-    off[0] = object_list16((uint16_t)(point + 2));
-    off[1] = object_list16((uint16_t)(point + 4));
-    off[2] = object_list16((uint16_t)(point + 6));
+    c->mode = object_list_word(point);
+    off[0] = object_list_word((uint16_t)(point + 2));
+    off[1] = object_list_word((uint16_t)(point + 4));
+    off[2] = object_list_word((uint16_t)(point + 6));
     if (c->mode & 0x0080) {
         if (o->director.steps) {
             o->director.steps--;
@@ -1933,8 +1932,7 @@ void CameraOnMarkedCar(Object *o)
 /* the camera table a course's record follows (gsu/params.c) */
 uint16_t TrackTableEntryNext(uint16_t entry)
 {
-    uint8_t bank = fx_ram[FX_TRACK_TABLE_BANK];
-    uint16_t last = cart16(bank, fxram_get(FX_TRACK_TABLE));
+    uint16_t last = track_table_last(cart_ref(fx_ram[FX_TRACK_TABLE_BANK], fxram_get(FX_TRACK_TABLE)));
 
     if (entry == last)
         entry = 0;
@@ -1943,9 +1941,5 @@ uint16_t TrackTableEntryNext(uint16_t entry)
 
 void TrackTableEntryPlace(uint16_t entry, uint16_t out[3])
 {
-    uint8_t bank = fx_ram[FX_TRACK_TABLE_BANK];
-    uint16_t at = (uint16_t)((uint16_t)((uint16_t)(entry - 1) << 3) + fxram_get(FX_TRACK_TABLE) + 2);
-
-    for (int i = 0; i < 3; i++)
-        out[i] = cart16(bank, (uint16_t)(at + 2 * i));
+    track_table_place(cart_ref(fx_ram[FX_TRACK_TABLE_BANK], fxram_get(FX_TRACK_TABLE)), entry, out);
 }
