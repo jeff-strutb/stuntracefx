@@ -74,6 +74,8 @@ unsigned BcdValue(uint16_t v);           /* four decimal digits, a nibble each, 
 uint16_t BcdOf(unsigned n);              /* a number (modulo 10000) as four decimal digits */
 uint16_t BcdAdd(uint16_t a, uint16_t b); /* decimal sum and difference, wrapping at four digits */
 uint16_t BcdSub(uint16_t a, uint16_t b);
+unsigned TimeHundredths(const uint8_t t[3]);            /* a [hundredths, seconds, minutes] decimal time in hundredths */
+void TimeSetHundredths(uint8_t t[3], unsigned hundredths);
 void TimeUnpackBcd(uint16_t packed, uint16_t *minutes, uint16_t *seconds, uint16_t *hundredths);
 void ChampionshipFinish(void);
 

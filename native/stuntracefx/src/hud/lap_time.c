@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "hud/hud.h"
+#include "race/race.h"
 #include "save/save.h"
 #include "system/state.h"
 
@@ -46,31 +47,6 @@ uint16_t TimePackBcd(uint8_t hundredths, uint8_t seconds, uint8_t minutes)
                       | ((BcdToBinary(minutes) & 0x0007) << 13));
 }
 
-/* The decimal add of the processor's decimal mode. */
-static uint8_t decimal_add(uint8_t a, uint8_t b, int *carry)
-{
-    int low = (a & 0x0F) + (b & 0x0F) + *carry;
-    int sum;
-
-    if (low > 0x09)
-        low += 0x06;
-    sum = (a & 0xF0) + (b & 0xF0) + (low > 0x0F ? 0x10 : 0) + (low & 0x0F);
-    if (sum > 0x9F)
-        sum += 0x60;
-    *carry = sum > 0xFF;
-    return (uint8_t)sum;
-}
-
-/* A value less 60 seconds, decimal. */
-static uint8_t less_sixty(uint8_t v)
-{
-    int high = (v & 0xF0) - 0x60;
-
-    if (high < 0)
-        high -= 0x60;
-    return (uint8_t)(high | (v & 0x0F));
-}
-
 /*
  * @routine 07:B75B TimeAddToTotal, 07:B796 TimeAddToNext
  * WHAT IT DOES: Adds a time to another, unless it is no time ($FF): seconds
@@ -78,26 +54,9 @@ static uint8_t less_sixty(uint8_t v)
  */
 static void time_add(const uint8_t *time, uint8_t *to)
 {
-    int carry = 0;
-    uint8_t v;
-
     if (time[0] == 0xFF)
         return;
-    to[0] = decimal_add(time[0], to[0], &carry);
-    v = decimal_add(time[1], to[1], &carry);
-    if (carry) {
-        v = less_sixty(v);
-        carry = 0;
-        to[2] = decimal_add(to[2], 0x01, &carry);
-    }
-    to[1] = v;
-    if (v >= 0x60) {
-        to[1] = less_sixty(v);
-        carry = 0;
-        to[2] = decimal_add(to[2], 0x01, &carry);
-    }
-    carry = 0;
-    to[2] = decimal_add(time[2], to[2], &carry);
+    TimeSetHundredths(to, TimeHundredths(to) + TimeHundredths(time));
 }
 
 /* @routine 07:B67E TimeTotalsSum: each group of four times into its total. */

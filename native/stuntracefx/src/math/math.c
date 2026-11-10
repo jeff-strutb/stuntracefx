@@ -158,57 +158,75 @@ static uint16_t halve(uint16_t v, uint16_t sign)
     return (r & sign) ? (uint16_t)(r + (v & 1)) : r;
 }
 
-/* The approach all the routines below share: the step is the difference,
-   at least `min` either way, halved `shifts` times. */
-static uint16_t approach(uint16_t value, uint16_t target, int wide, uint16_t min, int shifts, int *moved)
+/* The approach all the routines below share, for a word and for a byte:
+   the step is the difference (wrapping as the value does), at least `min`
+   either way, halved `shifts` times. */
+static uint16_t approach_word(uint16_t value, uint16_t target, uint16_t min, int shifts, int *moved)
 {
-    uint16_t mask = wide ? 0xFFFF : 0x00FF, sign = wide ? 0x8000 : 0x0080;
-    uint16_t cur = value & mask, d;
+    uint16_t d;
 
-    target &= mask;
-    *moved = target != cur;
+    *moved = target != value;
     if (!*moved)
-        return cur;
-    d = (uint16_t)(target - cur) & mask;
-    if (!(d & sign)) {
+        return value;
+    d = (uint16_t)(target - value);
+    if (!(d & 0x8000)) {
         if (d < min)
             d = min;
-    } else if (!((uint16_t)(d + min) & sign)) {
-        d = (uint16_t)(-min) & mask;
+    } else if (!((uint16_t)(d + min) & 0x8000)) {
+        d = (uint16_t)-min;
     }
     for (int i = 0; i < shifts; i++)
-        d = halve(d, sign) & mask;
-    return (uint16_t)(d + cur) & mask;
+        d = halve(d, 0x8000);
+    return (uint16_t)(d + value);
+}
+
+static uint8_t approach_byte(uint8_t value, uint8_t target, uint8_t min, int shifts, int *moved)
+{
+    uint8_t d;
+
+    *moved = target != value;
+    if (!*moved)
+        return value;
+    d = (uint8_t)(target - value);
+    if (!(d & 0x80)) {
+        if (d < min)
+            d = min;
+    } else if (!((uint8_t)(d + min) & 0x80)) {
+        d = (uint8_t)-min;
+    }
+    for (int i = 0; i < shifts; i++)
+        d = (uint8_t)halve(d, 0x0080);
+    return (uint8_t)(d + value);
 }
 
 /* @routine 03:CDC1 ApproachHalfMin2 */
-uint16_t ApproachHalfMin2(uint16_t value, uint16_t target, int *moved) { return approach(value, target, 1, 2, 1, moved); }
+uint16_t ApproachHalfMin2(uint16_t value, uint16_t target, int *moved) { return approach_word(value, target, 2, 1, moved); }
 /* @routine 03:CDF4 ApproachQuarterMin4 */
-uint16_t ApproachQuarterMin4(uint16_t value, uint16_t target, int *moved) { return approach(value, target, 1, 4, 2, moved); }
+uint16_t ApproachQuarterMin4(uint16_t value, uint16_t target, int *moved) { return approach_word(value, target, 4, 2, moved); }
 /* @routine 03:CE30 ApproachEighthMin8 */
-uint16_t ApproachEighthMin8(uint16_t value, uint16_t target, int *moved) { return approach(value, target, 1, 8, 3, moved); }
+uint16_t ApproachEighthMin8(uint16_t value, uint16_t target, int *moved) { return approach_word(value, target, 8, 3, moved); }
 /* @routine 03:CE75 ApproachSixteenthMin16 */
-uint16_t ApproachSixteenthMin16(uint16_t value, uint16_t target, int *moved) { return approach(value, target, 1, 16, 4, moved); }
+uint16_t ApproachSixteenthMin16(uint16_t value, uint16_t target, int *moved) { return approach_word(value, target, 16, 4, moved); }
 /* @routine 03:CEC3 ApproachThirtySecondMin32 */
-uint16_t ApproachThirtySecondMin32(uint16_t value, uint16_t target, int *moved) { return approach(value, target, 1, 32, 5, moved); }
+uint16_t ApproachThirtySecondMin32(uint16_t value, uint16_t target, int *moved) { return approach_word(value, target, 32, 5, moved); }
 /* @routine 03:CF1A ApproachSixtyFourthMin64 */
-uint16_t ApproachSixtyFourthMin64(uint16_t value, uint16_t target, int *moved) { return approach(value, target, 1, 64, 6, moved); }
+uint16_t ApproachSixtyFourthMin64(uint16_t value, uint16_t target, int *moved) { return approach_word(value, target, 64, 6, moved); }
 /* @routine 03:CF7A ApproachOneTwentyEighthMin128 */
-uint16_t ApproachOneTwentyEighthMin128(uint16_t value, uint16_t target, int *moved) { return approach(value, target, 1, 128, 7, moved); }
+uint16_t ApproachOneTwentyEighthMin128(uint16_t value, uint16_t target, int *moved) { return approach_word(value, target, 128, 7, moved); }
 /* @routine 03:CFE3 ApproachHalfMin2Byte */
-uint8_t ApproachHalfMin2Byte(uint8_t value, uint8_t target, int *moved) { return (uint8_t)approach(value, target, 0, 2, 1, moved); }
+uint8_t ApproachHalfMin2Byte(uint8_t value, uint8_t target, int *moved) { return approach_byte(value, target, 2, 1, moved); }
 /* @routine 03:D00F ApproachQuarterMin4Byte */
-uint8_t ApproachQuarterMin4Byte(uint8_t value, uint8_t target, int *moved) { return (uint8_t)approach(value, target, 0, 4, 2, moved); }
+uint8_t ApproachQuarterMin4Byte(uint8_t value, uint8_t target, int *moved) { return approach_byte(value, target, 4, 2, moved); }
 /* @routine 03:D042 ApproachEighthMin8Byte */
-uint8_t ApproachEighthMin8Byte(uint8_t value, uint8_t target, int *moved) { return (uint8_t)approach(value, target, 0, 8, 3, moved); }
+uint8_t ApproachEighthMin8Byte(uint8_t value, uint8_t target, int *moved) { return approach_byte(value, target, 8, 3, moved); }
 /* @routine 03:D07C ApproachSixteenthMin16Byte */
-uint8_t ApproachSixteenthMin16Byte(uint8_t value, uint8_t target, int *moved) { return (uint8_t)approach(value, target, 0, 16, 4, moved); }
+uint8_t ApproachSixteenthMin16Byte(uint8_t value, uint8_t target, int *moved) { return approach_byte(value, target, 16, 4, moved); }
 /* @routine 03:D0BD ApproachThirtySecondMin32Byte */
-uint8_t ApproachThirtySecondMin32Byte(uint8_t value, uint8_t target, int *moved) { return (uint8_t)approach(value, target, 0, 32, 5, moved); }
+uint8_t ApproachThirtySecondMin32Byte(uint8_t value, uint8_t target, int *moved) { return approach_byte(value, target, 32, 5, moved); }
 /* @routine 03:D105 ApproachSixtyFourthMin64Byte */
-uint8_t ApproachSixtyFourthMin64Byte(uint8_t value, uint8_t target, int *moved) { return (uint8_t)approach(value, target, 0, 64, 6, moved); }
+uint8_t ApproachSixtyFourthMin64Byte(uint8_t value, uint8_t target, int *moved) { return approach_byte(value, target, 64, 6, moved); }
 /* @routine 03:D154 ApproachOneTwentyEighthMin128Byte: $80 is -128 as a byte, so it always steps down by 1. */
-uint8_t ApproachOneTwentyEighthMin128Byte(uint8_t value, uint8_t target, int *moved) { return (uint8_t)approach(value, target, 0, 128, 7, moved); }
+uint8_t ApproachOneTwentyEighthMin128Byte(uint8_t value, uint8_t target, int *moved) { return approach_byte(value, target, 128, 7, moved); }
 
 /* The sine and cosine of an angle, from the cartridge's byte tables. */
 static uint8_t sine(uint8_t i) { return cart8(0x00, (uint16_t)(0x96FE + i)); }

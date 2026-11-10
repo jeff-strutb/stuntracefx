@@ -31,6 +31,22 @@ uint16_t BcdSub(uint16_t a, uint16_t b)
     return BcdOf(BcdValue(a) + 10000u - BcdValue(b));
 }
 
+/* A time as the results and the HUD keep it, [0] hundredths, [1] seconds,
+   [2] minutes, two decimal digits each: its value in hundredths of a
+   second, and a value back into one, the minutes wrapping at 100 as two
+   digits do. */
+unsigned TimeHundredths(const uint8_t t[3])
+{
+    return BcdValue(t[2]) * 6000u + BcdValue(t[1]) * 100u + BcdValue(t[0]);
+}
+
+void TimeSetHundredths(uint8_t t[3], unsigned hundredths)
+{
+    t[0] = (uint8_t)BcdOf(hundredths % 100u);
+    t[1] = (uint8_t)BcdOf(hundredths / 100u % 60u);
+    t[2] = (uint8_t)BcdOf(hundredths / 6000u % 100u);
+}
+
 /* @routine 03:EFBB CourseIndex12: tables with twelve bytes per course and three per entry. */
 static uint8_t course_index_12(uint8_t entry)
 {
