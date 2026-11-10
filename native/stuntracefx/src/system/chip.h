@@ -75,19 +75,19 @@ void GsuParamsFromDp(void);
 void GsuRecordsUpload(void);
 
 /* The programs the race frame runs. */
-void FrameRunGsu8FCA(void);
-void GsuAB13WithParams(void);
+void FramePhysicsAndObjects(void);
+void FramePicture(void);
 void GsuScreenFlip(void);
 void GsuScreenFlipMenu(void);
 void GsuScreenToggle(void);
 void ViewMatrixUpdateAndSave(void);
-void ViewUpdateAndGsuAEF8(void);
+void ViewUpdateAndSort(void);
 void ViewReset(void);
 void ViewDefaults(void);
-void GsuEE88Ramp(void);
-void Gsu8325(void);
-void Gsu82CE(uint16_t x, uint16_t y, uint16_t z);
-uint16_t Gsu81E3(uint16_t x, uint16_t y);
-uint16_t ObjectGsu80BC(uint16_t x, uint16_t z);
+void NoiseFillWithRamp(void);
+void ViewMatrixMake(void);
+void ViewRotateVector(uint16_t x, uint16_t y, uint16_t z);
+uint16_t VectorAngle(uint16_t x, uint16_t y);
+uint16_t VectorLength(uint16_t x, uint16_t z);
 
 #endif

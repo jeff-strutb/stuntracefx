@@ -218,7 +218,7 @@ static void mode_speed_battle(int speed)
         HUD_BYTES(battle_alt_sprites);
         race_hud_sprites_hide();
     } else {
-        player_tiles(g.player_mode[0], 0x00FA);
+        player_tiles(g.player_rank[0], 0x00FA);
         HUD_BYTES(battle_p1_sprites);
         player_tiles(g.tries_left, 0x00F2);
         HUD_BYTES(battle_p2_sprites);

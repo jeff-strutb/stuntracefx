@@ -57,8 +57,8 @@ static void rank_badge(uint8_t kind)
     FxGlyph24x16();
 }
 
-void RankBadgePlayer1(void) { rank_badge(g.player_mode[0]); }
-void RankBadgePlayer2(void) { rank_badge(g.player_mode[1]); }
+void RankBadgePlayer1(void) { rank_badge(g.player_rank[0]); }
+void RankBadgePlayer2(void) { rank_badge(g.player_rank[1]); }
 
 /*
  * @routine 07:85E1 GsuF0A5OrF0B4

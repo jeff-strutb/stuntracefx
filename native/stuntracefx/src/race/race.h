@@ -84,7 +84,7 @@ void RaceFrameRun(void);
 void RaceFrameRunTwoPlayers(void);
 void RaceVarsReset(void);
 void RaceModeSetup(void);
-void Set7EFFA6Sequence(void);
+void PlaceEntriesInOrder(void);
 void AttractCourseSetup(void);
 void ViewSetupTail(void);
 

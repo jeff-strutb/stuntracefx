@@ -10,7 +10,7 @@
 
 /* the frame's HUD work (hud_frame.c) */
 void HudDrawTime(void);
-void HudDrawDigits19EC(void);
+void HudStuntScoreDigits(void);
 void HudDrawNumber3(uint8_t n, int sprite);
 void HudDrawValueA(void);
 void HudDrawValueB(void);

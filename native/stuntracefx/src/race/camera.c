@@ -125,9 +125,9 @@ void CameraFollowStep(Camera *cam)
     g.view_angles_kept[0] = (uint16_t)-(uint16_t)(g.view_angles_kept[0] + cam->word35);
     g.view_angles_kept[1] = (uint16_t)(g.view_angles_kept[1] + cam->word37);
     g.view_angles_kept[2] = (uint16_t)(g.view_angles_kept[2] + cam->word39);
-    Gsu8325();
+    ViewMatrixMake();
     memcpy(g.view_matrix_kept, g.view_matrix, sizeof g.view_matrix_kept);
-    Gsu82CE(cam->place[0], cam->place[1], cam->place[2]);
+    ViewRotateVector(cam->place[0], cam->place[1], cam->place[2]);
     if (flags & 0x0008) {
         a = asr_n((uint16_t)(target->x + g.view_rotated[0] - cam->x), 2);
         cam->x = (uint16_t)(a + cam->x);

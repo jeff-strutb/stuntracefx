@@ -7,7 +7,7 @@ Folded into other converted code
 --------------------------------
   02:DF79 RandomStepLong -> math/math.c RandomStep
   02:DF95 MulWordByteLong -> MulWordByte, dead (math/math.c)
-  02:E016 Gsu81E3Long -> system/chip.c Gsu81E3
+  02:E016 Gsu81E3Long -> system/chip.c VectorAngle
   02:E3F1 CourseScreenWindowStep -> race/course.c state tables (WindowEdgesStep)
   02:E7E8 LevelColumnsSet4 -> race/course.c SpeedCourseSelectStep
   03:863D DemoRunFirst -> race/flow.c DemoRun(0)

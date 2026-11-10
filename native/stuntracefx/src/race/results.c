@@ -6,7 +6,7 @@
  * the menu after the race (retry, course, car). Also the championship's
  * screen between its races (ChampionshipScreenStep) and its finish.
  *
- * Not kept: $10A3, which ResultsPicture4000 clears and nothing reads.
+ * Not kept: $10A3, which ResultsPictureLoad clears and nothing reads.
  */
 #include <stdint.h>
 
@@ -221,9 +221,9 @@ static void TimedRecordsDraw(void)
 }
 
 /* @routine 07:CAD5 ResultsPanelFAB5 */
-static void ResultsPanelFAB5(void) { panel(0x1F, 0xFAB5); step_next(); }
+static void ResultsPanelStunt(void) { panel(0x1F, 0xFAB5); step_next(); }
 /* @routine 07:CB7C ResultsPanelF38E */
-static void ResultsPanelF38E(void) { panel(0x1C, 0xF38E); step_next(); }
+static void ResultsPanelTimed(void) { panel(0x1C, 0xF38E); step_next(); }
 
 /* B or START on the records: to `skip` for a placed player, else the next step. */
 static void records_choice(uint8_t skip, int check_skipped)
@@ -249,7 +249,7 @@ static void StuntRecordsChoice(void)
 static void TimedRecordsChoice(void) { records_choice(0x0F, 0); }
 
 /* @routine 07:CC11 ResultsPanelFB99 */
-static void ResultsPanelFB99(void)
+static void ResultsMenuPanel(void)
 {
     g.split_stage = 0;
     g.race_again = 0;
@@ -265,7 +265,7 @@ static void ResultsTotalTiles(void);
 static void RecordTimeTiles(void);
 
 /* @routine 07:CC4A ResultsPanelFA39 */
-static void ResultsPanelFA39(void)
+static void ResultsPanelRace(void)
 {
     panel(0x1F, 0xFA39);
     if (g.race_time[2])
@@ -276,7 +276,7 @@ static void ResultsPanelFA39(void)
 }
 
 /* @routine 07:CC83 ResultsPicture4000: picture $18:C770 to $70:4000. */
-static void ResultsPicture4000(void)
+static void ResultsPictureLoad(void)
 {
     picture_unpack(0x18, 0xC770, 0x4000);
     step_next();
@@ -520,21 +520,6 @@ static uint8_t count_on(uint8_t count)
     return (uint8_t)BcdOf((BcdValue(count) + 1u) % 100u);
 }
 
-/* A results time, [0] hundredths, [1] seconds, [2] minutes, two decimal
-   digits each, in hundredths of a second; and a value back into one, its
-   minutes wrapping at 100 as two digits do. */
-static unsigned time_hundredths(const uint8_t t[3])
-{
-    return BcdValue(t[2]) * 6000u + BcdValue(t[1]) * 100u + BcdValue(t[0]);
-}
-
-static void time_set(uint8_t t[3], unsigned hundredths)
-{
-    t[0] = (uint8_t)BcdOf(hundredths % 100u);
-    t[1] = (uint8_t)BcdOf(hundredths / 100u % 60u);
-    t[2] = (uint8_t)BcdOf(hundredths / 6000u % 100u);
-}
-
 /* A count one more (decimal) shown as two digits in the buffer. */
 static void count_digits(uint8_t *count, uint16_t hi, uint16_t lo)
 {
@@ -696,8 +681,8 @@ static void RecordTimeTiles(void)
    carrying into its minutes; the bonus holds at least that much. */
 static void bonus_move(unsigned hundredths)
 {
-    time_set(g.race_time_best, time_hundredths(g.race_time_best) - hundredths);
-    time_set(g.race_time, time_hundredths(g.race_time) + hundredths);
+    TimeSetHundredths(g.race_time_best, TimeHundredths(g.race_time_best) - hundredths);
+    TimeSetHundredths(g.race_time, TimeHundredths(g.race_time) + hundredths);
 }
 
 /*
@@ -716,7 +701,7 @@ static void ResultsBonusCount(void)
         n = 0xFA;
     g.banner_timer[0] = n;
     if (n >= 0x12 && pressed(0x9000)) {
-        time_set(total, time_hundredths(total) + time_hundredths(bonus));
+        TimeSetHundredths(total, TimeHundredths(total) + TimeHundredths(bonus));
         bonus[0] = bonus[1] = bonus[2] = 0;
         step_next();
         g.overlay_state = 0x02;
@@ -732,7 +717,7 @@ static void ResultsBonusCount(void)
             g.overlay_state = 0x02;
             SoundPort0QueuePushRaw(0x3F);
         }
-        time_set(total, time_hundredths(total) + 1u);
+        TimeSetHundredths(total, TimeHundredths(total) + 1u);
     } else {
         bonus_move(bonus[1] == 0x01 ? 73u : 57u);
     }
@@ -772,22 +757,22 @@ typedef void (*StepFn)(void);
 
 /* The tables at $07:C6C3 (mode 0), $07:C715 (mode 1) and $07:C6EB (mode 3). */
 static const StepFn steps_race[] = {
-    ResultsUnpackNext, ResultsPicture4000, ResultsCarPicture, ResultsPanelFA39,
+    ResultsUnpackNext, ResultsPictureLoad, ResultsCarPicture, ResultsPanelRace,
     ResultsChampionScreen, ResultsTotalLineWords, TimesKeepAndAdvance, ResultsWaitWindow,
     LapCharsLap1, LapCharsLap2, LapCharsLap3, LapCharsTotal,
     ResultsBlinkWait, ResultsBonusCount, RaceTimeTiles, ResultsRecordCompare
 };
 static const StepFn steps_stunt[] = {
-    ResultsNext, ResultsPicture4000, ResultsCarPicture, ResultsPanelFAB5,
+    ResultsNext, ResultsPictureLoad, ResultsCarPicture, ResultsPanelStunt,
     ResultsChampionScreen, ResultsTotalLine, TimesKeepAndAdvance, ResultsWaitWindow,
-    StuntResultsCount, StuntRecordsChoice, ResultsPanelFB99, ResultsMenu,
+    StuntResultsCount, StuntRecordsChoice, ResultsMenuPanel, ResultsMenu,
     StuntRecordsDraw, StuntRecordsWait
 };
 static const StepFn steps_all[] = {
-    ResultsNext, ResultsPicture4000, ResultsCarPicture, ResultsPanelF38E,
+    ResultsNext, ResultsPictureLoad, ResultsCarPicture, ResultsPanelTimed,
     ResultsChampionScreen, ResultsTotalLine, TimesKeepAndAdvance, ResultsWaitWindow,
     LapCharsLap1, LapCharsLap2, LapCharsLap3, LapCharsTotal,
-    TimedRecordsChoice, ResultsPanelFB99, ResultsMenu, TimedRecordsDraw,
+    TimedRecordsChoice, ResultsMenuPanel, ResultsMenu, TimedRecordsDraw,
     TimedRecordsWait
 };
 
@@ -898,7 +883,7 @@ int WindowClosedDigitStep(void)
 static void ChampionshipScreenStep(void)
 {
     static const StepFn t[] = {
-        ChampionshipStageStart, ChampionshipStageWaitOpen, ResultsPicture4000, ResultsCarPicture,
+        ChampionshipStageStart, ChampionshipStageWaitOpen, ResultsPictureLoad, ResultsCarPicture,
         ChampionshipStagePicture, ResultsTotalLine, TimesKeepAndAdvance, ChampionshipStageMap,
         ChampionshipStageWaitClosed, ResultsMenu
     };

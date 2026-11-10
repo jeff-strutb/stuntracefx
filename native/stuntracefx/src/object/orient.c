@@ -30,8 +30,8 @@ void ObjectFaceTied(Camera *cam)
         uint16_t pitch;
 
         g.last_worked_y = cam->y;
-        cam->turn = (uint16_t)(Gsu81E3((uint16_t)(cam->x - o->x), (uint16_t)(cam->z - o->z)) + 0x8000);
-        pitch = Gsu81E3((uint16_t)(cam->y - o->y), ObjectGsu80BC((uint16_t)(cam->x - o->x), (uint16_t)(cam->z - o->z)));
+        cam->turn = (uint16_t)(VectorAngle((uint16_t)(cam->x - o->x), (uint16_t)(cam->z - o->z)) + 0x8000);
+        pitch = VectorAngle((uint16_t)(cam->y - o->y), VectorLength((uint16_t)(cam->x - o->x), (uint16_t)(cam->z - o->z)));
         if (cam->mode & 0x0040)
             pitch = (uint16_t)(asr16(asr16((uint16_t)(pitch - cam->pitch))) + cam->pitch);
         cam->pitch = pitch;

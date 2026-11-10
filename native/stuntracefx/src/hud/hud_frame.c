@@ -52,7 +52,7 @@ void HudDrawTime(void)
 }
 
 /* @routine 7E:E7D6 HudDrawDigits19EC: the two-digit BCD count, sprites 90 and 88. */
-void HudDrawDigits19EC(void)
+void HudStuntScoreDigits(void)
 {
     if (g.hud_blank)
         return;
@@ -87,7 +87,7 @@ void HudDrawValueC(void) { HudDrawNumber3(g.status_level[1], 0x0128 / 4); }
 /* @routine 7E:E7FC HudDigitSprites62: a digit on sprites 62 and 63. */
 void HudDigitSprites62(void)
 {
-    uint8_t d = g.time_override ? 0x01 : g.player_mode[0];
+    uint8_t d = g.time_override ? 0x01 : g.player_rank[0];
 
     OamByteSet(62 * 4 + 2, (uint8_t)(d << 1));
     OamByteSet(63 * 4 + 2, (uint8_t)((d << 1) + 1));

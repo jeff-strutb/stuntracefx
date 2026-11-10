@@ -73,7 +73,7 @@ void PlayerStatsFromRecord(uint16_t rec, int player)
         SpeedSampleAdd(rec_get(rec, FXREC_SPEED), player);
         g.kept_enable[player] = (uint8_t)(rec_get(rec, FXREC_6A) >> 3);
         g.laps_done[player] = (uint8_t)rec_get(rec, FXREC_LAPS);
-        g.player_mode[player] = (uint8_t)(rec_get(rec, FXREC_RANK) & 0x0F);
+        g.player_rank[player] = (uint8_t)(rec_get(rec, FXREC_RANK) & 0x0F);
     }
     GsuRecordBits60();
 }

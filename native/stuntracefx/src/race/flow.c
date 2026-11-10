@@ -586,7 +586,7 @@ int race_session_update(void)
     switch (flow.state) {
     case FLOW_RACE_SETUP:
         RaceModeSetup();
-        Set7EFFA6Sequence();
+        PlaceEntriesInOrder();
         flow.state = FLOW_RACE_LOAD;
         /* fall through */
     case FLOW_RACE_LOAD:
@@ -641,7 +641,7 @@ static void demo_setup(uint16_t offset)
     flow.demo_flags = 0x0020;
     g.selection_handler[0] = cart16(0x03, (uint16_t)(0x8004 + at));
     g.hud_mode = 0;
-    Set7EFFA6Sequence();
+    PlaceEntriesInOrder();
     RaceVideoInit();
     WindowsInit();
     AttractCourseSetup();

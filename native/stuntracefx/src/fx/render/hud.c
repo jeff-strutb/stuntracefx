@@ -146,7 +146,7 @@ void FxTiles2bppTo4bppLow(void)
  * @routine 07:EE88 FxNoiseFill
  * WHAT IT DOES: Fills the 16 x 128 pixels at the screen's top left with
  * random grey: each pixel's colour is one of the eight words at $70:3C00
- * (GsuEE88Ramp writes $80, $90, ... $F0 there), picked by a random number
+ * (NoiseFillWithRamp writes $80, $90, ... $F0 there), picked by a random number
  * seeded from and saved back to $70:021C.
  * HOW: The generator (seed in R8): t = the seed with its low byte XORed into
  * its high byte, its bytes swapped; the new seed is (twice the old low byte

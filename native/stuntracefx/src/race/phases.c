@@ -309,8 +309,7 @@ void CarFinishSoundP2(void)
 void RaceFinishSounds(void)
 {
     if (g.hud_mode == 0) {
-        g.player_mode_kept = g.player_mode[0];
-        if (g.player_mode[0] == 0x01) {
+        if (g.player_rank[0] == 0x01) {
             sound_port0_push_raw(0x02);
             CarFinishSound();
             sound_port0_push(0x48);
@@ -422,7 +421,7 @@ static void lap_finish(int player)
     }
     if (g.hud_mode)
         goto hold;
-    if (g.player_mode[0] >= 0x04) {
+    if (g.player_rank[0] >= 0x04) {
         g.finish_lines = 0;
         g.end_timer = 0x23;
         g.player_phase[player] = 0x0A;
@@ -435,9 +434,9 @@ static void lap_finish(int player)
         finish_both();
         return;
     }
-    if (g.player_mode[0] < 0x02)
+    if (g.player_rank[0] < 0x02)
         w = 0x8000;
-    else if (g.player_mode[0] == 0x02)
+    else if (g.player_rank[0] == 0x02)
         w = 0x8006;
     else
         w = 0x800C;

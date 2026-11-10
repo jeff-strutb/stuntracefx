@@ -65,7 +65,7 @@ void GsuRecordsUpload(void)
  * WHAT IT DOES: Runs program $01:80BC on an object's offset from a point
  * and returns its result.
  */
-uint16_t ObjectGsu80BC(uint16_t x, uint16_t z)
+uint16_t VectorLength(uint16_t x, uint16_t z)
 {
     uint16_t stack = 0x0240;
 
@@ -80,7 +80,7 @@ uint16_t ObjectGsu80BC(uint16_t x, uint16_t z)
  * WHAT IT DOES: Runs program $01:81E3 on (x, y) and returns the word it
  * leaves at $0040.
  */
-uint16_t Gsu81E3(uint16_t x, uint16_t y)
+uint16_t VectorAngle(uint16_t x, uint16_t y)
 {
     fx16_set(FXIN_VECTOR_X, x);
     fx16_set(FXIN_VECTOR_Y, y);
@@ -93,7 +93,7 @@ uint16_t Gsu81E3(uint16_t x, uint16_t y)
  * WHAT IT DOES: Runs program $01:82CE on the vector and leaves its three
  * results in g.view_rotated.
  */
-void Gsu82CE(uint16_t x, uint16_t y, uint16_t z)
+void ViewRotateVector(uint16_t x, uint16_t y, uint16_t z)
 {
     fx16_set(FXIN_VECTOR_X, x);
     fx16_set(FXIN_VECTOR_Y, y);
@@ -108,7 +108,7 @@ void Gsu82CE(uint16_t x, uint16_t y, uint16_t z)
  * WHAT IT DOES: Runs program $01:8325 on the three view angles and copies
  * the nine matrix words it leaves into g.view_matrix.
  */
-void Gsu8325(void)
+void ViewMatrixMake(void)
 {
     for (int i = 0; i < 3; i++)
         fx16_set((uint16_t)(FXIN_ANGLES + 2 * i), g.view_angles_kept[i]);
@@ -122,7 +122,7 @@ void Gsu8325(void)
  * WHAT IT DOES: Writes the ramp $80, $90, ... $F0 to the chip's RAM and
  * runs program $07:EE88.
  */
-void GsuEE88Ramp(void)
+void NoiseFillWithRamp(void)
 {
     for (int i = 0; i < 8; i++)
         fx16_set((uint16_t)(FXIN_RAMP + 2 * i), (uint16_t)(0x80 + 0x10 * i));
@@ -138,7 +138,7 @@ void ViewReset(void)
 {
     memset(g.view_angles, 0, sizeof g.view_angles);
     memset(g.view_angles_kept, 0, sizeof g.view_angles_kept);
-    Gsu8325();
+    ViewMatrixMake();
     memcpy(g.view_matrix_kept, g.view_matrix, sizeof g.view_matrix_kept);
     for (int i = 0; i < 9; i++)
         g.view_matrix_identity[i] = (i % 4) == 0 ? 0x7F00 : 0;
@@ -187,7 +187,7 @@ void ViewDefaults(void)
  * the object work while the chip ran; here the chip's program runs first.
  * Not yet shown equivalent: the recorded state comparison decides it.
  */
-void FrameRunGsu8FCA(void)
+void FramePhysicsAndObjects(void)
 {
     (void)FxPhysicsProgram(0, 0, 0, 0, 0);
     BucketTriggersFromView();
@@ -204,7 +204,7 @@ void FrameRunGsu8FCA(void)
 void ViewMatrixUpdateAndSave(void)
 {
     memcpy(g.view_angles_kept, g.view_angles, sizeof g.view_angles_kept);
-    Gsu8325();
+    ViewMatrixMake();
     memcpy(g.view_matrix_kept, g.view_matrix, sizeof g.view_matrix_kept);
 }
 
@@ -212,7 +212,7 @@ void ViewMatrixUpdateAndSave(void)
  * @routine 02:DB59 ViewUpdateAndGsuAEF8
  * WHAT IT DOES: Updates the view matrix, then runs the sort program.
  */
-void ViewUpdateAndGsuAEF8(void)
+void ViewUpdateAndSort(void)
 {
     ViewMatrixUpdateAndSave();
     FxSortObjectsProgram();
@@ -223,7 +223,7 @@ void ViewUpdateAndGsuAEF8(void)
  * WHAT IT DOES: Updates the renderer's parameters and runs the frame
  * program.
  */
-void GsuAB13WithParams(void)
+void FramePicture(void)
 {
     GsuParamsUpdate();
     (void)FxFrameProgram(0);

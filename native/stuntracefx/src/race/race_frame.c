@@ -97,11 +97,11 @@ void RaceFrameStep(int step_only)
     CameraFollowStep(cam);
     ObjectFaceTied(cam);
     ViewFromRecord(cam);
-    FrameRunGsu8FCA();
-    ViewUpdateAndGsuAEF8();
+    FramePhysicsAndObjects();
+    ViewUpdateAndSort();
     if (!step_only) {
         fx_draw_begin(0);
-        GsuAB13WithParams();
+        FramePicture();
         fx_draw_flush();
         GsuScreenFlip();
         g.picture_uploaded = 0;
@@ -156,7 +156,7 @@ static void frame_side0(void)
 {
     g.draw_side = 0;
     fx16_set(GSU_VIEW_246C, 0xFFFF);
-    FrameRunGsu8FCA();
+    FramePhysicsAndObjects();
     FxTimersProgram();
 }
 
@@ -200,7 +200,7 @@ static void hud_frame_while_gsu_runs(void)
     if (g.hud_mode != 1 && g.hud_mode != 3)
         HudDigitSprites62();
     if (g.hud_mode != 3)
-        HudDrawDigits19EC();
+        HudStuntScoreDigits();
     BackdropRowsUpdate();
     HudDrawValueA();
     HudColourStep();
@@ -211,7 +211,7 @@ static void hud_frame_while_gsu_runs(void)
  * WHAT IT DOES: A frame for panel B: the parameters, the frame program, the
  * HUD's work, the gauges, on two players the objects, the map markers.
  */
-static void frame_run_ab13_b(void)
+static void frame_picture_panel_b(void)
 {
     GsuParamsUpdate();
     (void)FxFrameProgram(0);
@@ -228,7 +228,7 @@ static void frame_run_ab13_b(void)
 }
 
 /* @routine 7E:E298 FrameRunGsuAB13A: a frame for panel A. */
-static void frame_run_ab13_a(void)
+static void frame_picture_panel_a(void)
 {
     GsuParamsUpdate();
     (void)FxFrameProgram(0);
@@ -264,11 +264,11 @@ void RaceFrameRun(void)
     PlayerControlsFrame();
     frame_side0();
     ObjectsRunHandlers();
-    ViewUpdateAndGsuAEF8();
+    ViewUpdateAndSort();
     BackdropAnglesFromView();
     g.draw_side = 1;
     fx_draw_begin(g.fx_buffer);
-    frame_run_ab13_b();
+    frame_picture_panel_b();
     SpeedGaugeUpdate(fx16(FXIN_PLAYER1_RECORD));
     NearCarSoundUpdate();
     if (fx16(FXIN_TEXT_NOTICE))
@@ -307,11 +307,11 @@ static void two_players_first_half(void)
         return;
     GsuScreenFlipMenu();
     g.picture_uploaded = 0;
-    ViewUpdateAndGsuAEF8();
+    ViewUpdateAndSort();
     BackdropAnglesFromView();
     g.backdrop_heading = (uint16_t)(g.backdrop_heading - 0x0140);
     fx_draw_begin(g.fx_buffer);
-    frame_run_ab13_a();
+    frame_picture_panel_a();
     SpeedGauge2Update(fx16(FXIN_PLAYER2_RECORD));
     two_players_second_half();
 }
@@ -328,12 +328,12 @@ void RaceFrameRunTwoPlayers(void)
     ViewFromRecord(view_camera(g.player_car));
     PlayerControlsFrame();
     frame_side0();
-    ViewUpdateAndGsuAEF8();
+    ViewUpdateAndSort();
     BackdropAnglesFromView();
     ViewFromRecord(view_camera(g.player2_car));
     g.draw_side = 1;
     fx_draw_begin(g.fx_buffer);
-    frame_run_ab13_b();
+    frame_picture_panel_b();
     SpeedGaugeUpdate(fx16(FXIN_PLAYER1_RECORD));
     two_players_first_half();
 }
@@ -353,7 +353,7 @@ void race_steps_end(void)
     step_clock_restart();
 }
 
-/* The draw list and its records, as FrameRunGsu8FCA and FrameRunGsuAB13B's
+/* The draw list and its records, as FramePhysicsAndObjects and FrameRunGsuAB13B's
    object work make them, without the trigger lists and object groups. */
 static void picture_objects(void)
 {
@@ -384,7 +384,7 @@ int RaceViewForPicture(int panel)
         ObjectFaceTied(&cameras[0]);
         ViewFromRecord(&cameras[0]);
         picture_objects();
-        ViewUpdateAndGsuAEF8();
+        ViewUpdateAndSort();
         GsuParamsUpdate();
         return 1;
     case STEP_ONE_PLAYER:
@@ -394,7 +394,7 @@ int RaceViewForPicture(int panel)
         g.draw_side = 0;
         fx16_set(GSU_VIEW_246C, 0xFFFF);
         picture_objects();
-        ViewUpdateAndGsuAEF8();
+        ViewUpdateAndSort();
         BackdropAnglesFromView();
         g.draw_side = 1;
         GsuParamsUpdate();
@@ -405,7 +405,7 @@ int RaceViewForPicture(int panel)
             g.draw_side = 0;
             fx16_set(GSU_VIEW_246C, 0xFFFF);
             picture_objects();
-            ViewUpdateAndGsuAEF8();
+            ViewUpdateAndSort();
             BackdropAnglesFromView();
             ViewFromRecord(view_camera(g.player2_car));
             g.draw_side = 1;
@@ -413,7 +413,7 @@ int RaceViewForPicture(int panel)
             return 1;
         }
         picture_objects();
-        ViewUpdateAndGsuAEF8();
+        ViewUpdateAndSort();
         BackdropAnglesFromView();
         g.backdrop_heading = (uint16_t)(g.backdrop_heading - 0x0140);
         GsuParamsUpdate();
@@ -468,7 +468,7 @@ void RaceFinishSplit(int player)
     if (player == 0) {
         one = 1;
         if (g.laps_done[1] == 0x03)
-            one = g.player_mode[0] == 0x01;
+            one = g.player_rank[0] == 0x01;
     }
     if (one) {
         CarFinishSound();
@@ -539,8 +539,8 @@ void RaceVarsReset(void)
     g.gauge_one[0] = g.gauge_one[1] = 0;
     g.car_flags_low[0] = g.car_flags_low[1] = 0;
     g.car_flags_high[0] = g.car_flags_high[1] = 0;
-    g.player_mode[0] = 0x01;
-    g.player_mode[1] = 0x01;
+    g.player_rank[0] = 0x01;
+    g.player_rank[1] = 0x01;
     g.frame_stage_00 = 0;
     g.split_stage_on = 0;
     g.split_stage = 0;
@@ -709,7 +709,7 @@ void RaceModeSetup(void)
 }
 
 /* @routine 08:B893 Set7EFFA6Sequence */
-void Set7EFFA6Sequence(void)
+void PlaceEntriesInOrder(void)
 {
     for (int i = 0; i < 4; i++)
         objects.place_entries[i] = (uint16_t)(i + 1);

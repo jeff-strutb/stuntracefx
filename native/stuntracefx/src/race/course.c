@@ -312,7 +312,7 @@ static void CourseCursorStep(void) { cursor_at(g.champ_stage, 0); }
 static void RaceFadeStageDispatch(void) { cursor_at(g.champ_stage, 1); }
 
 /* @routine 02:FC44 Set0D37FromTable: the flashing sprite at the cursor's course */
-static void Set0D37FromTable(void)
+static void FlashSpriteToStage(void)
 {
     g.flash_sprite_pos = cart16(0x02, (uint16_t)(0xFC58 + g.champ_stage * 2));
 }
@@ -454,7 +454,7 @@ static void StuntCourseSelectStep(void)
     if (!fade_full() || scroll_step(1))
         return;
     if (!g.course_page) {
-        Set0D37FromTable();
+        FlashSpriteToStage();
         FlashingMetaspriteDraw();
         if (pressed(0x9000))
             CourseZoomStunt();
@@ -479,7 +479,7 @@ static void BattleCourseSelectStep(void)
 {
     if (!fade_full())
         return;
-    Set0D37FromTable();
+    FlashSpriteToStage();
     FlashingMetaspriteDraw();
     if (pressed(0x9000))
         CourseZoomBattle();
@@ -1018,13 +1018,13 @@ void CourseScreenRasterBlank(void)
 {
     RaceCourseUpload();
     if (g.fx_buffer) {
-        /* $0D7F: the loop drew the static (GsuEE88Ramp) and it goes up now.
+        /* $0D7F: the loop drew the static (NoiseFillWithRamp) and it goes up now.
            It is drawn here, the frame the original shows it; only the
            static's programs read its seed ($70:021C). */
         g.fx_buffer = 0;
         fx_draw_begin(0);
         fx_op_clear();
-        GsuEE88Ramp();
+        NoiseFillWithRamp();
         fx_draw_flush();
     }
     pic.brightness = g.fade_level & 0x0F;

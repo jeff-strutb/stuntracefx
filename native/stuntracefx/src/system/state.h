@@ -89,7 +89,6 @@ typedef struct {
     uint8_t every_course_open;          /* $0D24: 3 once Speed Trax's code has opened every course, for this power on */
     uint8_t end_panel_in;               /* $0D55: $2A once panel B has slid in at the race's end (its gauges and markers shown), else 0 */
     uint8_t results_step;               /* $0D59: the results screen's step */
-    uint8_t player_mode_kept;           /* $0D5E */
     uint8_t pause_stage_b, pause_player, pause_stage; /* $0D2D, $0D2E, $0D2F */
     uint8_t pause_choice;               /* $0D3D: 0 continue, otherwise quit */
     uint8_t records_state, records_timer; /* $0D43, $0D42: the course screen's records panel and its count */
@@ -121,7 +120,7 @@ typedef struct {
     uint8_t lap_splits[9];              /* $0EDE: three laps' times, hundredths seconds minutes */
     uint8_t lap_clock[9];               /* $0EF0: the clock at each lap */
     uint8_t race_time_kept[3];          /* $0EE7-$0EE9 */
-    uint8_t player_mode[2];             /* $0DF4, $0DF5 */
+    uint8_t player_rank[2];             /* $0DF4, $0DF5: each player's rank, the low four bits of their car record's */
     uint8_t player_phase[2];            /* $0DD6, $0DD7: each player's race phase */
     uint8_t race_timer;                 /* $0E55: the phases' countdown */
     uint8_t lap_shown;                  /* $0E57 */
@@ -144,7 +143,7 @@ typedef struct {
     int16_t view_matrix[9];             /* $0608: the view matrix from the Super FX */
     int16_t view_matrix_kept[9];        /* $064C: a copy of it, the frame's */
     int16_t view_matrix_identity[9];    /* $063A: the identity, set by ViewReset */
-    uint16_t view_rotated[3];           /* $B7, $B9, $BB: the rotated vector Gsu82CE leaves */
+    uint16_t view_rotated[3];           /* $B7, $B9, $BB: the rotated vector ViewRotateVector leaves */
     uint16_t view_area_origin[3];       /* $1EF5, $1EF7, $1EF9: the area the view is in */
     uint16_t view_fixed_origin[3];      /* $1EFB, $1EFD, $1EFF: the fixed area's */
     uint16_t camera_flags;              /* $05FA: the camera's mode bits, for the renderer too */
