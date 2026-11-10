@@ -633,7 +633,7 @@ backend.
 branch `shelf/hires-pictures` (the 239 pictures, the engine's later console-art extensions, and the fitting tools in
 `tools/hires_art`). Jeff: the 239 are close to right, but they stand out against the rest of the game's art, which
 cannot be converted the same way; the automatic fits of the other console art (race panels, menus, sprites, course
-outlines) were rejected. To be talked through before anything more.
+outlines) were rejected. Decided 2026-11-10: not used; it stays shelved (a one-pass redraw of the title cars read no better than an emulator filter: painted art needs repainting, not tracing).
 
 ### Stage 11. Whole game
 Finder zero on `native/stuntracefx`; section 8's criteria; every play through `nshvc-check`; every reachable platform.
