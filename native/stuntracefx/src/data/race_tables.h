@@ -30,6 +30,15 @@ uint16_t course_zoom_target_word(uint16_t target, int i);       /* the zoom targ
 uint16_t course_flash_sprite_place(uint16_t stage);             /* the flashing cursor's place by the menu stage */
 uint16_t course_palette_colour(int i);                          /* the race's 256 colours */
 
+/* ---- the race load's packed art blocks ---- */
+typedef enum {
+    RACE_BLOCK_COURSE_ART, RACE_BLOCK_SHARED_ART, RACE_BLOCK_SPLIT_ART,
+    RACE_BLOCK_VIEWS_SPEED, RACE_BLOCK_VIEWS_TEST_RUN, RACE_BLOCK_VIEWS_BATTLE, RACE_BLOCK_VIEWS_STUNT,
+    RACE_BLOCK_MODE_ART_SPEED, RACE_BLOCK_MODE_ART_BATTLE, RACE_BLOCK_MODE_ART_STUNT
+} RaceBlock;
+/* the block unpacked into `out` (`room` bytes); returns its length from its transfer record */
+uint32_t race_block_unpack(RaceBlock block, uint8_t *out, uint32_t room);
+
 /* ---- the race's times ---- */
 uint8_t course_lap_time(uint8_t entry, int lap);                /* the BCD seconds for lap 0-2; entry: its byte offset (CourseIndex12) */
 uint8_t class_time(uint8_t course_class);                       /* the time override's seconds by class */

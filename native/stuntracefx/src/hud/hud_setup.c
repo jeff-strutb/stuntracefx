@@ -79,10 +79,9 @@ static const HudByte battle_p2_sprites[6] = {
 /* The HUD's tables are in data/race_tables.h: the sprite lists (four bytes
    an entry); for the split screen, its panel sprites' places and tiles (a
    word each, four bytes an entry), its map sprites' the same and their five
-   size bytes. Still by their place here: the bank OamFromList reads its
-   list from, and the split screen's art block's two records (its transfer,
-   for its length; where its packed data is). */
-enum { HUD_SETUP_BANK = 0x03, TO_SPLIT_ART = 0xF845, PACKED_SPLIT_ART = 0xF804 };
+   size bytes; the split screen's art block. Still by its number here: the
+   bank OamFromList reads its list from (video's call takes the bank). */
+enum { HUD_SETUP_BANK = 0x03, UNPACK_ROOM = 0xC000 /* the chip's RAM from the unpack area on */ };
 
 /* The sprite list's entries from `list` on into the sprites' X ninth bits
    and sizes (the original sends this list to its high table): each entry
@@ -358,6 +357,6 @@ void RaceHudSetupTwoPlayers(void)
         sprite_high_set(0x6C + 4 * i, s);
     }
     /* the split screen's sprite art: the sprites' characters $A0 on */
-    race_art_write(RACE_ART_SPRITES + 0x0A0, fx_ram + FX_UNPACK_AREA, race_block_unpack(TO_SPLIT_ART, PACKED_SPLIT_ART));
+    race_art_write(RACE_ART_SPRITES + 0x0A0, fx_ram + FX_UNPACK_AREA, race_block_unpack(RACE_BLOCK_SPLIT_ART, fx_ram + FX_UNPACK_AREA, UNPACK_ROOM));
     RaceVarsReset();
 }

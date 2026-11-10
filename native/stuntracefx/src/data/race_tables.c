@@ -6,6 +6,7 @@
  */
 #include "data/cart.h"
 #include "data/race_tables.h"
+#include "data/unpack.h"
 
 typedef struct { uint8_t bank; uint16_t at; } Place;
 
@@ -53,6 +54,30 @@ uint16_t course_zoom_box_word(uint16_t box, int i) { return word_at(ZOOM_BOXES, 
 uint16_t course_zoom_target_word(uint16_t target, int i) { return word_at(ZOOM_TARGETS, (unsigned)(target + 2 * i)); }
 uint16_t course_flash_sprite_place(uint16_t stage) { return word_at(FLASH_SPRITE_PLACES, (unsigned)(stage * 2)); }
 uint16_t course_palette_colour(int i) { return word_at(COURSE_PALETTE, (unsigned)(2 * i)); }
+
+/* Each block's two records in bank 3: where its packed data is (an address,
+   then its bank), and its transfer (its length at +5). */
+static const struct { uint16_t packed, transfer; } k_blocks[] = {
+    [RACE_BLOCK_COURSE_ART] = {0xF7E6, 0xF837},
+    [RACE_BLOCK_SHARED_ART] = {0xF801, 0xF822},
+    [RACE_BLOCK_SPLIT_ART] = {0xF804, 0xF845},
+    [RACE_BLOCK_VIEWS_SPEED] = {0xF7F2, 0xF868},
+    [RACE_BLOCK_VIEWS_TEST_RUN] = {0xF7FB, 0xF868},
+    [RACE_BLOCK_VIEWS_BATTLE] = {0xF7F5, 0xF868},
+    [RACE_BLOCK_VIEWS_STUNT] = {0xF7F8, 0xF868},
+    [RACE_BLOCK_MODE_ART_SPEED] = {0xF7E9, 0xF83E},
+    [RACE_BLOCK_MODE_ART_BATTLE] = {0xF7EF, 0xF83E},
+    [RACE_BLOCK_MODE_ART_STUNT] = {0xF7EC, 0xF83E},
+};
+enum { BLOCK_RECORDS_BANK = 0x03 };
+
+uint32_t race_block_unpack(RaceBlock block, uint8_t *out, uint32_t room)
+{
+    Place packed = {BLOCK_RECORDS_BANK, k_blocks[block].packed}, transfer = {BLOCK_RECORDS_BANK, k_blocks[block].transfer};
+
+    unpack((uint32_t)byte_at(packed, 2) << 16 | word_at(packed, 0), out, room);
+    return word_at(transfer, 5);
+}
 
 uint8_t course_lap_time(uint8_t entry, int lap) { return byte_at(COURSE_TIMES, (unsigned)(lap + entry)); }
 uint8_t class_time(uint8_t course_class) { return byte_at(CLASS_TIMES, course_class); }

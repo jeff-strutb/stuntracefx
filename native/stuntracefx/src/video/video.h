@@ -413,7 +413,6 @@ void AllRecordsTextLine(void);
 /* wanted (menu/records_screen.c): a row's car, three pieces */
 void SpritePieces3(uint16_t x, uint8_t y, uint16_t set, uint16_t palette, int slot);
 /* wanted by the race (race/phases.c, the lap and results panels) */
-uint32_t race_block_unpack(uint16_t out, uint16_t in); /* a packed block to the unpack area; its length from its transfer record */
 uint8_t SpriteYOnScreen(uint8_t y);                /* 7E:B005 */
 void SpriteBar4WithMarker(uint8_t value, uint16_t pos, int first);  /* from sprite `first` */
 void SpriteBar6WithMarker(uint8_t value, uint16_t pos, int first);

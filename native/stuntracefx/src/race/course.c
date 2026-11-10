@@ -10,9 +10,7 @@
 #include <stdint.h>
 
 #include "audio/sound.h"
-#include "data/cart.h"
 #include "data/race_tables.h"
-#include "data/unpack.h"
 #include "fx/fx_draw.h"
 #include "fx/fx_rt.h"
 #include "math/math.h"
@@ -138,9 +136,8 @@ static void flash_sprite_y(uint8_t y)
 
 /* The course screen's tables are in data/race_tables.h: the zoom's window
    boxes and targets, four words each by offset; the stunt and battle courses
-   by cursor; the flashing sprite's place by stage; the screen's palette. The
-   packed art's records below are still read here by their place (bank 3). */
-enum { COURSE_BANK = 0x03 };
+   by cursor; the flashing sprite's place by stage; the screen's palette; the
+   race load's packed art blocks. */
 
 /* ---- the zoom into the chosen course ---- */
 
@@ -908,46 +905,29 @@ void RecordsPanelTile(uint16_t offset, uint8_t tile)
 
 /* ---- the race's load and the screen's loop ---- */
 
-/* The race load's packed blocks, by their two records in bank 3: its
-   transfer (its length at +5; where it goes is named where it is loaded)
-   and where its packed data is (an address, then its bank). */
-enum {
-    TO_COURSE_ART = 0xF837, TO_SHARED_ART = 0xF822, TO_VIEWS_MAP = 0xF868, TO_MODE_ART = 0xF83E,
-    PACKED_COURSE_ART = 0xF7E6, PACKED_SHARED_ART = 0xF801,
-    PACKED_VIEWS_SPEED = 0xF7F2, PACKED_VIEWS_TEST_RUN = 0xF7FB,
-    PACKED_VIEWS_BATTLE = 0xF7F5, PACKED_VIEWS_STUNT = 0xF7F8,
-    PACKED_ART_SPEED = 0xF7E9, PACKED_ART_BATTLE = 0xF7EF, PACKED_ART_STUNT = 0xF7EC,
-    UNPACK_ROOM = 0xC000                /* the chip's RAM from the unpack area on */
-};
+enum { UNPACK_ROOM = 0xC000 /* the chip's RAM from the unpack area on */ };
 
-/* A packed block from its record in bank 03 unpacked to the unpack area;
-   its length from its transfer record. */
-static uint32_t unpacked(uint16_t out, uint16_t in)
+/* @routine 03:CF42 GsuCF42ToVram (as the race calls it): a packed block of
+   the race load unpacked to the unpack area; its length. The caller sends
+   it to its named destination. */
+static uint32_t unpacked(RaceBlock block)
 {
-    unpack((uint32_t)cart8(COURSE_BANK, (uint16_t)(in + 2)) << 16 | cart16(COURSE_BANK, in), fx_ram + FX_UNPACK_AREA, UNPACK_ROOM);
-    return cart16(COURSE_BANK, (uint16_t)(out + 5));
-}
-
-/* @routine 03:CF42 GsuCF42ToVram (as the race calls it): the block unpacked;
-   the caller sends it to its named destination. */
-uint32_t race_block_unpack(uint16_t out, uint16_t in)
-{
-    return unpacked(out, in);
+    return race_block_unpack(block, fx_ram + FX_UNPACK_AREA, UNPACK_ROOM);
 }
 
 /* The course screen's art: the course's from character 0, the mode's from COURSE_MODE_ART. */
 enum { COURSE_MODE_ART = 0x180 };
 
 /* the views to the course screen's map (32 entries a row), kept as both maps */
-static void views(uint16_t in)
+static void views(RaceBlock in)
 {
-    race_course_screen_map_write((const uint16_t *)(const void *)(fx_ram + FX_UNPACK_AREA), unpacked(TO_VIEWS_MAP, in) / 64u);
+    race_course_screen_map_write((const uint16_t *)(const void *)(fx_ram + FX_UNPACK_AREA), unpacked(in) / 64u);
     race_course_maps_keep();
 }
 
-static void mode_art(uint16_t in)
+static void mode_art(RaceBlock in)
 {
-    race_course_screen_art_write(COURSE_MODE_ART, fx_ram + FX_UNPACK_AREA, unpacked(TO_MODE_ART, in));
+    race_course_screen_art_write(COURSE_MODE_ART, fx_ram + FX_UNPACK_AREA, unpacked(in));
 }
 
 /* $0E35 and $0E31 are only written: not kept. */
@@ -978,25 +958,25 @@ void RaceLoad(void)
     OamBufferClear();
     VideoRegsReset();
     RaceVarsReset();
-    race_course_screen_art_write(0, fx_ram + FX_UNPACK_AREA, unpacked(TO_COURSE_ART, PACKED_COURSE_ART));
-    race_art_write(RACE_ART_SPRITES, fx_ram + FX_UNPACK_AREA, unpacked(TO_SHARED_ART, PACKED_SHARED_ART));
+    race_course_screen_art_write(0, fx_ram + FX_UNPACK_AREA, unpacked(RACE_BLOCK_COURSE_ART));
+    race_art_write(RACE_ART_SPRITES, fx_ram + FX_UNPACK_AREA, unpacked(RACE_BLOCK_SHARED_ART));
     /* by the mode (the original's table of handlers at $03:F1B2) */
     switch (g.hud_mode) {
     case 0:                             /* Speed Trax */
     case 3:                             /* the test run */
-        views(g.hud_mode == 0 ? PACKED_VIEWS_SPEED : PACKED_VIEWS_TEST_RUN);
-        mode_art(PACKED_ART_SPEED);
+        views(g.hud_mode == 0 ? RACE_BLOCK_VIEWS_SPEED : RACE_BLOCK_VIEWS_TEST_RUN);
+        mode_art(RACE_BLOCK_MODE_ART_SPEED);
         scroll_set(g.course_page ? 0x0000 : 0x0050);
         break;
     case 2:                             /* Battle Trax */
-        views(PACKED_VIEWS_BATTLE);
-        mode_art(PACKED_ART_BATTLE);
+        views(RACE_BLOCK_VIEWS_BATTLE);
+        mode_art(RACE_BLOCK_MODE_ART_BATTLE);
         scroll_set(0x0000);
         g.champ_stage = 0;
         break;
     case 1:                             /* Stunt Trax */
-        views(PACKED_VIEWS_STUNT);
-        mode_art(PACKED_ART_STUNT);
+        views(RACE_BLOCK_VIEWS_STUNT);
+        mode_art(RACE_BLOCK_MODE_ART_STUNT);
         scroll_set(0x0000);
         if (!g.course_page) {
             scroll_set(0x0050);
