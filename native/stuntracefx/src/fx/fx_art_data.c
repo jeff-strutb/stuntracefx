@@ -677,7 +677,7 @@ static const FxArtCorner piece_tail_2_2[] = { { 22.0f, 3.0f, 2.0f }, { 22.0f, 7.
 static const FxArtLoop piece_tail_2[] = { { 4, piece_tail_2_0 }, { 8, piece_tail_2_1 }, { 4, piece_tail_2_2 } };
 static const FxArtLayer piece_tail_fill[] = { { 1, 1, piece_tail_0, 0.0f }, { 2, 5, piece_tail_1, 0.0f }, { 3, 3, piece_tail_2, 0.0f } };
 
-/* the HUD piece 'LAP badge' ($15:$1D1A), its colours each a region over the one before (1: 3 loops, 42 corners (23 sharp), radii 0.6; 2: 6 loops, 78 corners (35 sharp), radii 0.6; 3: 5 loops, 38 corners (17 sharp), radii 0.6); 0 off, its strokes a texel wide kept as drawn */
+/* the HUD piece 'LAP badge' ($15:$1D1A), its colours each a region over the one before (1: 3 loops, 42 corners (23 sharp), radii 0.6; 2: 6 loops, 78 corners (35 sharp), radii 0.6; 3: 5 loops, 38 corners (17 sharp), radii 0.6); 0 off, its strokes a texel wide kept as drawn, corners eased, diagonal neighbours joined */
 static const FxArtCorner piece_lap_badge_0_0[] = { { 3.0f, 4.0f, 0.6f }, { 4.0f, 4.0f, 0.0f }, { 4.0f, 3.0f, 0.6f }, { 22.0f, 3.0f, 0.6f }, { 22.0f, 4.0f, 0.0f }, { 23.0f, 4.0f, 0.6f }, { 23.0f, 21.0f, 0.6f }, { 22.0f, 21.0f, 0.0f }, { 22.0f, 22.0f, 0.6f }, { 17.0f, 22.0f, 0.0f }, { 17.0f, 24.0f, 0.6f }, { 14.0f, 24.0f, 0.6f }, { 14.0f, 23.0f, 0.0f }, { 13.0f, 23.0f, 0.6f }, { 13.0f, 22.0f, 0.0f }, { 12.0f, 22.0f, 0.6f }, { 12.0f, 18.0f, 0.6f }, { 13.0f, 18.0f, 0.0f }, { 13.0f, 17.0f, 0.0f }, { 7.0f, 17.0f, 0.0f }, { 7.0f, 18.0f, 0.0f }, { 11.0f, 18.0f, 0.6f }, { 11.0f, 22.0f, 0.6f }, { 4.0f, 22.0f, 0.6f }, { 4.0f, 21.0f, 0.0f }, { 3.0f, 21.0f, 0.6f } };
 static const FxArtCorner piece_lap_badge_0_1[] = { { 7.0f, 7.0f, 0.0f }, { 7.0f, 8.0f, 0.0f }, { 8.0f, 8.0f, 0.6f }, { 8.0f, 13.0f, 0.0f }, { 10.0f, 13.0f, 0.0f }, { 10.0f, 9.0f, 0.6f }, { 11.0f, 9.0f, 0.0f }, { 11.0f, 8.0f, 0.6f }, { 19.0f, 8.0f, 0.0f }, { 19.0f, 7.0f, 0.0f } };
 static const FxArtCorner piece_lap_badge_0_2[] = { { 17.0f, 17.0f, 0.0f }, { 17.0f, 18.0f, 0.0f }, { 19.0f, 18.0f, 0.0f }, { 19.0f, 15.0f, 0.0f }, { 18.0f, 15.0f, 0.0f }, { 18.0f, 17.0f, 0.6f } };
@@ -697,7 +697,7 @@ static const FxArtCorner piece_lap_badge_2_4[] = { { 17.0f, 11.0f, 0.0f }, { 17.
 static const FxArtLoop piece_lap_badge_2[] = { { 8, piece_lap_badge_2_0 }, { 12, piece_lap_badge_2_1 }, { 4, piece_lap_badge_2_2 }, { 10, piece_lap_badge_2_3 }, { 4, piece_lap_badge_2_4 } };
 static const FxArtLayer piece_lap_badge_fill[] = { { 1, 3, piece_lap_badge_0, 0.0f }, { 2, 6, piece_lap_badge_1, 0.0f }, { 3, 5, piece_lap_badge_2, 0.0f } };
 
-/* the HUD piece 'rank first' ($15:$080E), its colours each a region over the one before (1: 1 loop, 22 corners (9 sharp), radii 0.3; 2: 12 loops, 84 corners (18 sharp), radii 0.3; 3: 11 loops, 74 corners (15 sharp), radii 0.3); 0 off, its strokes a texel wide kept as drawn */
+/* the HUD piece 'rank first' ($15:$080E), its colours each a region over the one before (1: 1 loop, 22 corners (9 sharp), radii 0.3; 2: 21 loops, 120 corners (54 sharp), radii 0.3; 3: 20 loops, 110 corners (51 sharp), radii 0.3); 0 off, its strokes a texel wide kept as drawn, corners eased, diagonal neighbours joined */
 static const FxArtCorner piece_rank_first_0_0[] = { { 3.0f, 0.0f, 0.3f }, { 8.0f, 0.0f, 0.3f }, { 8.0f, 1.0f, 0.0f }, { 9.0f, 1.0f, 0.0f }, { 9.0f, 0.0f, 0.3f }, { 24.0f, 0.0f, 0.3f }, { 24.0f, 3.0f, 0.3f }, { 23.0f, 3.0f, 0.0f }, { 23.0f, 4.0f, 0.0f }, { 24.0f, 4.0f, 0.3f }, { 24.0f, 7.0f, 0.3f }, { 15.0f, 7.0f, 0.0f }, { 15.0f, 12.0f, 0.0f }, { 16.0f, 12.0f, 0.3f }, { 16.0f, 16.0f, 0.3f }, { 10.0f, 16.0f, 0.3f }, { 10.0f, 12.0f, 0.3f }, { 11.0f, 12.0f, 0.0f }, { 11.0f, 10.0f, 0.0f }, { 10.0f, 10.0f, 0.3f }, { 10.0f, 7.0f, 0.0f }, { 3.0f, 7.0f, 0.3f } };
 static const FxArtLoop piece_rank_first_0[] = { { 22, piece_rank_first_0_0 } };
 static const FxArtCorner piece_rank_first_1_0[] = { { 4.0f, 1.0f, 0.3f }, { 7.0f, 1.0f, 0.3f }, { 7.0f, 2.0f, 0.3f }, { 5.0f, 2.0f, 0.0f }, { 5.0f, 3.0f, 0.0f }, { 7.0f, 3.0f, 0.3f }, { 7.0f, 4.0f, 0.3f }, { 5.0f, 4.0f, 0.0f }, { 5.0f, 6.0f, 0.3f }, { 4.0f, 6.0f, 0.3f } };
@@ -712,7 +712,16 @@ static const FxArtCorner piece_rank_first_1_8[] = { { 21.0f, 2.0f, 0.3f }, { 22.
 static const FxArtCorner piece_rank_first_1_9[] = { { 21.0f, 4.0f, 0.3f }, { 22.0f, 4.0f, 0.3f }, { 22.0f, 5.0f, 0.3f }, { 21.0f, 5.0f, 0.3f } };
 static const FxArtCorner piece_rank_first_1_10[] = { { 22.0f, 1.0f, 0.3f }, { 23.0f, 1.0f, 0.3f }, { 23.0f, 2.0f, 0.3f }, { 22.0f, 2.0f, 0.3f } };
 static const FxArtCorner piece_rank_first_1_11[] = { { 22.0f, 5.0f, 0.3f }, { 23.0f, 5.0f, 0.3f }, { 23.0f, 6.0f, 0.3f }, { 22.0f, 6.0f, 0.3f } };
-static const FxArtLoop piece_rank_first_1[] = { { 10, piece_rank_first_1_0 }, { 4, piece_rank_first_1_1 }, { 4, piece_rank_first_1_2 }, { 12, piece_rank_first_1_3 }, { 4, piece_rank_first_1_4 }, { 10, piece_rank_first_1_5 }, { 16, piece_rank_first_1_6 }, { 8, piece_rank_first_1_7 }, { 4, piece_rank_first_1_8 }, { 4, piece_rank_first_1_9 }, { 4, piece_rank_first_1_10 }, { 4, piece_rank_first_1_11 } };
+static const FxArtCorner piece_rank_first_1_12[] = { { 7.0f, 1.3f, 0.0f }, { 7.7f, 2.0f, 0.0f }, { 7.0f, 2.7f, 0.0f }, { 6.3f, 2.0f, 0.0f } };
+static const FxArtCorner piece_rank_first_1_13[] = { { 10.0f, 1.3f, 0.0f }, { 10.7f, 2.0f, 0.0f }, { 10.0f, 2.7f, 0.0f }, { 9.3f, 2.0f, 0.0f } };
+static const FxArtCorner piece_rank_first_1_14[] = { { 12.0f, 1.3f, 0.0f }, { 12.7f, 2.0f, 0.0f }, { 12.0f, 2.7f, 0.0f }, { 11.3f, 2.0f, 0.0f } };
+static const FxArtCorner piece_rank_first_1_15[] = { { 22.0f, 1.3f, 0.0f }, { 22.7f, 2.0f, 0.0f }, { 22.0f, 2.7f, 0.0f }, { 21.3f, 2.0f, 0.0f } };
+static const FxArtCorner piece_rank_first_1_16[] = { { 7.0f, 2.3f, 0.0f }, { 7.7f, 3.0f, 0.0f }, { 7.0f, 3.7f, 0.0f }, { 6.3f, 3.0f, 0.0f } };
+static const FxArtCorner piece_rank_first_1_17[] = { { 21.0f, 2.3f, 0.0f }, { 21.7f, 3.0f, 0.0f }, { 21.0f, 3.7f, 0.0f }, { 20.3f, 3.0f, 0.0f } };
+static const FxArtCorner piece_rank_first_1_18[] = { { 7.0f, 3.3f, 0.0f }, { 7.7f, 4.0f, 0.0f }, { 7.0f, 4.7f, 0.0f }, { 6.3f, 4.0f, 0.0f } };
+static const FxArtCorner piece_rank_first_1_19[] = { { 21.0f, 3.3f, 0.0f }, { 21.7f, 4.0f, 0.0f }, { 21.0f, 4.7f, 0.0f }, { 20.3f, 4.0f, 0.0f } };
+static const FxArtCorner piece_rank_first_1_20[] = { { 22.0f, 4.3f, 0.0f }, { 22.7f, 5.0f, 0.0f }, { 22.0f, 5.7f, 0.0f }, { 21.3f, 5.0f, 0.0f } };
+static const FxArtLoop piece_rank_first_1[] = { { 10, piece_rank_first_1_0 }, { 4, piece_rank_first_1_1 }, { 4, piece_rank_first_1_2 }, { 12, piece_rank_first_1_3 }, { 4, piece_rank_first_1_4 }, { 10, piece_rank_first_1_5 }, { 16, piece_rank_first_1_6 }, { 8, piece_rank_first_1_7 }, { 4, piece_rank_first_1_8 }, { 4, piece_rank_first_1_9 }, { 4, piece_rank_first_1_10 }, { 4, piece_rank_first_1_11 }, { 4, piece_rank_first_1_12 }, { 4, piece_rank_first_1_13 }, { 4, piece_rank_first_1_14 }, { 4, piece_rank_first_1_15 }, { 4, piece_rank_first_1_16 }, { 4, piece_rank_first_1_17 }, { 4, piece_rank_first_1_18 }, { 4, piece_rank_first_1_19 }, { 4, piece_rank_first_1_20 } };
 static const FxArtCorner piece_rank_first_2_0[] = { { 4.0f, 1.0f, 0.3f }, { 7.0f, 1.0f, 0.3f }, { 7.0f, 2.0f, 0.3f }, { 5.0f, 2.0f, 0.0f }, { 5.0f, 3.0f, 0.0f }, { 7.0f, 3.0f, 0.3f }, { 7.0f, 4.0f, 0.3f }, { 5.0f, 4.0f, 0.0f }, { 5.0f, 6.0f, 0.3f }, { 4.0f, 6.0f, 0.3f } };
 static const FxArtCorner piece_rank_first_2_1[] = { { 7.0f, 2.0f, 0.3f }, { 8.0f, 2.0f, 0.3f }, { 8.0f, 3.0f, 0.3f }, { 7.0f, 3.0f, 0.3f } };
 static const FxArtCorner piece_rank_first_2_2[] = { { 7.0f, 4.0f, 0.3f }, { 8.0f, 4.0f, 0.3f }, { 8.0f, 6.0f, 0.3f }, { 7.0f, 6.0f, 0.3f } };
@@ -724,10 +733,19 @@ static const FxArtCorner piece_rank_first_2_7[] = { { 21.0f, 2.0f, 0.3f }, { 22.
 static const FxArtCorner piece_rank_first_2_8[] = { { 21.0f, 4.0f, 0.3f }, { 22.0f, 4.0f, 0.3f }, { 22.0f, 5.0f, 0.3f }, { 21.0f, 5.0f, 0.3f } };
 static const FxArtCorner piece_rank_first_2_9[] = { { 22.0f, 1.0f, 0.3f }, { 23.0f, 1.0f, 0.3f }, { 23.0f, 2.0f, 0.3f }, { 22.0f, 2.0f, 0.3f } };
 static const FxArtCorner piece_rank_first_2_10[] = { { 22.0f, 5.0f, 0.3f }, { 23.0f, 5.0f, 0.3f }, { 23.0f, 6.0f, 0.3f }, { 22.0f, 6.0f, 0.3f } };
-static const FxArtLoop piece_rank_first_2[] = { { 10, piece_rank_first_2_0 }, { 4, piece_rank_first_2_1 }, { 4, piece_rank_first_2_2 }, { 12, piece_rank_first_2_3 }, { 4, piece_rank_first_2_4 }, { 16, piece_rank_first_2_5 }, { 8, piece_rank_first_2_6 }, { 4, piece_rank_first_2_7 }, { 4, piece_rank_first_2_8 }, { 4, piece_rank_first_2_9 }, { 4, piece_rank_first_2_10 } };
-static const FxArtLayer piece_rank_first_fill[] = { { 1, 1, piece_rank_first_0, 0.0f }, { 2, 12, piece_rank_first_1, 0.0f }, { 3, 11, piece_rank_first_2, 0.0f } };
+static const FxArtCorner piece_rank_first_2_11[] = { { 7.0f, 1.3f, 0.0f }, { 7.7f, 2.0f, 0.0f }, { 7.0f, 2.7f, 0.0f }, { 6.3f, 2.0f, 0.0f } };
+static const FxArtCorner piece_rank_first_2_12[] = { { 10.0f, 1.3f, 0.0f }, { 10.7f, 2.0f, 0.0f }, { 10.0f, 2.7f, 0.0f }, { 9.3f, 2.0f, 0.0f } };
+static const FxArtCorner piece_rank_first_2_13[] = { { 12.0f, 1.3f, 0.0f }, { 12.7f, 2.0f, 0.0f }, { 12.0f, 2.7f, 0.0f }, { 11.3f, 2.0f, 0.0f } };
+static const FxArtCorner piece_rank_first_2_14[] = { { 22.0f, 1.3f, 0.0f }, { 22.7f, 2.0f, 0.0f }, { 22.0f, 2.7f, 0.0f }, { 21.3f, 2.0f, 0.0f } };
+static const FxArtCorner piece_rank_first_2_15[] = { { 7.0f, 2.3f, 0.0f }, { 7.7f, 3.0f, 0.0f }, { 7.0f, 3.7f, 0.0f }, { 6.3f, 3.0f, 0.0f } };
+static const FxArtCorner piece_rank_first_2_16[] = { { 21.0f, 2.3f, 0.0f }, { 21.7f, 3.0f, 0.0f }, { 21.0f, 3.7f, 0.0f }, { 20.3f, 3.0f, 0.0f } };
+static const FxArtCorner piece_rank_first_2_17[] = { { 7.0f, 3.3f, 0.0f }, { 7.7f, 4.0f, 0.0f }, { 7.0f, 4.7f, 0.0f }, { 6.3f, 4.0f, 0.0f } };
+static const FxArtCorner piece_rank_first_2_18[] = { { 21.0f, 3.3f, 0.0f }, { 21.7f, 4.0f, 0.0f }, { 21.0f, 4.7f, 0.0f }, { 20.3f, 4.0f, 0.0f } };
+static const FxArtCorner piece_rank_first_2_19[] = { { 22.0f, 4.3f, 0.0f }, { 22.7f, 5.0f, 0.0f }, { 22.0f, 5.7f, 0.0f }, { 21.3f, 5.0f, 0.0f } };
+static const FxArtLoop piece_rank_first_2[] = { { 10, piece_rank_first_2_0 }, { 4, piece_rank_first_2_1 }, { 4, piece_rank_first_2_2 }, { 12, piece_rank_first_2_3 }, { 4, piece_rank_first_2_4 }, { 16, piece_rank_first_2_5 }, { 8, piece_rank_first_2_6 }, { 4, piece_rank_first_2_7 }, { 4, piece_rank_first_2_8 }, { 4, piece_rank_first_2_9 }, { 4, piece_rank_first_2_10 }, { 4, piece_rank_first_2_11 }, { 4, piece_rank_first_2_12 }, { 4, piece_rank_first_2_13 }, { 4, piece_rank_first_2_14 }, { 4, piece_rank_first_2_15 }, { 4, piece_rank_first_2_16 }, { 4, piece_rank_first_2_17 }, { 4, piece_rank_first_2_18 }, { 4, piece_rank_first_2_19 } };
+static const FxArtLayer piece_rank_first_fill[] = { { 1, 1, piece_rank_first_0, 0.0f }, { 2, 21, piece_rank_first_1, 0.0f }, { 3, 20, piece_rank_first_2, 0.0f } };
 
-/* the HUD piece 'rank other' ($15:$0A0E), its colours each a region over the one before (1: 1 loop, 26 corners (11 sharp), radii 0.3; 2: 12 loops, 92 corners (22 sharp), radii 0.3; 3: 11 loops, 74 corners (15 sharp), radii 0.3); 0 off, its strokes a texel wide kept as drawn */
+/* the HUD piece 'rank other' ($15:$0A0E), its colours each a region over the one before (1: 1 loop, 26 corners (11 sharp), radii 0.3; 2: 21 loops, 128 corners (58 sharp), radii 0.3; 3: 20 loops, 110 corners (51 sharp), radii 0.3); 0 off, its strokes a texel wide kept as drawn, corners eased, diagonal neighbours joined */
 static const FxArtCorner piece_rank_other_0_0[] = { { 3.0f, 0.0f, 0.3f }, { 8.0f, 0.0f, 0.3f }, { 8.0f, 1.0f, 0.0f }, { 9.0f, 1.0f, 0.0f }, { 9.0f, 0.0f, 0.3f }, { 24.0f, 0.0f, 0.3f }, { 24.0f, 3.0f, 0.3f }, { 23.0f, 3.0f, 0.0f }, { 23.0f, 4.0f, 0.0f }, { 24.0f, 4.0f, 0.3f }, { 24.0f, 7.0f, 0.3f }, { 16.0f, 7.0f, 0.0f }, { 16.0f, 8.0f, 0.0f }, { 17.0f, 8.0f, 0.3f }, { 17.0f, 11.0f, 0.3f }, { 16.0f, 11.0f, 0.0f }, { 16.0f, 12.0f, 0.0f }, { 17.0f, 12.0f, 0.3f }, { 17.0f, 16.0f, 0.3f }, { 9.0f, 16.0f, 0.3f }, { 9.0f, 11.0f, 0.3f }, { 10.0f, 11.0f, 0.0f }, { 10.0f, 10.0f, 0.0f }, { 9.0f, 10.0f, 0.3f }, { 9.0f, 7.0f, 0.0f }, { 3.0f, 7.0f, 0.3f } };
 static const FxArtLoop piece_rank_other_0[] = { { 26, piece_rank_other_0_0 } };
 static const FxArtCorner piece_rank_other_1_0[] = { { 4.0f, 1.0f, 0.3f }, { 7.0f, 1.0f, 0.3f }, { 7.0f, 2.0f, 0.3f }, { 5.0f, 2.0f, 0.0f }, { 5.0f, 3.0f, 0.0f }, { 7.0f, 3.0f, 0.3f }, { 7.0f, 4.0f, 0.3f }, { 5.0f, 4.0f, 0.0f }, { 5.0f, 6.0f, 0.3f }, { 4.0f, 6.0f, 0.3f } };
@@ -742,7 +760,16 @@ static const FxArtCorner piece_rank_other_1_8[] = { { 21.0f, 2.0f, 0.3f }, { 22.
 static const FxArtCorner piece_rank_other_1_9[] = { { 21.0f, 4.0f, 0.3f }, { 22.0f, 4.0f, 0.3f }, { 22.0f, 5.0f, 0.3f }, { 21.0f, 5.0f, 0.3f } };
 static const FxArtCorner piece_rank_other_1_10[] = { { 22.0f, 1.0f, 0.3f }, { 23.0f, 1.0f, 0.3f }, { 23.0f, 2.0f, 0.3f }, { 22.0f, 2.0f, 0.3f } };
 static const FxArtCorner piece_rank_other_1_11[] = { { 22.0f, 5.0f, 0.3f }, { 23.0f, 5.0f, 0.3f }, { 23.0f, 6.0f, 0.3f }, { 22.0f, 6.0f, 0.3f } };
-static const FxArtLoop piece_rank_other_1[] = { { 10, piece_rank_other_1_0 }, { 4, piece_rank_other_1_1 }, { 4, piece_rank_other_1_2 }, { 12, piece_rank_other_1_3 }, { 4, piece_rank_other_1_4 }, { 18, piece_rank_other_1_5 }, { 16, piece_rank_other_1_6 }, { 8, piece_rank_other_1_7 }, { 4, piece_rank_other_1_8 }, { 4, piece_rank_other_1_9 }, { 4, piece_rank_other_1_10 }, { 4, piece_rank_other_1_11 } };
+static const FxArtCorner piece_rank_other_1_12[] = { { 7.0f, 1.3f, 0.0f }, { 7.7f, 2.0f, 0.0f }, { 7.0f, 2.7f, 0.0f }, { 6.3f, 2.0f, 0.0f } };
+static const FxArtCorner piece_rank_other_1_13[] = { { 10.0f, 1.3f, 0.0f }, { 10.7f, 2.0f, 0.0f }, { 10.0f, 2.7f, 0.0f }, { 9.3f, 2.0f, 0.0f } };
+static const FxArtCorner piece_rank_other_1_14[] = { { 12.0f, 1.3f, 0.0f }, { 12.7f, 2.0f, 0.0f }, { 12.0f, 2.7f, 0.0f }, { 11.3f, 2.0f, 0.0f } };
+static const FxArtCorner piece_rank_other_1_15[] = { { 22.0f, 1.3f, 0.0f }, { 22.7f, 2.0f, 0.0f }, { 22.0f, 2.7f, 0.0f }, { 21.3f, 2.0f, 0.0f } };
+static const FxArtCorner piece_rank_other_1_16[] = { { 7.0f, 2.3f, 0.0f }, { 7.7f, 3.0f, 0.0f }, { 7.0f, 3.7f, 0.0f }, { 6.3f, 3.0f, 0.0f } };
+static const FxArtCorner piece_rank_other_1_17[] = { { 21.0f, 2.3f, 0.0f }, { 21.7f, 3.0f, 0.0f }, { 21.0f, 3.7f, 0.0f }, { 20.3f, 3.0f, 0.0f } };
+static const FxArtCorner piece_rank_other_1_18[] = { { 7.0f, 3.3f, 0.0f }, { 7.7f, 4.0f, 0.0f }, { 7.0f, 4.7f, 0.0f }, { 6.3f, 4.0f, 0.0f } };
+static const FxArtCorner piece_rank_other_1_19[] = { { 21.0f, 3.3f, 0.0f }, { 21.7f, 4.0f, 0.0f }, { 21.0f, 4.7f, 0.0f }, { 20.3f, 4.0f, 0.0f } };
+static const FxArtCorner piece_rank_other_1_20[] = { { 22.0f, 4.3f, 0.0f }, { 22.7f, 5.0f, 0.0f }, { 22.0f, 5.7f, 0.0f }, { 21.3f, 5.0f, 0.0f } };
+static const FxArtLoop piece_rank_other_1[] = { { 10, piece_rank_other_1_0 }, { 4, piece_rank_other_1_1 }, { 4, piece_rank_other_1_2 }, { 12, piece_rank_other_1_3 }, { 4, piece_rank_other_1_4 }, { 18, piece_rank_other_1_5 }, { 16, piece_rank_other_1_6 }, { 8, piece_rank_other_1_7 }, { 4, piece_rank_other_1_8 }, { 4, piece_rank_other_1_9 }, { 4, piece_rank_other_1_10 }, { 4, piece_rank_other_1_11 }, { 4, piece_rank_other_1_12 }, { 4, piece_rank_other_1_13 }, { 4, piece_rank_other_1_14 }, { 4, piece_rank_other_1_15 }, { 4, piece_rank_other_1_16 }, { 4, piece_rank_other_1_17 }, { 4, piece_rank_other_1_18 }, { 4, piece_rank_other_1_19 }, { 4, piece_rank_other_1_20 } };
 static const FxArtCorner piece_rank_other_2_0[] = { { 4.0f, 1.0f, 0.3f }, { 7.0f, 1.0f, 0.3f }, { 7.0f, 2.0f, 0.3f }, { 5.0f, 2.0f, 0.0f }, { 5.0f, 3.0f, 0.0f }, { 7.0f, 3.0f, 0.3f }, { 7.0f, 4.0f, 0.3f }, { 5.0f, 4.0f, 0.0f }, { 5.0f, 6.0f, 0.3f }, { 4.0f, 6.0f, 0.3f } };
 static const FxArtCorner piece_rank_other_2_1[] = { { 7.0f, 2.0f, 0.3f }, { 8.0f, 2.0f, 0.3f }, { 8.0f, 3.0f, 0.3f }, { 7.0f, 3.0f, 0.3f } };
 static const FxArtCorner piece_rank_other_2_2[] = { { 7.0f, 4.0f, 0.3f }, { 8.0f, 4.0f, 0.3f }, { 8.0f, 6.0f, 0.3f }, { 7.0f, 6.0f, 0.3f } };
@@ -754,8 +781,17 @@ static const FxArtCorner piece_rank_other_2_7[] = { { 21.0f, 2.0f, 0.3f }, { 22.
 static const FxArtCorner piece_rank_other_2_8[] = { { 21.0f, 4.0f, 0.3f }, { 22.0f, 4.0f, 0.3f }, { 22.0f, 5.0f, 0.3f }, { 21.0f, 5.0f, 0.3f } };
 static const FxArtCorner piece_rank_other_2_9[] = { { 22.0f, 1.0f, 0.3f }, { 23.0f, 1.0f, 0.3f }, { 23.0f, 2.0f, 0.3f }, { 22.0f, 2.0f, 0.3f } };
 static const FxArtCorner piece_rank_other_2_10[] = { { 22.0f, 5.0f, 0.3f }, { 23.0f, 5.0f, 0.3f }, { 23.0f, 6.0f, 0.3f }, { 22.0f, 6.0f, 0.3f } };
-static const FxArtLoop piece_rank_other_2[] = { { 10, piece_rank_other_2_0 }, { 4, piece_rank_other_2_1 }, { 4, piece_rank_other_2_2 }, { 12, piece_rank_other_2_3 }, { 4, piece_rank_other_2_4 }, { 16, piece_rank_other_2_5 }, { 8, piece_rank_other_2_6 }, { 4, piece_rank_other_2_7 }, { 4, piece_rank_other_2_8 }, { 4, piece_rank_other_2_9 }, { 4, piece_rank_other_2_10 } };
-static const FxArtLayer piece_rank_other_fill[] = { { 1, 1, piece_rank_other_0, 0.0f }, { 2, 12, piece_rank_other_1, 0.0f }, { 3, 11, piece_rank_other_2, 0.0f } };
+static const FxArtCorner piece_rank_other_2_11[] = { { 7.0f, 1.3f, 0.0f }, { 7.7f, 2.0f, 0.0f }, { 7.0f, 2.7f, 0.0f }, { 6.3f, 2.0f, 0.0f } };
+static const FxArtCorner piece_rank_other_2_12[] = { { 10.0f, 1.3f, 0.0f }, { 10.7f, 2.0f, 0.0f }, { 10.0f, 2.7f, 0.0f }, { 9.3f, 2.0f, 0.0f } };
+static const FxArtCorner piece_rank_other_2_13[] = { { 12.0f, 1.3f, 0.0f }, { 12.7f, 2.0f, 0.0f }, { 12.0f, 2.7f, 0.0f }, { 11.3f, 2.0f, 0.0f } };
+static const FxArtCorner piece_rank_other_2_14[] = { { 22.0f, 1.3f, 0.0f }, { 22.7f, 2.0f, 0.0f }, { 22.0f, 2.7f, 0.0f }, { 21.3f, 2.0f, 0.0f } };
+static const FxArtCorner piece_rank_other_2_15[] = { { 7.0f, 2.3f, 0.0f }, { 7.7f, 3.0f, 0.0f }, { 7.0f, 3.7f, 0.0f }, { 6.3f, 3.0f, 0.0f } };
+static const FxArtCorner piece_rank_other_2_16[] = { { 21.0f, 2.3f, 0.0f }, { 21.7f, 3.0f, 0.0f }, { 21.0f, 3.7f, 0.0f }, { 20.3f, 3.0f, 0.0f } };
+static const FxArtCorner piece_rank_other_2_17[] = { { 7.0f, 3.3f, 0.0f }, { 7.7f, 4.0f, 0.0f }, { 7.0f, 4.7f, 0.0f }, { 6.3f, 4.0f, 0.0f } };
+static const FxArtCorner piece_rank_other_2_18[] = { { 21.0f, 3.3f, 0.0f }, { 21.7f, 4.0f, 0.0f }, { 21.0f, 4.7f, 0.0f }, { 20.3f, 4.0f, 0.0f } };
+static const FxArtCorner piece_rank_other_2_19[] = { { 22.0f, 4.3f, 0.0f }, { 22.7f, 5.0f, 0.0f }, { 22.0f, 5.7f, 0.0f }, { 21.3f, 5.0f, 0.0f } };
+static const FxArtLoop piece_rank_other_2[] = { { 10, piece_rank_other_2_0 }, { 4, piece_rank_other_2_1 }, { 4, piece_rank_other_2_2 }, { 12, piece_rank_other_2_3 }, { 4, piece_rank_other_2_4 }, { 16, piece_rank_other_2_5 }, { 8, piece_rank_other_2_6 }, { 4, piece_rank_other_2_7 }, { 4, piece_rank_other_2_8 }, { 4, piece_rank_other_2_9 }, { 4, piece_rank_other_2_10 }, { 4, piece_rank_other_2_11 }, { 4, piece_rank_other_2_12 }, { 4, piece_rank_other_2_13 }, { 4, piece_rank_other_2_14 }, { 4, piece_rank_other_2_15 }, { 4, piece_rank_other_2_16 }, { 4, piece_rank_other_2_17 }, { 4, piece_rank_other_2_18 }, { 4, piece_rank_other_2_19 } };
+static const FxArtLayer piece_rank_other_fill[] = { { 1, 1, piece_rank_other_0, 0.0f }, { 2, 21, piece_rank_other_1, 0.0f }, { 3, 20, piece_rank_other_2, 0.0f } };
 
 /* the HUD piece 'stunt mark' ($15:$0C08), its colours each a region over the one before (1: 1 loop, 4 corners (0 sharp), radii 3.9; 2: 3 loops, 24 corners (6 sharp), radii 0.3, 0.7, 2; 3: 1 loop, 12 corners (4 sharp), radii 0.3); 0 off */
 static const FxArtCorner piece_stunt_mark_0_0[] = { { 14.02f, 0.97f, 3.92f }, { 14.02f, 15.03f, 3.92f }, { 1.98f, 15.03f, 3.92f }, { 1.98f, 0.97f, 3.92f } };
@@ -773,7 +809,7 @@ static const FxArtCorner piece_stunt_mark_used_0[] = { { 1.27f, 1.27f, 1.94f }, 
 static const FxArtLoop piece_stunt_mark_used[] = { { 16, piece_stunt_mark_used_0 } };
 static const FxArtLayer piece_stunt_mark_used_fill[] = { { 3, 1, piece_stunt_mark_used } };
 
-/* ---- the race's sprite art (video block 0, the speed panel's digits, lettering, arrow, bar pieces and the RETRY? YES NO letters): console art, its tiles from the set video unpacks ---- */
+/* ---- the race's sprite art (video block 0: the speed panel's digits, lettering, arrow, bar pieces and the RETRY? YES NO letters; block 1: the minimap panel's corner and the MINI MAP label): console art, its tiles from the sets video unpacks ---- */
 
 /* the race sprites' picture 'digit 0' ($FF:$0000): 2 loops, 8 corners (0 sharp), radii 0.7, 2.9; 0 off, the 16 x 32 digit's design scaled to its box and fitted */
 static const FxArtCorner sprite_digit_0_0[] = { { 7.28f, 2.73f, 2.91f }, { 7.28f, 14.27f, 2.91f }, { 0.73f, 14.27f, 2.9f }, { 0.73f, 2.73f, 2.9f } };
@@ -841,7 +877,7 @@ static const FxArtLoop sprite_digit_9[] = { { 8, sprite_digit_9_0 }, { 4, sprite
 static const FxArtLayer sprite_digit_9_fill[] = { { 3, 2, sprite_digit_9 } };
 static const uint16_t sprite_digit_9_tiles[] = { 18, 19 };
 
-/* the race sprites' picture 'small pair a' ($FF:$0000), its colours each a region over the one before (15: 1 loop, 6 corners (1 sharp), radii 0.3; 3: 1 loop, 10 corners (3 sharp), radii 0.3; 14: 3 loops, 18 corners (3 sharp), radii 0.3); 0 off, its strokes a texel wide kept as drawn */
+/* the race sprites' picture 'small pair a' ($FF:$0000), its colours each a region over the one before (15: 1 loop, 6 corners (1 sharp), radii 0.3; 3: 1 loop, 10 corners (3 sharp), radii 0.3; 14: 5 loops, 26 corners (11 sharp), radii 0.3); 0 off, its strokes a texel wide kept as drawn, corners eased, diagonal neighbours joined */
 static const FxArtCorner sprite_small_pair_a_0_0[] = { { 1.0f, 1.0f, 0.3f }, { 6.0f, 1.0f, 0.3f }, { 6.0f, 7.0f, 0.3f }, { 5.0f, 7.0f, 0.0f }, { 5.0f, 8.0f, 0.3f }, { 1.0f, 8.0f, 0.3f } };
 static const FxArtLoop sprite_small_pair_a_0[] = { { 6, sprite_small_pair_a_0_0 } };
 static const FxArtCorner sprite_small_pair_a_1_0[] = { { 2.0f, 2.0f, 0.3f }, { 5.0f, 2.0f, 0.3f }, { 5.0f, 6.0f, 0.3f }, { 4.0f, 6.0f, 0.0f }, { 4.0f, 7.0f, 0.3f }, { 2.0f, 7.0f, 0.3f }, { 2.0f, 5.0f, 0.3f }, { 3.0f, 5.0f, 0.0f }, { 3.0f, 4.0f, 0.0f }, { 2.0f, 4.0f, 0.3f } };
@@ -849,27 +885,34 @@ static const FxArtLoop sprite_small_pair_a_1[] = { { 10, sprite_small_pair_a_1_0
 static const FxArtCorner sprite_small_pair_a_2_0[] = { { 2.0f, 2.0f, 0.3f }, { 4.0f, 2.0f, 0.3f }, { 4.0f, 3.0f, 0.0f }, { 5.0f, 3.0f, 0.3f }, { 5.0f, 5.0f, 0.3f }, { 4.0f, 5.0f, 0.3f }, { 4.0f, 4.0f, 0.0f }, { 3.0f, 4.0f, 0.3f }, { 3.0f, 3.0f, 0.0f }, { 2.0f, 3.0f, 0.3f } };
 static const FxArtCorner sprite_small_pair_a_2_1[] = { { 2.0f, 6.0f, 0.3f }, { 3.0f, 6.0f, 0.3f }, { 3.0f, 7.0f, 0.3f }, { 2.0f, 7.0f, 0.3f } };
 static const FxArtCorner sprite_small_pair_a_2_2[] = { { 3.0f, 5.0f, 0.3f }, { 4.0f, 5.0f, 0.3f }, { 4.0f, 6.0f, 0.3f }, { 3.0f, 6.0f, 0.3f } };
-static const FxArtLoop sprite_small_pair_a_2[] = { { 10, sprite_small_pair_a_2_0 }, { 4, sprite_small_pair_a_2_1 }, { 4, sprite_small_pair_a_2_2 } };
-static const FxArtLayer sprite_small_pair_a_fill[] = { { 15, 1, sprite_small_pair_a_0, 0.0f }, { 3, 1, sprite_small_pair_a_1, 0.0f }, { 14, 3, sprite_small_pair_a_2, 0.0f } };
+static const FxArtCorner sprite_small_pair_a_2_3[] = { { 4.0f, 4.3f, 0.0f }, { 4.7f, 5.0f, 0.0f }, { 4.0f, 5.7f, 0.0f }, { 3.3f, 5.0f, 0.0f } };
+static const FxArtCorner sprite_small_pair_a_2_4[] = { { 3.0f, 5.3f, 0.0f }, { 3.7f, 6.0f, 0.0f }, { 3.0f, 6.7f, 0.0f }, { 2.3f, 6.0f, 0.0f } };
+static const FxArtLoop sprite_small_pair_a_2[] = { { 10, sprite_small_pair_a_2_0 }, { 4, sprite_small_pair_a_2_1 }, { 4, sprite_small_pair_a_2_2 }, { 4, sprite_small_pair_a_2_3 }, { 4, sprite_small_pair_a_2_4 } };
+static const FxArtLayer sprite_small_pair_a_fill[] = { { 15, 1, sprite_small_pair_a_0, 0.0f }, { 3, 1, sprite_small_pair_a_1, 0.0f }, { 14, 5, sprite_small_pair_a_2, 0.0f } };
 static const uint16_t sprite_small_pair_a_tiles[] = { 20 };
 
-/* the race sprites' picture 'small pair b' ($FF:$0000), its colours each a region over the one before (15: 1 loop, 6 corners (1 sharp), radii 0.3; 3: 2 loops, 22 corners (7 sharp), radii 0.3; 14: 6 loops, 32 corners (4 sharp), radii 0.3); 0 off, its strokes a texel wide kept as drawn */
+/* the race sprites' picture 'small pair b' ($FF:$0000), its colours each a region over the one before (15: 1 loop, 6 corners (1 sharp), radii 0.3; 3: 4 loops, 30 corners (15 sharp), radii 0.3; 14: 9 loops, 44 corners (16 sharp), radii 0.3); 0 off, its strokes a texel wide kept as drawn, corners eased, diagonal neighbours joined */
 static const FxArtCorner sprite_small_pair_b_0_0[] = { { 0.0f, 1.0f, 0.3f }, { 8.0f, 1.0f, 0.3f }, { 8.0f, 7.0f, 0.3f }, { 7.0f, 7.0f, 0.0f }, { 7.0f, 8.0f, 0.3f }, { 0.0f, 8.0f, 0.3f } };
 static const FxArtLoop sprite_small_pair_b_0[] = { { 6, sprite_small_pair_b_0_0 } };
 static const FxArtCorner sprite_small_pair_b_1_0[] = { { 1.0f, 2.0f, 0.3f }, { 3.0f, 2.0f, 0.3f }, { 3.0f, 4.0f, 0.0f }, { 4.0f, 4.0f, 0.3f }, { 4.0f, 5.0f, 0.3f }, { 3.0f, 5.0f, 0.0f }, { 3.0f, 7.0f, 0.3f }, { 1.0f, 7.0f, 0.3f }, { 1.0f, 5.0f, 0.3f }, { 2.0f, 5.0f, 0.0f }, { 2.0f, 4.0f, 0.0f }, { 1.0f, 4.0f, 0.3f } };
 static const FxArtCorner sprite_small_pair_b_1_1[] = { { 4.0f, 2.0f, 0.3f }, { 7.0f, 2.0f, 0.3f }, { 7.0f, 6.0f, 0.3f }, { 6.0f, 6.0f, 0.0f }, { 6.0f, 7.0f, 0.3f }, { 4.0f, 7.0f, 0.3f }, { 4.0f, 5.0f, 0.3f }, { 5.0f, 5.0f, 0.0f }, { 5.0f, 4.0f, 0.0f }, { 4.0f, 4.0f, 0.3f } };
-static const FxArtLoop sprite_small_pair_b_1[] = { { 12, sprite_small_pair_b_1_0 }, { 10, sprite_small_pair_b_1_1 } };
+static const FxArtCorner sprite_small_pair_b_1_2[] = { { 4.0f, 3.3f, 0.0f }, { 4.7f, 4.0f, 0.0f }, { 4.0f, 4.7f, 0.0f }, { 3.3f, 4.0f, 0.0f } };
+static const FxArtCorner sprite_small_pair_b_1_3[] = { { 4.0f, 4.3f, 0.0f }, { 4.7f, 5.0f, 0.0f }, { 4.0f, 5.7f, 0.0f }, { 3.3f, 5.0f, 0.0f } };
+static const FxArtLoop sprite_small_pair_b_1[] = { { 12, sprite_small_pair_b_1_0 }, { 10, sprite_small_pair_b_1_1 }, { 4, sprite_small_pair_b_1_2 }, { 4, sprite_small_pair_b_1_3 } };
 static const FxArtCorner sprite_small_pair_b_2_0[] = { { 1.0f, 2.0f, 0.3f }, { 3.0f, 2.0f, 0.3f }, { 3.0f, 4.0f, 0.3f }, { 2.0f, 4.0f, 0.3f }, { 2.0f, 3.0f, 0.0f }, { 1.0f, 3.0f, 0.3f } };
 static const FxArtCorner sprite_small_pair_b_2_1[] = { { 1.0f, 6.0f, 0.3f }, { 2.0f, 6.0f, 0.3f }, { 2.0f, 7.0f, 0.3f }, { 1.0f, 7.0f, 0.3f } };
 static const FxArtCorner sprite_small_pair_b_2_2[] = { { 2.0f, 5.0f, 0.3f }, { 3.0f, 5.0f, 0.3f }, { 3.0f, 6.0f, 0.3f }, { 2.0f, 6.0f, 0.3f } };
 static const FxArtCorner sprite_small_pair_b_2_3[] = { { 4.0f, 2.0f, 0.3f }, { 6.0f, 2.0f, 0.3f }, { 6.0f, 3.0f, 0.0f }, { 7.0f, 3.0f, 0.3f }, { 7.0f, 5.0f, 0.3f }, { 6.0f, 5.0f, 0.3f }, { 6.0f, 4.0f, 0.0f }, { 5.0f, 4.0f, 0.3f }, { 5.0f, 3.0f, 0.0f }, { 4.0f, 3.0f, 0.3f } };
 static const FxArtCorner sprite_small_pair_b_2_4[] = { { 4.0f, 6.0f, 0.3f }, { 5.0f, 6.0f, 0.3f }, { 5.0f, 7.0f, 0.3f }, { 4.0f, 7.0f, 0.3f } };
 static const FxArtCorner sprite_small_pair_b_2_5[] = { { 5.0f, 5.0f, 0.3f }, { 6.0f, 5.0f, 0.3f }, { 6.0f, 6.0f, 0.3f }, { 5.0f, 6.0f, 0.3f } };
-static const FxArtLoop sprite_small_pair_b_2[] = { { 6, sprite_small_pair_b_2_0 }, { 4, sprite_small_pair_b_2_1 }, { 4, sprite_small_pair_b_2_2 }, { 10, sprite_small_pair_b_2_3 }, { 4, sprite_small_pair_b_2_4 }, { 4, sprite_small_pair_b_2_5 } };
-static const FxArtLayer sprite_small_pair_b_fill[] = { { 15, 1, sprite_small_pair_b_0, 0.0f }, { 3, 2, sprite_small_pair_b_1, 0.0f }, { 14, 6, sprite_small_pair_b_2, 0.0f } };
+static const FxArtCorner sprite_small_pair_b_2_6[] = { { 6.0f, 4.3f, 0.0f }, { 6.7f, 5.0f, 0.0f }, { 6.0f, 5.7f, 0.0f }, { 5.3f, 5.0f, 0.0f } };
+static const FxArtCorner sprite_small_pair_b_2_7[] = { { 2.0f, 5.3f, 0.0f }, { 2.7f, 6.0f, 0.0f }, { 2.0f, 6.7f, 0.0f }, { 1.3f, 6.0f, 0.0f } };
+static const FxArtCorner sprite_small_pair_b_2_8[] = { { 5.0f, 5.3f, 0.0f }, { 5.7f, 6.0f, 0.0f }, { 5.0f, 6.7f, 0.0f }, { 4.3f, 6.0f, 0.0f } };
+static const FxArtLoop sprite_small_pair_b_2[] = { { 6, sprite_small_pair_b_2_0 }, { 4, sprite_small_pair_b_2_1 }, { 4, sprite_small_pair_b_2_2 }, { 10, sprite_small_pair_b_2_3 }, { 4, sprite_small_pair_b_2_4 }, { 4, sprite_small_pair_b_2_5 }, { 4, sprite_small_pair_b_2_6 }, { 4, sprite_small_pair_b_2_7 }, { 4, sprite_small_pair_b_2_8 } };
+static const FxArtLayer sprite_small_pair_b_fill[] = { { 15, 1, sprite_small_pair_b_0, 0.0f }, { 3, 4, sprite_small_pair_b_1, 0.0f }, { 14, 9, sprite_small_pair_b_2, 0.0f } };
 static const uint16_t sprite_small_pair_b_tiles[] = { 21 };
 
-/* the race sprites' picture 'MPH' ($FF:$0000), its colours each a region over the one before (15: 1 loop, 16 corners (6 sharp), radii 0.3; 3: 4 loops, 42 corners (17 sharp), radii 0.3; 14: 4 loops, 42 corners (17 sharp), radii 0.3; 12: 4 loops, 42 corners (17 sharp), radii 0.3); 0 off, its strokes a texel wide kept as drawn */
+/* the race sprites' picture 'MPH' ($FF:$0000), its colours each a region over the one before (15: 1 loop, 16 corners (6 sharp), radii 0.3; 3: 4 loops, 42 corners (17 sharp), radii 0.3; 14: 4 loops, 42 corners (17 sharp), radii 0.3; 12: 4 loops, 42 corners (17 sharp), radii 0.3); 0 off, its strokes a texel wide kept as drawn, corners eased, diagonal neighbours joined */
 static const FxArtCorner sprite_mph_0_0[] = { { 2.0f, 1.0f, 0.3f }, { 5.0f, 1.0f, 0.3f }, { 5.0f, 2.0f, 0.0f }, { 6.0f, 2.0f, 0.0f }, { 6.0f, 1.0f, 0.3f }, { 19.0f, 1.0f, 0.3f }, { 19.0f, 8.0f, 0.3f }, { 13.0f, 8.0f, 0.3f }, { 13.0f, 6.0f, 0.0f }, { 11.0f, 6.0f, 0.0f }, { 11.0f, 8.0f, 0.3f }, { 6.0f, 8.0f, 0.3f }, { 6.0f, 7.0f, 0.0f }, { 5.0f, 7.0f, 0.0f }, { 5.0f, 8.0f, 0.3f }, { 2.0f, 8.0f, 0.3f } };
 static const FxArtLoop sprite_mph_0[] = { { 16, sprite_mph_0_0 } };
 static const FxArtCorner sprite_mph_1_0[] = { { 3.0f, 2.0f, 0.3f }, { 4.0f, 2.0f, 0.3f }, { 4.0f, 3.0f, 0.0f }, { 5.0f, 3.0f, 0.3f }, { 5.0f, 4.0f, 0.0f }, { 6.0f, 4.0f, 0.0f }, { 6.0f, 3.0f, 0.3f }, { 7.0f, 3.0f, 0.0f }, { 7.0f, 2.0f, 0.3f }, { 8.0f, 2.0f, 0.3f }, { 8.0f, 7.0f, 0.3f }, { 7.0f, 7.0f, 0.3f }, { 7.0f, 5.0f, 0.0f }, { 6.0f, 5.0f, 0.0f }, { 6.0f, 6.0f, 0.3f }, { 5.0f, 6.0f, 0.3f }, { 5.0f, 5.0f, 0.0f }, { 4.0f, 5.0f, 0.0f }, { 4.0f, 7.0f, 0.3f }, { 3.0f, 7.0f, 0.3f } };
@@ -890,7 +933,7 @@ static const FxArtLoop sprite_mph_3[] = { { 20, sprite_mph_3_0 }, { 6, sprite_mp
 static const FxArtLayer sprite_mph_fill[] = { { 15, 1, sprite_mph_0, 0.0f }, { 3, 4, sprite_mph_1, 0.0f }, { 14, 4, sprite_mph_2, 0.0f }, { 12, 4, sprite_mph_3, 0.0f } };
 static const uint16_t sprite_mph_tiles[] = { 22, 23, 24 };
 
-/* the race sprites' picture 'BOOST' ($FF:$0000), its colours each a region over the one before (15: 1 loop, 46 corners (21 sharp), radii 0.3; 3: 9 loops, 56 corners (18 sharp), radii 0.3); 0 off, its strokes a texel wide kept as drawn */
+/* the race sprites' picture 'BOOST' ($FF:$0000), its colours each a region over the one before (15: 1 loop, 46 corners (21 sharp), radii 0.3; 3: 13 loops, 72 corners (34 sharp), radii 0.3); 0 off, its strokes a texel wide kept as drawn, corners eased, diagonal neighbours joined */
 static const FxArtCorner sprite_boost_0_0[] = { { 0.0f, 1.0f, 0.3f }, { 1.0f, 1.0f, 0.0f }, { 1.0f, 0.0f, 0.3f }, { 3.0f, 0.0f, 0.3f }, { 3.0f, 1.0f, 0.0f }, { 5.0f, 1.0f, 0.0f }, { 5.0f, 0.0f, 0.3f }, { 8.0f, 0.0f, 0.3f }, { 8.0f, 1.0f, 0.0f }, { 9.0f, 1.0f, 0.0f }, { 9.0f, 0.0f, 0.3f }, { 12.0f, 0.0f, 0.3f }, { 12.0f, 1.0f, 0.0f }, { 13.0f, 1.0f, 0.0f }, { 13.0f, 0.0f, 0.3f }, { 16.0f, 0.0f, 0.3f }, { 16.0f, 1.0f, 0.0f }, { 17.0f, 1.0f, 0.0f }, { 17.0f, 0.0f, 0.3f }, { 20.0f, 0.0f, 0.3f }, { 20.0f, 1.0f, 0.0f }, { 21.0f, 1.0f, 0.3f }, { 21.0f, 2.0f, 0.3f }, { 20.0f, 2.0f, 0.0f }, { 20.0f, 7.0f, 0.3f }, { 19.0f, 7.0f, 0.0f }, { 19.0f, 8.0f, 0.3f }, { 18.0f, 8.0f, 0.3f }, { 18.0f, 7.0f, 0.0f }, { 16.0f, 7.0f, 0.0f }, { 16.0f, 8.0f, 0.3f }, { 13.0f, 8.0f, 0.3f }, { 13.0f, 7.0f, 0.0f }, { 12.0f, 7.0f, 0.0f }, { 12.0f, 8.0f, 0.3f }, { 9.0f, 8.0f, 0.3f }, { 9.0f, 7.0f, 0.0f }, { 8.0f, 7.0f, 0.0f }, { 8.0f, 8.0f, 0.3f }, { 5.0f, 8.0f, 0.3f }, { 5.0f, 7.0f, 0.0f }, { 3.0f, 7.0f, 0.0f }, { 3.0f, 8.0f, 0.3f }, { 1.0f, 8.0f, 0.3f }, { 1.0f, 7.0f, 0.0f }, { 0.0f, 7.0f, 0.3f } };
 static const FxArtLoop sprite_boost_0[] = { { 46, sprite_boost_0_0 } };
 static const FxArtCorner sprite_boost_1_0[] = { { 1.0f, 1.0f, 0.3f }, { 3.0f, 1.0f, 0.3f }, { 3.0f, 2.0f, 0.3f }, { 2.0f, 2.0f, 0.0f }, { 2.0f, 3.0f, 0.0f }, { 3.0f, 3.0f, 0.3f }, { 3.0f, 4.0f, 0.3f }, { 2.0f, 4.0f, 0.0f }, { 2.0f, 6.0f, 0.0f }, { 3.0f, 6.0f, 0.3f }, { 3.0f, 7.0f, 0.3f }, { 1.0f, 7.0f, 0.3f } };
@@ -902,11 +945,15 @@ static const FxArtCorner sprite_boost_1_5[] = { { 9.0f, 1.0f, 0.3f }, { 12.0f, 1
 static const FxArtCorner sprite_boost_1_6[] = { { 10.0f, 2.0f, 0.0f }, { 10.0f, 6.0f, 0.0f }, { 11.0f, 6.0f, 0.0f }, { 11.0f, 2.0f, 0.0f } };
 static const FxArtCorner sprite_boost_1_7[] = { { 13.0f, 1.0f, 0.3f }, { 16.0f, 1.0f, 0.3f }, { 16.0f, 2.0f, 0.3f }, { 14.0f, 2.0f, 0.0f }, { 14.0f, 3.0f, 0.0f }, { 16.0f, 3.0f, 0.3f }, { 16.0f, 7.0f, 0.3f }, { 13.0f, 7.0f, 0.3f }, { 13.0f, 6.0f, 0.3f }, { 15.0f, 6.0f, 0.0f }, { 15.0f, 4.0f, 0.0f }, { 13.0f, 4.0f, 0.3f } };
 static const FxArtCorner sprite_boost_1_8[] = { { 17.0f, 1.0f, 0.3f }, { 20.0f, 1.0f, 0.3f }, { 20.0f, 2.0f, 0.3f }, { 19.0f, 2.0f, 0.0f }, { 19.0f, 7.0f, 0.3f }, { 18.0f, 7.0f, 0.3f }, { 18.0f, 2.0f, 0.0f }, { 17.0f, 2.0f, 0.3f } };
-static const FxArtLoop sprite_boost_1[] = { { 12, sprite_boost_1_0 }, { 4, sprite_boost_1_1 }, { 4, sprite_boost_1_2 }, { 4, sprite_boost_1_3 }, { 4, sprite_boost_1_4 }, { 4, sprite_boost_1_5 }, { 4, sprite_boost_1_6 }, { 12, sprite_boost_1_7 }, { 8, sprite_boost_1_8 } };
-static const FxArtLayer sprite_boost_fill[] = { { 15, 1, sprite_boost_0, 0.0f }, { 3, 9, sprite_boost_1, 0.0f } };
+static const FxArtCorner sprite_boost_1_9[] = { { 3.0f, 1.3f, 0.0f }, { 3.7f, 2.0f, 0.0f }, { 3.0f, 2.7f, 0.0f }, { 2.3f, 2.0f, 0.0f } };
+static const FxArtCorner sprite_boost_1_10[] = { { 3.0f, 2.3f, 0.0f }, { 3.7f, 3.0f, 0.0f }, { 3.0f, 3.7f, 0.0f }, { 2.3f, 3.0f, 0.0f } };
+static const FxArtCorner sprite_boost_1_11[] = { { 3.0f, 3.3f, 0.0f }, { 3.7f, 4.0f, 0.0f }, { 3.0f, 4.7f, 0.0f }, { 2.3f, 4.0f, 0.0f } };
+static const FxArtCorner sprite_boost_1_12[] = { { 3.0f, 5.3f, 0.0f }, { 3.7f, 6.0f, 0.0f }, { 3.0f, 6.7f, 0.0f }, { 2.3f, 6.0f, 0.0f } };
+static const FxArtLoop sprite_boost_1[] = { { 12, sprite_boost_1_0 }, { 4, sprite_boost_1_1 }, { 4, sprite_boost_1_2 }, { 4, sprite_boost_1_3 }, { 4, sprite_boost_1_4 }, { 4, sprite_boost_1_5 }, { 4, sprite_boost_1_6 }, { 12, sprite_boost_1_7 }, { 8, sprite_boost_1_8 }, { 4, sprite_boost_1_9 }, { 4, sprite_boost_1_10 }, { 4, sprite_boost_1_11 }, { 4, sprite_boost_1_12 } };
+static const FxArtLayer sprite_boost_fill[] = { { 15, 1, sprite_boost_0, 0.0f }, { 3, 13, sprite_boost_1, 0.0f } };
 static const uint16_t sprite_boost_tiles[] = { 26, 27, 28 };
 
-/* the race sprites' picture 'bar 29' ($FF:$0000), its colours each a region over the one before (15: 1 loop, 8 corners (2 sharp), radii 0.3; 3: 1 loop, 8 corners (2 sharp), radii 0.3; 14: 1 loop, 8 corners (2 sharp), radii 0.3; 4: 2 loops, 8 corners (0 sharp), radii 0.3; 2: 2 loops, 8 corners (0 sharp), radii 0.3; 1: 2 loops, 8 corners (0 sharp), radii 0.3; 11: 2 loops, 8 corners (0 sharp), radii 0.3); 0 off, its strokes a texel wide kept as drawn */
+/* the race sprites' picture 'bar 29' ($FF:$0000), its colours each a region over the one before (15: 1 loop, 8 corners (2 sharp), radii 0.3; 3: 1 loop, 8 corners (2 sharp), radii 0.3; 14: 1 loop, 8 corners (2 sharp), radii 0.3; 4: 2 loops, 8 corners (0 sharp), radii 0.3; 2: 2 loops, 8 corners (0 sharp), radii 0.3; 1: 2 loops, 8 corners (0 sharp), radii 0.3; 11: 2 loops, 8 corners (0 sharp), radii 0.3); 0 off, its strokes a texel wide kept as drawn, corners eased, diagonal neighbours joined */
 static const FxArtCorner sprite_bar_29_0_0[] = { { 5.0f, 1.0f, 0.3f }, { 6.0f, 1.0f, 0.0f }, { 6.0f, 0.0f, 0.3f }, { 8.0f, 0.0f, 0.3f }, { 8.0f, 8.0f, 0.3f }, { 6.0f, 8.0f, 0.3f }, { 6.0f, 7.0f, 0.0f }, { 5.0f, 7.0f, 0.3f } };
 static const FxArtLoop sprite_bar_29_0[] = { { 8, sprite_bar_29_0_0 } };
 static const FxArtCorner sprite_bar_29_1_0[] = { { 6.0f, 1.0f, 0.3f }, { 8.0f, 1.0f, 0.3f }, { 8.0f, 2.0f, 0.3f }, { 7.0f, 2.0f, 0.0f }, { 7.0f, 6.0f, 0.0f }, { 8.0f, 6.0f, 0.3f }, { 8.0f, 7.0f, 0.3f }, { 6.0f, 7.0f, 0.3f } };
@@ -928,7 +975,7 @@ static const FxArtLoop sprite_bar_29_6[] = { { 4, sprite_bar_29_6_0 }, { 4, spri
 static const FxArtLayer sprite_bar_29_fill[] = { { 15, 1, sprite_bar_29_0, 0.0f }, { 3, 1, sprite_bar_29_1, 0.0f }, { 14, 1, sprite_bar_29_2, 0.0f }, { 4, 2, sprite_bar_29_3, 0.0f }, { 2, 2, sprite_bar_29_4, 0.0f }, { 1, 2, sprite_bar_29_5, 0.0f }, { 11, 2, sprite_bar_29_6, 0.0f } };
 static const uint16_t sprite_bar_29_tiles[] = { 29 };
 
-/* the race sprites' picture 'bar 30' ($FF:$0000), its colours each a region over the one before (15: 1 loop, 4 corners (0 sharp), radii 0.3; 3: 2 loops, 8 corners (0 sharp), radii 0.3; 14: 2 loops, 8 corners (0 sharp), radii 0.3); 0 off, its strokes a texel wide kept as drawn */
+/* the race sprites' picture 'bar 30' ($FF:$0000), its colours each a region over the one before (15: 1 loop, 4 corners (0 sharp), radii 0.3; 3: 2 loops, 8 corners (0 sharp), radii 0.3; 14: 2 loops, 8 corners (0 sharp), radii 0.3); 0 off, its strokes a texel wide kept as drawn, corners eased, diagonal neighbours joined */
 static const FxArtCorner sprite_bar_30_0_0[] = { { 0.0f, 0.0f, 0.3f }, { 8.0f, 0.0f, 0.3f }, { 8.0f, 8.0f, 0.3f }, { 0.0f, 8.0f, 0.3f } };
 static const FxArtLoop sprite_bar_30_0[] = { { 4, sprite_bar_30_0_0 } };
 static const FxArtCorner sprite_bar_30_1_0[] = { { 0.0f, 1.0f, 0.3f }, { 8.0f, 1.0f, 0.3f }, { 8.0f, 2.0f, 0.3f }, { 0.0f, 2.0f, 0.3f } };
@@ -940,7 +987,7 @@ static const FxArtLoop sprite_bar_30_2[] = { { 4, sprite_bar_30_2_0 }, { 4, spri
 static const FxArtLayer sprite_bar_30_fill[] = { { 15, 1, sprite_bar_30_0, 0.0f }, { 3, 2, sprite_bar_30_1, 0.0f }, { 14, 2, sprite_bar_30_2, 0.0f } };
 static const uint16_t sprite_bar_30_tiles[] = { 30 };
 
-/* the race sprites' picture 'bar 31' ($FF:$0000), its colours each a region over the one before (15: 1 loop, 4 corners (0 sharp), radii 0.3; 3: 3 loops, 12 corners (0 sharp), radii 0.3; 14: 2 loops, 8 corners (0 sharp), radii 0.3); 0 off, its strokes a texel wide kept as drawn */
+/* the race sprites' picture 'bar 31' ($FF:$0000), its colours each a region over the one before (15: 1 loop, 4 corners (0 sharp), radii 0.3; 3: 3 loops, 12 corners (0 sharp), radii 0.3; 14: 2 loops, 8 corners (0 sharp), radii 0.3); 0 off, its strokes a texel wide kept as drawn, corners eased, diagonal neighbours joined */
 static const FxArtCorner sprite_bar_31_0_0[] = { { 0.0f, 0.0f, 0.3f }, { 8.0f, 0.0f, 0.3f }, { 8.0f, 8.0f, 0.3f }, { 0.0f, 8.0f, 0.3f } };
 static const FxArtLoop sprite_bar_31_0[] = { { 4, sprite_bar_31_0_0 } };
 static const FxArtCorner sprite_bar_31_1_0[] = { { 0.0f, 1.0f, 0.3f }, { 8.0f, 1.0f, 0.3f }, { 8.0f, 2.0f, 0.3f }, { 0.0f, 2.0f, 0.3f } };
@@ -953,7 +1000,7 @@ static const FxArtLoop sprite_bar_31_2[] = { { 4, sprite_bar_31_2_0 }, { 4, spri
 static const FxArtLayer sprite_bar_31_fill[] = { { 15, 1, sprite_bar_31_0, 0.0f }, { 3, 3, sprite_bar_31_1, 0.0f }, { 14, 2, sprite_bar_31_2, 0.0f } };
 static const uint16_t sprite_bar_31_tiles[] = { 31 };
 
-/* the race sprites' picture 'bar 32' ($FF:$0000), its colours each a region over the one before (15: 1 loop, 4 corners (0 sharp), radii 0.3; 3: 1 loop, 4 corners (0 sharp), radii 0.3; 14: 1 loop, 4 corners (0 sharp), radii 0.3; 4: 1 loop, 4 corners (0 sharp), radii 0.3; 2: 1 loop, 4 corners (0 sharp), radii 0.3; 1: 1 loop, 4 corners (0 sharp), radii 0.3); 0 off, its strokes a texel wide kept as drawn */
+/* the race sprites' picture 'bar 32' ($FF:$0000), its colours each a region over the one before (15: 1 loop, 4 corners (0 sharp), radii 0.3; 3: 1 loop, 4 corners (0 sharp), radii 0.3; 14: 1 loop, 4 corners (0 sharp), radii 0.3; 4: 1 loop, 4 corners (0 sharp), radii 0.3; 2: 1 loop, 4 corners (0 sharp), radii 0.3; 1: 1 loop, 4 corners (0 sharp), radii 0.3); 0 off, its strokes a texel wide kept as drawn, corners eased, diagonal neighbours joined */
 static const FxArtCorner sprite_bar_32_0_0[] = { { 0.0f, 6.0f, 0.3f }, { 8.0f, 6.0f, 0.3f }, { 8.0f, 8.0f, 0.3f }, { 0.0f, 8.0f, 0.3f } };
 static const FxArtLoop sprite_bar_32_0[] = { { 4, sprite_bar_32_0_0 } };
 static const FxArtCorner sprite_bar_32_1_0[] = { { 0.0f, 6.0f, 0.3f }, { 8.0f, 6.0f, 0.3f }, { 8.0f, 8.0f, 0.3f }, { 0.0f, 8.0f, 0.3f } };
@@ -969,7 +1016,7 @@ static const FxArtLoop sprite_bar_32_5[] = { { 4, sprite_bar_32_5_0 } };
 static const FxArtLayer sprite_bar_32_fill[] = { { 15, 1, sprite_bar_32_0, 0.0f }, { 3, 1, sprite_bar_32_1, 0.0f }, { 14, 1, sprite_bar_32_2, 0.0f }, { 4, 1, sprite_bar_32_3, 0.0f }, { 2, 1, sprite_bar_32_4, 0.0f }, { 1, 1, sprite_bar_32_5, 0.0f } };
 static const uint16_t sprite_bar_32_tiles[] = { 32 };
 
-/* the race sprites' picture 'bar 33' ($FF:$0000), its colours each a region over the one before (15: 1 loop, 4 corners (0 sharp), radii 0.3; 3: 1 loop, 4 corners (0 sharp), radii 0.3; 14: 1 loop, 4 corners (0 sharp), radii 0.3; 4: 1 loop, 4 corners (0 sharp), radii 0.3; 2: 1 loop, 4 corners (0 sharp), radii 0.3; 1: 1 loop, 4 corners (0 sharp), radii 0.3); 0 off, its strokes a texel wide kept as drawn */
+/* the race sprites' picture 'bar 33' ($FF:$0000), its colours each a region over the one before (15: 1 loop, 4 corners (0 sharp), radii 0.3; 3: 1 loop, 4 corners (0 sharp), radii 0.3; 14: 1 loop, 4 corners (0 sharp), radii 0.3; 4: 1 loop, 4 corners (0 sharp), radii 0.3; 2: 1 loop, 4 corners (0 sharp), radii 0.3; 1: 1 loop, 4 corners (0 sharp), radii 0.3); 0 off, its strokes a texel wide kept as drawn, corners eased, diagonal neighbours joined */
 static const FxArtCorner sprite_bar_33_0_0[] = { { 0.0f, 6.0f, 0.3f }, { 8.0f, 6.0f, 0.3f }, { 8.0f, 8.0f, 0.3f }, { 0.0f, 8.0f, 0.3f } };
 static const FxArtLoop sprite_bar_33_0[] = { { 4, sprite_bar_33_0_0 } };
 static const FxArtCorner sprite_bar_33_1_0[] = { { 0.0f, 6.0f, 0.3f }, { 8.0f, 6.0f, 0.3f }, { 8.0f, 8.0f, 0.3f }, { 0.0f, 8.0f, 0.3f } };
@@ -985,7 +1032,7 @@ static const FxArtLoop sprite_bar_33_5[] = { { 4, sprite_bar_33_5_0 } };
 static const FxArtLayer sprite_bar_33_fill[] = { { 15, 1, sprite_bar_33_0, 0.0f }, { 3, 1, sprite_bar_33_1, 0.0f }, { 14, 1, sprite_bar_33_2, 0.0f }, { 4, 1, sprite_bar_33_3, 0.0f }, { 2, 1, sprite_bar_33_4, 0.0f }, { 1, 1, sprite_bar_33_5, 0.0f } };
 static const uint16_t sprite_bar_33_tiles[] = { 33 };
 
-/* the race sprites' picture 'bar 34' ($FF:$0000), its colours each a region over the one before (15: 1 loop, 4 corners (0 sharp), radii 0.3; 3: 2 loops, 8 corners (0 sharp), radii 0.3; 14: 1 loop, 4 corners (0 sharp), radii 0.3; 4: 1 loop, 4 corners (0 sharp), radii 0.3); 0 off, its strokes a texel wide kept as drawn */
+/* the race sprites' picture 'bar 34' ($FF:$0000), its colours each a region over the one before (15: 1 loop, 4 corners (0 sharp), radii 0.3; 3: 2 loops, 8 corners (0 sharp), radii 0.3; 14: 1 loop, 4 corners (0 sharp), radii 0.3; 4: 1 loop, 4 corners (0 sharp), radii 0.3); 0 off, its strokes a texel wide kept as drawn, corners eased, diagonal neighbours joined */
 static const FxArtCorner sprite_bar_34_0_0[] = { { 0.0f, 0.0f, 0.3f }, { 8.0f, 0.0f, 0.3f }, { 8.0f, 8.0f, 0.3f }, { 0.0f, 8.0f, 0.3f } };
 static const FxArtLoop sprite_bar_34_0[] = { { 4, sprite_bar_34_0_0 } };
 static const FxArtCorner sprite_bar_34_1_0[] = { { 0.0f, 0.0f, 0.3f }, { 8.0f, 0.0f, 0.3f }, { 8.0f, 2.0f, 0.3f }, { 0.0f, 2.0f, 0.3f } };
@@ -998,7 +1045,7 @@ static const FxArtLoop sprite_bar_34_3[] = { { 4, sprite_bar_34_3_0 } };
 static const FxArtLayer sprite_bar_34_fill[] = { { 15, 1, sprite_bar_34_0, 0.0f }, { 3, 2, sprite_bar_34_1, 0.0f }, { 14, 1, sprite_bar_34_2, 0.0f }, { 4, 1, sprite_bar_34_3, 0.0f } };
 static const uint16_t sprite_bar_34_tiles[] = { 34 };
 
-/* the race sprites' picture 'bar 35' ($FF:$0000), its colours each a region over the one before (15: 1 loop, 4 corners (0 sharp), radii 0.3; 3: 2 loops, 8 corners (0 sharp), radii 0.3; 14: 1 loop, 4 corners (0 sharp), radii 0.3; 4: 1 loop, 4 corners (0 sharp), radii 0.3); 0 off, its strokes a texel wide kept as drawn */
+/* the race sprites' picture 'bar 35' ($FF:$0000), its colours each a region over the one before (15: 1 loop, 4 corners (0 sharp), radii 0.3; 3: 2 loops, 8 corners (0 sharp), radii 0.3; 14: 1 loop, 4 corners (0 sharp), radii 0.3; 4: 1 loop, 4 corners (0 sharp), radii 0.3); 0 off, its strokes a texel wide kept as drawn, corners eased, diagonal neighbours joined */
 static const FxArtCorner sprite_bar_35_0_0[] = { { 0.0f, 0.0f, 0.3f }, { 8.0f, 0.0f, 0.3f }, { 8.0f, 8.0f, 0.3f }, { 0.0f, 8.0f, 0.3f } };
 static const FxArtLoop sprite_bar_35_0[] = { { 4, sprite_bar_35_0_0 } };
 static const FxArtCorner sprite_bar_35_1_0[] = { { 0.0f, 0.0f, 0.3f }, { 8.0f, 0.0f, 0.3f }, { 8.0f, 2.0f, 0.3f }, { 0.0f, 2.0f, 0.3f } };
@@ -1011,7 +1058,7 @@ static const FxArtLoop sprite_bar_35_3[] = { { 4, sprite_bar_35_3_0 } };
 static const FxArtLayer sprite_bar_35_fill[] = { { 15, 1, sprite_bar_35_0, 0.0f }, { 3, 2, sprite_bar_35_1, 0.0f }, { 14, 1, sprite_bar_35_2, 0.0f }, { 4, 1, sprite_bar_35_3, 0.0f } };
 static const uint16_t sprite_bar_35_tiles[] = { 35 };
 
-/* the race sprites' picture 'bar 48' ($FF:$0000), its colours each a region over the one before (15: 1 loop, 4 corners (0 sharp), radii 0.3; 3: 1 loop, 4 corners (0 sharp), radii 0.3; 14: 1 loop, 4 corners (0 sharp), radii 0.3; 4: 1 loop, 4 corners (0 sharp), radii 0.3; 2: 1 loop, 4 corners (0 sharp), radii 0.3; 1: 1 loop, 4 corners (0 sharp), radii 0.3); 0 off, its strokes a texel wide kept as drawn */
+/* the race sprites' picture 'bar 48' ($FF:$0000), its colours each a region over the one before (15: 1 loop, 4 corners (0 sharp), radii 0.3; 3: 1 loop, 4 corners (0 sharp), radii 0.3; 14: 1 loop, 4 corners (0 sharp), radii 0.3; 4: 1 loop, 4 corners (0 sharp), radii 0.3; 2: 1 loop, 4 corners (0 sharp), radii 0.3; 1: 1 loop, 4 corners (0 sharp), radii 0.3); 0 off, its strokes a texel wide kept as drawn, corners eased, diagonal neighbours joined */
 static const FxArtCorner sprite_bar_48_0_0[] = { { 0.0f, 0.0f, 0.3f }, { 8.0f, 0.0f, 0.3f }, { 8.0f, 2.0f, 0.3f }, { 0.0f, 2.0f, 0.3f } };
 static const FxArtLoop sprite_bar_48_0[] = { { 4, sprite_bar_48_0_0 } };
 static const FxArtCorner sprite_bar_48_1_0[] = { { 0.0f, 0.0f, 0.3f }, { 8.0f, 0.0f, 0.3f }, { 8.0f, 2.0f, 0.3f }, { 0.0f, 2.0f, 0.3f } };
@@ -1027,7 +1074,7 @@ static const FxArtLoop sprite_bar_48_5[] = { { 4, sprite_bar_48_5_0 } };
 static const FxArtLayer sprite_bar_48_fill[] = { { 15, 1, sprite_bar_48_0, 0.0f }, { 3, 1, sprite_bar_48_1, 0.0f }, { 14, 1, sprite_bar_48_2, 0.0f }, { 4, 1, sprite_bar_48_3, 0.0f }, { 2, 1, sprite_bar_48_4, 0.0f }, { 1, 1, sprite_bar_48_5, 0.0f } };
 static const uint16_t sprite_bar_48_tiles[] = { 48 };
 
-/* the race sprites' picture 'bar 49' ($FF:$0000), its colours each a region over the one before (15: 1 loop, 4 corners (0 sharp), radii 0.3; 3: 1 loop, 4 corners (0 sharp), radii 0.3; 14: 1 loop, 4 corners (0 sharp), radii 0.3; 4: 1 loop, 4 corners (0 sharp), radii 0.3; 2: 1 loop, 4 corners (0 sharp), radii 0.3; 1: 1 loop, 4 corners (0 sharp), radii 0.3); 0 off, its strokes a texel wide kept as drawn */
+/* the race sprites' picture 'bar 49' ($FF:$0000), its colours each a region over the one before (15: 1 loop, 4 corners (0 sharp), radii 0.3; 3: 1 loop, 4 corners (0 sharp), radii 0.3; 14: 1 loop, 4 corners (0 sharp), radii 0.3; 4: 1 loop, 4 corners (0 sharp), radii 0.3; 2: 1 loop, 4 corners (0 sharp), radii 0.3; 1: 1 loop, 4 corners (0 sharp), radii 0.3); 0 off, its strokes a texel wide kept as drawn, corners eased, diagonal neighbours joined */
 static const FxArtCorner sprite_bar_49_0_0[] = { { 0.0f, 0.0f, 0.3f }, { 8.0f, 0.0f, 0.3f }, { 8.0f, 2.0f, 0.3f }, { 0.0f, 2.0f, 0.3f } };
 static const FxArtLoop sprite_bar_49_0[] = { { 4, sprite_bar_49_0_0 } };
 static const FxArtCorner sprite_bar_49_1_0[] = { { 0.0f, 0.0f, 0.3f }, { 8.0f, 0.0f, 0.3f }, { 8.0f, 2.0f, 0.3f }, { 0.0f, 2.0f, 0.3f } };
@@ -1043,7 +1090,7 @@ static const FxArtLoop sprite_bar_49_5[] = { { 4, sprite_bar_49_5_0 } };
 static const FxArtLayer sprite_bar_49_fill[] = { { 15, 1, sprite_bar_49_0, 0.0f }, { 3, 1, sprite_bar_49_1, 0.0f }, { 14, 1, sprite_bar_49_2, 0.0f }, { 4, 1, sprite_bar_49_3, 0.0f }, { 2, 1, sprite_bar_49_4, 0.0f }, { 1, 1, sprite_bar_49_5, 0.0f } };
 static const uint16_t sprite_bar_49_tiles[] = { 49 };
 
-/* the race sprites' picture 'bar 50' ($FF:$0000), its colours each a region over the one before (15: 1 loop, 4 corners (0 sharp), radii 0.3; 3: 2 loops, 8 corners (0 sharp), radii 0.3; 14: 1 loop, 4 corners (0 sharp), radii 0.3; 4: 1 loop, 4 corners (0 sharp), radii 0.3); 0 off, its strokes a texel wide kept as drawn */
+/* the race sprites' picture 'bar 50' ($FF:$0000), its colours each a region over the one before (15: 1 loop, 4 corners (0 sharp), radii 0.3; 3: 2 loops, 8 corners (0 sharp), radii 0.3; 14: 1 loop, 4 corners (0 sharp), radii 0.3; 4: 1 loop, 4 corners (0 sharp), radii 0.3); 0 off, its strokes a texel wide kept as drawn, corners eased, diagonal neighbours joined */
 static const FxArtCorner sprite_bar_50_0_0[] = { { 0.0f, 0.0f, 0.3f }, { 8.0f, 0.0f, 0.3f }, { 8.0f, 8.0f, 0.3f }, { 0.0f, 8.0f, 0.3f } };
 static const FxArtLoop sprite_bar_50_0[] = { { 4, sprite_bar_50_0_0 } };
 static const FxArtCorner sprite_bar_50_1_0[] = { { 0.0f, 3.0f, 0.3f }, { 8.0f, 3.0f, 0.3f }, { 8.0f, 5.0f, 0.3f }, { 0.0f, 5.0f, 0.3f } };
@@ -1056,7 +1103,7 @@ static const FxArtLoop sprite_bar_50_3[] = { { 4, sprite_bar_50_3_0 } };
 static const FxArtLayer sprite_bar_50_fill[] = { { 15, 1, sprite_bar_50_0, 0.0f }, { 3, 2, sprite_bar_50_1, 0.0f }, { 14, 1, sprite_bar_50_2, 0.0f }, { 4, 1, sprite_bar_50_3, 0.0f } };
 static const uint16_t sprite_bar_50_tiles[] = { 50 };
 
-/* the race sprites' picture 'bar 51' ($FF:$0000), its colours each a region over the one before (15: 1 loop, 4 corners (0 sharp), radii 0.3; 3: 2 loops, 8 corners (0 sharp), radii 0.3; 14: 1 loop, 4 corners (0 sharp), radii 0.3; 4: 1 loop, 4 corners (0 sharp), radii 0.3); 0 off, its strokes a texel wide kept as drawn */
+/* the race sprites' picture 'bar 51' ($FF:$0000), its colours each a region over the one before (15: 1 loop, 4 corners (0 sharp), radii 0.3; 3: 2 loops, 8 corners (0 sharp), radii 0.3; 14: 1 loop, 4 corners (0 sharp), radii 0.3; 4: 1 loop, 4 corners (0 sharp), radii 0.3); 0 off, its strokes a texel wide kept as drawn, corners eased, diagonal neighbours joined */
 static const FxArtCorner sprite_bar_51_0_0[] = { { 0.0f, 0.0f, 0.3f }, { 8.0f, 0.0f, 0.3f }, { 8.0f, 8.0f, 0.3f }, { 0.0f, 8.0f, 0.3f } };
 static const FxArtLoop sprite_bar_51_0[] = { { 4, sprite_bar_51_0_0 } };
 static const FxArtCorner sprite_bar_51_1_0[] = { { 0.0f, 3.0f, 0.3f }, { 8.0f, 3.0f, 0.3f }, { 8.0f, 5.0f, 0.3f }, { 0.0f, 5.0f, 0.3f } };
@@ -1159,6 +1206,54 @@ static const FxArtCorner sprite_letter_9_o_1_1[] = { { 3.0f, 11.0f, 0.0f }, { 5.
 static const FxArtLoop sprite_letter_9_o_1[] = { { 4, sprite_letter_9_o_1_0 }, { 4, sprite_letter_9_o_1_1 } };
 static const FxArtLayer sprite_letter_9_o_fill[] = { { 15, 1, sprite_letter_9_o_0, 0.0f }, { 13, 2, sprite_letter_9_o_1, 0.0f } };
 static const uint16_t sprite_letter_9_o_tiles[] = { 45, 61 };
+
+/* the race sprites' picture 'shared panel corner' ($FF:$0001), its colours each a region over the one before (2: 1 loop, 8 corners (0 sharp), radii 0.2, 0.3, 6.2; 15: 2 loops, 10 corners (0 sharp), radii 0.3, 4.1, 6.2; 1: 4 loops, 20 corners (0 sharp), radii 0.3, 2.3, 3.8, 4, 7.7); 0 off */
+static const FxArtCorner sprite_shared_panel_corner_0_0[] = { { 56.04f, -0.13f, 0.3f }, { 56.04f, 16.31f, 0.3f }, { 32.0f, 16.31f, 0.3f }, { 32.0f, 7.98f, 0.21f }, { 23.98f, 7.98f, 6.24f }, { 23.98f, 16.37f, 0.3f }, { -0.05f, 16.37f, 0.3f }, { -0.05f, -0.13f, 0.3f } };
+static const FxArtLoop sprite_shared_panel_corner_0[] = { { 8, sprite_shared_panel_corner_0_0 } };
+static const FxArtCorner sprite_shared_panel_corner_1_0[] = { { 32.0f, -0.14f, 0.3f }, { 32.0f, 7.99f, 0.3f }, { 23.98f, 7.99f, 6.2f }, { 23.98f, 16.12f, 0.3f }, { 8.99f, 16.12f, 0.3f }, { 8.99f, -0.14f, 4.07f } };
+static const FxArtCorner sprite_shared_panel_corner_1_1[] = { { 56.05f, -0.05f, 0.3f }, { 56.05f, 16.07f, 0.3f }, { 41.0f, 16.07f, 0.3f }, { 41.0f, -0.05f, 0.3f } };
+static const FxArtLoop sprite_shared_panel_corner_1[] = { { 6, sprite_shared_panel_corner_1_0 }, { 4, sprite_shared_panel_corner_1_1 } };
+static const FxArtCorner sprite_shared_panel_corner_2_0[] = { { 32.01f, -0.1f, 0.3f }, { 32.01f, 1.0f, 0.3f }, { 9.99f, 1.0f, 3.81f }, { 9.99f, 16.02f, 0.3f }, { 8.99f, 16.02f, 0.3f }, { 8.99f, -0.1f, 4.0f } };
+static const FxArtCorner sprite_shared_panel_corner_2_1[] = { { 32.0f, 1.99f, 0.3f }, { 32.0f, 6.96f, 0.3f }, { 22.96f, 6.96f, 7.7f }, { 22.96f, 16.02f, 0.3f }, { 10.99f, 16.02f, 0.3f }, { 10.99f, 1.99f, 2.33f } };
+static const FxArtCorner sprite_shared_panel_corner_2_2[] = { { 42.0f, -0.02f, 0.3f }, { 42.0f, 16.02f, 0.3f }, { 41.0f, 16.02f, 0.3f }, { 41.0f, -0.02f, 0.3f } };
+static const FxArtCorner sprite_shared_panel_corner_2_3[] = { { 55.0f, -0.01f, 0.3f }, { 55.0f, 16.01f, 0.3f }, { 43.0f, 16.01f, 0.3f }, { 43.0f, -0.01f, 0.3f } };
+static const FxArtLoop sprite_shared_panel_corner_2[] = { { 6, sprite_shared_panel_corner_2_0 }, { 6, sprite_shared_panel_corner_2_1 }, { 4, sprite_shared_panel_corner_2_2 }, { 4, sprite_shared_panel_corner_2_3 } };
+static const FxArtLayer sprite_shared_panel_corner_fill[] = { { 2, 1, sprite_shared_panel_corner_0, 0.0f }, { 15, 2, sprite_shared_panel_corner_1, 0.0f }, { 1, 4, sprite_shared_panel_corner_2, 0.0f } };
+static const uint16_t sprite_shared_panel_corner_tiles[] = { 0, 1, 2, 3, 4, 5, 6, 16, 17, 18, 19, 20, 21, 22 };
+
+/* the race sprites' picture 'shared MINI MAP' ($FF:$0001), its colours each a region over the one before (15: 23 loops, 122 corners (47 sharp), radii 0.6, 3.8, 3.9, 19.4, 19.5, 19.6; 2: 2 loops, 8 corners (0 sharp), radii 5.5; 4: 2 loops, 56 corners (28 sharp), radii 0.6); 0 off */
+static const FxArtCorner sprite_shared_mini_map_0_0[] = { { 35.51f, -3.56f, 19.49f }, { 35.51f, 35.51f, 19.39f }, { -3.56f, 35.51f, 19.49f }, { -3.56f, -3.56f, 19.58f } };
+static const FxArtCorner sprite_shared_mini_map_0_1[] = { { 3.99f, 28.01f, 3.86f }, { 28.01f, 28.01f, 3.85f }, { 28.01f, 3.99f, 3.86f }, { 3.99f, 3.99f, 3.86f } };
+static const FxArtCorner sprite_shared_mini_map_0_2[] = { { 8.0f, 10.0f, 0.6f }, { 9.0f, 10.0f, 0.6f }, { 9.0f, 11.0f, 0.0f }, { 10.0f, 11.0f, 0.6f }, { 10.0f, 12.0f, 0.6f }, { 9.0f, 12.0f, 0.0f }, { 9.0f, 15.0f, 0.6f }, { 8.0f, 15.0f, 0.6f } };
+static const FxArtCorner sprite_shared_mini_map_0_3[] = { { 8.0f, 17.0f, 0.6f }, { 9.0f, 17.0f, 0.6f }, { 9.0f, 18.0f, 0.0f }, { 10.0f, 18.0f, 0.6f }, { 10.0f, 19.0f, 0.6f }, { 9.0f, 19.0f, 0.0f }, { 9.0f, 22.0f, 0.6f }, { 8.0f, 22.0f, 0.6f } };
+static const FxArtCorner sprite_shared_mini_map_0_4[] = { { 10.0f, 12.0f, 0.6f }, { 11.0f, 12.0f, 0.6f }, { 11.0f, 13.0f, 0.6f }, { 10.0f, 13.0f, 0.6f } };
+static const FxArtCorner sprite_shared_mini_map_0_5[] = { { 10.0f, 19.0f, 0.6f }, { 11.0f, 19.0f, 0.6f }, { 11.0f, 20.0f, 0.6f }, { 10.0f, 20.0f, 0.6f } };
+static const FxArtCorner sprite_shared_mini_map_0_6[] = { { 11.0f, 11.0f, 0.6f }, { 12.0f, 11.0f, 0.0f }, { 12.0f, 10.0f, 0.6f }, { 13.0f, 10.0f, 0.6f }, { 13.0f, 15.0f, 0.6f }, { 12.0f, 15.0f, 0.6f }, { 12.0f, 12.0f, 0.0f }, { 11.0f, 12.0f, 0.6f } };
+static const FxArtCorner sprite_shared_mini_map_0_7[] = { { 11.0f, 18.0f, 0.6f }, { 12.0f, 18.0f, 0.0f }, { 12.0f, 17.0f, 0.6f }, { 13.0f, 17.0f, 0.6f }, { 13.0f, 22.0f, 0.6f }, { 12.0f, 22.0f, 0.6f }, { 12.0f, 19.0f, 0.0f }, { 11.0f, 19.0f, 0.6f } };
+static const FxArtCorner sprite_shared_mini_map_0_8[] = { { 14.0f, 10.0f, 0.6f }, { 15.0f, 10.0f, 0.6f }, { 15.0f, 15.0f, 0.6f }, { 14.0f, 15.0f, 0.6f } };
+static const FxArtCorner sprite_shared_mini_map_0_9[] = { { 14.0f, 17.0f, 0.6f }, { 18.0f, 17.0f, 0.6f }, { 18.0f, 22.0f, 0.6f }, { 17.0f, 22.0f, 0.6f }, { 17.0f, 20.0f, 0.0f }, { 15.0f, 20.0f, 0.0f }, { 15.0f, 22.0f, 0.6f }, { 14.0f, 22.0f, 0.6f } };
+static const FxArtCorner sprite_shared_mini_map_0_10[] = { { 15.0f, 18.0f, 0.0f }, { 15.0f, 19.0f, 0.0f }, { 17.0f, 19.0f, 0.0f }, { 17.0f, 18.0f, 0.0f } };
+static const FxArtCorner sprite_shared_mini_map_0_11[] = { { 16.0f, 10.0f, 0.6f }, { 17.0f, 10.0f, 0.6f }, { 17.0f, 11.0f, 0.0f }, { 18.0f, 11.0f, 0.6f }, { 18.0f, 12.0f, 0.6f }, { 17.0f, 12.0f, 0.0f }, { 17.0f, 15.0f, 0.6f }, { 16.0f, 15.0f, 0.6f } };
+static const FxArtCorner sprite_shared_mini_map_0_12[] = { { 18.0f, 12.0f, 0.6f }, { 19.0f, 12.0f, 0.6f }, { 19.0f, 13.0f, 0.6f }, { 18.0f, 13.0f, 0.6f } };
+static const FxArtCorner sprite_shared_mini_map_0_13[] = { { 19.0f, 13.0f, 0.6f }, { 20.0f, 13.0f, 0.0f }, { 20.0f, 10.0f, 0.6f }, { 21.0f, 10.0f, 0.6f }, { 21.0f, 15.0f, 0.6f }, { 20.0f, 15.0f, 0.6f }, { 20.0f, 14.0f, 0.0f }, { 19.0f, 14.0f, 0.6f } };
+static const FxArtCorner sprite_shared_mini_map_0_14[] = { { 19.0f, 17.0f, 0.6f }, { 23.0f, 17.0f, 0.6f }, { 23.0f, 20.0f, 0.6f }, { 20.0f, 20.0f, 0.0f }, { 20.0f, 22.0f, 0.6f }, { 19.0f, 22.0f, 0.6f } };
+static const FxArtCorner sprite_shared_mini_map_0_15[] = { { 20.0f, 18.0f, 0.0f }, { 20.0f, 19.0f, 0.0f }, { 22.0f, 19.0f, 0.0f }, { 22.0f, 18.0f, 0.0f } };
+static const FxArtCorner sprite_shared_mini_map_0_16[] = { { 22.0f, 10.0f, 0.6f }, { 23.0f, 10.0f, 0.6f }, { 23.0f, 15.0f, 0.6f }, { 22.0f, 15.0f, 0.6f } };
+static const FxArtCorner sprite_shared_mini_map_0_17[] = { { 10.0f, 11.3f, 0.0f }, { 10.7f, 12.0f, 0.0f }, { 10.0f, 12.7f, 0.0f }, { 9.3f, 12.0f, 0.0f } };
+static const FxArtCorner sprite_shared_mini_map_0_18[] = { { 11.0f, 11.3f, 0.0f }, { 11.7f, 12.0f, 0.0f }, { 11.0f, 12.7f, 0.0f }, { 10.3f, 12.0f, 0.0f } };
+static const FxArtCorner sprite_shared_mini_map_0_19[] = { { 18.0f, 11.3f, 0.0f }, { 18.7f, 12.0f, 0.0f }, { 18.0f, 12.7f, 0.0f }, { 17.3f, 12.0f, 0.0f } };
+static const FxArtCorner sprite_shared_mini_map_0_20[] = { { 19.0f, 12.3f, 0.0f }, { 19.7f, 13.0f, 0.0f }, { 19.0f, 13.7f, 0.0f }, { 18.3f, 13.0f, 0.0f } };
+static const FxArtCorner sprite_shared_mini_map_0_21[] = { { 10.0f, 18.3f, 0.0f }, { 10.7f, 19.0f, 0.0f }, { 10.0f, 19.7f, 0.0f }, { 9.3f, 19.0f, 0.0f } };
+static const FxArtCorner sprite_shared_mini_map_0_22[] = { { 11.0f, 18.3f, 0.0f }, { 11.7f, 19.0f, 0.0f }, { 11.0f, 19.7f, 0.0f }, { 10.3f, 19.0f, 0.0f } };
+static const FxArtLoop sprite_shared_mini_map_0[] = { { 4, sprite_shared_mini_map_0_0 }, { 4, sprite_shared_mini_map_0_1 }, { 8, sprite_shared_mini_map_0_2 }, { 8, sprite_shared_mini_map_0_3 }, { 4, sprite_shared_mini_map_0_4 }, { 4, sprite_shared_mini_map_0_5 }, { 8, sprite_shared_mini_map_0_6 }, { 8, sprite_shared_mini_map_0_7 }, { 4, sprite_shared_mini_map_0_8 }, { 8, sprite_shared_mini_map_0_9 }, { 4, sprite_shared_mini_map_0_10 }, { 8, sprite_shared_mini_map_0_11 }, { 4, sprite_shared_mini_map_0_12 }, { 8, sprite_shared_mini_map_0_13 }, { 6, sprite_shared_mini_map_0_14 }, { 4, sprite_shared_mini_map_0_15 }, { 4, sprite_shared_mini_map_0_16 }, { 4, sprite_shared_mini_map_0_17 }, { 4, sprite_shared_mini_map_0_18 }, { 4, sprite_shared_mini_map_0_19 }, { 4, sprite_shared_mini_map_0_20 }, { 4, sprite_shared_mini_map_0_21 }, { 4, sprite_shared_mini_map_0_22 } };
+static const FxArtCorner sprite_shared_mini_map_1_0[] = { { 31.02f, 0.98f, 5.46f }, { 31.02f, 31.02f, 5.46f }, { 0.98f, 31.02f, 5.46f }, { 0.98f, 0.98f, 5.46f } };
+static const FxArtCorner sprite_shared_mini_map_1_1[] = { { 2.98f, 29.02f, 5.48f }, { 29.02f, 29.02f, 5.48f }, { 29.02f, 2.98f, 5.48f }, { 2.98f, 2.98f, 5.48f } };
+static const FxArtLoop sprite_shared_mini_map_1[] = { { 4, sprite_shared_mini_map_1_0 }, { 4, sprite_shared_mini_map_1_1 } };
+static const FxArtCorner sprite_shared_mini_map_2_0[] = { { 1.0f, 5.0f, 0.6f }, { 2.0f, 5.0f, 0.0f }, { 2.0f, 4.0f, 0.6f }, { 3.0f, 4.0f, 0.0f }, { 3.0f, 3.0f, 0.6f }, { 4.0f, 3.0f, 0.0f }, { 4.0f, 2.0f, 0.6f }, { 5.0f, 2.0f, 0.0f }, { 5.0f, 1.0f, 0.6f }, { 27.0f, 1.0f, 0.6f }, { 27.0f, 2.0f, 0.0f }, { 28.0f, 2.0f, 0.6f }, { 28.0f, 3.0f, 0.0f }, { 29.0f, 3.0f, 0.6f }, { 29.0f, 4.0f, 0.0f }, { 30.0f, 4.0f, 0.6f }, { 30.0f, 5.0f, 0.0f }, { 31.0f, 5.0f, 0.6f }, { 31.0f, 27.0f, 0.6f }, { 30.0f, 27.0f, 0.0f }, { 30.0f, 28.0f, 0.6f }, { 29.0f, 28.0f, 0.0f }, { 29.0f, 29.0f, 0.6f }, { 28.0f, 29.0f, 0.0f }, { 28.0f, 30.0f, 0.6f }, { 27.0f, 30.0f, 0.0f }, { 27.0f, 31.0f, 0.6f }, { 5.0f, 31.0f, 0.6f }, { 5.0f, 30.0f, 0.0f }, { 4.0f, 30.0f, 0.6f }, { 4.0f, 29.0f, 0.0f }, { 3.0f, 29.0f, 0.6f }, { 3.0f, 28.0f, 0.0f }, { 2.0f, 28.0f, 0.6f }, { 2.0f, 27.0f, 0.0f }, { 1.0f, 27.0f, 0.6f } };
+static const FxArtCorner sprite_shared_mini_map_2_1[] = { { 3.0f, 5.0f, 0.0f }, { 3.0f, 27.0f, 0.0f }, { 4.0f, 27.0f, 0.6f }, { 4.0f, 28.0f, 0.0f }, { 5.0f, 28.0f, 0.6f }, { 5.0f, 29.0f, 0.0f }, { 27.0f, 29.0f, 0.0f }, { 27.0f, 28.0f, 0.6f }, { 28.0f, 28.0f, 0.0f }, { 28.0f, 27.0f, 0.6f }, { 29.0f, 27.0f, 0.0f }, { 29.0f, 5.0f, 0.0f }, { 28.0f, 5.0f, 0.6f }, { 28.0f, 4.0f, 0.0f }, { 27.0f, 4.0f, 0.6f }, { 27.0f, 3.0f, 0.0f }, { 5.0f, 3.0f, 0.0f }, { 5.0f, 4.0f, 0.6f }, { 4.0f, 4.0f, 0.0f }, { 4.0f, 5.0f, 0.6f } };
+static const FxArtLoop sprite_shared_mini_map_2[] = { { 36, sprite_shared_mini_map_2_0 }, { 20, sprite_shared_mini_map_2_1 } };
+static const FxArtLayer sprite_shared_mini_map_fill[] = { { 15, 23, sprite_shared_mini_map_0, 0.0f }, { 2, 2, sprite_shared_mini_map_1, 0.0f }, { 4, 2, sprite_shared_mini_map_2, 0.0f } };
+static const uint16_t sprite_shared_mini_map_tiles[] = { 8, 9, 10, 11, 24, 25, 26, 27, 12, 13, 14, 15, 28, 29, 30, 31 };
 
 const FxArtPicture fx_art_pictures[] = {
     { "the 16 x 32 glyph '0'", 0x15, 0x8000, 16, 32, FX_ART_OUTLINED, 1, 1, big16_0_fill, 0 },
@@ -1312,5 +1407,7 @@ const FxArtPicture fx_art_pictures[] = {
     { "the race sprites' picture 'letter 7 S'", 0xFF, 0x0000, 8, 16, FX_ART_LAYERED, 0, 2, sprite_letter_7_s_fill, 2, sprite_letter_7_s_tiles, { 0 } },
     { "the race sprites' picture 'letter 8 N'", 0xFF, 0x0000, 8, 16, FX_ART_LAYERED, 0, 2, sprite_letter_8_n_fill, 2, sprite_letter_8_n_tiles, { 0 } },
     { "the race sprites' picture 'letter 9 O'", 0xFF, 0x0000, 8, 16, FX_ART_LAYERED, 0, 2, sprite_letter_9_o_fill, 0, sprite_letter_9_o_tiles, { 0 } },
+    { "the race sprites' picture 'shared panel corner'", 0xFF, 0x0001, 56, 16, FX_ART_LAYERED, 0, 3, sprite_shared_panel_corner_fill, 0, sprite_shared_panel_corner_tiles, { 0 } },
+    { "the race sprites' picture 'shared MINI MAP'", 0xFF, 0x0001, 32, 32, FX_ART_LAYERED, 0, 3, sprite_shared_mini_map_fill, 0, sprite_shared_mini_map_tiles, { 0 } },
 };
 const int fx_art_picture_count = (int)(sizeof fx_art_pictures / sizeof fx_art_pictures[0]);
