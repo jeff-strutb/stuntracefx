@@ -1487,6 +1487,395 @@ static const FxArtLoop menu_z[] = { { 10, menu_z_0 } };
 static const FxArtLayer menu_z_fill[] = { { 3, 1, menu_z } };
 static const uint16_t menu_z_tiles[] = { 67, 83 };
 
+/* ---- the menus' mode words SPEED / STUNT / BATTLE / FREE TRAX (menu picture 10, 16 x 16 letters): console art, the face, its dark rim and its shade each a region over the one before ---- */
+
+/* the menus' mode word letter '0 S' ($FF:$002A), its colours each a region over the one before (1: 1 loop, 15 corners (3 sharp), radii 0.3, 0.6, 0.7, 1.3, 2, 3.2, 3.5, 4.3; 2: 1 loop, 16 corners (5 sharp), radii 0.3, 0.7, 1.5, 2, 3, 3.5, 3.6, 4.2; 7: 1 loop, 16 corners (5 sharp), radii 0.3, 0.7, 1.5, 2, 3, 3.5); 11 off */
+static const FxArtCorner menuword_0_s_0_0[] = { { 10.95f, 1.25f, 0.3f }, { 17.28f, 5.98f, 1.3f }, { 8.16f, 5.98f, 0.59f }, { 9.02f, 4.99f, 0.0f }, { 4.17f, 4.99f, 0.33f }, { 14.81f, 8.54f, 1.99f }, { 14.81f, 14.68f, 4.29f }, { 0.23f, 14.68f, 4.27f }, { 0.23f, 9.99f, 0.3f }, { 6.48f, 9.99f, 0.71f }, { 6.01f, 11.0f, 0.0f }, { 6.03f, 11.0f, 0.3f }, { 9.86f, 11.0f, 0.0f }, { 0.13f, 6.76f, 3.51f }, { 0.13f, 1.25f, 3.21f } };
+static const FxArtLoop menuword_0_s_0[] = { { 15, menuword_0_s_0_0 } };
+static const FxArtCorner menuword_0_s_1_0[] = { { 13.96f, 1.19f, 3.53f }, { 13.96f, 5.01f, 0.3f }, { 8.53f, 5.01f, 0.71f }, { 8.99f, 4.0f, 0.0f }, { 4.98f, 4.0f, 0.0f }, { 4.98f, 5.08f, 1.5f }, { 13.82f, 8.2f, 3.0f }, { 13.82f, 14.79f, 4.19f }, { 1.21f, 14.79f, 4.18f }, { 1.21f, 9.98f, 0.3f }, { 6.48f, 9.98f, 0.72f }, { 6.0f, 11.0f, 0.0f }, { 10.0f, 11.0f, 0.0f }, { 10.0f, 10.12f, 0.0f }, { 1.02f, 6.11f, 1.99f }, { 1.02f, 1.19f, 3.59f } };
+static const FxArtLoop menuword_0_s_1[] = { { 16, menuword_0_s_1_0 } };
+static const FxArtCorner menuword_0_s_2_0[] = { { 14.0f, 1.0f, 3.5f }, { 14.0f, 5.0f, 0.3f }, { 8.54f, 5.0f, 0.71f }, { 9.0f, 4.0f, 0.0f }, { 5.0f, 4.0f, 0.0f }, { 5.0f, 5.09f, 1.5f }, { 14.0f, 8.27f, 3.5f }, { 14.0f, 14.0f, 3.0f }, { 1.0f, 14.0f, 3.5f }, { 1.0f, 10.0f, 0.3f }, { 6.46f, 10.0f, 0.71f }, { 6.0f, 11.0f, 0.0f }, { 10.0f, 11.0f, 0.0f }, { 10.0f, 10.12f, 0.0f }, { 1.0f, 6.1f, 2.0f }, { 1.0f, 1.0f, 3.5f } };
+static const FxArtLoop menuword_0_s_2[] = { { 16, menuword_0_s_2_0 } };
+static const FxArtLayer menuword_0_s_fill[] = { { 1, 1, menuword_0_s_0, 0.0f }, { 2, 1, menuword_0_s_1, 0.0f }, { 7, 1, menuword_0_s_2, 0.0f } };
+static const uint16_t menuword_0_s_tiles[] = { 256, 257, 272, 273 };
+
+/* the menus' mode word letter '1 P' ($FF:$002A), its colours each a region over the one before (1: 2 loops, 10 corners (3 sharp), radii 1, 2, 2.1, 4.1, 4.6, 5.2; 2: 2 loops, 10 corners (4 sharp), radii 2, 4, 4.9; 7: 2 loops, 10 corners (3 sharp), radii 0.3, 1, 2, 3, 4, 4.9); 4 off */
+static const FxArtCorner menuword_1_p_0_0[] = { { 14.58f, 1.06f, 5.15f }, { 14.58f, 10.79f, 4.58f }, { 6.98f, 10.79f, 1.0f }, { 6.98f, 14.98f, 2.05f }, { -0.02f, 14.98f, 2.06f }, { -0.02f, 1.06f, 4.1f } };
+static const FxArtCorner menuword_1_p_0_1[] = { { 5.0f, 6.99f, 0.0f }, { 9.96f, 6.99f, 2.01f }, { 9.96f, 4.99f, 0.0f }, { 5.0f, 4.99f, 0.0f } };
+static const FxArtLoop menuword_1_p_0[] = { { 6, menuword_1_p_0_0 }, { 4, menuword_1_p_0_1 } };
+static const FxArtCorner menuword_1_p_1_0[] = { { 14.02f, 1.07f, 4.01f }, { 14.02f, 10.02f, 4.93f }, { 6.99f, 10.02f, 0.0f }, { 6.99f, 14.98f, 2.01f }, { 0.0f, 14.98f, 2.01f }, { 0.0f, 1.07f, 4.01f } };
+static const FxArtCorner menuword_1_p_1_1[] = { { 5.0f, 7.0f, 0.0f }, { 9.99f, 7.0f, 2.0f }, { 9.99f, 4.99f, 0.0f }, { 5.0f, 4.99f, 0.0f } };
+static const FxArtLoop menuword_1_p_1[] = { { 6, menuword_1_p_1_0 }, { 4, menuword_1_p_1_1 } };
+static const FxArtCorner menuword_1_p_2_0[] = { { 14.02f, 1.06f, 4.02f }, { 14.02f, 10.02f, 4.93f }, { 6.0f, 10.02f, 0.0f }, { 6.0f, 14.0f, 0.3f }, { 0.99f, 14.0f, 0.3f }, { 0.99f, 1.06f, 3.0f } };
+static const FxArtCorner menuword_1_p_2_1[] = { { 5.0f, 7.01f, 0.0f }, { 9.9f, 7.01f, 1.96f }, { 9.9f, 4.05f, 1.01f }, { 5.0f, 4.05f, 0.0f } };
+static const FxArtLoop menuword_1_p_2[] = { { 6, menuword_1_p_2_0 }, { 4, menuword_1_p_2_1 } };
+static const FxArtLayer menuword_1_p_fill[] = { { 1, 2, menuword_1_p_0, 0.0f }, { 2, 2, menuword_1_p_1, 0.0f }, { 7, 2, menuword_1_p_2, 0.0f } };
+static const uint16_t menuword_1_p_tiles[] = { 258, 259, 274, 275 };
+
+/* the menus' mode word letter '2 E' ($FF:$002A), its colours each a region over the one before (1: 1 loop, 12 corners (3 sharp), radii 0.3, 0.4, 2.3, 4.4; 2: 1 loop, 12 corners (4 sharp), radii 0.3, 2.2; 7: 1 loop, 12 corners (4 sharp), radii 0.3, 2.2); 0 off */
+static const FxArtCorner menuword_2_e_0_0[] = { { 15.03f, 0.98f, 2.32f }, { 15.03f, 5.0f, 0.3f }, { 4.99f, 5.0f, 0.39f }, { 4.99f, 5.99f, 0.0f }, { 13.03f, 5.99f, 2.29f }, { 13.03f, 10.0f, 0.3f }, { 5.0f, 10.0f, 0.0f }, { 5.0f, 10.99f, 0.0f }, { 15.03f, 10.99f, 2.28f }, { 15.03f, 15.01f, 0.3f }, { -0.3f, 15.01f, 4.39f }, { -0.3f, 0.98f, 4.41f } };
+static const FxArtLoop menuword_2_e_0[] = { { 12, menuword_2_e_0_0 } };
+static const FxArtCorner menuword_2_e_1_0[] = { { 14.0f, 0.99f, 0.3f }, { 14.0f, 4.0f, 0.3f }, { 5.0f, 4.0f, 0.0f }, { 5.0f, 6.0f, 0.0f }, { 12.0f, 6.0f, 0.3f }, { 12.0f, 9.0f, 0.3f }, { 5.0f, 9.0f, 0.0f }, { 5.0f, 11.0f, 0.0f }, { 14.0f, 11.0f, 0.3f }, { 14.0f, 14.01f, 0.3f }, { 0.99f, 14.01f, 2.25f }, { 0.99f, 0.99f, 2.25f } };
+static const FxArtLoop menuword_2_e_1[] = { { 12, menuword_2_e_1_0 } };
+static const FxArtCorner menuword_2_e_2_0[] = { { 14.0f, 0.99f, 0.3f }, { 14.0f, 4.0f, 0.3f }, { 5.0f, 4.0f, 0.0f }, { 5.0f, 6.0f, 0.0f }, { 12.0f, 6.0f, 0.3f }, { 12.0f, 9.0f, 0.3f }, { 5.0f, 9.0f, 0.0f }, { 5.0f, 11.0f, 0.0f }, { 14.0f, 11.0f, 0.3f }, { 14.0f, 14.01f, 0.3f }, { 0.99f, 14.01f, 2.25f }, { 0.99f, 0.99f, 2.25f } };
+static const FxArtLoop menuword_2_e_2[] = { { 12, menuword_2_e_2_0 } };
+static const FxArtLayer menuword_2_e_fill[] = { { 1, 1, menuword_2_e_0, 0.0f }, { 2, 1, menuword_2_e_1, 0.0f }, { 7, 1, menuword_2_e_2, 0.0f } };
+static const uint16_t menuword_2_e_tiles[] = { 260, 261, 276, 277 };
+
+/* the menus' mode word letter '3 E' ($FF:$002A), its colours each a region over the one before (1: 1 loop, 12 corners (3 sharp), radii 0.3, 0.4, 2.3, 4.4; 2: 1 loop, 12 corners (4 sharp), radii 0.3, 2.2; 7: 1 loop, 12 corners (4 sharp), radii 0.3, 2.2); 0 off */
+static const FxArtCorner menuword_3_e_0_0[] = { { 15.03f, 0.98f, 2.32f }, { 15.03f, 5.0f, 0.3f }, { 4.99f, 5.0f, 0.39f }, { 4.99f, 5.99f, 0.0f }, { 13.03f, 5.99f, 2.29f }, { 13.03f, 10.0f, 0.3f }, { 5.0f, 10.0f, 0.0f }, { 5.0f, 10.99f, 0.0f }, { 15.03f, 10.99f, 2.28f }, { 15.03f, 15.01f, 0.3f }, { -0.3f, 15.01f, 4.39f }, { -0.3f, 0.98f, 4.41f } };
+static const FxArtLoop menuword_3_e_0[] = { { 12, menuword_3_e_0_0 } };
+static const FxArtCorner menuword_3_e_1_0[] = { { 14.0f, 0.99f, 0.3f }, { 14.0f, 4.0f, 0.3f }, { 5.0f, 4.0f, 0.0f }, { 5.0f, 6.0f, 0.0f }, { 12.0f, 6.0f, 0.3f }, { 12.0f, 9.0f, 0.3f }, { 5.0f, 9.0f, 0.0f }, { 5.0f, 11.0f, 0.0f }, { 14.0f, 11.0f, 0.3f }, { 14.0f, 14.01f, 0.3f }, { 0.99f, 14.01f, 2.25f }, { 0.99f, 0.99f, 2.25f } };
+static const FxArtLoop menuword_3_e_1[] = { { 12, menuword_3_e_1_0 } };
+static const FxArtCorner menuword_3_e_2_0[] = { { 14.0f, 0.99f, 0.3f }, { 14.0f, 4.0f, 0.3f }, { 5.0f, 4.0f, 0.0f }, { 5.0f, 6.0f, 0.0f }, { 12.0f, 6.0f, 0.3f }, { 12.0f, 9.0f, 0.3f }, { 5.0f, 9.0f, 0.0f }, { 5.0f, 11.0f, 0.0f }, { 14.0f, 11.0f, 0.3f }, { 14.0f, 14.01f, 0.3f }, { 0.99f, 14.01f, 2.25f }, { 0.99f, 0.99f, 2.25f } };
+static const FxArtLoop menuword_3_e_2[] = { { 12, menuword_3_e_2_0 } };
+static const FxArtLayer menuword_3_e_fill[] = { { 1, 1, menuword_3_e_0, 0.0f }, { 2, 1, menuword_3_e_1, 0.0f }, { 7, 1, menuword_3_e_2, 0.0f } };
+static const uint16_t menuword_3_e_tiles[] = { 262, 263, 278, 279 };
+
+/* the menus' mode word letter '4 D' ($FF:$002A), its colours each a region over the one before (1: 2 loops, 8 corners (4 sharp), radii 4.3, 4.4, 7; 2: 2 loops, 12 corners (5 sharp), radii 0.7, 2, 6; 7: 2 loops, 8 corners (0 sharp), radii 0.2, 2.2, 2.3, 6, 6.4); 1 off */
+static const FxArtCorner menuword_4_d_0_0[] = { { 14.81f, 1.0f, 6.98f }, { 14.81f, 15.0f, 7.01f }, { -0.27f, 15.0f, 4.36f }, { -0.27f, 1.0f, 4.32f } };
+static const FxArtCorner menuword_4_d_0_1[] = { { 6.0f, 11.0f, 0.0f }, { 9.0f, 11.0f, 0.0f }, { 9.0f, 5.0f, 0.0f }, { 6.0f, 5.0f, 0.0f } };
+static const FxArtLoop menuword_4_d_0[] = { { 4, menuword_4_d_0_0 }, { 4, menuword_4_d_0_1 } };
+static const FxArtCorner menuword_4_d_1_0[] = { { 14.0f, 1.0f, 6.0f }, { 14.0f, 14.0f, 6.0f }, { 1.0f, 14.0f, 2.0f }, { 1.0f, 1.0f, 2.0f } };
+static const FxArtCorner menuword_4_d_1_1[] = { { 5.0f, 5.0f, 0.0f }, { 6.0f, 4.54f, 0.71f }, { 6.0f, 11.0f, 0.0f }, { 9.0f, 11.0f, 0.0f }, { 9.0f, 5.54f, 0.71f }, { 10.0f, 6.0f, 0.0f }, { 10.0f, 4.0f, 2.0f }, { 5.0f, 4.0f, 0.0f } };
+static const FxArtLoop menuword_4_d_1[] = { { 4, menuword_4_d_1_0 }, { 8, menuword_4_d_1_1 } };
+static const FxArtCorner menuword_4_d_2_0[] = { { 14.12f, 1.01f, 5.97f }, { 14.12f, 14.03f, 6.44f }, { 0.99f, 14.03f, 2.29f }, { 0.99f, 1.01f, 2.22f } };
+static const FxArtCorner menuword_4_d_2_1[] = { { 5.0f, 11.02f, 0.18f }, { 10.03f, 11.02f, 2.31f }, { 10.03f, 3.98f, 2.31f }, { 5.0f, 3.98f, 0.18f } };
+static const FxArtLoop menuword_4_d_2[] = { { 4, menuword_4_d_2_0 }, { 4, menuword_4_d_2_1 } };
+static const FxArtLayer menuword_4_d_fill[] = { { 1, 2, menuword_4_d_0, 0.0f }, { 2, 2, menuword_4_d_1, 0.0f }, { 7, 2, menuword_4_d_2, 0.0f } };
+static const uint16_t menuword_4_d_tiles[] = { 264, 265, 280, 281 };
+
+/* the menus' mode word letter '5 T' ($FF:$002A), its colours each a region over the one before (1: 1 loop, 8 corners (2 sharp), radii 2.3, 2.4, 2.5; 2: 1 loop, 12 corners (4 sharp), radii 0.3, 0.7, 2; 7: 1 loop, 8 corners (2 sharp), radii 0.3); 0 off */
+static const FxArtCorner menuword_5_t_0_0[] = { { 15.06f, 0.99f, 2.36f }, { 15.06f, 6.03f, 2.38f }, { 11.0f, 6.03f, 0.0f }, { 11.0f, 15.03f, 2.28f }, { 4.0f, 15.03f, 2.28f }, { 4.0f, 6.03f, 0.0f }, { -0.14f, 6.03f, 2.54f }, { -0.14f, 0.99f, 2.5f } };
+static const FxArtLoop menuword_5_t_0[] = { { 8, menuword_5_t_0_0 } };
+static const FxArtCorner menuword_5_t_1_0[] = { { 14.0f, 1.0f, 0.3f }, { 14.0f, 5.0f, 0.3f }, { 10.0f, 5.0f, 0.0f }, { 10.0f, 6.0f, 0.0f }, { 11.0f, 5.54f, 0.71f }, { 11.0f, 15.0f, 2.0f }, { 4.0f, 15.0f, 2.0f }, { 4.0f, 5.54f, 0.71f }, { 5.0f, 6.0f, 0.0f }, { 5.0f, 5.0f, 0.0f }, { 1.0f, 5.0f, 0.3f }, { 1.0f, 1.0f, 0.3f } };
+static const FxArtLoop menuword_5_t_1[] = { { 12, menuword_5_t_1_0 } };
+static const FxArtCorner menuword_5_t_2_0[] = { { 14.0f, 1.0f, 0.3f }, { 14.0f, 5.0f, 0.3f }, { 10.0f, 5.0f, 0.0f }, { 10.0f, 14.0f, 0.3f }, { 5.0f, 14.0f, 0.3f }, { 5.0f, 5.0f, 0.0f }, { 1.0f, 5.0f, 0.3f }, { 1.0f, 1.0f, 0.3f } };
+static const FxArtLoop menuword_5_t_2[] = { { 8, menuword_5_t_2_0 } };
+static const FxArtLayer menuword_5_t_fill[] = { { 1, 1, menuword_5_t_0, 0.0f }, { 2, 1, menuword_5_t_1, 0.0f }, { 7, 1, menuword_5_t_2, 0.0f } };
+static const uint16_t menuword_5_t_tiles[] = { 266, 267, 282, 283 };
+
+/* the menus' mode word letter '6 R' ($FF:$002A), its colours each a region over the one before (1: 1 loop, 14 corners (5 sharp), radii 0.3, 0.8, 2, 4, 6, 7; 2: 1 loop, 16 corners (5 sharp), radii 0.3, 0.8, 2, 2.1, 3, 4; 7: 1 loop, 14 corners (5 sharp), radii 0.3, 0.8, 3, 4, 6); 9 off */
+static const FxArtCorner menuword_6_r_0_0[] = { { 15.02f, 1.01f, 5.96f }, { 15.02f, 9.21f, 0.81f }, { 13.67f, 8.0f, 0.0f }, { 13.67f, 12.0f, 0.0f }, { 15.0f, 10.81f, 0.8f }, { 15.0f, 15.0f, 2.0f }, { 5.99f, 15.0f, 7.01f }, { 5.99f, 7.0f, 0.3f }, { 10.0f, 7.0f, 0.0f }, { 10.0f, 5.0f, 0.0f }, { 5.0f, 5.0f, 0.0f }, { 5.0f, 15.0f, 0.3f }, { 0.0f, 15.0f, 2.0f }, { 0.0f, 1.01f, 4.01f } };
+static const FxArtLoop menuword_6_r_0[] = { { 14, menuword_6_r_0_0 } };
+static const FxArtCorner menuword_6_r_1_0[] = { { 14.0f, 1.01f, 4.0f }, { 14.0f, 9.2f, 0.8f }, { 12.66f, 8.0f, 0.0f }, { 12.69f, 8.06f, 0.3f }, { 12.69f, 10.98f, 0.0f }, { 14.98f, 10.77f, 2.1f }, { 14.98f, 15.02f, 1.96f }, { 11.52f, 15.02f, 0.3f }, { 6.0f, 9.5f, 0.3f }, { 6.0f, 7.0f, 0.3f }, { 10.0f, 7.0f, 0.0f }, { 10.0f, 4.0f, 0.0f }, { 5.0f, 4.0f, 0.0f }, { 5.0f, 15.0f, 0.3f }, { 1.0f, 15.0f, 0.3f }, { 1.0f, 1.01f, 3.0f } };
+static const FxArtLoop menuword_6_r_1[] = { { 16, menuword_6_r_1_0 } };
+static const FxArtCorner menuword_6_r_2_0[] = { { 14.0f, 1.01f, 4.0f }, { 14.0f, 9.19f, 0.8f }, { 12.67f, 8.0f, 0.0f }, { 12.67f, 11.0f, 0.0f }, { 14.0f, 9.81f, 0.8f }, { 14.0f, 13.98f, 0.3f }, { 6.02f, 13.98f, 6.01f }, { 6.02f, 7.0f, 0.3f }, { 10.0f, 7.0f, 0.0f }, { 10.0f, 4.0f, 0.0f }, { 5.0f, 4.0f, 0.0f }, { 5.0f, 14.0f, 0.3f }, { 1.0f, 14.0f, 0.3f }, { 1.0f, 1.01f, 3.0f } };
+static const FxArtLoop menuword_6_r_2[] = { { 14, menuword_6_r_2_0 } };
+static const FxArtLayer menuword_6_r_fill[] = { { 1, 1, menuword_6_r_0, 0.0f }, { 2, 1, menuword_6_r_1, 0.0f }, { 7, 1, menuword_6_r_2, 0.0f } };
+static const uint16_t menuword_6_r_tiles[] = { 268, 269, 284, 285 };
+
+/* the menus' mode word letter '7 A' ($FF:$002A), its colours each a region over the one before (1: 2 loops, 12 corners (6 sharp), radii 0.3, 2.3, 2.4, 7.3, 7.6; 2: 2 loops, 12 corners (6 sharp), radii 0.3, 2.3, 2.4, 7.3, 7.6; 7: 2 loops, 12 corners (6 sharp), radii 0.3, 6.2); 2 off */
+static const FxArtCorner menuword_7_a_0_0[] = { { 15.01f, 1.07f, 7.64f }, { 15.01f, 15.04f, 2.44f }, { 9.0f, 15.04f, 0.3f }, { 9.0f, 12.0f, 0.0f }, { 6.0f, 12.0f, 0.0f }, { 6.0f, 15.04f, 0.3f }, { 0.04f, 15.04f, 2.32f }, { 0.04f, 1.07f, 7.33f } };
+static const FxArtCorner menuword_7_a_0_1[] = { { 6.0f, 8.0f, 0.0f }, { 9.0f, 8.0f, 0.0f }, { 9.0f, 5.0f, 0.0f }, { 6.0f, 5.0f, 0.0f } };
+static const FxArtLoop menuword_7_a_0[] = { { 8, menuword_7_a_0_0 }, { 4, menuword_7_a_0_1 } };
+static const FxArtCorner menuword_7_a_1_0[] = { { 15.01f, 1.07f, 7.64f }, { 15.01f, 15.02f, 2.39f }, { 9.0f, 15.02f, 0.3f }, { 9.0f, 10.99f, 0.0f }, { 5.99f, 10.99f, 0.0f }, { 5.99f, 15.02f, 0.3f }, { 0.04f, 15.02f, 2.28f }, { 0.04f, 1.07f, 7.34f } };
+static const FxArtCorner menuword_7_a_1_1[] = { { 6.0f, 8.0f, 0.0f }, { 9.0f, 8.0f, 0.0f }, { 9.0f, 5.0f, 0.0f }, { 6.0f, 5.0f, 0.0f } };
+static const FxArtLoop menuword_7_a_1[] = { { 8, menuword_7_a_1_0 }, { 4, menuword_7_a_1_1 } };
+static const FxArtCorner menuword_7_a_2_0[] = { { 14.01f, 0.96f, 6.25f }, { 14.01f, 14.0f, 0.3f }, { 9.0f, 14.0f, 0.3f }, { 9.0f, 11.0f, 0.0f }, { 6.0f, 11.0f, 0.0f }, { 6.0f, 14.0f, 0.3f }, { 0.99f, 14.0f, 0.3f }, { 0.99f, 0.96f, 6.25f } };
+static const FxArtCorner menuword_7_a_2_1[] = { { 6.0f, 8.0f, 0.0f }, { 9.0f, 8.0f, 0.0f }, { 9.0f, 4.0f, 0.0f }, { 6.0f, 4.0f, 0.0f } };
+static const FxArtLoop menuword_7_a_2[] = { { 8, menuword_7_a_2_0 }, { 4, menuword_7_a_2_1 } };
+static const FxArtLayer menuword_7_a_fill[] = { { 1, 2, menuword_7_a_0, 0.0f }, { 2, 2, menuword_7_a_1, 0.0f }, { 7, 2, menuword_7_a_2, 0.0f } };
+static const uint16_t menuword_7_a_tiles[] = { 270, 271, 286, 287 };
+
+/* the menus' mode word letter '8 X' ($FF:$002A), its colours each a region over the one before (1: 1 loop, 16 corners (4 sharp), radii 0.5, 0.6, 1, 1.7; 2: 1 loop, 16 corners (4 sharp), radii 0.4, 0.5, 0.6, 0.7, 1.2; 7: 1 loop, 16 corners (4 sharp), radii 0.5, 0.6, 0.7, 1.2); 0 off, built by hand */
+static const FxArtCorner menuword_8_x_0_0[] = { { 1.0f, 1.08f, 1.0f }, { 4.91f, 1.08f, 0.5f }, { 7.5f, 3.67f, 0.0f }, { 10.07f, 1.1f, 0.5f }, { 14.0f, 1.1f, 1.0f }, { 15.31f, 2.79f, 0.6f }, { 10.33f, 8.23f, 0.0f }, { 14.97f, 11.73f, 0.6f }, { 13.7f, 14.62f, 1.66f }, { 9.99f, 14.62f, 0.6f }, { 7.5f, 12.34f, 0.0f }, { 5.11f, 14.62f, 0.6f }, { 1.24f, 14.62f, 1.73f }, { 0.05f, 11.71f, 0.6f }, { 4.56f, 8.31f, 0.0f }, { -0.29f, 2.77f, 0.6f } };
+static const FxArtLoop menuword_8_x_0[] = { { 16, menuword_8_x_0_0 } };
+static const FxArtCorner menuword_8_x_1_0[] = { { 1.73f, 1.38f, 1.2f }, { 5.04f, 1.38f, 0.52f }, { 7.5f, 3.66f, 0.0f }, { 9.93f, 1.38f, 0.51f }, { 13.27f, 1.38f, 1.2f }, { 14.66f, 2.85f, 0.7f }, { 10.33f, 7.5f, 0.0f }, { 14.03f, 11.19f, 0.59f }, { 13.02f, 14.76f, 1.16f }, { 10.56f, 14.76f, 0.47f }, { 7.5f, 10.62f, 0.0f }, { 4.46f, 14.74f, 0.43f }, { 2.05f, 14.74f, 1.17f }, { 0.87f, 11.3f, 0.59f }, { 4.67f, 7.5f, 0.0f }, { 0.36f, 2.85f, 0.69f } };
+static const FxArtLoop menuword_8_x_1[] = { { 16, menuword_8_x_1_0 } };
+static const FxArtCorner menuword_8_x_2_0[] = { { 1.73f, 1.38f, 1.2f }, { 5.02f, 1.38f, 0.5f }, { 7.5f, 3.66f, 0.0f }, { 9.98f, 1.38f, 0.5f }, { 13.27f, 1.38f, 1.2f }, { 14.63f, 2.82f, 0.62f }, { 10.33f, 7.5f, 0.0f }, { 14.16f, 11.33f, 0.6f }, { 13.1f, 14.27f, 1.17f }, { 10.44f, 14.27f, 0.71f }, { 7.5f, 11.33f, 0.0f }, { 4.55f, 14.28f, 0.54f }, { 1.9f, 14.28f, 1.18f }, { 0.84f, 11.32f, 0.6f }, { 4.67f, 7.5f, 0.0f }, { 0.36f, 2.83f, 0.62f } };
+static const FxArtLoop menuword_8_x_2[] = { { 16, menuword_8_x_2_0 } };
+static const FxArtLayer menuword_8_x_fill[] = { { 1, 1, menuword_8_x_0, 0.0f }, { 2, 1, menuword_8_x_1, 0.0f }, { 7, 1, menuword_8_x_2, 0.0f } };
+static const uint16_t menuword_8_x_tiles[] = { 288, 289, 304, 305 };
+
+/* the menus' mode word letter '9 S' ($FF:$002A), its colours each a region over the one before (1: 1 loop, 15 corners (3 sharp), radii 0.3, 0.6, 0.7, 1.3, 2, 3.2, 3.5, 4.3; 2: 1 loop, 16 corners (5 sharp), radii 0.3, 0.7, 1.5, 2, 3, 3.5, 3.6, 4.2; 7: 1 loop, 16 corners (5 sharp), radii 0.3, 0.7, 1.5, 2, 3, 3.5); 11 off */
+static const FxArtCorner menuword_9_s_0_0[] = { { 10.95f, 1.25f, 0.3f }, { 17.28f, 5.98f, 1.3f }, { 8.16f, 5.98f, 0.59f }, { 9.02f, 4.99f, 0.0f }, { 4.17f, 4.99f, 0.33f }, { 14.81f, 8.54f, 1.99f }, { 14.81f, 14.68f, 4.29f }, { 0.23f, 14.68f, 4.27f }, { 0.23f, 9.99f, 0.3f }, { 6.48f, 9.99f, 0.71f }, { 6.01f, 11.0f, 0.0f }, { 6.03f, 11.0f, 0.3f }, { 9.86f, 11.0f, 0.0f }, { 0.13f, 6.76f, 3.51f }, { 0.13f, 1.25f, 3.21f } };
+static const FxArtLoop menuword_9_s_0[] = { { 15, menuword_9_s_0_0 } };
+static const FxArtCorner menuword_9_s_1_0[] = { { 13.96f, 1.19f, 3.53f }, { 13.96f, 5.01f, 0.3f }, { 8.53f, 5.01f, 0.71f }, { 8.99f, 4.0f, 0.0f }, { 4.98f, 4.0f, 0.0f }, { 4.98f, 5.08f, 1.5f }, { 13.82f, 8.2f, 3.0f }, { 13.82f, 14.79f, 4.19f }, { 1.21f, 14.79f, 4.18f }, { 1.21f, 9.98f, 0.3f }, { 6.48f, 9.98f, 0.72f }, { 6.0f, 11.0f, 0.0f }, { 10.0f, 11.0f, 0.0f }, { 10.0f, 10.12f, 0.0f }, { 1.02f, 6.11f, 1.99f }, { 1.02f, 1.19f, 3.59f } };
+static const FxArtLoop menuword_9_s_1[] = { { 16, menuword_9_s_1_0 } };
+static const FxArtCorner menuword_9_s_2_0[] = { { 14.0f, 1.0f, 3.5f }, { 14.0f, 5.0f, 0.3f }, { 8.54f, 5.0f, 0.71f }, { 9.0f, 4.0f, 0.0f }, { 5.0f, 4.0f, 0.0f }, { 5.0f, 5.09f, 1.5f }, { 14.0f, 8.27f, 3.5f }, { 14.0f, 14.0f, 3.0f }, { 1.0f, 14.0f, 3.5f }, { 1.0f, 10.0f, 0.3f }, { 6.46f, 10.0f, 0.71f }, { 6.0f, 11.0f, 0.0f }, { 10.0f, 11.0f, 0.0f }, { 10.0f, 10.12f, 0.0f }, { 1.0f, 6.1f, 2.0f }, { 1.0f, 1.0f, 3.5f } };
+static const FxArtLoop menuword_9_s_2[] = { { 16, menuword_9_s_2_0 } };
+static const FxArtLayer menuword_9_s_fill[] = { { 1, 1, menuword_9_s_0, 0.0f }, { 2, 1, menuword_9_s_1, 0.0f }, { 7, 1, menuword_9_s_2, 0.0f } };
+static const uint16_t menuword_9_s_tiles[] = { 290, 291, 306, 307 };
+
+/* the menus' mode word letter '10 T' ($FF:$002A), its colours each a region over the one before (1: 1 loop, 8 corners (2 sharp), radii 2.3, 2.4, 2.5; 2: 1 loop, 12 corners (4 sharp), radii 0.3, 0.7, 2; 7: 1 loop, 8 corners (2 sharp), radii 0.3); 0 off */
+static const FxArtCorner menuword_10_t_0_0[] = { { 15.06f, 0.99f, 2.36f }, { 15.06f, 6.03f, 2.38f }, { 11.0f, 6.03f, 0.0f }, { 11.0f, 15.03f, 2.28f }, { 4.0f, 15.03f, 2.28f }, { 4.0f, 6.03f, 0.0f }, { -0.14f, 6.03f, 2.54f }, { -0.14f, 0.99f, 2.5f } };
+static const FxArtLoop menuword_10_t_0[] = { { 8, menuword_10_t_0_0 } };
+static const FxArtCorner menuword_10_t_1_0[] = { { 14.0f, 1.0f, 0.3f }, { 14.0f, 5.0f, 0.3f }, { 10.0f, 5.0f, 0.0f }, { 10.0f, 6.0f, 0.0f }, { 11.0f, 5.54f, 0.71f }, { 11.0f, 15.0f, 2.0f }, { 4.0f, 15.0f, 2.0f }, { 4.0f, 5.54f, 0.71f }, { 5.0f, 6.0f, 0.0f }, { 5.0f, 5.0f, 0.0f }, { 1.0f, 5.0f, 0.3f }, { 1.0f, 1.0f, 0.3f } };
+static const FxArtLoop menuword_10_t_1[] = { { 12, menuword_10_t_1_0 } };
+static const FxArtCorner menuword_10_t_2_0[] = { { 14.0f, 1.0f, 0.3f }, { 14.0f, 5.0f, 0.3f }, { 10.0f, 5.0f, 0.0f }, { 10.0f, 14.0f, 0.3f }, { 5.0f, 14.0f, 0.3f }, { 5.0f, 5.0f, 0.0f }, { 1.0f, 5.0f, 0.3f }, { 1.0f, 1.0f, 0.3f } };
+static const FxArtLoop menuword_10_t_2[] = { { 8, menuword_10_t_2_0 } };
+static const FxArtLayer menuword_10_t_fill[] = { { 1, 1, menuword_10_t_0, 0.0f }, { 2, 1, menuword_10_t_1, 0.0f }, { 7, 1, menuword_10_t_2, 0.0f } };
+static const uint16_t menuword_10_t_tiles[] = { 292, 293, 308, 309 };
+
+/* the menus' mode word letter '11 U' ($FF:$002A), its colours each a region over the one before (1: 1 loop, 8 corners (2 sharp), radii 2.2, 2.3, 3.8, 5.6, 5.7; 2: 1 loop, 8 corners (2 sharp), radii 0.3, 2.3, 4, 5.3; 7: 1 loop, 8 corners (0 sharp), radii 0.3, 2.3, 3.9); 4 off */
+static const FxArtCorner menuword_11_u_0_0[] = { { 6.01f, 1.0f, 2.23f }, { 6.01f, 11.0f, 0.0f }, { 9.0f, 11.0f, 0.0f }, { 9.0f, 0.99f, 3.77f }, { 15.03f, 0.99f, 2.27f }, { 15.03f, 15.06f, 5.6f }, { -0.07f, 15.06f, 5.66f }, { -0.07f, 1.0f, 3.84f } };
+static const FxArtLoop menuword_11_u_0[] = { { 8, menuword_11_u_0_0 } };
+static const FxArtCorner menuword_11_u_1_0[] = { { 6.01f, 0.94f, 2.35f }, { 6.01f, 11.0f, 0.0f }, { 8.99f, 11.0f, 0.0f }, { 8.99f, 0.94f, 3.96f }, { 14.0f, 0.94f, 0.3f }, { 14.0f, 15.14f, 5.26f }, { 0.99f, 15.14f, 5.27f }, { 0.99f, 0.94f, 2.34f } };
+static const FxArtLoop menuword_11_u_1[] = { { 8, menuword_11_u_1_0 } };
+static const FxArtCorner menuword_11_u_2_0[] = { { 4.99f, 0.97f, 0.3f }, { 4.99f, 11.05f, 2.34f }, { 10.0f, 11.05f, 2.33f }, { 10.0f, 0.97f, 2.27f }, { 14.01f, 0.97f, 0.3f }, { 14.01f, 14.03f, 3.89f }, { 0.98f, 14.03f, 3.9f }, { 0.98f, 0.97f, 2.31f } };
+static const FxArtLoop menuword_11_u_2[] = { { 8, menuword_11_u_2_0 } };
+static const FxArtLayer menuword_11_u_fill[] = { { 1, 1, menuword_11_u_0, 0.0f }, { 2, 1, menuword_11_u_1, 0.0f }, { 7, 1, menuword_11_u_2, 0.0f } };
+static const uint16_t menuword_11_u_tiles[] = { 294, 295, 310, 311 };
+
+/* the menus' mode word letter '12 N' ($FF:$002A), its colours each a region over the one before (1: 1 loop, 10 corners (2 sharp), radii 0.6, 0.8, 1.1, 1.5, 1.6; 2: 1 loop, 10 corners (2 sharp), radii 0.6, 0.8, 1.5, 1.6; 7: 1 loop, 10 corners (2 sharp), radii 0.6, 0.8, 1.5); 0 off, built by hand */
+static const FxArtCorner menuword_12_n_0_0[] = { { 0.07f, 1.17f, 1.57f }, { 5.0f, 1.17f, 0.6f }, { 9.9f, 6.07f, 0.0f }, { 9.9f, 1.1f, 0.6f }, { 14.85f, 1.1f, 1.56f }, { 14.85f, 14.88f, 1.53f }, { 10.06f, 14.88f, 0.8f }, { 5.86f, 10.69f, 0.0f }, { 5.86f, 14.62f, 1.08f }, { 0.07f, 14.62f, 1.46f } };
+static const FxArtLoop menuword_12_n_0[] = { { 10, menuword_12_n_0_0 } };
+static const FxArtCorner menuword_12_n_1_0[] = { { 0.16f, 1.11f, 1.53f }, { 4.94f, 1.11f, 0.6f }, { 9.91f, 6.08f, 0.0f }, { 9.91f, 1.11f, 0.6f }, { 14.86f, 1.11f, 1.57f }, { 14.86f, 14.77f, 1.53f }, { 10.64f, 14.77f, 0.64f }, { 5.38f, 8.53f, 0.0f }, { 5.38f, 14.91f, 0.8f }, { 0.16f, 14.91f, 1.56f } };
+static const FxArtLoop menuword_12_n_1[] = { { 10, menuword_12_n_1_0 } };
+static const FxArtCorner menuword_12_n_2_0[] = { { 0.62f, 1.08f, 1.5f }, { 4.91f, 1.08f, 0.6f }, { 9.92f, 6.08f, 0.0f }, { 9.92f, 1.0f, 0.6f }, { 14.38f, 1.0f, 1.5f }, { 14.38f, 14.38f, 1.5f }, { 10.55f, 14.38f, 0.8f }, { 5.38f, 9.21f, 0.0f }, { 5.38f, 14.38f, 0.8f }, { 0.62f, 14.38f, 1.5f } };
+static const FxArtLoop menuword_12_n_2[] = { { 10, menuword_12_n_2_0 } };
+static const FxArtLayer menuword_12_n_fill[] = { { 1, 1, menuword_12_n_0, 0.0f }, { 2, 1, menuword_12_n_1, 0.0f }, { 7, 1, menuword_12_n_2, 0.0f } };
+static const uint16_t menuword_12_n_tiles[] = { 296, 297, 312, 313 };
+
+/* the menus' mode word letter '13 T' ($FF:$002A), its colours each a region over the one before (1: 1 loop, 8 corners (2 sharp), radii 2.3, 2.4, 2.5; 2: 1 loop, 12 corners (4 sharp), radii 0.3, 0.7, 2; 7: 1 loop, 8 corners (2 sharp), radii 0.3); 0 off */
+static const FxArtCorner menuword_13_t_0_0[] = { { 15.06f, 0.99f, 2.36f }, { 15.06f, 6.03f, 2.38f }, { 11.0f, 6.03f, 0.0f }, { 11.0f, 15.03f, 2.28f }, { 4.0f, 15.03f, 2.28f }, { 4.0f, 6.03f, 0.0f }, { -0.14f, 6.03f, 2.54f }, { -0.14f, 0.99f, 2.5f } };
+static const FxArtLoop menuword_13_t_0[] = { { 8, menuword_13_t_0_0 } };
+static const FxArtCorner menuword_13_t_1_0[] = { { 14.0f, 1.0f, 0.3f }, { 14.0f, 5.0f, 0.3f }, { 10.0f, 5.0f, 0.0f }, { 10.0f, 6.0f, 0.0f }, { 11.0f, 5.54f, 0.71f }, { 11.0f, 15.0f, 2.0f }, { 4.0f, 15.0f, 2.0f }, { 4.0f, 5.54f, 0.71f }, { 5.0f, 6.0f, 0.0f }, { 5.0f, 5.0f, 0.0f }, { 1.0f, 5.0f, 0.3f }, { 1.0f, 1.0f, 0.3f } };
+static const FxArtLoop menuword_13_t_1[] = { { 12, menuword_13_t_1_0 } };
+static const FxArtCorner menuword_13_t_2_0[] = { { 14.0f, 1.0f, 0.3f }, { 14.0f, 5.0f, 0.3f }, { 10.0f, 5.0f, 0.0f }, { 10.0f, 14.0f, 0.3f }, { 5.0f, 14.0f, 0.3f }, { 5.0f, 5.0f, 0.0f }, { 1.0f, 5.0f, 0.3f }, { 1.0f, 1.0f, 0.3f } };
+static const FxArtLoop menuword_13_t_2[] = { { 8, menuword_13_t_2_0 } };
+static const FxArtLayer menuword_13_t_fill[] = { { 1, 1, menuword_13_t_0, 0.0f }, { 2, 1, menuword_13_t_1, 0.0f }, { 7, 1, menuword_13_t_2, 0.0f } };
+static const uint16_t menuword_13_t_tiles[] = { 298, 299, 314, 315 };
+
+/* the menus' mode word letter '14 T' ($FF:$002A), its colours each a region over the one before (1: 1 loop, 8 corners (2 sharp), radii 2.3, 2.4, 2.5; 2: 1 loop, 12 corners (4 sharp), radii 0.3, 0.7, 2; 7: 1 loop, 8 corners (2 sharp), radii 0.3); 0 off */
+static const FxArtCorner menuword_14_t_0_0[] = { { 15.06f, 0.99f, 2.36f }, { 15.06f, 6.03f, 2.38f }, { 11.0f, 6.03f, 0.0f }, { 11.0f, 15.03f, 2.28f }, { 4.0f, 15.03f, 2.28f }, { 4.0f, 6.03f, 0.0f }, { -0.14f, 6.03f, 2.54f }, { -0.14f, 0.99f, 2.5f } };
+static const FxArtLoop menuword_14_t_0[] = { { 8, menuword_14_t_0_0 } };
+static const FxArtCorner menuword_14_t_1_0[] = { { 14.0f, 1.0f, 0.3f }, { 14.0f, 5.0f, 0.3f }, { 10.0f, 5.0f, 0.0f }, { 10.0f, 6.0f, 0.0f }, { 11.0f, 5.54f, 0.71f }, { 11.0f, 15.0f, 2.0f }, { 4.0f, 15.0f, 2.0f }, { 4.0f, 5.54f, 0.71f }, { 5.0f, 6.0f, 0.0f }, { 5.0f, 5.0f, 0.0f }, { 1.0f, 5.0f, 0.3f }, { 1.0f, 1.0f, 0.3f } };
+static const FxArtLoop menuword_14_t_1[] = { { 12, menuword_14_t_1_0 } };
+static const FxArtCorner menuword_14_t_2_0[] = { { 14.0f, 1.0f, 0.3f }, { 14.0f, 5.0f, 0.3f }, { 10.0f, 5.0f, 0.0f }, { 10.0f, 14.0f, 0.3f }, { 5.0f, 14.0f, 0.3f }, { 5.0f, 5.0f, 0.0f }, { 1.0f, 5.0f, 0.3f }, { 1.0f, 1.0f, 0.3f } };
+static const FxArtLoop menuword_14_t_2[] = { { 8, menuword_14_t_2_0 } };
+static const FxArtLayer menuword_14_t_fill[] = { { 1, 1, menuword_14_t_0, 0.0f }, { 2, 1, menuword_14_t_1, 0.0f }, { 7, 1, menuword_14_t_2, 0.0f } };
+static const uint16_t menuword_14_t_tiles[] = { 300, 301, 316, 317 };
+
+/* the menus' mode word letter '15 R' ($FF:$002A), its colours each a region over the one before (1: 1 loop, 14 corners (5 sharp), radii 0.3, 0.8, 2, 4, 6, 7; 2: 1 loop, 16 corners (5 sharp), radii 0.3, 0.8, 2, 2.1, 3, 4; 7: 1 loop, 14 corners (5 sharp), radii 0.3, 0.8, 3, 4, 6); 9 off */
+static const FxArtCorner menuword_15_r_0_0[] = { { 15.02f, 1.01f, 5.96f }, { 15.02f, 9.21f, 0.81f }, { 13.67f, 8.0f, 0.0f }, { 13.67f, 12.0f, 0.0f }, { 15.0f, 10.81f, 0.8f }, { 15.0f, 15.0f, 2.0f }, { 5.99f, 15.0f, 7.01f }, { 5.99f, 7.0f, 0.3f }, { 10.0f, 7.0f, 0.0f }, { 10.0f, 5.0f, 0.0f }, { 5.0f, 5.0f, 0.0f }, { 5.0f, 15.0f, 0.3f }, { 0.0f, 15.0f, 2.0f }, { 0.0f, 1.01f, 4.01f } };
+static const FxArtLoop menuword_15_r_0[] = { { 14, menuword_15_r_0_0 } };
+static const FxArtCorner menuword_15_r_1_0[] = { { 14.0f, 1.01f, 4.0f }, { 14.0f, 9.2f, 0.8f }, { 12.66f, 8.0f, 0.0f }, { 12.69f, 8.06f, 0.3f }, { 12.69f, 10.98f, 0.0f }, { 14.98f, 10.77f, 2.1f }, { 14.98f, 15.02f, 1.96f }, { 11.52f, 15.02f, 0.3f }, { 6.0f, 9.5f, 0.3f }, { 6.0f, 7.0f, 0.3f }, { 10.0f, 7.0f, 0.0f }, { 10.0f, 4.0f, 0.0f }, { 5.0f, 4.0f, 0.0f }, { 5.0f, 15.0f, 0.3f }, { 1.0f, 15.0f, 0.3f }, { 1.0f, 1.01f, 3.0f } };
+static const FxArtLoop menuword_15_r_1[] = { { 16, menuword_15_r_1_0 } };
+static const FxArtCorner menuword_15_r_2_0[] = { { 14.0f, 1.01f, 4.0f }, { 14.0f, 9.19f, 0.8f }, { 12.67f, 8.0f, 0.0f }, { 12.67f, 11.0f, 0.0f }, { 14.0f, 9.81f, 0.8f }, { 14.0f, 13.98f, 0.3f }, { 6.02f, 13.98f, 6.01f }, { 6.02f, 7.0f, 0.3f }, { 10.0f, 7.0f, 0.0f }, { 10.0f, 4.0f, 0.0f }, { 5.0f, 4.0f, 0.0f }, { 5.0f, 14.0f, 0.3f }, { 1.0f, 14.0f, 0.3f }, { 1.0f, 1.01f, 3.0f } };
+static const FxArtLoop menuword_15_r_2[] = { { 14, menuword_15_r_2_0 } };
+static const FxArtLayer menuword_15_r_fill[] = { { 1, 1, menuword_15_r_0, 0.0f }, { 2, 1, menuword_15_r_1, 0.0f }, { 7, 1, menuword_15_r_2, 0.0f } };
+static const uint16_t menuword_15_r_tiles[] = { 302, 303, 318, 319 };
+
+/* the menus' mode word letter '16 A' ($FF:$002A), its colours each a region over the one before (1: 2 loops, 12 corners (6 sharp), radii 0.3, 2.3, 2.4, 7.3, 7.6; 2: 2 loops, 12 corners (6 sharp), radii 0.3, 2.3, 2.4, 7.3, 7.6; 7: 2 loops, 12 corners (6 sharp), radii 0.3, 6.2); 2 off */
+static const FxArtCorner menuword_16_a_0_0[] = { { 15.01f, 1.07f, 7.64f }, { 15.01f, 15.04f, 2.44f }, { 9.0f, 15.04f, 0.3f }, { 9.0f, 12.0f, 0.0f }, { 6.0f, 12.0f, 0.0f }, { 6.0f, 15.04f, 0.3f }, { 0.04f, 15.04f, 2.32f }, { 0.04f, 1.07f, 7.33f } };
+static const FxArtCorner menuword_16_a_0_1[] = { { 6.0f, 8.0f, 0.0f }, { 9.0f, 8.0f, 0.0f }, { 9.0f, 5.0f, 0.0f }, { 6.0f, 5.0f, 0.0f } };
+static const FxArtLoop menuword_16_a_0[] = { { 8, menuword_16_a_0_0 }, { 4, menuword_16_a_0_1 } };
+static const FxArtCorner menuword_16_a_1_0[] = { { 15.01f, 1.07f, 7.64f }, { 15.01f, 15.02f, 2.39f }, { 9.0f, 15.02f, 0.3f }, { 9.0f, 10.99f, 0.0f }, { 5.99f, 10.99f, 0.0f }, { 5.99f, 15.02f, 0.3f }, { 0.04f, 15.02f, 2.28f }, { 0.04f, 1.07f, 7.34f } };
+static const FxArtCorner menuword_16_a_1_1[] = { { 6.0f, 8.0f, 0.0f }, { 9.0f, 8.0f, 0.0f }, { 9.0f, 5.0f, 0.0f }, { 6.0f, 5.0f, 0.0f } };
+static const FxArtLoop menuword_16_a_1[] = { { 8, menuword_16_a_1_0 }, { 4, menuword_16_a_1_1 } };
+static const FxArtCorner menuword_16_a_2_0[] = { { 14.01f, 0.96f, 6.25f }, { 14.01f, 14.0f, 0.3f }, { 9.0f, 14.0f, 0.3f }, { 9.0f, 11.0f, 0.0f }, { 6.0f, 11.0f, 0.0f }, { 6.0f, 14.0f, 0.3f }, { 0.99f, 14.0f, 0.3f }, { 0.99f, 0.96f, 6.25f } };
+static const FxArtCorner menuword_16_a_2_1[] = { { 6.0f, 8.0f, 0.0f }, { 9.0f, 8.0f, 0.0f }, { 9.0f, 4.0f, 0.0f }, { 6.0f, 4.0f, 0.0f } };
+static const FxArtLoop menuword_16_a_2[] = { { 8, menuword_16_a_2_0 }, { 4, menuword_16_a_2_1 } };
+static const FxArtLayer menuword_16_a_fill[] = { { 1, 2, menuword_16_a_0, 0.0f }, { 2, 2, menuword_16_a_1, 0.0f }, { 7, 2, menuword_16_a_2, 0.0f } };
+static const uint16_t menuword_16_a_tiles[] = { 320, 321, 336, 337 };
+
+/* the menus' mode word letter '17 X' ($FF:$002A), its colours each a region over the one before (1: 1 loop, 16 corners (4 sharp), radii 0.5, 0.6, 1, 1.7; 2: 1 loop, 16 corners (4 sharp), radii 0.4, 0.5, 0.6, 0.7, 1.2; 7: 1 loop, 16 corners (4 sharp), radii 0.5, 0.6, 0.7, 1.2); 0 off, built by hand */
+static const FxArtCorner menuword_17_x_0_0[] = { { 1.0f, 1.08f, 1.0f }, { 4.91f, 1.08f, 0.5f }, { 7.5f, 3.67f, 0.0f }, { 10.07f, 1.1f, 0.5f }, { 14.0f, 1.1f, 1.0f }, { 15.31f, 2.79f, 0.6f }, { 10.33f, 8.23f, 0.0f }, { 14.97f, 11.73f, 0.6f }, { 13.7f, 14.62f, 1.66f }, { 9.99f, 14.62f, 0.6f }, { 7.5f, 12.34f, 0.0f }, { 5.11f, 14.62f, 0.6f }, { 1.24f, 14.62f, 1.73f }, { 0.05f, 11.71f, 0.6f }, { 4.56f, 8.31f, 0.0f }, { -0.29f, 2.77f, 0.6f } };
+static const FxArtLoop menuword_17_x_0[] = { { 16, menuword_17_x_0_0 } };
+static const FxArtCorner menuword_17_x_1_0[] = { { 1.73f, 1.38f, 1.2f }, { 5.04f, 1.38f, 0.52f }, { 7.5f, 3.66f, 0.0f }, { 9.93f, 1.38f, 0.51f }, { 13.27f, 1.38f, 1.2f }, { 14.66f, 2.85f, 0.7f }, { 10.33f, 7.5f, 0.0f }, { 14.03f, 11.19f, 0.59f }, { 13.02f, 14.76f, 1.16f }, { 10.56f, 14.76f, 0.47f }, { 7.5f, 10.62f, 0.0f }, { 4.46f, 14.74f, 0.43f }, { 2.05f, 14.74f, 1.17f }, { 0.87f, 11.3f, 0.59f }, { 4.67f, 7.5f, 0.0f }, { 0.36f, 2.85f, 0.69f } };
+static const FxArtLoop menuword_17_x_1[] = { { 16, menuword_17_x_1_0 } };
+static const FxArtCorner menuword_17_x_2_0[] = { { 1.73f, 1.38f, 1.2f }, { 5.02f, 1.38f, 0.5f }, { 7.5f, 3.66f, 0.0f }, { 9.98f, 1.38f, 0.5f }, { 13.27f, 1.38f, 1.2f }, { 14.63f, 2.82f, 0.62f }, { 10.33f, 7.5f, 0.0f }, { 14.16f, 11.33f, 0.6f }, { 13.1f, 14.27f, 1.17f }, { 10.44f, 14.27f, 0.71f }, { 7.5f, 11.33f, 0.0f }, { 4.55f, 14.28f, 0.54f }, { 1.9f, 14.28f, 1.18f }, { 0.84f, 11.32f, 0.6f }, { 4.67f, 7.5f, 0.0f }, { 0.36f, 2.83f, 0.62f } };
+static const FxArtLoop menuword_17_x_2[] = { { 16, menuword_17_x_2_0 } };
+static const FxArtLayer menuword_17_x_fill[] = { { 1, 1, menuword_17_x_0, 0.0f }, { 2, 1, menuword_17_x_1, 0.0f }, { 7, 1, menuword_17_x_2, 0.0f } };
+static const uint16_t menuword_17_x_tiles[] = { 322, 323, 338, 339 };
+
+/* the menus' mode word letter '18 B' ($FF:$002A), its colours each a region over the one before (1: 3 loops, 17 corners (10 sharp), radii 1.8, 2.1, 2.2, 2.3, 3.1, 4.1, 13.2; 2: 3 loops, 17 corners (10 sharp), radii 0.3, 2, 2.1, 3, 4.1; 7: 3 loops, 16 corners (6 sharp), radii 0.3, 1, 2, 2.1, 3); 9 off */
+static const FxArtCorner menuword_18_b_0_0[] = { { 14.76f, 1.02f, 3.06f }, { 14.76f, 6.36f, 2.15f }, { 12.49f, 6.23f, 0.0f }, { 12.75f, 7.53f, 13.21f }, { 12.75f, 8.92f, 0.0f }, { 14.63f, 8.83f, 1.8f }, { 14.63f, 14.92f, 4.11f }, { -0.03f, 14.92f, 2.13f }, { -0.03f, 1.02f, 2.26f } };
+static const FxArtCorner menuword_18_b_0_1[] = { { 5.0f, 6.0f, 0.0f }, { 9.0f, 6.0f, 0.0f }, { 9.0f, 4.0f, 0.0f }, { 5.0f, 4.0f, 0.0f } };
+static const FxArtCorner menuword_18_b_0_2[] = { { 5.0f, 12.0f, 0.0f }, { 9.0f, 12.0f, 0.0f }, { 9.0f, 10.0f, 0.0f }, { 5.0f, 10.0f, 0.0f } };
+static const FxArtLoop menuword_18_b_0[] = { { 9, menuword_18_b_0_0 }, { 4, menuword_18_b_0_1 }, { 4, menuword_18_b_0_2 } };
+static const FxArtCorner menuword_18_b_1_0[] = { { 13.79f, 1.03f, 3.0f }, { 13.79f, 6.19f, 2.06f }, { 11.67f, 6.13f, 0.0f }, { 11.67f, 6.15f, 0.3f }, { 11.67f, 8.88f, 0.0f }, { 13.74f, 8.78f, 1.97f }, { 13.74f, 15.0f, 4.1f }, { 1.0f, 15.0f, 0.3f }, { 1.0f, 1.03f, 0.3f } };
+static const FxArtCorner menuword_18_b_1_1[] = { { 5.0f, 6.0f, 0.0f }, { 9.0f, 6.0f, 0.0f }, { 9.0f, 4.0f, 0.0f }, { 5.0f, 4.0f, 0.0f } };
+static const FxArtCorner menuword_18_b_1_2[] = { { 5.0f, 12.0f, 0.0f }, { 9.0f, 12.0f, 0.0f }, { 9.0f, 10.0f, 0.0f }, { 5.0f, 10.0f, 0.0f } };
+static const FxArtLoop menuword_18_b_1[] = { { 9, menuword_18_b_1_0 }, { 4, menuword_18_b_1_1 }, { 4, menuword_18_b_1_2 } };
+static const FxArtCorner menuword_18_b_2_0[] = { { 13.94f, 1.0f, 3.0f }, { 13.94f, 6.26f, 2.04f }, { 11.69f, 6.03f, 0.0f }, { 11.69f, 8.97f, 0.0f }, { 13.94f, 8.76f, 2.06f }, { 13.94f, 14.0f, 2.99f }, { 1.0f, 14.0f, 0.3f }, { 1.0f, 1.0f, 0.3f } };
+static const FxArtCorner menuword_18_b_2_1[] = { { 5.0f, 6.01f, 0.0f }, { 9.95f, 6.01f, 1.97f }, { 9.95f, 3.02f, 1.03f }, { 5.0f, 3.02f, 0.0f } };
+static const FxArtCorner menuword_18_b_2_2[] = { { 5.0f, 12.01f, 0.0f }, { 9.95f, 12.01f, 1.97f }, { 9.95f, 9.02f, 1.03f }, { 5.0f, 9.02f, 0.0f } };
+static const FxArtLoop menuword_18_b_2[] = { { 8, menuword_18_b_2_0 }, { 4, menuword_18_b_2_1 }, { 4, menuword_18_b_2_2 } };
+static const FxArtLayer menuword_18_b_fill[] = { { 1, 3, menuword_18_b_0, 0.0f }, { 2, 3, menuword_18_b_1, 0.0f }, { 7, 3, menuword_18_b_2, 0.0f } };
+static const uint16_t menuword_18_b_tiles[] = { 324, 325, 340, 341 };
+
+/* the menus' mode word letter '19 A' ($FF:$002A), its colours each a region over the one before (1: 2 loops, 12 corners (6 sharp), radii 0.3, 2.3, 2.4, 7.3, 7.6; 2: 2 loops, 12 corners (6 sharp), radii 0.3, 2.3, 2.4, 7.3, 7.6; 7: 2 loops, 12 corners (6 sharp), radii 0.3, 6.2); 2 off */
+static const FxArtCorner menuword_19_a_0_0[] = { { 15.01f, 1.07f, 7.64f }, { 15.01f, 15.04f, 2.44f }, { 9.0f, 15.04f, 0.3f }, { 9.0f, 12.0f, 0.0f }, { 6.0f, 12.0f, 0.0f }, { 6.0f, 15.04f, 0.3f }, { 0.04f, 15.04f, 2.32f }, { 0.04f, 1.07f, 7.33f } };
+static const FxArtCorner menuword_19_a_0_1[] = { { 6.0f, 8.0f, 0.0f }, { 9.0f, 8.0f, 0.0f }, { 9.0f, 5.0f, 0.0f }, { 6.0f, 5.0f, 0.0f } };
+static const FxArtLoop menuword_19_a_0[] = { { 8, menuword_19_a_0_0 }, { 4, menuword_19_a_0_1 } };
+static const FxArtCorner menuword_19_a_1_0[] = { { 15.01f, 1.07f, 7.64f }, { 15.01f, 15.02f, 2.39f }, { 9.0f, 15.02f, 0.3f }, { 9.0f, 10.99f, 0.0f }, { 5.99f, 10.99f, 0.0f }, { 5.99f, 15.02f, 0.3f }, { 0.04f, 15.02f, 2.28f }, { 0.04f, 1.07f, 7.34f } };
+static const FxArtCorner menuword_19_a_1_1[] = { { 6.0f, 8.0f, 0.0f }, { 9.0f, 8.0f, 0.0f }, { 9.0f, 5.0f, 0.0f }, { 6.0f, 5.0f, 0.0f } };
+static const FxArtLoop menuword_19_a_1[] = { { 8, menuword_19_a_1_0 }, { 4, menuword_19_a_1_1 } };
+static const FxArtCorner menuword_19_a_2_0[] = { { 14.01f, 0.96f, 6.25f }, { 14.01f, 14.0f, 0.3f }, { 9.0f, 14.0f, 0.3f }, { 9.0f, 11.0f, 0.0f }, { 6.0f, 11.0f, 0.0f }, { 6.0f, 14.0f, 0.3f }, { 0.99f, 14.0f, 0.3f }, { 0.99f, 0.96f, 6.25f } };
+static const FxArtCorner menuword_19_a_2_1[] = { { 6.0f, 8.0f, 0.0f }, { 9.0f, 8.0f, 0.0f }, { 9.0f, 4.0f, 0.0f }, { 6.0f, 4.0f, 0.0f } };
+static const FxArtLoop menuword_19_a_2[] = { { 8, menuword_19_a_2_0 }, { 4, menuword_19_a_2_1 } };
+static const FxArtLayer menuword_19_a_fill[] = { { 1, 2, menuword_19_a_0, 0.0f }, { 2, 2, menuword_19_a_1, 0.0f }, { 7, 2, menuword_19_a_2, 0.0f } };
+static const uint16_t menuword_19_a_tiles[] = { 326, 327, 342, 343 };
+
+/* the menus' mode word letter '20 T' ($FF:$002A), its colours each a region over the one before (1: 1 loop, 8 corners (2 sharp), radii 2.3, 2.4, 2.5; 2: 1 loop, 12 corners (4 sharp), radii 0.3, 0.7, 2; 7: 1 loop, 8 corners (2 sharp), radii 0.3); 0 off */
+static const FxArtCorner menuword_20_t_0_0[] = { { 15.06f, 0.99f, 2.36f }, { 15.06f, 6.03f, 2.38f }, { 11.0f, 6.03f, 0.0f }, { 11.0f, 15.03f, 2.28f }, { 4.0f, 15.03f, 2.28f }, { 4.0f, 6.03f, 0.0f }, { -0.14f, 6.03f, 2.54f }, { -0.14f, 0.99f, 2.5f } };
+static const FxArtLoop menuword_20_t_0[] = { { 8, menuword_20_t_0_0 } };
+static const FxArtCorner menuword_20_t_1_0[] = { { 14.0f, 1.0f, 0.3f }, { 14.0f, 5.0f, 0.3f }, { 10.0f, 5.0f, 0.0f }, { 10.0f, 6.0f, 0.0f }, { 11.0f, 5.54f, 0.71f }, { 11.0f, 15.0f, 2.0f }, { 4.0f, 15.0f, 2.0f }, { 4.0f, 5.54f, 0.71f }, { 5.0f, 6.0f, 0.0f }, { 5.0f, 5.0f, 0.0f }, { 1.0f, 5.0f, 0.3f }, { 1.0f, 1.0f, 0.3f } };
+static const FxArtLoop menuword_20_t_1[] = { { 12, menuword_20_t_1_0 } };
+static const FxArtCorner menuword_20_t_2_0[] = { { 14.0f, 1.0f, 0.3f }, { 14.0f, 5.0f, 0.3f }, { 10.0f, 5.0f, 0.0f }, { 10.0f, 14.0f, 0.3f }, { 5.0f, 14.0f, 0.3f }, { 5.0f, 5.0f, 0.0f }, { 1.0f, 5.0f, 0.3f }, { 1.0f, 1.0f, 0.3f } };
+static const FxArtLoop menuword_20_t_2[] = { { 8, menuword_20_t_2_0 } };
+static const FxArtLayer menuword_20_t_fill[] = { { 1, 1, menuword_20_t_0, 0.0f }, { 2, 1, menuword_20_t_1, 0.0f }, { 7, 1, menuword_20_t_2, 0.0f } };
+static const uint16_t menuword_20_t_tiles[] = { 328, 329, 344, 345 };
+
+/* the menus' mode word letter '21 T' ($FF:$002A), its colours each a region over the one before (1: 1 loop, 8 corners (2 sharp), radii 2.3, 2.4, 2.5; 2: 1 loop, 12 corners (4 sharp), radii 0.3, 0.7, 2; 7: 1 loop, 8 corners (2 sharp), radii 0.3); 0 off */
+static const FxArtCorner menuword_21_t_0_0[] = { { 15.06f, 0.99f, 2.36f }, { 15.06f, 6.03f, 2.38f }, { 11.0f, 6.03f, 0.0f }, { 11.0f, 15.03f, 2.28f }, { 4.0f, 15.03f, 2.28f }, { 4.0f, 6.03f, 0.0f }, { -0.14f, 6.03f, 2.54f }, { -0.14f, 0.99f, 2.5f } };
+static const FxArtLoop menuword_21_t_0[] = { { 8, menuword_21_t_0_0 } };
+static const FxArtCorner menuword_21_t_1_0[] = { { 14.0f, 1.0f, 0.3f }, { 14.0f, 5.0f, 0.3f }, { 10.0f, 5.0f, 0.0f }, { 10.0f, 6.0f, 0.0f }, { 11.0f, 5.54f, 0.71f }, { 11.0f, 15.0f, 2.0f }, { 4.0f, 15.0f, 2.0f }, { 4.0f, 5.54f, 0.71f }, { 5.0f, 6.0f, 0.0f }, { 5.0f, 5.0f, 0.0f }, { 1.0f, 5.0f, 0.3f }, { 1.0f, 1.0f, 0.3f } };
+static const FxArtLoop menuword_21_t_1[] = { { 12, menuword_21_t_1_0 } };
+static const FxArtCorner menuword_21_t_2_0[] = { { 14.0f, 1.0f, 0.3f }, { 14.0f, 5.0f, 0.3f }, { 10.0f, 5.0f, 0.0f }, { 10.0f, 14.0f, 0.3f }, { 5.0f, 14.0f, 0.3f }, { 5.0f, 5.0f, 0.0f }, { 1.0f, 5.0f, 0.3f }, { 1.0f, 1.0f, 0.3f } };
+static const FxArtLoop menuword_21_t_2[] = { { 8, menuword_21_t_2_0 } };
+static const FxArtLayer menuword_21_t_fill[] = { { 1, 1, menuword_21_t_0, 0.0f }, { 2, 1, menuword_21_t_1, 0.0f }, { 7, 1, menuword_21_t_2, 0.0f } };
+static const uint16_t menuword_21_t_tiles[] = { 330, 331, 346, 347 };
+
+/* the menus' mode word letter '22 L' ($FF:$002A), its colours each a region over the one before (1: 1 loop, 8 corners (2 sharp), radii 0.3, 0.7, 2, 3, 4; 2: 1 loop, 8 corners (2 sharp), radii 0.3, 0.6, 2.3, 3; 7: 1 loop, 8 corners (2 sharp), radii 0.3, 0.5, 2.2, 2.3); 3 off */
+static const FxArtCorner menuword_22_l_0_0[] = { { 6.0f, 1.0f, 0.3f }, { 6.0f, 11.0f, 0.0f }, { 10.0f, 11.0f, 0.0f }, { 9.54f, 10.0f, 0.71f }, { 15.0f, 10.0f, 2.0f }, { 15.0f, 15.0f, 3.0f }, { -0.0f, 15.0f, 4.0f }, { -0.0f, 1.0f, 4.0f } };
+static const FxArtLoop menuword_22_l_0[] = { { 8, menuword_22_l_0_0 } };
+static const FxArtCorner menuword_22_l_1_0[] = { { 6.0f, 0.98f, 0.3f }, { 6.0f, 11.0f, 0.0f }, { 10.14f, 11.0f, 0.0f }, { 8.83f, 9.99f, 0.56f }, { 13.95f, 9.99f, 0.3f }, { 13.95f, 15.03f, 3.03f }, { 0.99f, 15.03f, 2.3f }, { 0.99f, 0.98f, 2.28f } };
+static const FxArtLoop menuword_22_l_1[] = { { 8, menuword_22_l_1_0 } };
+static const FxArtCorner menuword_22_l_2_0[] = { { 6.0f, 0.98f, 0.3f }, { 6.0f, 11.0f, 0.0f }, { 10.17f, 11.0f, 0.0f }, { 8.54f, 10.0f, 0.54f }, { 14.03f, 10.0f, 0.3f }, { 14.03f, 14.01f, 2.26f }, { 0.99f, 14.01f, 2.23f }, { 0.99f, 0.98f, 2.24f } };
+static const FxArtLoop menuword_22_l_2[] = { { 8, menuword_22_l_2_0 } };
+static const FxArtLayer menuword_22_l_fill[] = { { 1, 1, menuword_22_l_0, 0.0f }, { 2, 1, menuword_22_l_1, 0.0f }, { 7, 1, menuword_22_l_2, 0.0f } };
+static const uint16_t menuword_22_l_tiles[] = { 332, 333, 348, 349 };
+
+/* the menus' mode word letter '23 E' ($FF:$002A), its colours each a region over the one before (1: 1 loop, 12 corners (3 sharp), radii 0.3, 0.4, 2.3, 4.4; 2: 1 loop, 12 corners (4 sharp), radii 0.3, 2.2; 7: 1 loop, 12 corners (4 sharp), radii 0.3, 2.2); 0 off */
+static const FxArtCorner menuword_23_e_0_0[] = { { 15.03f, 0.98f, 2.32f }, { 15.03f, 5.0f, 0.3f }, { 4.99f, 5.0f, 0.39f }, { 4.99f, 5.99f, 0.0f }, { 13.03f, 5.99f, 2.29f }, { 13.03f, 10.0f, 0.3f }, { 5.0f, 10.0f, 0.0f }, { 5.0f, 10.99f, 0.0f }, { 15.03f, 10.99f, 2.28f }, { 15.03f, 15.01f, 0.3f }, { -0.3f, 15.01f, 4.39f }, { -0.3f, 0.98f, 4.41f } };
+static const FxArtLoop menuword_23_e_0[] = { { 12, menuword_23_e_0_0 } };
+static const FxArtCorner menuword_23_e_1_0[] = { { 14.0f, 0.99f, 0.3f }, { 14.0f, 4.0f, 0.3f }, { 5.0f, 4.0f, 0.0f }, { 5.0f, 6.0f, 0.0f }, { 12.0f, 6.0f, 0.3f }, { 12.0f, 9.0f, 0.3f }, { 5.0f, 9.0f, 0.0f }, { 5.0f, 11.0f, 0.0f }, { 14.0f, 11.0f, 0.3f }, { 14.0f, 14.01f, 0.3f }, { 0.99f, 14.01f, 2.25f }, { 0.99f, 0.99f, 2.25f } };
+static const FxArtLoop menuword_23_e_1[] = { { 12, menuword_23_e_1_0 } };
+static const FxArtCorner menuword_23_e_2_0[] = { { 14.0f, 0.99f, 0.3f }, { 14.0f, 4.0f, 0.3f }, { 5.0f, 4.0f, 0.0f }, { 5.0f, 6.0f, 0.0f }, { 12.0f, 6.0f, 0.3f }, { 12.0f, 9.0f, 0.3f }, { 5.0f, 9.0f, 0.0f }, { 5.0f, 11.0f, 0.0f }, { 14.0f, 11.0f, 0.3f }, { 14.0f, 14.01f, 0.3f }, { 0.99f, 14.01f, 2.25f }, { 0.99f, 0.99f, 2.25f } };
+static const FxArtLoop menuword_23_e_2[] = { { 12, menuword_23_e_2_0 } };
+static const FxArtLayer menuword_23_e_fill[] = { { 1, 1, menuword_23_e_0, 0.0f }, { 2, 1, menuword_23_e_1, 0.0f }, { 7, 1, menuword_23_e_2, 0.0f } };
+static const uint16_t menuword_23_e_tiles[] = { 334, 335, 350, 351 };
+
+/* the menus' mode word letter '24 T' ($FF:$002A), its colours each a region over the one before (1: 1 loop, 8 corners (2 sharp), radii 2.3, 2.4, 2.5; 2: 1 loop, 12 corners (4 sharp), radii 0.3, 0.7, 2; 7: 1 loop, 8 corners (2 sharp), radii 0.3); 0 off */
+static const FxArtCorner menuword_24_t_0_0[] = { { 15.06f, 0.99f, 2.36f }, { 15.06f, 6.03f, 2.38f }, { 11.0f, 6.03f, 0.0f }, { 11.0f, 15.03f, 2.28f }, { 4.0f, 15.03f, 2.28f }, { 4.0f, 6.03f, 0.0f }, { -0.14f, 6.03f, 2.54f }, { -0.14f, 0.99f, 2.5f } };
+static const FxArtLoop menuword_24_t_0[] = { { 8, menuword_24_t_0_0 } };
+static const FxArtCorner menuword_24_t_1_0[] = { { 14.0f, 1.0f, 0.3f }, { 14.0f, 5.0f, 0.3f }, { 10.0f, 5.0f, 0.0f }, { 10.0f, 6.0f, 0.0f }, { 11.0f, 5.54f, 0.71f }, { 11.0f, 15.0f, 2.0f }, { 4.0f, 15.0f, 2.0f }, { 4.0f, 5.54f, 0.71f }, { 5.0f, 6.0f, 0.0f }, { 5.0f, 5.0f, 0.0f }, { 1.0f, 5.0f, 0.3f }, { 1.0f, 1.0f, 0.3f } };
+static const FxArtLoop menuword_24_t_1[] = { { 12, menuword_24_t_1_0 } };
+static const FxArtCorner menuword_24_t_2_0[] = { { 14.0f, 1.0f, 0.3f }, { 14.0f, 5.0f, 0.3f }, { 10.0f, 5.0f, 0.0f }, { 10.0f, 14.0f, 0.3f }, { 5.0f, 14.0f, 0.3f }, { 5.0f, 5.0f, 0.0f }, { 1.0f, 5.0f, 0.3f }, { 1.0f, 1.0f, 0.3f } };
+static const FxArtLoop menuword_24_t_2[] = { { 8, menuword_24_t_2_0 } };
+static const FxArtLayer menuword_24_t_fill[] = { { 1, 1, menuword_24_t_0, 0.0f }, { 2, 1, menuword_24_t_1, 0.0f }, { 7, 1, menuword_24_t_2, 0.0f } };
+static const uint16_t menuword_24_t_tiles[] = { 352, 353, 368, 369 };
+
+/* the menus' mode word letter '25 R' ($FF:$002A), its colours each a region over the one before (1: 1 loop, 14 corners (5 sharp), radii 0.3, 0.8, 2, 4, 6, 7; 2: 1 loop, 16 corners (5 sharp), radii 0.3, 0.8, 2, 2.1, 3, 4; 7: 1 loop, 14 corners (5 sharp), radii 0.3, 0.8, 3, 4, 6); 9 off */
+static const FxArtCorner menuword_25_r_0_0[] = { { 15.02f, 1.01f, 5.96f }, { 15.02f, 9.21f, 0.81f }, { 13.67f, 8.0f, 0.0f }, { 13.67f, 12.0f, 0.0f }, { 15.0f, 10.81f, 0.8f }, { 15.0f, 15.0f, 2.0f }, { 5.99f, 15.0f, 7.01f }, { 5.99f, 7.0f, 0.3f }, { 10.0f, 7.0f, 0.0f }, { 10.0f, 5.0f, 0.0f }, { 5.0f, 5.0f, 0.0f }, { 5.0f, 15.0f, 0.3f }, { 0.0f, 15.0f, 2.0f }, { 0.0f, 1.01f, 4.01f } };
+static const FxArtLoop menuword_25_r_0[] = { { 14, menuword_25_r_0_0 } };
+static const FxArtCorner menuword_25_r_1_0[] = { { 14.0f, 1.01f, 4.0f }, { 14.0f, 9.2f, 0.8f }, { 12.66f, 8.0f, 0.0f }, { 12.69f, 8.06f, 0.3f }, { 12.69f, 10.98f, 0.0f }, { 14.98f, 10.77f, 2.1f }, { 14.98f, 15.02f, 1.96f }, { 11.52f, 15.02f, 0.3f }, { 6.0f, 9.5f, 0.3f }, { 6.0f, 7.0f, 0.3f }, { 10.0f, 7.0f, 0.0f }, { 10.0f, 4.0f, 0.0f }, { 5.0f, 4.0f, 0.0f }, { 5.0f, 15.0f, 0.3f }, { 1.0f, 15.0f, 0.3f }, { 1.0f, 1.01f, 3.0f } };
+static const FxArtLoop menuword_25_r_1[] = { { 16, menuword_25_r_1_0 } };
+static const FxArtCorner menuword_25_r_2_0[] = { { 14.0f, 1.01f, 4.0f }, { 14.0f, 9.19f, 0.8f }, { 12.67f, 8.0f, 0.0f }, { 12.67f, 11.0f, 0.0f }, { 14.0f, 9.81f, 0.8f }, { 14.0f, 13.98f, 0.3f }, { 6.02f, 13.98f, 6.01f }, { 6.02f, 7.0f, 0.3f }, { 10.0f, 7.0f, 0.0f }, { 10.0f, 4.0f, 0.0f }, { 5.0f, 4.0f, 0.0f }, { 5.0f, 14.0f, 0.3f }, { 1.0f, 14.0f, 0.3f }, { 1.0f, 1.01f, 3.0f } };
+static const FxArtLoop menuword_25_r_2[] = { { 14, menuword_25_r_2_0 } };
+static const FxArtLayer menuword_25_r_fill[] = { { 1, 1, menuword_25_r_0, 0.0f }, { 2, 1, menuword_25_r_1, 0.0f }, { 7, 1, menuword_25_r_2, 0.0f } };
+static const uint16_t menuword_25_r_tiles[] = { 354, 355, 370, 371 };
+
+/* the menus' mode word letter '26 A' ($FF:$002A), its colours each a region over the one before (1: 2 loops, 12 corners (6 sharp), radii 0.3, 2.3, 2.4, 7.3, 7.6; 2: 2 loops, 12 corners (6 sharp), radii 0.3, 2.3, 2.4, 7.3, 7.6; 7: 2 loops, 12 corners (6 sharp), radii 0.3, 6.2); 2 off */
+static const FxArtCorner menuword_26_a_0_0[] = { { 15.01f, 1.07f, 7.64f }, { 15.01f, 15.04f, 2.44f }, { 9.0f, 15.04f, 0.3f }, { 9.0f, 12.0f, 0.0f }, { 6.0f, 12.0f, 0.0f }, { 6.0f, 15.04f, 0.3f }, { 0.04f, 15.04f, 2.32f }, { 0.04f, 1.07f, 7.33f } };
+static const FxArtCorner menuword_26_a_0_1[] = { { 6.0f, 8.0f, 0.0f }, { 9.0f, 8.0f, 0.0f }, { 9.0f, 5.0f, 0.0f }, { 6.0f, 5.0f, 0.0f } };
+static const FxArtLoop menuword_26_a_0[] = { { 8, menuword_26_a_0_0 }, { 4, menuword_26_a_0_1 } };
+static const FxArtCorner menuword_26_a_1_0[] = { { 15.01f, 1.07f, 7.64f }, { 15.01f, 15.02f, 2.39f }, { 9.0f, 15.02f, 0.3f }, { 9.0f, 10.99f, 0.0f }, { 5.99f, 10.99f, 0.0f }, { 5.99f, 15.02f, 0.3f }, { 0.04f, 15.02f, 2.28f }, { 0.04f, 1.07f, 7.34f } };
+static const FxArtCorner menuword_26_a_1_1[] = { { 6.0f, 8.0f, 0.0f }, { 9.0f, 8.0f, 0.0f }, { 9.0f, 5.0f, 0.0f }, { 6.0f, 5.0f, 0.0f } };
+static const FxArtLoop menuword_26_a_1[] = { { 8, menuword_26_a_1_0 }, { 4, menuword_26_a_1_1 } };
+static const FxArtCorner menuword_26_a_2_0[] = { { 14.01f, 0.96f, 6.25f }, { 14.01f, 14.0f, 0.3f }, { 9.0f, 14.0f, 0.3f }, { 9.0f, 11.0f, 0.0f }, { 6.0f, 11.0f, 0.0f }, { 6.0f, 14.0f, 0.3f }, { 0.99f, 14.0f, 0.3f }, { 0.99f, 0.96f, 6.25f } };
+static const FxArtCorner menuword_26_a_2_1[] = { { 6.0f, 8.0f, 0.0f }, { 9.0f, 8.0f, 0.0f }, { 9.0f, 4.0f, 0.0f }, { 6.0f, 4.0f, 0.0f } };
+static const FxArtLoop menuword_26_a_2[] = { { 8, menuword_26_a_2_0 }, { 4, menuword_26_a_2_1 } };
+static const FxArtLayer menuword_26_a_fill[] = { { 1, 2, menuword_26_a_0, 0.0f }, { 2, 2, menuword_26_a_1, 0.0f }, { 7, 2, menuword_26_a_2, 0.0f } };
+static const uint16_t menuword_26_a_tiles[] = { 356, 357, 372, 373 };
+
+/* the menus' mode word letter '27 X' ($FF:$002A), its colours each a region over the one before (1: 1 loop, 16 corners (4 sharp), radii 0.5, 0.6, 1, 1.7; 2: 1 loop, 16 corners (4 sharp), radii 0.4, 0.5, 0.6, 0.7, 1.2; 7: 1 loop, 16 corners (4 sharp), radii 0.5, 0.6, 0.7, 1.2); 0 off, built by hand */
+static const FxArtCorner menuword_27_x_0_0[] = { { 1.0f, 1.08f, 1.0f }, { 4.91f, 1.08f, 0.5f }, { 7.5f, 3.67f, 0.0f }, { 10.07f, 1.1f, 0.5f }, { 14.0f, 1.1f, 1.0f }, { 15.31f, 2.79f, 0.6f }, { 10.33f, 8.23f, 0.0f }, { 14.97f, 11.73f, 0.6f }, { 13.7f, 14.62f, 1.66f }, { 9.99f, 14.62f, 0.6f }, { 7.5f, 12.34f, 0.0f }, { 5.11f, 14.62f, 0.6f }, { 1.24f, 14.62f, 1.73f }, { 0.05f, 11.71f, 0.6f }, { 4.56f, 8.31f, 0.0f }, { -0.29f, 2.77f, 0.6f } };
+static const FxArtLoop menuword_27_x_0[] = { { 16, menuword_27_x_0_0 } };
+static const FxArtCorner menuword_27_x_1_0[] = { { 1.73f, 1.38f, 1.2f }, { 5.04f, 1.38f, 0.52f }, { 7.5f, 3.66f, 0.0f }, { 9.93f, 1.38f, 0.51f }, { 13.27f, 1.38f, 1.2f }, { 14.66f, 2.85f, 0.7f }, { 10.33f, 7.5f, 0.0f }, { 14.03f, 11.19f, 0.59f }, { 13.02f, 14.76f, 1.16f }, { 10.56f, 14.76f, 0.47f }, { 7.5f, 10.62f, 0.0f }, { 4.46f, 14.74f, 0.43f }, { 2.05f, 14.74f, 1.17f }, { 0.87f, 11.3f, 0.59f }, { 4.67f, 7.5f, 0.0f }, { 0.36f, 2.85f, 0.69f } };
+static const FxArtLoop menuword_27_x_1[] = { { 16, menuword_27_x_1_0 } };
+static const FxArtCorner menuword_27_x_2_0[] = { { 1.73f, 1.38f, 1.2f }, { 5.02f, 1.38f, 0.5f }, { 7.5f, 3.66f, 0.0f }, { 9.98f, 1.38f, 0.5f }, { 13.27f, 1.38f, 1.2f }, { 14.63f, 2.82f, 0.62f }, { 10.33f, 7.5f, 0.0f }, { 14.16f, 11.33f, 0.6f }, { 13.1f, 14.27f, 1.17f }, { 10.44f, 14.27f, 0.71f }, { 7.5f, 11.33f, 0.0f }, { 4.55f, 14.28f, 0.54f }, { 1.9f, 14.28f, 1.18f }, { 0.84f, 11.32f, 0.6f }, { 4.67f, 7.5f, 0.0f }, { 0.36f, 2.83f, 0.62f } };
+static const FxArtLoop menuword_27_x_2[] = { { 16, menuword_27_x_2_0 } };
+static const FxArtLayer menuword_27_x_fill[] = { { 1, 1, menuword_27_x_0, 0.0f }, { 2, 1, menuword_27_x_1, 0.0f }, { 7, 1, menuword_27_x_2, 0.0f } };
+static const uint16_t menuword_27_x_tiles[] = { 358, 359, 374, 375 };
+
+/* the menus' mode word letter '28 F' ($FF:$002A), its colours each a region over the one before (1: 1 loop, 10 corners (3 sharp), radii 0.3, 2.3, 2.7, 4.3; 2: 1 loop, 10 corners (2 sharp), radii 0, 0.3, 2.2; 7: 1 loop, 10 corners (2 sharp), radii 0, 0.3, 2.2); 0 off */
+static const FxArtCorner menuword_28_f_0_0[] = { { 15.03f, 0.98f, 2.31f }, { 15.03f, 5.0f, 0.3f }, { 4.99f, 5.0f, 0.0f }, { 4.99f, 5.99f, 0.0f }, { 13.03f, 5.99f, 2.29f }, { 13.03f, 10.0f, 0.3f }, { 5.0f, 10.0f, 0.0f }, { 5.0f, 15.03f, 0.3f }, { -0.24f, 15.03f, 2.7f }, { -0.24f, 0.98f, 4.29f } };
+static const FxArtLoop menuword_28_f_0[] = { { 10, menuword_28_f_0_0 } };
+static const FxArtCorner menuword_28_f_1_0[] = { { 14.0f, 0.99f, 0.3f }, { 14.0f, 4.0f, 0.3f }, { 5.0f, 4.0f, 0.0f }, { 5.0f, 6.0f, 0.0f }, { 12.0f, 6.0f, 0.3f }, { 12.0f, 9.0f, 0.3f }, { 5.0f, 9.0f, 0.03f }, { 5.0f, 14.0f, 0.3f }, { 0.99f, 14.0f, 0.3f }, { 0.99f, 0.99f, 2.24f } };
+static const FxArtLoop menuword_28_f_1[] = { { 10, menuword_28_f_1_0 } };
+static const FxArtCorner menuword_28_f_2_0[] = { { 14.0f, 0.99f, 0.3f }, { 14.0f, 4.0f, 0.3f }, { 5.0f, 4.0f, 0.0f }, { 5.0f, 6.0f, 0.0f }, { 12.0f, 6.0f, 0.3f }, { 12.0f, 9.0f, 0.3f }, { 5.0f, 9.0f, 0.03f }, { 5.0f, 14.0f, 0.3f }, { 0.99f, 14.0f, 0.3f }, { 0.99f, 0.99f, 2.24f } };
+static const FxArtLoop menuword_28_f_2[] = { { 10, menuword_28_f_2_0 } };
+static const FxArtLayer menuword_28_f_fill[] = { { 1, 1, menuword_28_f_0, 0.0f }, { 2, 1, menuword_28_f_1, 0.0f }, { 7, 1, menuword_28_f_2, 0.0f } };
+static const uint16_t menuword_28_f_tiles[] = { 360, 361, 376, 377 };
+
+/* the menus' mode word letter '29 R' ($FF:$002A), its colours each a region over the one before (1: 1 loop, 14 corners (5 sharp), radii 0.3, 0.8, 2, 4, 6, 7; 2: 1 loop, 16 corners (5 sharp), radii 0.3, 0.8, 2, 2.1, 3, 4; 7: 1 loop, 14 corners (5 sharp), radii 0.3, 0.8, 3, 4, 6); 9 off */
+static const FxArtCorner menuword_29_r_0_0[] = { { 15.02f, 1.01f, 5.96f }, { 15.02f, 9.21f, 0.81f }, { 13.67f, 8.0f, 0.0f }, { 13.67f, 12.0f, 0.0f }, { 15.0f, 10.81f, 0.8f }, { 15.0f, 15.0f, 2.0f }, { 5.99f, 15.0f, 7.01f }, { 5.99f, 7.0f, 0.3f }, { 10.0f, 7.0f, 0.0f }, { 10.0f, 5.0f, 0.0f }, { 5.0f, 5.0f, 0.0f }, { 5.0f, 15.0f, 0.3f }, { 0.0f, 15.0f, 2.0f }, { 0.0f, 1.01f, 4.01f } };
+static const FxArtLoop menuword_29_r_0[] = { { 14, menuword_29_r_0_0 } };
+static const FxArtCorner menuword_29_r_1_0[] = { { 14.0f, 1.01f, 4.0f }, { 14.0f, 9.2f, 0.8f }, { 12.66f, 8.0f, 0.0f }, { 12.69f, 8.06f, 0.3f }, { 12.69f, 10.98f, 0.0f }, { 14.98f, 10.77f, 2.1f }, { 14.98f, 15.02f, 1.96f }, { 11.52f, 15.02f, 0.3f }, { 6.0f, 9.5f, 0.3f }, { 6.0f, 7.0f, 0.3f }, { 10.0f, 7.0f, 0.0f }, { 10.0f, 4.0f, 0.0f }, { 5.0f, 4.0f, 0.0f }, { 5.0f, 15.0f, 0.3f }, { 1.0f, 15.0f, 0.3f }, { 1.0f, 1.01f, 3.0f } };
+static const FxArtLoop menuword_29_r_1[] = { { 16, menuword_29_r_1_0 } };
+static const FxArtCorner menuword_29_r_2_0[] = { { 14.0f, 1.01f, 4.0f }, { 14.0f, 9.19f, 0.8f }, { 12.67f, 8.0f, 0.0f }, { 12.67f, 11.0f, 0.0f }, { 14.0f, 9.81f, 0.8f }, { 14.0f, 13.98f, 0.3f }, { 6.02f, 13.98f, 6.01f }, { 6.02f, 7.0f, 0.3f }, { 10.0f, 7.0f, 0.0f }, { 10.0f, 4.0f, 0.0f }, { 5.0f, 4.0f, 0.0f }, { 5.0f, 14.0f, 0.3f }, { 1.0f, 14.0f, 0.3f }, { 1.0f, 1.01f, 3.0f } };
+static const FxArtLoop menuword_29_r_2[] = { { 14, menuword_29_r_2_0 } };
+static const FxArtLayer menuword_29_r_fill[] = { { 1, 1, menuword_29_r_0, 0.0f }, { 2, 1, menuword_29_r_1, 0.0f }, { 7, 1, menuword_29_r_2, 0.0f } };
+static const uint16_t menuword_29_r_tiles[] = { 362, 363, 378, 379 };
+
+/* the menus' mode word letter '30 E' ($FF:$002A), its colours each a region over the one before (1: 1 loop, 12 corners (3 sharp), radii 0.3, 0.4, 2.3, 4.4; 2: 1 loop, 12 corners (4 sharp), radii 0.3, 2.2; 7: 1 loop, 12 corners (4 sharp), radii 0.3, 2.2); 0 off */
+static const FxArtCorner menuword_30_e_0_0[] = { { 15.03f, 0.98f, 2.32f }, { 15.03f, 5.0f, 0.3f }, { 4.99f, 5.0f, 0.39f }, { 4.99f, 5.99f, 0.0f }, { 13.03f, 5.99f, 2.29f }, { 13.03f, 10.0f, 0.3f }, { 5.0f, 10.0f, 0.0f }, { 5.0f, 10.99f, 0.0f }, { 15.03f, 10.99f, 2.28f }, { 15.03f, 15.01f, 0.3f }, { -0.3f, 15.01f, 4.39f }, { -0.3f, 0.98f, 4.41f } };
+static const FxArtLoop menuword_30_e_0[] = { { 12, menuword_30_e_0_0 } };
+static const FxArtCorner menuword_30_e_1_0[] = { { 14.0f, 0.99f, 0.3f }, { 14.0f, 4.0f, 0.3f }, { 5.0f, 4.0f, 0.0f }, { 5.0f, 6.0f, 0.0f }, { 12.0f, 6.0f, 0.3f }, { 12.0f, 9.0f, 0.3f }, { 5.0f, 9.0f, 0.0f }, { 5.0f, 11.0f, 0.0f }, { 14.0f, 11.0f, 0.3f }, { 14.0f, 14.01f, 0.3f }, { 0.99f, 14.01f, 2.25f }, { 0.99f, 0.99f, 2.25f } };
+static const FxArtLoop menuword_30_e_1[] = { { 12, menuword_30_e_1_0 } };
+static const FxArtCorner menuword_30_e_2_0[] = { { 14.0f, 0.99f, 0.3f }, { 14.0f, 4.0f, 0.3f }, { 5.0f, 4.0f, 0.0f }, { 5.0f, 6.0f, 0.0f }, { 12.0f, 6.0f, 0.3f }, { 12.0f, 9.0f, 0.3f }, { 5.0f, 9.0f, 0.0f }, { 5.0f, 11.0f, 0.0f }, { 14.0f, 11.0f, 0.3f }, { 14.0f, 14.01f, 0.3f }, { 0.99f, 14.01f, 2.25f }, { 0.99f, 0.99f, 2.25f } };
+static const FxArtLoop menuword_30_e_2[] = { { 12, menuword_30_e_2_0 } };
+static const FxArtLayer menuword_30_e_fill[] = { { 1, 1, menuword_30_e_0, 0.0f }, { 2, 1, menuword_30_e_1, 0.0f }, { 7, 1, menuword_30_e_2, 0.0f } };
+static const uint16_t menuword_30_e_tiles[] = { 364, 365, 380, 381 };
+
+/* the menus' mode word letter '31 E' ($FF:$002A), its colours each a region over the one before (1: 1 loop, 12 corners (3 sharp), radii 0.3, 0.4, 2.3, 4.4; 2: 1 loop, 12 corners (4 sharp), radii 0.3, 2.2; 7: 1 loop, 12 corners (4 sharp), radii 0.3, 2.2); 0 off */
+static const FxArtCorner menuword_31_e_0_0[] = { { 15.03f, 0.98f, 2.32f }, { 15.03f, 5.0f, 0.3f }, { 4.99f, 5.0f, 0.39f }, { 4.99f, 5.99f, 0.0f }, { 13.03f, 5.99f, 2.29f }, { 13.03f, 10.0f, 0.3f }, { 5.0f, 10.0f, 0.0f }, { 5.0f, 10.99f, 0.0f }, { 15.03f, 10.99f, 2.28f }, { 15.03f, 15.01f, 0.3f }, { -0.3f, 15.01f, 4.39f }, { -0.3f, 0.98f, 4.41f } };
+static const FxArtLoop menuword_31_e_0[] = { { 12, menuword_31_e_0_0 } };
+static const FxArtCorner menuword_31_e_1_0[] = { { 14.0f, 0.99f, 0.3f }, { 14.0f, 4.0f, 0.3f }, { 5.0f, 4.0f, 0.0f }, { 5.0f, 6.0f, 0.0f }, { 12.0f, 6.0f, 0.3f }, { 12.0f, 9.0f, 0.3f }, { 5.0f, 9.0f, 0.0f }, { 5.0f, 11.0f, 0.0f }, { 14.0f, 11.0f, 0.3f }, { 14.0f, 14.01f, 0.3f }, { 0.99f, 14.01f, 2.25f }, { 0.99f, 0.99f, 2.25f } };
+static const FxArtLoop menuword_31_e_1[] = { { 12, menuword_31_e_1_0 } };
+static const FxArtCorner menuword_31_e_2_0[] = { { 14.0f, 0.99f, 0.3f }, { 14.0f, 4.0f, 0.3f }, { 5.0f, 4.0f, 0.0f }, { 5.0f, 6.0f, 0.0f }, { 12.0f, 6.0f, 0.3f }, { 12.0f, 9.0f, 0.3f }, { 5.0f, 9.0f, 0.0f }, { 5.0f, 11.0f, 0.0f }, { 14.0f, 11.0f, 0.3f }, { 14.0f, 14.01f, 0.3f }, { 0.99f, 14.01f, 2.25f }, { 0.99f, 0.99f, 2.25f } };
+static const FxArtLoop menuword_31_e_2[] = { { 12, menuword_31_e_2_0 } };
+static const FxArtLayer menuword_31_e_fill[] = { { 1, 1, menuword_31_e_0, 0.0f }, { 2, 1, menuword_31_e_1, 0.0f }, { 7, 1, menuword_31_e_2, 0.0f } };
+static const uint16_t menuword_31_e_tiles[] = { 366, 367, 382, 383 };
+
+/* the menus' mode word letter '32 T' ($FF:$002A), its colours each a region over the one before (1: 1 loop, 8 corners (2 sharp), radii 2.3, 2.4, 2.5; 2: 1 loop, 12 corners (4 sharp), radii 0.3, 0.7, 2; 7: 1 loop, 8 corners (2 sharp), radii 0.3); 0 off */
+static const FxArtCorner menuword_32_t_0_0[] = { { 15.06f, 0.99f, 2.36f }, { 15.06f, 6.03f, 2.38f }, { 11.0f, 6.03f, 0.0f }, { 11.0f, 15.03f, 2.28f }, { 4.0f, 15.03f, 2.28f }, { 4.0f, 6.03f, 0.0f }, { -0.14f, 6.03f, 2.54f }, { -0.14f, 0.99f, 2.5f } };
+static const FxArtLoop menuword_32_t_0[] = { { 8, menuword_32_t_0_0 } };
+static const FxArtCorner menuword_32_t_1_0[] = { { 14.0f, 1.0f, 0.3f }, { 14.0f, 5.0f, 0.3f }, { 10.0f, 5.0f, 0.0f }, { 10.0f, 6.0f, 0.0f }, { 11.0f, 5.54f, 0.71f }, { 11.0f, 15.0f, 2.0f }, { 4.0f, 15.0f, 2.0f }, { 4.0f, 5.54f, 0.71f }, { 5.0f, 6.0f, 0.0f }, { 5.0f, 5.0f, 0.0f }, { 1.0f, 5.0f, 0.3f }, { 1.0f, 1.0f, 0.3f } };
+static const FxArtLoop menuword_32_t_1[] = { { 12, menuword_32_t_1_0 } };
+static const FxArtCorner menuword_32_t_2_0[] = { { 14.0f, 1.0f, 0.3f }, { 14.0f, 5.0f, 0.3f }, { 10.0f, 5.0f, 0.0f }, { 10.0f, 14.0f, 0.3f }, { 5.0f, 14.0f, 0.3f }, { 5.0f, 5.0f, 0.0f }, { 1.0f, 5.0f, 0.3f }, { 1.0f, 1.0f, 0.3f } };
+static const FxArtLoop menuword_32_t_2[] = { { 8, menuword_32_t_2_0 } };
+static const FxArtLayer menuword_32_t_fill[] = { { 1, 1, menuword_32_t_0, 0.0f }, { 2, 1, menuword_32_t_1, 0.0f }, { 7, 1, menuword_32_t_2, 0.0f } };
+static const uint16_t menuword_32_t_tiles[] = { 384, 385, 400, 401 };
+
+/* the menus' mode word letter '33 R' ($FF:$002A), its colours each a region over the one before (1: 1 loop, 14 corners (5 sharp), radii 0.3, 0.8, 2, 4, 6, 7; 2: 1 loop, 16 corners (5 sharp), radii 0.3, 0.8, 2, 2.1, 3, 4; 7: 1 loop, 14 corners (5 sharp), radii 0.3, 0.8, 3, 4, 6); 9 off */
+static const FxArtCorner menuword_33_r_0_0[] = { { 15.02f, 1.01f, 5.96f }, { 15.02f, 9.21f, 0.81f }, { 13.67f, 8.0f, 0.0f }, { 13.67f, 12.0f, 0.0f }, { 15.0f, 10.81f, 0.8f }, { 15.0f, 15.0f, 2.0f }, { 5.99f, 15.0f, 7.01f }, { 5.99f, 7.0f, 0.3f }, { 10.0f, 7.0f, 0.0f }, { 10.0f, 5.0f, 0.0f }, { 5.0f, 5.0f, 0.0f }, { 5.0f, 15.0f, 0.3f }, { 0.0f, 15.0f, 2.0f }, { 0.0f, 1.01f, 4.01f } };
+static const FxArtLoop menuword_33_r_0[] = { { 14, menuword_33_r_0_0 } };
+static const FxArtCorner menuword_33_r_1_0[] = { { 14.0f, 1.01f, 4.0f }, { 14.0f, 9.2f, 0.8f }, { 12.66f, 8.0f, 0.0f }, { 12.69f, 8.06f, 0.3f }, { 12.69f, 10.98f, 0.0f }, { 14.98f, 10.77f, 2.1f }, { 14.98f, 15.02f, 1.96f }, { 11.52f, 15.02f, 0.3f }, { 6.0f, 9.5f, 0.3f }, { 6.0f, 7.0f, 0.3f }, { 10.0f, 7.0f, 0.0f }, { 10.0f, 4.0f, 0.0f }, { 5.0f, 4.0f, 0.0f }, { 5.0f, 15.0f, 0.3f }, { 1.0f, 15.0f, 0.3f }, { 1.0f, 1.01f, 3.0f } };
+static const FxArtLoop menuword_33_r_1[] = { { 16, menuword_33_r_1_0 } };
+static const FxArtCorner menuword_33_r_2_0[] = { { 14.0f, 1.01f, 4.0f }, { 14.0f, 9.19f, 0.8f }, { 12.67f, 8.0f, 0.0f }, { 12.67f, 11.0f, 0.0f }, { 14.0f, 9.81f, 0.8f }, { 14.0f, 13.98f, 0.3f }, { 6.02f, 13.98f, 6.01f }, { 6.02f, 7.0f, 0.3f }, { 10.0f, 7.0f, 0.0f }, { 10.0f, 4.0f, 0.0f }, { 5.0f, 4.0f, 0.0f }, { 5.0f, 14.0f, 0.3f }, { 1.0f, 14.0f, 0.3f }, { 1.0f, 1.01f, 3.0f } };
+static const FxArtLoop menuword_33_r_2[] = { { 14, menuword_33_r_2_0 } };
+static const FxArtLayer menuword_33_r_fill[] = { { 1, 1, menuword_33_r_0, 0.0f }, { 2, 1, menuword_33_r_1, 0.0f }, { 7, 1, menuword_33_r_2, 0.0f } };
+static const uint16_t menuword_33_r_tiles[] = { 386, 387, 402, 403 };
+
+/* the menus' mode word letter '34 A' ($FF:$002A), its colours each a region over the one before (1: 2 loops, 12 corners (6 sharp), radii 0.3, 2.3, 2.4, 7.3, 7.6; 2: 2 loops, 12 corners (6 sharp), radii 0.3, 2.3, 2.4, 7.3, 7.6; 7: 2 loops, 12 corners (6 sharp), radii 0.3, 6.2); 2 off */
+static const FxArtCorner menuword_34_a_0_0[] = { { 15.01f, 1.07f, 7.64f }, { 15.01f, 15.04f, 2.44f }, { 9.0f, 15.04f, 0.3f }, { 9.0f, 12.0f, 0.0f }, { 6.0f, 12.0f, 0.0f }, { 6.0f, 15.04f, 0.3f }, { 0.04f, 15.04f, 2.32f }, { 0.04f, 1.07f, 7.33f } };
+static const FxArtCorner menuword_34_a_0_1[] = { { 6.0f, 8.0f, 0.0f }, { 9.0f, 8.0f, 0.0f }, { 9.0f, 5.0f, 0.0f }, { 6.0f, 5.0f, 0.0f } };
+static const FxArtLoop menuword_34_a_0[] = { { 8, menuword_34_a_0_0 }, { 4, menuword_34_a_0_1 } };
+static const FxArtCorner menuword_34_a_1_0[] = { { 15.01f, 1.07f, 7.64f }, { 15.01f, 15.02f, 2.39f }, { 9.0f, 15.02f, 0.3f }, { 9.0f, 10.99f, 0.0f }, { 5.99f, 10.99f, 0.0f }, { 5.99f, 15.02f, 0.3f }, { 0.04f, 15.02f, 2.28f }, { 0.04f, 1.07f, 7.34f } };
+static const FxArtCorner menuword_34_a_1_1[] = { { 6.0f, 8.0f, 0.0f }, { 9.0f, 8.0f, 0.0f }, { 9.0f, 5.0f, 0.0f }, { 6.0f, 5.0f, 0.0f } };
+static const FxArtLoop menuword_34_a_1[] = { { 8, menuword_34_a_1_0 }, { 4, menuword_34_a_1_1 } };
+static const FxArtCorner menuword_34_a_2_0[] = { { 14.01f, 0.96f, 6.25f }, { 14.01f, 14.0f, 0.3f }, { 9.0f, 14.0f, 0.3f }, { 9.0f, 11.0f, 0.0f }, { 6.0f, 11.0f, 0.0f }, { 6.0f, 14.0f, 0.3f }, { 0.99f, 14.0f, 0.3f }, { 0.99f, 0.96f, 6.25f } };
+static const FxArtCorner menuword_34_a_2_1[] = { { 6.0f, 8.0f, 0.0f }, { 9.0f, 8.0f, 0.0f }, { 9.0f, 4.0f, 0.0f }, { 6.0f, 4.0f, 0.0f } };
+static const FxArtLoop menuword_34_a_2[] = { { 8, menuword_34_a_2_0 }, { 4, menuword_34_a_2_1 } };
+static const FxArtLayer menuword_34_a_fill[] = { { 1, 2, menuword_34_a_0, 0.0f }, { 2, 2, menuword_34_a_1, 0.0f }, { 7, 2, menuword_34_a_2, 0.0f } };
+static const uint16_t menuword_34_a_tiles[] = { 388, 389, 404, 405 };
+
+/* the menus' mode word letter '35 X' ($FF:$002A), its colours each a region over the one before (1: 1 loop, 16 corners (4 sharp), radii 0.5, 0.6, 1, 1.7; 2: 1 loop, 16 corners (4 sharp), radii 0.4, 0.5, 0.6, 0.7, 1.2; 7: 1 loop, 16 corners (4 sharp), radii 0.5, 0.6, 0.7, 1.2); 0 off, built by hand */
+static const FxArtCorner menuword_35_x_0_0[] = { { 1.0f, 1.08f, 1.0f }, { 4.91f, 1.08f, 0.5f }, { 7.5f, 3.67f, 0.0f }, { 10.07f, 1.1f, 0.5f }, { 14.0f, 1.1f, 1.0f }, { 15.31f, 2.79f, 0.6f }, { 10.33f, 8.23f, 0.0f }, { 14.97f, 11.73f, 0.6f }, { 13.7f, 14.62f, 1.66f }, { 9.99f, 14.62f, 0.6f }, { 7.5f, 12.34f, 0.0f }, { 5.11f, 14.62f, 0.6f }, { 1.24f, 14.62f, 1.73f }, { 0.05f, 11.71f, 0.6f }, { 4.56f, 8.31f, 0.0f }, { -0.29f, 2.77f, 0.6f } };
+static const FxArtLoop menuword_35_x_0[] = { { 16, menuword_35_x_0_0 } };
+static const FxArtCorner menuword_35_x_1_0[] = { { 1.73f, 1.38f, 1.2f }, { 5.04f, 1.38f, 0.52f }, { 7.5f, 3.66f, 0.0f }, { 9.93f, 1.38f, 0.51f }, { 13.27f, 1.38f, 1.2f }, { 14.66f, 2.85f, 0.7f }, { 10.33f, 7.5f, 0.0f }, { 14.03f, 11.19f, 0.59f }, { 13.02f, 14.76f, 1.16f }, { 10.56f, 14.76f, 0.47f }, { 7.5f, 10.62f, 0.0f }, { 4.46f, 14.74f, 0.43f }, { 2.05f, 14.74f, 1.17f }, { 0.87f, 11.3f, 0.59f }, { 4.67f, 7.5f, 0.0f }, { 0.36f, 2.85f, 0.69f } };
+static const FxArtLoop menuword_35_x_1[] = { { 16, menuword_35_x_1_0 } };
+static const FxArtCorner menuword_35_x_2_0[] = { { 1.73f, 1.38f, 1.2f }, { 5.02f, 1.38f, 0.5f }, { 7.5f, 3.66f, 0.0f }, { 9.98f, 1.38f, 0.5f }, { 13.27f, 1.38f, 1.2f }, { 14.63f, 2.82f, 0.62f }, { 10.33f, 7.5f, 0.0f }, { 14.16f, 11.33f, 0.6f }, { 13.1f, 14.27f, 1.17f }, { 10.44f, 14.27f, 0.71f }, { 7.5f, 11.33f, 0.0f }, { 4.55f, 14.28f, 0.54f }, { 1.9f, 14.28f, 1.18f }, { 0.84f, 11.32f, 0.6f }, { 4.67f, 7.5f, 0.0f }, { 0.36f, 2.83f, 0.62f } };
+static const FxArtLoop menuword_35_x_2[] = { { 16, menuword_35_x_2_0 } };
+static const FxArtLayer menuword_35_x_fill[] = { { 1, 1, menuword_35_x_0, 0.0f }, { 2, 1, menuword_35_x_1, 0.0f }, { 7, 1, menuword_35_x_2, 0.0f } };
+static const uint16_t menuword_35_x_tiles[] = { 390, 391, 406, 407 };
+
 const FxArtPicture fx_art_pictures[] = {
     { "the 16 x 32 glyph '0'", 0x15, 0x8000, 16, 32, FX_ART_OUTLINED, 1, 1, big16_0_fill, 0 },
     { "the 16 x 32 glyph '1'", 0x15, 0x8004, 16, 32, FX_ART_OUTLINED, 1, 1, big16_1_fill, 7 },
@@ -1677,5 +2066,41 @@ const FxArtPicture fx_art_pictures[] = {
     { "the menus' 8 x 16 glyph 'X'", 0xFF, 0x002A, 8, 16, FX_ART_OUTLINED, 0, 1, menu_x_fill, 0, menu_x_tiles, { 0, 0xA, 0xD, 0xB } },
     { "the menus' 8 x 16 glyph 'Y'", 0xFF, 0x002A, 8, 16, FX_ART_OUTLINED, 0, 1, menu_y_fill, 3, menu_y_tiles, { 0, 0xA, 0xD, 0xB } },
     { "the menus' 8 x 16 glyph 'Z'", 0xFF, 0x002A, 8, 16, FX_ART_OUTLINED, 0, 1, menu_z_fill, 2, menu_z_tiles, { 0, 0xA, 0xD, 0xB } },
+    { "the menus' mode word letter '0 S'", 0xFF, 0x002A, 16, 16, FX_ART_LAYERED, 0, 3, menuword_0_s_fill, 11, menuword_0_s_tiles, { 0 } },
+    { "the menus' mode word letter '1 P'", 0xFF, 0x002A, 16, 16, FX_ART_LAYERED, 0, 3, menuword_1_p_fill, 4, menuword_1_p_tiles, { 0 } },
+    { "the menus' mode word letter '2 E'", 0xFF, 0x002A, 16, 16, FX_ART_LAYERED, 0, 3, menuword_2_e_fill, 0, menuword_2_e_tiles, { 0 } },
+    { "the menus' mode word letter '3 E'", 0xFF, 0x002A, 16, 16, FX_ART_LAYERED, 0, 3, menuword_3_e_fill, 0, menuword_3_e_tiles, { 0 } },
+    { "the menus' mode word letter '4 D'", 0xFF, 0x002A, 16, 16, FX_ART_LAYERED, 0, 3, menuword_4_d_fill, 1, menuword_4_d_tiles, { 0 } },
+    { "the menus' mode word letter '5 T'", 0xFF, 0x002A, 16, 16, FX_ART_LAYERED, 0, 3, menuword_5_t_fill, 0, menuword_5_t_tiles, { 0 } },
+    { "the menus' mode word letter '6 R'", 0xFF, 0x002A, 16, 16, FX_ART_LAYERED, 0, 3, menuword_6_r_fill, 9, menuword_6_r_tiles, { 0 } },
+    { "the menus' mode word letter '7 A'", 0xFF, 0x002A, 16, 16, FX_ART_LAYERED, 0, 3, menuword_7_a_fill, 2, menuword_7_a_tiles, { 0 } },
+    { "the menus' mode word letter '8 X'", 0xFF, 0x002A, 16, 16, FX_ART_LAYERED, 0, 3, menuword_8_x_fill, 0, menuword_8_x_tiles, { 0 } },
+    { "the menus' mode word letter '9 S'", 0xFF, 0x002A, 16, 16, FX_ART_LAYERED, 0, 3, menuword_9_s_fill, 11, menuword_9_s_tiles, { 0 } },
+    { "the menus' mode word letter '10 T'", 0xFF, 0x002A, 16, 16, FX_ART_LAYERED, 0, 3, menuword_10_t_fill, 0, menuword_10_t_tiles, { 0 } },
+    { "the menus' mode word letter '11 U'", 0xFF, 0x002A, 16, 16, FX_ART_LAYERED, 0, 3, menuword_11_u_fill, 4, menuword_11_u_tiles, { 0 } },
+    { "the menus' mode word letter '12 N'", 0xFF, 0x002A, 16, 16, FX_ART_LAYERED, 0, 3, menuword_12_n_fill, 0, menuword_12_n_tiles, { 0 } },
+    { "the menus' mode word letter '13 T'", 0xFF, 0x002A, 16, 16, FX_ART_LAYERED, 0, 3, menuword_13_t_fill, 0, menuword_13_t_tiles, { 0 } },
+    { "the menus' mode word letter '14 T'", 0xFF, 0x002A, 16, 16, FX_ART_LAYERED, 0, 3, menuword_14_t_fill, 0, menuword_14_t_tiles, { 0 } },
+    { "the menus' mode word letter '15 R'", 0xFF, 0x002A, 16, 16, FX_ART_LAYERED, 0, 3, menuword_15_r_fill, 9, menuword_15_r_tiles, { 0 } },
+    { "the menus' mode word letter '16 A'", 0xFF, 0x002A, 16, 16, FX_ART_LAYERED, 0, 3, menuword_16_a_fill, 2, menuword_16_a_tiles, { 0 } },
+    { "the menus' mode word letter '17 X'", 0xFF, 0x002A, 16, 16, FX_ART_LAYERED, 0, 3, menuword_17_x_fill, 0, menuword_17_x_tiles, { 0 } },
+    { "the menus' mode word letter '18 B'", 0xFF, 0x002A, 16, 16, FX_ART_LAYERED, 0, 3, menuword_18_b_fill, 9, menuword_18_b_tiles, { 0 } },
+    { "the menus' mode word letter '19 A'", 0xFF, 0x002A, 16, 16, FX_ART_LAYERED, 0, 3, menuword_19_a_fill, 2, menuword_19_a_tiles, { 0 } },
+    { "the menus' mode word letter '20 T'", 0xFF, 0x002A, 16, 16, FX_ART_LAYERED, 0, 3, menuword_20_t_fill, 0, menuword_20_t_tiles, { 0 } },
+    { "the menus' mode word letter '21 T'", 0xFF, 0x002A, 16, 16, FX_ART_LAYERED, 0, 3, menuword_21_t_fill, 0, menuword_21_t_tiles, { 0 } },
+    { "the menus' mode word letter '22 L'", 0xFF, 0x002A, 16, 16, FX_ART_LAYERED, 0, 3, menuword_22_l_fill, 3, menuword_22_l_tiles, { 0 } },
+    { "the menus' mode word letter '23 E'", 0xFF, 0x002A, 16, 16, FX_ART_LAYERED, 0, 3, menuword_23_e_fill, 0, menuword_23_e_tiles, { 0 } },
+    { "the menus' mode word letter '24 T'", 0xFF, 0x002A, 16, 16, FX_ART_LAYERED, 0, 3, menuword_24_t_fill, 0, menuword_24_t_tiles, { 0 } },
+    { "the menus' mode word letter '25 R'", 0xFF, 0x002A, 16, 16, FX_ART_LAYERED, 0, 3, menuword_25_r_fill, 9, menuword_25_r_tiles, { 0 } },
+    { "the menus' mode word letter '26 A'", 0xFF, 0x002A, 16, 16, FX_ART_LAYERED, 0, 3, menuword_26_a_fill, 2, menuword_26_a_tiles, { 0 } },
+    { "the menus' mode word letter '27 X'", 0xFF, 0x002A, 16, 16, FX_ART_LAYERED, 0, 3, menuword_27_x_fill, 0, menuword_27_x_tiles, { 0 } },
+    { "the menus' mode word letter '28 F'", 0xFF, 0x002A, 16, 16, FX_ART_LAYERED, 0, 3, menuword_28_f_fill, 0, menuword_28_f_tiles, { 0 } },
+    { "the menus' mode word letter '29 R'", 0xFF, 0x002A, 16, 16, FX_ART_LAYERED, 0, 3, menuword_29_r_fill, 9, menuword_29_r_tiles, { 0 } },
+    { "the menus' mode word letter '30 E'", 0xFF, 0x002A, 16, 16, FX_ART_LAYERED, 0, 3, menuword_30_e_fill, 0, menuword_30_e_tiles, { 0 } },
+    { "the menus' mode word letter '31 E'", 0xFF, 0x002A, 16, 16, FX_ART_LAYERED, 0, 3, menuword_31_e_fill, 0, menuword_31_e_tiles, { 0 } },
+    { "the menus' mode word letter '32 T'", 0xFF, 0x002A, 16, 16, FX_ART_LAYERED, 0, 3, menuword_32_t_fill, 0, menuword_32_t_tiles, { 0 } },
+    { "the menus' mode word letter '33 R'", 0xFF, 0x002A, 16, 16, FX_ART_LAYERED, 0, 3, menuword_33_r_fill, 9, menuword_33_r_tiles, { 0 } },
+    { "the menus' mode word letter '34 A'", 0xFF, 0x002A, 16, 16, FX_ART_LAYERED, 0, 3, menuword_34_a_fill, 2, menuword_34_a_tiles, { 0 } },
+    { "the menus' mode word letter '35 X'", 0xFF, 0x002A, 16, 16, FX_ART_LAYERED, 0, 3, menuword_35_x_fill, 0, menuword_35_x_tiles, { 0 } },
 };
 const int fx_art_picture_count = (int)(sizeof fx_art_pictures / sizeof fx_art_pictures[0]);
