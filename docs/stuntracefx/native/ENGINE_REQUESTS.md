@@ -33,3 +33,31 @@ considered.
   itself, because the player may bind keys anywhere. Asked: while text input is on, keys that type text ('A'-'Z', digits,
   space, Backspace) go to the text queue only and press no pad button. Enter can keep pressing its button, so a typed
   name can be confirmed.
+
+## 4. Binding a controller's buttons
+
+Part of Jeff's direction 1: every native input reaches the game as a true input, and a player can rebind it.
+
+API 4.5 binds keyboard keys only: `nshvc_control_bind(player, button, nshvc_key)`. The engine maps every controller to
+the pad itself, and a game cannot change which controller button presses which pad button. A game's pause screen can let
+the player rebind keys ("press the key you want", from `keys_pressed`), but not a controller's buttons.
+
+A game cannot do it with 4.5. `nshvc_input.pad[]` merges the keyboard, every controller and the touch screen. The bits a
+controller presses there look the same as a keyboard's, so a game cannot take the engine's controller mapping back out
+and put its own in. It sees `controller[].buttons` beside the pad, but a pad bit that a key and a controller button both
+press can't be split between them. Mapping every device itself, the game would have to repeat the engine's own mapping of
+keys, controllers and touch, which the engine owns.
+
+Asked, for every game:
+- `nshvc_control_bind_controller(player, button, ctl)`: the controller button `ctl` (an `NSHVC_CTL_*`, by its place)
+  presses `button` for that player's controllers, taking `ctl` from whichever button had it, as `nshvc_control_bind` does
+  for keys.
+- `nshvc_control_name(player, button)` names the controller button bound to `button` when the player's source is a
+  controller, in that controller family's own terms (A, Cross, and so on).
+- The bindings last until changed, and a game can put the engine's defaults back. The game keeps them in its own save,
+  as it does its keys.
+
+With that, a game's pause screen takes a controller button pressed (from `controller[].buttons`) for a SNES button the
+way it takes a key now.
+
+A touch screen's on-screen controls are the engine's, with nothing to rebind; nothing is asked for touch.
