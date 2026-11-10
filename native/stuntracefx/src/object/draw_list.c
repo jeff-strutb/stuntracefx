@@ -62,6 +62,7 @@ static uint8_t *draw_record(Object *o, uint8_t *r)
     r[0x1C] = o->byte5f;
     r[0x1D] = o->byte60;
     put16(r, 0x16, o->anim);
+    objects.record_gaze[g.frame_record_count] = object_gaze(o, g.draw_side ? 1 : 0);
     g.frame_record_count++;
     return r + RECORD_SIZE;
 }
@@ -101,4 +102,11 @@ void ObjectDrawListBuild(void)
             ref = o->bucket_next;
         }
     }
+}
+
+uint16_t draw_record_gaze(int record)
+{
+    if (record < 0 || record >= (int)(sizeof objects.record_gaze / sizeof objects.record_gaze[0]))
+        return 0;
+    return objects.record_gaze[record];
 }

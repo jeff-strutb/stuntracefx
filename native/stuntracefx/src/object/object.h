@@ -107,6 +107,11 @@ typedef struct {
     uint16_t slot_changes[OBJECT_COUNT]; /* each slot's count of objects made in it and freed from it
                                             (ObjectInit, ObjectFree): a slot whose count moved during a
                                             step holds an object that was not there at its start */
+    uint16_t gaze[OBJECT_COUNT][2];     /* per slot and camera: 0x100 | the byte ObjectPlaceOnParent last
+                                           read the table at $08:E8AF by (object_gaze); 0 when it gave
+                                           $8C or the slot was made or freed since */
+    uint16_t record_gaze[64];           /* per draw record, as g.frame_records: its object's gaze for
+                                           the side drawn (draw_record_gaze) */
 } ObjectTable;
 
 extern ObjectTable objects;
@@ -161,6 +166,7 @@ void ObjectPoolInit(void);
 void ObjectLinkFlag4000Step(void);
 void ObjectFlag40IfMatch(uint16_t value);
 uint8_t ObjectTableE8AF(const Object *o, uint8_t base, uint8_t value);
+uint16_t object_gaze(const Object *o, int side);
 uint8_t ObjectTableC056(const Object *o, uint8_t turn);
 int ObjectListAppend(Object *o);
 void ObjectBucketInsert(Object *o);
@@ -423,6 +429,13 @@ void CourseScriptRun(uint8_t bank, uint16_t at);
 
 /* draw_list.c */
 void ObjectDrawListBuild(void);
+/* 0x100 | the byte the picture of the draw record built at index `record` was
+   picked by from the table at $08:E8AF (ObjectPlaceOnParent: the camera's
+   turn + the parent's heading + the object's +$48 + the parent's record's
+   +$3A; a turn in 256ths, the picture's /8 of it), while the record's frame
+   byte is still the one that read gave; 0 otherwise. Indexed as
+   ObjectDrawListBuild writes g.frame_records; rebuilt with them. */
+uint16_t draw_record_gaze(int record);
 
 /* the handler numbers the objects and data store, and the dispatch to them
    (object_handlers.c, objects_09.c and the rest) */

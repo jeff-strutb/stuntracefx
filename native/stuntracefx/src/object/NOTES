@@ -204,7 +204,8 @@ car_parts.c rm_eased16: rm_eased16, rm_share_by, rm_sharing
 car_parts.c rm_eased8: rm_eased8, rm_share_by, rm_sharing
 car_parts.c return_frame: rm_eased16, rm_eased8
 draw_list.c parked_child: rm_enhanced, rm_redrawing
-draw_list.c draw_record: rm_gaze_of, rm_record_look
+draw_list.c draw_record: rm_record_look (rm_gaze_of's gaze is back:
+  object_gaze and draw_record_gaze, for the fx session's solid eyes)
 draw_list.c far_record: rm_look_dy
 draw_list.c far_records: rm_far_left_out
 draw_list.c ObjectDrawListBuild: rm_enhanced, rm_whole_steps

@@ -158,6 +158,18 @@ uint8_t ObjectTableE8AF(const Object *o, uint8_t base, uint8_t value)
     return cart8(0x08, (uint16_t)(0xE8AF + (uint8_t)(value + o->heading + base) / 8));
 }
 
+/* 0x100 | the byte ObjectPlaceOnParent last read the table at $08:E8AF by
+   for o and the side's camera, while o's frame byte for that side is still
+   the one that read gave (other routines write it too); 0 otherwise */
+uint16_t object_gaze(const Object *o, int side)
+{
+    uint16_t gz = objects.gaze[obj_slot(o)][side];
+
+    if (!gz || o->sprite_turn[side] != (uint8_t)(cart8(0x08, (uint16_t)(0xE8AF + (uint8_t)gz / 8)) | 0x80))
+        return 0;
+    return gz;
+}
+
 /*
  * @routine 08:C03C ObjectTableC056
  * WHAT IT DOES: The byte of the table at $08:C056 for (the object's heading
@@ -551,6 +563,7 @@ ObjRef ObjectAlloc(void)
 void ObjectInit(Object *o)
 {
     objects.slot_changes[obj_slot(o)]++;
+    objects.gaze[obj_slot(o)][0] = objects.gaze[obj_slot(o)][1] = 0;
     memset(&o->model, 0, sizeof(Object) - offsetof(Object, model));
     ObjectBucketInsert(o);
     o->byte59 = 0x69;
@@ -589,6 +602,7 @@ void ObjectFree(Object *o)
     ObjRef r = obj_ref(o), prev = o->prev, next = o->next;
 
     objects.slot_changes[obj_slot(o)]++;
+    objects.gaze[obj_slot(o)][0] = objects.gaze[obj_slot(o)][1] = 0;
     ObjectBucketRemove(o);
     if (!prev) {
         objects.used_head = next;
@@ -1056,12 +1070,17 @@ void ObjectPlaceOnParent(Object *parent, Object *o)
 
     if (o->flags25 & 0x01) {
         o->sprite_turn[0] = o->sprite_turn[1] = 0x8C;
+        objects.gaze[obj_slot(o)][0] = objects.gaze[obj_slot(o)][1] = 0;
     } else {
         uint16_t lift = parent->record ? (uint16_t)(rec_get(parent->record, FXREC_WORD_3A) << 2) : 0;
         uint8_t base = (uint8_t)((uint8_t)(lift >> 8) + o->count48);
 
-        for (int i = 0; i < 2; i++)
-            o->sprite_turn[i] = (uint8_t)(ObjectTableE8AF(parent, base, (uint8_t)(cameras[i].turn >> 8)) | 0x80);
+        for (int i = 0; i < 2; i++) {
+            uint8_t turn = (uint8_t)(cameras[i].turn >> 8);
+
+            o->sprite_turn[i] = (uint8_t)(ObjectTableE8AF(parent, base, turn) | 0x80);
+            objects.gaze[obj_slot(o)][i] = (uint16_t)(0x100 | (uint8_t)(turn + parent->heading + base));
+        }
     }
     v = ObjectTurnVector(parent, (int8_t)(uint8_t)o->vx, (int8_t)(uint8_t)o->vy, (int8_t)(uint8_t)o->vz);
     o->x = (uint16_t)(parent->x + (uint16_t)(v.x * 2));
