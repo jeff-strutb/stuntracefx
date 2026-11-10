@@ -81,3 +81,15 @@ Asked: `nshvc_game(... ICON <one square image>)` makes each platform's form at b
 - Windows: an `.ico` (16 to 256) in a resource script linked into the program as the icon the window class loads.
 - Linux: a PNG beside the program for a desktop file; Android as now.
 A working recipe for all of these from one image is in the old port's `ports/stuntracefx/icon/icons.sh`.
+
+## 6. Antialiased draw lists (Jeff, 2026-11-09: "That black arrow on yellow is still a bit aliased")
+
+Every polygon edge a draw list fills is aliased: `NSHVC_FILL_SMOOTH` gives sub-pixel vertices, but each pixel is wholly in
+or out, because a draw list is filled into a one-value-a-pixel texture (`R32Uint` on Metal: a palette index or
+`0xFFRRGGBB`) and composed per window pixel from it. The game cannot smooth an edge from its side: a pixel holds one
+value, and an index cannot be blended before the palette and the colour maths.
+
+Asked: a draw list filled with several samples a pixel (a game's choice, e.g. `nshvc_draw_samples(list, 4)`), each sample
+composed as a pixel is now (the palette, see-through 0, the layers' priorities, windows and colour maths per sample), and
+the samples' final colours averaged into the window's pixel. The picture stays exact per sample; only the edges change.
+The same on Metal, Vulkan and D3D12, and in the picture `nshvc_picture_read` returns.
