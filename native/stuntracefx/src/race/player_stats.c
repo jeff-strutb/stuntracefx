@@ -375,7 +375,7 @@ static void stunt_panel_wait(void)
     CarFinishSound();
     g.banner[0] = 0x06;
     g.finish_mark = 0;
-    g.race_ended_d55 = 0;
+    g.end_panel_in = 0;
     g.banner_timer[0] = 0x20;
     OamHideForHudMode();
     StuntRecordTime();
@@ -402,7 +402,7 @@ static void stunt_phase_end(void)
 {
     if (windows.bands_state != 0x05)
         return;
-    g.overlay_d59 = 0;
+    g.results_step = 0;
     g.stunt_score_counted = 0;
     g.time_counted = 0;
     race_wait_overlay(race_go_on);
@@ -426,7 +426,7 @@ static void stunt_phase_race(void)
 {
     if (!g.time_left) {
         g.player_phase[0] = 0x0C;
-        g.race_ended_d55 = 0;
+        g.end_panel_in = 0;
         g.time_up_timer = 0x80;
         SoundPort0QueuePush(0x31);
         return;
@@ -601,7 +601,7 @@ static void time_up_phase_race(void)
 static void time_up_phase_end(void)
 {
     if (!g.end_timer) {
-        g.overlay_d59 = 0;
+        g.results_step = 0;
         race_wait_champion(race_go_on);
         return;
     }

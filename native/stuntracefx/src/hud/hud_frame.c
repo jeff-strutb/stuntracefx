@@ -111,7 +111,6 @@ void HudCountMove19EECopy(void)
 {
     g.stunt_score_add = (uint8_t)g.hits_bcd;
     g.hits_bcd = 0;
-    g.byte_19f2 = 0x01;
 }
 
 /* @routine 09:C08E HudCountMove19EE: unless time-up is shown ($0E59): sound $35, the record's lift, the count moved. */
@@ -142,7 +141,7 @@ void HudGaugesPanelA(void)
  */
 void HudGaugesPanelB(void)
 {
-    if (!g.race_ended_d55 && !g.split_screen)
+    if (!g.end_panel_in && !g.split_screen)
         return;
     SpriteBar4WithMarker(g.gauge_one[0], (uint16_t)(g.gauge_place[2] << 8 | g.gauge_place[0]),
                          g.split_screen ? 0x0040 : 0x0100);
@@ -192,7 +191,7 @@ void MapMarkersPanelA(void)
 /* @routine 7E:EF16 MapMarkersPanelB */
 void MapMarkersPanelB(void)
 {
-    if (!g.race_ended_d55 && !g.split_screen)
+    if (!g.end_panel_in && !g.split_screen)
         return;
     map_marker_sprites(g.hud_map_origin_x[0], g.hud_map_y_b, 4, g.split_screen ? 0x0054 : 0x0180);
 }

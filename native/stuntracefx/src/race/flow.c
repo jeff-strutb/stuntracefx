@@ -315,7 +315,7 @@ static void wait_step(void)
         if (v)
             return;
         if (g.hud_mode) {
-            g.overlay_d59 = 0;
+            g.results_step = 0;
             SoundPort0QueuePushRaw(0x30);
             race_wait_champion(race_go_on);
             return;
@@ -325,7 +325,7 @@ static void wait_step(void)
     case WAIT_END_COUNT:
         if (--g.time_up_timer)
             return;
-        g.overlay_d59 = 0;
+        g.results_step = 0;
         race_wait_champion(race_go_on);
         return;
     case WAIT_OVERLAY:

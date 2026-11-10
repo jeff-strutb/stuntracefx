@@ -547,7 +547,7 @@ void RaceVarsReset(void)
     g.pause_stage = 0;
     g.pause_stage_b = 0;
     g.pause_player = 0;
-    g.race_ended_d55 = 0;
+    g.end_panel_in = 0;
     g.lap_shown = 0;
     g.sprites_counted = 0;
     g.time_up_shown = 0;

@@ -42,7 +42,7 @@ static uint8_t digit_low(uint8_t v) { return (uint8_t)((v & 0x0F) + 0xC0); }
 
 static int pressed(uint16_t mask) { return (frame_state.pressed_copy[0] & mask) != 0; }
 
-static void step_next(void) { g.overlay_d59++; }
+static void step_next(void) { g.results_step++; }
 
 /* $0EDE-$0EE9: the three laps' splits, then the race's time as kept. */
 static uint8_t split_byte(unsigned i)
@@ -143,7 +143,7 @@ static void records_wait(uint8_t next, const uint16_t *rows, int count, uint8_t 
 {
     if (pressed(0x9000)) {
         SoundPort0QueuePush(0x46);
-        g.overlay_d59 = next;
+        g.results_step = next;
         OamByteSet(0x213, 0x55);
         OamByteSet(0x214, 0x55);
         OamByteSet(0x215, 0x55);
@@ -233,7 +233,7 @@ static void records_choice(uint8_t skip, int check_skipped)
     if ((check_skipped && g.race_skipped) || !g.record_place)
         step_next();
     else
-        g.overlay_d59 = skip;
+        g.results_step = skip;
     SoundPort0QueuePush(0x46);
 }
 
@@ -594,7 +594,7 @@ static void lap_char(unsigned y)
     case 0x0C:
         map_byte_set(at, digit_low(split_byte(y)));
         step_next();
-        if (g.overlay_d59 == 0x0B) {
+        if (g.results_step == 0x0B) {
             SoundPort0QueuePushRaw(0x3F);
             g.results_at = (uint16_t)(at + 0x00F4);
         } else {
@@ -849,8 +849,8 @@ static const StepFn steps_all[] = {
 
 static void steps(const StepFn *t, unsigned n)
 {
-    if (g.overlay_d59 < n)
-        t[g.overlay_d59]();
+    if (g.results_step < n)
+        t[g.results_step]();
 }
 
 #define STEPS(t) (t), (sizeof (t) / sizeof (t)[0])
@@ -1003,6 +1003,6 @@ static void championship_finish_records(void)
  */
 void ChampionshipFinish(void)
 {
-    g.overlay_d59 = 0;
+    g.results_step = 0;
     race_wait_overlay(championship_finish_records);
 }

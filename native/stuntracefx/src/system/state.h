@@ -52,10 +52,9 @@ typedef struct {
     uint8_t speed_gauge[2];             /* $0E49, $0E47: the two players' speed gauges */
     uint8_t course_screen_state;        /* $0D40 */
     uint8_t records_wait, records_cursor; /* $0D41, $0D50 */
-    uint8_t byte_0e92;                  /* $0E92 */
 
     /* ---- the race: its flow, cars, laps and times ---- */
-    uint8_t trail_zone_on, byte_19ec, byte_19f0, byte_19f2; /* $19E7, $19EC, $19F0, $19F2: cleared with the windows */
+    uint8_t trail_zone_on, byte_19ec, byte_19f0; /* $19E7, $19EC, $19F0: cleared with the windows */
     uint8_t time_gate_bonus;            /* $19E6: the BCD seconds a time gate adds, from the table at $09:F115 by class and stage */
     uint8_t switches_hit[3];            /* $19E8-$19EA: the count trigger and switches B and C touched; each one's lamp counts while set */
     uint8_t slide_wobble_step;          /* $1A04: set to $FF with each slide down; read only by the unreached SlideOutWobble */
@@ -90,8 +89,8 @@ typedef struct {
     uint8_t course_code_presses;        /* $0D25: Select presses so far of Speed Trax's every-course code */
     uint8_t champ_stage;                /* $0D48: the championship's stage */
     uint8_t every_course_open;          /* $0D24: 3 once Speed Trax's code has opened every course, for this power on */
-    uint8_t race_ended_d55;             /* $0D55 */
-    uint8_t overlay_d59;                /* $0D59 */
+    uint8_t end_panel_in;               /* $0D55: $2A once panel B has slid in at the race's end (its gauges and markers shown), else 0 */
+    uint8_t results_step;               /* $0D59: the results screen's step */
     uint8_t player_mode_kept;           /* $0D5E */
     uint8_t pause_stage_b, pause_player, pause_stage; /* $0D2D, $0D2E, $0D2F */
     uint8_t pause_choice;               /* $0D3D: 0 continue, otherwise quit */

@@ -1020,7 +1020,7 @@ void WindowsInit(void)
     windows.bands_kind = 0;
     windows.split_pos = windows.split_step = 0;
     g.stunt_finished = 0;
-    g.switches_hit[0] = g.switches_hit[1] = g.switches_hit[2] = g.byte_19ec = g.byte_19f2 = 0;
+    g.switches_hit[0] = g.switches_hit[1] = g.switches_hit[2] = g.byte_19ec = 0;
     g.hits_bcd = 0;
     g.byte_19f0 = 0;
     g.bonus_markers_taken = 0;

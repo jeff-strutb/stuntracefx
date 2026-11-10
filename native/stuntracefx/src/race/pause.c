@@ -123,7 +123,7 @@ static void stage_leave(void)
             SoftResetToBootWarm();
         return;
     }
-    g.overlay_d59 = 0;
+    g.results_step = 0;
     race_wait_champion(race_go_on);
 }
 

@@ -181,7 +181,7 @@ void OamDirectStage(void)
         break;
     case 0x06:
         if (g.hud_panel_b_y == 0x2A) {
-            g.race_ended_d55 = 0x2A;
+            g.end_panel_in = 0x2A;
             g.start_light = 0;
         }
         memcpy(&pic.sprites[band[2].first], &sprites[band[2].first], band[2].count * sizeof sprites[0]);

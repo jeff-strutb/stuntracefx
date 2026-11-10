@@ -777,7 +777,7 @@ void TimesKeepAndAdvance(void)
     for (i = 0; i < 3; i++)
         g.race_time_best[i] = g.race_time_kept[i];
     g.banner_timer[0] = 0;
-    g.overlay_d59++;
+    g.results_step++;
     g.split_stage = 2;
     windows.bands_kind = 0;
     windows.bands_state = 2;
@@ -1087,7 +1087,6 @@ void RaceScreenSetup(void)
     t[6] = t[9] = t[12] = 1;
     g.hdma_enable = 0x02;
     g.cursor_column_x = 0xF0;
-    g.byte_0e92 = 0xF0;
     pic.race.on = 1;
     pic.race.split = 0;
     pic.race.course_screen = 1;

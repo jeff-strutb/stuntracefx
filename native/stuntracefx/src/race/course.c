@@ -121,7 +121,6 @@ static int scroll_step(int hide)
     }
     scroll_low_set(v);
     if (hide) {
-        g.byte_0e92 = 0xF0;
         OamBufferHideLarge();
     }
     return 1;

@@ -469,7 +469,7 @@ panel:
     RaceFinishSounds();
     g.banner_timer[player] = 0x14;
     g.player_phase[player] = 0x08;
-    g.race_ended_d55 = 0;
+    g.end_panel_in = 0;
     g.end_timer = 0x70;
     OamHideForHudMode();
     RaceTimeKeep();
@@ -635,7 +635,7 @@ static void race_end_wait(void (*draw)(void))
     g.split_stage_on = palettes.amount;
     g.split_stage = 0x06;
     g.finish_timer = 0x78;
-    g.race_ended_d55 = 0;
+    g.end_panel_in = 0;
     RaceEndCountdownFade();
 }
 
@@ -659,7 +659,7 @@ static int window_closed_overlay(void (*after)(void))
 {
     if (windows.bands_state != 0x05)
         return 0;
-    g.overlay_d59 = 0;
+    g.results_step = 0;
     race_wait_overlay(after);
     return 1;
 }
@@ -830,7 +830,7 @@ static void time_up_end(uint8_t t)
     g.split_stage_on = 0x06;
     g.split_stage = 0x06;
     g.time_up_timer = t;
-    g.race_ended_d55 = 0;
+    g.end_panel_in = 0;
     sound_port0_push_raw(0x30);
     RaceEndCountdown();
 }

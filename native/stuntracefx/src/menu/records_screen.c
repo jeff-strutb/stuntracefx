@@ -73,7 +73,6 @@ static void records_menu_back(void)
     sound_port0_push(0x2F);
     CourseScreenState8();
     OamBufferHideLarge();
-    g.byte_0e92 = 0xF0;
 }
 
 /*
@@ -192,7 +191,6 @@ static void speed_alt_leave(void)
     g.course_screen_state = 0x0E;
     g.champ_stage++;
     OamBufferHideLarge();
-    g.byte_0e92 = 0xF0;
 }
 
 static void menu_speed_alt(void)
@@ -492,7 +490,6 @@ void SpeedRecordsScreen(void)
         menu_two();
         return;
     }
-    g.byte_0e92 = 0xF0;
     if (pad() & 0x9000) {
         sound_port0_push(0x46);
         g.course_screen_state = 0x0A;
