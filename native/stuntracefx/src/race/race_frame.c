@@ -317,7 +317,7 @@ static void two_players_first_half(void)
     g.picture_uploaded = 0;
     ViewUpdateAndGsuAEF8();
     BackdropAnglesFromView();
-    g.view_heading_06cf = (uint16_t)(g.view_heading_06cf - 0x0140);
+    g.backdrop_heading = (uint16_t)(g.backdrop_heading - 0x0140);
     fx_draw_begin(g.fx_buffer);
     frame_run_ab13_a();
     SpeedGauge2Update(fx16(FXIN_PLAYER2_RECORD));
@@ -424,7 +424,7 @@ int RaceViewForPicture(int panel)
         picture_objects();
         ViewUpdateAndGsuAEF8();
         BackdropAnglesFromView();
-        g.view_heading_06cf = (uint16_t)(g.view_heading_06cf - 0x0140);
+        g.backdrop_heading = (uint16_t)(g.backdrop_heading - 0x0140);
         GsuParamsUpdate();
         return 1;
     default:

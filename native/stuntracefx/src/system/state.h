@@ -214,7 +214,7 @@ typedef struct {
     /* ---- the picture: palettes, windows, tile maps, the HUD ---- */
     uint8_t split_stage_on;             /* $0D22: the split screen's upload stages run */
     uint8_t split_stage;                /* $0D23: which of them */
-    uint16_t view_heading_06cf;         /* $06CF: the view's heading for the backdrop */
+    uint16_t backdrop_heading;          /* $06CF: the view's heading for the backdrop, the pair of backdrop_pitch */
     uint16_t backdrop_row_adjust;       /* $0DA2: added to the view angle when the backdrop's map row is chosen */
     uint8_t level_columns[12];          /* $0F05: the screen's level columns */
     uint16_t time_shown_2;              /* $0E6E */

@@ -493,7 +493,7 @@ uint16_t BackdropScrollFromView(void)
     uint16_t h, t;
     unsigned s;
 
-    g.backdrop_x[half] = (uint16_t)(g.view_heading_06cf >> 2);
+    g.backdrop_x[half] = (uint16_t)(g.backdrop_heading >> 2);
     h = (uint16_t)(player_vehicle_raised(half) + g.backdrop_pitch + 0x18);
     s = (unsigned)(uint16_t)(h << 1) + 0xEF99 + (h >> 15);
     t = (uint16_t)s;
@@ -519,11 +519,11 @@ void BackdropRowsUpdate(void)
     s = (uint16_t)((uint16_t)(h << 1) + 0x42 + (h >> 15));
     gradient.view_offset[0] = s < 0x0300 ? s : 0x0300;
     g.backdrop_y[buf] = (uint16_t)((h & 7) - 0x20 + ram_code_7e16((uint16_t)(0xE811 + buf * 2)));
-    g.backdrop_x[buf] = (uint16_t)(((g.view_heading_06cf >> 1) & 7) - 0x18);
+    g.backdrop_x[buf] = (uint16_t)(((g.backdrop_heading >> 1) & 7) - 0x18);
     row_step = (unsigned)(((uint16_t)(h + g.backdrop_row_adjust) >> 3) & 0x3F) * 0x140u;
-    x = ((g.view_heading_06cf >> 3) & 0xFE) + row_step;
+    x = ((g.backdrop_heading >> 3) & 0xFE) + row_step;
     wide_band[buf].map = (g.picture_effects & 0x40) ? 1 : 0;
-    wide_band[buf].heading = g.view_heading_06cf;
+    wide_band[buf].heading = g.backdrop_heading;
     wide_band[buf].pitch = h;
     wide_band[buf].row_adjust = g.backdrop_row_adjust;
     for (n = 0; n < 17; n++) {
@@ -568,7 +568,7 @@ void BackdropAnglesFromView(void)
     w = g.view_angles[1];
     for (i = 0; i < 5; i++)
         w = (uint16_t)((w >> 1) | (w & 0x8000));
-    g.view_heading_06cf = w & 0x07FF;
+    g.backdrop_heading = w & 0x07FF;
 }
 
 void Bg2ScrollFromTable(int half)
