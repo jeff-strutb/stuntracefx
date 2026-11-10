@@ -1215,9 +1215,8 @@ uint16_t fx_static_seed(int line)
     return static_seed[line & 127];
 }
 
-void fx_noise_row(uint16_t x, uint16_t y, uint16_t n, uint16_t seed, uint16_t ramp)
+void fx_noise_row(uint16_t x, uint16_t y, uint16_t n, uint16_t seed)
 {
-    (void)ramp;
     static_seed[y & 127] = seed;
     quad(fx_noise_image(), x, x + n, y, y + 1, seed & 0xFF, 1, (seed >> 8) + 0.5, 0);
 }

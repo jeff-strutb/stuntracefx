@@ -175,7 +175,7 @@ static uint16_t noise_next(uint16_t seed)
 void FxNoiseFill(void)
 {
     for (uint16_t y = 0; y < 128; y++) {
-        fx_noise_row(0, y, 16, noise_seed, 0);   /* the ramp argument is unused (fx_draw.c) */
+        fx_noise_row(0, y, 16, noise_seed);
         for (int i = 0; i < 16; i++)
             noise_seed = noise_next(noise_seed);
     }

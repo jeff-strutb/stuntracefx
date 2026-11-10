@@ -104,7 +104,7 @@ void fx_glyph_row(uint16_t x, uint16_t y, uint16_t n, uint8_t bank, uint16_t bas
 void fx_glyph_scaled_row(uint16_t x, uint16_t y, uint16_t n, uint16_t tu, uint16_t du, uint8_t bank, uint16_t start, uint16_t base, const uint8_t colours[4]);
 void fx_scaled_row_start(void);
 void fx_scaled_row(uint16_t x, uint16_t y, uint16_t n, uint16_t tu, uint16_t du, uint16_t base, uint16_t palette);
-void fx_noise_row(uint16_t x, uint16_t y, uint16_t n, uint16_t seed, uint16_t ramp);
+void fx_noise_row(uint16_t x, uint16_t y, uint16_t n, uint16_t seed);
 void fx_row_open(uint8_t kind, uint16_t x, uint16_t y, uint16_t tu, uint16_t du, uint16_t tv, uint16_t base, uint16_t dv);
 void fx_row_close(uint16_t x);
 void fx_draw_flush(void);
