@@ -74,7 +74,7 @@ _Noreturn void fx_bad_dispatch(uint16_t at);
 #define FXREC_Y_HELD 0x0060
 #define FX_ATAN_TABLE 0x9E40
 #define FX_CARS 0x262E
-#define FX_CAR_2394 0x2394
+#define FX_CAR_FRAME 0x2394
 #define FX_CAR_LAST 0x2474
 #define FX_CAR_POS 0x2354
 #define FX_CLIP_END1_ATTR2 0x008E

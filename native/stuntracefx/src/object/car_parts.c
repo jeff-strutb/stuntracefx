@@ -303,7 +303,7 @@ void PlayerCar1(Object *o)
     o->byte26 = 0x01;
     ObjectListAppend(o);
     o->y = (uint16_t)(o->y + 0xFF60);
-    if (g.hud_mode == 0 && obj_at(g.director[0])->handler == 0x8E2A)
+    if (g.hud_mode == 0 && obj_at(g.director[0])->handler == H_DIRECTOR_PATH_START)
         o->link27 = 0x8669;
     player_record(o, 0x0001, FXIN_PLAYER1_RECORD);
     player_attach(o, H_PLAYER_CAR_1_STEP, g.director[0]);

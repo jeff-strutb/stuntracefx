@@ -122,7 +122,7 @@ void ObjectScoreGate(Object *o)
     o->handler2 = H9_SCORE_GATE_RECORD;
     o->handler2_bank = 0x09;
     handler(o, H9_SCORE_GATE_STEP);
-    n = ObjectSpawn(0xA040);
+    n = ObjectSpawn(MODEL_NONE);
     if (n) {
         ObjectCopyPosition(n, o);
         n->link27 = obj_ref(o);
@@ -290,7 +290,7 @@ void ObjectFireworkShell(Object *o)
     ObjectFireworkShellRecord(o);
 }
 
-static void shell(Object *o, uint16_t dx, uint8_t s14, uint8_t s15, uint8_t s16)
+static void shell(Object *o, uint16_t dx, uint8_t pitch, uint8_t heading, uint8_t roll)
 {
     Object *n = ObjectSpawn(0xB6E4);
 
@@ -304,9 +304,9 @@ static void shell(Object *o, uint16_t dx, uint8_t s14, uint8_t s15, uint8_t s16)
     n->vx = 0;
     n->vy = 0;
     n->vz = 0x015E;
-    n->pitch = s14;
-    n->heading = s15;
-    n->roll = s16;
+    n->pitch = pitch;
+    n->heading = heading;
+    n->roll = roll;
     n->byte0a = 0x1E;
 }
 
@@ -837,7 +837,7 @@ void ObjectStarSparkleStep(Object *o)
 /* a sparkle at the object's place, $C8 back */
 static void sparkle(Object *o)
 {
-    Object *n = ObjectSpawn(0xA158);
+    Object *n = ObjectSpawn(MODEL_COMMON);
 
     if (!n)
         return;
@@ -1410,7 +1410,7 @@ static int lap_matches_0a(const Object *o) { return g.laps_counted[0] == o->byte
 static void lap_take_0a(Object *o)
 {
     o->byte0a = g.laps_counted[0];
-    o->model = 0xA040;
+    o->model = MODEL_NONE;
 }
 
 /* a spark of `model` at the player's place following it */
@@ -1433,7 +1433,7 @@ static void lap_ball_record(Object *o, uint16_t model)
     GsuRecordNew42D(o);
     GsuRecordFlag10(o);
     GsuRecordSet2AHigh(o, 0x14);
-    o->model = lap_matches_0a(o) ? 0xA040 : model;
+    o->model = lap_matches_0a(o) ? MODEL_NONE : model;
 }
 
 /* @routine 09:ADB6 ObjectLapBallUpStep */
@@ -1887,7 +1887,7 @@ static const Object *orbit(Object *o, int8_t x, int8_t y, int8_t z, int all_thre
 /* An orbiter's set-up: a centre of kind $A040 at its place */
 static void orbiter(Object *o, uint16_t centre_handler, uint16_t frame)
 {
-    Object *c = ObjectSpawn(0xA040);
+    Object *c = ObjectSpawn(MODEL_NONE);
 
     if (c) {
         ObjectCopyPosition(c, o);
@@ -1985,12 +1985,12 @@ GATE(ObjectBellGate, ObjectBellGateRecord, ObjectBellGateStep, H9_BELL_RECORD, H
    of the turn it shows the lit model, with `sound` the first time */
 static void fan_frame(Object *o, int all_three, uint16_t lit, uint8_t sound)
 {
-    uint8_t a;
+    uint8_t roll;
 
     o->roll = orbit(o, 0x64, 0x46, 0x00, all_three)->roll;
-    a = o->roll;
-    if (a == 0x3A || ((uint8_t)(a - 0x3A) & 0x80) || !(a == 0xC0 || ((uint8_t)(a - 0xC0) & 0x80))) {
-        o->model = 0xA040;
+    roll = o->roll;
+    if (roll == 0x3A || ((uint8_t)(roll - 0x3A) & 0x80) || !(roll == 0xC0 || ((uint8_t)(roll - 0xC0) & 0x80))) {
+        o->model = MODEL_NONE;
         o->flags25 &= 0xFE;
     } else {
         o->model = lit;
@@ -2482,7 +2482,7 @@ static void trail_frame(Object *o, uint16_t dz, uint16_t dx, uint16_t drift)
         o->x = (uint16_t)(ApproachQuarterMin4(o->x, p->x, &moved) + dx);
         o->byte0a = 0x1A;
         /* @routine 09:E59D TrailFlip */
-        if (rec_get(p->record, FXREC_WORD_4A) & 0x8000)
+        if (rec_get(p->record, FXREC_SPEED) & 0x8000)
             add_word_at(&o->heading, 0x0080);
         o->roll = 0x00;
     } else if (o->byte0a) {

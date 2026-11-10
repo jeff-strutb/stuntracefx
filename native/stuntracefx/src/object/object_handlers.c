@@ -284,7 +284,7 @@ void ObjectPaceCarSetup(Object *o)
     g.pace_z = o->z;
     g.pace_signal = 0;
     o->y = (uint16_t)(o->y + 0xFF9C);
-    n = ObjectSpawn(0xA040);
+    n = ObjectSpawn(MODEL_NONE);
     if (!n)
         return;
     ObjectCopyPosition(n, o);
@@ -338,15 +338,15 @@ static Object *ObjectBreakOffChance(Object *child)
 /* The break-off a car's knock gives a child, if any */
 static void child_break_off(Object *o, const Object *p, uint16_t own)
 {
-    uint16_t d, f4c, w;
+    uint16_t d, car_flags, w;
     Object *n;
 
     if (p->flags24 & 0x40)
         return;
-    f4c = rec_get(p->record, FXREC_FLAGS40);
+    car_flags = rec_get(p->record, FXREC_FLAGS40);
     if (!(rec_get(p->record, FXREC_FLAGS64) & 0x0003))
         return;
-    w = rec_get(own, FXREC_FACE_46);
+    w = rec_get(own, FXPART_46);
     if (!(w & 0x0001) || !(w & 0x0010))
         return;
     d = rec_get(own, 0x002C);
@@ -375,7 +375,7 @@ static void child_break_off(Object *o, const Object *p, uint16_t own)
             ObjectSetHandler(n, H_BREAK_OFF_G);
         return;
     }
-    if (!(f4c & 0x0800) && !(rec_get(own, FXREC_FACE_46) & 0x0020))
+    if (!(car_flags & 0x0800) && !(rec_get(own, FXPART_46) & 0x0020))
         return;
     if ((n = ObjectBreakOffChance(o)) != NULL)
         ObjectSetHandler(n, H_BREAK_OFF_H);
@@ -422,21 +422,21 @@ void ObjectChildrenSpawn(Object *o)
     if (!o->record)
         return;
     for (rec = rec_get(o->record, 0x003E); rec; rec = rec_get(rec, 0x0034)) {
-        uint16_t t, w52;
+        uint16_t t, look;
         Object *n;
 
-        if (rec_get(rec, FXREC_FACE_46) & 0x0200)
+        if (rec_get(rec, FXPART_46) & 0x0200)
             continue;
         t = rec_get(rec, 0x0012);
-        w52 = cart16(0x09, (uint16_t)(0x8002 + t));
-        n = ObjectSpawn(cart16(0x09, (uint16_t)(0x8000 + t)));
+        look = object_data16(t, DATA_LOOK);
+        n = ObjectSpawn(object_data16(t, DATA_MODEL));
         if (!n)
             continue;
-        if (w52) {
+        if (look) {
             n->flags24 |= 0x08;
             n->byte3a = 0;
-            n->byte5f = (uint8_t)cart16(0x09, (uint16_t)(0x8004 + t));
-            n->word29 = w52;
+            n->byte5f = (uint8_t)object_data16(t, DATA_SIZE);
+            n->word29 = look;
             if (g.split_screen)
                 n->word29 = (uint16_t)(n->word29 + 2);
         }
@@ -697,12 +697,12 @@ void ObjectBreakOffContact(Object *o)
 /* @routine 08:D33F ObjectBreakOffF: +$5F = half the parent's record speed + $14, at most $78 */
 void ObjectBreakOffF(Object *o)
 {
-    uint16_t a = (uint16_t)(asr1(abs16(rec_get(obj_at(o->link27)->record, FXREC_SPEED))) + 0x0014);
+    uint16_t size = (uint16_t)(asr1(abs16(rec_get(obj_at(o->link27)->record, FXREC_SPEED))) + 0x0014);
 
-    if (!below(a, 0x0078))
-        a = 0x0078;
+    if (!below(size, 0x0078))
+        size = 0x0078;
     ObjectVelocityFromRecord(o);
-    break_off_f(o, (uint8_t)a);
+    break_off_f(o, (uint8_t)size);
 }
 
 /* @routine 08:D39F ObjectBreakOffG */
@@ -732,14 +732,14 @@ void ObjectBreakOffH(Object *o)
 void ObjectPieceSpray(Object *o)
 {
     Object *p;
-    uint16_t f4c;
+    uint16_t dz;
     Vec16 v;
 
     piece_handler(o, 0x06);
-    f4c = (uint16_t)((RandomStep() & 0x0F) + 0xFFD8);
+    dz = (uint16_t)((RandomStep() & 0x0F) + 0xFFD8);
     piece_look(o, 0x997C, 0, 0x0A);
     p = obj_at(o->link27);
-    RotateXZFrom08(0, (int8_t)(uint8_t)f4c, p->pitch, &v.y, &v.z);
+    RotateXZFrom08(0, (int8_t)(uint8_t)dz, p->pitch, &v.y, &v.z);
     RotateXZ(0, (int8_t)v.z, p->heading, &v.x, &v.z);
     o->x = (uint16_t)(o->x + (uint16_t)((uint16_t)v.x << 1));
     o->z = (uint16_t)(o->z + (uint16_t)((uint16_t)v.z << 1));
@@ -794,31 +794,31 @@ static void offset_on_parent(Object *o, const Object *p, int sh, int with14)
  */
 void ObjectAttachSpawn(Object *o)
 {
-    uint16_t i = fxram_get(0x2392);
-    unsigned n = cart8(0x09, (uint16_t)(0x8090 + i));
+    uint16_t i = fxram_get(FX_CAR_ATTACHMENTS);
+    unsigned n = object_list8(i);
 
     i = (uint16_t)(i + 1);
     for (; n; n--, i = (uint16_t)(i + 5)) {
-        Object *a = ObjectSpawn(0xA040);
+        Object *a = ObjectSpawn(MODEL_NONE);
         uint16_t k, look;
 
         if (!a)
             continue;
         a->parent = obj_ref(o);
-        k = cart16(0x09, (uint16_t)(0x8090 + i));
-        a->model = cart16(0x09, (uint16_t)(0x8000 + k));
-        look = cart16(0x09, (uint16_t)(0x8002 + k));
-        a->handler = cart16(0x09, (uint16_t)(0x8006 + k));
-        a->handler_bank = cart8(0x09, (uint16_t)(0x8008 + k));
+        k = object_list16(i);
+        a->model = object_data16(k, DATA_MODEL);
+        look = object_data16(k, DATA_LOOK);
+        a->handler = object_data16(k, DATA_HANDLER);
+        a->handler_bank = (uint8_t)object_data16(k, DATA_HANDLER_BANK);
         if (look) {
             a->flags24 |= 0x08;
             a->byte3a = 0;
-            a->byte5f = (uint8_t)cart16(0x09, (uint16_t)(0x8004 + k));
+            a->byte5f = (uint8_t)object_data16(k, DATA_SIZE);
             a->anim = look;
         }
-        a->vx = (uint16_t)sx8(cart8(0x09, (uint16_t)(0x8092 + i)));
-        a->vy = (uint16_t)sx8(cart8(0x09, (uint16_t)(0x8093 + i)));
-        a->vz = (uint16_t)sx8(cart8(0x09, (uint16_t)(0x8094 + i)));
+        a->vx = (uint16_t)sx8(object_list8((uint16_t)(i + 2)));
+        a->vy = (uint16_t)sx8(object_list8((uint16_t)(i + 3)));
+        a->vz = (uint16_t)sx8(object_list8((uint16_t)(i + 4)));
     }
 }
 
@@ -1135,7 +1135,7 @@ void PlayerCarEvents(Object *o)
 
                 found = 0;
                 do {
-                    if ((rec_get(r, 0x002C) & 0x0080) && (rec_get(r, FXREC_FACE_46) & 0x0001) && (rec_get(r, FXREC_FACE_46) & 0x0010))
+                    if ((rec_get(r, 0x002C) & 0x0080) && (rec_get(r, FXPART_46) & 0x0001) && (rec_get(r, FXPART_46) & 0x0010))
                         found = 1;
                     r = rec_get(r, 0x0034);
                 } while (r);
@@ -1315,7 +1315,7 @@ void ObjectLampOnParent(Object *o)
     } else if (p->flags25 & 0x20) {
         ObjectLampDropBStart(o);
     } else if (p->flags25 & 0x40) {
-        o->anim = 0x9AB1;
+        o->anim = LOOK_EYE_STARTLED;
         lamp_drop_start(o);
     } else {
         lamp_place(o);
@@ -1339,11 +1339,11 @@ static void lamp_look_step(Object *o, uint16_t table)
 void ObjectLampAnimate(Object *o)
 {
     switch (g.lamp_lights & 0x1C) {
-    case 0x08: lamp_look_step(o, 0xE5AD); break;
-    case 0x04: lamp_look_step(o, 0xE57F); break;
-    case 0x0C: lamp_look_step(o, 0xE5DB); break;
-    case 0x1C: lamp_look_step(o, 0xE609); break;
-    case 0x10: o->anim = 0x9AAF; break;
+    case 0x08: lamp_look_step(o, EYE_BLINK_TO_STARTLED); break;
+    case 0x04: lamp_look_step(o, EYE_BLINK); break;
+    case 0x0C: lamp_look_step(o, EYE_BLINK_TO_PLAIN); break;
+    case 0x1C: lamp_look_step(o, EYE_BLINK_STARTLED); break;
+    case 0x10: o->anim = LOOK_EYE_PLAIN; break;
     default: o->byte4b = 0; break;
     }
     ObjectLampOnParent(o);
@@ -1362,7 +1362,7 @@ void ObjectLampWait(Object *o)
         ObjectLampAnimate(o);
         return;
     }
-    o->anim = 0x9AAF;
+    o->anim = LOOK_EYE_PLAIN;
     ObjectSetHandler(o, H_LAMP_ON_PARENT);
     ObjectLampOnParent(o);
 }
@@ -1425,12 +1425,12 @@ void ObjectLampDropBStart(Object *o)
 void CameraPointFromTable(Object *o)
 {
     Camera *c = camera_of(o->link);
-    uint16_t x, off[3];
+    uint16_t point, off[3];
     int moved;
 
     if (!(c->mode & 0x0020) && (o->flags25 & 0x01)) {
-        uint8_t count = cart8(0x09, (uint16_t)(0x8090 + c->word32));
-        uint8_t back = cart8(0x09, (uint16_t)(0x8091 + c->word32));
+        uint8_t count = object_list8(c->word32);
+        uint8_t back = object_list8((uint16_t)(c->word32 + 1));
         uint8_t v;
 
         o->flags25 &= 0xFE;
@@ -1449,15 +1449,15 @@ void CameraPointFromTable(Object *o)
     }
     if (obj_at(o->parent)->flags25 & 0x04) {
         o->link27 = 0x0007;
-        x = 0x0000;
+        point = 0x0000;
     } else {
-        x = (uint16_t)((uint16_t)(c->byte34 << 3) + c->word32);
+        point = (uint16_t)((uint16_t)(c->byte34 << 3) + c->word32);
     }
-    x = (uint16_t)(x + 2);
-    c->mode = cart16(0x09, (uint16_t)(0x8090 + x));
-    off[0] = cart16(0x09, (uint16_t)(0x8092 + x));
-    off[1] = cart16(0x09, (uint16_t)(0x8094 + x));
-    off[2] = cart16(0x09, (uint16_t)(0x8096 + x));
+    point = (uint16_t)(point + 2);
+    c->mode = object_list16(point);
+    off[0] = object_list16((uint16_t)(point + 2));
+    off[1] = object_list16((uint16_t)(point + 4));
+    off[2] = object_list16((uint16_t)(point + 6));
     if (c->mode & 0x0080) {
         if (o->link27) {
             o->link27--;

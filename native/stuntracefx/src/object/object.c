@@ -31,9 +31,16 @@
 ObjectTable objects;
 Camera cameras[2];
 
-/* the work RAM code block's data, read from the cartridge's copy of it */
-enum { WRAM_CODE_RUN = 0xA2D9 };
-static const uint8_t *wram_code(uint16_t a) { return &cart[0x10000u + (uint16_t)(a - WRAM_CODE_RUN)]; }
+/* The trigger areas, data in the block of code the original copies from the
+   cartridge's $02:8000 to work RAM and runs at $7E:A2D9; they name one
+   another by their place there. */
+enum {
+    CODE_BLOCK_RUN = 0xA2D9,            /* where the block runs: the places its data names are from here */
+    TRIGGER_AREAS_BY_HEIGHT = 0xC61D,   /* a word for each step of the view's height: its area */
+    TRIGGER_AREA_SPLIT = 0xC661,        /* the fixed area on the split screen or with course flag bit 7 */
+    TRIGGER_AREA_SINGLE = 0xC696        /* the fixed area otherwise */
+};
+static const uint8_t *code_block(uint16_t at) { return cart_at(0x02, (uint16_t)(0x8000 + (uint16_t)(at - CODE_BLOCK_RUN))); }
 
 static uint16_t asr1(uint16_t v) { return (uint16_t)((v >> 1) | (v & 0x8000)); }
 
@@ -155,7 +162,7 @@ void ObjectFlag40IfMatch(uint16_t value)
  */
 uint8_t ObjectTableE8AF(const Object *o, uint8_t base, uint8_t value)
 {
-    return cart8(0x08, (uint16_t)(0xE8AF + (uint8_t)(value + o->heading + base) / 8));
+    return cart8(0x08, (uint16_t)(FACING_FRAMES_32 + (uint8_t)(value + o->heading + base) / 8));
 }
 
 /* 0x100 | the byte ObjectPlaceOnParent last read the table at $08:E8AF by
@@ -165,7 +172,7 @@ uint16_t object_gaze(const Object *o, int side)
 {
     uint16_t gz = objects.gaze[obj_slot(o)][side];
 
-    if (!gz || o->sprite_turn[side] != (uint8_t)(cart8(0x08, (uint16_t)(0xE8AF + (uint8_t)gz / 8)) | 0x80))
+    if (!gz || o->sprite_turn[side] != (uint8_t)(cart8(0x08, (uint16_t)(FACING_FRAMES_32 + (uint8_t)gz / 8)) | 0x80))
         return 0;
     return gz;
 }
@@ -177,7 +184,7 @@ uint16_t object_gaze(const Object *o, int side)
  */
 uint8_t ObjectTableC056(const Object *o, uint8_t turn)
 {
-    return cart8(0x08, (uint16_t)(0xC056 + (uint8_t)(o->heading - turn) / 4));
+    return cart8(0x08, (uint16_t)(FACING_FRAMES_64 + (uint8_t)(o->heading - turn) / 4));
 }
 
 /*
@@ -428,12 +435,12 @@ void ObjectLinkedHandlerByState(Object *o, uint8_t state)
 void ObjectAttachLinked(Object *o, Object *other)
 {
     Camera *cam = camera_of(other->link);
-    uint16_t t = fxram_get(FX_CAR_2396);
+    uint16_t t = fxram_get(FX_CAR_CAMERA_POINTS);
 
     o->link = obj_ref(other);
     other->parent = obj_ref(o);
     cam->object = obj_ref(o);
-    if (other->handler == 0x8E2A)
+    if (other->handler == H_DIRECTOR_PATH_START)
         t = (uint16_t)(t + 2);
     else if (g.hud_mode == 1)
         t = (uint16_t)(t + 4);
@@ -441,7 +448,7 @@ void ObjectAttachLinked(Object *o, Object *other)
         t = (uint16_t)(t + 8);
     else if (g.hud_mode == 3)
         t = (uint16_t)(t + 6);
-    cam->word32 = cart16(0x09, (uint16_t)(0x8090 + t));
+    cam->word32 = object_list16(t);
     cam->word35 = cam->word37 = cam->word39 = 0;
     memset(cam->turn_words, 0, sizeof cam->turn_words);
     cam->mode = 0x0005;
@@ -509,10 +516,11 @@ static void BucketTriggersFromArea(const uint8_t *rec)
 void BucketTriggersFromView(void)
 {
     uint16_t at = (uint16_t)((((g.view_angles[1] >> 8 & 0xFF) >> 3) + 1) & 0xFE);
-    uint16_t rec = (uint16_t)(wram_code((uint16_t)(0xC61D + at))[0] | wram_code((uint16_t)(0xC61D + at))[1] << 8);
+    const uint8_t *entry = code_block((uint16_t)(TRIGGER_AREAS_BY_HEIGHT + at));
+    uint16_t area = (uint16_t)(entry[0] | entry[1] << 8);
 
     memcpy(g.bucket_origin, g.view_area_origin, sizeof g.bucket_origin);
-    BucketTriggersFromArea(wram_code(rec));
+    BucketTriggersFromArea(code_block(area));
 }
 
 /*
@@ -523,7 +531,7 @@ void BucketTriggersFromView(void)
 void BucketTriggersFixedArea(void)
 {
     memcpy(g.bucket_origin, g.view_fixed_origin, sizeof g.bucket_origin);
-    BucketTriggersFromArea(wram_code(g.split_screen || (g.course_flags & 0x0080) ? 0xC661 : 0xC696));
+    BucketTriggersFromArea(code_block(g.split_screen || (g.course_flags & 0x0080) ? TRIGGER_AREA_SPLIT : TRIGGER_AREA_SINGLE));
 }
 
 /*
@@ -719,12 +727,12 @@ void ObjectsRunHandlers(void)
 /*
  * @routine 08:826E ObjectSpawnFromScript
  * WHAT IT DOES: Makes an object from the course script entry at bank:$8000
- * + at: model, script word, place, handler, flags, offsets (added to those
+ * + entry: model, script word, place, handler, flags, offsets (added to those
  * of the record +$20 names when bit 9 of the flags is set; X and Z swapped
  * when the spawn heading is not 0 or $80), then its bucket, and +$36 = 3
  * when its handler starts with a NOP.
  */
-Object *ObjectSpawnFromScript(uint16_t at, uint8_t bank)
+Object *ObjectSpawnFromScript(uint16_t entry, uint8_t bank)
 {
     ObjRef r = ObjectAlloc();
     Object *o;
@@ -737,29 +745,29 @@ Object *ObjectSpawnFromScript(uint16_t at, uint8_t bank)
     o = obj_at(r);
     ObjectInit(o);
     o->heading = g.spawn_mirror;
-    o->x = cart16(bank, (uint16_t)(0x8001 + at));
-    o->y = cart16(bank, (uint16_t)(0x8003 + at));
-    o->z = cart16(bank, (uint16_t)(0x8005 + at));
-    o->model = cart16(bank, (uint16_t)(0x8007 + at));
-    o->script = cart16(bank, (uint16_t)(0x8009 + at));
-    o->handler = cart16(bank, (uint16_t)(0x800B + at));
-    o->handler_bank = cart8(bank, (uint16_t)(0x800D + at));
-    w = cart16(bank, (uint16_t)(0x8014 + at));
+    o->x = script16(bank, entry, ENTRY_X);
+    o->y = script16(bank, entry, ENTRY_Y);
+    o->z = script16(bank, entry, ENTRY_Z);
+    o->model = script16(bank, entry, ENTRY_MODEL);
+    o->script = script16(bank, entry, ENTRY_SCRIPT);
+    o->handler = script16(bank, entry, ENTRY_HANDLER);
+    o->handler_bank = script8(bank, entry, ENTRY_HANDLER_BANK);
+    w = script16(bank, entry, ENTRY_FLAGS);
     o->script_flags = w;
     if (w & 0x0200) {
         if (o->script) {                /* the model record's offsets (the data's are all from $8000) */
-            o->offset_x = cart16(0x00, (uint16_t)(0x000A + o->script));
-            o->offset_y = cart16(0x00, (uint16_t)(0x000C + o->script));
-            o->offset_z = cart16(0x00, (uint16_t)(0x000E + o->script));
+            o->offset_x = cart16(0x00, (uint16_t)(o->script + MODEL_OFFSET_X));
+            o->offset_y = cart16(0x00, (uint16_t)(o->script + MODEL_OFFSET_Y));
+            o->offset_z = cart16(0x00, (uint16_t)(o->script + MODEL_OFFSET_Z));
         } else {                        /* none: the original reads work RAM $000A-$000F there */
             o->offset_x = g.last_worked_y;
             o->offset_y = 0;            /* $000C-$000F: written only by the power-on clear */
             o->offset_z = 0;
         }
     }
-    o->offset_x = (uint16_t)(o->offset_x + cart16(bank, (uint16_t)(0x800E + at)));
-    o->offset_y = (uint16_t)(o->offset_y + cart16(bank, (uint16_t)(0x8010 + at)));
-    o->offset_z = (uint16_t)(o->offset_z + cart16(bank, (uint16_t)(0x8012 + at)));
+    o->offset_x = (uint16_t)(o->offset_x + script16(bank, entry, ENTRY_OFFSET_X));
+    o->offset_y = (uint16_t)(o->offset_y + script16(bank, entry, ENTRY_OFFSET_Y));
+    o->offset_z = (uint16_t)(o->offset_z + script16(bank, entry, ENTRY_OFFSET_Z));
     if (g.spawn_mirror != 0x00 && g.spawn_mirror != 0x80) {
         uint16_t t = o->offset_x;
 
@@ -767,7 +775,7 @@ Object *ObjectSpawnFromScript(uint16_t at, uint8_t bank)
         o->offset_z = t;
     }
     ObjectRebucket(o);
-    if (cart8(o->handler_bank, o->handler) == 0xEA)
+    if (handler_runs_from_start((uint32_t)o->handler_bank << 16 | o->handler))
         o->timer = 3;
     return o;
 }
@@ -797,7 +805,7 @@ void ObjectSpawnChanceD460(Object *o)
     n = ObjectSpawn(MODEL_COMMON);
     if (!n)
         return;
-    ObjectSetHandler(n, H_SPAWNED_D460);
+    ObjectSetHandler(n, H_PIECE_SPRAY);
     ObjectCopyPosition(n, o);
     n->link27 = obj_ref(o);
 }
@@ -815,7 +823,7 @@ void ObjectSpawnD460UnlessFlag(Object *o)
     n = ObjectSpawn(MODEL_COMMON);
     if (!n)
         return;
-    ObjectSetHandler(n, H_SPAWNED_D460);
+    ObjectSetHandler(n, H_PIECE_SPRAY);
     ObjectCopyPosition(n, o);
     n->link27 = obj_ref(o);
 }
@@ -917,7 +925,7 @@ Vec16 ObjectTurnVector(const Object *o, int8_t x, int8_t y, int8_t z)
  */
 void ObjectMoveForward(Object *o)
 {
-    uint8_t speed = cart8(0x08, (uint16_t)(0xB32B + rec_get(o->record, FXREC_WORD_5E)));
+    uint8_t speed = cart8(0x08, (uint16_t)(JUMP_RISE + rec_get(o->record, FXCAR_JUMP_TIMER)));
     Vec16 v = ObjectTurnVector(o, 0, (int8_t)speed, 0);
 
     o->x = (uint16_t)(o->x + (uint16_t)(v.x * 4));
@@ -1072,7 +1080,7 @@ void ObjectPlaceOnParent(Object *parent, Object *o)
         o->sprite_turn[0] = o->sprite_turn[1] = 0x8C;
         objects.gaze[obj_slot(o)][0] = objects.gaze[obj_slot(o)][1] = 0;
     } else {
-        uint16_t lift = parent->record ? (uint16_t)(rec_get(parent->record, FXREC_WORD_3A) << 2) : 0;
+        uint16_t lift = parent->record ? (uint16_t)(rec_get(parent->record, FXCAR_STEER_BIAS) << 2) : 0;
         uint8_t base = (uint8_t)((uint8_t)(lift >> 8) + o->count48);
 
         for (int i = 0; i < 2; i++) {
@@ -1187,22 +1195,21 @@ void ObjectLinkBobStart(uint8_t kind)
 void ObjectBillboardTilt(Object *o)
 {
     uint8_t turn = (uint8_t)-(uint8_t)(cameras[0].turn >> 8);
-    uint8_t a = (uint8_t)(o->roll + (uint8_t)(cameras[0].roll >> 8));
-    uint8_t tilt;
+    uint8_t tilt = (uint8_t)(o->roll + (uint8_t)(cameras[0].roll >> 8));
+    uint8_t facing;
 
-    a = (uint8_t)(a >> 1 | (a & 0x80));
-    if (a & 0x80)
-        a = (uint8_t)-((uint8_t)-a & 0xFC);
-    a &= 0xFC;
-    if (!((uint8_t)(a - 0x08) & 0x80))
-        a = 0x08;
-    if ((uint8_t)(a - 0xF8) & 0x80)
-        a = 0xF8;
-    tilt = a;
-    a = (uint8_t)(o->heading - turn);
-    if (a & 0x80)
-        a = (uint8_t)-a;
-    if (!((uint8_t)(a - 0x40) & 0x80))
+    tilt = (uint8_t)(tilt >> 1 | (tilt & 0x80));
+    if (tilt & 0x80)
+        tilt = (uint8_t)-((uint8_t)-tilt & 0xFC);
+    tilt &= 0xFC;
+    if (!((uint8_t)(tilt - 0x08) & 0x80))
+        tilt = 0x08;
+    if ((uint8_t)(tilt - 0xF8) & 0x80)
+        tilt = 0xF8;
+    facing = (uint8_t)(o->heading - turn);
+    if (facing & 0x80)
+        facing = (uint8_t)-facing;
+    if (!((uint8_t)(facing - 0x40) & 0x80))
         tilt = (uint8_t)-tilt;
     o->anim = (uint16_t)(sx8(tilt) + 8 + o->word29);
     o->sprite_turn[0] = (uint8_t)(ObjectTableC056(o, turn) | 0x80);
@@ -1295,7 +1302,7 @@ static void ObjectCarRecordTake(Object *o)
         return;
     o->record = rec;
     o->model = fxram_get(GSU_IN_AMOUNT);
-    o->sprite_turn[0] = (uint8_t)(fx_ram[FX_CAR_2394] | 0x80);
+    o->sprite_turn[0] = (uint8_t)(fx_ram[FX_CAR_FRAME] | 0x80);
     o->flags24 |= 0x10;
     ObjectChildrenSpawn(o);
     ObjectAttachSpawn(o);
@@ -1312,11 +1319,11 @@ static void ObjectCarRecordTake(Object *o)
 void ObjectCarRecordNew(Object *o, uint16_t amount)
 {
     fxram_put(GSU_IN_AMOUNT, amount);
-    fxram_put(0x0068, o->x);
-    fxram_put(0x002C, o->y);
-    fxram_put(0x002E, o->z);
-    fxram_put(0x0022, (uint16_t)(o->heading << 8));
-    fxram_put(0x2392, o->byte4a);
+    fxram_put(FX_NEW_CAR_X, o->x);
+    fxram_put(FX_NEW_CAR_Y, o->y);
+    fxram_put(FX_NEW_CAR_Z, o->z);
+    fxram_put(FX_NEW_CAR_HEADING, (uint16_t)(o->heading << 8));
+    fxram_put(FX_CAR_ATTACHMENTS, o->byte4a);
     fxram_put(GSU_RECORD_ARG, o->link27);
     FxCarNew();
     ObjectCarRecordTake(o);

@@ -8,7 +8,7 @@
 #include "object/object.h"
 #include "system/state.h"
 
-enum { RECORD_SIZE = 0x1E, RECORD_MAX = 0x31, MODEL_NONE = 0xA040 };
+enum { RECORD_SIZE = 0x1E, RECORD_MAX = 0x31 };
 
 static void put16(uint8_t *r, unsigned off, uint16_t v)
 {
@@ -33,12 +33,12 @@ static uint8_t *draw_record(Object *o, uint8_t *r)
         put16(r, 0x14, o->z);
         put16(r, 0x02, 0xF060);
     } else {
-        uint16_t a = (uint16_t)(o->y - g.view_pos[1]);
+        uint16_t dy = (uint16_t)(o->y - g.view_pos[1]);
 
-        put16(r, 0x10, a);
-        if (a & 0x8000)
-            a = (uint16_t)(~a + 1);
-        put16(r, 0x02, (uint16_t)((uint16_t)(a << 1) + ((o->flags09 & 0x01) ? 0x1F40 : 0x0000)));
+        put16(r, 0x10, dy);
+        if (dy & 0x8000)
+            dy = (uint16_t)(~dy + 1);
+        put16(r, 0x02, (uint16_t)((uint16_t)(dy << 1) + ((o->flags09 & 0x01) ? 0x1F40 : 0x0000)));
         put16(r, 0x12, (uint16_t)(o->x - g.view_pos[0]));
         put16(r, 0x14, (uint16_t)(o->z - g.view_pos[2]));
     }

@@ -400,3 +400,29 @@ void object_handler_call(Object *o, uint32_t handler)
         reported[reported_count++] = handler;
     fprintf(stderr, "object handler %06X: not converted\n", (unsigned)handler);
 }
+
+/*
+ * The handlers whose code begins with a NOP: the original's mark for an
+ * object a course script makes that runs from the start (+$36 = 3, not
+ * stopped until near). Read from the cartridge's code bytes for every
+ * handler in the table above: 30 of them.
+ */
+int handler_runs_from_start(uint32_t handler)
+{
+    switch (handler) {
+    case 0x089BD9: case 0x089BF7: case 0x089C15: case 0x089C33: /* ObjectRingStart Z, X, BackZ, BackX */
+    case 0x098B3B: case 0x098BD4:                                /* ObjectLampTower, ObjectLampLow */
+    case 0x098C0F: case 0x098CF8:                                /* ObjectScale40, ObjectScoreCounterStep */
+    case 0x099520: case 0x099ACB: case 0x099AE8: case 0x099E9A: /* sky ball, cannon balls left and right, wave ball */
+    case 0x09ABF3:                                               /* ObjectPopMarker */
+    case 0x09C244: case 0x09C280: case 0x09C2C5:                 /* ObjectLapLight, Left, Right */
+    case 0x09C5C8: case 0x09C5D1: case 0x09C5DA: case 0x09C5E3: case 0x09C5EC: case 0x09C5F5: /* ObjectColour2-7 */
+    case 0x09C5FE: case 0x09C605: case 0x09C60C:                 /* ObjectScaleE0, A0, 20 */
+    case 0x09C613:                                               /* ObjectSwing */
+    case 0x09C7C9: case 0x09C7FC: case 0x09C83D:                 /* LapCrowdStep0-2 */
+    case 0x09E4D6:                                               /* ObjectSlideMeter */
+        return 1;
+    default:
+        return 0;
+    }
+}

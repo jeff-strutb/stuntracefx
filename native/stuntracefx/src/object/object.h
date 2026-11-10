@@ -11,6 +11,7 @@
 
 #include <stdint.h>
 
+#include "data/cart.h"
 #include "fx/fx.h"
 #include "math/math.h"
 
@@ -136,13 +137,47 @@ extern RecordContacts record_contacts;
 
 /* the Super FX record fields the object code uses that fx.h does not name */
 enum {
-    FXREC_POS_X = 0x001E, FXREC_POS_Y = 0x0020, FXREC_POS_Z = 0x0022, FXREC_ANGLE = 0x0024,
+    FXREC_POS_X = 0x001E, FXREC_POS_Y = 0x0020, FXREC_POS_Z = 0x0022,
+    FXREC_HEADING = 0x0024,             /* its high byte the object's heading */
     FXREC_VEL_X = 0x002E, FXREC_VEL_Y = 0x0030, FXREC_VEL_Z = 0x0032,
-    FXREC_WORD_3A = 0x003A, FXREC_WORD_4A = 0x004A, FXREC_WORD_5E = 0x005E, FXREC_FLAGS64 = 0x0064,
-    FXREC_WORD_72 = 0x0072, FXREC_FLAGS8A = 0x008A, FXREC_6A_ALIAS = 0x006A,
-    FX_CAR_2396 = 0x2396,
-    FX_LANDED_2482 = 0x2482, FXREC_FACE_46 = 0x0046, FX_REPLAY_FLAGS = 0x273C,
+    FXCAR_JUMP_TIMER = 0x005E,          /* a car's: $20 when it jumps, counted down; no jump while set */
+    FXREC_FLAGS64 = 0x0064, FXREC_FLAGS8A = 0x008A
+};
+
+/* Super FX RAM the object code shares with the chip's programs */
+enum {
+    FX_NEW_CAR_X = 0x0068, FX_NEW_CAR_Y = 0x002C, FX_NEW_CAR_Z = 0x002E, /* FxCarNew's place */
+    FX_NEW_CAR_HEADING = 0x0022,        /* and its heading, as the high byte */
+    FX_CAR_ATTACHMENTS = 0x2392,        /* in: the car object's +$4A; out: its attachment list, from OBJECT_LISTS */
+    FX_CAR_CAMERA_POINTS = 0x2396,      /* the made car's camera point list, from OBJECT_LISTS */
+    FX_RECORDS_422 = 0x2482,            /* the number of mode $0422 records made (FxRecordNew422) */
+    FX_REPLAY_FLAGS = 0x273C,
     FX_COURSE_FLAGS = 0x26F2, FX_TRACK_TABLE = 0x1092, FX_TRACK_TABLE_BANK = 0x1094
+};
+
+/* the cartridge's tables the object code reads through */
+enum {
+    FACING_FRAMES_32 = 0xE8AF,          /* $08: a sprite's frame by its turn to the camera, 32 steps (ObjectTableE8AF) */
+    FACING_FRAMES_64 = 0xC056,          /* $08: the same by 64 steps (ObjectTableC056) */
+    JUMP_RISE = 0xB32B,                 /* $08: a rise by a car's jump timer (ObjectMoveForward) */
+    EYE_BLINK = 0xE57F,                 /* $08: an eye's looks through a blink, from the second word: plain, half, shut, half, plain */
+    EYE_BLINK_TO_STARTLED = 0xE5AD,     /* plain, half, shut, half startled, startled */
+    EYE_BLINK_TO_PLAIN = 0xE5DB,        /* startled, half startled, shut, half, plain */
+    EYE_BLINK_STARTLED = 0xE609,        /* startled, half startled, shut, half startled, startled */
+    OBJECT_DATA = 0x8000,               /* $09: entries the data names by their offset from here */
+    OBJECT_LISTS = 0x8090               /* $09: lists the data names by their offset from here */
+};
+/* an entry at OBJECT_DATA: a child's or an attachment's */
+enum { DATA_MODEL = 0, DATA_LOOK = 2, DATA_SIZE = 4, DATA_HANDLER = 6, DATA_HANDLER_BANK = 8 };
+static inline uint16_t object_data16(uint16_t at, unsigned field) { return cart16(0x09, (uint16_t)(OBJECT_DATA + at + field)); }
+static inline uint8_t object_list8(uint16_t at) { return cart8(0x09, (uint16_t)(OBJECT_LISTS + at)); }
+static inline uint16_t object_list16(uint16_t at) { return cart16(0x09, (uint16_t)(OBJECT_LISTS + at)); }
+
+/* the models and looks the object code names */
+enum {
+    MODEL_NONE = 0xA040,                /* drawn by its record or not at all (ObjectDrawListBuild leaves it out) */
+    LOOK_EYE_PLAIN = 0x9AAF,            /* an eye's looks (the 4WD's): plain */
+    LOOK_EYE_STARTLED = 0x9AB1          /* startled: more white, the pupil small */
 };
 
 /* sign-extended byte */
@@ -191,7 +226,22 @@ void ObjectRelease(Object *o);
 void ObjectCallHandler(Object *o);
 void ObjectRunHandlerA(Object *o);
 void ObjectsRunHandlers(void);
-Object *ObjectSpawnFromScript(uint16_t at, uint8_t bank);
+/* The course script lies at bank:$8000 + its offset (CourseScriptRun). A
+   spawning entry is its command byte, then these fields. */
+enum { SCRIPT_BASE = 0x8000 };
+enum {
+    ENTRY_X = 0x01, ENTRY_Y = 0x03, ENTRY_Z = 0x05, ENTRY_MODEL = 0x07, ENTRY_SCRIPT = 0x09,
+    ENTRY_HANDLER = 0x0B, ENTRY_HANDLER_BANK = 0x0D,
+    ENTRY_OFFSET_X = 0x0E, ENTRY_OFFSET_Y = 0x10, ENTRY_OFFSET_Z = 0x12, ENTRY_FLAGS = 0x14,
+    ENTRY_LINK = 0x16,                  /* a numbered object's or a car's +$27 */
+    ENTRY_COUNT = 0x16, ENTRY_STEP = 0x17, ENTRY_COUNTER = 0x18, /* a counted object's +$48, +$49, +$4A */
+    ENTRY_PLAYER = 0x18, ENTRY_HEADING = 0x19 /* a car's: bit 0 player 1's, bit 1 player 2's, bits 2-4 not in a demo; its heading */
+};
+static inline uint8_t script8(uint8_t bank, uint16_t entry, unsigned field) { return cart8(bank, (uint16_t)(SCRIPT_BASE + entry + field)); }
+static inline uint16_t script16(uint8_t bank, uint16_t entry, unsigned field) { return cart16(bank, (uint16_t)(SCRIPT_BASE + entry + field)); }
+/* a model record's offsets: an object made with bit 9 of its entry's flags adds them */
+enum { MODEL_OFFSET_X = 0x0A, MODEL_OFFSET_Y = 0x0C, MODEL_OFFSET_Z = 0x0E };
+Object *ObjectSpawnFromScript(uint16_t entry, uint8_t bank);
 void ObjectStep48To8(Object *o);
 void ObjectSpawnChanceD460(Object *o);
 void ObjectAdvance5DIfFlag(Object *o);
@@ -440,6 +490,7 @@ uint16_t draw_record_gaze(int record);
 /* the handler numbers the objects and data store, and the dispatch to them
    (object_handlers.c, objects_09.c and the rest) */
 void object_handler_call(Object *o, uint32_t handler);
+int handler_runs_from_start(uint32_t handler);
 
 /* wanted by the race (race/) */
 void PlayerControlsFrame(void);

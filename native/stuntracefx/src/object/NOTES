@@ -1,8 +1,8 @@
 NOTES: the routines of src/stuntracefx/object that are not converted, and
 where the Enhanced calls were left out.
 
-Nothing in native/stuntracefx/src/object has been run. It compiles; the
-race flow that would run it is not finished.
+The objects have run only inside the race session's runs: the attract
+demos, the menu walk to a race and back, and the recorded battle.
 
 Dead routines
 -------------

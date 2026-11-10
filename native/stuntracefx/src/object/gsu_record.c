@@ -186,7 +186,7 @@ void GsuRecordFromObject(Object *o)
     rec_put(rec, FXREC_POS_X, o->x);
     rec_put(rec, FXREC_POS_Y, o->y);
     rec_put(rec, FXREC_POS_Z, o->z);
-    rec_put(rec, FXREC_ANGLE, (uint16_t)(o->heading << 8));
+    rec_put(rec, FXREC_HEADING, (uint16_t)(o->heading << 8));
     rec_put(rec, 0x0012, o->frame5a & 0x7F);
 }
 
@@ -320,7 +320,7 @@ int ObjectSyncFromRecord(Object *o)
         return 0;
     }
     record_contacts.next = rec_get(rec, FXREC_LIST);
-    rec_put(rec, FXREC_ANGLE, (uint16_t)(o->heading << 8));
+    rec_put(rec, FXREC_HEADING, (uint16_t)(o->heading << 8));
     rec_put(rec, 0x0012, o->frame5a & 0x7F);
     o->x = rec_get(rec, FXREC_POS_X);
     o->y = rec_get(rec, FXREC_POS_Y);
@@ -351,7 +351,7 @@ int ObjectSyncToRecord(Object *o)
         record_contacts.next = 0;
         return 0;
     }
-    rec_put(rec, FXREC_ANGLE, (uint16_t)(o->heading << 8));
+    rec_put(rec, FXREC_HEADING, (uint16_t)(o->heading << 8));
     rec_put(rec, 0x0012, o->frame5a & 0x7F);
     record_contacts.next = rec_get(rec, FXREC_LIST);
     rec_put(rec, FXREC_POS_X, o->x);
@@ -397,7 +397,7 @@ void GsuRecordLand(Object *o)
 {
     uint16_t rec;
 
-    if (!fxram_get(FX_LANDED_2482))
+    if (!fxram_get(FX_RECORDS_422))
         return;
     rec = o->record;
     if (!(rec_get(rec, 0x002C) & 0x0040) || !(rec_get(rec, FXREC_FLAGS8A) & 0x0010) || (rec_get(rec, FXREC_FLAGS40) & 0x0100))
@@ -597,7 +597,7 @@ void CarControlsToRecord(Object *o, uint16_t held, uint16_t prev, int player)
             rec_or(rec, FXREC_SIDES, 0x0400);
         g.player_flags[player] &= 0xFFEF;
     }
-    if ((held & 0x0040) && !(prev & 0x0040) && !rec_get(rec, FXREC_WORD_5E) && !(rec_get(rec, FXREC_FLAGS40) & 0x0100))
+    if ((held & 0x0040) && !(prev & 0x0040) && !rec_get(rec, FXCAR_JUMP_TIMER) && !(rec_get(rec, FXREC_FLAGS40) & 0x0100))
         rec_or(rec, FXREC_SIDES, 0x0080);
     if (held & 0x8000)
         rec_or(rec, FXREC_SIDES, 0x0010);

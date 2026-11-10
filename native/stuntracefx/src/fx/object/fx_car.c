@@ -605,7 +605,7 @@ void FxCarNew(void)
         car_2394 = fx_getb();
         script_ptr_5 = (uint16_t)(script_ptr_4 + 1);
         fx_r14(script_ptr_5);
-        fx_stw(FX_CAR_2394, car_2394);
+        fx_stw(FX_CAR_FRAME, car_2394);
         skipped_word_low = fx_getb();
         script_ptr_6 = (uint16_t)(script_ptr_5 + 1);
         fx_r14(script_ptr_6);
