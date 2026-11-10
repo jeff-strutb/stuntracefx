@@ -74,6 +74,27 @@ void fx_face_point(uint16_t record, uint16_t x, uint16_t y, uint16_t z)
     point[i].made = projection;
 }
 
+uint8_t fx_face_facing(uint16_t a, uint16_t b, uint16_t c, uint8_t chip)
+{
+    uint16_t at[3] = { a, b, c };
+    unsigned i[3], k;
+    double det;
+
+    for (k = 0; k < 3; k++) {
+        if ((uint16_t)(at[k] - TABLE) % 6u)
+            return chip;
+        i[k] = (uint16_t)(at[k] - TABLE) / 6u;
+        if (i[k] >= POINTS || !projection || point[i[k]].made != projection)
+            return chip;
+    }
+    det = point[i[0]].x * (point[i[1]].y * point[i[2]].z - point[i[1]].z * point[i[2]].y)
+        - point[i[0]].y * (point[i[1]].x * point[i[2]].z - point[i[1]].z * point[i[2]].x)
+        + point[i[0]].z * (point[i[1]].x * point[i[2]].y - point[i[1]].y * point[i[2]].x);
+    if (det == 0)
+        return chip;
+    return (uint8_t)((chip & 0x7F) | (det < 0 ? 0x80 : 0));
+}
+
 /* ---- the view: its centre and rectangle in the picture's pixels ---- */
 
 typedef struct {

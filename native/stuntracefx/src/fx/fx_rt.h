@@ -115,6 +115,13 @@ void fx_draw_flush(void);
    its points with its texel; a scaled sprite's place. */
 void fx_face_point(uint16_t record, uint16_t x, uint16_t y, uint16_t z);
 void fx_face_begin(uint16_t entry, int textured);
+/* FxModelFacing's flag byte for the triangle of the projected records at
+   a, b, c ($04E4 + 6i): bit 7, whether it faces away, from its points in
+   view space in floats (the sign of A . (B x C), which is the chip's cross
+   product of the projected points with its behind-the-eye correction,
+   without the rounding to whole pixels that flips it for small or distant
+   faces); the chip's byte as it is when a point is not known. */
+uint8_t fx_face_facing(uint16_t a, uint16_t b, uint16_t c, uint8_t chip);
 void fx_face_vertex(uint8_t point, uint8_t u, uint8_t v);
 void fx_sprite_place(uint16_t x, uint16_t y, uint16_t depth, uint16_t size, uint16_t centre_x, uint16_t centre_y, uint16_t screen_size);
 /* The frame program's drawing is the picture's 3D (0); what is drawn after

@@ -3427,7 +3427,8 @@ FxModelFacingResult FxModelFacing(uint16_t *stack, uint16_t rom_at)
             cross_term_b = (uint32_t)((int32_t)(int16_t)(uint16_t)(point_c_y - point_a_y) * (int16_t)edge_ab_dx);
             depth_flags_x2 = (uint16_t)(depth_flags_xor + depth_flags_xor);
             depth_flags_x4 = (uint16_t)(depth_flags_x2 + depth_flags_x2);
-            fx_stb(facing_ptr, (uint8_t)(uint16_t)(((uint16_t)((uint16_t)(depth_flags_x4 + depth_flags_x4) << 8 | (uint16_t)(depth_flags_x4 + depth_flags_x4) >> 8) ^ (uint16_t)((uint16_t)(cross_term_b >> 16) - cross_term_a_high - ((uint16_t)cross_term_b < (uint16_t)cross_term_a))) >> 8));
+            fx_stb(facing_ptr, fx_face_facing(point_a_addr, point_b_addr, point_c_addr,
+                                              (uint8_t)(uint16_t)(((uint16_t)((uint16_t)(depth_flags_x4 + depth_flags_x4) << 8 | (uint16_t)(depth_flags_x4 + depth_flags_x4) >> 8) ^ (uint16_t)((uint16_t)(cross_term_b >> 16) - cross_term_a_high - ((uint16_t)cross_term_b < (uint16_t)cross_term_a))) >> 8)));
             count = (uint16_t)(count - 1);
             facing_ptr = (uint16_t)(facing_ptr + 1);
             if (count != 0) {
@@ -3468,7 +3469,8 @@ FxModelFacingResult FxModelFacing(uint16_t *stack, uint16_t rom_at)
             cross_term_a_byte = (uint32_t)((int32_t)(int16_t)(uint16_t)(point_b_y_byte - point_a_y_byte) * (int16_t)(uint16_t)(point_c_x_byte - point_a_x_byte));
             cross_term_a_high_byte = (uint16_t)(cross_term_a_byte >> 16);
             cross_term_b_byte = (uint32_t)((int32_t)(int16_t)(uint16_t)(point_c_y_byte - point_a_y_byte) * (int16_t)edge_ab_dx_byte);
-            fx_stb(facing_ptr_byte, (uint8_t)(uint16_t)((uint16_t)((uint16_t)(cross_term_b_byte >> 16) - cross_term_a_high_byte - ((uint16_t)cross_term_b_byte < (uint16_t)cross_term_a_byte)) >> 8));
+            fx_stb(facing_ptr_byte, fx_face_facing(point_a_addr_byte, point_b_addr_byte, point_c_addr_byte,
+                                                   (uint8_t)(uint16_t)((uint16_t)((uint16_t)(cross_term_b_byte >> 16) - cross_term_a_high_byte - ((uint16_t)cross_term_b_byte < (uint16_t)cross_term_a_byte)) >> 8)));
             count_2 = (uint16_t)(count_2 - 1);
             facing_ptr_byte = (uint16_t)(facing_ptr_byte + 1);
             if (count_2 != 0) {
