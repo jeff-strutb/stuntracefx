@@ -173,11 +173,94 @@ static inline uint16_t object_data16(uint16_t at, unsigned field) { return cart1
 static inline uint8_t object_list8(uint16_t at) { return cart8(0x09, (uint16_t)(OBJECT_LISTS + at)); }
 static inline uint16_t object_list16(uint16_t at) { return cart16(0x09, (uint16_t)(OBJECT_LISTS + at)); }
 
-/* the models and looks the object code names */
+/* Models: 28-byte records in the cartridge's table at $A040, each named by
+   its number there; model 0 is none (drawn by its record or not at all). */
+enum { MODEL_TABLE = 0xA040, MODEL_SIZE = 28 };
+#define MODEL(n) ((uint16_t)(MODEL_TABLE + (n) * MODEL_SIZE))
 enum {
-    MODEL_NONE = 0xA040,                /* drawn by its record or not at all (ObjectDrawListBuild leaves it out) */
-    LOOK_EYE_PLAIN = 0x9AAF,            /* an eye's looks (the 4WD's): plain */
-    LOOK_EYE_STARTLED = 0x9AB1          /* startled: more white, the pupil small */
+    MODEL_NONE = MODEL(0),
+    MODEL_FIREWORK_SPARK = MODEL(5),    /* a firework shell's sparks */
+    MODEL_LAMP_POST_LIGHT = MODEL(6),   /* a lamp post's second light */
+    MODEL_LAMP_TOWER = MODEL(7),
+    MODEL_LAMP_TOWER_LIGHT = MODEL(8),  /* a lamp tower's second light */
+    MODEL_COMMON = MODEL(10),           /* the sprite the effects use, their look choosing the picture */
+    MODEL_BREAK_OFF_PIECE = MODEL(13),  /* a piece a knock breaks off a car's child */
+    MODEL_TRUCK_WHEEL = MODEL(15),      /* the bonus truck's wheels */
+    MODEL_BURST_PIECE = MODEL(52),      /* a burst's four pieces, this and the next three */
+    MODEL_PLAYER_AT_GO = MODEL(65),     /* the player's car's object once the pace car's signal says go */
+    MODEL_SIGNAL_LIGHT_COUNTING = MODEL(67), /* the signal's light while it counts down */
+    MODEL_SIGNAL_LIGHT = MODEL(68),     /* the pace car's signal light */
+    MODEL_BLINKER = MODEL(81),          /* a blinker's light */
+    MODEL_BALL = MODEL(91),             /* the sky, cannon and wave balls */
+    MODEL_BREAKABLE_PIECE = MODEL(107), /* a breakable's pieces, two kinds */
+    MODEL_BREAKABLE_PIECE_2 = MODEL(108),
+    MODEL_FAN_LIT = MODEL(135),         /* a fan over the lit part of its turn */
+    MODEL_WHEEL_LIT = MODEL(136),       /* a wheel the same */
+    MODEL_SHARDS = MODEL(149),          /* ObjectShatter's six shards, this and the next five */
+    MODEL_SHARDS_2 = MODEL(155),        /* ObjectShatter2's six */
+    MODEL_RAIL_RISING = MODEL(170),
+    MODEL_RAIL_DROPPING = MODEL(171),
+    MODEL_FLOATER = MODEL(178),
+    MODEL_FINALE_BREAKABLE = MODEL(188),
+    MODEL_BONUS_5 = MODEL(199),         /* a bonus marker's figure at the player, by its bonus */
+    MODEL_BONUS_2 = MODEL(203),
+    MODEL_FIREWORK_SHELL = MODEL(207),
+    MODEL_SCORE_COUNTER_ON = MODEL(211), /* the score counter from the second lap */
+    MODEL_CROWD = MODEL(212),           /* a lap's crowd */
+    MODEL_RAISE_BALL = MODEL(214),      /* a ball that raises a car's record (+$6A); a sky ball drops one */
+    MODEL_LOWER_BALL = MODEL(215),      /* one that lowers it (+$82) */
+    MODEL_POP_MARKER = MODEL(217)
+};
+
+/* Looks: an object's animation word (+$5D), where in the cartridge its
+   pictures are listed. */
+enum {
+    LOOK_CAR_F_TYPE = 0x8F91,           /* a car's far looks, by its kind (the menu's order) */
+    LOOK_CAR_COUPE = 0x9163,
+    LOOK_CAR_4WD = 0x9335,
+    LOOK_CAR_2WD = 0x9507,
+    LOOK_FIREWORK_SPARK = 0x996B,
+    LOOK_LANTERN = 0x996D,
+    LOOK_LAMP_LIGHT = 0x9971,           /* a lamp's light */
+    LOOK_LAMP_LIGHT_RAISED = 0x9973,    /* a lamp's light raised */
+    LOOK_STAR_SPARKLE = 0x997C,
+    LOOK_BREAK_OFF_A = 0x998D,          /* the pieces' looks, by the routine that breaks them off */
+    LOOK_SPARKLE = 0x9998,
+    LOOKS_FAR = 0x99A3,                 /* an object's far look, a word for each kind (+$49) */
+    LOOK_EYE_PLAIN = 0x9AAF,            /* a car's eyes: plain */
+    LOOK_EYE_STARTLED = 0x9AB1,         /* startled: more white, the pupil small */
+    LOOK_BREAK_OFF_H = 0x9B40,
+    LOOK_BREAK_OFF_G = 0x9B56,
+    LOOK_BREAK_OFF_E_FLAT = 0x9B63,     /* ObjectBreakOffE's piece once it lies flat */
+    LOOK_BREAK_OFF_E = 0x9B79,
+    LOOK_BREAK_OFF_D = 0x9B8F,
+    LOOK_BREAK_OFF_B = 0x9B96,
+    LOOK_PUFF = 0x9BB4,
+    LOOK_WHEEL = 0x9BBF                 /* a car's tyres and the bonus truck's wheels */
+};
+
+/* The records objects name in their +$20 (an object's script word): where
+   in the cartridge its shape and offsets are. */
+enum {
+    OBJECT_SCRIPT_SIGNAL = 0xC6DC,      /* the pace car's signal */
+    OBJECT_SCRIPT_BLINKER = 0xD354,
+    OBJECT_SCRIPT_MARKER = 0xECD0       /* the count marker's and the switch lamps' */
+};
+
+/* The car scripts (an object's +$27 for its car record, FxCarNew) */
+enum {
+    CAR_F_TYPE = 0x81B9, CAR_COUPE = 0x853D, CAR_4WD = 0x8411, CAR_2WD = 0x82E5, /* the menu's order */
+    CAR_RIVAL_F_TYPE = 0x876E, CAR_RIVAL_COUPE = 0x8AA8, CAR_RIVAL_4WD = 0x8990, CAR_RIVAL_2WD = 0x8886,
+    CAR_BONUS_TRUCK = 0x8669
+};
+
+/* The Super FX handlers a record runs each step (its +$0A) */
+enum {
+    FXRUN_NONE = 0x0000,
+    FXRUN_BOUNCE = 0x907A,              /* falls and bounces (FxObjectBounce) */
+    FXRUN_MARK_TOUCHED = 0x90E8,        /* marks what it touches (FxObjectMarkTouched) */
+    FXRUN_FALL = 0x910A,                /* falls while it touches something (FxObjectFall) */
+    FXRUN_COLLIDE_ONLY = 0x916D         /* collides without moving (FxObjectCollideOnly) */
 };
 
 /* sign-extended byte */
@@ -472,6 +555,23 @@ void ViewFromRecord(const Camera *cam);
 
 /* path.c */
 int ObjectPathCommand(Object *o);
+/* The camera paths: their offsets into the path table at $08:85B9 (path.c) */
+enum {
+    PATH_DEMO_SHOT = 0x0000,            /* $85B9: CameraPathB's in the attract demos */
+    PATH_GO_1 = 0x004A,                 /* $8603: CameraPath8603 */
+    PATH_GO_2 = 0x00C0,                 /* $8679: CameraPath8679 */
+    PATH_GO_3 = 0x00E2,                 /* $869B: CameraPath869B */
+    PATH_GO_4 = 0x00FA,                 /* $86B3: CameraPath86B3 */
+    PATH_GO_5 = 0x0112,                 /* $86CB: CameraPath86CB */
+    PATH_GO_6 = 0x012A,                 /* $86E3: CameraPath86E3 */
+    PATH_GO_7 = 0x0150,                 /* $8709: CameraPath8709 */
+    PATH_LOW_1 = 0x01A2,                /* $875B: CameraPathLow875B */
+    PATH_LOW_2 = 0x01FE,                /* $87B7: CameraPathLow87B7 */
+    PATH_DIRECTOR = 0x0238,             /* $87F1: the replay director's (CameraDirectorPathStart) */
+    PATH_SHOT_B = 0x0274,               /* $882D: CameraPathB's */
+    PATH_SHOT_A = 0x02A6,               /* $885F: CameraPathA's */
+    PATH_ORBIT = 0x0302                 /* $88BB: the orbit shot's (CameraOrbit) */
+};
 int ObjectPathStart(Object *o, uint16_t path);
 
 /* course_script.c */

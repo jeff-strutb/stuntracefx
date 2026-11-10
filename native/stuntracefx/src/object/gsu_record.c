@@ -230,19 +230,19 @@ static int record_new(Object *o, uint16_t word0a)
 }
 
 /* @routine 08:CB98 GsuRecordNew422: a record from the second pool, +$0A 0 */
-int GsuRecordNew422(Object *o) { FxRecordNew422(); return record_new(o, 0x0000); }
+int GsuRecordNew422(Object *o) { FxRecordNew422(); return record_new(o, FXRUN_NONE); }
 /* @routine 08:CBB2 GsuRecordNew42D */
-int GsuRecordNew42D(Object *o) { FxRecordNew42D(); return record_new(o, 0x90E8); }
+int GsuRecordNew42D(Object *o) { FxRecordNew42D(); return record_new(o, FXRUN_MARK_TOUCHED); }
 /* @routine 08:CBCC GsuRecordNew424Piece */
-int GsuRecordNew424Piece(Object *o) { FxRecordNew424(); return record_new(o, 0x907A); }
+int GsuRecordNew424Piece(Object *o) { FxRecordNew424(); return record_new(o, FXRUN_BOUNCE); }
 /* @routine 08:CBE6 GsuRecordNew424 */
-int GsuRecordNew424(Object *o) { FxRecordNew424(); return record_new(o, 0x910A); }
+int GsuRecordNew424(Object *o) { FxRecordNew424(); return record_new(o, FXRUN_FALL); }
 /* @routine 08:CC18 GsuRecordNew424Alt */
-int GsuRecordNew424Alt(Object *o) { FxRecordNew424(); return record_new(o, 0x90E8); }
+int GsuRecordNew424Alt(Object *o) { FxRecordNew424(); return record_new(o, FXRUN_MARK_TOUCHED); }
 /* @routine 08:CC4A GsuRecordNewCamera */
-int GsuRecordNewCamera(Object *o) { FxRecordNewCamera(); return record_new(o, 0x916D); }
+int GsuRecordNewCamera(Object *o) { FxRecordNewCamera(); return record_new(o, FXRUN_COLLIDE_ONLY); }
 /* @routine 08:CC63 GsuRecordNew426 */
-int GsuRecordNew426(Object *o) { FxRecordNew426(); return record_new(o, 0x910A); }
+int GsuRecordNew426(Object *o) { FxRecordNew426(); return record_new(o, FXRUN_FALL); }
 
 /* the record and the amount (as the high byte) go to the Super FX */
 static void record_amount_args(uint16_t rec, uint8_t amount)

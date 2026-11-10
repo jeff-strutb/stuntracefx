@@ -63,11 +63,11 @@ int ObjectPathCommand(Object *o)
 
 /*
  * @routine 08:88C7 ObjectPathStart
- * WHAT IT DOES: Starts the object on the path at `path` (its address in the
- * table) and runs its first command.
+ * WHAT IT DOES: Starts the object on the path at offset `path` in the table
+ * (the original passes its address) and runs its first command.
  */
 int ObjectPathStart(Object *o, uint16_t path)
 {
-    o->word29 = (uint16_t)(path - PATH_TABLE);
+    o->word29 = path;
     return ObjectPathCommand(o);
 }

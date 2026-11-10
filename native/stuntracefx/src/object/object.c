@@ -271,7 +271,7 @@ void ObjectVelocityFromRecord(Object *o)
  */
 uint16_t ObjectSet5DByKind(Object *o, uint8_t kind)
 {
-    o->anim = kind == 1 ? 0x9163 : kind == 2 ? 0x9335 : kind == 3 ? 0x9507 : 0x8F91;
+    o->anim = kind == 1 ? LOOK_CAR_COUPE : kind == 2 ? LOOK_CAR_4WD : kind == 3 ? LOOK_CAR_2WD : LOOK_CAR_F_TYPE;
     return o->anim;
 }
 
@@ -366,7 +366,7 @@ void ObjectNearFocus(Object *o)
     o->flags24 |= 0x08;
     o->byte3a = 0;
     o->byte5f = 0x32;
-    o->anim = (uint16_t)(0x99A3 + (uint16_t)(o->byte49 << 1));
+    o->anim = (uint16_t)(LOOKS_FAR + (uint16_t)(o->byte49 << 1));
 }
 
 /*
@@ -891,7 +891,7 @@ void ObjectSparkleStart(Object *o)
     uint8_t r;
 
     o->flags24 |= 0x08;
-    o->anim = 0x9998;
+    o->anim = LOOK_SPARKLE;
     r = RandomStep();
     o->sprite_turn[0] = (uint8_t)((r & 0x03) | 0x80);
     ObjectSetHandler(o, H_SPARKLE_STEP);
@@ -1231,7 +1231,7 @@ void ObjectSpawnPuff(Object *o)
     n = ObjectSpawn(MODEL_COMMON);
     if (!n)
         return;
-    n->anim = 0x9BB4;
+    n->anim = LOOK_PUFF;
     n->word29 = 0xFE0C;
     n->flags24 |= 0x08;
     n->byte3a = 0;

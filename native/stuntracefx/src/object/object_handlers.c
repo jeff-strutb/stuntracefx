@@ -55,10 +55,8 @@ static void burst_piece(Object *o, uint16_t model, uint16_t h)
  */
 void ObjectBurstSpawn(Object *o)
 {
-    burst_piece(o, 0xA5F0, H_BURST_PIECE_START);
-    burst_piece(o, 0xA60C, H_BURST_PIECE_START);
-    burst_piece(o, 0xA628, H_BURST_PIECE_START);
-    burst_piece(o, 0xA644, H_BURST_PIECE_START);
+    for (int i = 0; i < 4; i++)
+        burst_piece(o, (uint16_t)(MODEL_BURST_PIECE + i * MODEL_SIZE), H_BURST_PIECE_START);
 }
 
 /*
@@ -176,7 +174,7 @@ static void record_place(Object *o, uint16_t x, uint16_t y, uint16_t z, uint16_t
  */
 void ObjectBlinkerStart(Object *o)
 {
-    Object *n = ObjectSpawn(0xA91C);
+    Object *n = ObjectSpawn(MODEL_BLINKER);
 
     if (n) {
         ObjectCopyPosition(n, o);
@@ -186,7 +184,7 @@ void ObjectBlinkerStart(Object *o)
     ObjectSetHandler(o, H_BLINKER_RISE);
     o->count48 = 0x32;
     o->frame5a = 0x8F;
-    o->script = 0xD354;
+    o->script = OBJECT_SCRIPT_BLINKER;
     if (!GsuRecordNew422(o))
         return;
     record_place(o, 0x02D0, 0x0190, 0x02D0, 0x4000);
@@ -248,9 +246,9 @@ void ObjectSignalStep(Object *o)
         Object *child = obj_at(o->parent);
         uint8_t v;
 
-        child->model = 0xA794;
+        child->model = MODEL_SIGNAL_LIGHT_COUNTING;
         if ((child->frame5a & 0x7F) == 0x07) {
-            obj_at(g.player_car)->model = 0xA75C;
+            obj_at(g.player_car)->model = MODEL_PLAYER_AT_GO;
             ObjectRelease(child);
             ObjectRelease(o);
             g.pace_signal = 0x02;
@@ -292,7 +290,7 @@ void ObjectPaceCarSetup(Object *o)
     n->y = 0;
     n->link27 = g.selection_handler[0];
     ObjectSetHandler(n, H_PACE_CAR_START);
-    n = ObjectSpawn(0xA7B0);
+    n = ObjectSpawn(MODEL_SIGNAL_LIGHT);
     if (!n)
         return;
     ObjectCopyPosition(n, o);
@@ -301,7 +299,7 @@ void ObjectPaceCarSetup(Object *o)
     ObjectRebucket(n);
     o->parent = obj_ref(n);
     ObjectSetHandler(o, H_SIGNAL_STEP);
-    o->script = 0xC6DC;
+    o->script = OBJECT_SCRIPT_SIGNAL;
     if (!GsuRecordNew422(o))
         return;
     record_place(o, 0x0640, 0x0640, 0x0640, 0xC100);
@@ -327,7 +325,7 @@ static Object *ObjectBreakOffChance(Object *child)
 
     if (RandomStep() < 0x7F)
         return NULL;
-    n = ObjectSpawn(0xA1AC);
+    n = ObjectSpawn(MODEL_BREAK_OFF_PIECE);
     if (!n)
         return NULL;
     ObjectCopyPosition(n, child);
@@ -640,7 +638,7 @@ static void piece_fall4(Object *o)
 /* @routine 08:D1F7 ObjectBreakOffA: a child broken off, look $998D */
 void ObjectBreakOffA(Object *o)
 {
-    piece_look(o, 0x998D, 0, 0x14);
+    piece_look(o, LOOK_BREAK_OFF_A, 0, 0x14);
     ObjectVelocityFromRecordScaled(o);
     piece_drop(o);
     piece_fall4(o);
@@ -649,7 +647,7 @@ void ObjectBreakOffA(Object *o)
 /* @routine 08:D249 ObjectBreakOffB */
 void ObjectBreakOffB(Object *o)
 {
-    piece_look(o, 0x9B96, 0, 0x14);
+    piece_look(o, LOOK_BREAK_OFF_B, 0, 0x14);
     ObjectVelocityFromRecord(o);
     piece_drop(o);
     piece_handler(o, 0x03);
@@ -659,7 +657,7 @@ void ObjectBreakOffB(Object *o)
 /* @routine 08:D2CF ObjectBreakOffD */
 void ObjectBreakOffD(Object *o)
 {
-    piece_look(o, 0x9B8F, 1, 0x14);
+    piece_look(o, LOOK_BREAK_OFF_D, 1, 0x14);
     ObjectVelocityFromRecord(o);
     piece_drop(o);
     piece_fall4(o);
@@ -668,7 +666,7 @@ void ObjectBreakOffD(Object *o)
 /* @routine 08:D303 ObjectBreakOffE */
 void ObjectBreakOffE(Object *o)
 {
-    piece_look(o, 0x9B79, 1, 0x14);
+    piece_look(o, LOOK_BREAK_OFF_E, 1, 0x14);
     ObjectVelocityFromRecord(o);
     piece_drop(o);
     piece_fall4(o);
@@ -676,7 +674,7 @@ void ObjectBreakOffE(Object *o)
 
 static void break_off_f(Object *o, uint8_t f5)
 {
-    o->anim = 0x9B63;
+    o->anim = LOOK_BREAK_OFF_E_FLAT;
     ObjectAdvance5DIfFlag(o);
     o->flags24 |= 0x08;
     o->byte3a = 0;
@@ -708,7 +706,7 @@ void ObjectBreakOffF(Object *o)
 /* @routine 08:D39F ObjectBreakOffG */
 void ObjectBreakOffG(Object *o)
 {
-    piece_look(o, 0x9B56, 1, 0x14);
+    piece_look(o, LOOK_BREAK_OFF_G, 1, 0x14);
     piece_drop(o);
     ObjectVelocityFromRecordScaled(o);
     piece_fall4(o);
@@ -717,7 +715,7 @@ void ObjectBreakOffG(Object *o)
 /* @routine 08:D3D3 ObjectBreakOffH */
 void ObjectBreakOffH(Object *o)
 {
-    piece_look(o, 0x9B40, 1, 0x0A);
+    piece_look(o, LOOK_BREAK_OFF_H, 1, 0x0A);
     piece_drop(o);
     ObjectVelocityFromRecordScaled(o);
     piece_fall4(o);
@@ -737,7 +735,7 @@ void ObjectPieceSpray(Object *o)
 
     piece_handler(o, 0x06);
     dz = (uint16_t)((RandomStep() & 0x0F) + 0xFFD8);
-    piece_look(o, 0x997C, 0, 0x0A);
+    piece_look(o, LOOK_STAR_SPARKLE, 0, 0x0A);
     p = obj_at(o->link27);
     RotateXZFrom08(0, (int8_t)(uint8_t)dz, p->pitch, &v.y, &v.z);
     RotateXZ(0, (int8_t)v.z, p->heading, &v.x, &v.z);
@@ -891,7 +889,7 @@ void ObjectAttachTurned(Object *o)
 
 static void spark(Object *o, uint16_t vx, uint16_t vz)
 {
-    Object *n = ObjectSpawn(0xA1E4);
+    Object *n = ObjectSpawn(MODEL_TRUCK_WHEEL);
 
     if (!n)
         return;
@@ -942,7 +940,7 @@ void ObjectSparkStart(Object *o)
     o->byte3a = 0;
     o->byte5f = 0x6E;
     ObjectSetHandler(o, H_SPARK_STEP);
-    o->word29 = 0x9BBF;
+    o->word29 = LOOK_WHEEL;
     ObjectSparkStep(o);
 }
 
@@ -1477,7 +1475,7 @@ void CameraPointFromTable(Object *o)
         c->place_base[i] = off[i];
 }
 
-static const uint16_t ring_model[4] = {0xA660, 0xA6D0, 0xA67C, 0xA5D4};
+static const uint16_t ring_model[4] = {MODEL(56), MODEL(60), MODEL(57), MODEL(51)}; /* the ring's parts */
 static const uint16_t ring_vx[4] = {0xFF90, 0xFFDB, 0x0025, 0x0070};
 
 /* The ring's Y, its parts, spin or idle. Returns 1 if the ring spins. */
@@ -1878,7 +1876,7 @@ void CameraDirectorPathStart(Object *o)
 {
     ObjectSetHandler(o, H_DIRECTOR_PATH);
     director_mode(o, 0x0001);
-    ObjectPathStart(o, 0x87F1);
+    ObjectPathStart(o, PATH_DIRECTOR);
     CameraFollowLink(o);
     CameraDirectorPath(o);
 }

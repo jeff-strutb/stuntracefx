@@ -157,7 +157,7 @@ void CameraPathA(Object *o)
 {
     ObjectSetHandler(o, H_CAMERA_PATH_STEP);
     set_mode(o, 0x0001);
-    path_shot(o, 0x885F);
+    path_shot(o, PATH_SHOT_A);
 }
 
 /* @routine 08:919F CameraPathB: on path $882D, or $85B9 in HUD mode 3 */
@@ -165,7 +165,7 @@ void CameraPathB(Object *o)
 {
     ObjectSetHandler(o, H_CAMERA_PATH_STEP);
     set_mode(o, 0x0001);
-    path_shot(o, g.hud_mode == 3 ? 0x85B9 : 0x882D);
+    path_shot(o, g.hud_mode == 3 ? PATH_DEMO_SHOT : PATH_SHOT_B);
 }
 
 /* The drift frames: the camera's point moved by the director's velocity,
@@ -279,7 +279,7 @@ void CameraOrbit(Object *o)
 {
     ObjectSetHandler(o, H_CAMERA_ORBIT_STEP);
     set_mode(o, 0x0655);
-    ObjectPathStart(o, 0x88BB);
+    ObjectPathStart(o, PATH_ORBIT);
     rec_or(car_of(o)->record, FXREC_FLAGS40, 0x0004);
     CameraOrbitStep(o);
 }
@@ -347,19 +347,19 @@ static void path_go(Object *o, uint16_t path, int keep_mode)
 }
 
 /* @routine 08:9896 CameraPath8603 */
-void CameraPath8603(Object *o) { path_go(o, 0x8603, 0); }
+void CameraPath8603(Object *o) { path_go(o, PATH_GO_1, 0); }
 /* @routine 08:98CC CameraPath8679 */
-void CameraPath8679(Object *o) { path_go(o, 0x8679, 0); }
+void CameraPath8679(Object *o) { path_go(o, PATH_GO_2, 0); }
 /* @routine 08:98E7 CameraPath869B */
-void CameraPath869B(Object *o) { path_go(o, 0x869B, 0); }
+void CameraPath869B(Object *o) { path_go(o, PATH_GO_3, 0); }
 /* @routine 08:9902 CameraPath86B3 */
-void CameraPath86B3(Object *o) { path_go(o, 0x86B3, 0); }
+void CameraPath86B3(Object *o) { path_go(o, PATH_GO_4, 0); }
 /* @routine 08:991D CameraPath86CB */
-void CameraPath86CB(Object *o) { path_go(o, 0x86CB, 0); }
+void CameraPath86CB(Object *o) { path_go(o, PATH_GO_5, 0); }
 /* @routine 08:9946 CameraPath86E3 */
-void CameraPath86E3(Object *o) { path_go(o, 0x86E3, 0); }
+void CameraPath86E3(Object *o) { path_go(o, PATH_GO_6, 0); }
 /* @routine 08:9938 CameraPath8709: the camera's mode kept */
-void CameraPath8709(Object *o) { path_go(o, 0x8709, 1); }
+void CameraPath8709(Object *o) { path_go(o, PATH_GO_7, 1); }
 
 /*
  * @routine 08:9A25 CameraLowHoldStep
@@ -405,6 +405,6 @@ static void path_low(Object *o, uint16_t path)
 }
 
 /* @routine 08:99DC CameraPathLow87B7 */
-void CameraPathLow87B7(Object *o) { path_low(o, 0x87B7); }
+void CameraPathLow87B7(Object *o) { path_low(o, PATH_LOW_2); }
 /* @routine 08:99E6 CameraPathLow875B */
-void CameraPathLow875B(Object *o) { path_low(o, 0x875B); }
+void CameraPathLow875B(Object *o) { path_low(o, PATH_LOW_1); }

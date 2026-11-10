@@ -7,8 +7,6 @@
 #define STUNTRACEFX_HANDLERS_H
 
 enum {
-    MODEL_COMMON = 0xA158,              /* the model the spawned effects use */
-
     H_PART_DETACH = 0xAC04,
     H_PART_DETACH_STEP = 0xAC27,
     H_PART_HIT = 0xAC97,
