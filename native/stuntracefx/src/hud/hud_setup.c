@@ -79,9 +79,8 @@ static const HudByte battle_p2_sprites[6] = {
 /* The HUD's tables are in data/race_tables.h: the sprite lists (four bytes
    an entry); for the split screen, its panel sprites' places and tiles (a
    word each, four bytes an entry), its map sprites' the same and their five
-   size bytes; the split screen's art block. Still by its number here: the
-   bank OamFromList reads its list from (video's call takes the bank). */
-enum { HUD_SETUP_BANK = 0x03, UNPACK_ROOM = 0xC000 /* the chip's RAM from the unpack area on */ };
+   size bytes; the split screen's art block. */
+enum { UNPACK_ROOM = 0xC000 /* the chip's RAM from the unpack area on */ };
 
 /* The sprite list's entries from `list` on into the sprites' X ninth bits
    and sizes (the original sends this list to its high table): each entry
@@ -266,7 +265,7 @@ void RaceHudSetup(void)
     (void)SoundFromTableD89();
     fx16_set(FXIN_SHADE_BASE, FX_SHADE_BASE_HUD);
     OamBufferClear();
-    OamFromList(HUD_SETUP_BANK, &slot, &list);
+    OamFromList(&slot, &list);
     oam_high_table_from_list(0x01AA);
     switch (g.hud_mode) {
     case 3:

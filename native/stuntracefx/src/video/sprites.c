@@ -8,6 +8,7 @@
 
 #include "audio/sound.h"
 #include "data/cart.h"
+#include "data/race_tables.h"
 #include "system/game.h"
 #include "system/state.h"
 #include "video/picture.h"
@@ -235,19 +236,20 @@ void OamBufferHideLarge(void)
     }
 }
 
-/* Entries from the list: $FE hides one, else four bytes of X, Y, tile, attributes. */
-void OamFromList(uint8_t bank, int *slot, uint16_t *list)
+/* Entries from the HUD's sprite lists (data/race_tables), from byte offset
+   *list: $FE hides one, else four bytes of X, Y, tile, attributes; $FF ends. */
+void OamFromList(int *slot, uint16_t *list)
 {
     uint8_t v;
 
-    while ((v = cart8(bank, (uint16_t)(0xF883 + *list))) != 0xFF) {
+    while ((v = hud_sprite_list_byte(*list)) != 0xFF) {
         if (v == 0xFE) {
             set_y(*slot, 0xFE);
         } else {
             set_x_byte(*slot, v);
-            set_y(*slot, cart8(bank, (uint16_t)(0xF884 + *list)));
-            set_tile_byte(*slot, cart8(bank, (uint16_t)(0xF885 + *list)));
-            set_attr(*slot, cart8(bank, (uint16_t)(0xF886 + *list)));
+            set_y(*slot, hud_sprite_list_byte((uint16_t)(*list + 1)));
+            set_tile_byte(*slot, hud_sprite_list_byte((uint16_t)(*list + 2)));
+            set_attr(*slot, hud_sprite_list_byte((uint16_t)(*list + 3)));
             *list = (uint16_t)(*list + 3);
         }
         *list = (uint16_t)(*list + 1);

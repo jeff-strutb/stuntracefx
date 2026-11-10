@@ -360,7 +360,7 @@ void OamBufferClear(void);
 void OamBufferHideLarge(void);
 void SpriteSlot1Countdown(void);
 int SpriteSlotFirst(void);
-void OamFromList(uint8_t bank, int *slot, uint16_t *list);
+void OamFromList(int *slot, uint16_t *list);   /* the HUD's sprite lists from byte offset *list */
 void OamSprite0AddY(uint8_t lines);
 void oam_attr_fill(int first, int count, uint8_t attr);
 void OamAttr36x4(int first);
