@@ -177,17 +177,11 @@ static void two_player_rows(int want, uint8_t next)
     g.picture_uploaded = 1;
 }
 
-/* A block of bank $7F (the map buffer from byte `from`) to VRAM word `word`. */
-static void map_buffer_to_vram(uint16_t word, uint16_t from, uint32_t bytes)
+/* 7E:AA91, AA9A: the map buffer's $9BD7 part to the half's 3D characters
+   (0 the top, 1 the bottom), stage $10, colour 0 = $1CC4. */
+static void split_picture(int half)
 {
-    race_vram_write(word, (const uint8_t *)(const void *)race_map_buffer() + from, bytes);
-}
-
-/* 7E:AA91, AA9A: the map buffer's $9BD7 part to VRAM word `word`, stage $10,
-   colour 0 = $1CC4. */
-static void split_picture(uint16_t word)
-{
-    map_buffer_to_vram(word, 0x0800, 0x1680);
+    race_half_characters_write(half, (const uint8_t *)(const void *)race_map_buffer() + 0x0800);
     g.split_stage = 0x10;
     palettes.buffer[0] = 0x1CC4;
     pic.palette[0] = 0x1CC4;            /* CGRAM's colour 0 written with it */
@@ -208,7 +202,7 @@ static void split_upload(void)
 {
     switch (g.split_stage) {
     case 0x02:
-        TilemapRowsTo5C00();
+        ResultsMapRowsUpload();
         /* fall through */
     case 0x08:
         OamDmaAll();
@@ -216,9 +210,7 @@ static void split_upload(void)
         CgramUploadAll();
         break;
     case 0x04:
-        race_vram_write(0x6C00, fx_ram + FX_RESULTS_PICTURE, 0x0A00);
-        race_vram_write(0x6240, fx_ram + FX_RESULTS_PICTURE + 0x0600, 0x0140);
-        race_vram_write(0x6340, fx_ram + FX_RESULTS_PICTURE + 0x0800, 0x0140);
+        race_results_picture_write(fx_ram + FX_RESULTS_PICTURE);
         g.split_stage = 0x00;
         break;
     case 0x0A:
@@ -229,16 +221,16 @@ static void split_upload(void)
         CgramUploadAll();
         break;
     case 0x0C:
-        split_picture(0x0000);
+        split_picture(0);
         break;
     case 0x0E:
-        split_picture(0x0B40);
+        split_picture(1);
         break;
     case 0x10:
-        map_buffer_to_vram(0x7800, 0x0000, 0x0800);
+        race_panel_map_write(race_map_buffer()); /* only after $0C and $0E: the split screen's quit menu */
         break;
     case 0x12:
-        race_vram_write(0x6600, race_pictures + (uint16_t)(g.overlay_picture - RACE_PICTURES_ORIGINAL), 0x0C00);
+        race_car_picture_write(race_pictures + (uint16_t)(g.overlay_picture - RACE_PICTURES_ORIGINAL));
         g.split_stage = 0x02;
         break;
     default:

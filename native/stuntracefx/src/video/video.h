@@ -97,7 +97,11 @@ void VideoRegsReset(void);
 void race_art_write(uint16_t word, const uint8_t *data, uint32_t bytes);
 void race_frame_art_write(uint16_t word, const uint8_t *data, uint32_t bytes);
 void race_map_page_write(int page, const uint16_t *words);
-void race_panel_map_write(const uint16_t *words);
+void race_panel_map_write(const uint16_t *words);  /* two players: the panel's map over a half (a finished player's, the quit menu's), $400 words */
+/* the results screens' pictures, by what they hold (the art the sprites draw from) */
+void race_results_picture_write(const uint8_t *picture); /* the big picture, $A00 bytes: 5 rows of 16 characters */
+void race_car_picture_write(const uint8_t *picture);     /* the car's picture, $C00 bytes */
+void race_half_characters_write(int half, const uint8_t *characters); /* two players: a half's 3D characters, $1680 bytes, for the quit menu */
 void race_frame_map_two_write(const uint16_t *words);
 void race_two_player_list(void);
 void race_backdrop_two_write(int page, const uint16_t *words);
@@ -156,7 +160,7 @@ void PaletteDarkenFour(uint16_t request);
 
 void RasterColours(void);
 void RasterPaletteUpload(void);
-void RasterColoursUnless0D22(void);
+void RasterColoursUnlessSplitStages(void);
 void PaletteKeptColoursStep(int player, int pad_index);
 void PlayerColoursFlash(uint8_t level, int player);
 void StatusColourPick(int item);
@@ -303,7 +307,7 @@ void TilemapRow187Palette4(void);
 void TilemapRow207Palette4(void);
 void TilemapRow287Palette4(void);
 void TilemapLevelColumns(void);
-void DigitTiles1184(void);
+void CarSettingsDigits(void);
 void VramNoiseTiles(void);
 void TimesKeepAndAdvance(void);
 void ChampionshipStageStart(void);

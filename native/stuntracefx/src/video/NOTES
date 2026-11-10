@@ -18,7 +18,7 @@ Folded into other converted code
   07:AC08 OamFillEvery4 -> sprites.c OamHideForHudMode
   04:E06E OverlaySpritesState0 -> sprites.c OverlaySpritesStep, state 0 (its jump table's entry)
   7E:B31E RasterColoursCycling -> palette.c raster_colours_cycling
-  7E:B39A RasterColoursE4 -> palette.c RasterColoursUnless0D22
+  7E:B39A RasterColoursE4 -> palette.c RasterColoursUnlessSplitStages
   03:EDC6 PaletteCopy16To7F39D7 -> palette.c PaletteCourseLoad
   7E:E6E9 ColourBlend -> palette.c colour_blend
   7E:E6A2 ColourBlendToTarget -> palette.c HudColourStep (buffer_from_blend)

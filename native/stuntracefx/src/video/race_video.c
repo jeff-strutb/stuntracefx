@@ -189,8 +189,42 @@ void race_course_vram_write(uint16_t word, const uint8_t *data, uint32_t bytes)
         race_art_write(word, data, bytes);
 }
 
-/* The finished player's panel map; drawn as an image into the list, from the
-   shared art at tile $300 on. */
+/* ---- the results' and the quit menu's uploads, by what they hold ---- */
+
+/* Where the original put them: the sprites' first page from word $6000, a
+   character $10 words; with two players, BG1's characters from word 0. */
+enum {
+    RESULTS_PICTURE_WORD = 0x6C00,      /* characters $C0-$10F */
+    RESULTS_ROWS_WORD = 0x6240,         /* characters $24-$2D, the next row $34-$3D */
+    CAR_PICTURE_WORD = 0x6600,          /* characters $60-$BF */
+    TOP_HALF_WORD = 0x0000,             /* the top half's 3D characters, 0-$B3 */
+    BOTTOM_HALF_WORD = 0x0B40,          /* the bottom half's, $B4-$167 */
+};
+
+/* The results' big picture: 5 rows of 16 characters, and its fourth and fifth
+   rows' first ten characters again as characters $24-$2D and $34-$3D. */
+void race_results_picture_write(const uint8_t *picture)
+{
+    race_vram_write(RESULTS_PICTURE_WORD, picture, 0x0A00);
+    race_vram_write(RESULTS_ROWS_WORD, picture + 0x0600, 0x0140);
+    race_vram_write(RESULTS_ROWS_WORD + 0x100, picture + 0x0800, 0x0140);
+}
+
+/* the results' car picture */
+void race_car_picture_write(const uint8_t *picture)
+{
+    race_vram_write(CAR_PICTURE_WORD, picture, 0x0C00);
+}
+
+/* two players: the half's 3D characters (0 the top, 1 the bottom), from the
+   map buffer when the quit menu opens over it */
+void race_half_characters_write(int half, const uint8_t *characters)
+{
+    race_vram_write(half ? BOTTOM_HALF_WORD : TOP_HALF_WORD, characters, 0x1680);
+}
+
+/* The panel's map over a half (a finished player's, or the quit menu's);
+   drawn as an image into the list, from the shared art at tile $300 on. */
 void race_panel_map_write(const uint16_t *words)
 {
     memcpy(panel_words, words, sizeof panel_words);
@@ -761,8 +795,10 @@ void TilemapLevelColumns(void)
     }
 }
 
-/* the digits, in tile words */
-void DigitTiles1184(void)
+/* @routine 07:CFA3 DigitTiles1184
+   The car's three settings ($1184) as digit characters in the panel's map,
+   row 2 from column 21. */
+void CarSettingsDigits(void)
 {
     int i;
 
@@ -916,7 +952,7 @@ void race_screen_start(void)
 void RaceVideoUpload1P(void)
 {
     OamDirectStage();
-    RasterColoursUnless0D22();
+    RasterColoursUnlessSplitStages();
     pic.main_screen = SHOW_BG1 | SHOW_BG2 | SHOW_SPRITES;
     pic.blend.fixed_bgr15 = fixed_from(windows.colours);
     WindowsSetupSelect();
@@ -984,12 +1020,13 @@ uint16_t *race_map_buffer(void)
     return backdrop_map(0);
 }
 
-/* The results' and championship's BG2 map: 17 rows of 26 entries copied
+/* @routine 7E:B24C TilemapRowsTo5C00
+   The results' and championship's BG2 map: 17 rows of 26 entries copied
    from the map buffer ($7F:93D7, rows $40 bytes apart) to the map at $5C00,
    as they stand now; then BG2's scroll from the first half. $5C00 is the
    second page of the one-player backdrop's map, so the rows go there, with
    its tile numbering and priority (race_backdrop_rows_upload). */
-void TilemapRowsTo5C00(void)
+void ResultsMapRowsUpload(void)
 {
     uint16_t row[26];
     int r, i;

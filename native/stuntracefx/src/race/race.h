@@ -165,7 +165,7 @@ void ResultsScreenStep(void);
    rows to BG2 at $5C00 */
 void TilemapPaletteCycle(unsigned at, int count);   /* 07:CEDF, every fourth frame */
 void TilemapPaletteFill(unsigned at, int count, uint8_t bits);  /* 07:CF14 */
-void TilemapRowsTo5C00(void);           /* 7E:B24C */
+void ResultsMapRowsUpload(void);         /* 7E:B24C */
 
 /* time_bonus.c, player_stats.c */
 void GsuTimeDigits(void);

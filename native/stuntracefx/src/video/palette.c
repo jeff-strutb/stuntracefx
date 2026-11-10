@@ -69,7 +69,8 @@ static void raster_colours_cycling(void)
         shown(0x12, 2);
 }
 
-void RasterColoursUnless0D22(void)
+/* @routine 7E:B307 RasterColoursUnless0D22: the colours above, unless the split screen's upload stages run ($0D22) */
+void RasterColoursUnlessSplitStages(void)
 {
     if (g.split_stage_on)
         return;

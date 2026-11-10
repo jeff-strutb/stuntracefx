@@ -82,7 +82,7 @@ static void panel(Packed p)
     picture_unpack(p, FX_UNPACK_AREA);
     for (i = 0; i < 0x440; i++)
         map_byte_set((uint16_t)i, fx_ram[FX_UNPACK_AREA + i]);
-    DigitTiles1184();
+    CarSettingsDigits();
 }
 
 /* ---- the panels' contents ---- */
@@ -853,7 +853,7 @@ void ChampionshipStagePicture(void)
     picture_unpack(RESULTS_MENU_PANEL, FX_UNPACK_AREA);
     for (i = 0; i < 0x440; i++)
         map_byte_set((uint16_t)i, fx_ram[FX_UNPACK_AREA + i]);
-    DigitTiles1184();
+    CarSettingsDigits();
     step_next();
     g.line_effects.results_bg1_off = 1;     /* bit 1 on, bits 2 and 3 (the sky) off */
     g.line_effects.course_scroll = g.line_effects.sky = 0;
