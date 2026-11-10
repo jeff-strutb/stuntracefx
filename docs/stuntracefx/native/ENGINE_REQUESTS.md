@@ -104,14 +104,13 @@ being sharp." Each texel a solid square with its edges exactly where they fall i
 crosses mixed by how much of it each side covers; nothing blurred inside a texel; no texels 3 pixels wide beside ones 4
 wide at a size that is not a whole multiple.
 
-4.7 gives that to a triangle's outside edges only. Inside a triangle the texture is read once a pixel, at its centre
-(`list_fs` reads no `[[sample_id]]`), so an image's or a textured face's texel edges stay stepped; and the layers (maps,
-sprites, mode 7, the per-line changes) are composed at one point a window pixel (`pb_window(uint(pos.x), uint(pos.y))`), so
-a screen of 342 x 224 in a 1280 x 720 window gives texels 3 and 4 pixels wide, 3 and 4 tall.
+4.7 gives that to a triangle's outside edges only: inside a triangle the texture is read once a pixel, at its centre
+(`list_fs` reads no `[[sample_id]]`), so an image's or a textured face's texel edges stay stepped.
 
-Asked, on every backend and in `nshvc_picture_read`'s picture:
-- a draw list of several samples reads its image at each sample (sample-rate shading), so texel edges inside a triangle
-  are covered as its outside edges are;
-- the window's pixel composed at the same several sample positions, each mapped into the screen (its line for the
-  per-line changes, its point in the maps, sprites and mode 7), and the colours averaged.
-The picture stays exact at each sample; only where a texel's or polygon's edge crosses a window pixel does anything mix.
+Asked, on every backend and in `nshvc_picture_read`'s picture: a draw list of several samples reads its image at each
+sample (sample-rate shading), so texel edges inside a triangle are covered as its outside edges are.
+
+Withdrawn: a second part, asking for the window's pixel to be composed at several samples. It came from reading the call
+`pb_window(uint(pos.x), uint(pos.y))` without its body; the engine already composes each window pixel from its footprint
+on the texel grid (each texel solid, a pixel a texel edge crosses mixed by that coverage) for the maps, sprites, per-line
+changes and draw-list rows, mode 7 by its own coverage. No picture had shown otherwise.
