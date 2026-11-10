@@ -1000,9 +1000,14 @@ void sprites_place_full(nshvc_sprite *out, const nshvc_sprite *in, uint32_t coun
  * the rest the second's. Those off the original's screen, or off their
  * half's rows (the first's from 16 to 111, the second's from 120 to 215),
  * are left out, and so are those in the boxes' columns, which go with the
- * boxes (drawn with them, scaled). The HUD's (priority 3) move by piece to
- * where screen_two_anchor puts the player's original view; the 3D's keep
- * their place about the rectangle's middle.
+ * boxes (drawn with them, scaled). So are the 3D's (below priority 3)
+ * wholly outside the player's 144 x 80 view: the frame covered them (its
+ * tiles there are over them), as the bezel does for one player. In the
+ * battle these are only the start lamps (characters $A0-$AF, palette 3):
+ * beside the view before the start, parked at the screen's right edge
+ * after it. The HUD's (priority 3) move by piece to where
+ * screen_two_anchor puts the player's original view; the 3D's keep their
+ * place about the rectangle's middle.
  */
 void sprites_place_two(nshvc_sprite *out, const nshvc_sprite *in, uint32_t count)
 {
@@ -1018,7 +1023,8 @@ void sprites_place_two(nshvc_sprite *out, const nshvc_sprite *in, uint32_t count
         up[i] = i;
         hud[i] = s->priority == 3;
         shown[i] = !(y < 0 || y >= 224 || x + w <= 0 || x >= 256 || y + h <= box_y[p] || y >= box_y[p] + 96 ||
-                     (cx >= box_x[p] && cx < box_x[p] + 80));
+                     (cx >= box_x[p] && cx < box_x[p] + 80) ||
+                     (!hud[i] && (x + w <= view_x[p] || x >= view_x[p] + 144 || y + h <= view_y[p] || y >= view_y[p] + 80)));
         if (!shown[i])
             continue;
         for (b = p ? 64 : 0; b < i; b++)
