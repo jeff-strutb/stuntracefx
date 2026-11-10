@@ -23,15 +23,15 @@ typedef struct {
     uint16_t vx_frac, vx;               /* +1C; +1E also a frame count */
     uint16_t vy_frac, vy;               /* +20 */
     uint16_t palette;                   /* +24 */
-    uint16_t word26, word28, word2a;
+    uint16_t spare[3];                  /* +26-+2A: read by no handler */
 } Actor;
 
 /* the handlers, by the numbers the spawn data stores */
 enum {
-    HANDLER_IDLE_C47B = 0xC47B,
-    HANDLER_IDLE_CE89 = 0xCE89,
-    HANDLER_IDLE_DF7B = 0xDF7B,
-    HANDLER_IDLE_E0DF = 0xE0DF,
+    HANDLER_ROW_SET = 0xC47B,           /* a settings row once set up: nothing */
+    HANDLER_DONE = 0xCE89,              /* an object done moving, which others wait for: nothing */
+    HANDLER_NO_STEP = 0xDF7B,           /* an object with no step of its own */
+    HANDLER_NO_STEP_B = 0xE0DF,         /* the same, a second copy */
     HANDLER_ANIMATE_THEN_EXIT = 0xCD6C,
     HANDLER_DROP_START = 0xCD7C,
     HANDLER_DROP_BOUNCE = 0xCE19,
@@ -73,8 +73,8 @@ enum {
     HANDLER_FADE_IN = 0xC896,
     HANDLER_SLIDE_IN_DONE = 0xC8BF,
     HANDLER_FADE_UP = 0xC95F,
-    HANDLER_FOLLOW_SLIDE_1CF = 0xC985,
-    HANDLER_FOLLOW_SLIDE_194 = 0xC993,
+    HANDLER_FOLLOW_SLIDE_FAR = 0xC985,  /* with the sliding sprites, at $1CF less the slide */
+    HANDLER_FOLLOW_SLIDE_NEAR = 0xC993, /* at $194 less the slide */
     HANDLER_FADE_OUT = 0xC9C4,
     HANDLER_CHOICE_00_START = 0xCAE6,
     HANDLER_CHOICE_00 = 0xCAEE,

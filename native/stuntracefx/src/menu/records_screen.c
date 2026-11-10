@@ -26,14 +26,7 @@ enum { S_71, S_73, S_75, S_77, S_79, S_7B };
 
 static uint16_t *slot_at(int s)
 {
-    switch (s) {
-    case S_71: return &g.sprite_slot_d71;
-    case S_73: return &g.sprite_slot_d73;
-    case S_75: return &g.sprite_row_d75;
-    case S_77: return &g.sprite_slot_d77;
-    case S_79: return &g.sprite_row_d79;
-    default:   return &g.oam_first_free;
-    }
+    return &g.records_group_slot[s];
 }
 
 /* The metasprite groups' sprite counts, a word each in bank $04: a page's
@@ -464,7 +457,7 @@ void SpeedRecordsScreen(void)
         md_first(0x001A);
         md_next(GROUP_COUNTS + 0x6A, -1, S_73, 0x0019);
         md_next(GROUP_COUNTS + 0x66, S_73, S_75, 0x0000);
-        g.oam_first_free = g.sprite_row_d75;
+        g.records_group_slot[S_7B] = g.records_group_slot[S_75];
         OamClassName();
         SpeedRecordsTextLine();
         SpeedRecordsLinePalette();

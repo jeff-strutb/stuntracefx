@@ -210,8 +210,8 @@ typedef struct {
     uint8_t level_columns[12];          /* $0F05: the screen's level columns */
     uint16_t time_shown_2;              /* $0E6E */
     uint8_t race_time_best[3];          /* $0EEA-$0EEC */
-    uint16_t sprite_row_d75, sprite_row_d79; /* $0D75, $0D79: the sprite rows the race's palettes run from */
-    uint16_t sprite_slot_d71, sprite_slot_d73, sprite_slot_d77; /* $0D71, $0D73, $0D77: the records pages' other metasprite slots */
+    uint16_t records_group_slot[6];     /* $0D71-$0D7B: the sprite slot each of a records page's metasprite groups
+                                           starts at; the pages' palettes run from them */
     uint8_t sprite_origin[2];           /* $0D3B, $0D3C: a metasprite's origin */
     uint16_t metasprite_set;            /* $0D35 */
     uint16_t flash_sprite_pos;          /* $0D37-$0D38 as a word, the flashing metasprite's position */
@@ -261,7 +261,6 @@ typedef struct {
     uint8_t gauge_one[2];               /* $0DF9, $0DFA: each panel's four-sprite gauge value */
     uint8_t hud_marker_x;               /* $0E16: the map marker's X as it slides in to $AC */
     uint16_t slide_value, slide_step, slide_target, slide_direction; /* $19F6, $19F8, $19FA, $19FC */
-    uint16_t oam_first_free;            /* $0D7B */
     uint16_t hud_point_index;           /* $0D6B */
     uint16_t hud_point_x, hud_point_y;  /* $0D6D, $0D6F */
     uint16_t digit_pair;                /* $0E74 */

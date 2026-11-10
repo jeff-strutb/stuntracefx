@@ -703,7 +703,7 @@ static void row_palette5(void)
  * WHAT IT DOES: Derives the 2-bit values at $18D3-$18E9 from the four
  * selections through tables in banks $0B and $03.
  */
-void SelectionTables18CB(void)
+void SelectionDerive(void)
 {
     uint16_t base = cart16(MENU_BANK, (uint16_t)(CHOICE_SETTINGS + g.choice_p1 * 2));
     uint16_t x = (uint16_t)(base + g.choices[0] * 3 + g.choices[1] * 9 + g.choices[2] * 27);
@@ -748,7 +748,7 @@ static void settings_show(void)
     static const uint16_t row_anim[3] = {0x0036, 0x003C, 0x0030};
     Actor *a;
 
-    SelectionTables18CB();
+    SelectionDerive();
     choice_animations();
     a = actor_find(0x0003);
     if (a && g.choices[menu.row] < 3)
@@ -1447,10 +1447,10 @@ void menu_actor_run(Actor *a)
 {
     switch (a->handler) {
     case HANDLER_IDLE:
-    case HANDLER_IDLE_C47B:
-    case HANDLER_IDLE_CE89:
-    case HANDLER_IDLE_DF7B:
-    case HANDLER_IDLE_E0DF:
+    case HANDLER_ROW_SET:
+    case HANDLER_DONE:
+    case HANDLER_NO_STEP:
+    case HANDLER_NO_STEP_B:
         break;
 
     /* the title */
@@ -1487,7 +1487,7 @@ void menu_actor_run(Actor *a)
         uint16_t n = (uint16_t)(a->count + 1);
 
         if (n == 0x0040) {
-            a->handler = HANDLER_IDLE_CE89;
+            a->handler = HANDLER_DONE;
             break;
         }
         a->count = n;
@@ -1517,7 +1517,7 @@ void menu_actor_run(Actor *a)
             uint16_t v = (uint16_t)(a->vy - 2);
 
             if (v & 0x8000) {
-                a->handler = HANDLER_IDLE_CE89;
+                a->handler = HANDLER_DONE;
                 break;
             }
             a->vy = (uint16_t)(0 - v);
@@ -1531,7 +1531,7 @@ void menu_actor_run(Actor *a)
         drop_step(a);
         if (!(a->vy_frac & 0x8000)) {
             if (a->vy_frac >= 0x00DC) {
-                a->handler = HANDLER_IDLE_CE89;
+                a->handler = HANDLER_DONE;
                 break;
             }
             if (a->vy_frac >= 0x001E)
@@ -1551,7 +1551,7 @@ void menu_actor_run(Actor *a)
     case HANDLER_AWAY_CHECK: {
         const Actor *bg = actor_find(0x0013);
 
-        if (bg && bg->handler == HANDLER_IDLE_CE89)
+        if (bg && bg->handler == HANDLER_DONE)
             drop_away_finish(a);
         break;
     }
@@ -1594,18 +1594,18 @@ void menu_actor_run(Actor *a)
     case HANDLER_SLIDE_IN_DONE: slide_in_done(a); break;
     case HANDLER_FADE_UP: fade_up(a); break;
     case HANDLER_FADE_OUT: fade_out(a); break;
-    case HANDLER_FOLLOW_SLIDE_1CF:
+    case HANDLER_FOLLOW_SLIDE_FAR:
         a->x = (uint16_t)(0x01CF - menu.slide_low_next);
         actor_animate_frame(a);
         break;
-    case HANDLER_FOLLOW_SLIDE_194:
+    case HANDLER_FOLLOW_SLIDE_NEAR:
         a->x = (uint16_t)(0x0194 - menu.slide_low_next);
         actor_animate_frame(a);
         break;
     case HANDLER_ROW_START:
         actor_copy_group(a);
         row_blink_settings(a);
-        a->handler = HANDLER_IDLE_C47B;
+        a->handler = HANDLER_ROW_SET;
         break;
     case HANDLER_CHOICE_00_START:
         choice_start(a, HANDLER_CHOICE_00);

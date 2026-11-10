@@ -902,7 +902,7 @@ void SelectionSave(void)
     g.selection_handler[1] = handler_table_b(g.choices[0]);
     g.selection_handler[2] = handler_table_b(g.choices[1]);
     g.selection_handler[3] = handler_table_b(g.choices[2]);
-    SelectionTables18CB();
+    SelectionDerive();
     if (g.menu_mode == 3)
         save.car_mode3 = (uint8_t)cart16(SELECTION_BANK, (uint16_t)(SELECTION_SAVED + ((g.choice_p1 & 3) << 1)));
     else if (g.menu_mode == 1)

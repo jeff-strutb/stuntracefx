@@ -330,7 +330,7 @@ static void results_time_digits(Actor *a)
     } else {
         a->hidden = 0xFFFF;
     }
-    a->handler = HANDLER_IDLE_DF7B;
+    a->handler = HANDLER_NO_STEP;
 }
 
 /*
@@ -345,7 +345,7 @@ static void results_over_or_hide(Actor *a)
         return;
     }
     a->hidden = 0xFFFF;
-    a->handler = HANDLER_IDLE_DF7B;
+    a->handler = HANDLER_NO_STEP;
 }
 
 /*
@@ -365,7 +365,7 @@ static void leader_or_stop(Actor *a, uint16_t field)
         a->vy = 0;
         a->count = 0;
     } else {
-        a->handler = HANDLER_IDLE_DF7B;
+        a->handler = HANDLER_NO_STEP;
     }
 }
 
@@ -413,7 +413,7 @@ static void results_no_time(Actor *a)
     if (k) {
         k->hidden = 0xFFFF;
         k->x = 0x0200;
-        k->handler = HANDLER_IDLE_DF7B;
+        k->handler = HANDLER_NO_STEP;
     }
 }
 
@@ -506,7 +506,7 @@ static void place_points(Actor *a, uint16_t n, uint16_t handler)
         }
     }
     results_points(a, n);
-    a->handler = HANDLER_IDLE_E0DF;
+    a->handler = HANDLER_NO_STEP_B;
 }
 
 /*

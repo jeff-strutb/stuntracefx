@@ -314,7 +314,7 @@ void OamSetPalette(uint8_t bits, int count, int first)
 /* @routine 04:E2EC OamPaletteFromTableE30F */
 void StuntRecordsPagePalette(void)
 {
-    OamSetPalette(cart8(0x04, (uint16_t)(0xE30F + g.champ_stage)), 0x16, g.sprite_row_d79);
+    OamSetPalette(cart8(0x04, (uint16_t)(0xE30F + g.champ_stage)), 0x16, g.records_group_slot[4]);
 }
 
 /* @routine 04:E23F OamPaletteFromTableE26A */
@@ -322,21 +322,21 @@ void SpeedRecordsPagePalette(void)
 {
     uint16_t n = g.times_step;
 
-    OamSetPalette(n ? cart8(0x04, (uint16_t)(0xE26A + ((n - 1) & 0xFF))) : 0x0A, 0x16, g.oam_first_free + 0x0D);
+    OamSetPalette(n ? cart8(0x04, (uint16_t)(0xE26A + ((n - 1) & 0xFF))) : 0x0A, 0x16, g.records_group_slot[5] + 0x0D);
 }
 
 /* @routine 04:E26E OamPaletteFromTableE26AByMode */
 void AllRecordsPagePalette(void)
 {
-    OamSetPalette(cart8(0x04, (uint16_t)(0xE26A + g.champ_stage)), 0x12, g.sprite_row_d79);
+    OamSetPalette(cart8(0x04, (uint16_t)(0xE26A + g.champ_stage)), 0x12, g.records_group_slot[4]);
 }
 
 /* @routine 04:E28D OamPalettesE28D */
 void BattleRecordsPagePalettes(void)
 {
-    OamSetPalette(cart8(0x04, (uint16_t)(0xE30B + g.champ_stage)), 0x12, g.sprite_row_d75);
-    OamSetPalette(cart8(0x04, (uint16_t)(0xE313 + g.car[0])), 0x06, g.sprite_row_d75 + 0x16);
-    OamSetPalette(cart8(0x04, (uint16_t)(0xE313 + g.car[1])), 0x06, g.sprite_row_d75 + 0x1C);
+    OamSetPalette(cart8(0x04, (uint16_t)(0xE30B + g.champ_stage)), 0x12, g.records_group_slot[2]);
+    OamSetPalette(cart8(0x04, (uint16_t)(0xE313 + g.car[0])), 0x06, g.records_group_slot[2] + 0x16);
+    OamSetPalette(cart8(0x04, (uint16_t)(0xE313 + g.car[1])), 0x06, g.records_group_slot[2] + 0x1C);
 }
 
 /* The records screens' sprite palettes, by screen: the rows' sprites after
@@ -344,7 +344,7 @@ void BattleRecordsPagePalettes(void)
 /* @routine 04:E227 OamPaletteForD75 */
 void SpeedRecordsLinePalette(void)
 {
-    OamSetPalette(0x0A, 0x16, g.sprite_row_d75 + 13);
+    OamSetPalette(0x0A, 0x16, g.records_group_slot[2] + 13);
 }
 
 /* ---- blocks and columns ---- */

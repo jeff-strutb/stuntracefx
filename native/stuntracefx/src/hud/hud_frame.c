@@ -409,7 +409,7 @@ enum { CLASS_NAME_BANK = 0x02, CLASS_NAME_TILES = 0xEFD6 };
 /* @routine 02:EFA3 OamClassName: the class's name over six sprites. */
 void OamClassName(void)
 {
-    int n = g.oam_first_free + 1;       /* the six sprites after the first free one: their characters */
+    int n = g.records_group_slot[5] + 1;    /* the six sprites after the first free one: their characters */
     uint16_t x;
 
     if (!g.course_class)

@@ -66,7 +66,7 @@ void menu_lines_send(void);
    initials screen no longer runs */
 void menu_typing_run_end(void);
 
-void SelectionTables18CB(void);
+void SelectionDerive(void);
 void SelectionCommit(void);
 void SelectionSave(void);
 void CarSelectTwoPlayers(void);
