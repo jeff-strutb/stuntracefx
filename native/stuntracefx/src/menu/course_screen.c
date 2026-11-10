@@ -43,19 +43,19 @@ static void oam_from_list(uint16_t offset, uint16_t list)
  * @routine 7F:0B56 CoursePictureToVram
  * @routine 7F:0BCE VramWriteRowFromGsuRam
  * WHAT IT DOES: Four 64-word rows of the course's picture, as unpacked, to
- * the art at $6480, $6580, $64C0 and $65C0, from the offset the table at
- * $7F:0B96 gives for the course.
+ * the sprites' characters $48, $58, $4C and $5C (four each), from the
+ * offset the table at $7F:0B96 gives for the course.
  */
 static void course_picture_to_art(void)
 {
-    static const uint16_t to[4] = {0x6480, 0x6580, 0x64C0, 0x65C0};
+    static const unsigned to[4] = { RACE_ART_SPRITES + 0x48, RACE_ART_SPRITES + 0x58, RACE_ART_SPRITES + 0x4C, RACE_ART_SPRITES + 0x5C };
     uint16_t w = ram_code_7f16((uint16_t)(0x0B96 + 2 * g.course));
     uint16_t t = (uint16_t)(w & 0xFFFC);
     uint16_t src = (uint16_t)((uint16_t)((uint16_t)(t >> 8 | t << 8) << 1) + ((w & 3) << 7));
     int i;
 
     for (i = 0; i < 4; i++, src = (uint16_t)(src + 0x0200))
-        race_vram_write(to[i], &fx_ram[0x3000 + src], 0x80);
+        race_art_write(to[i], &fx_ram[0x3000 + src], 0x80);
 }
 
 /*

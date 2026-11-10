@@ -70,7 +70,8 @@ static const HudByte battle_p2_sprites[6] = {
 /* The HUD's tables in bank 3: the sprite lists (four bytes an entry); for
    the split screen, its panel sprites' places and tiles (a word each, four
    bytes an entry), its map sprites' the same, their five size bytes, and
-   its art block's two records (where it goes; where its packed data is). */
+   its art block's two records (its transfer, for its length; where its
+   packed data is). */
 enum {
     HUD_SETUP_BANK = 0x03, SPRITE_LISTS = 0xF883,
     SPLIT_PANEL_SPRITES = 0xE7EA, SPLIT_MAP_SPRITES = 0xE80F, SPLIT_SPRITE_SIZES = 0xE80A,
@@ -339,6 +340,7 @@ void RaceHudSetupTwoPlayers(void)
         OamByteSet((uint16_t)(0x0200 + 0x0B + i), s);
         OamByteSet((uint16_t)(0x0210 + 0x0B + i), s);
     }
-    race_unpacked_to_art(TO_SPLIT_ART, PACKED_SPLIT_ART);
+    /* the split screen's sprite art: the sprites' characters $A0 on */
+    race_art_write(RACE_ART_SPRITES + 0x0A0, fx_ram + FX_UNPACK_AREA, race_block_unpack(TO_SPLIT_ART, PACKED_SPLIT_ART));
     RaceVarsReset();
 }

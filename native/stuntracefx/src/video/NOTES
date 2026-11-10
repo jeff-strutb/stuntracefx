@@ -73,11 +73,13 @@ Folded into other converted code
 Replaced by the engine or by the design (no counterpart by intent)
 ------------------------------------------------------------------
 The DMA routines and the VRAM queue: what they carried goes to the engine's
-tiles, maps, palette and sprite table directly (race_vram_write routes a
-VRAM destination to its role).
-  7E:ABB6 VramDmaFromBank7F -> race_vram_write
-  7E:ABD7 VramDmaFromGsuRam -> race_vram_write
-  7E:AC08 VramDmaRowsFromGsuRam -> race_vram_write
+tiles, maps, palette and sprite table directly, each load naming its
+destination by role and character or row (race_art_write,
+race_frame_art_write, race_frame_two_art_write, the course screen's art
+and map, the maps' own calls); no call takes a VRAM address.
+  7E:ABB6 VramDmaFromBank7F -> the named destination at each use
+  7E:ABD7 VramDmaFromGsuRam -> the named destination at each use
+  7E:AC08 VramDmaRowsFromGsuRam -> the named destination at each use
   7E:ACF7 OamDma -> sprites.c OamDmaAll (the sprite table is the engine's)
   7E:B0F6 CgramDma -> palette.c CgramDmaAll, RasterPaletteUpload
   03:ECA8 DmaFromDescriptor -> race_video.c clear_all (its only use, VideoStartUploads)

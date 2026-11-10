@@ -84,8 +84,16 @@ typedef struct {
 extern RaceVideo race_video;
 
 void race_video_init(void);
-void race_vram_write(uint16_t word, const uint8_t *data, uint32_t bytes); /* by the word address the original sent it to */
-void race_course_vram_write(uint16_t word, const uint8_t *data, uint32_t bytes); /* the one-screen destinations, always */
+/* The race's tile sets and maps, written by what they are and by character
+   or row: never by the original's video addresses. The race art is one 4bpp
+   set of 1024 characters; with two players BG2 draws from its start, with
+   one from RACE_ART_SPRITES, where the sprites' characters begin. */
+enum { RACE_ART_TWO_BACKDROP = 0x000, RACE_ART_SPRITES = 0x200, RACE_FRAME_TWO_FRAME = 0x168 };
+void race_art_write(unsigned character, const uint8_t *data, uint32_t bytes);           /* the race art */
+void race_frame_art_write(unsigned character, const uint8_t *data, uint32_t bytes);     /* one player: the frame's 8bpp art */
+void race_frame_two_art_write(unsigned character, const uint8_t *data, uint32_t bytes); /* two players: BG1's art (the halves' 3D, then the frame's) */
+void race_course_screen_art_write(unsigned character, const uint8_t *data, uint32_t bytes);
+void race_course_screen_map_write(const uint16_t *words, unsigned rows);               /* 32 entries a row */
 void race_course_maps_keep(void);              /* the unpacked course picture to both maps */
 void race_course_preview_reset(void);          /* $7F:C3D7 to $7F:9BD7, $800 bytes */
 void race_frame_art_draw(nshvc_draw_list list);    /* the frame and panels, at screen positions, after the list is cleared */
@@ -94,8 +102,6 @@ typedef struct { int count, x0[16], x1[16], y0[16], y1[16]; } PanelBoxes;
 const PanelBoxes *race_panel_boxes(void);          /* the one-player panel row's boxes, on the original's screen */
 void race_backdrop_two_pages_write(int first, const uint16_t *words, uint32_t n);
 void VideoRegsReset(void);
-void race_art_write(uint16_t word, const uint8_t *data, uint32_t bytes);
-void race_frame_art_write(uint16_t word, const uint8_t *data, uint32_t bytes);
 void race_map_page_write(int page, const uint16_t *words);
 void race_panel_map_write(const uint16_t *words);  /* two players: the panel's map over a half (a finished player's, the quit menu's), $400 words */
 /* the results screens' pictures, by what they hold (the art the sprites draw from) */
@@ -388,7 +394,7 @@ void SpriteTextAt8952(void);
 /* wanted (menu/records_screen.c): a row's car, three pieces */
 void SpritePieces3(uint16_t x, uint8_t y, uint16_t set, uint16_t palette, int slot);
 /* wanted by the race (race/phases.c, the lap and results panels) */
-void race_unpacked_to_art(uint16_t out, uint16_t in);  /* a packed block to its VRAM place, as RaceLoad's GsuCF42ToVram */
+uint32_t race_block_unpack(uint16_t out, uint16_t in); /* a packed block to the unpack area; its length from its transfer record */
 void OamByteSet(uint16_t offset, uint8_t value);   /* a byte of the sprite table, 0-$21F */
 uint8_t SpriteYOnScreen(uint8_t y);                /* 7E:B005 */
 void SpriteBar4WithMarker(uint8_t value, uint16_t pos, uint16_t slot);

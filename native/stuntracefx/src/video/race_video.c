@@ -114,16 +114,17 @@ static void clear_all(void)
     nshvc_map_write_snes(race_video.frame_map_two, 0, 0, 32, 32, zero_words);
 }
 
-/* The art at the word address the original gave it, into the sets by what lives there:
-   4bpp art from word $4000 up, the frame art (8bpp) at and above $5600 in the one-player screen. */
-void race_art_write(uint16_t word, const uint8_t *data, uint32_t bytes)
+/* The race art from `character` on (32 bytes a character): the tile set
+   the layers and sprites draw from, and the copy the list's images are cut
+   from. */
+void race_art_write(unsigned character, const uint8_t *data, uint32_t bytes)
 {
-    if (word >= 0x4000 && word < 0x8000) {
-        nshvc_tiles_write(race_video.tiles, (uint32_t)(word - 0x4000u) / 16u, data, bytes / 32u, NSHVC_TILES_PLANAR);
-        memcpy(race_art_bytes + (uint32_t)(word - 0x4000u) * 2u, data, bytes);
-        two_images_stale = 1;
-        memset(sprite_atlas_made, 0, sizeof sprite_atlas_made);
-    }
+    if (character * 32u + bytes > sizeof race_art_bytes)
+        return;
+    nshvc_tiles_write(race_video.tiles, character, data, bytes / 32u, NSHVC_TILES_PLANAR);
+    memcpy(race_art_bytes + character * 32u, data, bytes);
+    two_images_stale = 1;
+    memset(sprite_atlas_made, 0, sizeof sprite_atlas_made);
 }
 
 static uint8_t frame_art_8[1024 * 64];       /* the one-player frame and HUD art, 8bpp, as loaded */
@@ -141,86 +142,66 @@ static void frame_art_clear(void)
     frame_image_stale = 1;
 }
 
-void race_frame_art_write(uint16_t word, const uint8_t *data, uint32_t bytes)
+/* The one-player frame's 8bpp art from `character` on (64 bytes a character). */
+void race_frame_art_write(unsigned character, const uint8_t *data, uint32_t bytes)
 {
-    memcpy(frame_art_8 + (uint32_t)word * 2u, data, bytes);
+    if (character * 64u + bytes > sizeof frame_art_8)
+        return;
+    memcpy(frame_art_8 + character * 64u, data, bytes);
     frame_image_stale = 1;
 }
 
-/* Art or a map named by the word address the original sent it to, for the
-   unpacked pictures of the race and the course menu. */
-void race_vram_write(uint16_t word, const uint8_t *data, uint32_t bytes)
+/* With two players, BG1's art from `character` on: the halves' 3D characters
+   (0 the top's, TWO_HALF_CHARACTERS the bottom's), then the frame's from
+   RACE_FRAME_TWO_FRAME; kept too for the full window's boxes. */
+void race_frame_two_art_write(unsigned character, const uint8_t *data, uint32_t bytes)
 {
-    if (g.split_screen) {
-        if (word >= 0x3C00 && word < 0x4C00) {
-            race_backdrop_two_pages_write((word - 0x3C00) / 0x400, (const uint16_t *)(const void *)data, bytes / 0x800);
-        } else if (word >= 0x7800 && word < 0x7C00) {
-            race_panel_map_write((const uint16_t *)(const void *)data);
-        } else if (word >= 0x4C00 && word < 0x8000) {
-            race_art_write(word, data, bytes);
-        } else if (word == 0x1C00) {
-            race_frame_map_two_write((const uint16_t *)(const void *)data);
-        } else if (word < 0x2000) {
-            nshvc_tiles_write(race_video.frame_tiles_two, word / 16u, data, bytes / 32u, NSHVC_TILES_PLANAR);
-            if ((uint32_t)word * 2u + bytes <= sizeof frame_two_bytes)
-                memcpy(frame_two_bytes + (uint32_t)word * 2u, data, bytes);
-            two_boxes_stale = 1;
-        }
-        return;
-    }
-    race_course_vram_write(word, data, bytes);
+    nshvc_tiles_write(race_video.frame_tiles_two, character, data, bytes / 32u, NSHVC_TILES_PLANAR);
+    if (character * 32u + bytes <= sizeof frame_two_bytes)
+        memcpy(frame_two_bytes + character * 32u, data, bytes);
+    two_boxes_stale = 1;
 }
 
-/* The one-screen destinations, whatever the screen to come: the course
-   screen's art ($2000-$4FFF) and map ($5000), the frame art, the frame maps
-   and the shared art. The course screen loads before the battle's two-player
-   flag is cleared, so its loads come here directly. */
-void race_course_vram_write(uint16_t word, const uint8_t *data, uint32_t bytes)
+/* The course screen's art from `character` on, and its map's first `rows` rows. */
+void race_course_screen_art_write(unsigned character, const uint8_t *data, uint32_t bytes)
 {
-    if (word >= 0x2000 && word < 0x5000) {
-        nshvc_tiles_write(race_video.course_tiles, (uint32_t)(word - 0x2000u) / 16u, data, bytes / 32u, NSHVC_TILES_PLANAR);
-    } else if (word == 0x5000) {
-        nshvc_map_write_snes(race_video.course_map, 0, 0, 32, bytes / 64u, (const uint16_t *)(const void *)data);
-    } else if (word >= 0x5600 && word < 0x6000)
-        race_frame_art_write(word, data, bytes);
-    else if (word >= 0x7800)
-        race_map_page_write((word - 0x7800) / 0x400, (const uint16_t *)(const void *)data);
-    else if (word >= 0x4000)
-        race_art_write(word, data, bytes);
+    nshvc_tiles_write(race_video.course_tiles, character, data, bytes / 32u, NSHVC_TILES_PLANAR);
+}
+
+void race_course_screen_map_write(const uint16_t *words, unsigned rows)
+{
+    nshvc_map_write_snes(race_video.course_map, 0, 0, 32, rows, words);
 }
 
 /* ---- the results' and the quit menu's uploads, by what they hold ---- */
 
-/* Where the original put them: the sprites' first page from word $6000, a
-   character $10 words; with two players, BG1's characters from word 0. */
 enum {
-    RESULTS_PICTURE_WORD = 0x6C00,      /* characters $C0-$10F */
-    RESULTS_ROWS_WORD = 0x6240,         /* characters $24-$2D, the next row $34-$3D */
-    CAR_PICTURE_WORD = 0x6600,          /* characters $60-$BF */
-    TOP_HALF_WORD = 0x0000,             /* the top half's 3D characters, 0-$B3 */
-    BOTTOM_HALF_WORD = 0x0B40,          /* the bottom half's, $B4-$167 */
+    RESULTS_PICTURE = RACE_ART_SPRITES + 0x0C0, /* the sprites' characters $C0-$10F */
+    RESULTS_ROWS = RACE_ART_SPRITES + 0x024,    /* $24-$2D, the next row $34-$3D */
+    CAR_PICTURE = RACE_ART_SPRITES + 0x060,     /* $60-$BF */
+    TWO_HALF_CHARACTERS = 0x0B4,                /* each half's 3D characters with two players */
 };
 
 /* The results' big picture: 5 rows of 16 characters, and its fourth and fifth
-   rows' first ten characters again as characters $24-$2D and $34-$3D. */
+   rows' first ten characters again as the sprites' $24-$2D and $34-$3D. */
 void race_results_picture_write(const uint8_t *picture)
 {
-    race_vram_write(RESULTS_PICTURE_WORD, picture, 0x0A00);
-    race_vram_write(RESULTS_ROWS_WORD, picture + 0x0600, 0x0140);
-    race_vram_write(RESULTS_ROWS_WORD + 0x100, picture + 0x0800, 0x0140);
+    race_art_write(RESULTS_PICTURE, picture, 0x0A00);
+    race_art_write(RESULTS_ROWS, picture + 0x0600, 0x0140);
+    race_art_write(RESULTS_ROWS + 0x10, picture + 0x0800, 0x0140);
 }
 
 /* the results' car picture */
 void race_car_picture_write(const uint8_t *picture)
 {
-    race_vram_write(CAR_PICTURE_WORD, picture, 0x0C00);
+    race_art_write(CAR_PICTURE, picture, 0x0C00);
 }
 
 /* two players: the half's 3D characters (0 the top, 1 the bottom), from the
    map buffer when the quit menu opens over it */
 void race_half_characters_write(int half, const uint8_t *characters)
 {
-    race_vram_write(half ? BOTTOM_HALF_WORD : TOP_HALF_WORD, characters, 0x1680);
+    race_frame_two_art_write(half ? TWO_HALF_CHARACTERS : 0, characters, TWO_HALF_CHARACTERS * 32u);
 }
 
 /* The panel's map over a half (a finished player's, or the quit menu's);
@@ -274,20 +255,18 @@ static void unpack_record(uint16_t in)
     chip_unpack((uint32_t)cart8(0x03, (uint16_t)(in + 2)) << 16 | cart16(0x03, in), 0x3000);
 }
 
-/* The record's unpack, sent to the art at its transfer record's word. */
-static void unpacked_to_art(uint16_t out, uint16_t in)
+/* The record's unpack to the chip RAM's $3000; its length from its
+   transfer record `out` (where the original sent it is each caller's named
+   destination). */
+static uint32_t unpacked(uint16_t out, uint16_t in)
 {
-    uint16_t word = cart16(0x03, (uint16_t)(out + 1)), bytes = cart16(0x03, (uint16_t)(out + 5));
-
     unpack_record(in);
-    race_vram_write(word, fx_ram + 0x3000, bytes);
+    return cart16(0x03, (uint16_t)(out + 5));
 }
 
-/* The frame and HUD art from the chip RAM by bytes. */
-static void chip_to_frame_art(uint16_t at, uint16_t word, uint32_t bytes)
-{
-    race_frame_art_write(word, fx_ram + at, bytes);
-}
+/* The one-player frame's art by character: its frame and HUD from FRAME_HUD,
+   the mode's HUD pieces from FRAME_HUD_PIECES, the car's from FRAME_HUD_CAR. */
+enum { FRAME_HUD = 0x2B0, FRAME_HUD_PIECES = 0x2D6, FRAME_HUD_CAR = 0x2DA };
 
 /* A frame row's word and a picture's words to the first (buffer 0) or second page. */
 void race_map_page_write(int page, const uint16_t *words)
@@ -384,11 +363,11 @@ static void hud_art_mode0(void)
     uint8_t row[0x100];
     int i;
 
-    unpacked_to_art(0xF829, 0xF7D1);
+    race_frame_art_write(FRAME_HUD, fx_ram + 0x3000, unpacked(0xF829, 0xF7D1));
     chip_unpack(0x1D << 16 | 0x9228, 0x3000);
     for (i = 0; i < 0x100; i++)
         row[i] = fx_ram[0x3000u + k + (uint16_t)i];
-    race_frame_art_write(0x5B40, row, 0x100);
+    race_frame_art_write(FRAME_HUD_CAR, row, 0x100);
     chip_unpack(0x18 << 16 | 0xFAE8, 0x3000);
 }
 
@@ -416,13 +395,13 @@ static void race_screen_layers(void);
 static void two_player_art(int k3)
 {
     chip_unpack((uint32_t)cart8(0x03, (uint16_t)(0xF4FB + k3)) << 16 | cart16(0x03, (uint16_t)(0xF4F9 + k3)), 0x3000);
-    race_vram_write(0x4C00, fx_ram + 0x3000, 0x1800);
+    race_art_write(RACE_ART_TWO_BACKDROP + 0x0C0, fx_ram + 0x3000, 0x1800);
     chip_unpack((uint32_t)cart8(0x03, (uint16_t)(0xF5A3 + k3)) << 16 | cart16(0x03, (uint16_t)(0xF5A1 + k3)), 0x3000);
-    race_vram_write(0x3C00, fx_ram + 0x3000, 0x2000);
+    race_backdrop_two_pages_write(0, (const uint16_t *)(const void *)(fx_ram + 0x3000), 4);
     chip_unpack(0x17u << 16 | 0xFB84, 0x3000);
-    race_vram_write(0x1680, fx_ram + 0x3000, 0x600);
+    race_frame_two_art_write(RACE_FRAME_TWO_FRAME, fx_ram + 0x3000, 0x600);
     chip_unpack(0x17u << 16 | 0xFFAC, 0x3000);
-    race_vram_write(0x1C00, fx_ram + 0x3000, 0x800);
+    race_frame_map_two_write((const uint16_t *)(const void *)(fx_ram + 0x3000));
 }
 
 void RaceVideoSetup(void)
@@ -433,7 +412,7 @@ void RaceVideoSetup(void)
     g.fx_screen_mode = 3;
     clear_all();
     SoundIndicesFromHandlers();
-    unpacked_to_art(0xF80D, 0xF7DA);
+    race_art_write(RACE_ART_SPRITES, fx_ram + 0x3000, unpacked(0xF80D, 0xF7DA));
     PaletteCourseLoad(g.course);
     CgramDmaAll();
     GradientBuildColours(g.course);
@@ -442,23 +421,26 @@ void RaceVideoSetup(void)
         /* $7F:9BD7-$BBD7 cleared: what the results and the quit menu put
            in a half's 3D place (split_picture) is this, a blank picture */
         memset((uint8_t *)bank7f_words + 0x800, 0, 0x2001);
-        unpacked_to_art(0xF84C, 0xF7E3);
+        unpacked(0xF84C, 0xF7E3);
+        race_panel_map_write((const uint16_t *)(const void *)(fx_ram + 0x3000));
         memcpy(backdrop_map(0), fx_ram + 0x3000, 0x800);
         chip_unpack(0x18 << 16 | 0xC770, 0x3000);
-        race_art_write(0x7C00, fx_ram + 0x3000, 0x800);
-        race_art_write(0x6600, fx_ram + 0x3600, 0x400);
+        race_art_write(RACE_ART_SPRITES + 0x1C0, fx_ram + 0x3000, 0x800);
+        race_art_write(RACE_ART_SPRITES + 0x060, fx_ram + 0x3600, 0x400);
         race_screen_layers();
         return;
     }
-    unpacked_to_art(0xF853, (uint16_t)(0xF4F9 + k3));
+    /* the course's backdrop art: BG2's characters $C0 on (with one player
+       BG2's start is the sprites') */
+    race_art_write(RACE_ART_SPRITES + 0x0C0, fx_ram + 0x3000, unpacked(0xF853, (uint16_t)(0xF4F9 + k3)));
     if (cart16(0x03, (uint16_t)(0xF54D + k3)))
-        unpacked_to_art(0xF85A, (uint16_t)(0xF54D + k3));
-    unpacked_to_art(0xF814, 0xF7DD);
+        race_art_write(RACE_ART_SPRITES + 0x140, fx_ram + 0x3000, unpacked(0xF85A, (uint16_t)(0xF54D + k3)));
+    race_art_write(RACE_ART_SPRITES + 0x040, fx_ram + 0x3000, unpacked(0xF814, 0xF7DD));
     chip_unpack(0x1D << 16 | 0xD970, 0x3000);
     {
-        /* four rows of the course picture's sprite art */
+        /* four rows of the course picture's sprite art: the sprites' characters $48, $58, $4C, $5C, four each */
         uint16_t w = ram_code_7f16((uint16_t)(0x0B96 + 2 * g.course)), t = (uint16_t)(w & 0xFFFC);
-        static const uint16_t row_at[4] = {0x6480, 0x6580, 0x64C0, 0x65C0};
+        static const unsigned row_at[4] = { RACE_ART_SPRITES + 0x48, RACE_ART_SPRITES + 0x58, RACE_ART_SPRITES + 0x4C, RACE_ART_SPRITES + 0x5C };
         int r;
 
         t = (uint16_t)((uint16_t)(t >> 8 | t << 8) << 1);
@@ -471,18 +453,18 @@ void RaceVideoSetup(void)
     switch (g.hud_mode) {
     case 1:
         if (!g.hud_blank) {
-            unpacked_to_art(0xF830, 0xF7D4);
+            race_frame_art_write(FRAME_HUD, fx_ram + 0x3000, unpacked(0xF830, 0xF7D4));
             chip_unpack(0x18 << 16 | 0xFA38, 0x3000);
-            chip_to_frame_art(0x3000, 0x5AC0, 0x180);
+            race_frame_art_write(FRAME_HUD_PIECES, fx_ram + 0x3000, 0x180);
             chip_unpack(0x18 << 16 | 0xFB90, 0x3000);
             break;
         }
         /* fall through */
     case 3:
         if (!g.race_skipped) {
-            unpacked_to_art(0xF830, 0xF7D4);
+            race_frame_art_write(FRAME_HUD, fx_ram + 0x3000, unpacked(0xF830, 0xF7D4));
             chip_unpack(0x18 << 16 | 0xFA38, 0x3000);
-            chip_to_frame_art(0x3180, 0x5AC0, 0x100);
+            race_frame_art_write(FRAME_HUD_PIECES, fx_ram + 0x3180, 0x100);
             chip_unpack(0x18 << 16 | 0xFC20, 0x3000);
             break;
         }
@@ -1143,9 +1125,10 @@ void RaceCourseUpload(void)
 
 uint8_t race_pictures[0x3000];          /* $7F:63D7: the three art pictures the results screens switch between */
 
-static void hud_tile(uint16_t from, uint16_t tile, uint16_t word)
+/* One character of the unpacked HUD picture to the sprites' character `to`. */
+static void hud_tile(uint16_t from, uint16_t tile, unsigned to)
 {
-    race_art_write(word, fx_ram + (uint16_t)(from + (uint16_t)(tile << 5)), 32);
+    race_art_write(RACE_ART_SPRITES + to, fx_ram + (uint16_t)(from + (uint16_t)(tile << 5)), 32);
 }
 
 /* The race's sound and HUD art: tiles of the unpacked HUD picture, its big picture for the results, the race time, then the HUD's setup. */
@@ -1160,23 +1143,23 @@ void RaceHudLoad(void)
     chip_unpack(0x1D << 16 | 0x8078, 0x3000);
     switch (g.hud_mode) {
     case 0:
-        hud_tile(0x30A0, g.selection_derived[1], 0x62F0);
-        hud_tile(0x30A0, g.selection_derived[2], 0x63E0);
-        hud_tile(0x30A0, g.selection_derived[3], 0x63F0);
+        hud_tile(0x30A0, g.selection_derived[1], 0x2F);
+        hud_tile(0x30A0, g.selection_derived[2], 0x3E);
+        hud_tile(0x30A0, g.selection_derived[3], 0x3F);
         /* fall through */
     case 1:
         if (g.hud_blank)
-            race_art_write(0x63F0, fx_ram + 0x3080, 0x20);
+            race_art_write(RACE_ART_SPRITES + 0x3F, fx_ram + 0x3080, 0x20);
         break;
     case 2:
-        hud_tile(0x3000, g.selection_derived[1], 0x62F0);
+        hud_tile(0x3000, g.selection_derived[1], 0x2F);
         break;
     default:
-        race_art_write(0x63F0, fx_ram + 0x3080, 0x20);
+        race_art_write(RACE_ART_SPRITES + 0x3F, fx_ram + 0x3080, 0x20);
         break;
     }
-    hud_tile(0x3000, g.selection_derived[0], 0x62E0);
-    unpacked_to_art(0xF845, 0xF804);
+    hud_tile(0x3000, g.selection_derived[0], 0x2E);
+    race_art_write(RACE_ART_SPRITES + 0x0A0, fx_ram + 0x3000, unpacked(0xF845, 0xF804));
     chip_unpack(0x18 << 16 | 0xD920, 0x3000);
     memcpy(race_pictures, fx_ram + 0x3000, sizeof race_pictures);
     SoundReset();
@@ -1846,6 +1829,6 @@ void VramUploadGsuBuffer(void)
 {
     if (!g.picture_turn_pending)
         return;
-    race_art_write(0x6600, fx_ram + (g.fx_buffer ? 0x4000 : 0xD000), 0x0C00);
+    race_art_write(RACE_ART_SPRITES + 0x060, fx_ram + (g.fx_buffer ? 0x4000 : 0xD000), 0x0C00);
     g.picture_turn_pending = 0;
 }
