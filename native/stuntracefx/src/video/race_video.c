@@ -1040,6 +1040,7 @@ static void race_screen_layers(void)
     }
     pic.bg[2].tiles.id = 0;
     pic.bg[2].map.id = 0;
+    pic.bg[2].draw_list.id = 0;        /* the menus' 3D layer off: left on, the engine filled the race's list twice */
     pic.line_tables = 0;
     pic.main_screen = SHOW_BG1 | SHOW_BG2 | SHOW_SPRITES;
     pic.sub_screen = 0;
@@ -1223,6 +1224,7 @@ void RaceScreenSetup(void)
     pic.bg[1].scroll_x = pic.bg[1].scroll_y = 0;
     pic.bg[2].tiles.id = 0;
     pic.bg[2].map.id = 0;
+    pic.bg[2].draw_list.id = 0;        /* the menus' 3D layer off: left on, the engine filled the race's list twice */
     pic.main_screen = SHOW_BG2 | SHOW_BG1;
     pic.sub_screen = 0;
     pic.palette[1] = 0;
