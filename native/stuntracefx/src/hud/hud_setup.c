@@ -220,7 +220,7 @@ static void mode_speed_battle(int speed)
     } else {
         player_tiles(g.player_mode[0], 0x00FA);
         HUD_BYTES(battle_p1_sprites);
-        player_tiles(g.countdown_df8, 0x00F2);
+        player_tiles(g.tries_left, 0x00F2);
         HUD_BYTES(battle_p2_sprites);
         if (g.time_override) {
             palettes.target = 0x3947;

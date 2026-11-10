@@ -74,7 +74,7 @@ typedef struct {
     uint16_t time_taken_from;           /* $0E76 */
     uint16_t time_left_shown;           /* $0E78 */
     uint16_t bonus_step;                /* $0E7C */
-    uint8_t countdown_df8;              /* $0DF8 */
+    uint8_t tries_left;                 /* $0DF8: the HUD's REST count: 2 at a Speed Trax start ($FF in modes with none), one more for a lap finished with time left, one fewer at each race end (TryUsed) */
     uint8_t stunt_seen;                 /* $1A2D */
     uint32_t speed_total[2];            /* $0DDC, $0DE0 */
     uint16_t speed_count[2];            /* $0DE4, $0DE6 */

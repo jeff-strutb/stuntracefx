@@ -570,9 +570,29 @@ void RaceVarsReset(void)
  * WHAT IT DOES: The view's window and projection for one player or the
  * split screen.
  */
+static void view_words_set(FxViewWords w)
+{
+    g.view_left = w.left;
+    g.view_right = w.right;
+    g.view_top = w.top;
+    g.view_bottom = w.bottom;
+    g.view_centre_x = w.centre_x;
+    g.view_centre_y = w.centre_y;
+    g.view_scale_34 = w.scale_34;
+    g.view_scale_32 = w.scale_32;
+}
+
 static void view_params_by_players(void)
 {
-    if (g.split_screen) {
+    if (g.split_screen && race_two_full_window()) {
+        /* two players in the full window (plan stage 10): a player's
+           rectangle (both are the same size), the horizon at its middle as
+           the original's 72, 40 of 144 x 80 */
+        int x, y, w, h;
+
+        screen_two_rect(0, &x, &y, &w, &h);
+        view_words_set(fx_view_words(0, 0, w, h, h / 2));
+    } else if (g.split_screen) {
         g.view_left = 0;
         g.view_right = 0x008F;
         g.view_top = 0;
@@ -585,16 +605,8 @@ static void view_params_by_players(void)
         /* the full window (plan stage 10, step B): the whole screen, the
            horizon at the original's screen line 96 */
         const ScreenShape *s = screen_shape();
-        FxViewWords w = fx_view_words(0, 0, s->width, s->height, 96 + s->origin_y);
 
-        g.view_left = w.left;
-        g.view_right = w.right;
-        g.view_top = w.top;
-        g.view_bottom = w.bottom;
-        g.view_centre_x = w.centre_x;
-        g.view_centre_y = w.centre_y;
-        g.view_scale_34 = w.scale_34;
-        g.view_scale_32 = w.scale_32;
+        view_words_set(fx_view_words(0, 0, s->width, s->height, 96 + s->origin_y));
     } else {
         g.view_left = 0;
         g.view_right = 0x00CF;
@@ -688,12 +700,12 @@ void RaceModeSetup(void)
     g.time_shown_2 = 0;
     if (g.hud_mode == 0x00) {
         RecordsUnpackCourseRunning();
-        g.countdown_df8 = 0x02;
+        g.tries_left = 0x02;
         return;
     }
     if (g.hud_mode == 0x02)
         RaceModeSetupBattleSound();
-    g.countdown_df8 = 0xFF;
+    g.tries_left = 0xFF;
 }
 
 /* @routine 08:B893 Set7EFFA6Sequence */
@@ -703,11 +715,12 @@ void Set7EFFA6Sequence(void)
         objects.place_entries[i] = (uint16_t)(i + 1);
 }
 
-/* @routine 07:EE11 Countdown0DF8: the count down; once zero, the counted sprites' count. */
-void Countdown0DF8(void)
+/* @routine 07:EE11 Countdown0DF8: a try used at a race's end: one fewer left; with none, the
+   counted sprites' count down instead. */
+void TryUsed(void)
 {
-    if (g.countdown_df8) {
-        g.countdown_df8--;
+    if (g.tries_left) {
+        g.tries_left--;
         return;
     }
     g.sprites_counted--;

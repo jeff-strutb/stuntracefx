@@ -364,7 +364,7 @@ static void finish_alone(int player, uint16_t colour, uint8_t phase, uint8_t t)
     PaletteDarkenFour(colour);
     g.finish_mark = 0;
     g.finish_lines = 0;
-    Countdown0DF8();
+    TryUsed();
     g.player_phase[player] = phase;
     g.finish_timer = t;
     g.end_ready = t;
@@ -427,7 +427,7 @@ static void lap_finish(int player)
         g.end_timer = 0x23;
         g.player_phase[player] = 0x0A;
         OamHideForHudMode();
-        Countdown0DF8();
+        TryUsed();
         sound_port0_push(0x51);
         return;
     }
@@ -905,7 +905,7 @@ void TimeUpRace(int player)
             g.time_up_timer = 0x24;
             g.time_up_shown--;
             sound_port0_push(0x51);
-            Countdown0DF8();
+            TryUsed();
         }
         return;
     }

@@ -177,7 +177,7 @@ void HudBestTimeDigits(uint16_t packed);
 uint16_t TimePackBcd(uint8_t hundredths, uint8_t seconds, uint8_t minutes);
 
 /* misc.c */
-void Countdown0DF8(void);
+void TryUsed(void);             /* 07:EE11: a try used at a race's end */
 
 /* player_stats.c */
 void SpeedSampleAdd(uint16_t speed, int player);

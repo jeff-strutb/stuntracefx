@@ -220,7 +220,7 @@ static void player_one_phase_race(void)
             return;
         g.laps_counted[0] = g.laps_done[0];
         SoundPort0QueuePush(0x35);
-        g.countdown_df8++;
+        g.tries_left++;
         g.glyphs_extended++;
         return;
     }

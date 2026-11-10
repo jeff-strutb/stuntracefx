@@ -150,7 +150,7 @@ static void choice_made(int quit_extra)
     }
     g.pause_stage = 0x08;
     if (quit_extra && !g.hud_mode && !g.time_override) {
-        Countdown0DF8();
+        TryUsed();
         SoundPort1QueuePush(0x22);
     }
 }
