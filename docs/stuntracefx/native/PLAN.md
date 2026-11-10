@@ -496,6 +496,31 @@ every pixel of the surface, its texel and its colour.
   `pause_blur.shade` does) and eight inputs.
 - Shown to Jeff on a couple of courses (land and water, Aqua Tunnel from above and in the tube) before it is switched on.
 
+**Land as a ground mesh (Jeff, 2026-11-09; replaces the plane for land; water stays a plane).** Measured: land is not flat (Easy
+Ride's road runs from -1669 to -863 while its plane sat at -1280), so one plane's marks slid against the road. Every course
+object is placed at the course's base height and its relief is in its shapes; all of them are in the map's cells from the course
+script on (125-150 a course), so the whole course's shapes are known from the first picture.
+- **Heights.** Once a course, the fx side takes every course shape's points in world space through the chip's own point
+  routine (the frame program's object walk over the near and far records, with the view matrix at $00E4 set to the identity and
+  each object placed at a fixed point in front, the points caught by fx_face_point and moved back by the object's place); sprites,
+  cars and effects are left out. A grid of 512-unit cells over the course takes in each cell the lowest point that falls in it
+  (a pillar's foot, a road's surface, a wall's base: where the shapes meet the ground); cells with no point are filled smoothly
+  from their neighbours, out to the course's base height at the course's edges.
+- **Drawing.** The cells' corners are the mesh; each triangle is planar, so the GPU works out each of its pixels exactly from
+  its plane in view space (4 numbers a triangle as the material's inputs; the view's turn, the eye and the cell size in the
+  image's header once a picture): the pixel's world place, its texel and its depth. The triangles in view are drawn farthest
+  first, before every object, as the plane was: the track always covers the ground.
+- **Colour.** Opaque: the band's colour for the pixel's distance (the screen row a flat ground at the eye's height above the
+  mesh under the eye would show that distance on, read from video's race_ground_colour), so a flat stretch matches the
+  original's band; the marks over it, a shade darker.
+- **Kinds, from the course survey (pictures of every course, 2026-11-09).** Grass: Easy Ride ($00), the foggy forest ($04),
+  the grass stunt arena ($0D), the battle-style courses ($14-$16). Rock: the canyon ($02), the wild-west desert ($09). Cement:
+  the airport, the night city ($03, Jeff), and the sunset city ($07). Snow: White Land ($06); ice: the ice stunt arena ($0E).
+  Dirt: the dirt stunt arena ($0C). Water in the underwater wave art: Aqua Tunnel ($01), Sea Breeze ($05), Lake Side ($08),
+  the night harbour ($0B), the water stunt arena ($0F); the level of each measured from its own shapes (the harbour's old 3840
+  lay under its own floor). None: Sky Ramp ($0A) and the checkered test arenas ($17-$1A). The two-player battle arenas
+  ($10-$13) are surveyed in two players.
+
 #### Pattern textures as geometry (design, 2026-11-09)
 
 How it meets the direction: the CPU builds flat polygons into the draw list, as for the solids; the GPU fills them at the
