@@ -12,6 +12,7 @@
 
 #include "audio/sound.h"
 #include "data/cart.h"
+#include "data/race_tables.h"
 #include "data/unpack.h"
 #include "hud/hud.h"
 #include "menu/menu.h"
@@ -58,14 +59,10 @@ static const Packed RACE_RESULTS_PANEL = {0x1F, 0xFA39}, STUNT_RESULTS_PANEL = {
                     TIMED_RECORDS_PANEL = {0x1C, 0xF3F2}, RESULTS_MENU_PANEL = {0x1F, 0xFB99},
                     RESULTS_PICTURE = {0x18, 0xC770};
 
-/* The results' tables in bank 7: each car's picture word and choice byte,
-   the five letters of the word over the totals; the championship screen's
-   palette (bank $1F). */
-enum {
-    RESULTS_BANK = 0x07, CAR_PICTURES = 0xCCB7, CAR_CHOICE_BYTES = 0xCE93, TOTALS_WORD_LETTERS = 0xD5AD,
-    CHAMPION_PALETTE_BANK = 0x1F, CHAMPION_PALETTE = 0x8600,
-    UNPACK_ROOM = 0xC000                /* the chip's RAM from the unpack area on */
-};
+/* The results' tables are in data/race_tables.h: each car's picture word
+   and choice byte, the five letters of the word over the totals, the
+   championship screen's palette. */
+enum { UNPACK_ROOM = 0xC000 /* the chip's RAM from the unpack area on */ };
 
 /* A Super FX picture (program $01:CF42, the unpacker) to the chip's RAM at `to`. */
 static void picture_unpack(Packed p, uint16_t to)
@@ -303,7 +300,7 @@ static void ResultsPictureLoad(void)
 /* $10A0 = the car's picture word from the table at $07:CCB7. */
 static void car_picture(void)
 {
-    g.overlay_picture = cart16(RESULTS_BANK, (uint16_t)(CAR_PICTURES + g.car[0] * 2));
+    g.overlay_picture = results_car_picture(g.car[0]);
 }
 
 /* @routine 07:CC9B ResultsCarPicture */
@@ -347,7 +344,7 @@ static void car_change(int right)
             c = car3_open() ? 0x03 : 0x02;
     }
     g.car[0] = c;
-    g.choice_p1 = (uint16_t)((g.choice_p1 & 0xFF00) | cart8(RESULTS_BANK, (uint16_t)(CAR_CHOICE_BYTES + c)));
+    g.choice_p1 = (uint16_t)((g.choice_p1 & 0xFF00) | results_car_choice(c));
     SelectionSave();
     g.split_stage = 0x12;
     car_picture();
@@ -452,7 +449,7 @@ static void champion_palette(void)
     int i;
 
     for (i = 0; i < 256; i++)
-        palettes.buffer[i] = cart16(CHAMPION_PALETTE_BANK, (uint16_t)(CHAMPION_PALETTE + 2 * i));
+        palettes.buffer[i] = champion_palette_colour(i);
 }
 
 /* BG2 at (-24, -32), showing the results' page of its map ($5C00). */
@@ -514,7 +511,7 @@ static void OamWordRow5(void)
 
         sprite_x_set(n, (uint8_t)(0xA5 + 8 * i));
         sprite_y_set(n, 0x4E);
-        sprite_tile_set(n, (uint8_t)(cart8(RESULTS_BANK, (uint16_t)(TOTALS_WORD_LETTERS + i)) + 0xC0));
+        sprite_tile_set(n, (uint8_t)(results_totals_word_letter((int)i) + 0xC0));
         sprite_attributes_set(n, 0x38);
     }
 }

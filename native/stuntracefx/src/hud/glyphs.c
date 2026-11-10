@@ -12,7 +12,7 @@
  * GsuClear6000IfSet, HudTimesDrawEven, HudTimesPackedEven.
  */
 #include "audio/sound.h"
-#include "data/cart.h"
+#include "data/race_tables.h"
 #include "fx/fx.h"
 #include "hud/hud.h"
 #include "race/race.h"
@@ -20,23 +20,12 @@
 #include "system/state.h"
 #include "video/video.h"
 
-/* The glyph programs' tables. Bank 7 (HUD_BANK): the big and the small
-   digits' glyphs; the time frame's middle, its two tails' widths and their
-   texture steps, by the animation step; the laps-to-go words' heights by
-   their step. Bank 4: the glyph sprites' starting places and glyphs; their
-   grow steps' sizes, scales and offsets; the messages (each an address in
-   the bank: a length byte, then a glyph word a letter). */
-enum {
-    BIG_DIGIT_GLYPHS = 0x8E3E, SMALL_DIGIT_GLYPHS = 0x8E52,
-    FRAME_MIDDLE_WIDTHS = 0x97BE, FRAME_MIDDLE_STEPS = 0x97CA,
-    FRAME_TAIL_B_WIDTHS = 0x97D6, FRAME_TAIL_B_STEPS = 0x97E2,
-    FRAME_TAIL_A_WIDTHS = 0x97EE, FRAME_TAIL_A_STEPS = 0x97FA,
-    LAPS_TO_GO_HEIGHTS = 0x85CC,
-    GLYPH_SPRITE_BANK = 0x04,
-    GLYPH_SPRITE_XS = 0xDA7A, GLYPH_SPRITE_GLYPHS = 0xDA8E,
-    GROW_SIZES = 0xDAA2, GROW_SCALES = 0xDAB2, GROW_X_OFFSETS = 0xDAC2, GROW_Y_OFFSETS = 0xDAD2,
-    MESSAGES = 0xDF6D
-};
+/* The glyph programs' tables are in data/race_tables.h: the big and the
+   small digits' glyphs; the time frame's middle, its two tails' widths and
+   their texture steps, by the animation step; the laps-to-go words' heights
+   by their step; the glyph sprites' starting places and glyphs; their grow
+   steps' sizes, scales and offsets; the messages (a length, then a glyph
+   word a letter). */
 
 /* The piece the HUD draws next: what it sets before each program, kept
    between them as the original's words were (a program that moves x on
@@ -53,8 +42,8 @@ void GlyphColours(uint8_t b1, uint8_t b2, uint8_t b3)
 }
 
 /* the glyph from the word tables at $07:8E3E and $07:8E52 (DigitGlyphSelect, B) */
-static void piece_big_digit(uint16_t index) { hud_piece.glyph = cart16(HUD_BANK, (uint16_t)(BIG_DIGIT_GLYPHS + index)); }
-static void piece_small_digit(uint16_t index) { hud_piece.glyph = cart16(HUD_BANK, (uint16_t)(SMALL_DIGIT_GLYPHS + index)); }
+static void piece_big_digit(uint16_t index) { hud_piece.glyph = hud_big_digit_glyph(index); }
+static void piece_small_digit(uint16_t index) { hud_piece.glyph = hud_small_digit_glyph(index); }
 
 void DigitGlyphSelect(uint16_t digit) { piece_big_digit((uint16_t)(digit << 1)); }
 
@@ -252,11 +241,11 @@ void TimeFrameTailB(void)
     hud_piece.y = (uint16_t)(g.hud_point_y + 8);
     hud_piece.h = 0x0100;
     hud_piece.v = 0x0100;
-    v = cart16(HUD_BANK, (uint16_t)(FRAME_TAIL_B_WIDTHS + g.hud_point_index));
+    v = hud_frame_tail_b_width(g.hud_point_index);
     if (!v)
         return;
     hud_piece.w = v;
-    hud_piece.u = cart16(HUD_BANK, (uint16_t)(FRAME_TAIL_B_STEPS + g.hud_point_index));
+    hud_piece.u = hud_frame_tail_b_step(g.hud_point_index);
     hud_piece.glyph = 0x1E00;
     FxScaledSprite13(&hud_piece, chip_view_right(), chip_view_bottom());
 }
@@ -271,11 +260,11 @@ void TimeFrameTailA(void)
     hud_piece.y = (uint16_t)(g.hud_point_y + 8);
     hud_piece.h = 0x0100;
     hud_piece.v = 0x0100;
-    v = cart16(HUD_BANK, (uint16_t)(FRAME_TAIL_A_WIDTHS + g.hud_point_index));
+    v = hud_frame_tail_a_width(g.hud_point_index);
     if (!v)
         return;
     hud_piece.w = v;
-    hud_piece.u = cart16(HUD_BANK, (uint16_t)(FRAME_TAIL_A_STEPS + g.hud_point_index));
+    hud_piece.u = hud_frame_tail_a_step(g.hud_point_index);
     hud_piece.glyph = 0x1C00;
     FxScaledSprite12(&hud_piece, chip_view_right(), chip_view_bottom());
 }
@@ -295,7 +284,7 @@ void TimeFrameLeft(void)
 /* @routine 07:9486 GsuFA5AThreeShifted */
 void TimeFrameLeftShifted(void)
 {
-    uint16_t x = (uint16_t)(cart16(HUD_BANK, (uint16_t)(FRAME_X_OFFSETS + g.hud_point_index)) + g.hud_point_x);
+    uint16_t x = (uint16_t)(hud_frame_x_offset(g.hud_point_index) + g.hud_point_x);
     uint16_t y = g.hud_point_y;
 
     piece_scale(0x0100, 0x0100, 0x0100, 0x0100);
@@ -310,7 +299,7 @@ void TimeFrameRight(void)
 {
     static const uint16_t dy[6] = {0x0000, 0x0008, 0x0010, 0x0018, 0x0008, 0x0010};
     static const uint16_t piece[6] = {0x1A0E, 0x1A16, 0x1B16, 0x1B0E, 0x1A0E, 0x1B0E};
-    uint16_t x = (uint16_t)(cart16(HUD_BANK, (uint16_t)(FRAME_X_OFFSETS + g.hud_point_index)) + g.hud_point_x);
+    uint16_t x = (uint16_t)(hud_frame_x_offset(g.hud_point_index) + g.hud_point_x);
 
     piece_scale(0x0100, 0x0100, 0x0100, 0x0100);
     for (int i = 0; i < 6; i++) {
@@ -337,7 +326,7 @@ void TimeFrameMiddle(void)
 {
     uint16_t i = g.hud_point_index;
 
-    piece_scale(cart16(HUD_BANK, (uint16_t)(FRAME_MIDDLE_WIDTHS + i)), 0x0100, cart16(HUD_BANK, (uint16_t)(FRAME_MIDDLE_STEPS + i)), 0x0100);
+    piece_scale(hud_frame_middle_width(i), 0x0100, hud_frame_middle_step(i), 0x0100);
     scaled_piece(g.hud_point_x, g.hud_point_y, 0x1B18);
     hud_piece.h = 0x0100;
     hud_piece.v = 0x0100;
@@ -361,7 +350,7 @@ void ShowLapsToGo(void)
     hud_piece.x = 0x0010;
     hud_piece.y = 0x0028;
     GlyphColours(0xBF, 0xBA, 0xB9);
-    hud_piece.h = cart8(HUD_BANK, (uint16_t)(LAPS_TO_GO_HEIGHTS + n));
+    hud_piece.h = hud_laps_to_go_height(n);
     for (int i = 0; i < 11; i++) {
         hud_piece.glyph = piece[i];
         if (n < 8)
@@ -597,9 +586,9 @@ static void glyph_sprite_draw_left8(int sprite)
 void GlyphSpritesInit(void)
 {
     for (int i = 0; i < 16; i++) {
-        g.glyph_sprite_x[i] = cart16(GLYPH_SPRITE_BANK, (uint16_t)(GLYPH_SPRITE_XS + 2 * i));
+        g.glyph_sprite_x[i] = glyph_sprite_start_x((uint16_t)i);
         g.glyph_sprite_y[i] = 0x0008;
-        g.glyph_sprite_glyph[i] = cart16(GLYPH_SPRITE_BANK, (uint16_t)(GLYPH_SPRITE_GLYPHS + 2 * i));
+        g.glyph_sprite_glyph[i] = glyph_sprite_start_glyph((uint16_t)i);
         g.glyph_sprite_step[i] = 0;
     }
     g.times_step = 0;
@@ -631,15 +620,14 @@ static void time_glyph(int *slot, uint16_t glyph, uint8_t x)
  */
 static void glyph_list_message_and_time(uint16_t index, uint8_t min, uint8_t sec, uint8_t hund)
 {
-    uint16_t s = cart16(GLYPH_SPRITE_BANK, (uint16_t)(MESSAGES + index));
-    uint16_t letters = (uint16_t)(cart16(GLYPH_SPRITE_BANK, s) & 0x00FF), x;
+    uint16_t letters = hud_message_letters(index), x, k = 0;
     int slot = 0;
 
     x = (uint16_t)-(uint16_t)((uint16_t)(letters * 4) - 0x0068);
     g.glyph_first_end = (uint16_t)(letters - 1);
     g.glyph_end = (uint16_t)(g.glyph_first_end + 7);
     for (uint16_t n = letters; n; n--) {
-        uint16_t w = cart16(GLYPH_SPRITE_BANK, (uint16_t)(s + 1));
+        uint16_t w = hud_message_glyph(index, k);
 
         if (w) {
             g.glyph_word[slot] = w;
@@ -649,7 +637,7 @@ static void glyph_list_message_and_time(uint16_t index, uint8_t min, uint8_t sec
             slot++;
         }
         x = (uint16_t)(x + 8);
-        s = (uint16_t)(s + 2);
+        k++;
     }
     time_glyph(&slot, digit_glyph(hund), 0x4C);
     time_glyph(&slot, 0x980A, 0x54);
@@ -838,12 +826,12 @@ void GlyphSpritesGrowAndTimes(void)
             if (!step)
                 continue;
             y = (uint16_t)(step * 2);
-            hud_piece.w = cart16(GLYPH_SPRITE_BANK, (uint16_t)(GROW_SIZES + y));
-            hud_piece.h = cart16(GLYPH_SPRITE_BANK, (uint16_t)(GROW_SIZES + y));
-            hud_piece.u = cart16(GLYPH_SPRITE_BANK, (uint16_t)(GROW_SCALES + y));
-            hud_piece.v = cart16(GLYPH_SPRITE_BANK, (uint16_t)(GROW_SCALES + y));
-            hud_piece.x = (uint16_t)(g.glyph_sprite_x[i] + cart16(GLYPH_SPRITE_BANK, (uint16_t)(GROW_X_OFFSETS + y)));
-            hud_piece.y = (uint16_t)(g.glyph_sprite_y[i] + cart16(GLYPH_SPRITE_BANK, (uint16_t)(GROW_Y_OFFSETS + y)));
+            hud_piece.w = glyph_grow_size(y);
+            hud_piece.h = glyph_grow_size(y);
+            hud_piece.u = glyph_grow_scale(y);
+            hud_piece.v = glyph_grow_scale(y);
+            hud_piece.x = (uint16_t)(g.glyph_sprite_x[i] + glyph_grow_x_offset(y));
+            hud_piece.y = (uint16_t)(g.glyph_sprite_y[i] + glyph_grow_y_offset(y));
             hud_piece.glyph = g.glyph_sprite_glyph[i];
             FxScaledSpriteAdvance(&hud_piece, chip_view_right(), chip_view_bottom());
         }

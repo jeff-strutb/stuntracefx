@@ -7,7 +7,7 @@
  * before them loads 0 after its BIT), PlayerOnePhaseReturn.
  */
 #include "audio/sound.h"
-#include "data/cart.h"
+#include "data/race_tables.h"
 #include "hud/hud.h"
 #include "object/object.h"
 #include "race/race.h"
@@ -92,9 +92,6 @@ void PlayerStatsAndPaletteAnimate(void)
     g.palette_animate = 0xFF;
 }
 
-/* The tally's tables in bank 7: each glyph sprite's glyph and its slide's
-   end, and the stunt panel's count by its timer. */
-enum { TALLY_BANK = 0x07, TALLY_GLYPHS = 0xDFA0, TALLY_X_ENDS = 0xDF70, STUNT_COUNT_STEPS = 0xE115 };
 
 typedef void (*PhaseFn)(void);
 
@@ -241,7 +238,7 @@ static void player_one_phase_race(void)
         for (uint16_t n = rows[r].n; n; n--, x++) {
             g.glyph_sprite_y[x] = rows[r].y;
             g.glyph_sprite_x[x] = 0x0038;
-            g.glyph_sprite_glyph[x] = cart16(TALLY_BANK, (uint16_t)(TALLY_GLYPHS + 2 * x));
+            g.glyph_sprite_glyph[x] = tally_glyph(x);
         }
     }
     g.glyph_sprite_glyph[3] = (uint16_t)(0x1400 + ((g.digit_pair & 0x000F) << 1));
@@ -267,7 +264,7 @@ static void player_one_phase_tally(void)
     uint16_t a;
 
     for (int x = 1; x < 25; x++) {
-        uint16_t limit = cart16(TALLY_BANK, (uint16_t)(TALLY_X_ENDS + 2 * x));
+        uint16_t limit = tally_x_end(x);
 
         a = (uint16_t)(g.glyph_sprite_x[x] + 0x000B);
         if (a >= limit)
@@ -334,7 +331,7 @@ static void player_one_phase_step(void)
 /* The stunt panel's count byte through the table, then the draw. */
 static uint16_t stunt_count_byte(void)
 {
-    return cart8(TALLY_BANK, (uint16_t)(STUNT_COUNT_STEPS + g.banner_timer[0]));
+    return stunt_count_step(g.banner_timer[0]);
 }
 
 static void stunt_count_down(void)

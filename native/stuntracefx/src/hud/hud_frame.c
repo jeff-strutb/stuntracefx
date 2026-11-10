@@ -12,7 +12,7 @@
 #include "race/race.h"
 #include "system/chip.h"
 #include "system/state.h"
-#include "data/cart.h"
+#include "data/race_tables.h"
 #include "video/video.h"
 
 /* A digit's two tiles into two sprites stacked: tile 2d on top, 2d + 1 below. */
@@ -402,10 +402,6 @@ void SlideStep(void)
     palettes.amount = (uint8_t)(g.slide_value >> 8);
 }
 
-/* The classes' names in bank 2: six sprite tiles each, the first class's
-   from the start, the second's six on. */
-enum { CLASS_NAME_BANK = 0x02, CLASS_NAME_TILES = 0xEFD6 };
-
 /* @routine 02:EFA3 OamClassName: the class's name over six sprites. */
 void OamClassName(void)
 {
@@ -416,5 +412,5 @@ void OamClassName(void)
         return;
     x = g.course_class == 1 ? 0x0006 : 0x0000;
     for (int i = 0; i < 6; i++)
-        sprite_tile_set(n + i, cart8(CLASS_NAME_BANK, (uint16_t)(CLASS_NAME_TILES + x + i)));
+        sprite_tile_set(n + i, class_name_tile((uint16_t)(x + i)));   /* six tiles a class, the second class's six on */
 }

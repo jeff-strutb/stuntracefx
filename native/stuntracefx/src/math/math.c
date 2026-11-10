@@ -8,7 +8,7 @@
  * only caller; ObjectMoveByVector and ObjectVelocityFromHeading are the
  * objects'. race/NOTES lists them all.
  */
-#include "data/cart.h"
+#include "data/race_tables.h"
 #include "math/math.h"
 #include "system/state.h"
 
@@ -228,13 +228,6 @@ uint8_t ApproachSixtyFourthMin64Byte(uint8_t value, uint8_t target, int *moved) 
 /* @routine 03:D154 ApproachOneTwentyEighthMin128Byte: $80 is -128 as a byte, so it always steps down by 1. */
 uint8_t ApproachOneTwentyEighthMin128Byte(uint8_t value, uint8_t target, int *moved) { return approach_byte(value, target, 128, 7, moved); }
 
-/* The sine and cosine of an angle, from the cartridge's byte tables in
-   bank 0. */
-enum { TRIG_BANK = 0x00, SINE_TABLE = 0x96FE, COSINE_TABLE = 0x973E };
-
-static uint8_t sine(uint8_t i) { return cart8(TRIG_BANK, (uint16_t)(SINE_TABLE + i)); }
-static uint8_t cosine(uint8_t i) { return cart8(TRIG_BANK, (uint16_t)(COSINE_TABLE + i)); }
-
 /* The signed 8 x 8 multiply the code does by hand: the magnitudes, the
    first doubled and kept to eight bits, the high byte of the product,
    negated when the signs differ. */
@@ -252,9 +245,9 @@ static Vec16 flat(int8_t speed, uint8_t i)
 {
     Vec16 v;
 
-    v.x = (int8_t)smul((uint8_t)speed, sine(i));
+    v.x = (int8_t)smul((uint8_t)speed, trig_sine(i));
     v.y = 0;
-    v.z = (int8_t)smul((uint8_t)speed, cosine(i));
+    v.z = (int8_t)smul((uint8_t)speed, trig_cosine(i));
     return v;
 }
 
@@ -262,9 +255,9 @@ static Vec16 pitched(int8_t speed, uint8_t ia, uint8_t ib)
 {
     Vec16 v;
 
-    v.x = (int8_t)smul(smul((uint8_t)speed, sine(ia)), cosine(ib));
-    v.z = (int8_t)smul(smul((uint8_t)speed, cosine(ia)), cosine(ib));
-    v.y = (int8_t)smul((uint8_t)speed, sine(ib));
+    v.x = (int8_t)smul(smul((uint8_t)speed, trig_sine(ia)), trig_cosine(ib));
+    v.z = (int8_t)smul(smul((uint8_t)speed, trig_cosine(ia)), trig_cosine(ib));
+    v.y = (int8_t)smul((uint8_t)speed, trig_sine(ib));
     return v;
 }
 
@@ -301,17 +294,17 @@ void RotateXZ(int8_t x, int8_t z, uint8_t angle, int16_t *x_out, int16_t *z_out)
 {
     uint8_t i = (uint8_t)-angle;
 
-    rotate8(sine(i), cosine(i), x, z, x_out, z_out);
+    rotate8(trig_sine(i), trig_cosine(i), x, z, x_out, z_out);
 }
 
 /* @routine 03:C3FF RotateXZFrom08: by the angle itself. */
 void RotateXZFrom08(int8_t x, int8_t z, uint8_t angle, int16_t *x_out, int16_t *z_out)
 {
-    rotate8(sine(angle), cosine(angle), x, z, x_out, z_out);
+    rotate8(trig_sine(angle), trig_cosine(angle), x, z, x_out, z_out);
 }
 
 /* @routine 03:C57C RotateXY */
 void RotateXY(int8_t x, int8_t y, uint8_t angle, int16_t *x_out, int16_t *y_out)
 {
-    rotate8(sine(angle), cosine(angle), x, y, x_out, y_out);
+    rotate8(trig_sine(angle), trig_cosine(angle), x, y, x_out, y_out);
 }

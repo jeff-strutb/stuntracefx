@@ -91,8 +91,4 @@ void TimeTotalsSum(void);
 void TimeRunningTotals(void);
 void RecordTimeInsert(void);
 
-/* The HUD's tables in bank 7 the race's and the glyphs' code both read:
-   the time frame's X offsets by its animation step. */
-enum { HUD_BANK = 0x07, FRAME_X_OFFSETS = 0x9806 };
-
 #endif

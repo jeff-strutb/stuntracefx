@@ -11,6 +11,7 @@
 
 #include "audio/sound.h"
 #include "data/cart.h"
+#include "data/race_tables.h"
 #include "data/unpack.h"
 #include "fx/fx_draw.h"
 #include "fx/fx_rt.h"
@@ -135,17 +136,11 @@ static void flash_sprite_y(uint8_t y)
     g.flash_sprite_pos = (uint16_t)((g.flash_sprite_pos & 0x00FF) | y << 8);
 }
 
-/* The cartridge tables the course screen reads (bank 3 unless named): the
-   zoom's window boxes and targets, four words each by offset; the stunt and
-   battle courses by cursor; the flashing sprite's place by stage (bank 2);
-   the screen's palette (bank $1F). */
-enum {
-    COURSE_BANK = 0x03,
-    ZOOM_TARGETS = 0xFB8E, ZOOM_BOXES = 0xFC11,
-    STUNT_COURSE_LIST = 0xFB86, BATTLE_COURSE_LIST = 0xFB8A,
-    FLASH_SPRITE_BANK = 0x02, FLASH_SPRITE_PLACES = 0xFC58,
-    COURSE_PALETTE_BANK = 0x1F, COURSE_PALETTE = 0x8200
-};
+/* The course screen's tables are in data/race_tables.h: the zoom's window
+   boxes and targets, four words each by offset; the stunt and battle courses
+   by cursor; the flashing sprite's place by stage; the screen's palette. The
+   packed art's records below are still read here by their place (bank 3). */
+enum { COURSE_BANK = 0x03 };
 
 /* ---- the zoom into the chosen course ---- */
 
@@ -160,8 +155,8 @@ static void course_zoom(uint16_t box, uint16_t target)
     int i;
 
     for (i = 0; i < 4; i++) {
-        zoom.target[i] = cart16(COURSE_BANK, (uint16_t)(ZOOM_TARGETS + target + 2 * i));
-        zoom.base[i] = cart16(COURSE_BANK, (uint16_t)(ZOOM_BOXES + box + 2 * i));
+        zoom.target[i] = course_zoom_target_word(target, i);
+        zoom.base[i] = course_zoom_box_word(box, i);
         zoom_word_set(i, zoom.base[i]);
     }
     zoom.limit = 0x0F;
@@ -175,17 +170,17 @@ static void course_zoom(uint16_t box, uint16_t target)
 
 /* The course from the cursor in a list of four (a word store, the high
    byte cleared), the zoom from box cursor * 8 + $80. */
-static void course_choose(uint16_t list, uint16_t target)
+static void course_choose(CourseList list, uint16_t target)
 {
-    g.course = cart8(COURSE_BANK, (uint16_t)(list + g.champ_stage));
+    g.course = course_in_list(list, g.champ_stage);
     g.course_high = 0;
     course_zoom((uint16_t)(g.champ_stage * 8 + 0x80), target);
 }
 
 /* @routine 03:FB25 CourseZoomStunt: courses $0C-$0F */
-static void CourseZoomStunt(void) { course_choose(STUNT_COURSE_LIST, 0x0008); }
+static void CourseZoomStunt(void) { course_choose(COURSE_LIST_STUNT, 0x0008); }
 /* @routine 03:FB47 CourseZoomBattle: courses $10-$13 */
-static void CourseZoomBattle(void) { course_choose(BATTLE_COURSE_LIST, 0x0010); }
+static void CourseZoomBattle(void) { course_choose(COURSE_LIST_BATTLE, 0x0010); }
 
 /* @routine 02:EB51 CourseFromSelection, 02:EB4D CourseFromSelectionLong */
 uint8_t CourseFromSelection(void)
@@ -231,7 +226,7 @@ static void CourseZoomFromSelection(void)
 /* @routine 03:FAFF CourseZoomTimeUp */
 static void CourseZoomTimeUp(void)
 {
-    g.course = cart8(COURSE_BANK, (uint16_t)(STUNT_COURSE_LIST + g.champ_stage));
+    g.course = course_in_list(COURSE_LIST_STUNT, g.champ_stage);
     g.course_high = 0;
     course_zoom((uint16_t)((g.champ_stage - 2) * 8 + 0x80), 0x0008);
 }
@@ -326,7 +321,7 @@ static void RaceFadeStageDispatch(void) { cursor_at(g.champ_stage, 1); }
 /* @routine 02:FC44 Set0D37FromTable: the flashing sprite at the cursor's course */
 static void FlashSpriteToStage(void)
 {
-    g.flash_sprite_pos = cart16(FLASH_SPRITE_BANK, (uint16_t)(FLASH_SPRITE_PLACES + g.champ_stage * 2));
+    g.flash_sprite_pos = course_flash_sprite_place(g.champ_stage);
 }
 
 /* @routine 02:FC60 TimeUpSelectDraw */
@@ -978,7 +973,7 @@ void RaceLoad(void)
     g.fx_screen_mode = 0x03;
     VramNoiseTiles();
     for (i = 0; i < 256; i++)
-        palettes.buffer[i] = cart16(COURSE_PALETTE_BANK, (uint16_t)(COURSE_PALETTE + 2 * i));
+        palettes.buffer[i] = course_palette_colour(i);
     CgramDmaAll();
     OamBufferClear();
     VideoRegsReset();

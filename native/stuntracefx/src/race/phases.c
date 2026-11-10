@@ -8,7 +8,7 @@
  * those calls in a handler runs anyway.
  */
 #include "audio/sound.h"
-#include "data/cart.h"
+#include "data/race_tables.h"
 #include "hud/hud.h"
 #include "race/race.h"
 #include "system/chip.h"
@@ -69,14 +69,11 @@ void RaceReadyShort(void) { race_ready(0x1E); }
 /* @routine 07:E2CA RaceReadyLong */
 void RaceReadyLong(void) { race_ready(0x36); }
 
-/* The phases' tables in bank 7: the start's race-time size by its timer,
-   a lap banner's size by its timer. */
-enum { PHASE_BANK = 0x07, START_TIME_SIZES = 0xE33A, BANNER_SIZES = 0xE95A };
 
 /* @routine 07:E323 RaceStartStepsDraw: the race time at the size the timer picks. */
 static void start_draw(void)
 {
-    hud_piece.h = (uint8_t)cart16(PHASE_BANK, (uint16_t)(START_TIME_SIZES + g.race_timer));
+    hud_piece.h = (uint8_t)start_time_size(g.race_timer);
     GlyphColours(0xBF, 0xB5, 0xBB);
     GsuTimeDigits();
 }
@@ -342,7 +339,7 @@ static void finish_both(void)
 /* A banner's size by its timer, then the timer counted down; at 0 the banner is cleared. */
 static void lap_banner(int player, void (*draw)(uint16_t))
 {
-    uint16_t size = cart8(PHASE_BANK, (uint16_t)(BANNER_SIZES + g.banner_timer[player]));
+    uint16_t size = banner_size(g.banner_timer[player]);
 
     draw(size);
     if (!--g.banner_timer[player])

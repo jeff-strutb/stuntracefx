@@ -11,6 +11,7 @@
 
 #include "audio/sound.h"
 #include "data/cart.h"
+#include "data/race_tables.h"
 #include "fx/fx.h"
 #include "fx/fx_draw.h"
 #include "hud/hud.h"
@@ -415,10 +416,7 @@ static uint8_t race_pace(void)
    is (three bytes a course: its address, then its bank), and the attract
    demos' scripts (a command byte, then its operands). A script's address is
    in its bank's ROM, which starts at $8000. */
-enum { FLOW_BANK = 0x03, COURSE_SCRIPTS = 0xF4A5, DEMO_SCRIPTS = 0x8004, BANK_ROM_START = 0x8000 };
-
-static uint8_t demo8(uint16_t at) { return cart8(FLOW_BANK, (uint16_t)(DEMO_SCRIPTS + at)); }
-static uint16_t demo16(uint16_t at) { return cart16(FLOW_BANK, (uint16_t)(DEMO_SCRIPTS + at)); }
+enum { FLOW_BANK = 0x03, COURSE_SCRIPTS = 0xF4A5, BANK_ROM_START = 0x8000 };
 
 /* @routine 03:EC24 CourseDataPointer: the course script's start. */
 static void course_script_start(void)
@@ -642,9 +640,9 @@ static void demo_setup(uint16_t offset)
 {
     uint16_t at = offset;
 
-    g.course = (uint8_t)demo16((uint16_t)(at + 2));
+    g.course = (uint8_t)demo_script_word((uint16_t)(at + 2));
     flow.demo_flags = 0x0020;
-    g.selection_handler[0] = demo16(at);
+    g.selection_handler[0] = demo_script_word(at);
     g.hud_mode = 0;
     PlaceEntriesInOrder();
     RaceVideoInit();
@@ -683,22 +681,22 @@ static int demo_commands(void)
 {
     for (;;) {
         uint16_t at = flow.demo_at;
-        uint8_t c = demo8(at);
+        uint8_t c = demo_script_byte(at);
 
         switch (c) {
         case 0x01:
-            ObjectLinkedHandlerSet(obj_at(g.player_car), demo16((uint16_t)(at + 1)));
+            ObjectLinkedHandlerSet(obj_at(g.player_car), demo_script_word((uint16_t)(at + 1)));
             flow.demo_at = (uint16_t)(at + 3);
             continue;
         case 0x02:
             /* the text's address and its bank (the original's second word
                store, at $2733, puts the bank at $2734) */
-            fx16_set(FXIN_TEXT_NOTICE, demo16((uint16_t)(at + 1)));
-            fx8_set(FX_TEXT_BANK, demo8((uint16_t)(at + 3)));
+            fx16_set(FXIN_TEXT_NOTICE, demo_script_word((uint16_t)(at + 1)));
+            fx8_set(FX_TEXT_BANK, demo_script_byte((uint16_t)(at + 3)));
             flow.demo_at = (uint16_t)(at + 4);
             continue;
         case 0x03:
-            if (demo16((uint16_t)(at + 1)) != flow.demo_frame)
+            if (demo_script_word((uint16_t)(at + 1)) != flow.demo_frame)
                 return 0;
             flow.demo_at = (uint16_t)(at + 3);
             continue;
@@ -722,13 +720,13 @@ static int demo_commands(void)
             flow.demo_at = (uint16_t)(at + 1);
             continue;
         case 0x09:
-            cameras[0].x = demo16((uint16_t)(at + 1));
-            cameras[0].z = demo16((uint16_t)(at + 3));
+            cameras[0].x = demo_script_word((uint16_t)(at + 1));
+            cameras[0].z = demo_script_word((uint16_t)(at + 3));
             demo_camera();
             flow.demo_at = (uint16_t)(at + 5);
             continue;
         case 0x0A:
-            cameras[0].y = (uint16_t)(cameras[0].y + demo16((uint16_t)(at + 1)));
+            cameras[0].y = (uint16_t)(cameras[0].y + demo_script_word((uint16_t)(at + 1)));
             demo_camera();
             flow.demo_at = (uint16_t)(at + 3);
             continue;
@@ -739,11 +737,11 @@ static int demo_commands(void)
             flow.demo_mode = DEMO_WAIT_FADE;
             return 0;
         case 0x0C:
-            flow.demo_flags |= demo16((uint16_t)(at + 1));
+            flow.demo_flags |= demo_script_word((uint16_t)(at + 1));
             flow.demo_at = (uint16_t)(at + 3);
             continue;
         case 0x0D:
-            flow.demo_flags &= demo16((uint16_t)(at + 1));
+            flow.demo_flags &= demo_script_word((uint16_t)(at + 1));
             flow.demo_at = (uint16_t)(at + 3);
             continue;
         default:

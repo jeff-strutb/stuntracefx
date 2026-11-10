@@ -7,7 +7,7 @@
  * Each sprite byte is written as an offset in the sprite table.
  */
 #include "audio/sound.h"
-#include "data/cart.h"
+#include "data/race_tables.h"
 #include "fx/fx.h"
 #include "hud/hud.h"
 #include "menu/menu.h"
@@ -76,16 +76,13 @@ static const HudByte battle_p2_sprites[6] = {
     {0x3D, SPRITE_ATTRIBUTES, 0x36},
 };
 
-/* The HUD's tables in bank 3: the sprite lists (four bytes an entry); for
-   the split screen, its panel sprites' places and tiles (a word each, four
-   bytes an entry), its map sprites' the same, their five size bytes, and
-   its art block's two records (its transfer, for its length; where its
-   packed data is). */
-enum {
-    HUD_SETUP_BANK = 0x03, SPRITE_LISTS = 0xF883,
-    SPLIT_PANEL_SPRITES = 0xE7EA, SPLIT_MAP_SPRITES = 0xE80F, SPLIT_SPRITE_SIZES = 0xE80A,
-    TO_SPLIT_ART = 0xF845, PACKED_SPLIT_ART = 0xF804
-};
+/* The HUD's tables are in data/race_tables.h: the sprite lists (four bytes
+   an entry); for the split screen, its panel sprites' places and tiles (a
+   word each, four bytes an entry), its map sprites' the same and their five
+   size bytes. Still by their place here: the bank OamFromList reads its
+   list from, and the split screen's art block's two records (its transfer,
+   for its length; where its packed data is). */
+enum { HUD_SETUP_BANK = 0x03, TO_SPLIT_ART = 0xF845, PACKED_SPLIT_ART = 0xF804 };
 
 /* The sprite list's entries from `list` on into the sprites' X ninth bits
    and sizes (the original sends this list to its high table): each entry
@@ -95,14 +92,14 @@ static void oam_high_table_from_list(uint16_t list)
     int first = 0;
     uint8_t v;
 
-    while ((v = cart8(HUD_SETUP_BANK, (uint16_t)(SPRITE_LISTS + list))) != 0xFF) {
+    while ((v = hud_sprite_list_byte(list)) != 0xFF) {
         if (v == 0xFE) {
             sprite_high_set(first + 4, 0xFE);
         } else {
             sprite_high_set(first, v);
-            sprite_high_set(first + 4, cart8(HUD_SETUP_BANK, (uint16_t)(SPRITE_LISTS + 1 + list)));
-            sprite_high_set(first + 8, cart8(HUD_SETUP_BANK, (uint16_t)(SPRITE_LISTS + 2 + list)));
-            sprite_high_set(first + 12, cart8(HUD_SETUP_BANK, (uint16_t)(SPRITE_LISTS + 3 + list)));
+            sprite_high_set(first + 4, hud_sprite_list_byte((uint16_t)(1 + list)));
+            sprite_high_set(first + 8, hud_sprite_list_byte((uint16_t)(2 + list)));
+            sprite_high_set(first + 12, hud_sprite_list_byte((uint16_t)(3 + list)));
             list = (uint16_t)(list + 3);
         }
         list = (uint16_t)(list + 1);
@@ -325,11 +322,11 @@ void RaceHudSetupTwoPlayers(void)
     for (int k = 0; k < 8; k++) {
         uint16_t y = (uint16_t)(4 * k);
 
-        v = (uint16_t)(cart16(HUD_SETUP_BANK, (uint16_t)(SPLIT_PANEL_SPRITES + y)) - 0x0800);
+        v = (uint16_t)(split_panel_sprite_word(y) - 0x0800);
         sprite_place(0x2F + k, v);
         v = (uint16_t)(v + 0x6850);
         sprite_place(0x6F + k, v);
-        v = cart16(HUD_SETUP_BANK, (uint16_t)(SPLIT_PANEL_SPRITES + 2 + y));
+        v = split_panel_sprite_word((uint16_t)(2 + y));
         sprite_look(0x2F + k, v);
         sprite_look(0x6F + k, v);
     }
@@ -344,18 +341,18 @@ void RaceHudSetupTwoPlayers(void)
     for (int k = 0; k < 9; k++) {
         uint16_t y = (uint16_t)(4 * k);
 
-        sprite_place(0x37 + k, (uint16_t)(cart16(HUD_SETUP_BANK, (uint16_t)(SPLIT_MAP_SPRITES + y)) + 0x2C28));
-        sprite_look(0x37 + k, cart16(HUD_SETUP_BANK, (uint16_t)(SPLIT_MAP_SPRITES + 2 + y)));
+        sprite_place(0x37 + k, (uint16_t)(split_map_sprite_word(y) + 0x2C28));
+        sprite_look(0x37 + k, split_map_sprite_word((uint16_t)(2 + y)));
     }
     for (int k = 0; k < 9; k++) {
         uint16_t y = (uint16_t)(4 * k);
 
-        sprite_place(0x77 + k, (uint16_t)(cart16(HUD_SETUP_BANK, (uint16_t)(SPLIT_MAP_SPRITES + y)) + 0x9476));
-        sprite_look(0x77 + k, cart16(HUD_SETUP_BANK, (uint16_t)(SPLIT_MAP_SPRITES + 2 + y)));
+        sprite_place(0x77 + k, (uint16_t)(split_map_sprite_word(y) + 0x9476));
+        sprite_look(0x77 + k, split_map_sprite_word((uint16_t)(2 + y)));
     }
     /* their sizes and X ninth bits: sprites $2C-$3F and $6C-$7F, four a byte */
     for (int i = 0; i < 5; i++) {
-        uint8_t s = cart8(HUD_SETUP_BANK, (uint16_t)(SPLIT_SPRITE_SIZES + i));
+        uint8_t s = split_sprite_size((uint16_t)i);
 
         sprite_high_set(0x2C + 4 * i, s);
         sprite_high_set(0x6C + 4 * i, s);

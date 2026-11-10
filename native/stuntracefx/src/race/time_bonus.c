@@ -7,19 +7,15 @@
  * GsuBonusDigitsFull, TimeBonusPiecesMirrored.
  */
 #include "audio/sound.h"
-#include "data/cart.h"
+#include "data/race_tables.h"
 #include "hud/hud.h"
 #include "race/race.h"
 #include "system/chip.h"
 #include "system/state.h"
 
-/* More of the HUD's tables in bank 7 (HUD_BANK): the bonus digits' sizes
-   by step, and the countdown digit's scale, size and place, four words for
-   each tenth of a second. */
-enum { DIGIT_GROW_SIZES = 0x918F, COUNTDOWN_DIGIT_SHAPES = 0x8DDA };
 
 /* The digit sizes for the animation steps, $07:918F. */
-static uint16_t size_grow(void) { return cart16(HUD_BANK, (uint16_t)(DIGIT_GROW_SIZES + g.hud_point_index)); }
+static uint16_t size_grow(void) { return hud_digit_grow_size(g.hud_point_index); }
 
 static void digit(uint16_t d)
 {
@@ -86,7 +82,7 @@ static void time_digit_bytes(void)
 
 static void bonus_x_from_table(void)
 {
-    g.hud_point_x = (uint16_t)(0x008F - cart16(HUD_BANK, (uint16_t)(FRAME_X_OFFSETS + g.hud_point_index)));
+    g.hud_point_x = (uint16_t)(0x008F - hud_frame_x_offset(g.hud_point_index));
 }
 
 /* The frame drawn while the bonus shows, mirrored. */
@@ -426,14 +422,14 @@ void TimeLeftDigits(void)
     }
     DigitGlyphSelect(v);
     {
-        uint16_t at = (uint16_t)(COUNTDOWN_DIGIT_SHAPES + (uint16_t)(((g.countdown_fraction >> 8) >> 4) * 8));
+        HudShape shape = hud_countdown_shape((uint16_t)((g.countdown_fraction >> 8) >> 4)); /* by the tenth of a second */
 
-        hud_piece.w = cart16(HUD_BANK, at);
-        hud_piece.h = cart16(HUD_BANK, at);
-        hud_piece.u = cart16(HUD_BANK, (uint16_t)(at + 2));
-        hud_piece.v = cart16(HUD_BANK, (uint16_t)(at + 2));
-        hud_piece.x = cart16(HUD_BANK, (uint16_t)(at + 4));
-        hud_piece.y = cart16(HUD_BANK, (uint16_t)(at + 6));
+        hud_piece.w = shape.size;
+        hud_piece.h = shape.size;
+        hud_piece.u = shape.scale;
+        hud_piece.v = shape.scale;
+        hud_piece.x = shape.x;
+        hud_piece.y = shape.y;
     }
     GlyphColours(0xBF, 0xB7, 0xB6);
     FxScaledSpriteAdvance(&hud_piece, chip_view_right(), chip_view_bottom());
