@@ -108,19 +108,12 @@ static void emit(const float (*p)[3], int n, uint8_t c)
         fx_draw_flat(corners, k, c);
 }
 
-/* Interim, until Jeff has seen each look: the solids are drawn only where
-   this is set (a private build for the pictures); the game keeps the
-   sprites. */
-static const int solids_shown = 0;
-
 /* FxObjectsDraw's object: its shape (the draw record's model) */
 void fx_solid_object(uint16_t shape)
 {
     int i;
 
     object = NULL;
-    if (!solids_shown)
-        return;
     for (i = 0; i < N(solids); i++)
         if (solids[i].shape == shape)
             object = &solids[i];
