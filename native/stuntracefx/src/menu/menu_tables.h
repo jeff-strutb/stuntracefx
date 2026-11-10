@@ -9,7 +9,7 @@
 
 enum { MENU_LINES_TITLE, MENU_LINES_PREVIEW, MENU_LINES_CHAMPION };
 
-/* `channels`: the channels on, as bits 3-7 of HDMAEN */
+/* `channels`: the per-line tables on, one bit each (bits 3-7) */
 void menu_lines_set(int set, uint8_t channels);
 
 /* the course menu's graphics, loaded a step a frame after the title */

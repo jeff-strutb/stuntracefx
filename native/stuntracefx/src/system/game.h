@@ -8,6 +8,13 @@
 
 #include "nshvc/nshvc.h"
 
+/* the pad's buttons, as the pad words hold them */
+enum {
+    PAD_R = 0x0010, PAD_L = 0x0020, PAD_X = 0x0040, PAD_A = 0x0080,
+    PAD_RIGHT = 0x0100, PAD_LEFT = 0x0200, PAD_DOWN = 0x0400, PAD_UP = 0x0800,
+    PAD_START = 0x1000, PAD_SELECT = 0x2000, PAD_Y = 0x4000, PAD_B = 0x8000
+};
+
 /* the frame's end: the fades, the sound and the counters */
 typedef struct {
     uint16_t held[2], pressed[2];

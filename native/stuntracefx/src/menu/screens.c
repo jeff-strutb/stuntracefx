@@ -467,7 +467,7 @@ static void preview_open(void)
     actors_build_sprites();
     menu_scroll_reset();
     preview_full_mode();
-    pic.bg[0].scroll_x = 0x0100;        /* BG1HOFS written 0 then 1: the second page */
+    pic.bg[0].scroll_x = 0x0100;        /* the second page */
     preview_palette();
     tiles_from_picture(tiles_menu, 0, picture_unpack(0x17, 0xCC78), 32);
     pages_from_picture(2, picture_unpack(0x17, 0xCE78));
@@ -521,8 +521,8 @@ static void preview_fade_begin(void)
     memset(pic.windows.mask_main, 0, sizeof pic.windows.mask_main);
     memset(pic.windows.mask_sub, 0, sizeof pic.windows.mask_sub);
     pic.main_screen = SHOW_BG1 | SHOW_BG2;
-    /* BG1HOFS queued as 1 then 0 and applied newest first: $0100, the
-       second page, the picture without the window's grid */
+    /* the second page (the original queued its two scroll bytes, applied
+       newest first): the picture without the window's grid */
     pic.bg[0].scroll_x = 0x0100;
 }
 
@@ -844,7 +844,7 @@ static void car_step(uint8_t *car, uint16_t pressed)
 {
     int four;
 
-    if (pressed & 0x0100) {
+    if (pressed & PAD_RIGHT) {
         sound_port0_push(0x45);
         *car = (uint8_t)(*car + 1);
         if (*car == 3) {
@@ -854,7 +854,7 @@ static void car_step(uint8_t *car, uint16_t pressed)
         } else if (*car > 3) {
             *car = 0;
         }
-    } else if (pressed & 0x0200) {
+    } else if (pressed & PAD_LEFT) {
         sound_port0_push(0x45);
         *car = (uint8_t)(*car - 1);
         if (*car & 0x80) {
@@ -887,11 +887,11 @@ void MenuCursorFourWay(void)
     uint8_t v = g.time_override;
 
     if (v) {
-        if (pad & 0x0100) {
+        if (pad & PAD_RIGHT) {
             g.champ_stage = 2;
             g.time_override = 0;
             sound_port0_push(0x45);
-        } else if (pad & 0x0200) {
+        } else if (pad & PAD_LEFT) {
             g.champ_stage = 1;
             g.time_override = 0;
             sound_port0_push(0x45);
@@ -899,18 +899,18 @@ void MenuCursorFourWay(void)
     } else {
         switch (g.champ_stage) {
         case 0:
-            if (pad & 0x0100) { g.champ_stage++; sound_port0_push(0x45); }
+            if (pad & PAD_RIGHT) { g.champ_stage++; sound_port0_push(0x45); }
             break;
         case 1:
-            if (pad & 0x0200) { g.champ_stage--; sound_port0_push(0x45); }
-            else if (pad & 0x0100) { g.time_override = (uint8_t)(g.time_override - 1); sound_port0_push(0x45); }
+            if (pad & PAD_LEFT) { g.champ_stage--; sound_port0_push(0x45); }
+            else if (pad & PAD_RIGHT) { g.time_override = (uint8_t)(g.time_override - 1); sound_port0_push(0x45); }
             break;
         case 2:
-            if (pad & 0x0100) { g.champ_stage++; sound_port0_push(0x45); }
-            else if (pad & 0x0200) { g.time_override = (uint8_t)(g.time_override - 1); sound_port0_push(0x45); }
+            if (pad & PAD_RIGHT) { g.champ_stage++; sound_port0_push(0x45); }
+            else if (pad & PAD_LEFT) { g.time_override = (uint8_t)(g.time_override - 1); sound_port0_push(0x45); }
             break;
         default:
-            if (pad & 0x0200) { g.champ_stage--; sound_port0_push(0x45); }
+            if (pad & PAD_LEFT) { g.champ_stage--; sound_port0_push(0x45); }
             break;
         }
     }

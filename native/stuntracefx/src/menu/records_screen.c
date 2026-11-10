@@ -139,25 +139,25 @@ static void menu_all(void)
 
     if (!menu_wait())
         return;
-    if (p & 0x4000) {
+    if (p & PAD_Y) {
         records_menu_back();
         return;
     }
     switch (g.records_cursor) {
     case 0:
-        if (p & 0x9000) { records_menu_go(); return; }
-        if (p & 0x0400) { sound_port0_push(0x45); all_middle_show(); return; }
+        if (p & (PAD_B | PAD_START)) { records_menu_go(); return; }
+        if (p & PAD_DOWN) { sound_port0_push(0x45); all_middle_show(); return; }
         all_top_show();
         break;
     case 2:
-        if (p & 0x9000) { records_menu_back(); return; }
-        if (p & 0x0800) { sound_port0_push(0x45); all_middle_show(); return; }
+        if (p & (PAD_B | PAD_START)) { records_menu_back(); return; }
+        if (p & PAD_UP) { sound_port0_push(0x45); all_middle_show(); return; }
         all_bottom_show();
         break;
     default:
-        if (g.every_course_open != 3 && (p & 0x9000)) { records_view(); return; }
-        if (p & 0x0800) { sound_port0_push(0x45); all_top_show(); return; }
-        if (p & 0x0400) { sound_port0_push(0x45); all_bottom_show(); return; }
+        if (g.every_course_open != 3 && (p & (PAD_B | PAD_START))) { records_view(); return; }
+        if (p & PAD_UP) { sound_port0_push(0x45); all_top_show(); return; }
+        if (p & PAD_DOWN) { sound_port0_push(0x45); all_bottom_show(); return; }
         all_middle_show();
         break;
     }
@@ -169,17 +169,17 @@ static void menu_two(void)
 
     if (!menu_wait())
         return;
-    if (p & 0x4000) {
+    if (p & PAD_Y) {
         records_menu_back();
         return;
     }
     if (g.records_cursor == 0) {
-        if (p & 0x9000) { records_menu_go(); return; }
-        if (p & 0x0400) { sound_port0_push(0x45); speed_bottom_show(); return; }
+        if (p & (PAD_B | PAD_START)) { records_menu_go(); return; }
+        if (p & PAD_DOWN) { sound_port0_push(0x45); speed_bottom_show(); return; }
         speed_top_show();
     } else {
-        if (p & 0x9000) { records_menu_back(); return; }
-        if (p & 0x0800) { sound_port0_push(0x45); speed_top_show(); return; }
+        if (p & (PAD_B | PAD_START)) { records_menu_back(); return; }
+        if (p & PAD_UP) { sound_port0_push(0x45); speed_top_show(); return; }
         speed_bottom_show();
     }
 }
@@ -200,13 +200,13 @@ static void menu_speed_alt(void)
     if (!menu_wait())
         return;
     if (g.records_cursor == 0) {
-        if (p & 0x4000) { speed_alt_leave(); return; }
-        if (p & 0x9000) { records_menu_go(); return; }
-        if (p & 0x0400) { sound_port0_push(0x45); alt_bottom_show(); return; }
+        if (p & PAD_Y) { speed_alt_leave(); return; }
+        if (p & (PAD_B | PAD_START)) { records_menu_go(); return; }
+        if (p & PAD_DOWN) { sound_port0_push(0x45); alt_bottom_show(); return; }
         alt_top_show();
     } else {
-        if (p & 0x4000 || p & 0x9000) { speed_alt_leave(); return; }
-        if (p & 0x0800) { sound_port0_push(0x45); alt_top_show(); return; }
+        if (p & PAD_Y || p & (PAD_B | PAD_START)) { speed_alt_leave(); return; }
+        if (p & PAD_UP) { sound_port0_push(0x45); alt_top_show(); return; }
         alt_bottom_show();
     }
 }
@@ -217,25 +217,25 @@ static void menu_stunt_three(void)
 
     if (!menu_wait())
         return;
-    if (p & 0x4000) {
+    if (p & PAD_Y) {
         records_menu_back();
         return;
     }
     switch (g.records_cursor) {
     case 0:
-        if (p & 0x9000) { records_menu_go(); return; }
-        if (p & 0x0400) { sound_port0_push(0x45); all_middle_show(); return; }
+        if (p & (PAD_B | PAD_START)) { records_menu_go(); return; }
+        if (p & PAD_DOWN) { sound_port0_push(0x45); all_middle_show(); return; }
         all_top_show();
         break;
     case 2:
-        if (p & 0x9000) { records_menu_back(); return; }
-        if (p & 0x0800) { sound_port0_push(0x45); all_middle_show(); return; }
+        if (p & (PAD_B | PAD_START)) { records_menu_back(); return; }
+        if (p & PAD_UP) { sound_port0_push(0x45); all_middle_show(); return; }
         all_bottom_show();
         break;
     default:
-        if (p & 0x9000) { records_view(); return; }
-        if (p & 0x0800) { sound_port0_push(0x45); all_top_show(); return; }
-        if (p & 0x0400) { sound_port0_push(0x45); all_bottom_show(); return; }
+        if (p & (PAD_B | PAD_START)) { records_view(); return; }
+        if (p & PAD_UP) { sound_port0_push(0x45); all_top_show(); return; }
+        if (p & PAD_DOWN) { sound_port0_push(0x45); all_bottom_show(); return; }
         all_middle_show();
         break;
     }
@@ -430,12 +430,12 @@ static void speed_records_page(void)
     uint16_t p = pad();
     uint8_t old, v;
 
-    if (p & 0x0100) {
+    if (p & PAD_RIGHT) {
         if (g.times_step < 4) {
             sound_port0_push(0x45);
             g.times_step++;
         }
-    } else if (p & 0x0200) {
+    } else if (p & PAD_LEFT) {
         if (g.times_step) {
             sound_port0_push(0x45);
             g.times_step--;
@@ -490,7 +490,7 @@ void SpeedRecordsScreen(void)
         menu_two();
         return;
     }
-    if (pad() & 0x9000) {
+    if (pad() & (PAD_B | PAD_START)) {
         sound_port0_push(0x46);
         g.course_screen_state = 0x0A;
         ColourMathA7Start();
@@ -507,10 +507,10 @@ void StuntRecordsScreen(void)
         uint16_t p = pad();
 
         origin(0x81, 0x89);
-        if (p & 0x0100) {
+        if (p & PAD_RIGHT) {
             sound_port0_push(0x45);
             g.course = g.course >= 0x1A ? 0x17 : (uint8_t)(g.course + 1);
-        } else if (p & 0x0200) {
+        } else if (p & PAD_LEFT) {
             sound_port0_push(0x45);
             g.course = g.course <= 0x17 ? 0x1A : (uint8_t)(g.course - 1);
         }

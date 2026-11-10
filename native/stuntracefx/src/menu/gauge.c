@@ -62,7 +62,7 @@ void SpeedGaugeUpdate(uint16_t offset)
     if (g.freeze) {
         if (g.player_phase[0] >= 6) {
             v = gauge_from_speed(offset);
-        } else if (frame_state.held[0] & 0x8000) {
+        } else if (frame_state.held[0] & PAD_B) {
             menu_gauge = (uint16_t)(menu_gauge + 0x28);
             if (menu_gauge >= 0xFF)
                 menu_gauge = 0xFF;
@@ -103,7 +103,7 @@ void SpeedGauge2Update(uint16_t offset)
     uint16_t t, v;
 
     if (g.freeze) {
-        if (frame_state.held[1] & 0x8000) {
+        if (frame_state.held[1] & PAD_B) {
             gauge2 = (uint16_t)(gauge2 + 0x10);
             if (gauge2 >= 0x7F)
                 gauge2 = 0x7F;

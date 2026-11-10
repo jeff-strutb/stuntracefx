@@ -69,7 +69,7 @@ static int select_confirm(Actor *a)
 {
     Actor *bg;
 
-    if (!(frame_menu_pressed() & 0x9000))
+    if (!(frame_menu_pressed() & (PAD_B | PAD_START)))
         return 0;
     actors_set_hidden(0x0011, 0xFFFF);
     bg = actor_find(0x0013);
@@ -97,7 +97,7 @@ static void button_sequence(Actor *a)
     pressed = frame_menu_pressed();
     if (!pressed)
         return;
-    if (pressed & 0x0800) {
+    if (pressed & PAD_UP) {
         a->count = 0;
         menu_idle = 0;
     }
@@ -156,17 +156,17 @@ static void erase_question(Actor *a, uint16_t yes_anim, uint16_t no_anim, int se
 
     actor_animate_frame(a);
     pressed = frame_menu_pressed();
-    if ((pressed & 0x0200) && !a->count) {
+    if ((pressed & PAD_LEFT) && !a->count) {
         a->count = 1;
         actor_start_animation(a, yes_anim);
         sound_port0_push(0x45);
     }
-    if ((pressed & 0x0100) && a->count) {
+    if ((pressed & PAD_RIGHT) && a->count) {
         a->count = 0;
         actor_start_animation(a, no_anim);
         sound_port0_push(0x45);
     }
-    if (!(pressed & 0x8000))
+    if (!(pressed & PAD_B))
         return;
     if (!a->count) {
         erase_cancel(a, 1);
@@ -318,11 +318,11 @@ static void choice_up_down(void)
     uint16_t pad = frame_menu_pressed();
 
     menu.mode_previous = g.menu_mode;
-    if (pad & 0x0800) {
+    if (pad & PAD_UP) {
         sound_port0_push(0x45);
         g.menu_mode = (uint16_t)((g.menu_mode - 1) & 3);
     }
-    if (pad & 0x0400) {
+    if (pad & PAD_DOWN) {
         sound_port0_push(0x45);
         g.menu_mode = (uint16_t)((g.menu_mode + 1) & 3);
     }
@@ -483,7 +483,7 @@ static void choices_from_save(uint16_t mode)
 static void mode_select(Actor *a)
 {
     choice_up_down();
-    if (!(frame_menu_pressed() & 0x9000))
+    if (!(frame_menu_pressed() & (PAD_B | PAD_START)))
         return;
     sound_port0_push(0x46);
     if (g.menu_mode == 3) {
@@ -762,21 +762,21 @@ static void settings_input(void)
 {
     uint16_t pad = frame_menu_pressed();
 
-    if ((pad & 0x0200) && menu.row) {
+    if ((pad & PAD_LEFT) && menu.row) {
         menu.row--;
         sound_port0_push(0x46);
         settings_row_marker();
     }
-    if ((pad & 0x0100) && menu.row != 2) {
+    if ((pad & PAD_RIGHT) && menu.row != 2) {
         menu.row++;
         sound_port0_push(0x46);
         settings_row_marker();
     }
-    if (pad & 0x0800) {
+    if (pad & PAD_UP) {
         sound_port0_push(0x45);
         g.choices[menu.row] = g.choices[menu.row] == 0 ? 2 : (uint16_t)(g.choices[menu.row] - 1);
     }
-    if (pad & 0x0400) {
+    if (pad & PAD_DOWN) {
         sound_port0_push(0x45);
         g.choices[menu.row] = g.choices[menu.row] == 2 ? 0 : (uint16_t)(g.choices[menu.row] + 1);
     }
@@ -802,7 +802,7 @@ static void settings_select(Actor *a)
     actors.fast_animation = 0;
     fixed_colour_step(0);
     settings_input();
-    if (!(frame_menu_pressed() & 0xF000))
+    if (!(frame_menu_pressed() & (PAD_B | PAD_Y | PAD_SELECT | PAD_START)))
         return;
     actors_set_hidden(0x0004, 0);
     sound_port0_push(0x46);
@@ -844,7 +844,7 @@ static void settings_select2(Actor *a)
 {
     fixed_colour_step(0);
     settings_input();
-    if (!(frame_menu_pressed() & 0xF000))
+    if (!(frame_menu_pressed() & (PAD_B | PAD_Y | PAD_SELECT | PAD_START)))
         return;
     actors_set_hidden(0x0004, 0);
     sound_port0_push(0x46);
@@ -873,18 +873,18 @@ static void initials_step(uint16_t press)
     uint16_t held = frame_state.held[0], n;
     int repeat;
 
-    if ((press & 0x0200) && menu.position) {
+    if ((press & PAD_LEFT) && menu.position) {
         sound_port0_push(0x46);
         row_palette5();
         menu.position--;
     }
-    if ((press & 0x0100) && menu.position != 2) {
+    if ((press & PAD_RIGHT) && menu.position != 2) {
         sound_port0_push(0x46);
         row_palette5();
         menu.position++;
     }
     repeat = 0;
-    if (held & 0x0800) {
+    if (held & PAD_UP) {
         n = (uint16_t)(menu.hold_up + 1);
         if (n >= 0x0D)
             repeat = 1;
@@ -893,14 +893,14 @@ static void initials_step(uint16_t press)
     } else {
         menu.hold_up = 0;
     }
-    if (repeat || (press & 0x0800)) {
+    if (repeat || (press & PAD_UP)) {
         menu.hold_up = 0;
         sound_port0_push(0x45);
         g.settings_row[menu.position] = g.settings_row[menu.position] == 0x19 ? 0 : (uint16_t)(g.settings_row[menu.position] + 1);
         return;
     }
     repeat = 0;
-    if (held & 0x0400) {
+    if (held & PAD_DOWN) {
         n = (uint16_t)(menu.hold_down + 1);
         if (n >= 0x0D)
             repeat = 1;
@@ -909,7 +909,7 @@ static void initials_step(uint16_t press)
     } else {
         menu.hold_down = 0;
     }
-    if (repeat || (press & 0x0400)) {
+    if (repeat || (press & PAD_DOWN)) {
         menu.hold_down = 0;
         sound_port0_push(0x45);
         g.settings_row[menu.position] = g.settings_row[menu.position] == 0 ? 0x19 : (uint16_t)(g.settings_row[menu.position] - 1);
@@ -1032,13 +1032,13 @@ static void initials_frame(Actor *a)
     initials_presses();
     pad = frame_menu_pressed();
     frame_menu_pressed_clear(0);
-    if (pad & 0x9000) {
+    if (pad & (PAD_B | PAD_START)) {
         actors.exit_request = 1;
         sound_port0_push(0x46);
         actor_free(a);
         return;
     }
-    if (pad & 0x4000) {
+    if (pad & PAD_Y) {
         actors_set_hidden(0x0005, 0);
         kinds67_animate(0x00AE, 0x00B8);
         actors_set_hidden(0x0008, 0xFFFF);
@@ -1055,7 +1055,7 @@ static void initials_frame(Actor *a)
         sound_port0_push(0x47);
         return;
     }
-    if ((pad & 0x2000) && g.menu_mode == 0) {
+    if ((pad & PAD_SELECT) && g.menu_mode == 0) {
         sound_port0_push(0x46);
         actors_set_hidden(0x0004, 0xFFFF);
         actors_set_hidden(0x0008, 0xFFFF);
@@ -1096,7 +1096,7 @@ static void settings_frame(Actor *a)
     choice_presses(0);
     pad = frame_menu_pressed();
     frame_menu_pressed_clear(0);
-    if (pad & 0x4000) {
+    if (pad & PAD_Y) {
         a->handler = HANDLER_SLIDE_IN;
         a->count = 0x0080;
         sound_port0_push(0x47);
@@ -1106,7 +1106,7 @@ static void settings_frame(Actor *a)
         kinds67_animate(0x00C2, 0x00C8);
         return;
     }
-    if (!menu.fixed_colour && (pad & 0x9000)) {
+    if (!menu.fixed_colour && (pad & (PAD_B | PAD_START))) {
         if (g.menu_mode == 2) {
             Actor *k = actor_find(0x0004);
 
@@ -1133,7 +1133,7 @@ static void settings_frame(Actor *a)
         menu.press_count[0] = 0;
         return;
     }
-    if ((pad & 0x2000) && g.menu_mode == 0) {
+    if ((pad & PAD_SELECT) && g.menu_mode == 0) {
         sound_port0_push(0x46);
         actors_set_hidden(0x0004, 0xFFFF);
         actors_set_hidden(0x0005, 0xFFFF);

@@ -9,8 +9,6 @@
 #include "system/game.h"
 #include "system/state.h"
 
-enum { PAD_A = 0x0080, PAD_B = 0x8000 };
-
 /*
  * Auto-accelerate (an option, on unless the player turns it off; the
  * menus' option_auto_accelerate): on a touch screen, player 1's gas (B) is

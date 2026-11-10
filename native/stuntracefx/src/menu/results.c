@@ -172,7 +172,7 @@ static void results_leader_blink(Actor *a)
  */
 static void results_wait_button(Actor *a)
 {
-    if (!(frame_menu_pressed() & 0x9000))
+    if (!(frame_menu_pressed() & (PAD_B | PAD_START)))
         return;
     if (g.player_phase[0] == 8) {
         a->handler = HANDLER_RESULTS_LOWER;
@@ -199,7 +199,7 @@ static void results_rise_again(Actor *a)
 
 static void results_wait_end(Actor *a)
 {
-    if (!(frame_menu_pressed() & 0x9000))
+    if (!(frame_menu_pressed() & (PAD_B | PAD_START)))
         return;
     actors.exit_request = 1;
     actor_free(a);
