@@ -255,3 +255,49 @@ void screen_two_anchor(int player, int x0, int x1, int y0, int y1, int *dx, int 
             *dx = bx - 2 - x1;
     }
 }
+
+/*
+ * A player's box b (0 DAMAGE, 1 the map, 2 the speed, 3 TIME): its place in
+ * the player's 80 x 96 of the original's screen (the second player's map
+ * and speed the other way round; the map's place runs a row above and two
+ * below its box, for the map's sprites), and where it floats, at the
+ * player's scale: side by side, in a row along the rectangle's bottom (DAMAGE
+ * and the map at the left, the speed and TIME at the right); above and
+ * below, as the original's column down the rectangle's right side.
+ */
+enum { TWO_MAP_TOP = 31, TWO_BOX_ROW = 32 };
+static const int box_sx[2][4] = { { 0, 0, 32, 0 }, { 0, 48, 0, 0 } }, box_sy[4] = { 0, TWO_MAP_TOP, 32, 64 };
+static const int box_sw[4] = { 80, 32, 48, 80 }, box_sh[4] = { TWO_BOX_ROW, TWO_MAP_H, TWO_BOX_ROW, TWO_BOX_ROW };
+
+void screen_two_box_source(int player, int box, int *x, int *y, int *w, int *h)
+{
+    *x = box_sx[player & 1][box & 3];
+    *y = box_sy[box & 3];
+    *w = box_sw[box & 3];
+    *h = box_sh[box & 3];
+}
+
+void screen_two_box(int player, int box, float *x, float *y, float *w, float *h)
+{
+    int rx, ry, rw, rh, m[4];
+    float s = (float)screen_two_scale(player) / 256.0f, left, right, top, bottom, wide, gap;
+
+    screen_two_rect(player, &rx, &ry, &rw, &rh);
+    two_margins(player, m);
+    left = (float)(rx + m[0]);
+    right = (float)(rx + rw - m[2]);
+    top = (float)(ry + m[1]);
+    bottom = (float)(ry + rh - m[3]);
+    wide = TWO_BOX_W * s;
+    gap = TWO_BOX_GAP * s;
+    box &= 3;
+    *w = (float)box_sw[box] * s;
+    *h = (float)box_sh[box] * s;
+    if (!screen_two_side()) {
+        *x = right - wide + (float)box_sx[player & 1][box] * s;
+        *y = top + (float)box_sy[box] * s;
+        return;
+    }
+    *y = bottom - *h;
+    *x = box == 0 ? left : box == 1 ? left + wide + gap : box == 2 ? right - wide - gap - *w : right - wide;
+}

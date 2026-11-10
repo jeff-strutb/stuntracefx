@@ -386,6 +386,41 @@ static void full_window_draw(const ScreenShape *sh)
     }
 }
 
+/* Two players in the whole window: the frame's layer off (the boxes are in
+   the list), each player's sky, hills and 3D in the list on BG2, the
+   sprites placed by player. Above and below, the second player's colours
+   $E1-$E3, colour 0 and fixed colour from its rectangle's first row, as
+   the original changed them at line 112. */
+static void full_two_draw(const ScreenShape *sh)
+{
+    static nshvc_sprite placed[128];
+    nshvc_windows w = pic.windows;
+    Background none;
+    int r;
+
+    memset(&none, 0, sizeof none);
+    race_two_player_list();
+    layer_send(0, &none);
+    layer_send(1, &pic.bg[1]);
+    layer_send(2, &none);
+    full_windows(&w, sh->width);
+    nshvc_windows_set(&w);
+    nshvc_blend_set(&pic.blend);
+    nshvc_palette_write(0, 256, pic.palette);
+    nshvc_sprites_show(1, 0);
+    sprites_place_two(placed, pic.sprites, pic.sprite_count);
+    nshvc_sprites_set(placed, pic.sprite_count, 0);
+    if (!screen_two_side()) {
+        int x, y, wd, ht;
+
+        screen_two_rect(1, &x, &y, &wd, &ht);
+        for (r = 0; r < 3; r++)
+            nshvc_line((uint32_t)y, (nshvc_line_field)(NSHVC_LINE_PALETTE + 0xE1 + r), pic.race.colours_kept[1][r]);
+        nshvc_line((uint32_t)y, (nshvc_line_field)(NSHVC_LINE_PALETTE + 0), pic.race.colour_0[1]);
+        nshvc_line((uint32_t)y, NSHVC_LINE_FIXED, pic.race.fixed[1]);
+    }
+}
+
 void video_draw(void)
 {
     nshvc_screen s;
@@ -394,7 +429,7 @@ void video_draw(void)
 
     screen_update();
     sh = screen_shape();
-    full = race_full_window();
+    full = race_full_window() || race_two_full_window();
     menu_full = pic.fills_window && !pic.race.on;
     memset(&s, 0, sizeof s);
     s.width = full || menu_full ? sh->width : 256;
@@ -416,7 +451,10 @@ void video_draw(void)
         nshvc_limits_set(&l);
     }
     if (full) {
-        full_window_draw(sh);
+        if (pic.race.split)
+            full_two_draw(sh);
+        else
+            full_window_draw(sh);
         return;
     }
     if (pic.race.on && pic.race.split && !pic.race.course_screen)

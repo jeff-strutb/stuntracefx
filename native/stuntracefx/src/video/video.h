@@ -42,10 +42,16 @@ int screen_two_side(void);                     /* two players side by side (else
 void screen_two_rect(int player, int *x, int *y, int *w, int *h); /* a player's rectangle of the screen */
 int screen_two_scale(int player);              /* its boxes' scale, 256ths */
 void screen_two_anchor(int player, int x0, int x1, int y0, int y1, int *dx, int *dy); /* where its original 144 x 80 view goes for a piece */
+void screen_two_box_source(int player, int box, int *x, int *y, int *w, int *h); /* a box's place in the player's 80 x 96 */
+void screen_two_box(int player, int box, float *x, float *y, float *w, float *h);   /* and where it floats, scaled */
 int race_full_window(void);                    /* the one-player race fills the window */
+int race_two_full_window(void);                /* two players fill the window */
+void race_two_full_window_ready(int on);       /* interim: the 3D's side turns it on with its two-player rectangles */
 void race_hills_full(void);                    /* its hills and sky for the picture shown, or one between steps */
 uint16_t sky_colour_at(int at);                /* colour 1 at place `at` of the day and night lists */
 void sprites_place_full(nshvc_sprite *out, const nshvc_sprite *in, uint32_t count); /* the race's sprites on the larger screen */
+void sprites_place_two(nshvc_sprite *out, const nshvc_sprite *in, uint32_t count);  /* two players' */
+unsigned sprite_name_of(const nshvc_sprite *s);  /* a sprite's 9-bit character name, as the original's table holds it */
 
 /* The race screen's engine objects, by role. */
 typedef struct {

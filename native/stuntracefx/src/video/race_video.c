@@ -46,6 +46,20 @@ static int shown_buffer;
 
 /* The one-player race fills the window: its screen, not the course
    screen's, the split screen's or the results' page. */
+/* Two players fill the window: once the 3D draws each player's picture in
+   its rectangle (the Enhanced 3D session turns this on with that). */
+static int two_full_ready;
+
+void race_two_full_window_ready(int on)
+{
+    two_full_ready = on;
+}
+
+int race_two_full_window(void)
+{
+    return two_full_ready && pic.race.on && pic.race.split && !pic.race.course_screen;
+}
+
 int race_full_window(void)
 {
     return pic.race.on && !pic.race.split && !pic.race.course_screen && !g.results_page_shown;
@@ -73,6 +87,13 @@ static void frame_art_clear(void);
 /* The two-player screen's backdrop and panel are drawn into the picture's
    list as images, so the shared art and their maps are kept here too. */
 static uint8_t race_art_bytes[0x8000];
+/* the two-player frame's map and art as written, for the full window's boxes */
+static uint16_t frame_two_words[32 * 32];
+static uint8_t frame_two_bytes[0x4000];
+static int two_boxes_stale = 1;
+/* the race's sprite art by palette, for sprites drawn into the list */
+static nshvc_image sprite_atlas[8];
+static uint8_t sprite_atlas_made[8];
 static uint16_t backdrop_two_words[4][0x400];
 static uint16_t panel_words[0x400];
 static int two_images_stale = 1;
@@ -101,6 +122,7 @@ void race_art_write(uint16_t word, const uint8_t *data, uint32_t bytes)
         nshvc_tiles_write(race_video.tiles, (uint32_t)(word - 0x4000u) / 16u, data, bytes / 32u, NSHVC_TILES_PLANAR);
         memcpy(race_art_bytes + (uint32_t)(word - 0x4000u) * 2u, data, bytes);
         two_images_stale = 1;
+        memset(sprite_atlas_made, 0, sizeof sprite_atlas_made);
     }
 }
 
@@ -140,6 +162,9 @@ void race_vram_write(uint16_t word, const uint8_t *data, uint32_t bytes)
             race_frame_map_two_write((const uint16_t *)(const void *)data);
         } else if (word < 0x2000) {
             nshvc_tiles_write(race_video.frame_tiles_two, word / 16u, data, bytes / 32u, NSHVC_TILES_PLANAR);
+            if ((uint32_t)word * 2u + bytes <= sizeof frame_two_bytes)
+                memcpy(frame_two_bytes + (uint32_t)word * 2u, data, bytes);
+            two_boxes_stale = 1;
         }
         return;
     }
@@ -182,6 +207,8 @@ void race_frame_map_two_write(const uint16_t *words)
     for (i = 0; i < 32 * 32; i++)
         frame_only[i] = (words[i] & 0x3FF) >= 0x168 ? words[i] : 0;
     nshvc_map_write_snes(race_video.frame_map_two, 0, 0, 32, 32, frame_only);
+    memcpy(frame_two_words, frame_only, sizeof frame_two_words);
+    two_boxes_stale = 1;
 }
 
 /* `n` pages of the two-player backdrop from `first`. */
@@ -1227,6 +1254,8 @@ static void frame_image_build(void)
 
 /* The two-player backdrop (four pages) and the panel, from the shared art;
    the panel's tile numbers count from its own art, $300 on. */
+static nshvc_image backdrop_clear;
+
 static void two_images_build(void)
 {
     static uint8_t backdrop[512 * 512], panel[256 * 256];
@@ -1251,6 +1280,14 @@ static void two_images_build(void)
         }
     nshvc_image_write(race_video.backdrop_image, backdrop);
     nshvc_image_write(race_video.panel_image, panel);
+    /* the full window's copy: the sky's colour 1 clear, each player's own
+       sky rows behind it */
+    if (!backdrop_clear.id)
+        backdrop_clear = nshvc_image_create(512, 512, NSHVC_IMAGE_INDEXED);
+    for (x = 0; x < 512 * 512; x++)
+        if (backdrop[x] == 1)
+            backdrop[x] = 0;
+    nshvc_image_write(backdrop_clear, backdrop);
     two_images_stale = 0;
 }
 
@@ -1310,6 +1347,290 @@ static void half_draw(nshvc_draw_list list, int half, int first, int last)
     }
 }
 
+/* ---- two players in the full window ---- */
+
+/* A colour of the palette's 15 bits as the list's direct colour, each
+   channel widened as the engine widens a palette colour's. */
+static uint32_t direct_of(uint16_t bgr)
+{
+    uint32_t r = bgr & 31, gc = (bgr >> 5) & 31, b = (bgr >> 10) & 31;
+
+    r = r << 3 | r >> 2;
+    gc = gc << 3 | gc >> 2;
+    b = b << 3 | b >> 2;
+    return 0xFF000000u | r << 16 | gc << 8 | b;
+}
+
+/* A rectangle of one colour, in screen pixels, into the list. */
+static void colour_rect(nshvc_draw_list list, int x0, int y0, int x1, int y1, uint32_t colour)
+{
+    nshvc_vertex v[6];
+    float sx, sy;
+
+    fx_draw_list_scale(&sx, &sy);
+    memset(v, 0, sizeof v);
+    v[0].x = (float)x0 * sx; v[0].y = (float)y0 * sy;
+    v[1].x = (float)x1 * sx; v[1].y = (float)y0 * sy;
+    v[2].x = (float)x1 * sx; v[2].y = (float)y1 * sy;
+    v[3] = v[0];
+    v[4] = v[2];
+    v[5].x = (float)x0 * sx; v[5].y = (float)y1 * sy;
+    for (x0 = 0; x0 < 6; x0++)
+        v[x0].colour = colour;
+    nshvc_draw_tris(list, v, 6, NULL);
+}
+
+/* An image of `size` x `size` texels wrapped over a rectangle of the screen:
+   its top left shows texel (u, v). */
+static void image_wrap(nshvc_draw_list list, nshvc_image image, int size, int x, int y, int w, int h, int u, int v)
+{
+    int mask = size - 1, r = 0;
+
+    while (r < h) {
+        int tv = (v + r) & mask, n = size - tv, c = 0;
+
+        if (n > h - r)
+            n = h - r;
+        while (c < w) {
+            int tu = (u + c) & mask, m = size - tu;
+
+            if (m > w - c)
+                m = w - c;
+            image_quad(list, image, x + c, y + r, m, n, tu, tv);
+            c += m;
+        }
+        r += n;
+    }
+}
+
+/*
+ * Each player's sky and hills in its rectangle, about its view's centre
+ * (the rectangle's middle) as the original's half had them about its
+ * view's (columns 88 and 168, lines 63 and 167): each row the day list's
+ * colour at its height above that player's horizon, the hills (or the
+ * finished player's panel) at that player's scroll, the image's row the
+ * original line's + 1 + scroll as the hardware counted.
+ */
+static void two_full_backdrop(nshvc_draw_list list)
+{
+    static const int centre_x[2] = { 88, 168 }, centre_y[2] = { 63, 167 };
+    const ScreenShape *sh = screen_shape();
+    int p;
+
+    /* the seam between the players black, as the original's blank lines between its halves */
+    colour_rect(list, 0, 0, sh->width, sh->height, 0xFF000000u);
+    for (p = 0; p < 2; p++) {
+        int x, y, w, h, rcx, rcy, r, sx = pic.race.backdrop_x[p], sy = pic.race.backdrop_y[p];
+
+        screen_two_rect(p, &x, &y, &w, &h);
+        rcx = x + w / 2;
+        rcy = y + h / 2;
+        for (r = 0; r < h; r++) {
+            int at = (int)pic.race.gradient_start[p] + (y + r - rcy) + 40;
+
+            if (at < GRADIENT_AT_DAY)
+                at = GRADIENT_AT_DAY;
+            if (at > GRADIENT_AT_DAY + 511)
+                at = GRADIENT_AT_DAY + 511;
+            colour_rect(list, x, y + r, x + w, y + r + 1, direct_of(gradient_colour((uint32_t)at)));
+        }
+        if (pic.race.panel[p])
+            image_wrap(list, race_video.panel_image, 256, x, y, w, h,
+                       x - rcx + centre_x[p] + sx, y - rcy + centre_y[p] + 1 + sy);
+        else
+            image_wrap(list, backdrop_clear, 512, x, y, w, h,
+                       x - rcx + centre_x[p] + sx, y - rcy + centre_y[p] + 1 + sy);
+    }
+}
+
+/* A rectangle of texels (u0, v0, uw x vh) over a rectangle of the screen
+   at any scale, in the list's pixels; flipped across or down. */
+static void image_quad_scaled(nshvc_draw_list list, nshvc_image image, float x, float y, float w, float h,
+                              int u0, int v0, int uw, int vh, int hflip, int vflip)
+{
+    nshvc_vertex v[6];
+    nshvc_material m;
+    float sx, sy, l, t, r, b, ul = (float)u0, ur = (float)(u0 + uw), vt = (float)v0, vb = (float)(v0 + vh), k;
+
+    fx_draw_list_scale(&sx, &sy);
+    if (hflip) {
+        k = ul;
+        ul = ur;
+        ur = k;
+    }
+    if (vflip) {
+        k = vt;
+        vt = vb;
+        vb = k;
+    }
+    l = x * sx;
+    r = (x + w) * sx;
+    t = y * sy;
+    b = (y + h) * sy;
+    memset(&m, 0, sizeof m);
+    m.image = image;
+    memset(v, 0, sizeof v);
+    v[0].x = l; v[0].y = t; v[0].u = ul; v[0].v = vt; v[0].colour = 1;
+    v[1].x = r; v[1].y = t; v[1].u = ur; v[1].v = vt; v[1].colour = 1;
+    v[2].x = r; v[2].y = b; v[2].u = ur; v[2].v = vb; v[2].colour = 1;
+    v[3] = v[0];
+    v[4] = v[2];
+    v[5].x = l; v[5].y = b; v[5].u = ul; v[5].v = vb; v[5].colour = 1;
+    nshvc_draw_tris(list, v, 6, &m);
+}
+
+/*
+ * Each player's boxes as one picture, 80 x 96 of the two-player frame from
+ * (168, 16) and (8, 120): the frame drawn as its layer shows it (the map's
+ * pixel at the layer's scroll + the line + 1), then the bezel's fill (its
+ * character under the map, map row 7 column 21) cleared wherever it is
+ * reached from outside the boxes' outlines and in the map's place; its
+ * first and last rows are the bezel's rim (fullwindow.c's panels_two).
+ */
+static nshvc_image two_box_image[2];
+
+static void two_boxes_build(void)
+{
+    static const int box_x[2] = { 168, 8 }, box_y[2] = { 16, 120 };
+    static uint8_t frame[256 * 256], img[96 * 80], keep[96][80];
+    static int16_t stack[96 * 80][2];
+    int sx = pic.bg[0].scroll_x, sy = pic.bg[0].scroll_y, r, c, p;
+
+    memset(frame, 0, sizeof frame);
+    for (r = 0; r < 32; r++)
+        for (c = 0; c < 32; c++) {
+            uint16_t w = frame_two_words[r * 32 + c];
+            unsigned t = w & 0x1FF;
+            int x = (c * 8 - sx) & 255, y = (r * 8 - 1 - sy) & 255;
+
+            if (!(w & 0x3FF))
+                continue;
+            plot_tile(frame, 256, 256, x, y, frame_two_bytes + t * 32u, 4, (w >> 10) & 7, (w >> 14) & 1, (w >> 15) & 1);
+            if (x > 248)
+                plot_tile(frame, 256, 256, x - 256, y, frame_two_bytes + t * 32u, 4, (w >> 10) & 7, (w >> 14) & 1, (w >> 15) & 1);
+            if (y > 248)
+                plot_tile(frame, 256, 256, x, y - 256, frame_two_bytes + t * 32u, 4, (w >> 10) & 7, (w >> 14) & 1, (w >> 15) & 1);
+        }
+    for (p = 0; p < 2; p++) {
+        static const int step[4][2] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } };
+        uint8_t bg = frame[(7 * 8 + 4) * 256 + 21 * 8 + 4];
+        int n = 0, x, y, k;
+
+        for (y = 0; y < 96; y++)
+            for (x = 0; x < 80; x++) {
+                uint8_t v = frame[(box_y[p] + y) * 256 + box_x[p] + x];
+
+                img[y * 80 + x] = v;
+                keep[y][x] = v != 0 && y && y != 95;
+            }
+        for (y = 0; y < 96; y++)
+            for (x = 0; x < 80; x++)
+                if ((!x || x == 79 || y == 1 || y == 94 || ((p ? x / 8 >= 6 : x / 8 < 4) && y / 8 >= 4 && y / 8 < 8)) &&
+                    img[y * 80 + x] == bg && keep[y][x]) {
+                    keep[y][x] = 0;
+                    stack[n][0] = (int16_t)x;
+                    stack[n++][1] = (int16_t)y;
+                }
+        while (n) {
+            n--;
+            x = stack[n][0];
+            y = stack[n][1];
+            for (k = 0; k < 4; k++) {
+                int a = x + step[k][0], b = y + step[k][1];
+
+                if (a < 0 || a >= 80 || b < 0 || b >= 96 || !keep[b][a] || img[b * 80 + a] != bg)
+                    continue;
+                keep[b][a] = 0;
+                stack[n][0] = (int16_t)a;
+                stack[n++][1] = (int16_t)b;
+            }
+        }
+        for (y = 0; y < 96; y++)
+            for (x = 0; x < 80; x++)
+                if (!keep[y][x])
+                    img[y * 80 + x] = 0;
+        if (!two_box_image[p].id)
+            two_box_image[p] = nshvc_image_create(80, 96, NSHVC_IMAGE_INDEXED);
+        nshvc_image_write(two_box_image[p], img);
+    }
+    two_boxes_stale = 0;
+}
+
+/* The race's sprite art in palette `pal`, 128 x 256: the sprite named n
+   (9 bits; 16 x 16 ones take n, n + 1, n + 16, n + 17) at column (n & 15)
+   * 8, row (n >> 4) * 8, as the sprites' characters are laid out. */
+static nshvc_image sprite_atlas_for(int pal)
+{
+    static uint8_t img[128 * 256];
+    int n;
+
+    pal &= 7;
+    if (sprite_atlas_made[pal])
+        return sprite_atlas[pal];
+    memset(img, 0, sizeof img);
+    for (n = 0; n < 512; n++) {
+        unsigned tile = n < 256 ? 0x200u + (unsigned)n : 0x300u + (unsigned)(n - 256);
+
+        plot_tile(img, 128, 256, (n & 15) * 8, (n >> 4) * 8, race_art_bytes + tile * 32u, 4, 8 + pal, 0, 0);
+    }
+    if (!sprite_atlas[pal].id)
+        sprite_atlas[pal] = nshvc_image_create(128, 256, NSHVC_IMAGE_INDEXED);
+    nshvc_image_write(sprite_atlas[pal], img);
+    sprite_atlas_made[pal] = 1;
+    return sprite_atlas[pal];
+}
+
+/*
+ * Each player's four boxes over its 3D at their places and scale, and the
+ * HUD's sprites inside them (digits, gauges, the map's dots) drawn with
+ * them at the same scale, in the box their middle is in (the sprite layer
+ * leaves these out: sprites_place_two).
+ */
+static void two_full_boxes(nshvc_draw_list list)
+{
+    static const int box_x[2] = { 168, 8 }, box_y[2] = { 16, 120 };
+    int p, b, i;
+
+    if (two_boxes_stale)
+        two_boxes_build();
+    for (p = 0; p < 2; p++) {
+        float s = (float)screen_two_scale(p) / 256.0f;
+
+        for (b = 0; b < 4; b++) {
+            int sx, sy, sw, sh;
+            float x, y, w, h;
+
+            screen_two_box_source(p, b, &sx, &sy, &sw, &sh);
+            screen_two_box(p, b, &x, &y, &w, &h);
+            image_quad_scaled(list, two_box_image[p], x, y, w, h, sx, sy, sw, sh, 0, 0);
+        }
+        for (i = p ? 64 : 0; i < (p ? 128 : 64) && i < (int)pic.sprite_count; i++) {
+            const nshvc_sprite *o = &pic.sprites[i];
+            int size = o->width * 8, rx = o->x - box_x[p], ry = o->y - box_y[p], cx = rx + size / 2, cy = ry + size / 2;
+
+            if (o->priority != 3 || o->y < 0 || o->y >= 224 || cx < 0 || cx >= 80 || cy < 0 || cy >= 96)
+                continue;
+            for (b = 0; b < 4; b++) {
+                int sx, sy, sw, sh;
+                float x, y, w, h;
+
+                screen_two_box_source(p, b, &sx, &sy, &sw, &sh);
+                if (cx < sx || cx >= sx + sw || cy < sy || cy >= sy + sh)
+                    continue;
+                screen_two_box(p, b, &x, &y, &w, &h);
+                {
+                    unsigned name = sprite_name_of(o);
+
+                    image_quad_scaled(list, sprite_atlas_for(o->palette), x + (float)(rx - sx) * s, y + (float)(ry - sy) * s,
+                                      (float)size * s, (float)size * s, (int)(name & 15) * 8, (int)(name >> 4) * 8,
+                                      size, size, o->hflip, o->vflip);
+                }
+                break;
+            }
+        }
+    }
+}
+
 /* What goes behind the 3D in its list: one player the frame and panels;
    two players each half's backdrop or panel. */
 void race_frame_art_draw(nshvc_draw_list list)
@@ -1319,6 +1640,10 @@ void race_frame_art_draw(nshvc_draw_list list)
     if (g.split_screen) {
         if (two_images_stale)
             two_images_build();
+        if (race_two_full_window()) {
+            two_full_backdrop(list);
+            return;
+        }
         half_draw(list, 0, 0, 112);
         half_draw(list, 1, 112, 224);
     } else {
@@ -1345,6 +1670,10 @@ void race_frame_art_draw_over(nshvc_draw_list list)
 {
     int k, down;
 
+    if (race_two_full_window()) {
+        two_full_boxes(list);
+        return;
+    }
     if (!race_full_window())
         return;
     if (frame_image_stale)
@@ -1362,11 +1691,13 @@ void race_frame_art_draw_over(nshvc_draw_list list)
    (asking for the other picture number makes the compose run; both are in it). */
 void race_two_player_list(void)
 {
-    static struct { int32_t x[2], y[2]; uint8_t panel[2]; } shown;
+    static struct { int32_t x[2], y[2]; uint8_t panel[2]; uint16_t sky[2]; } shown;
     static int which;
 
     if (memcmp(shown.x, pic.race.backdrop_x, sizeof shown.x) || memcmp(shown.y, pic.race.backdrop_y, sizeof shown.y)
-        || memcmp(shown.panel, pic.race.panel, sizeof shown.panel)) {
+        || memcmp(shown.panel, pic.race.panel, sizeof shown.panel)
+        || (race_two_full_window() && memcmp(shown.sky, pic.race.gradient_start, sizeof shown.sky))) {
+        memcpy(shown.sky, pic.race.gradient_start, sizeof shown.sky);
         memcpy(shown.x, pic.race.backdrop_x, sizeof shown.x);
         memcpy(shown.y, pic.race.backdrop_y, sizeof shown.y);
         memcpy(shown.panel, pic.race.panel, sizeof shown.panel);

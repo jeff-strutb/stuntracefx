@@ -900,6 +900,11 @@ static unsigned sprite_name(const nshvc_sprite *s)
     return s->tile >= page_second ? 0x100u + (unsigned)(s->tile - page_second) : (unsigned)(s->tile - page_first);
 }
 
+unsigned sprite_name_of(const nshvc_sprite *s)
+{
+    return sprite_name(s);
+}
+
 static int piece_root(int *up, int i)
 {
     while (up[i] != i)
@@ -985,5 +990,71 @@ void sprites_place_full(nshvc_sprite *out, const nshvc_sprite *in, uint32_t coun
         }
         out[i].x = in[i].x + dx;
         out[i].y = in[i].y + dy;
+    }
+}
+
+/* ---- two players' sprites in the whole window ---- */
+
+/*
+ * fullwindow.c's sprites_two: the first 64 sprites are the first player's,
+ * the rest the second's. Those off the original's screen, or off their
+ * half's rows (the first's from 16 to 111, the second's from 120 to 215),
+ * are left out, and so are those in the boxes' columns, which go with the
+ * boxes (drawn with them, scaled). The HUD's (priority 3) move by piece to
+ * where screen_two_anchor puts the player's original view; the 3D's keep
+ * their place about the rectangle's middle.
+ */
+void sprites_place_two(nshvc_sprite *out, const nshvc_sprite *in, uint32_t count)
+{
+    static const int view_x[2] = { 16, 96 }, view_y[2] = { 23, 127 }, box_x[2] = { 168, 8 }, box_y[2] = { 16, 120 };
+    const ScreenShape *sh = screen_shape();
+    int up[128], shown[128], hud[128], x0[128], x1[128], y0[128], y1[128];
+    int i, b, n = count > 128 ? 128 : (int)count;
+
+    for (i = 0; i < n; i++) {
+        const nshvc_sprite *s = &in[i];
+        int x = s->x, y = s->y, h = s->height * 8, w = s->width * 8, p = i >= 64, cx = x + w / 2;
+
+        up[i] = i;
+        hud[i] = s->priority == 3;
+        shown[i] = !(y < 0 || y >= 224 || x + w <= 0 || x >= 256 || y + h <= box_y[p] || y >= box_y[p] + 96 ||
+                     (cx >= box_x[p] && cx < box_x[p] + 80));
+        if (!shown[i])
+            continue;
+        for (b = p ? 64 : 0; b < i; b++)
+            if (shown[b] && hud[b] == hud[i] && in[b].x <= x + w && x <= in[b].x + in[b].width * 8 &&
+                in[b].y <= y + h && y <= in[b].y + in[b].height * 8)
+                up[piece_root(up, b)] = piece_root(up, i);
+    }
+    for (i = 0; i < n; i++) {
+        x0[i] = y0[i] = 0x7FFF;
+        x1[i] = y1[i] = -0x7FFF;
+    }
+    for (i = 0; i < n; i++)
+        if (shown[i]) {
+            int p = piece_root(up, i);
+
+            x0[p] = in[i].x < x0[p] ? in[i].x : x0[p];
+            x1[p] = in[i].x + in[i].width * 8 - 1 > x1[p] ? in[i].x + in[i].width * 8 - 1 : x1[p];
+            y0[p] = in[i].y < y0[p] ? in[i].y : y0[p];
+            y1[p] = in[i].y + in[i].height * 8 - 1 > y1[p] ? in[i].y + in[i].height * 8 - 1 : y1[p];
+        }
+    for (i = 0; i < n; i++) {
+        int p = i >= 64, g = piece_root(up, i), rx, ry, rw, rh, dx, dy;
+
+        out[i] = in[i];
+        if (!shown[i]) {
+            out[i].y = sh->height + 64;
+            continue;
+        }
+        screen_two_rect(p, &rx, &ry, &rw, &rh);
+        if (hud[i]) {
+            screen_two_anchor(p, x0[g] - view_x[p], x1[g] - view_x[p], y0[g] - view_y[p], y1[g] - view_y[p], &dx, &dy);
+            out[i].x = dx + in[i].x - view_x[p];
+            out[i].y = dy + in[i].y - view_y[p];
+        } else {
+            out[i].x = rx + rw / 2 + in[i].x - (view_x[p] + 72);
+            out[i].y = ry + rh / 2 + in[i].y - (view_y[p] + 40);
+        }
     }
 }
