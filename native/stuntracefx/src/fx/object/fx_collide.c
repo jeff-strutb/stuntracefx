@@ -206,8 +206,8 @@ FxRecordsApartResult FxRecordsApart(uint16_t records_1, uint16_t records_2, uint
     record1_word_32 = fx_ldw((uint16_t)(record1_ptr + 0x0032));
     record2_word_32 = fx_ldw((uint16_t)(record2_ptr + 0x0032));
     fx_stw(0x006A, (uint16_t)((uint16_t)~(uint16_t)((uint16_t)((uint32_t)((int32_t)(int16_t)fx_div2((uint16_t)(record1_word_32 - record2_word_32)) * (int16_t)scaled_vector_z) >> 16) + (uint16_t)((uint32_t)((int32_t)(int16_t)fx_div2((uint16_t)(velocity - velocity_2)) * (int16_t)scaled_vector_x) >> 16)) + 1));
-    size = fx_ldw((uint16_t)(FXREC_SIZE + record1_ptr));
-    size_2 = fx_ldw((uint16_t)(FXREC_SIZE + record2_ptr));
+    size = fx_ldw((uint16_t)(FXREC_TOUCH_X + record1_ptr));
+    size_2 = fx_ldw((uint16_t)(FXREC_TOUCH_X + record2_ptr));
     touch_distance_raw = (uint16_t)((uint16_t)(size + size_2) - 0x0294);
     touch_distance = touch_distance_raw;
     if (!(touch_distance_raw & 0x8000)) {
@@ -503,18 +503,18 @@ FxRecordTouchesResult FxRecordTouches(uint16_t record, uint16_t entry_scratch_a,
     half_x = fx_ldw((uint16_t)(FXREC_HALF_X + record));
     y = fx_ldw((uint16_t)(record + FXREC_Y));
     record_z = fx_ldw((uint16_t)(record + 0x0022));
-    size = fx_ldw((uint16_t)(FXREC_SIZE + record));
+    size = fx_ldw((uint16_t)(FXREC_TOUCH_X + record));
     fx_stw(FX_SIZES, size);
-    next = fx_ldw((uint16_t)(record + FXREC_NEXT));
+    next = fx_ldw((uint16_t)(record + FXREC_TOUCH_Y));
     fx_stw(0x236E, next);
-    flags10 = fx_ldw((uint16_t)(record + FXREC_FLAGS10));
+    flags10 = fx_ldw((uint16_t)(record + FXREC_TOUCH_Z));
     fx_stw(0x2370, flags10);
     other_record = record;
     for (;;) {
         all_next = fx_ldw((uint16_t)(FXREC_ALL_NEXT + other_record));
         other_record = all_next;
         if (all_next != 0) {
-            flags10_2 = fx_ldw((uint16_t)(other_record + FXREC_FLAGS10));
+            flags10_2 = fx_ldw((uint16_t)(other_record + FXREC_TOUCH_Z));
             record_z_size = fx_ldw(0x2370);
             z_size_sum = (uint16_t)(flags10_2 + record_z_size);
             other_z = fx_ldw((uint16_t)(other_record + 0x0022));
@@ -527,7 +527,7 @@ FxRecordTouchesResult FxRecordTouches(uint16_t record, uint16_t entry_scratch_a,
             if (!((uint16_t)(z_dist_abs - z_size_sum) & 0x8000)) {
                 continue;
             } else {
-                other_x_size = fx_ldw((uint16_t)(other_record + 0x000C));
+                other_x_size = fx_ldw((uint16_t)(other_record + FXREC_TOUCH_X));
                 sizes = fx_ldw(FX_SIZES);
                 x_size_sum = (uint16_t)(other_x_size + sizes);
                 half_x_2 = fx_ldw((uint16_t)(other_record + FXREC_HALF_X));
@@ -540,7 +540,7 @@ FxRecordTouchesResult FxRecordTouches(uint16_t record, uint16_t entry_scratch_a,
                 if (!((uint16_t)(x_dist_abs - x_size_sum) & 0x8000)) {
                     continue;
                 } else {
-                    next_2 = fx_ldw((uint16_t)(other_record + FXREC_NEXT));
+                    next_2 = fx_ldw((uint16_t)(other_record + FXREC_TOUCH_Y));
                     record_y_size = fx_ldw(0x236E);
                     y_size_sum = (uint16_t)(next_2 + record_y_size);
                     y_2 = fx_ldw((uint16_t)(other_record + FXREC_Y));

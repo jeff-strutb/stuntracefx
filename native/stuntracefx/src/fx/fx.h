@@ -41,7 +41,7 @@ _Noreturn void fx_bad_dispatch(uint16_t at);
 #define FXREC_ALL_PREV 0x0006
 #define FXREC_COUNTED 0x0086
 #define FXREC_DIRECTION 0x0070
-#define FXREC_FLAGS10 0x0010
+#define FXREC_FLAGS10 0x0010           /* a contact's flags (FxContact) */
 #define FXREC_FLAGS16 0x0016
 #define FXREC_FLAGS1C 0x001C
 #define FXREC_FLAGS40 0x0040
@@ -51,14 +51,13 @@ _Noreturn void fx_bad_dispatch(uint16_t at);
 #define FXREC_LIST 0x0018
 #define FXREC_MASS 0x002A
 #define FXREC_MODE 0x001A
-#define FXREC_NEXT 0x000E
+#define FXREC_NEXT 0x000E              /* a contact's next (FxContact) */
 #define FXREC_NEXT_CAR 0x0074
 #define FXREC_POOL 0x0008
 #define FXREC_RANK 0x0088
 #define FXREC_SCALED_X 0x002E
 #define FXREC_SEGMENT 0x0058
 #define FXREC_SIDES 0x0042
-#define FXREC_SIZE 0x000C
 #define FXREC_SPEED 0x004A
 #define FXREC_SPREAD 0x007C
 #define FXREC_TO_GO 0x0084
@@ -82,9 +81,9 @@ typedef enum {
 } FxHandler;
 
 #define FXREC_HANDLER 0x000A            /* the Super FX handler it runs each step (an FxHandler's word) */
-#define FXREC_OFFSET_X 0x000C           /* the object's model offsets (a contact entry's +$0C-$10 are FXCON_OTHER, FXREC_NEXT, FXREC_FLAGS10) */
-#define FXREC_OFFSET_Y 0x000E
-#define FXREC_OFFSET_Z 0x0010
+#define FXREC_TOUCH_X 0x000C            /* half its touch box along x, y, z: two records touch when each axis's distance is */
+#define FXREC_TOUCH_Y 0x000E            /* within the sum of theirs (a contact's +$0C-$10 are FXCON_OTHER, FXREC_NEXT, */
+#define FXREC_TOUCH_Z 0x0010            /* FXREC_FLAGS10) */
 #define FXREC_FRAME 0x0012              /* the frame shown */
 #define FXREC_OBJECT_SCRIPT 0x0014      /* the object's script word */
 #define FXREC_POS_X 0x001E              /* its place (+$1E is also FXREC_HALF_X, +$20 FXREC_Y in the chip code) */
@@ -346,7 +345,7 @@ struct FxRecord {
     /* every record */
     FxRecord *next, *prev;                      /* +$04, +$06: the list of all records */
     FxHandler handler;                          /* +$0A */
-    int16_t offset_x, offset_y, offset_z;       /* +$0C-$10: the model's offset (an object's; a car part's too) */
+    uint16_t touch_x, touch_y, touch_z;         /* +$0C-$10: half its touch box along x, y and z */
     FxContact *contacts;                        /* +$18: the records it touches */
     uint16_t frame, script;                     /* +$12, +$14 */
     uint16_t flags16, flags1c;                  /* +$16, +$1C */

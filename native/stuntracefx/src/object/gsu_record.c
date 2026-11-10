@@ -68,9 +68,9 @@ void GsuRecordSolid(Object *o)
 void GsuRecordTouchBox(Object *o, uint16_t x, uint16_t y, uint16_t z)
 {
     if (o->record) {
-        rec_put(o->record, FXREC_OFFSET_X, x);
-        rec_put(o->record, FXREC_OFFSET_Y, y);
-        rec_put(o->record, FXREC_OFFSET_Z, z);
+        rec_put(o->record, FXREC_TOUCH_X, x);
+        rec_put(o->record, FXREC_TOUCH_Y, y);
+        rec_put(o->record, FXREC_TOUCH_Z, z);
     }
 }
 
@@ -190,9 +190,9 @@ void GsuRecordFromObject(Object *o)
 
     if (!rec)
         return;
-    rec_put(rec, FXREC_OFFSET_X, o->touch_x);
-    rec_put(rec, FXREC_OFFSET_Y, o->touch_y);
-    rec_put(rec, FXREC_OFFSET_Z, o->touch_z);
+    rec_put(rec, FXREC_TOUCH_X, o->touch_x);
+    rec_put(rec, FXREC_TOUCH_Y, o->touch_y);
+    rec_put(rec, FXREC_TOUCH_Z, o->touch_z);
     rec_put(rec, FXREC_OBJECT_SCRIPT, o->script);
     rec_put(rec, FXREC_POS_X, o->x);
     rec_put(rec, FXREC_POS_Y, o->y);
