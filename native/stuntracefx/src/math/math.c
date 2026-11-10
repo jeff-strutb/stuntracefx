@@ -228,9 +228,12 @@ uint8_t ApproachSixtyFourthMin64Byte(uint8_t value, uint8_t target, int *moved) 
 /* @routine 03:D154 ApproachOneTwentyEighthMin128Byte: $80 is -128 as a byte, so it always steps down by 1. */
 uint8_t ApproachOneTwentyEighthMin128Byte(uint8_t value, uint8_t target, int *moved) { return approach_byte(value, target, 128, 7, moved); }
 
-/* The sine and cosine of an angle, from the cartridge's byte tables. */
-static uint8_t sine(uint8_t i) { return cart8(0x00, (uint16_t)(0x96FE + i)); }
-static uint8_t cosine(uint8_t i) { return cart8(0x00, (uint16_t)(0x973E + i)); }
+/* The sine and cosine of an angle, from the cartridge's byte tables in
+   bank 0. */
+enum { TRIG_BANK = 0x00, SINE_TABLE = 0x96FE, COSINE_TABLE = 0x973E };
+
+static uint8_t sine(uint8_t i) { return cart8(TRIG_BANK, (uint16_t)(SINE_TABLE + i)); }
+static uint8_t cosine(uint8_t i) { return cart8(TRIG_BANK, (uint16_t)(COSINE_TABLE + i)); }
 
 /* The signed 8 x 8 multiply the code does by hand: the magnitudes, the
    first doubled and kept to eight bits, the high byte of the product,

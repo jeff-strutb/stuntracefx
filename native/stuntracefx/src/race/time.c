@@ -47,6 +47,17 @@ void TimeSetHundredths(uint8_t t[3], unsigned hundredths)
     t[2] = (uint8_t)BcdOf(hundredths / 6000u % 100u);
 }
 
+/* The time tables in bank 3, decimal seconds: Speed Trax's by course and
+   car, three bytes each (the start, then what the second and the third lap
+   add), twelve to a course; by class with the time override; Stunt Trax's
+   by course from the first stunt course ($0C) and car, four to a course. */
+enum {
+    TIME_BANK = 0x03,
+    COURSE_TIMES = 0xD813, COURSE_TIME_LAP2 = 1, COURSE_TIME_LAP3 = 2,
+    CLASS_TIMES = 0xD810,
+    STUNT_TIMES = 0xD8A3, FIRST_STUNT_COURSE = 0x0C
+};
+
 /* @routine 03:EFBB CourseIndex12: tables with twelve bytes per course and three per entry. */
 static uint8_t course_index_12(uint8_t entry)
 {
@@ -57,12 +68,12 @@ static uint8_t course_index_12(uint8_t entry)
    the time left gains this course's time for the lap ahead ($03:D815 the third, $D814 the second). */
 void TimeLeftAddLap3(void)
 {
-    g.time_left = BcdAdd(cart8(0x03, (uint16_t)(0xD815 + course_index_12(g.car[0]))), g.time_left);
+    g.time_left = BcdAdd(cart8(TIME_BANK, (uint16_t)(COURSE_TIMES + COURSE_TIME_LAP3 + course_index_12(g.car[0]))), g.time_left);
 }
 
 void TimeLeftAddLap2(void)
 {
-    g.time_left = BcdAdd(cart8(0x03, (uint16_t)(0xD814 + course_index_12(g.car[0]))), g.time_left);
+    g.time_left = BcdAdd(cart8(TIME_BANK, (uint16_t)(COURSE_TIMES + COURSE_TIME_LAP2 + course_index_12(g.car[0]))), g.time_left);
 }
 
 /*
@@ -78,11 +89,11 @@ void RaceTimeInit(void)
     g.countdown_fraction_2 = 0x9999;
     if (g.hud_mode == 0) {
         if (g.time_override == 0)
-            v = cart8(0x03, (uint16_t)(0xD813 + course_index_12(g.car[0])));
+            v = cart8(TIME_BANK, (uint16_t)(COURSE_TIMES + course_index_12(g.car[0])));
         else
-            v = cart8(0x03, (uint16_t)(0xD810 + g.course_class));
+            v = cart8(TIME_BANK, (uint16_t)(CLASS_TIMES + g.course_class));
     } else if (g.hud_mode == 1 && !g.hud_blank) {
-        v = cart8(0x03, (uint16_t)(0xD8A3 + (uint8_t)((uint8_t)((uint8_t)(g.course - 0x0C) * 4) + g.car[0])));
+        v = cart8(TIME_BANK, (uint16_t)(STUNT_TIMES + (uint8_t)((uint8_t)((uint8_t)(g.course - FIRST_STUNT_COURSE) * 4) + g.car[0])));
     }
     g.time_left = v;
 }
