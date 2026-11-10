@@ -13,8 +13,13 @@
 #include "system/chip.h"
 #include "system/state.h"
 
+/* More of the HUD's tables in bank 7 (HUD_BANK): the bonus digits' sizes
+   by step, and the countdown digit's scale, size and place, four words for
+   each tenth of a second. */
+enum { DIGIT_GROW_SIZES = 0x918F, COUNTDOWN_DIGIT_SHAPES = 0x8DDA };
+
 /* The digit sizes for the animation steps, $07:918F. */
-static uint16_t size_grow(void) { return cart16(0x07, (uint16_t)(0x918F + g.hud_point_index)); }
+static uint16_t size_grow(void) { return cart16(HUD_BANK, (uint16_t)(DIGIT_GROW_SIZES + g.hud_point_index)); }
 
 static void digit(uint16_t d)
 {
@@ -81,7 +86,7 @@ static void time_digit_bytes(void)
 
 static void bonus_x_from_table(void)
 {
-    g.hud_point_x = (uint16_t)(0x008F - cart16(0x07, (uint16_t)(0x9806 + g.hud_point_index)));
+    g.hud_point_x = (uint16_t)(0x008F - cart16(HUD_BANK, (uint16_t)(FRAME_X_OFFSETS + g.hud_point_index)));
 }
 
 /* The frame drawn while the bonus shows, mirrored. */
@@ -421,14 +426,14 @@ void TimeLeftDigits(void)
     }
     DigitGlyphSelect(v);
     {
-        uint16_t at = (uint16_t)(0x8DDA + (uint16_t)(((g.countdown_fraction >> 8) >> 4) * 8));
+        uint16_t at = (uint16_t)(COUNTDOWN_DIGIT_SHAPES + (uint16_t)(((g.countdown_fraction >> 8) >> 4) * 8));
 
-        fx16_set(FXIN_PIECE_W, cart16(0x07, at));
-        fx16_set(FXIN_PIECE_H, cart16(0x07, at));
-        fx16_set(FXIN_PIECE_U, cart16(0x07, (uint16_t)(at + 2)));
-        fx16_set(FXIN_PIECE_V, cart16(0x07, (uint16_t)(at + 2)));
-        fx16_set(FXIN_PIECE_X, cart16(0x07, (uint16_t)(at + 4)));
-        fx16_set(FXIN_PIECE_Y, cart16(0x07, (uint16_t)(at + 6)));
+        fx16_set(FXIN_PIECE_W, cart16(HUD_BANK, at));
+        fx16_set(FXIN_PIECE_H, cart16(HUD_BANK, at));
+        fx16_set(FXIN_PIECE_U, cart16(HUD_BANK, (uint16_t)(at + 2)));
+        fx16_set(FXIN_PIECE_V, cart16(HUD_BANK, (uint16_t)(at + 2)));
+        fx16_set(FXIN_PIECE_X, cart16(HUD_BANK, (uint16_t)(at + 4)));
+        fx16_set(FXIN_PIECE_Y, cart16(HUD_BANK, (uint16_t)(at + 6)));
     }
     GlyphColours(0xBF, 0xB7, 0xB6);
     FxScaledSpriteAdvance(0);

@@ -69,10 +69,14 @@ void RaceReadyShort(void) { race_ready(0x1E); }
 /* @routine 07:E2CA RaceReadyLong */
 void RaceReadyLong(void) { race_ready(0x36); }
 
+/* The phases' tables in bank 7: the start's race-time size by its timer,
+   a lap banner's size by its timer. */
+enum { PHASE_BANK = 0x07, START_TIME_SIZES = 0xE33A, BANNER_SIZES = 0xE95A };
+
 /* @routine 07:E323 RaceStartStepsDraw: the race time at the size the timer picks. */
 static void start_draw(void)
 {
-    fx16_set(FXIN_PIECE_H, (uint8_t)cart16(0x07, (uint16_t)(0xE33A + g.race_timer)));
+    fx16_set(FXIN_PIECE_H, (uint8_t)cart16(PHASE_BANK, (uint16_t)(START_TIME_SIZES + g.race_timer)));
     GlyphColours(0xBF, 0xB5, 0xBB);
     GsuTimeDigits();
 }
@@ -340,7 +344,7 @@ static void finish_both(void)
 /* A banner's size by its timer, then the timer counted down; at 0 the banner is cleared. */
 static void lap_banner(int player, void (*draw)(uint16_t))
 {
-    uint16_t size = cart8(0x07, (uint16_t)(0xE95A + g.banner_timer[player]));
+    uint16_t size = cart8(PHASE_BANK, (uint16_t)(BANNER_SIZES + g.banner_timer[player]));
 
     draw(size);
     if (!--g.banner_timer[player])

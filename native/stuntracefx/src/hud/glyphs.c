@@ -20,6 +20,24 @@
 #include "system/state.h"
 #include "video/video.h"
 
+/* The glyph programs' tables. Bank 7 (HUD_BANK): the big and the small
+   digits' glyphs; the time frame's middle, its two tails' widths and their
+   texture steps, by the animation step; the laps-to-go words' heights by
+   their step. Bank 4: the glyph sprites' starting places and glyphs; their
+   grow steps' sizes, scales and offsets; the messages (each an address in
+   the bank: a length byte, then a glyph word a letter). */
+enum {
+    BIG_DIGIT_GLYPHS = 0x8E3E, SMALL_DIGIT_GLYPHS = 0x8E52,
+    FRAME_MIDDLE_WIDTHS = 0x97BE, FRAME_MIDDLE_STEPS = 0x97CA,
+    FRAME_TAIL_B_WIDTHS = 0x97D6, FRAME_TAIL_B_STEPS = 0x97E2,
+    FRAME_TAIL_A_WIDTHS = 0x97EE, FRAME_TAIL_A_STEPS = 0x97FA,
+    LAPS_TO_GO_HEIGHTS = 0x85CC,
+    GLYPH_SPRITE_BANK = 0x04,
+    GLYPH_SPRITE_XS = 0xDA7A, GLYPH_SPRITE_GLYPHS = 0xDA8E,
+    GROW_SIZES = 0xDAA2, GROW_SCALES = 0xDAB2, GROW_X_OFFSETS = 0xDAC2, GROW_Y_OFFSETS = 0xDAD2,
+    MESSAGES = 0xDF6D
+};
+
 void GlyphColours(uint8_t b1, uint8_t b2, uint8_t b3)
 {
     fx8_set(FXIN_GLYPH_BYTES + 0, 0x00);
@@ -29,8 +47,8 @@ void GlyphColours(uint8_t b1, uint8_t b2, uint8_t b3)
 }
 
 /* $70:0216 from the word tables at $07:8E3E and $07:8E52 (DigitGlyphSelect, B). */
-static void piece_big_digit(uint16_t index) { fx16_set(FXIN_PIECE, cart16(0x07, (uint16_t)(0x8E3E + index))); }
-static void piece_small_digit(uint16_t index) { fx16_set(FXIN_PIECE, cart16(0x07, (uint16_t)(0x8E52 + index))); }
+static void piece_big_digit(uint16_t index) { fx16_set(FXIN_PIECE, cart16(HUD_BANK, (uint16_t)(BIG_DIGIT_GLYPHS + index))); }
+static void piece_small_digit(uint16_t index) { fx16_set(FXIN_PIECE, cart16(HUD_BANK, (uint16_t)(SMALL_DIGIT_GLYPHS + index))); }
 
 void DigitGlyphSelect(uint16_t digit) { piece_big_digit((uint16_t)(digit << 1)); }
 
@@ -228,11 +246,11 @@ void TimeFrameTailB(void)
     fx16_set(FXIN_PIECE_Y, (uint16_t)(g.hud_point_y + 8));
     fx16_set(FXIN_PIECE_H, 0x0100);
     fx16_set(FXIN_PIECE_V, 0x0100);
-    v = cart16(0x07, (uint16_t)(0x97D6 + g.hud_point_index));
+    v = cart16(HUD_BANK, (uint16_t)(FRAME_TAIL_B_WIDTHS + g.hud_point_index));
     if (!v)
         return;
     fx16_set(FXIN_PIECE_W, v);
-    fx16_set(FXIN_PIECE_U, cart16(0x07, (uint16_t)(0x97E2 + g.hud_point_index)));
+    fx16_set(FXIN_PIECE_U, cart16(HUD_BANK, (uint16_t)(FRAME_TAIL_B_STEPS + g.hud_point_index)));
     fx16_set(FXIN_PIECE, 0x1E00);
     FxScaledSprite13(0);
 }
@@ -247,11 +265,11 @@ void TimeFrameTailA(void)
     fx16_set(FXIN_PIECE_Y, (uint16_t)(g.hud_point_y + 8));
     fx16_set(FXIN_PIECE_H, 0x0100);
     fx16_set(FXIN_PIECE_V, 0x0100);
-    v = cart16(0x07, (uint16_t)(0x97EE + g.hud_point_index));
+    v = cart16(HUD_BANK, (uint16_t)(FRAME_TAIL_A_WIDTHS + g.hud_point_index));
     if (!v)
         return;
     fx16_set(FXIN_PIECE_W, v);
-    fx16_set(FXIN_PIECE_U, cart16(0x07, (uint16_t)(0x97FA + g.hud_point_index)));
+    fx16_set(FXIN_PIECE_U, cart16(HUD_BANK, (uint16_t)(FRAME_TAIL_A_STEPS + g.hud_point_index)));
     fx16_set(FXIN_PIECE, 0x1C00);
     FxScaledSprite12(0);
 }
@@ -271,7 +289,7 @@ void TimeFrameLeft(void)
 /* @routine 07:9486 GsuFA5AThreeShifted */
 void TimeFrameLeftShifted(void)
 {
-    uint16_t x = (uint16_t)(cart16(0x07, (uint16_t)(0x9806 + g.hud_point_index)) + g.hud_point_x);
+    uint16_t x = (uint16_t)(cart16(HUD_BANK, (uint16_t)(FRAME_X_OFFSETS + g.hud_point_index)) + g.hud_point_x);
     uint16_t y = g.hud_point_y;
 
     piece_scale(0x0100, 0x0100, 0x0100, 0x0100);
@@ -286,7 +304,7 @@ void TimeFrameRight(void)
 {
     static const uint16_t dy[6] = {0x0000, 0x0008, 0x0010, 0x0018, 0x0008, 0x0010};
     static const uint16_t piece[6] = {0x1A0E, 0x1A16, 0x1B16, 0x1B0E, 0x1A0E, 0x1B0E};
-    uint16_t x = (uint16_t)(cart16(0x07, (uint16_t)(0x9806 + g.hud_point_index)) + g.hud_point_x);
+    uint16_t x = (uint16_t)(cart16(HUD_BANK, (uint16_t)(FRAME_X_OFFSETS + g.hud_point_index)) + g.hud_point_x);
 
     piece_scale(0x0100, 0x0100, 0x0100, 0x0100);
     for (int i = 0; i < 6; i++) {
@@ -313,7 +331,7 @@ void TimeFrameMiddle(void)
 {
     uint16_t i = g.hud_point_index;
 
-    piece_scale(cart16(0x07, (uint16_t)(0x97BE + i)), 0x0100, cart16(0x07, (uint16_t)(0x97CA + i)), 0x0100);
+    piece_scale(cart16(HUD_BANK, (uint16_t)(FRAME_MIDDLE_WIDTHS + i)), 0x0100, cart16(HUD_BANK, (uint16_t)(FRAME_MIDDLE_STEPS + i)), 0x0100);
     scaled_piece(g.hud_point_x, g.hud_point_y, 0x1B18);
     fx16_set(FXIN_PIECE_H, 0x0100);
     fx16_set(FXIN_PIECE_V, 0x0100);
@@ -337,7 +355,7 @@ void ShowLapsToGo(void)
     fx16_set(FXIN_PIECE_X, 0x0010);
     fx16_set(FXIN_PIECE_Y, 0x0028);
     GlyphColours(0xBF, 0xBA, 0xB9);
-    fx16_set(FXIN_PIECE_H, cart8(0x07, (uint16_t)(0x85CC + n)));
+    fx16_set(FXIN_PIECE_H, cart8(HUD_BANK, (uint16_t)(LAPS_TO_GO_HEIGHTS + n)));
     for (int i = 0; i < 11; i++) {
         fx16_set(FXIN_PIECE, piece[i]);
         if (n < 8)
@@ -573,9 +591,9 @@ static void glyph_sprite_draw_left8(int sprite)
 void GlyphSpritesInit(void)
 {
     for (int i = 0; i < 16; i++) {
-        g.glyph_sprite_x[i] = cart16(0x04, (uint16_t)(0xDA7A + 2 * i));
+        g.glyph_sprite_x[i] = cart16(GLYPH_SPRITE_BANK, (uint16_t)(GLYPH_SPRITE_XS + 2 * i));
         g.glyph_sprite_y[i] = 0x0008;
-        g.glyph_sprite_glyph[i] = cart16(0x04, (uint16_t)(0xDA8E + 2 * i));
+        g.glyph_sprite_glyph[i] = cart16(GLYPH_SPRITE_BANK, (uint16_t)(GLYPH_SPRITE_GLYPHS + 2 * i));
         g.glyph_sprite_step[i] = 0;
     }
     g.times_step = 0;
@@ -607,15 +625,15 @@ static void time_glyph(int *slot, uint16_t glyph, uint8_t x)
  */
 static void glyph_list_message_and_time(uint16_t index, uint8_t min, uint8_t sec, uint8_t hund)
 {
-    uint16_t s = cart16(0x04, (uint16_t)(0xDF6D + index));
-    uint16_t letters = (uint16_t)(cart16(0x04, s) & 0x00FF), x;
+    uint16_t s = cart16(GLYPH_SPRITE_BANK, (uint16_t)(MESSAGES + index));
+    uint16_t letters = (uint16_t)(cart16(GLYPH_SPRITE_BANK, s) & 0x00FF), x;
     int slot = 0;
 
     x = (uint16_t)-(uint16_t)((uint16_t)(letters * 4) - 0x0068);
     g.glyph_first_end = (uint16_t)(letters - 1);
     g.glyph_end = (uint16_t)(g.glyph_first_end + 7);
     for (uint16_t n = letters; n; n--) {
-        uint16_t w = cart16(0x04, (uint16_t)(s + 1));
+        uint16_t w = cart16(GLYPH_SPRITE_BANK, (uint16_t)(s + 1));
 
         if (w) {
             g.glyph_word[slot] = w;
@@ -814,12 +832,12 @@ void GlyphSpritesGrowAndTimes(void)
             if (!step)
                 continue;
             y = (uint16_t)(step * 2);
-            fx16_set(FXIN_PIECE_W, cart16(0x04, (uint16_t)(0xDAA2 + y)));
-            fx16_set(FXIN_PIECE_H, cart16(0x04, (uint16_t)(0xDAA2 + y)));
-            fx16_set(FXIN_PIECE_U, cart16(0x04, (uint16_t)(0xDAB2 + y)));
-            fx16_set(FXIN_PIECE_V, cart16(0x04, (uint16_t)(0xDAB2 + y)));
-            fx16_set(FXIN_PIECE_X, (uint16_t)(g.glyph_sprite_x[i] + cart16(0x04, (uint16_t)(0xDAC2 + y))));
-            fx16_set(FXIN_PIECE_Y, (uint16_t)(g.glyph_sprite_y[i] + cart16(0x04, (uint16_t)(0xDAD2 + y))));
+            fx16_set(FXIN_PIECE_W, cart16(GLYPH_SPRITE_BANK, (uint16_t)(GROW_SIZES + y)));
+            fx16_set(FXIN_PIECE_H, cart16(GLYPH_SPRITE_BANK, (uint16_t)(GROW_SIZES + y)));
+            fx16_set(FXIN_PIECE_U, cart16(GLYPH_SPRITE_BANK, (uint16_t)(GROW_SCALES + y)));
+            fx16_set(FXIN_PIECE_V, cart16(GLYPH_SPRITE_BANK, (uint16_t)(GROW_SCALES + y)));
+            fx16_set(FXIN_PIECE_X, (uint16_t)(g.glyph_sprite_x[i] + cart16(GLYPH_SPRITE_BANK, (uint16_t)(GROW_X_OFFSETS + y))));
+            fx16_set(FXIN_PIECE_Y, (uint16_t)(g.glyph_sprite_y[i] + cart16(GLYPH_SPRITE_BANK, (uint16_t)(GROW_Y_OFFSETS + y))));
             fx16_set(FXIN_PIECE, g.glyph_sprite_glyph[i]);
             FxScaledSpriteAdvance(0);
         }

@@ -400,6 +400,10 @@ void SlideStep(void)
     palettes.amount = (uint8_t)(g.slide_value >> 8);
 }
 
+/* The classes' names in bank 2: six sprite tiles each, the first class's
+   from the start, the second's six on. */
+enum { CLASS_NAME_BANK = 0x02, CLASS_NAME_TILES = 0xEFD6 };
+
 /* @routine 02:EFA3 OamClassName: the class's name over six sprites. */
 void OamClassName(void)
 {
@@ -410,7 +414,7 @@ void OamClassName(void)
         return;
     x = g.course_class == 1 ? 0x0006 : 0x0000;
     for (int i = 0; i < 6; i++) {
-        OamByteSet(y, cart8(0x02, (uint16_t)(0xEFD6 + x + i)));
+        OamByteSet(y, cart8(CLASS_NAME_BANK, (uint16_t)(CLASS_NAME_TILES + x + i)));
         y = (uint16_t)(y + 4);
     }
 }
