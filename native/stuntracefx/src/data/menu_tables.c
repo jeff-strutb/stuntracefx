@@ -35,6 +35,8 @@ enum {
     LETTER_TILES = 0x05DDD3,            /* words, by letter */
     COURSE_SPRITE_LISTS = 0x05FCA2,     /* words */
     GAUGE_NEEDLES = 0x05B158,           /* bytes, by car and band */
+    COURSE_PICTURE_PLACES = 0x058396,   /* words, by course */
+    SPRITE_GROUP_COUNTS = 0x026DCD,     /* words, 4 bytes a group (after its data's place) */
     RECORD_TAGS = 0x03B4EB,             /* words, by entry */
     PANEL_ROWS_STUNT = 0x03D8D4,        /* words, by row */
     PANEL_COLUMNS_STUNT = 0x03D8DC,     /* bytes, by character */
@@ -284,7 +286,10 @@ uint8_t menu_gauge_needle(uint16_t car_script, int band)
     return byte_at(GAUGE_NEEDLES + at);
 }
 
+uint16_t menu_course_picture_place(int course) { return word_at(COURSE_PICTURE_PLACES + (uint32_t)course * 2); }
+
 uint16_t records_first_tag(int entry) { return word_at(RECORD_TAGS + (uint32_t)entry * 2); }
+uint16_t records_sprite_group_count(int group) { return word_at(SPRITE_GROUP_COUNTS + (uint32_t)group * 4); }
 
 uint16_t records_panel_row_start(int stunt, int row)
 {

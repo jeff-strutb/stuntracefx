@@ -13,9 +13,8 @@
 #include "system/state.h"
 #include "video/video.h"
 
-/* where the chip unpacks a picture in its RAM, and the course pictures'
-   places in it by course (a table in the data block, as the original's) */
-enum { CHIP_PICTURE = 0x3000, COURSE_PICTURE_PLACES = 0x0B96 };
+/* where the chip unpacks a picture in its RAM */
+enum { CHIP_PICTURE = 0x3000 };
 
 /* A sprite's place (X low byte, Y high) or look (character low, attributes high) from a word. */
 static void sprite_word(int n, int look, uint16_t w)
@@ -69,7 +68,7 @@ static void sprite_highs_from_list(int first, MenuSpriteList list)
 static void course_picture_to_art(void)
 {
     static const unsigned to[4] = { RACE_ART_SPRITES + 0x48, RACE_ART_SPRITES + 0x58, RACE_ART_SPRITES + 0x4C, RACE_ART_SPRITES + 0x5C };
-    uint16_t w = ram_code_7f16((uint16_t)(COURSE_PICTURE_PLACES + 2 * g.course));
+    uint16_t w = menu_course_picture_place(g.course);
     uint16_t t = (uint16_t)(w & 0xFFFC);
     uint16_t src = (uint16_t)((uint16_t)((uint16_t)(t >> 8 | t << 8) << 1) + ((w & 3) << 7));
     int i;

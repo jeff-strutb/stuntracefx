@@ -217,6 +217,7 @@ typedef enum {
     MENU_COURSE_SPRITES_64, MENU_COURSE_SPRITES_64_SIZES
 } MenuSpriteList;
 uint16_t menu_course_sprite_word(MenuSpriteList list, int k);  /* word k of the list */
+uint16_t menu_course_picture_place(int course);         /* where a course's picture is among the unpacked pictures (packed form) */
 
 /* the speed gauge's needle sprite by speed band (0-$95), for the car its
    course script makes (the four cars and the others) */
@@ -225,6 +226,7 @@ uint8_t menu_gauge_needle(uint16_t car_script, int band);
 /* --- the records ---------------------------------------------------------- */
 
 uint16_t records_first_tag(int entry);                  /* each sorted entry's first tag, 0-11 */
+uint16_t records_sprite_group_count(int group);         /* a sprite group's count word, which places the next group drawn after it */
 uint16_t records_panel_row_start(int stunt, int row);   /* a records panel's row in the map, Stunt Trax's or the others' */
 uint8_t records_panel_column(int stunt, int character); /* and a character's column in it */
 

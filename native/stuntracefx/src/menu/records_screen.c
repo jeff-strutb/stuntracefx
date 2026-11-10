@@ -7,7 +7,7 @@
 #include <stdint.h>
 
 #include "audio/sound.h"
-#include "data/cart.h"
+#include "data/menu_tables.h"
 #include "hud/hud.h"
 #include "menu/menu.h"
 #include "race/race.h"
@@ -29,10 +29,6 @@ static uint16_t *slot_at(int s)
     return &g.records_group_slot[s];
 }
 
-/* The metasprite groups' sprite counts, a word each in bank $04: a page's
-   next group starts that many sprites past the last. */
-#define GROUP_COUNTS 0x04EDCBu
-
 static void origin(uint8_t x, uint8_t y)
 {
     g.sprite_origin[0] = x;
@@ -45,11 +41,11 @@ static void md_first(uint16_t id)
     MetaspriteDraw(id, 0);
 }
 
-/* The next group from the slot past the last: the table's count at `at`,
+/* The next group from the slot past the last: group `after`'s sprite count,
    plus the previous slot. */
-static void md_next(uint32_t at, int prev, int here, uint16_t id)
+static void md_next(int after, int prev, int here, uint16_t id)
 {
-    int v = cart16((uint8_t)(at >> 16), (uint16_t)at);
+    int v = records_sprite_group_count(after);
 
     if (prev >= 0)
         v += *slot_at(prev);
@@ -455,8 +451,8 @@ void SpeedRecordsScreen(void)
     if (g.time_override) {
         origin(0x89, 0x89);
         md_first(0x001A);
-        md_next(GROUP_COUNTS + 0x6A, -1, S_73, 0x0019);
-        md_next(GROUP_COUNTS + 0x66, S_73, S_75, 0x0000);
+        md_next(0x1A, -1, S_73, 0x0019);
+        md_next(0x19, S_73, S_75, 0x0000);
         g.records_group_slot[S_7B] = g.records_group_slot[S_75];
         OamClassName();
         SpeedRecordsTextLine();
@@ -466,11 +462,11 @@ void SpeedRecordsScreen(void)
     }
     origin(0x89, 0x89);
     md_first(g.champ_stage ? 0x001B : 0x0005);
-    md_next(GROUP_COUNTS + 0x16, -1, S_73, 0x0001);
-    md_next(GROUP_COUNTS + 0x06, S_73, S_75, 0x0002);
-    md_next(GROUP_COUNTS + 0x0A, S_75, S_77, 0x0003);
-    md_next(GROUP_COUNTS + 0x0E, S_77, S_79, 0x0004);
-    md_next(GROUP_COUNTS + 0x12, S_79, S_7B, 0x0000);
+    md_next(0x05, -1, S_73, 0x0001);
+    md_next(0x01, S_73, S_75, 0x0002);
+    md_next(0x02, S_75, S_77, 0x0003);
+    md_next(0x03, S_77, S_79, 0x0004);
+    md_next(0x04, S_79, S_7B, 0x0000);
     OamClassName();
     speed_records_page();
     SpeedRecordsPagePalette();
@@ -503,8 +499,8 @@ void StuntRecordsScreen(void)
             g.course = g.course <= 0x17 ? 0x1A : (uint8_t)(g.course - 1);
         }
         md_first(0x0015);
-        md_next(GROUP_COUNTS + 0x56, -1, S_73, 0x0013);
-        md_next(GROUP_COUNTS + 0x4E, S_73, S_75, 0x0014);
+        md_next(0x15, -1, S_73, 0x0013);
+        md_next(0x13, S_73, S_75, 0x0014);
         best_time(save.stunt, 0x0017, 0, 1);
         StuntBattleRecordsTextLine();
         menu_two();
@@ -512,10 +508,10 @@ void StuntRecordsScreen(void)
     }
     origin(0x81, 0x89);
     md_first(0x0012);
-    md_next(GROUP_COUNTS + 0x2A, -1, S_73, 0x0007);
-    md_next(GROUP_COUNTS + 0x1E, S_73, S_75, 0x0008);
-    md_next(GROUP_COUNTS + 0x22, S_75, S_77, 0x0009);
-    md_next(GROUP_COUNTS + 0x26, S_77, S_79, 0x0006);
+    md_next(0x0A, -1, S_73, 0x0007);
+    md_next(0x07, S_73, S_75, 0x0008);
+    md_next(0x08, S_75, S_77, 0x0009);
+    md_next(0x09, S_77, S_79, 0x0006);
     StuntBattleRecordsTextLine();
     special_row(*slot_at(S_77), 2, 1, StuntRecordsRow3Car);
     special_row(*slot_at(S_75), 1, 1, StuntRecordsRow2Car);
@@ -532,8 +528,8 @@ void BattleRecordsScreen(void)
 {
     origin(0x81, 0x89);
     md_first(0x000D);
-    md_next(GROUP_COUNTS + 0x36, -1, S_73, 0x000C);
-    md_next(GROUP_COUNTS + 0x32, S_73, S_75, 0x000B);
+    md_next(0x0D, -1, S_73, 0x000C);
+    md_next(0x0C, S_73, S_75, 0x000B);
     SpritePiecesAtLeft((uint16_t)((g.car[0] * 3) & 0xFF), *slot_at(S_73));
     SpritePiecesAtRight((uint16_t)((g.car[1] * 3) & 0xFF), *slot_at(S_73) + 3);
     StuntBattleRecordsTextLine();
@@ -550,8 +546,8 @@ void AllRecordsScreen(void)
     if (g.time_override) {
         origin(0x89, 0x89);
         md_first(0x0018);
-        md_next(GROUP_COUNTS + 0x62, -1, S_73, 0x0016);
-        md_next(GROUP_COUNTS + 0x5A, S_73, S_75, 0x0017);
+        md_next(0x18, -1, S_73, 0x0016);
+        md_next(0x16, S_73, S_75, 0x0017);
         best_time(save.special, 0x0014, -1, 0);
         AllRecordsTextLine();
         menu_two();
@@ -559,10 +555,10 @@ void AllRecordsScreen(void)
     }
     origin(0x89, 0x89);
     md_first(0x0012);
-    md_next(GROUP_COUNTS + 0x3A, -1, S_73, 0x000F);
-    md_next(GROUP_COUNTS + 0x3E, S_73, S_75, 0x0010);
-    md_next(GROUP_COUNTS + 0x42, S_75, S_77, 0x0011);
-    md_next(GROUP_COUNTS + 0x46, S_77, S_79, 0x000E);
+    md_next(0x0E, -1, S_73, 0x000F);
+    md_next(0x0F, S_73, S_75, 0x0010);
+    md_next(0x10, S_75, S_77, 0x0011);
+    md_next(0x11, S_77, S_79, 0x000E);
     AllRecordsTextLine();
     AllRecordsPagePalette();
     special_row(*slot_at(S_77), 2, 0, AllRecordsRow3Car);
