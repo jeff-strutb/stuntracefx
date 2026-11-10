@@ -210,6 +210,7 @@ FxObjectsDrawResult FxObjectsDraw(uint16_t draw_list_end, uint16_t *stack)
             draw_flags = fx_ldb(flags_ptr);
             model_field_ptr = (uint16_t)(flags_ptr + 1);
             model_header_ptr = fx_ldw(model_field_ptr);
+            fx_solid_object(model_header_ptr);
             selected_model_ptr = model_header_ptr;
             if (model_header_ptr != 0) {
                 pos_y_ptr = (uint16_t)(model_field_ptr + 8);
@@ -453,7 +454,18 @@ FxObjectsDrawResult FxObjectsDraw(uint16_t draw_list_end, uint16_t *stack)
  * Exit: as the code leaves the registers, flags and RAM; R14 and the
  * ROM buffer move as on the Super FX.
  */
+static FxObjectSpriteResult object_sprite(uint16_t sprite_scale, uint16_t draw_list_end, uint16_t *stack);
+
+/* The sprite, or a solid in its place (fx_solid.c), drawn as it returns. */
 FxObjectSpriteResult FxObjectSprite(uint16_t sprite_scale, uint16_t draw_list_end, uint16_t *stack)
+{
+    FxObjectSpriteResult r = object_sprite(sprite_scale, draw_list_end, stack);
+
+    fx_solid_end();
+    return r;
+}
+
+static FxObjectSpriteResult object_sprite(uint16_t sprite_scale, uint16_t draw_list_end, uint16_t *stack)
 {
     int run_lB14C = 0;
     uint16_t place_x = 0, place_y = 0, place_size = 0;  /* the place projected, for fx_sprite_place */
@@ -535,6 +547,7 @@ FxObjectSpriteResult FxObjectSprite(uint16_t sprite_scale, uint16_t draw_list_en
         fx_unspill(stack);
         return (FxObjectSpriteResult){draw_list_end, 0};
     } else {
+        fx_solid_begin();
         ce = fx_ldw(FX_MODEL_CE);
         sprite_size_field = ce;
         if (ce & 0x8000) {
@@ -616,6 +629,7 @@ FxObjectSpriteResult FxObjectSprite(uint16_t sprite_scale, uint16_t draw_list_en
             sprite_colour = fx_ldw(0x0058);
             fx_color((uint8_t)sprite_colour);
             fx_cmode((uint16_t)(sprite_colour << 8 | sprite_colour >> 8));
+            fx_solid_colour(fxs.colr, fxs.por);
             fx_stw(FX_SPRITE_CLIP_X, (uint16_t)((uint16_t)~ce_3 + 1));
             clip_width = fx_ldw(0x003A);
             fx_stw(FX_SPRITE_CLIP_W, (uint16_t)(clip_width - ce_3));

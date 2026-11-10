@@ -62,6 +62,13 @@ int fx_draw_step_picture(int panel);
    frame program into the picture that panel showed. Called by draw before
    the screen is set. */
 void fx_tween_draw(float between);
+/* Solids (fx/fx_solid.c): their triangles into the picture in a palette
+   colour; whether the picture takes the whole palette; whether a solid is
+   drawn in the place of the sprite being drawn. */
+#include "fx/fx_face.h"
+void fx_draw_flat(const FxCorner *c, uint32_t n, uint8_t colour);
+int fx_draw_full_colour(void);
+int fx_solid_hiding(void);
 /* The list drawn into, by size in pixels (the checks). */
 void fx_draw_set_target(nshvc_draw_list list, uint32_t width, uint32_t height);
 

@@ -121,5 +121,12 @@ void fx_draw_part(int hud);
    pitch, 1 heading, 2 roll). 0 outside such a picture. */
 void fx_angle_record(uint16_t record);
 uint8_t fx_angle_fraction(int axis);
+/* Solid shapes in sprites' places (fx/fx_solid.c): the object's shape as
+   FxObjectsDraw takes it; FxObjectSprite past its depth test; its colour
+   and plot mode; and its return. */
+void fx_solid_object(uint16_t shape);
+void fx_solid_begin(void);
+void fx_solid_colour(uint8_t colr, uint8_t por);
+void fx_solid_end(void);
 
 #endif

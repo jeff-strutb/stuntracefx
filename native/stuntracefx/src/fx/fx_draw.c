@@ -593,26 +593,81 @@ static struct {
    u = u0 + i du and v = v0 + j dv at the centre of column i and row j: the
    corners take the texels' edges, half a step out from the first and last
    centres. */
+static int hide_quads;           /* a solid is drawn in the sprite's place (fx_solid.c) */
+
+/* A sprite's own texels, 0 to its size across and down: its quads are cut
+   where their texture would go past them. The chip sampled each pixel at
+   one point, always inside; a quad's last pixel drawn finer reaches up to
+   a texel beyond, which is the next picture in the cartridge's sheet. */
+static struct {
+    int on;
+    double across, down;
+} texels;
+
+/* The part [s0, s1] of [0, 1] along which a goes from a0 to a1 within
+   [lo, hi]; 0 when none. */
+static int keep_within(double a0, double a1, double lo, double hi, double *s0, double *s1)
+{
+    double p, q;
+
+    if (a1 == a0) {
+        *s0 = 0;
+        *s1 = 1;
+        return a0 >= lo && a0 <= hi;
+    }
+    p = (lo - a0) / (a1 - a0);
+    q = (hi - a0) / (a1 - a0);
+    *s0 = p < q ? p : q;
+    *s1 = p < q ? q : p;
+    if (*s0 < 0)
+        *s0 = 0;
+    if (*s1 > 1)
+        *s1 = 1;
+    return *s1 > *s0;
+}
+
 static void quad(nshvc_image image, int x0, int x1, int y0, int y1, double u0, double du, double v0, double dv)
 {
     nshvc_vertex v[6];
     nshvc_material m;
     double ul = u0 - 0.5 * du, ur = u0 + ((x1 - x0) - 0.5) * du;
     double vt = v0 - 0.5 * dv, vb = v0 + ((y1 - y0) - 0.5) * dv;
-    double l = x0, r = x1, t = y0, b = y1;
+    double l = x0, r = x1, t = y0, b = y1, ql = x0, qr = x1, qt = y0, qb = y1;
 
-    if ((!target.id && !recording) || x1 <= x0 || y1 <= y0)
+    if ((!target.id && !recording) || x1 <= x0 || y1 <= y0 || hide_quads)
         return;
     blocks_flush();
+    if (texels.on) {
+        double s0, s1, t0, t1, nu0, nu1, nv0, nv1;
+
+        if (!keep_within(ul, ur, 0, texels.across, &s0, &s1) || !keep_within(vt, vb, 0, texels.down, &t0, &t1))
+            return;
+        ql = x0 + (x1 - x0) * s0;
+        qr = x0 + (x1 - x0) * s1;
+        qt = y0 + (y1 - y0) * t0;
+        qb = y0 + (y1 - y0) * t1;
+        nu0 = ul + (ur - ul) * s0;
+        nu1 = ul + (ur - ul) * s1;
+        nv0 = vt + (vb - vt) * t0;
+        nv1 = vt + (vb - vt) * t1;
+        ul = nu0;
+        ur = nu1;
+        vt = nv0;
+        vb = nv1;
+        l = ql;
+        r = qr;
+        t = qt;
+        b = qb;
+    }
     if (sprite_map.on) {
         float vl, vr, vt_, vb_;
         double nl, nr, nt, nb;
 
         fx_face_view_rect(&vl, &vr, &vt_, &vb_);
-        nl = sprite_map.cx + (x0 - sprite_map.bx) * sprite_map.k;
-        nr = sprite_map.cx + (x1 - sprite_map.bx) * sprite_map.k;
-        nt = sprite_map.cy + (y0 - sprite_map.by) * sprite_map.k;
-        nb = sprite_map.cy + (y1 - sprite_map.by) * sprite_map.k;
+        nl = sprite_map.cx + (ql - sprite_map.bx) * sprite_map.k;
+        nr = sprite_map.cx + (qr - sprite_map.bx) * sprite_map.k;
+        nt = sprite_map.cy + (qt - sprite_map.by) * sprite_map.k;
+        nb = sprite_map.cy + (qb - sprite_map.by) * sprite_map.k;
         l = nl < vl ? vl : nl;
         r = nr > vr ? vr : nr;
         t = nt < vt_ ? vt_ : nt;
@@ -673,7 +728,13 @@ uint16_t fx_sprite_shrink(uint16_t size, uint16_t c8, uint16_t step, uint16_t le
     uint16_t r;
 
     sprite_map.on = fx_sprite_map(left, top, &sprite_map.cx, &sprite_map.cy, &sprite_map.bx, &sprite_map.by, &sprite_map.k);
+    hide_quads = fx_solid_hiding();
+    texels.on = 1;
+    texels.across = c8;
+    texels.down = (mask & 0x8000) ? c8 + 1 : c8;   /* a mirrored sprite's columns read a row on (the chip's) */
     r = sprite_shrink(size, c8, step, left, top, bank, base, mask);
+    texels.on = 0;
+    hide_quads = 0;
     sprite_map.on = 0;
     return r;
 }
@@ -683,7 +744,13 @@ uint16_t fx_sprite_magnify(uint16_t c8, uint16_t step, uint16_t left, uint16_t t
     uint16_t r;
 
     sprite_map.on = fx_sprite_map(left, top, &sprite_map.cx, &sprite_map.cy, &sprite_map.bx, &sprite_map.by, &sprite_map.k);
+    hide_quads = fx_solid_hiding();
+    texels.on = 1;
+    texels.across = c8;
+    texels.down = (mask & 0x8000) ? c8 + 1 : c8;   /* a mirrored sprite's columns read a row on (the chip's) */
     r = sprite_magnify(c8, step, left, top, bank, base, mask);
+    texels.on = 0;
+    hide_quads = 0;
     sprite_map.on = 0;
     return r;
 }
@@ -942,6 +1009,37 @@ void fx_row_open(uint8_t kind, uint16_t x, uint16_t y, uint16_t tu, uint16_t du,
 void fx_row_close(uint16_t x) {}
 
 void fx_plot(uint8_t x, uint8_t y) { fx_flat_row(x, y, 1); }
+
+/* A solid's triangles (fx_solid.c), flat in palette colour c. */
+void fx_draw_flat(const FxCorner *c, uint32_t n, uint8_t colour)
+{
+    nshvc_vertex v[48];
+    uint32_t done = 0, i;
+
+    colour = ink(colour);
+    if ((!target.id && !recording) || !colour)
+        return;
+    blocks_flush();
+    memset(v, 0, sizeof v);
+    while (done < n) {
+        uint32_t k = n - done > 48 ? 48 : n - done;
+
+        for (i = 0; i < k; i++) {
+            v[i].x = c[done + i].x;
+            v[i].y = c[done + i].y;
+            v[i].colour = colour;
+        }
+        emit(v, k, 0, 0);
+        done += k;
+    }
+}
+
+/* Whether the picture is of eight bits a pixel (the whole palette): a
+   solid's colours are the 8-bit palette's. */
+int fx_draw_full_colour(void)
+{
+    return depth_mask() == 0xFF;
+}
 uint8_t fx_rpix(uint8_t x, uint8_t y) { (void)x; (void)y; return 0; }
 
 /* ---- the queue ---- */

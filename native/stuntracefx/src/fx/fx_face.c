@@ -32,7 +32,7 @@
 
 enum {
     POINTS = 256,               /* a model's point records ($04E4 + 6i, i a byte) */
-    MOST = 16,                  /* a face's points; the chip's are 2 to 8 */
+    MOST = 64,                  /* a face's points: the chip's are 2 to 8, a solid's cap up to 60 */
     WORK = MOST + 8,            /* each clip adds at most one */
     SHAPES = 512,
     CORNERS = 32768,
@@ -391,6 +391,50 @@ static int fan(const Corner3 *in, int n, const View *v)
         }
     }
     return 1;
+}
+
+/* A solid's face (fx_solid.c): n view-space points, clipped against the
+   near plane, projected and kept to the view's rectangle, fanned into
+   `out`. Returns the corners made (0: nothing seen, or no room). WORK
+   bounds n. */
+uint32_t fx_face_triangles(const float (*p)[3], int n, FxCorner *out, uint32_t room)
+{
+    Corner3 a[WORK], b[WORK];
+    Corner2 c[WORK], d[WORK];
+    View v = view_now();
+    int i, m;
+    uint32_t k = 0;
+
+    if (n < 3 || n > MOST)
+        return 0;
+    for (i = 0; i < n; i++) {
+        a[i].x = p[i][0];
+        a[i].y = p[i][1];
+        a[i].z = p[i][2];
+        a[i].u = a[i].v = 0;
+    }
+    m = clip_depth(a, n, b, NEAR_Z, 1);
+    if (m < 3)
+        return 0;
+    project(b, m, c, &v);
+    m = clip_side(c, m, d, 0, v.left, 1);
+    m = clip_side(d, m, c, 0, v.right, 0);
+    m = clip_side(c, m, d, 1, v.top, 1);
+    m = clip_side(d, m, c, 1, v.bottom, 0);
+    if (m < 3 || (uint32_t)(m - 2) * 3 > room)
+        return 0;
+    for (i = 1; i + 1 < m; i++) {
+        const Corner2 *t[3] = { &c[0], &c[i], &c[i + 1] };
+        int j;
+
+        for (j = 0; j < 3; j++) {
+            out[k].x = (float)t[j]->x;
+            out[k].y = (float)t[j]->y;
+            out[k].u = out[k].v = 0;
+            k++;
+        }
+    }
+    return k;
 }
 
 /* A line: its segment kept in front of the near plane and in the view's

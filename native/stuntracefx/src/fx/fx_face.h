@@ -42,6 +42,11 @@ typedef struct {
 void fx_face_check_on(int on);
 FxFaceCheck fx_face_check(void);
 
+/* A solid's face (fx_solid.c) of n view-space points, near-clipped,
+   projected and kept to the view: its triangles' corners in `out`; the
+   count made, 0 when none (n at most 64). */
+uint32_t fx_face_triangles(const float (*p)[3], int n, FxCorner *out, uint32_t room);
+
 /* The view's rectangle in the picture's pixels: left, right (past its last
    column), top, bottom (past its last row). */
 void fx_face_view_rect(float *left, float *right, float *top, float *bottom);
