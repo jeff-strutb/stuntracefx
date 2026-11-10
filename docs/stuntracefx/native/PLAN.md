@@ -540,10 +540,18 @@ backend.
 - **Done (2026-11-09):** the stripes below; the red and the blue chevron boards (bank $12, bases $E040 and $A080, the high
   four bits: the fill left of X - Y = 16.5 and X + Y = 48.5); the chevron sign ($12:$E000, the low four bits: the frame's
   lines, then the chevron between X - Y = -0.5 and 11.5 and X + Y = 30.5 and 42.5, its fill between 1.5 and 9.5 and 32.5
-  and 40.5; four see-through panes). Each checked against all 1,024 texels of its tile. Not done: the curved arrow signs
-  (the U-turns $12:$C0A0 and $E060, the S-bend $C0C0, the turn $C0E0, all the high four bits), whose edges are curves, and
-  any pattern on a course no recording or demo has visited (banks $06, $12 and $13 looked at as a whole: no other tile with
-  slanted edges and few colours).
+  and 40.5; four see-through panes). Each checked against all 1,024 texels of its tile.
+- **The curved arrow signs (Jeff, 2026-11-09: "Edges should be totally smooth and clean as the original pixelated one
+  intended").** Built from clean geometry in `fx_pattern.c` rather than traced from the stairs: circle arcs (an arch's two
+  arcs about one centre), straight runs of one width, 45-degree heads with sharp points, sized and placed by fitting them
+  to the texels. The blue U-turn ($12:$C0A0: radii 4 and 12 about (15, 12.5)), the red U-turn with its white outline
+  ($E060: the same about (15, 13.36), the outline the red grown by one texel), the turn ($C0E0: a quarter ring of radius 18,
+  8.4 wide, about (22, 24)), the S-bend ($C0C0: three 45-degree runs 11 wide in X +- Y, outer corners rounded 5.4, inner
+  sharp). So a few edge texels fall on the other side of a clean edge: 12, 50 (mostly the red U-turn's outline, two texels
+  a row along its head's slants), 0 and 8; the table states each count and the check confirms it exactly. A first try
+  traced and smoothed the stairs and was wobbly; Jeff turned it down. Not done: any pattern on a course no recording or
+  demo has visited (banks $06, $12 and $13 looked at as a whole: no other tile with slanted or curved edges and few
+  colours).
 - **The first: the yellow and black stripes** (bank $12, base $A040, mask $1F1F, the high four bits; the barriers' walls, Aqua Tunnel's among them). Tile
   32 x 32 texels, two values ($A, $F), stripes 8 texels wide that move one texel left every 4 rows. Their edges are the lines
   X = 8k - Y/4 (through the middle of each step); value $A where X + Y/4 mod 16 is below 8, else $F. The texel centres
