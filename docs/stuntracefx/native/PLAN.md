@@ -263,7 +263,7 @@ pitch, roll, mass, contact flags, velocity, turn rates, the car's and the part's
 | still | $2A | second | mode $0422, counted, on the still list |
 
 Every link that holds a record's RAM address today becomes an `FxRecord *`: the all-records list (+$04, +$06, head at
-$2332), the still list (head $2398, +$26), a record's own list (+$18 head, +$0E next), a car's parts (+$3E, +$34), the
+$2332), the still list (head $2398, +$26), a record's contacts (+$18 head; `FxContact`, the $12-byte blocks of the records it touches, +$0E next), a car's parts (+$3E, +$34), the
 next car (+$74), the partner (+$8E), the player and view records ($2476-$247A), the S-CPU objects' record links. A test
 that a word "is a record" by its address range becomes a null test.
 

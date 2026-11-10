@@ -330,6 +330,7 @@ typedef enum {
  * part, a car's +$34 heading rate), each meaning has its own field. The files move onto these as they convert.
  */
 typedef struct FxRecord FxRecord;
+typedef struct FxContact FxContact;
 
 /* the record maker's mode (+$1A): still, falling, falling part, trigger, camera follower */
 typedef enum { FX_MODE_NONE, FX_MODE_STILL, FX_MODE_FALLING, FX_MODE_FALLING_PART, FX_MODE_TRIGGER, FX_MODE_CAMERA } FxMode;
@@ -345,9 +346,8 @@ struct FxRecord {
     /* every record */
     FxRecord *next, *prev;                      /* +$04, +$06: the list of all records */
     FxHandler handler;                          /* +$0A */
-    int16_t offset_x, offset_y, offset_z;       /* +$0C-$10: the model's offset (an object's) */
-    uint16_t flags10;                           /* +$10 (the record's own list's keep bit, bit 0) */
-    FxRecord *list, *list_next;                 /* +$18 the head of its own list, +$0E the next on the list it is on */
+    int16_t offset_x, offset_y, offset_z;       /* +$0C-$10: the model's offset (an object's; a car part's too) */
+    FxContact *contacts;                        /* +$18: the records it touches */
     uint16_t frame, script;                     /* +$12, +$14 */
     uint16_t flags16, flags1c;                  /* +$16, +$1C */
     FxMode mode;                                /* +$1A */
@@ -384,12 +384,27 @@ struct FxRecord {
     uint16_t part_flags, part50;                /* +$46, +$50 */
 };
 
+/* A contact: another record a record touches, on the record's contact list, with that record's velocity and place as
+   it was noted. A $12-byte block in the first pool, between the records (FxContactNote makes it, FxListSweep frees it
+   when the bit 0 of its flags has not been set again). */
+struct FxContact {
+    uint8_t in_use;
+    uint16_t block_place, block_size;           /* where its block is in the first pool, and how big */
+    FxRecord *other;                            /* +$0C */
+    FxContact *next;                            /* +$0E */
+    uint16_t flags;                             /* +$10: bit 0 still touching (the sweep keeps it while set) */
+    int16_t other_vel_x, other_vel_z;           /* +$04, +$06: the other's velocity x and z */
+    int16_t other_pos_x, other_pos_z;           /* +$08, +$0A: the other's place x and z */
+};
+#define FX_CONTACTS_MAX 182                     /* the first pool's $CD8 bytes in $12-byte blocks */
+
 /* The original's memory manager: first fit over two pools of bytes, a larger block split, neighbours merged; a record
    is not made when no block fits, which is game behaviour. Places and sizes are its own bookkeeping. */
 #define FX_RECORDS_MAX 98                       /* at most 63 of the smallest first-pool records ($34) and 35 stills ($2A) */
+#define FX_POOL_BLOCKS_MAX 822                  /* the first pool's $CD8 bytes in blocks of at least 4 (the second's $5BE fewer) */
 typedef struct { uint16_t place, size; uint8_t used; } FxBlock;
 typedef struct {
-    FxBlock blocks[2][FX_RECORDS_MAX * 2];      /* each pool's blocks in place order */
+    FxBlock blocks[2][FX_POOL_BLOCKS_MAX];      /* each pool's blocks in place order */
     uint16_t nblocks[2];
 } FxPool;
 
@@ -427,6 +442,7 @@ typedef struct {
 typedef struct {
     FxShared shared;
     FxRecord record[FX_RECORDS_MAX];
+    FxContact contact[FX_CONTACTS_MAX];
     FxPool pool;
 } FxStateBlock;
 extern FxStateBlock fx_state;
