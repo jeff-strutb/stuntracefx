@@ -11,6 +11,7 @@ ObjectTable objects;
 Camera cameras[2];
 float race_step_progress(float between) { (void)between; return 0; }
 int RaceViewForPicture(int panel) { (void)panel; return 0; }
+uint16_t draw_record_gaze(int record) { (void)record; return 0; }
 int screen_view_anchor_x(int x0, int x1) { (void)x0; (void)x1; return 0; }
 int screen_anchor_y(int y0, int y1) { (void)y0; (void)y1; return 0; }
 #include "video/video.h"
