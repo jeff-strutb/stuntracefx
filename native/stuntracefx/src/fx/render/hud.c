@@ -14,6 +14,7 @@
  */
 
 #include "fx/fx.h"
+#include "data/race_tables.h"
 #include "fx/render/hud.h"
 
 /*
@@ -305,13 +306,8 @@ void FxNoiseFillScreen(void)
 
 /* ---- the HUD's pieces: glyphs, the banner's picture and scaled sprites ---- */
 
-enum {
-    GLYPH_BANK = 0x15,                  /* the glyphs, digits and the banner's picture */
-    GLYPH_BANK_04 = 0x04,               /* GlyphSlideThree's 24 x 32 glyphs */
-    GLYPH_ROW_BYTES = 32,               /* a picture row's bytes in the cartridge, 4 pixels a byte */
-    BANNER_PICTURE = 0x3D00,            /* the lap banner's picture in bank $15, from its column 0 */
-    BANNER_COLUMN_56 = 0x3D0E           /* the same from its column 56 */
-};
+/* where the pictures are (their banks, the banner) is data/race_tables' */
+enum { GLYPH_ROW_BYTES = 32 /* a picture row's bytes in the cartridge, 4 pixels a byte */ };
 
 /* `rows` rows of a picture, `width` pixels each, from `at` down, a line
    apart; the count runs as the chip's loop did (0 is 65536 rows). */
@@ -337,7 +333,7 @@ void FxGlyph16RowsFromBottom(FxPiece *p)
 
     p->x = (uint16_t)(x + p->w);
     if (p->glyph)
-        glyph_rows(x, p->y, 16, p->h, GLYPH_BANK, (uint16_t)(p->glyph + (uint16_t)(32 - p->h) * GLYPH_ROW_BYTES),
+        glyph_rows(x, p->y, 16, p->h, hud_glyphs_bank(), (uint16_t)(p->glyph + (uint16_t)(32 - p->h) * GLYPH_ROW_BYTES),
                    p->colours);
 }
 
@@ -353,7 +349,7 @@ void FxGlyph16RowsFromTop(FxPiece *p)
 
     p->x = (uint16_t)(x + p->w);
     if (p->glyph)
-        glyph_rows(x, y, 16, rows, GLYPH_BANK, p->glyph, p->colours);
+        glyph_rows(x, y, 16, rows, hud_glyphs_bank(), p->glyph, p->colours);
 }
 
 /* @routine 07:F280 FxGlyph8x8: the 8 x 8 glyph; x on by 8; glyph 0 draws nothing. */
@@ -363,7 +359,7 @@ void FxGlyph8x8(FxPiece *p)
 
     p->x = (uint16_t)(x + 8);
     if (p->glyph)
-        glyph_rows(x, p->y, 8, 8, GLYPH_BANK, p->glyph, p->colours);
+        glyph_rows(x, p->y, 8, 8, hud_glyphs_bank(), p->glyph, p->colours);
 }
 
 /* @routine 07:F329 FxGlyph8x16: the 8 x 16 glyph; x on by 8; glyph 0 draws nothing. */
@@ -373,7 +369,7 @@ void FxGlyph8x16(FxPiece *p)
 
     p->x = (uint16_t)(x + 8);
     if (p->glyph)
-        glyph_rows(x, p->y, 8, 16, GLYPH_BANK, p->glyph, p->colours);
+        glyph_rows(x, p->y, 8, 16, hud_glyphs_bank(), p->glyph, p->colours);
 }
 
 /* @routine 07:F3D2 FxGlyph24x32Bank04: the 24 x 32 glyph from bank $04; x on by 16; the glyph is not checked. */
@@ -382,7 +378,7 @@ void FxGlyph24x32Bank04(FxPiece *p)
     uint16_t x = p->x;
 
     p->x = (uint16_t)(x + 16);
-    glyph_rows(x, p->y, 24, 32, GLYPH_BANK_04, p->glyph, p->colours);
+    glyph_rows(x, p->y, 24, 32, hud_places_bank(), p->glyph, p->colours);
 }
 
 /* @routine 07:F441 FxGlyph24x16: the 24 x 16 glyph (the player marks); x on by 16; the glyph is not checked. */
@@ -391,7 +387,7 @@ void FxGlyph24x16(FxPiece *p)
     uint16_t x = p->x;
 
     p->x = (uint16_t)(x + 16);
-    glyph_rows(x, p->y, 24, 16, GLYPH_BANK, p->glyph, p->colours);
+    glyph_rows(x, p->y, 24, 16, hud_glyphs_bank(), p->glyph, p->colours);
 }
 
 /* @routine 07:F5C9 FxGlyph16x16: the 16 x 16 glyph; x on by 16; the glyph is not checked. */
@@ -400,7 +396,7 @@ void FxGlyph16x16(FxPiece *p)
     uint16_t x = p->x;
 
     p->x = (uint16_t)(x + 16);
-    glyph_rows(x, p->y, 16, 16, GLYPH_BANK, p->glyph, p->colours);
+    glyph_rows(x, p->y, 16, 16, hud_glyphs_bank(), p->glyph, p->colours);
 }
 
 /* @routine 07:F6DF FxGlyph16x32: the 16 x 32 glyph; x on by 16; glyph 0 draws nothing. */
@@ -410,20 +406,20 @@ void FxGlyph16x32(FxPiece *p)
 
     p->x = (uint16_t)(x + 16);
     if (p->glyph)
-        glyph_rows(x, p->y, 16, 32, GLYPH_BANK, p->glyph, p->colours);
+        glyph_rows(x, p->y, 16, 32, hud_glyphs_bank(), p->glyph, p->colours);
 }
 
 /* the banner's picture from `at`, `width` columns, its top `rows` rows rising out of `line` at `x` */
 static void rise(uint16_t x, uint16_t line, uint16_t width, uint16_t at, uint16_t rows, const uint8_t colours[4])
 {
-    glyph_rows(x, (uint16_t)(line - rows), width, rows, GLYPH_BANK, at, colours);
+    glyph_rows(x, (uint16_t)(line - rows), width, rows, hud_glyphs_bank(), at, colours);
 }
 
 /* @routine 07:F0A5 FxPictureRise40: the banner's first 56 columns rising out of line $40 at x $28. */
-void FxPictureRise40(const uint8_t colours[4], uint16_t rows) { rise(0x28, 0x40, 56, BANNER_PICTURE, rows, colours); }
+void FxPictureRise40(const uint8_t colours[4], uint16_t rows) { rise(0x28, 0x40, 56, hud_banner_picture(0), rows, colours); }
 
 /* @routine 07:F0B4 FxPictureRise60: as FxPictureRise40, out of line $60 at x $4C. */
-void FxPictureRise60(const uint8_t colours[4], uint16_t rows) { rise(0x4C, 0x60, 56, BANNER_PICTURE, rows, colours); }
+void FxPictureRise60(const uint8_t colours[4], uint16_t rows) { rise(0x4C, 0x60, 56, hud_banner_picture(0), rows, colours); }
 
 /*
  * @routine 07:EEF5 FxPictureRiseSplit40
@@ -432,15 +428,15 @@ void FxPictureRise60(const uint8_t colours[4], uint16_t rows) { rise(0x4C, 0x60,
  */
 void FxPictureRiseSplit40(const uint8_t colours[4], uint16_t rows)
 {
-    rise(0x1C, 0x40, 56, BANNER_COLUMN_56, rows, colours);
-    rise(0x54, 0x40, 40, BANNER_PICTURE, rows, colours);
+    rise(0x1C, 0x40, 56, hud_banner_picture(56), rows, colours);
+    rise(0x54, 0x40, 40, hud_banner_picture(0), rows, colours);
 }
 
 /* @routine 07:EFCD FxPictureRiseSplit60: as FxPictureRiseSplit40, out of line $60, the pieces at x $34 and $6C. */
 void FxPictureRiseSplit60(const uint8_t colours[4], uint16_t rows)
 {
-    rise(0x34, 0x60, 56, BANNER_COLUMN_56, rows, colours);
-    rise(0x6C, 0x60, 40, BANNER_PICTURE, rows, colours);
+    rise(0x34, 0x60, 56, hud_banner_picture(56), rows, colours);
+    rise(0x6C, 0x60, 40, hud_banner_picture(0), rows, colours);
 }
 
 /* The chip's signed halving (DIV2): -1 halves to 0. */
@@ -495,7 +491,7 @@ static void scaled_sprite(const FxPiece *p, uint16_t x, uint16_t y, uint16_t w, 
         if (off)
             at = (uint16_t)(at + (uint16_t)(source_row(off, p->v) * GLYPH_ROW_BYTES));
         fx_scaled_row_start();
-        fx_glyph_scaled_row(left, row_y, w, (uint16_t)(left - x), p->u, GLYPH_BANK, p->glyph, at, p->colours);
+        fx_glyph_scaled_row(left, row_y, w, (uint16_t)(left - x), p->u, hud_glyphs_bank(), p->glyph, at, p->colours);
         row_y = (uint16_t)(row_y + 1);
     } while (--h);
 }

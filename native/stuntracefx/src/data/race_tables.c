@@ -179,6 +179,10 @@ uint16_t hud_place_glyph(char c)
                 return (uint16_t)(0x8000 + r * 0x400 + i * 6);
     return 0;
 }
+enum { GLYPHS_BANK = 0x15, PLACES_BANK = 0x04, BANNER_PICTURE = 0x3D00 };
+uint8_t hud_glyphs_bank(void) { return GLYPHS_BANK; }
+uint8_t hud_places_bank(void) { return PLACES_BANK; }
+uint16_t hud_banner_picture(uint16_t column) { return (uint16_t)(BANNER_PICTURE + column / 4); }
 uint16_t hud_pieces_at(uint16_t x, uint16_t line) { return (uint16_t)(SHEET_PIECES + line * 32 + x / 4); }
 uint16_t hud_picture(HudPicture p) { return k_pictures[p]; }
 

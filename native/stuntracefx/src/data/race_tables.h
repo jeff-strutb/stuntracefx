@@ -84,6 +84,9 @@ uint16_t hud_glyph_24x40(char c);       /* the big sprites' letters: A C E F G H
 uint16_t hud_place_glyph(char c);       /* the finishing places' 24 x 32 glyphs in bank $04: "1st", "2nd", "3rd" */
 uint16_t hud_pieces_at(uint16_t x, uint16_t line);  /* the HUD's pieces picture (the time frame, its tails,
                                                        the grids): the piece from pixel x (a multiple of 4), line */
+uint8_t hud_glyphs_bank(void);          /* the cartridge bank of all these but the places, for fx's row hand-offs */
+uint8_t hud_places_bank(void);          /* the places' bank */
+uint16_t hud_banner_picture(uint16_t column);   /* the lap banner's picture from its column 0 or 56 */
 typedef enum { HUD_RANK_FIRST, HUD_RANK_OTHER, HUD_STUNT_MARK, HUD_STUNT_MARK_USED } HudPicture;
 uint16_t hud_picture(HudPicture p);     /* the rank badges (24 x 16) and Stunt Trax's marks (16 x 16) */
 
