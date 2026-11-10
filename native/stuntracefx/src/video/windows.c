@@ -162,7 +162,7 @@ void WindowLayoutStepForScreen(void)
     uint16_t pos, limit, y = g.split_screen ? 2 : 0;
     uint8_t req;
 
-    g.hdma_enable &= (uint8_t)~0x20;
+    g.line_effects.fixed_bands = 0;
     req = windows.layout_request;
     if (req == 0x01 || req == 0xFF) {
         windows.layout_moving = 0xFF;
@@ -412,7 +412,7 @@ void WindowSlideCheck(void)
     level_step();
     if ((uint16_t)(windows.level + (uint16_t)windows.level_step) == 0xE000) {
         g.picture_effects &= 0xFE;
-        g.hdma_enable &= (uint8_t)~0x20;
+        g.line_effects.fixed_bands = 0;
         return;
     }
     {
@@ -442,7 +442,7 @@ void WindowSlideCheck(void)
         windows.level_table[0] = windows.top_band;
         windows.level_table[0x20] = windows.low_band;
         windows.player_y = y;
-        g.hdma_enable |= 0x20;
+        g.line_effects.fixed_bands = 1;
     }
 }
 
@@ -493,7 +493,7 @@ void BobWindowsRun(void)
         return;
     ObjectLinkEventTrigger();
     if (g.view_event[0] & 0x80) {
-        g.hdma_enable &= (uint8_t)~0x20;
+        g.line_effects.fixed_bands = 0;
         windows.setup = 2;
         if (bob_window(0, 0))
             bands_for_screen();
@@ -502,7 +502,7 @@ void BobWindowsRun(void)
         return;
     ObjectLinkEventTrigger2();
     if (g.view_event[1] & 0x80) {
-        g.hdma_enable &= (uint8_t)~0x20;
+        g.line_effects.fixed_bands = 0;
         windows.setup = 2;
         if (bob_window(1, 3))
             WindowHdmaFFD9();
@@ -536,7 +536,7 @@ void WindowBandsAnimate(void)
     } else if (s != 4 && s != 5) {
         return;
     }
-    g.hdma_enable &= (uint8_t)~0x20;
+    g.line_effects.fixed_bands = 0;
     windows.setup = 8;
     memset(windows.colours, windows.windows_colour, sizeof windows.colours);
     {
@@ -593,7 +593,7 @@ void WindowSplitAnimate(void)
         g.picture_effects = 0;
         windows.bands_state = 4;
     }
-    g.hdma_enable &= (uint8_t)~0x20;
+    g.line_effects.fixed_bands = 0;
     windows.setup = 8;
     memset(windows.colours, windows.windows_colour, sizeof windows.colours);
     {

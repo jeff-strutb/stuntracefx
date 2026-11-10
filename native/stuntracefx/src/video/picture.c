@@ -221,7 +221,7 @@ static void course_lines_send(int full, int origin_x)
     scroll = (g.course_scroll_low & 0xFF) | (g.course_scroll_top & 0xFF00);
     for (; r < 224; r++)
         v[r] = scroll;
-    if (g.hdma_enable & 0x04) {
+    if (g.line_effects.course_scroll) {
         const uint8_t *t = g.course_scroll_table;
 
         while (t[at] && line < 224) {
@@ -237,7 +237,7 @@ static void course_lines_send(int full, int origin_x)
             v[r] = v[line - 1];
     }
     nshvc_lines(0, 224, (nshvc_line_field)(NSHVC_LINE_SCROLL_Y + 1), v);
-    if (g.hdma_enable & 0x02) {
+    if (g.line_effects.course_wipe) {
         const uint8_t *t = windows.wipe_table;
 
         at = 0;
@@ -280,13 +280,13 @@ static void race_lines_send(void)
         return;
     }
     blank_lines_send();
-    if (!one || (g.hdma_enable & 0x0C) == 0x0C)
+    if (!one || g.line_effects.sky)
         gradient_lines_send();
-    if (!one || (g.hdma_enable & 0x10))
+    if (!one || g.line_effects.window_bands)
         window_lines_send();
-    if (g.hdma_enable & 0x20)
+    if (g.line_effects.fixed_bands)
         fixed_lines_send(pic.blend.fixed_bgr15);
-    if (one && (g.hdma_enable & 0x02)) {
+    if (one && g.line_effects.results_bg1_off) {
         nshvc_line(0, NSHVC_LINE_MAIN + 0, 1);
         nshvc_line(32, NSHVC_LINE_MAIN + 0, 0);
         nshvc_line(160, NSHVC_LINE_MAIN + 0, 1);
@@ -356,7 +356,7 @@ static void full_window_draw(const ScreenShape *sh)
     nshvc_windows w = pic.windows;
     Background hills = pic.bg[1];
     static nshvc_sprite placed[128];
-    int sky = (g.hdma_enable & 0x0C) == 0x0C, r;
+    int sky = g.line_effects.sky, r;
 
     race_hills_full();
     layer_send(0, &pic.bg[0]);
@@ -365,7 +365,7 @@ static void full_window_draw(const ScreenShape *sh)
     hills.scroll_y = pic.race.wide_y - sh->origin_y;
     layer_send(1, &hills);
     layer_send(2, &pic.bg[2]);
-    if (g.hdma_enable & 0x10)
+    if (g.line_effects.window_bands)
         full_windows(&w, sh->width);
     nshvc_windows_set(&w);
     nshvc_blend_set(&pic.blend);
@@ -381,7 +381,7 @@ static void full_window_draw(const ScreenShape *sh)
             rows[r] = full_sky_at(r, sh->origin_y);
         nshvc_lines(0, (uint32_t)sh->height, (nshvc_line_field)(NSHVC_LINE_PALETTE + 1), rows);
     }
-    if (g.hdma_enable & 0x20) {
+    if (g.line_effects.fixed_bands) {
         int32_t lines[224];
 
         fixed_line_values(pic.blend.fixed_bgr15, lines);

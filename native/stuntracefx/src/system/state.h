@@ -232,7 +232,14 @@ typedef struct {
     uint16_t picture_turn_number;       /* $0D33 */
     uint8_t panel_top, panel_bottom;    /* $0D5C, $0D5D: the half shows the finished player's panel; bit 7 its other scroll */
     uint16_t backdrop_x[2], backdrop_y[2]; /* $0D92, $0D8E: BG2's scroll by picture buffer or half */
-    uint8_t hdma_enable;                /* $0D45: the per-line effects on; bit 5 the fixed colour's bands */
+    struct {                            /* $0D45: the per-line effects on (the original's HDMA channels), by what each does */
+        uint8_t results_bg1_off;        /* the race screen's results: BG1 off on the middle lines (bit 1 there) */
+        uint8_t course_wipe;            /* the course screen's wipe: window 1 from the wipe table (bit 1 there) */
+        uint8_t course_scroll;          /* the course screen's BG2 scroll by bands (bit 2) */
+        uint8_t sky;                    /* the race's sky, colour 1 by line (bits 2 and 3) */
+        uint8_t window_bands;           /* the window bands (bit 4) */
+        uint8_t fixed_bands;            /* the fixed colour's bands (bit 5) */
+    } line_effects;
     uint8_t palette_animate;            /* $0E5F: the animated colours are in use */
     uint8_t picture_effects;            /* $0DA5: bits 0 slide check, 1-2 slide, 3 oscillate/gradient off, 4 sweep, 5 weather ease, 6 alternate backdrop, 7 stops the ease */
     uint8_t status_level[2];            /* $0DDA, by player */

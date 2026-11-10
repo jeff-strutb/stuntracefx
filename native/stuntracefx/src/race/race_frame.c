@@ -562,7 +562,7 @@ void RaceVarsReset(void)
     g.start_substate = 0;
     g.palette_animate = 0x17;
     g.freeze = 0xFF;
-    g.hdma_enable = 0x1C;
+    line_effects_set(0, 0, 0, 1, 1, 0);     /* $1C: the sky and the window bands */
 }
 
 /*

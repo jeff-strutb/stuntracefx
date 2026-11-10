@@ -645,7 +645,7 @@ static void CourseScreenWipeOut(void)
     uint8_t *t = g.course_scroll_table;
     unsigned sum;
 
-    g.hdma_enable = 0x06;
+    line_effects_set(0, 1, 1, 0, 0, 0);     /* $06: the wipe and the scroll bands */
     if (t[3] >= 0x04) {
         t[3] = (uint8_t)(t[3] - 4);
         sum = (unsigned)t[6] + 4;
@@ -665,7 +665,7 @@ static void CourseScreenWipeIn(void)
     uint8_t v = (uint8_t)(t[3] + 4);
     int borrow;
 
-    g.hdma_enable = 0x06;
+    line_effects_set(0, 1, 1, 0, 0, 0);     /* $06: the wipe and the scroll bands */
     if (v < 0x4F) {
         t[3] = v;
         borrow = t[6] < 4;
@@ -677,7 +677,7 @@ static void CourseScreenWipeIn(void)
     t[6] = 0x01;
     t[9] = 0x01;
     g.course_screen_state = 0x14;
-    g.hdma_enable = 0x02;
+    line_effects_set(0, 1, 0, 0, 0, 0);     /* $02: the wipe */
 }
 
 /* 02:E4BD / 02:E51E: a pressed button leaves for state $12 (sound $2F);

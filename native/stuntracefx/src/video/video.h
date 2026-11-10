@@ -14,6 +14,7 @@
 
 #include "data/cart.h"
 #include "nshvc/nshvc.h"
+#include "system/state.h"
 
 /* tables in the code the original copied to work RAM ($7E:A2D9 up from ROM
    $01:0000, $7F:0800 up from $05:8000), by the address they ran at */
@@ -22,6 +23,17 @@ static inline uint16_t ram_code_7e16(uint16_t a) { const uint8_t *p = ram_code_7
 static inline uint8_t ram_code_7e8(uint16_t a) { return *ram_code_7e(a); }
 static inline const uint8_t *ram_code_7f(uint16_t a) { return &cart[0x58000u + (uint32_t)(a - 0x0800u)]; }
 static inline uint16_t ram_code_7f16(uint16_t a) { const uint8_t *p = ram_code_7f(a); return (uint16_t)(p[0] | p[1] << 8); }
+
+/* The per-line effects all set at once, as a store of the whole of $0D45 set them. */
+static inline void line_effects_set(int results_bg1_off, int course_wipe, int course_scroll, int sky, int window_bands, int fixed_bands)
+{
+    g.line_effects.results_bg1_off = (uint8_t)results_bg1_off;
+    g.line_effects.course_wipe = (uint8_t)course_wipe;
+    g.line_effects.course_scroll = (uint8_t)course_scroll;
+    g.line_effects.sky = (uint8_t)sky;
+    g.line_effects.window_bands = (uint8_t)window_bands;
+    g.line_effects.fixed_bands = (uint8_t)fixed_bands;
+}
 
 /* ---- the screen (screen.c): its size from the window, the HUD's places ---- */
 

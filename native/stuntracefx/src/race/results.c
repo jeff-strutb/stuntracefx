@@ -467,7 +467,9 @@ static void ResultsWaitWindow(void)
 /* The results' text line: $0D45's low nibble 2 and line $0E3D as sprites from 96 on. */
 static void total_line(void)
 {
-    g.hdma_enable = (uint8_t)((g.hdma_enable & 0xF0) | 0x02);
+    /* $0D45's low nibble 2: BG1 off in the middle, the sky's and scroll's channels off */
+    g.line_effects.results_bg1_off = 1;
+    g.line_effects.course_wipe = g.line_effects.course_scroll = g.line_effects.sky = 0;
     OamTextLine(0x60, 0xC0, 0x67, 0x2F, 0x38);
 }
 
@@ -851,7 +853,8 @@ void ChampionshipStagePicture(void)
         map_byte_set((uint16_t)i, fx_ram[FX_UNPACK_AREA + i]);
     DigitTiles1184();
     step_next();
-    g.hdma_enable = (uint8_t)((g.hdma_enable | 0x02) & 0xF3);
+    g.line_effects.results_bg1_off = 1;     /* bit 1 on, bits 2 and 3 (the sky) off */
+    g.line_effects.course_scroll = g.line_effects.sky = 0;
     champion_palette();
 }
 

@@ -1065,7 +1065,7 @@ void RaceScreenSetup(void)
     for (i = 1; i <= 4; i++)
         table_entry_value((int)i, g.course_scroll_low);
     t[6] = t[9] = t[12] = 1;
-    g.hdma_enable = 0x02;
+    line_effects_set(0, 1, 0, 0, 0, 0);     /* $02: the wipe */
     g.cursor_column_x = 0xF0;
     pic.race.on = 1;
     pic.race.split = 0;
