@@ -6,6 +6,7 @@
 
 #include <stdint.h>
 #include "fx/fx_rt.h"
+#include "fx/math/fx_math.h"
 
 /* DIV2: half, rounded down, except that -1 halves to 0. */
 static inline uint16_t fx_div2(uint16_t a)
@@ -399,7 +400,6 @@ typedef struct { uint16_t draw_list_start_out; uint16_t draw_list_end_out; uint1
 typedef struct { uint16_t draw_list_start_out; uint16_t draw_list_end_out; uint16_t rom_at_out; int up; } FxModelReturnPullResult;
 typedef struct { uint16_t draw_list_start_out; uint16_t draw_list_end_out; uint16_t rom_at_out; int up; } FxModelSpriteResult;
 typedef struct { uint16_t draw_list_start_out; uint16_t rom_at_out; } FxModelSpriteColourResult;
-typedef struct { uint16_t scaled_vector_x; uint16_t scaled_vector_y; uint16_t scaled_vector_z; uint16_t quotient; uint16_t place_y; uint16_t high_words_hi; uint16_t k; } FxNormalizeResult;
 typedef struct { uint16_t world_sum_x_out; uint16_t world_sum_y_out; uint16_t push_flags_high_out; uint16_t record_restored_out; uint16_t working_record_out; uint16_t rom_at_out; int up; } FxObjectBounceResult;
 typedef struct { uint16_t last_collision_result; uint16_t last_contact_ptr; uint16_t last_other_ptr_out; uint16_t record_restored; uint16_t collided_record; uint16_t rom_at_out; int up; } FxObjectCollideOnlyResult;
 typedef struct { uint16_t last_collision_result; uint16_t last_contact_ptr; uint16_t last_other_ptr_out; uint16_t record_restored; uint16_t collided_record; uint16_t rom_at_out; int up; } FxObjectDropResult;
@@ -454,7 +454,6 @@ typedef struct { int up; } FxScaleFromTable14PullResult;
 typedef struct { uint16_t cut_x; uint16_t cut_y; uint16_t cut_z; uint16_t kept_x; uint16_t kept_y; uint16_t kept_z; } FxSegmentCrossZResult;
 typedef struct { uint16_t spread_value_out; uint16_t car_y_out; uint16_t car_z_out; uint16_t other_car_out; } FxSpreadCarsResult;
 typedef struct { uint16_t shade_row_base_out; uint16_t rom_at; } FxSpriteMaterialResult;
-typedef struct { uint16_t low_word_out; uint16_t root; } FxSquareRootResult;
 typedef struct { uint16_t new_value; uint16_t pose_aux; } FxSteerFromInputResult;
 typedef struct { uint16_t world_sum_x; uint16_t world_sum_y; } FxSumsApplyResult;
 typedef struct { uint16_t push_x_out; uint16_t push_y_out; } FxSumsPushWorldResult;
@@ -524,10 +523,8 @@ FxCourseNearestResult FxCourseNearest(uint16_t point_x, uint16_t point_y, uint16
 FxCourseNextDistanceResult FxCourseNextDistance(uint16_t entry, uint16_t entry_words_z, uint16_t car_record, uint16_t *stack, uint16_t rom_at);
 FxCourseNextEntryResult FxCourseNextEntry(uint16_t number, uint16_t prior_word3, uint16_t prior_word4, uint16_t entry, uint16_t car_record, uint16_t rom_at);
 FxCoursePrevEntryResult FxCoursePrevEntry(uint16_t number, uint16_t entry);
-uint16_t FxDivide(uint16_t high_word, uint16_t low_word, uint16_t divisor);
 uint16_t FxDivide32By16(uint16_t dividend_hi, uint16_t dividend_lo, uint16_t divisor);
 uint16_t FxDivide32By16Halving(uint16_t dividend_high, uint16_t dividend_low, uint16_t divisor);
-uint16_t FxDivideHalvedIfLarge(uint16_t dividend_high, uint16_t dividend_low, uint16_t divisor);
 uint16_t FxDivideHalving(uint16_t dividend_hi, uint16_t dividend_lo, uint16_t divisor);
 FxDivideSignedResult FxDivideSigned(uint16_t dividend_lo, uint16_t dividend_hi, uint16_t divisor);
 FxDrawBitmap120x16Result FxDrawBitmap120x16(uint16_t row_y, uint16_t left_x, uint16_t palette_ptr, uint16_t rom_at);
@@ -616,7 +613,6 @@ void FxNoiseFill(void);
 void FxNoiseFillScreen(void);
 void FxNopReturn(void);
 void FxNopReturnCache(void);
-FxNormalizeResult FxNormalize(uint16_t vector_x, uint16_t vector_y, uint16_t vector_z, uint16_t model_record, uint16_t fallback_shift, uint16_t *stack);
 FxObjectBounceResult FxObjectBounce(uint16_t place_x, uint16_t pose_aux, uint16_t record, uint16_t *stack, uint16_t rom_at);
 FxObjectCollideOnlyResult FxObjectCollideOnly(uint16_t place_x, uint16_t place_y, uint16_t last_other_ptr, uint16_t record, uint16_t *stack, uint16_t rom_at);
 FxObjectDropResult FxObjectDrop(uint16_t place_x, uint16_t last_other_ptr, uint16_t record, uint16_t *stack, uint16_t rom_at);
@@ -717,7 +713,6 @@ FxSpriteMaterialResult FxSpriteMaterial(uint16_t material_index, uint16_t model_
 void FxSqrt16(uint16_t value);
 uint16_t FxSqrt32(uint16_t radicand_lo, uint16_t radicand_hi);
 void FxSqrt32Test(void);
-FxSquareRootResult FxSquareRoot(uint16_t high_word, uint16_t low_word);
 FxSteerFromInputResult FxSteerFromInput(uint16_t control_bits, uint16_t car_record);
 void FxSumScale(uint16_t scale);
 FxSumsApplyResult FxSumsApply(uint16_t record);

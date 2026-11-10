@@ -82,7 +82,7 @@ FxCollidePushResult FxCollidePush(uint16_t contact_words, uint16_t other_record,
     fx_push(stack, other_record);
     fx_push(stack, record);
     fx_push(stack, contact_words);
-    { FxNormalizeResult r_ = FxNormalize(offset_x, 0, offset_z, other_record, record, stack); scaled_vector_x = r_.scaled_vector_x; scaled_vector_y = r_.scaled_vector_y; scaled_vector_z = r_.scaled_vector_z; };
+    { FxNormalized n_; if (FxNormalize((FxVec3){(int16_t)offset_x, (int16_t)0, (int16_t)offset_z}, &n_)) { scaled_vector_x = (uint16_t)n_.unit.x; scaled_vector_y = (uint16_t)n_.unit.y; scaled_vector_z = (uint16_t)n_.unit.z; } else { scaled_vector_x = 0; scaled_vector_y = 0; scaled_vector_z = 0; } };
     fx_stw(0x0068, scaled_vector_x);
     fx_stw(0x002C, scaled_vector_y);
     fx_stw(0x002E, scaled_vector_z);
@@ -112,7 +112,7 @@ FxCollidePushResult FxCollidePush(uint16_t contact_words, uint16_t other_record,
     fx_push(stack, closing_speed_clamped);
     mass = fx_ldw((uint16_t)(FXREC_MASS + other_ptr));
     mass_2 = fx_ldw((uint16_t)(FXREC_MASS + record_ptr));
-    quotient = FxDivideHalvedIfLarge(mass, 0, (uint16_t)(mass_2 + mass));
+    quotient = FxDivideHalvedIfLarge((uint32_t)mass << 16, (uint16_t)(mass_2 + mass));
     closing_speed_pulled = fx_pull(stack);
     fx_unspill(stack);
     fx_unspill(stack);
@@ -195,7 +195,7 @@ FxRecordsApartResult FxRecordsApart(uint16_t records_1, uint16_t records_2, uint
     fx_stw(0x002E, delta_z);
     fx_push(stack, records_2);
     fx_push(stack, records_1);
-    { FxNormalizeResult r_ = FxNormalize(delta_x, 0, delta_z, records_1, normalize_aux_in, stack); scaled_vector_x = r_.scaled_vector_x; scaled_vector_z = r_.scaled_vector_z; k = r_.k; };
+    { FxNormalized n_; if (FxNormalize((FxVec3){(int16_t)delta_x, (int16_t)0, (int16_t)delta_z}, &n_)) { scaled_vector_x = (uint16_t)n_.unit.x; scaled_vector_z = (uint16_t)n_.unit.z; k = (uint16_t)n_.shift; } else { scaled_vector_x = 0; scaled_vector_z = 0; k = normalize_aux_in; } };
     record1_ptr = fx_pull(stack);
     record2_ptr = fx_pull(stack);
     delta_x_saved = fx_ldw(0x0068);

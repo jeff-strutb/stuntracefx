@@ -187,7 +187,7 @@ FxRecordAlignmentResult FxRecordAlignment(uint16_t pose_aux, uint16_t record, ui
     velocity = fx_ldw((uint16_t)(FXREC_VELOCITY + record));
     vector_y = fx_ldw((uint16_t)(record + 0x0030));
     vector_z = fx_ldw((uint16_t)(record + 0x0032));
-    { FxNormalizeResult r_ = FxNormalize(velocity, vector_y, vector_z, pose_aux, normalize_work_reg, stack); scaled_vector_x = r_.scaled_vector_x; scaled_vector_y = r_.scaled_vector_y; scaled_vector_z = r_.scaled_vector_z; k = r_.k; };
+    { FxNormalized n_; if (FxNormalize((FxVec3){(int16_t)velocity, (int16_t)vector_y, (int16_t)vector_z}, &n_)) { scaled_vector_x = (uint16_t)n_.unit.x; scaled_vector_y = (uint16_t)n_.unit.y; scaled_vector_z = (uint16_t)n_.unit.z; k = (uint16_t)n_.shift; } else { scaled_vector_x = 0; scaled_vector_y = 0; scaled_vector_z = 0; k = normalize_work_reg; } };
     object_matrix_6 = fx_ldw(FX_OBJECT_MATRIX_6);
     dot_x_prod = (uint32_t)((int32_t)(int16_t)scaled_vector_x * (int16_t)object_matrix_6);
     dot_x_low = (uint16_t)dot_x_prod;

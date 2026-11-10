@@ -421,7 +421,7 @@ FxAngleOfResult FxAngleOf(uint16_t vector_x, uint16_t vector_y, uint16_t prior_s
                 prior_swap_marker = (uint16_t)(prior_swap_marker - 1);
             }
             numerator_half = (uint16_t)(abs_y >> 1);
-            quotient = FxDivide((uint16_t)(numerator_half >> 1), (uint16_t)((uint16_t)(0 >> 1 | (abs_y & 1) << 15) >> 1 | (numerator_half & 1) << 15), divisor);
+            quotient = FxDivide((uint32_t)(uint16_t)(numerator_half >> 1) << 16 | (uint16_t)((uint16_t)(0 >> 1 | (abs_y & 1) << 15) >> 1 | (numerator_half & 1) << 15), divisor);
             fx_romb(0);
             atan_table_addr = (uint16_t)((uint16_t)((uint16_t)((uint16_t)((uint16_t)((uint16_t)((uint16_t)(quotient >> 1) >> 1) >> 1) >> 1) >> 1) & ~1) + FX_ATAN_TABLE);
             fx_r14(atan_table_addr);

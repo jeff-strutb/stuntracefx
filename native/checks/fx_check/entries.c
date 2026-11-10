@@ -16,18 +16,20 @@ static void entry_FxInitRamBad(void)
 
 static void entry_FxNormalize(void)
 {
-    uint16_t stack = gsu.r[10];
     uint16_t ret = gsu.r[11];
+    FxNormalized n;
 
-    FxNormalizeResult r_ = FxNormalize(gsu.r[1], gsu.r[2], gsu.r[3], gsu.r[7], gsu.r[9], &stack);
-    gsu.r[10] = stack;
-    gsu.r[1] = (uint16_t)r_.scaled_vector_x;
-    gsu.r[2] = (uint16_t)r_.scaled_vector_y;
-    gsu.r[3] = (uint16_t)r_.scaled_vector_z;
-    gsu.r[4] = (uint16_t)r_.quotient;
-    gsu.r[5] = (uint16_t)r_.place_y;
-    gsu.r[7] = (uint16_t)r_.high_words_hi;
-    gsu.r[9] = (uint16_t)r_.k;
+    if (FxNormalize((FxVec3){(int16_t)gsu.r[1], (int16_t)gsu.r[2], (int16_t)gsu.r[3]}, &n)) {
+        gsu.r[1] = (uint16_t)n.unit.x;
+        gsu.r[2] = (uint16_t)n.unit.y;
+        gsu.r[3] = (uint16_t)n.unit.z;
+        gsu.r[4] = n.z_low;
+        gsu.r[7] = n.x_high;
+        gsu.r[9] = n.shift;
+    } else {
+        gsu.r[1] = gsu.r[2] = gsu.r[3] = gsu.r[4] = 0;
+    }
+    gsu.r[5] = 0;
     fx_code(0x040000 | ret, 1);          /* the byte the return goes to */
 }
 
@@ -35,9 +37,8 @@ static void entry_FxSquareRoot(void)
 {
     uint16_t ret = gsu.r[11];
 
-    FxSquareRootResult r_ = FxSquareRoot(gsu.r[4], gsu.r[5]);
-    gsu.r[5] = (uint16_t)r_.low_word_out;
-    gsu.r[6] = (uint16_t)r_.root;
+    gsu.r[6] = FxSquareRoot((uint32_t)gsu.r[4] << 16 | gsu.r[5]);
+    gsu.r[5] = 0;
     fx_code(0x040000 | ret, 1);          /* the byte the return goes to */
 }
 
@@ -45,7 +46,7 @@ static void entry_FxDivideHalvedIfLarge(void)
 {
     uint16_t ret = gsu.r[11];
 
-    gsu.r[4] = (uint16_t)FxDivideHalvedIfLarge(gsu.r[0], gsu.r[4], gsu.r[6]);
+    gsu.r[4] = FxDivideHalvedIfLarge((uint32_t)gsu.r[0] << 16 | gsu.r[4], gsu.r[6]);
     fx_code(0x040000 | ret, 1);          /* the byte the return goes to */
 }
 
@@ -53,7 +54,7 @@ static void entry_FxDivide(void)
 {
     uint16_t ret = gsu.r[11];
 
-    gsu.r[4] = (uint16_t)FxDivide(gsu.r[0], gsu.r[4], gsu.r[6]);
+    gsu.r[4] = FxDivide((uint32_t)gsu.r[0] << 16 | gsu.r[4], gsu.r[6]);
     fx_code(0x040000 | ret, 1);          /* the byte the return goes to */
 }
 

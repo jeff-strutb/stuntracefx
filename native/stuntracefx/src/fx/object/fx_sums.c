@@ -570,7 +570,7 @@ FxHitAddUnitResult FxHitAddUnit(uint16_t vector_x, uint16_t vector_y, uint16_t v
     fx_push(stack, owner_record);
     fx_spill(stack);
     if (((vector_x | vector_y) | vector_z) != 0) {
-        { FxNormalizeResult r_ = FxNormalize(vector_x, vector_y, vector_z, model_record, owner_record, stack); scaled_vector_x = r_.scaled_vector_x; scaled_vector_y = r_.scaled_vector_y; scaled_vector_z = r_.scaled_vector_z; place_x = r_.quotient; place_y = r_.place_y; model_record = r_.high_words_hi; };
+        { FxNormalized n_; if (FxNormalize((FxVec3){(int16_t)vector_x, (int16_t)vector_y, (int16_t)vector_z}, &n_)) { scaled_vector_x = (uint16_t)n_.unit.x; scaled_vector_y = (uint16_t)n_.unit.y; scaled_vector_z = (uint16_t)n_.unit.z; place_x = (uint16_t)n_.z_low; place_y = 0; model_record = (uint16_t)n_.x_high; } else { scaled_vector_x = 0; scaled_vector_y = 0; scaled_vector_z = 0; place_x = 0; place_y = 0; model_record = model_record; } };
         abs_unit_x = scaled_vector_x;
         if (!(scaled_vector_x & 0x8000)) {
         } else {

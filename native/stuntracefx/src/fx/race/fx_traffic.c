@@ -294,7 +294,7 @@ FxSpreadCarsResult FxSpreadCars(uint16_t entry_distance, uint16_t car_record, ui
                     }
                     fx_push(stack, (uint16_t)(overlap_abs + overlap_abs));
                     fx_push(stack, other_car);
-                    { FxNormalizeResult r_ = FxNormalize(dx_double, 0, dz_double, car_z, other_car, stack); scaled_vector_x = r_.scaled_vector_x; scaled_vector_z = r_.scaled_vector_z; };
+                    { FxNormalized n_; if (FxNormalize((FxVec3){(int16_t)dx_double, (int16_t)0, (int16_t)dz_double}, &n_)) { scaled_vector_x = (uint16_t)n_.unit.x; scaled_vector_z = (uint16_t)n_.unit.z; } else { scaled_vector_x = 0; scaled_vector_z = 0; } };
                     other_car = fx_pull(stack);
                     push_strength = fx_pull(stack);
                     velocity = fx_ldw((uint16_t)(FXREC_VELOCITY + other_car));
