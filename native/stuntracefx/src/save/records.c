@@ -574,7 +574,7 @@ static uint8_t bcd_add(uint8_t a, uint8_t b)
  */
 void StuntRecordTime(void)
 {
-    uint16_t score = (uint16_t)(g.stunt_score_high << 8 | bcd_add(g.time_left, g.stunt_score_add));
+    uint16_t score = (uint16_t)(g.stunt_score_high << 8 | bcd_add(g.time_left, (uint8_t)g.stunt_score_add));
     SaveEntry *e;
 
     if (g.course < 0x0C || g.course >= 0x10)
