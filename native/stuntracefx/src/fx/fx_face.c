@@ -25,6 +25,7 @@
  * place in space. Nothing here makes a pixel.
  */
 #include <math.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "fx/fx.h"
