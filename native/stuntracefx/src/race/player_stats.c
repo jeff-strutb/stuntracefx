@@ -64,7 +64,6 @@ void PlayerStatsFromRecord(uint16_t rec, int player)
         g.car_flags_low[player] = (uint8_t)f;
         g.car_flags_high[player] = (uint8_t)(f >> 8);
         g.status_flags[player] = rec_get(rec, FXREC_SIDES);
-        g.status_df6[player] = (uint8_t)rec_get(rec, 0x004E);
         w = rec_get(rec, FXREC_82) >> 3;
         v = (uint8_t)w;
         g.gauge_one[player] = v;
@@ -435,7 +434,6 @@ static void stunt_phase_race(void)
     if (g.car_flags_low[0] & 0x01) {
         PaletteDarkenFour(0x801F);
         g.finish_lines = 0;
-        g.game_e18 = 0xF0;
         g.finish_mark = 0;
         g.player_phase[0] = 0x0E;
         g.finish_timer = 0x0C;

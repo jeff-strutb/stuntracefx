@@ -89,7 +89,6 @@ static void stage_replay_end(void)
     }
     g.gauge_place[6] = 0x93;            /* $0E14 */
     g.hud_map_y_b = 0x7C;               /* $0E0C */
-    g.game_e18 = 0x8C;
     g.split_stage_on = 0;
     pause_resume();
 }

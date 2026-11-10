@@ -1027,7 +1027,6 @@ void CourseScreenRasterBlank(void)
         fx_op_clear();
         GsuEE88Ramp();
         fx_draw_flush();
-        g.picture_flip_0d81 = 0xFFFF;
     }
     pic.brightness = g.fade_level & 0x0F;
     pic.blank = (g.fade_level & 0x80) != 0;

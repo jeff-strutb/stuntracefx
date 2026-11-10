@@ -293,7 +293,6 @@ void race_frame_upload(void)
         return;                         /* $0E, $12, $16, $1A: nothing */
     }
     race_picture_shown(shown);
-    g.picture_flip_0d81 = 0xFFFF;
     g.frame_stage_00 = 0;
     g.oam_upload_wanted--;
 }
@@ -370,13 +369,6 @@ static void wait_step(void)
     }
 }
 
-/* What follows the frame in the race's loop. */
-static void race_step_end(void)
-{
-    if (!flow.stopped && g.object_frames >= 0x1E)
-        g.byte_0713 = 0;
-}
-
 /* One step of the race. */
 static void race_step(void)
 {
@@ -386,7 +378,6 @@ static void race_step(void)
         RaceFrameRunTwoPlayers();
     else
         RaceFrameRun();
-    race_step_end();
 }
 
 /* forward */
@@ -415,12 +406,8 @@ void race_pause_over(int second_half)
     else
         RaceFrameRunResume();
     flow.resuming = 0;
-    if (flow.state == FLOW_DEMO || flow.state == FLOW_ENDING) {
-        if (!flow.stopped && demo_after_step())
-            flow.demo_ended = 1;
-    } else {
-        race_step_end();
-    }
+    if ((flow.state == FLOW_DEMO || flow.state == FLOW_ENDING) && !flow.stopped && demo_after_step())
+        flow.demo_ended = 1;
 }
 
 static uint8_t race_pace(void)
@@ -446,9 +433,7 @@ static void attract_setup(void)
     AttractCourseSetup();
     course_script_start();
     ObjectPlaceAll();
-    g.byte_1a32 = 0;
     g.object_frames = 0;
-    g.byte_0713 = 1;
     FxInit();
     g.picture_uploaded = 1;
 }

@@ -23,7 +23,7 @@
  */
 void GsuParamsUpdate(void)
 {
-    fx16_set(GSU_PARAM_108A, g.param_0d12);
+    fx16_set(GSU_PARAM_108A, 0);        /* the original's $0D12, which nothing writes */
     for (int i = 0; i < 3; i++) {
         fx16_set((uint16_t)(FXIN_VIEW_POS + 2 * i), g.view_pos[i]);
         fx16_set((uint16_t)(FXIN_VIEW_ANGLES + 2 * i), g.view_angles[i]);

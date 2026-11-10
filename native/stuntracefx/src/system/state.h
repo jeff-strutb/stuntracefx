@@ -79,17 +79,11 @@ typedef struct {
     uint16_t bonus_step;                /* $0E7C */
     uint8_t countdown_df8;              /* $0DF8 */
     uint8_t stunt_seen;                 /* $1A2D */
-    uint8_t status_df6[2];              /* $0DF6 */
     uint32_t speed_total[2];            /* $0DDC, $0DE0 */
     uint16_t speed_count[2];            /* $0DE4, $0DE6 */
     uint8_t byte_e80, byte_e81;         /* $0E80, $0E81 */
-    uint8_t byte_0d58;                  /* $0D58 */
-    uint16_t picture_flip_0d81;         /* $0D81: a picture has been flipped to */
-    uint16_t hud_1ae8, hud_1aea;        /* $1AE8, $1AEA */
-    uint8_t time_1f3e, time_sum_06d5, time_count_06d6, time_fps_06d7; /* $1F3E, $06D5-$06D7 */
     uint8_t reset_state;                /* $0D51: a soft reset is under way */
     uint8_t frame_stage_00;             /* $00: 2 while a step runs, cleared when its picture is shown */
-    uint8_t byte_1a32, byte_0713;       /* $1A32, $0713 */
     uint8_t course_high, byte_0d63, byte_0d44, byte_0d25; /* $0E3E, $0D63, $0D44, $0D25 */
     uint8_t champ_stage;                /* $0D48: the championship's stage */
     uint8_t byte_0d24;                  /* $0D24 */
@@ -109,7 +103,6 @@ typedef struct {
     uint8_t car_flags_high[2];          /* $0DEE */
     uint8_t banner_timer[2];            /* $0E3F */
     uint8_t banner[2];                  /* $0E41: the lap banner's step */
-    uint8_t game_e18;                   /* $0E18 */
     uint8_t end_ready;                  /* $0E4B */
     uint8_t finish_timer;               /* $0E56 */
     uint8_t end_timer;                  /* $0E58 */
@@ -168,7 +161,6 @@ typedef struct {
     uint16_t view_centre_x, view_centre_y; /* $CE, $D0: where the horizon's centre is */
     uint16_t view_scale_34, view_scale_32; /* $34, $32: the projection's two factors */
     uint8_t view_ef;                    /* $05EF: $FF marks the view changed */
-    uint16_t param_0d12;                /* $0D12: read by the renderer's parameters; no writer found yet */
     uint8_t random_state[4];            /* $E6-$E9: the random numbers */
     uint16_t random_word;               /* $0D18: the 16-bit generator */
 

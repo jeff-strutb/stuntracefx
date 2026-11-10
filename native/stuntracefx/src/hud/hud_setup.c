@@ -151,7 +151,6 @@ static int mode_all(void)
     if (g.race_skipped)
         return 1;
     g.hud_marker_y = 0xEC;
-    g.game_e18 = 0xE8;
     palettes.target = 0x7FFF;
     if (g.time_override) {
         uint16_t t = fx16((uint16_t)(0xFC5E + RecordOffsetAllCourses()));
@@ -182,7 +181,6 @@ static void mode_stunt(void)
 
         palettes.target = 0x7FFF;
         g.hud_marker_y = 0xAC;
-        g.game_e18 = 0x8C;
         HUD_BYTES(stunt_record_sprites);
         t = fx16((uint16_t)(0xFC4A + (uint16_t)((g.course - 0x17) * 5)));
         if (t == 0xFFFF) {
@@ -197,7 +195,6 @@ static void mode_stunt(void)
         flags();
         return;
     }
-    g.game_e18 = 0xF0;
     race_hud_sprites_hide();
     HUD_BYTES(stunt_score_sprites);
     palettes.target = 0x2127;
@@ -213,7 +210,6 @@ static void player_tiles(uint8_t n, uint16_t at)
 static void mode_speed_battle(int speed)
 {
     if (speed) {
-        g.game_e18 = 0x8C;
         g.hud_marker_y = 0xEC;
     }
     if (g.race_skipped) {
@@ -278,7 +274,6 @@ void RaceHudSetup(void)
     g.hud_map_y_b = 0x7A;
     g.hud_panel_b_y = 0x00;
     g.hud_slide = 0xE0;
-    g.byte_0d58 = 0x20;
     g.gauge_place[0] = 0x50;
     g.gauge_place[2] = 0xB8;
     g.fx_upload_stage = 0;

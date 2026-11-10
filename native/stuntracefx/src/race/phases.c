@@ -362,7 +362,6 @@ static void lap_banner_wait(int player)
 static void finish_alone(int player, uint16_t colour, uint8_t phase, uint8_t t)
 {
     PaletteDarkenFour(colour);
-    g.game_e18 = 0xF0;
     g.finish_mark = 0;
     g.finish_lines = 0;
     Countdown0DF8();

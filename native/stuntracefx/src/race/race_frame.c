@@ -172,16 +172,10 @@ static void frame_start(void)
     view_words_follow();
 }
 
+/* The step's frames to the renderer. The original also kept $1F3E and a
+   steps-per-second count ($06D5-$06D7) here, which nothing reads. */
 static void frame_time(void)
 {
-    g.time_1f3e = g.frames_since_step;
-    g.time_sum_06d5 = (uint8_t)(g.time_sum_06d5 + g.frames_last_step);
-    g.time_count_06d6++;
-    if (g.time_sum_06d5 >= 0x3C) {
-        g.time_fps_06d7 = g.time_count_06d6;
-        g.time_count_06d6 = 0;
-        g.time_sum_06d5 = (uint8_t)(g.time_sum_06d5 - 0x3C);
-    }
     fx16_set(FXIN_STEP_FRAMES, g.frames_last_step);
 }
 
@@ -273,12 +267,10 @@ void RaceFrameRun(void)
     ViewUpdateAndGsuAEF8();
     BackdropAnglesFromView();
     g.draw_side = 1;
-    g.hud_1ae8 = 0;
     fx_draw_begin(g.fx_buffer);
     frame_run_ab13_b();
     SpeedGaugeUpdate(fx16(FXIN_PLAYER1_RECORD));
     NearCarSoundUpdate();
-    g.hud_1aea = g.hud_1ae8;
     if (fx16(FXIN_TEXT_NOTICE))
         FxTextProgram(0);
     else
@@ -340,7 +332,6 @@ void RaceFrameRunTwoPlayers(void)
     BackdropAnglesFromView();
     ViewFromRecord(view_camera(g.player2_car));
     g.draw_side = 1;
-    g.hud_1ae8 = 0;
     fx_draw_begin(g.fx_buffer);
     frame_run_ab13_b();
     SpeedGaugeUpdate(fx16(FXIN_PLAYER1_RECORD));
@@ -510,7 +501,6 @@ void RaceVarsReset(void)
     g.fx_buffer = 0;
     fx16_set(GSU_SCREEN_START, FX_PICTURE_0);
     g.screen_start = FX_PICTURE_0;
-    g.picture_flip_0d81 = 0;
     g.clock_fraction = 0;
     g.clock_seconds = 0;
     g.clock_minutes = 0;
@@ -546,7 +536,6 @@ void RaceVarsReset(void)
     g.laps_done[0] = g.laps_done[1] = 0;
     g.stunt_seen = 0;
     g.laps_counted[0] = g.laps_counted[1] = 0;
-    g.status_df6[0] = g.status_df6[1] = 0;
     g.gauge_one[0] = g.gauge_one[1] = 0;
     g.car_flags_low[0] = g.car_flags_low[1] = 0;
     g.car_flags_high[0] = g.car_flags_high[1] = 0;
