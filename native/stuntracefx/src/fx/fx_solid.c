@@ -44,6 +44,7 @@
 #include "fx/fx.h"
 #include "fx/fx_draw.h"
 #include "fx/fx_face.h"
+#include "fx/fx_far.h"
 #include "object/object.h"
 
 #define PI_F 3.14159265f
@@ -256,6 +257,8 @@ void fx_solid_begin(void)
        the shape's twice and the own shifted by $0032; 0 as 1 */
     own = (int16_t)word(FX_MODEL_CE);
     size = own < 0 ? -own : 2 * word(FX_SPRITE_SIZE) + (own << (word(0x0032) & 15));
+    if (own >= 0 && fx_far_shift())     /* a far object's, halved with its place (fx_far.c) */
+        size >>= fx_far_shift();
     scale = (float)(size ? size : 1) / object->texels;
     if (face) {
         /* turned by its gaze above */

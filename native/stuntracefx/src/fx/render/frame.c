@@ -8,6 +8,7 @@
  */
 
 #include "fx/fx.h"
+#include "fx/fx_far.h"
 
 /*
  * @routine 01:AB13 FxFrameProgram
@@ -59,6 +60,8 @@ static FxFrameProgramResult frame_program(uint16_t draw_list_end)
     }
     *stack = 0x0240;
     fx_stw(FX_MODEL_1B4, 0);
+    fx_far_pass(stack);                 /* the objects past the near list's block, first (fx_far.c) */
+    *stack = 0x0240;
     { FxObjectsDrawResult r_ = FxObjectsDraw(draw_list_end, stack); up_ = r_.up; };
     if (up_) {                       /* it returned past us */
         return (FxFrameProgramResult){up_ == 0 ? 0 : up_ - 0};
@@ -146,6 +149,7 @@ FxObjectsDrawResult FxObjectsDraw(uint16_t draw_list_end, uint16_t *stack)
     uint16_t object_pos_x;
     uint16_t object_pos_y;
     uint16_t object_pos_z;
+    uint16_t lod_depth;
     uint16_t points_total;
     uint16_t tex_u_offset;
     uint16_t tex_v_offset;
@@ -206,6 +210,7 @@ FxObjectsDrawResult FxObjectsDraw(uint16_t draw_list_end, uint16_t *stack)
             angle_y_byte = fx_ldb(angle_y_ptr);
             fx_stw(0x0024, angle_y_byte);
             fx_angle_record(object_ptr);
+            fx_far_record(object_ptr);
             flags_ptr = (uint16_t)(angle_y_ptr + 1);
             draw_flags = fx_ldb(flags_ptr);
             model_field_ptr = (uint16_t)(flags_ptr + 1);
@@ -277,7 +282,8 @@ FxObjectsDrawResult FxObjectsDraw(uint16_t draw_list_end, uint16_t *stack)
                     model_detail_byte = fx_getb();
                     fx_stw(0x0032, model_detail_byte);
                     fx_push(stack, selected_model_ptr);
-                    if (object_pos_z >= 0x0BB8) {
+                    lod_depth = fx_far_depth(object_pos_z);     /* a far object's by its true depth */
+                    if (lod_depth >= 0x0BB8) {
                         fx_r14(0x001A);
                         lod_far_ptr_ptr = (uint16_t)(selected_model_ptr + 0x001A);
                         fx_r14(lod_far_ptr_ptr);
@@ -285,7 +291,7 @@ FxObjectsDrawResult FxObjectsDraw(uint16_t draw_list_end, uint16_t *stack)
                         fx_r14((uint16_t)(lod_far_ptr_ptr + 1));
                         selected_model_ptr = (uint16_t)((lod_far_low & 0xFF) | fx_getb() << 8);
                     } else {
-                        if (object_pos_z >= 0x07D0) {
+                        if (lod_depth >= 0x07D0) {
                             fx_r14(0x0018);
                             lod_mid_ptr_ptr = (uint16_t)(selected_model_ptr + 0x0018);
                             fx_r14(lod_mid_ptr_ptr);
@@ -293,7 +299,7 @@ FxObjectsDrawResult FxObjectsDraw(uint16_t draw_list_end, uint16_t *stack)
                             fx_r14((uint16_t)(lod_mid_ptr_ptr + 1));
                             selected_model_ptr = (uint16_t)((lod_mid_low & 0xFF) | fx_getb() << 8);
                         } else {
-                            if (object_pos_z >= 0x03E8) {
+                            if (lod_depth >= 0x03E8) {
                                 fx_r14(0x0016);
                                 lod_near_ptr_ptr = (uint16_t)(selected_model_ptr + 0x0016);
                                 fx_r14(lod_near_ptr_ptr);
@@ -591,6 +597,11 @@ static FxObjectSpriteResult object_sprite(uint16_t sprite_scale, uint16_t draw_l
             if (size_sum != 0) {
             } else {
                 projection_scale = 1;
+            }
+            if (fx_far_shift()) {       /* a far sprite's size halved with its place (fx_far.c) */
+                projection_scale = (uint16_t)(projection_scale >> fx_far_shift());
+                if (!projection_scale)
+                    projection_scale = 1;
             }
             x_2 = fx_ldw(0x0026);
             y_2 = fx_ldw(0x0028);

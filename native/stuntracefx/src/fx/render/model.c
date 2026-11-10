@@ -9,6 +9,7 @@
  */
 
 #include "fx/fx.h"
+#include "fx/fx_far.h"
 
 /*
  * @routine 01:8000 FxModelCommands
@@ -238,7 +239,7 @@ FxModelDrawWithFlagsResult FxModelDrawWithFlags(uint16_t model_flags, uint16_t d
     }
     lod_mode_flags = fx_ldw(0x108C);
     if ((uint16_t)(lod_mode_flags & 0xFF) == 0) {
-        lod_bias = fx_ldw(0x002A);
+        lod_bias = fx_far_depth(fx_ldw(0x002A));     /* a far object's tier by its true depth (fx_far.c) */
         lod_near_limit = (uint16_t)((0 & 0xFF) | fx_getb() << 8);
         lod_rom_ptr_1 = (uint16_t)(rom_at + 1);
         fx_r14(lod_rom_ptr_1);
@@ -268,7 +269,7 @@ FxModelDrawWithFlagsResult FxModelDrawWithFlags(uint16_t model_flags, uint16_t d
         shade_base = fx_ldw(0x004E);
         fx_stw(FX_SHADE_AT, (uint16_t)(shade_base + shade_offset));
     } else {
-        lod_bias_far = fx_ldw(0x002A);
+        lod_bias_far = fx_far_depth(fx_ldw(0x002A));
         lod_near_limit_far = (uint16_t)((0 & 0xFF) | fx_getb() << 8);
         lod_rom_ptr_far_1 = (uint16_t)(rom_at + 1);
         fx_r14(lod_rom_ptr_far_1);
@@ -446,6 +447,12 @@ FxModelDrawWithFlagsResult FxModelDrawWithFlags(uint16_t model_flags, uint16_t d
     view_matrix_8 = fx_ldw(FX_VIEW_MATRIX_8);
     light_z_by_m8 = (uint32_t)((int32_t)(int16_t)light_z * (int16_t)view_matrix_8);
     fx_stw(FX_LIGHT_LOCAL_Z, (uint16_t)(int16_t)(int8_t)(uint16_t)((uint16_t)((uint16_t)((uint16_t)((uint16_t)(light_z_by_m8 >> 16) << 1 | (int)(light_z_by_m8 >> 15 & 1)) + (uint16_t)((uint16_t)(light_x_by_m6 >> 16) << 1 | (int)(light_x_by_m6 >> 15 & 1))) + (uint16_t)((uint16_t)(light_y_by_m7 >> 16) << 1 | (int)(light_y_by_m7 >> 15 & 1))) >> 8));
+    if (fx_far_shift()) {               /* a far object drawn halved with its place (fx_far.c), its light as it is */
+        uint16_t at;
+
+        for (at = FX_VIEW_MATRIX_0; at <= FX_VIEW_MATRIX_8; at = (uint16_t)(at + 2))
+            fx_stw(at, (uint16_t)((int16_t)fx_ldw(at) >> fx_far_shift()));
+    }
     detail_level = fx_ldw(0x0032);
     if (!((uint16_t)(detail_level - 3) & 0x8000)) {
     } else {

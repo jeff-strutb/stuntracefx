@@ -18,6 +18,7 @@
 
 #include "fx/fx.h"
 #include "fx/fx_draw.h"
+#include "fx/fx_far.h"
 #include "object/object.h"
 #include "race/race.h"
 #include "system/state.h"
@@ -125,7 +126,7 @@ void fx_angle_record(uint16_t record)
 {
     unsigned i = (uint16_t)(record - 0x0AAA) / 30u;
 
-    if (!fractions_on || (uint16_t)(record - 0x0AAA) % 30u || i >= 64) {
+    if (!fractions_on || fx_far_drawing() || (uint16_t)(record - 0x0AAA) % 30u || i >= 64) {     /* a far object's slot is not the step's record */
         current_frac[0] = current_frac[1] = current_frac[2] = 0;
         return;
     }

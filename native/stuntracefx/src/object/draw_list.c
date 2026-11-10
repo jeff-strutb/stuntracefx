@@ -2,9 +2,18 @@
  * draw_list.c: the list of objects the Super FX draws this frame, built
  * from the objects in the map cells the trigger list names.
  *
- * Not converted, nothing reaches it: ObjectDrawListClear08 (7E:F0D3). The
- * Enhanced mode's far records (rm_ calls) are left out for now.
+ * Not converted, nothing reaches it: ObjectDrawListClear08 (7E:F0D3).
+ *
+ * The race's view distance (plan stage 10, fx/fx_far.h): every other object
+ * the list would draw, in every cell of the map, gets a far record in the
+ * chip's RAM's second 64 KB, which the frame program draws behind the near
+ * ones (fx/fx_far.c). The objects are not touched by it: what is activated,
+ * and when, stays the trigger list's.
  */
+#include <string.h>
+
+#include "fx/fx_far.h"
+#include "fx/fx_rt.h"
 #include "object/object.h"
 #include "system/state.h"
 
@@ -22,10 +31,16 @@ static uint8_t frame_byte(uint8_t v)
     return (uint8_t)(((v & 0x80) ? v : (uint8_t)g.object_frames) & 0x7F);
 }
 
+/* the objects given a near record this list, by slot */
+static uint8_t near_drawn[OBJECT_COUNT];
+
+static unsigned slot_of(const Object *o) { return (unsigned)(obj_ref(o) - 1) / OBJECT_SIZE; }
+
 /* Object o's draw record at r: place relative to the view unless bit 7 of
    +$24 says absolute, its depth key, model, angles, link fields, flags,
-   palette and frame bytes and the animation word. */
-static uint8_t *draw_record(Object *o, uint8_t *r)
+   palette and frame bytes and the animation word. A far record (far) is
+   the same record, the object left as it is and not counted. */
+static uint8_t *draw_record(Object *o, uint8_t *r, int far)
 {
     if (o->flags24 & 0x80) {
         put16(r, 0x12, o->x);
@@ -55,13 +70,17 @@ static uint8_t *draw_record(Object *o, uint8_t *r)
         r[0x18] = 0;
     }
     r[0x07] = o->flags24;
-    o->flags24 &= 0xFD;
+    if (!far)
+        o->flags24 &= 0xFD;
     r[0x19] = frame_byte(o->frame5a);
     r[0x1A] = frame_byte(g.draw_side ? o->sprite_turn[1] : o->sprite_turn[0]);
     r[0x1B] = o->byte3a;
     r[0x1C] = o->byte5f;
     r[0x1D] = o->byte60;
     put16(r, 0x16, o->anim);
+    if (far)
+        return r + FX_FAR_SIZE;
+    near_drawn[slot_of(o)] = 1;
     objects.record_gaze[g.frame_record_count] = object_gaze(o, g.draw_side ? 1 : 0);
     g.frame_record_count++;
     return r + RECORD_SIZE;
@@ -80,6 +99,53 @@ static int drawn(const Object *o)
     return o->model != MODEL_NONE;
 }
 
+/* A far record: the object's record, its place from the view in 32 bits
+   and its key's lift, at `at` in the chip's second 64 KB. */
+static void far_record(Object *o, uint16_t at)
+{
+    uint8_t *r = &fx_ram[FX_FAR_BANK + at];
+    int32_t d[3];
+    unsigned k;
+
+    draw_record(o, r, 1);
+    d[0] = (int32_t)(int16_t)o->x - (int16_t)g.view_pos[0];
+    d[1] = (int32_t)(int16_t)o->y - (int16_t)g.view_pos[1];
+    d[2] = (int32_t)(int16_t)o->z - (int16_t)g.view_pos[2];
+    for (k = 0; k < 3; k++) {
+        put16(r, FX_FAR_PLACE + 4 * k, (uint16_t)d[k]);
+        put16(r, FX_FAR_PLACE + 4 * k + 2, (uint16_t)((uint32_t)d[k] >> 16));
+    }
+    r[FX_FAR_LIFT] = (uint8_t)(o->flags09 & 0x01);
+}
+
+/* Every object of every cell the near list did not draw and would: by its
+   rules, except those placed in view space (+$24 bit 7) and effect
+   emitters (bit 2), and none past the count's room. */
+static void far_records(void)
+{
+    unsigned cell, n = 0;
+
+    for (cell = 0; cell < sizeof objects.bucket_head / sizeof objects.bucket_head[0]; cell++) {
+        ObjRef ref = objects.bucket_head[cell];
+
+        while (ref) {
+            Object *o = obj_at(ref);
+
+            ref = o->bucket_next;
+            if (near_drawn[slot_of(o)] || (o->flags24 & 0x84) || n >= FX_FAR_MAX)
+                continue;
+            if ((o->flags24 & 0x20) || o->model == MODEL_NONE || o->model < 0x8000)
+                continue;
+            if ((o->flags24 & 0x40) && (o->byte26 == 0x02 ? g.draw_side != 0 : g.draw_side == 0))
+                continue;
+            far_record(o, (uint16_t)(FX_FAR_RECORDS + n * FX_FAR_SIZE));
+            n++;
+        }
+    }
+    fx_ram[FX_FAR_BANK + FX_FAR_COUNT] = (uint8_t)n;
+    fx_ram[FX_FAR_BANK + FX_FAR_COUNT + 1] = (uint8_t)(n >> 8);
+}
+
 /*
  * @routine 7E:EF50 ObjectDrawListBuild
  * WHAT IT DOES: Builds the list of objects to draw: for each trigger, walks
@@ -89,6 +155,7 @@ void ObjectDrawListBuild(void)
 {
     uint8_t *r = g.frame_records;
 
+    memset(near_drawn, 0, sizeof near_drawn);
     g.frame_record_count = 0;
     for (unsigned t = 0; g.trigger_list[t][0]; t++) {
         ObjRef ref = objects.bucket_head[(g.trigger_list[t][1] & 0x07FE) / 2];
@@ -98,10 +165,11 @@ void ObjectDrawListBuild(void)
 
             g.handler_object = ref;
             if (drawn(o))
-                r = draw_record(o, r);
+                r = draw_record(o, r, 0);
             ref = o->bucket_next;
         }
     }
+    far_records();
 }
 
 uint16_t draw_record_gaze(int record)
