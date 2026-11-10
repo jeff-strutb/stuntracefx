@@ -23,7 +23,6 @@
 #include "data/object_tables.h"
 #include "fx/fx.h"
 #include "math/math.h"
-#include "object/handlers.h"
 #include "object/object.h"
 #include "system/chip.h"
 #include "system/state.h"
@@ -57,10 +56,16 @@ static uint16_t bcd_inc16(uint16_t v)
     return (uint16_t)(lo | bcd_add8((uint8_t)(v >> 8), 0, &carry) << 8);
 }
 
-void ObjectSetHandler(Object *o, uint16_t handler)
+void ObjectSetHandler(Object *o, ObjectHandler handler)
 {
-    o->handler = handler;
-    o->handler_bank = 0x08;
+    o->handler = object_handler_word(handler);
+    o->handler_bank = object_handler_bank(handler);
+}
+
+void ObjectSetHandler2(Object *o, ObjectHandler handler)
+{
+    o->handler2 = object_handler_word(handler);
+    o->handler2_bank = object_handler_bank(handler);
 }
 
 /*
@@ -371,7 +376,7 @@ void ObjectRecordHoldWhileFrozen(Object *o)
  */
 void ObjectLinkedHandlerByState(Object *o, uint8_t state)
 {
-    uint16_t handler;
+    ObjectHandler handler;
 
     if (o->car.state & CAR_EVENT_TAKEN)
         return;
@@ -414,7 +419,7 @@ void ObjectAttachLinked(Object *o, Object *other)
     o->link = obj_ref(other);
     other->parent = obj_ref(o);
     cam->object = obj_ref(o);
-    if (other->handler == H_DIRECTOR_PATH_START)
+    if (other->handler == object_handler_word(H_DIRECTOR_PATH_START))
         t = (uint16_t)(t + 2);
     else if (g.hud_mode == 1)
         t = (uint16_t)(t + 4);
@@ -623,7 +628,7 @@ void ObjectRelease(Object *o)
  */
 void ObjectCallHandler(Object *o)
 {
-    object_handler_call(o, (uint32_t)o->handler_bank << 16 | o->handler);
+    object_handler_call(o, o->handler_bank, o->handler);
 }
 
 /* Run a handler as the run loop does: the object noted for ObjectRelease */
@@ -632,7 +637,7 @@ static void run_handler(Object *o, uint16_t word, uint8_t bank)
     if (!word)
         return;
     g.handler_object = obj_ref(o);
-    object_handler_call(o, (uint32_t)bank << 16 | word);
+    object_handler_call(o, bank, word);
 }
 
 /*
@@ -753,7 +758,7 @@ Object *ObjectSpawnFromScript(CartRef entry)
         o->offset_z = t;
     }
     ObjectRebucket(o);
-    if (handler_runs_from_start((uint32_t)o->handler_bank << 16 | o->handler))
+    if (handler_runs_from_start(object_handler_of(o->handler_bank, o->handler)))
         o->timer = 3;
     return o;
 }

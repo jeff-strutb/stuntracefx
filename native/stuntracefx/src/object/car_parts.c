@@ -10,7 +10,6 @@
 #include "audio/sound.h"
 #include "fx/fx.h"
 #include "math/math.h"
-#include "object/handlers.h"
 #include "object/object.h"
 #include "system/chip.h"
 #include "system/game.h"
@@ -283,7 +282,7 @@ static void player_record(Object *o, uint16_t n, uint16_t match)
 }
 
 /* The player car's set-up after its record. */
-static void player_attach(Object *o, uint16_t h, ObjRef bare)
+static void player_attach(Object *o, ObjectHandler h, ObjRef bare)
 {
     ObjectSetHandler(o, h);
     ObjectAttachLinked(o, obj_at(bare));
@@ -303,7 +302,7 @@ void PlayerCar1(Object *o)
     o->list_kind = 0x01;
     ObjectListAppend(o);
     o->y = (uint16_t)(o->y + 0xFF60);
-    if (g.hud_mode == 0 && obj_at(g.director[0])->handler == H_DIRECTOR_PATH_START)
+    if (g.hud_mode == 0 && obj_at(g.director[0])->handler == object_handler_word(H_DIRECTOR_PATH_START))
         o->car.car_script = car_script_word(CAR_BONUS_TRUCK);
     player_record(o, 0x0001, FXIN_PLAYER1_RECORD);
     player_attach(o, H_PLAYER_CAR_1_STEP, g.director[0]);

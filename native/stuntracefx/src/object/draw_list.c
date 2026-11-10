@@ -72,7 +72,7 @@ static const Object *child_car(const Object *o)
 {
     const Object *car;
 
-    if (((uint32_t)o->handler_bank << 16 | o->handler) != 0x08BB2E || !o->parent || !o->record)
+    if (object_handler_of(o->handler_bank, o->handler) != H_CHILD_STEP || !o->parent || !o->record)
         return NULL;
     car = obj_at(o->parent);
     return car->record ? car : NULL;

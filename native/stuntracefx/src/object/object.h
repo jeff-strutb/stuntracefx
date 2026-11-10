@@ -12,6 +12,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "data/object_handlers.h"
 #include "data/object_tables.h"
 #include "data/ref.h"
 #include "fx/fx.h"
@@ -268,7 +269,8 @@ void ObjectCarFrame(Object *o);
 void ObjectCarSpawn(Object *o);
 void ObjectCarRecordNew(Object *o, uint16_t amount);
 void ObjectPieceSprayUnlessSplit(Object *o);
-void ObjectSetHandler(Object *o, uint16_t handler);
+void ObjectSetHandler(Object *o, ObjectHandler handler);
+void ObjectSetHandler2(Object *o, ObjectHandler handler);    /* +$1D, run while it has no record */
 Vec16 ObjectTurnVector(const Object *o, int8_t x, int8_t y, int8_t z);
 void ObjectSparkleStart(Object *o);
 void ObjectSparkleStep(Object *o);
@@ -533,8 +535,8 @@ int ObjectOrbitBetween(int slot, const ObjectTable *was, const ObjectTable *end,
 
 /* the handler numbers the objects and data store, and the dispatch to them
    (object_handlers.c, objects_09.c and the rest) */
-void object_handler_call(Object *o, uint32_t handler);
-int handler_runs_from_start(uint32_t handler);
+void object_handler_call(Object *o, uint8_t bank, uint16_t word);
+int handler_runs_from_start(ObjectHandler handler);
 
 /* wanted by the race (race/) */
 void PlayerControlsFrame(void);

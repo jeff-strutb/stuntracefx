@@ -13,7 +13,6 @@
 #include "fx/fx.h"
 #include "math/math.h"
 #include "race/race.h"
-#include "object/handlers.h"
 #include "object/object.h"
 #include "system/chip.h"
 #include "system/state.h"
@@ -38,7 +37,7 @@ static int count_down(Object *o)
 }
 
 /* A new object of the model with handler h at object o's place. */
-static void burst_piece(Object *o, uint16_t model, uint16_t h)
+static void burst_piece(Object *o, uint16_t model, ObjectHandler h)
 {
     Object *n = ObjectSpawn(model);
 
@@ -218,8 +217,7 @@ void ObjectPaceCarStep(Object *o)
     o->draw_flags |= 0x20;
     o->draw_flags |= 0x08;
     o->y = (uint16_t)(o->y + 0xB1E0);
-    o->handler = 0;
-    o->handler_bank = 0;
+    ObjectSetHandler(o, H_NONE);
 }
 
 /*

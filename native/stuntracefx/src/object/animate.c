@@ -53,32 +53,32 @@ typedef struct {
 static Look look[OBJECT_COUNT], look_was[OBJECT_COUNT];
 static uint16_t gaze_was[OBJECT_COUNT][2];
 
-static uint32_t handler_of(const Object *o) { return (uint32_t)o->handler_bank << 16 | o->handler; }
+static ObjectHandler handler_of(const Object *o) { return object_handler_of(o->handler_bank, o->handler); }
 
 /* frames that move only the object itself */
-static int moves_itself(uint32_t h)
+static int moves_itself(ObjectHandler h)
 {
     switch (h) {
-    case 0x09CEE8: case 0x09CFD5:       /* ObjectFanStep (a dolphin), its centre */
-    case 0x09D023: case 0x09D131:       /* ObjectWheelStep (a dolphin), its centre */
-    case 0x09CAF8: case 0x09CBC4:       /* ObjectSpinnerStep, its centre */
-    case 0x09C9F0: case 0x09CAA3:       /* ObjectRingStep, its centre */
-    case 0x09C62D:                      /* ObjectSwingStep */
-    case 0x09C95C: case 0x09C956:       /* ObjectFloaterStep, ObjectFloaterSpawnerStep */
-    case 0x09AD50:                      /* ObjectPopMarkerStep */
+    case H_FAN_STEP: case H_FAN_CENTRE_STEP:       /* ObjectFanStep (a dolphin), its centre */
+    case H_WHEEL_STEP: case H_WHEEL_CENTRE_STEP:       /* ObjectWheelStep (a dolphin), its centre */
+    case H_SPINNER_STEP: case H_SPINNER_CENTRE_STEP:       /* ObjectSpinnerStep, its centre */
+    case H_RING_STEP: case H_RING_CENTRE_STEP:       /* ObjectRingStep, its centre */
+    case H_SWING_STEP:                      /* ObjectSwingStep */
+    case H_FLOATER_STEP: case H_FLOATER_SPAWNER_STEP:       /* ObjectFloaterStep, ObjectFloaterSpawnerStep */
+    case H_POP_MARKER_STEP:                      /* ObjectPopMarkerStep */
         return 1;
     }
     return 0;
 }
 
 /* frames that end a short life */
-static int short_lived(uint32_t h)
+static int short_lived(ObjectHandler h)
 {
     switch (h) {
-    case 0x08D549: case 0x08EB07: case 0x08E934: case 0x08EDB6: case 0x08E244: /* ObjectPieceFall, ObjectSparkleStep, ObjectTrailStep, ObjectBurstPieceStep, ObjectExhaustStep */
-    case 0x09BDE1: case 0x09BE92: case 0x09AE60:                               /* ObjectShardStep, ObjectRisingSpark, ObjectSparkFollow */
-    case 0x09E5BD: case 0x09E641: case 0x09E6E1:                               /* ObjectTrailMidStep, LeftStep, RightStep */
-    case 0x08EE63: case 0x08EE9F:                                              /* ObjectBlinkerRise, ObjectBlinkerFade */
+    case H_PIECE_FALL: case H_SPARKLE_STEP: case H_TRAIL_STEP: case H_BURST_PIECE_STEP: case H_EXHAUST_STEP: /* ObjectPieceFall, ObjectSparkleStep, ObjectTrailStep, ObjectBurstPieceStep, ObjectExhaustStep */
+    case H_SHARD_STEP: case H_RISING_SPARK: case H_BALL_SPARK:                               /* ObjectShardStep, ObjectRisingSpark, ObjectSparkFollow */
+    case H_TRAIL_MID_STEP: case H_TRAIL_LEFT_STEP: case H_TRAIL_RIGHT_STEP:                               /* ObjectTrailMidStep, LeftStep, RightStep */
+    case H_BLINKER_RISE: case H_BLINKER_FADE:                                              /* ObjectBlinkerRise, ObjectBlinkerFade */
         return 1;
     }
     return 0;
@@ -86,24 +86,24 @@ static int short_lived(uint32_t h)
 
 /* a frame that spins: a lap ball (+$15 and +$14 by $10 a step) and its
    set-up; a bumper (+$15 by $0C a step) and its set-up */
-static int lap_ball(uint32_t h) { return h == 0x09ADB6 || h == 0x09AF17 || h == 0x09AD5E || h == 0x09AEBF; }
-static int bumper(uint32_t h) { return h == 0x0991F6 || h == 0x0991CA; }
+static int lap_ball(ObjectHandler h) { return h == H_LAP_BALL_UP_STEP || h == H_LAP_BALL_DOWN_STEP || h == H_LAP_BALL_UP || h == H_LAP_BALL_DOWN; }
+static int bumper(ObjectHandler h) { return h == H_BUMPER_STEP || h == H_BUMPER; }
 /* a bonus marker's frame (its bounce, 09:C11F) and its set-up (offset 0,
    speed 2, colour 0) */
-static int marker_setup(uint32_t h) { return h == 0x09BEE8 || h == 0x09BFB0; }
-static int marker(uint32_t h) { return h == 0x09BF34 || h == 0x09BFF6 || marker_setup(h); }
+static int marker_setup(ObjectHandler h) { return h == H_BONUS_MARKER_2 || h == H_BONUS_MARKER_5; }
+static int marker(ObjectHandler h) { return h == H_BONUS_MARKER2_STEP || h == H_BONUS_MARKER5_STEP || marker_setup(h); }
 
 /* set-ups whose look the far view draws before they run: their effect on
    the record is known (setup_look) or there is none */
-static int look_known(uint32_t h)
+static int look_known(ObjectHandler h)
 {
     switch (h) {
-    case 0x000000: case 0x08CD2D:       /* no handler; ObjectFlagsRecordSetup */
-    case 0x09C5C8: case 0x09C5D1: case 0x09C5DA: case 0x09C5E3: case 0x09C5EC: case 0x09C5F5: /* ObjectColour2-7 */
-    case 0x098C0F: case 0x09C5FE: case 0x09C605: case 0x09C60C: /* ObjectHeading90, E0, A0, 20 */
-    case 0x09C90C:                      /* ObjectFloaterSpawner: its scale $40 (its floater is its trigger's) */
-    case 0x08CA45: case 0x08CAF6:       /* ObjectFlagsRecordFrame, ObjectFrameSwingSetup: a frame shown */
-    case 0x09C244: case 0x09C280: case 0x09C2C5: /* ObjectLapLight, Left, Right */
+    case H_NONE: case H_FLAGS_RECORD_SETUP:       /* no handler; ObjectFlagsRecordSetup */
+    case H_COLOUR_2: case H_COLOUR_3: case H_COLOUR_4: case H_COLOUR_5: case H_COLOUR_6: case H_COLOUR_7: /* ObjectColour2-7 */
+    case H_HEADING_90: case H_HEADING_315: case H_HEADING_225: case H_HEADING_45: /* ObjectHeading90, E0, A0, 20 */
+    case H_FLOATER_SPAWNER:                      /* ObjectFloaterSpawner: its scale $40 (its floater is its trigger's) */
+    case H_FLAGS_RECORD_FRAME: case H_FRAME_SWING_SETUP:       /* ObjectFlagsRecordFrame, ObjectFrameSwingSetup: a frame shown */
+    case H_LAP_LIGHT: case H_LAP_LIGHT_LEFT: case H_LAP_LIGHT_RIGHT: /* ObjectLapLight, Left, Right */
         return 1;
     }
     return lap_ball(h) || bumper(h) || marker(h);
@@ -152,7 +152,7 @@ int ObjectKept(const Object *o) { return kept[obj_slot(o)]; }
 void ObjectTurn(const Object *o, int run)
 {
     unsigned k = obj_slot(o);
-    uint32_t h = handler_of(o);
+    ObjectHandler h = handler_of(o);
     Look *l = &look[k];
 
     if (run) {
@@ -197,7 +197,7 @@ void ObjectTurn(const Object *o, int run)
 int ObjectFarLeftOut(const Object *o)
 {
     unsigned k = obj_slot(o);
-    uint32_t h = handler_of(o);
+    ObjectHandler h = handler_of(o);
 
     if (!ran[k] && !look_known(h))
         return 1;                       /* waiting for its set-up: its trigger */
@@ -214,27 +214,40 @@ static int32_t between(int32_t was, int32_t now)
     return was + (int32_t)lroundf((float)(now - was) * t);
 }
 
+/* ObjectColour2-7's colour */
+static uint8_t colour_of(ObjectHandler h)
+{
+    switch (h) {
+    case H_COLOUR_2: return 2;
+    case H_COLOUR_3: return 3;
+    case H_COLOUR_4: return 4;
+    case H_COLOUR_5: return 5;
+    case H_COLOUR_6: return 6;
+    default: return 7;
+    }
+}
+
 /* What a set-up that has not run gives the record r, far: the colour
    ObjectColourN puts in +$18 (the record's +$1A, on the near side), the
    scale +$15 (+$05) of ObjectScaleNN and ObjectFloaterSpawner's, the frame
    +$5A (+$19) of ObjectFlagsRecordFrame (+$48) and ObjectFrameSwingSetup
    (0), and a lap light's colour 0 and scale. */
-static void setup_look(const Object *o, uint8_t *r, uint32_t h)
+static void setup_look(const Object *o, uint8_t *r, ObjectHandler h)
 {
     switch (h) {
-    case 0x09C5C8: case 0x09C5D1: case 0x09C5DA: case 0x09C5E3: case 0x09C5EC: case 0x09C5F5:
+    case H_COLOUR_2: case H_COLOUR_3: case H_COLOUR_4: case H_COLOUR_5: case H_COLOUR_6: case H_COLOUR_7:
         if (!g.draw_side)
-            r[0x1A] = (uint8_t)(2 + (h - 0x09C5C8) / 9);
+            r[0x1A] = colour_of(h);
         break;
-    case 0x098C0F: case 0x09C90C: r[0x05] = 0x40; break;
-    case 0x09C5FE: r[0x05] = 0xE0; break;
-    case 0x09C605: r[0x05] = 0xA0; break;
-    case 0x09C60C: r[0x05] = 0x20; break;
-    case 0x08CA45: r[0x19] = (uint8_t)(o->flags_record.frame & 0x7F); break;
-    case 0x08CAF6: r[0x19] = 0x00; break;
-    case 0x09C244: case 0x09C280: case 0x09C2C5:
+    case H_HEADING_90: case H_FLOATER_SPAWNER: r[0x05] = 0x40; break;
+    case H_HEADING_315: r[0x05] = 0xE0; break;
+    case H_HEADING_225: r[0x05] = 0xA0; break;
+    case H_HEADING_45: r[0x05] = 0x20; break;
+    case H_FLAGS_RECORD_FRAME: r[0x19] = (uint8_t)(o->flags_record.frame & 0x7F); break;
+    case H_FRAME_SWING_SETUP: r[0x19] = 0x00; break;
+    case H_LAP_LIGHT: case H_LAP_LIGHT_LEFT: case H_LAP_LIGHT_RIGHT:
         r[0x19] = 0x00;
-        r[0x05] = (uint8_t)(o->heading + (h == 0x09C280 ? 0xE0 : h == 0x09C2C5 ? 0x20 : 0));
+        r[0x05] = (uint8_t)(o->heading + (h == H_LAP_LIGHT_LEFT ? 0xE0 : h == H_LAP_LIGHT_RIGHT ? 0x20 : 0));
         break;
     }
 }
@@ -295,12 +308,12 @@ uint16_t ObjectGazeBetween(const Object *o, int side, uint16_t gaze)
  * orbit). Fitted to the game's own places at the steps (Aqua Tunnel's
  * dolphins and spinners): within 121 units, its 8-bit rounding.
  */
-typedef struct { uint32_t h; int r1, r2, r3, xz; } Orbit;
+typedef struct { ObjectHandler h; int r1, r2, r3, xz; } Orbit;
 static const Orbit orbits[] = {
-    { 0x09CEE8, 0x64, 0x46, 0x00, 0 },  /* ObjectFanStep: a dolphin */
-    { 0x09D023, 0x64, 0x46, 0x00, 1 },  /* ObjectWheelStep: a dolphin */
-    { 0x09C9F0, 0x64, 0x00, 0x00, 1 },  /* ObjectRingStep */
-    { 0x09CAF8, 0x28, 0x0A, 0x00, 1 },  /* ObjectSpinnerStep */
+    { H_FAN_STEP, 0x64, 0x46, 0x00, 0 },  /* ObjectFanStep: a dolphin */
+    { H_WHEEL_STEP, 0x64, 0x46, 0x00, 1 },  /* ObjectWheelStep: a dolphin */
+    { H_RING_STEP, 0x64, 0x00, 0x00, 1 },  /* ObjectRingStep */
+    { H_SPINNER_STEP, 0x28, 0x0A, 0x00, 1 },  /* ObjectSpinnerStep */
 };
 
 static void orbit_at(const Orbit *b, double a16, double a14, double a15, double v[3])
@@ -321,7 +334,7 @@ static void orbit_at(const Orbit *b, double a16, double a14, double a15, double 
 int ObjectOrbitBetween(int slot, const ObjectTable *was, const ObjectTable *end, float t, int16_t add[3])
 {
     const Object *ow = &was->object[slot], *oe = &end->object[slot];
-    uint32_t h = handler_of(oe);
+    ObjectHandler h = handler_of(oe);
     const Orbit *b = NULL;
     const Object *cw, *ce;
     double a0[3], a1[3], at[3], p0[3], p1[3], pt[3];

@@ -14,7 +14,6 @@
 #include "audio/sound.h"
 #include "fx/fx.h"
 #include "math/math.h"
-#include "object/handlers.h"
 #include "object/object.h"
 #include "system/state.h"
 
@@ -190,7 +189,7 @@ static void drift_frame(Object *o, uint16_t ty, void (*done)(Object *))
     tail(o);
 }
 
-static void drift_shot(Object *o, uint16_t handler, uint8_t count, int flat)
+static void drift_shot(Object *o, ObjectHandler handler, uint8_t count, int flat)
 {
     ObjectSetHandler(o, handler);
     set_mode(o, 0x0003);

@@ -11,7 +11,6 @@
 #include "audio/sound.h"
 #include "fx/fx.h"
 #include "math/math.h"
-#include "object/handlers.h"
 
 /* a word $400 past a record, which the button sequence sets to $1000 with the
    boost (the original's +$400); what reads it is not worked out here */

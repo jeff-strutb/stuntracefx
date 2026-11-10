@@ -8,7 +8,6 @@
  * ObjectFrameCycleBackSetup and Step (08:CAA2, 08:CAC3),
  * ObjectFlagsRecordSetup20 (08:CD25).
  */
-#include "object/handlers.h"
 #include "object/object.h"
 
 /* the low byte of a word field used as a byte */
@@ -47,8 +46,7 @@ void ObjectFlagsRecord(Object *o)
 /* +$1D = ObjectFlagsRecord, then the record */
 static void flags_record_tail(Object *o)
 {
-    o->handler2 = H_FLAGS_RECORD;
-    o->handler2_bank = 0x08;
+    ObjectSetHandler2(o, H_FLAGS_RECORD);
     ObjectFlagsRecord(o);
 }
 
