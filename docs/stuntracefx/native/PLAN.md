@@ -656,13 +656,19 @@ filtered or scaled; one path for every backend.
   at the texel's centre). Each picture states its count; the first use checks it exactly against the cartridge's texels and
   draws the picture from its texels if it differs (all 102 passed in the sheet tool built from the game's own `fx_art.c`).
   Most of the larger counts are the drop shadow's outer stair along slanted edges, as the red U-turn's outline.
-  - 16 x 32 (37, 47 in all): 0 0, 1 1, 2 0, 3 2, 4 1, 5 0, 6 0, 7 0, 8 3, 9 1, A 0, B 4, C 0, D 0, E 0, F 0, G 1, H 0, I 0,
-    L 0, M 1, N 6, O 0, P 0, R 1, S 0, T 0, U 0, V 5, W 0, X 3, Y 9, Z 1, . 0, ' 0, " 8, ! 0.
-  - 8 x 16 (39, 115): 0 0, 1 0, 2 0, 3 0, 4 11, 5 0, 6 0, 7 13, 8 0, 9 0, A 0, B 5, C 2, D 0, E 0, F 0, G 2, H 0, I 0, J 0,
-    K 8, L 0, M 10, N 4, O 0, P 0, Q 3, R 0, S 0, T 4, U 0, V 3, W 11, X 11, Y 5, Z 6, . 0, ' 6, " 11.
-  - 24 x 40 letters (18, 257): A 10, C 12, E 24, F 16, G 13, H 11, I 21, K 26, L 15, M 13, N 14, O 8, P 12, R 8, S 17,
-    T 9, U 9, V 19.
-  - places (8, 118): 1 0, 2 13, 3 20, t 21, d 33, s 9, n 16, r 6.
+  - 16 x 32 (37, 74 in all): 0 0, 1 7, 2 0, 3 2, 4 1, 5 0, 6 0, 7 0, 8 3, 9 1, A 0, B 3, C 0, D 0, E 0, F 0, G 11, H 0,
+    I 8, L 0, M 0, N 5, O 0, P 0, R 1, S 0, T 0, U 0, V 5, W 1, X 3, Y 14, Z 1, . 0, ' 0, " 8, ! 0.
+  - 8 x 16 (39, 84): 0 0, 1 2, 2 0, 3 0, 4 9, 5 0, 6 0, 7 7, 8 0, 9 0, A 0, B 1, C 2, D 0, E 0, F 0, G 2, H 0, I 0, J 0,
+    K 4, L 0, M 9, N 4, O 0, P 0, Q 3, R 0, S 0, T 6, U 0, V 3, W 10, X 9, Y 5, Z 7, . 0, ' 0, " 1.
+  - 24 x 40 letters (18, 261): A 10, C 12, E 24, F 16, G 13, H 11, I 22, K 26, L 15, M 14, N 14, O 8, P 12, R 7, S 17,
+    T 9, U 9, V 22.
+  - places (8, 136): 1 0, 2 13, 3 19, t 21, d 35, s 9, n 15, r 24.
+- **Rules from Jeff's review (2026-11-10).** No convex corner comes to a point: every one is rounded, at least 0.6 texel
+  on the 16 x 32, 24 x 40 and places sets and 0.3 on the 8-texel-scale ones (small enough that no texel changes side);
+  concave notches and cusps stay crisp. The digits are one design everywhere: the 8 x 16 digits (and the race sprites'
+  speed digits, the same texels) are the 16 x 32 digits' corners scaled into their box and fitted to their own texels.
+  The 8 x 16 quote marks are closing quotes: each a comma, a round head tapering into a tail that curls down to the left,
+  the yellow a teardrop inside it (full at the head, a thin line down the tail), dark round it, the outline grown from it.
 - **Where drawn.** `fx_draw.c`: a run of glyph rows (`fx_glyph_row`'s blocks) inside a picture with geometry draws that
   part of it (rolling digits cut to their rows); `hud.c`'s scaled sprites ask `fx_glyph_scaled` to draw the whole sprite from
   its geometry at its scale, cut to the sprite's box and the view as the rows were. Anything else is drawn as before.
@@ -674,8 +680,14 @@ filtered or scaled; one path for every backend.
   and as colour layers each a region over the one before: the rank badges RANK 1 / RANK 2 and the LAP badge, whose
   lettering is strokes a texel wide, kept as drawn (straight edges on the texel lines; 0 each). The diamond, the used
   mark and the octagon were built by hand.
-- **Not done yet:** the console's sprite and background art (the race panel's digits and MPH, gauges, map markers,
-  panels) and the menu screens, and a census of the 3D faces' textures beyond the patterns.
+- **Console art (tile sets the game unpacks), first set: the race's sprite art** (video block 0; 36 pictures, 36 off): the
+  speed digits (the 16 x 32 design, as above), MPH and BOOST and two small marks (lettering a texel wide, kept as drawn
+  with its corners eased), the gauge's striped bar pieces (exact), the arrow (a triangle with its tip rounded, its border
+  grown from it; built by hand) and the 8 x 16 letters of RETRY? YES NO (each colour a region over the one before).
+  The picture table reads these from the tile sets (`fx_art_tile_set`); how the console's layers draw them is not this
+  table's (Jeff: not this job's concern), so nothing draws them yet; the sheet tool runs their check.
+- **Not done yet:** the other console tile sets (the race frame's panels and lettering, the shared set's MINI/MAP labels,
+  the two-player sets), the menu screens, and a census of the 3D faces' textures beyond the patterns.
 
 ### Stage 11. Whole game
 Finder zero on `native/stuntracefx`; section 8's criteria; every play through `nshvc-check`; every reachable platform.

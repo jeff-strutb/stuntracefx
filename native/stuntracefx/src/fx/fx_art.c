@@ -272,6 +272,8 @@ static void edge_cells(double *acc, int w, int h, double x0, double y0, double x
     double lo = y0 < y1 ? y0 : y1, hi = y0 < y1 ? y1 : y0, s0, s1, dxdy;
     int r;
 
+    if (!isfinite(x0) || !isfinite(y0) || !isfinite(x1) || !isfinite(y1) || fabs(x0) > 1e4 || fabs(x1) > 1e4)
+        return;                 /* no part of a picture */
     if (y0 == y1 || hi <= 0 || lo >= h)
         return;
     dxdy = (x1 - x0) / (y1 - y0);
@@ -601,7 +603,8 @@ int fx_art_pieces(const double (*p)[2], const int *len, const int *set, int loop
 enum {
     POINTS = 16384,             /* a layer's loops' points, grown and moved copies included */
     LOOPS = 256,
-    TRIANGLES = 65536
+    TRIANGLES = 65536,
+    LAYERS = 16                 /* a picture's colour layers at most: one for each colour a tile can hold */
 };
 
 typedef struct {
@@ -610,7 +613,7 @@ typedef struct {
         uint8_t value;
         int n;
         float (*tri)[2];
-    } layer[4];
+    } layer[LAYERS];
 } Made;
 
 static Made *made;
@@ -756,7 +759,7 @@ static int check(const FxArtPicture *p, const Set *fill, const Set *green, const
 
         if (!v)
             abort();
-        for (k = 0; k < p->layers; k++) {
+        for (k = 0; k < p->layers && k < LAYERS; k++) {
             fx_art_share((const double (*)[2])layer[k].p, layer[k].len, layer[k].loops, w, h, 1, a);
             for (y = 0; y < w * h; y++)
                 if (a[y] > 0)
@@ -775,19 +778,19 @@ static int check(const FxArtPicture *p, const Set *fill, const Set *green, const
 
 static void make(const FxArtPicture *p, Made *m)
 {
-    Set fill, green, face, layer[4];
-    int k, wrong = 0;
+    Set fill, green, face, layer[LAYERS];
+    int k, wrong = 0, layers = p->layers < LAYERS ? p->layers : LAYERS;
 
     m->made = 1;
     m->layers = 0;
     if (p->style == FX_ART_LAYERED) {
-        for (k = 0; k < p->layers && k < 4; k++) {
+        for (k = 0; k < layers; k++) {
             set_init(&layer[k]);
             trace_layer(&p->layer[k], p->layer[k].grow, 0, 0, layer[k].p, layer[k].len, &layer[k].loops, &layer[k].used);
             set_tag(&layer[k], 0, 0);
         }
         wrong = check(p, NULL, NULL, NULL, layer);
-        for (k = 0; k < p->layers && k < 4; k++) {
+        for (k = 0; k < layers; k++) {
             keep_pieces(m, p->layer[k].value, &layer[k], 1);
             free(layer[k].p);
         }
