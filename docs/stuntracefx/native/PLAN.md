@@ -359,6 +359,47 @@ frames.
 - E. Perspective-correct textures (a game shader given the face's 1/z plane, u/z and v/z as vertex u, v), angle fractions for
   turning objects between steps, particles, weather and labels sub-pixel, facing from the 3D determinant if slivers show.
 - F. Solid tyres, eyes and trees (`remaster/solids.c`).
+- G. The view distance (218f69f1 ported, 56ea23c6): the draw list writes a far record for every other object it would draw, in
+  every map cell, into the chip's RAM's second 64 KB (`fx/fx_far.h`); the frame program draws them first, farthest first,
+  turned and culled as the sort does, each halved until its place fits 14 bits with its matrix and sprite size, its level of
+  detail and colour tier from its true depth; the chip's first 64 KB put back after. Kept as the original has them: the levels
+  of detail and the four colour tiers (they change a model's detail and colour, they leave nothing out).
+- H. The ground and water as a surface (design below).
+
+#### The ground and water (design, 2026-11-09)
+
+What carries over from the earlier work (be60bbb9, 8931a216..c68f1373, af4032ea; `remaster/fullwindow.c`): each course's surface
+by its number ($0E3D, `g.course`): none (Sky Ramp), land or water by its band's ground colours, at the height its scenery is
+planted at (Aqua Tunnel's sea level -1280); none in Aqua Tunnel's sealed tunnel (bit 3 of $0DA5 set by its dark gates); the
+looks: water as the underwater backdrop's ripple cells at the size the original shows them, their colours by distance from its
+strip, the water between them the band's colour for that distance; land as tufts in its band's shades on cells of the same size;
+the track occludes the ground, a road dipping below a surface is never left out, and only Aqua Tunnel's water cuts the track and
+is seen from under. What does not carry over: the per-pixel depth test and the water pass, which were the old front end's own
+fill kernels; the engine's draw lists paint in order and have no depth.
+
+How it is drawn, in one line against the direction: the CPU makes one polygon and eight numbers a picture; the GPU works out
+every pixel of the surface, its texel and its colour.
+- **The polygon.** The plane at the surface's height, turned to the view (the matrix at $00E4 and the eye's height), clipped in
+  view space against a near plane and the view's sides and out to a depth where it meets the horizon within a hundredth of a
+  pixel, projected as the faces are (fx_face.c): one convex polygon covering the ground's part of the picture, made per picture
+  and per player, so the pictures between steps and the wide window follow.
+- **The shader** (`shaders/ground.shade`, fragment only, as the engine's game shaders are). The vertices' u, v are their screen
+  places, so the GPU hands every pixel its own place exactly. The plane's coordinates from a screen place are one projective map
+  (x' = (a x + b y + c) / (g x + h y + 1), y' the same with d, e, f): its eight numbers are the material's eight inputs. From
+  them the pixel's texel (the art repeating across the plane) and its depth (the map's denominator), which picks the colour by
+  distance. The material's image holds the cell art and a strip of the band's colours by depth, written when the course's
+  colours change (art prepared as the sprites' textures are, never pixels of the picture).
+- **The order.** Land, and water other than Aqua Tunnel's: the surface is drawn first, after the screen clear and before the far
+  and near objects, so everything the race draws covers it (the track occludes the ground; a road below it is never hidden), and
+  it is not drawn while the eye is below it. Aqua Tunnel's water: with one flat surface, anything on the far side of it from the
+  eye is behind it along every ray, so the depth test's picture comes from order alone. Each face's shape (fx_face.c, already in
+  view space) is cut by the plane; the part on the eye's side goes to a layer drawn after the surface, the other part to one
+  drawn before it, each layer keeping the frame program's order; a sprite or solid goes whole by its place's side; particles,
+  weather and labels after. Under the water (the glass tube) the same with the sides swapped: the surface seen overhead.
+- **Two players**: each panel draws its own surface in its rectangle (the frame program runs per panel).
+- No engine feature is needed: draw lists take a material with a game shader, its image read at any texel (`nshvc_image`, as
+  `pause_blur.shade` does) and eight inputs.
+- Shown to Jeff on a couple of courses (land and water, Aqua Tunnel from above and in the tube) before it is switched on.
 
 ### Stage 11. Whole game
 Finder zero on `native/stuntracefx`; section 8's criteria; every play through `nshvc-check`; every reachable platform.
