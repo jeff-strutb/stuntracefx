@@ -34,8 +34,6 @@ static uint8_t frame_byte(uint8_t v)
 /* the objects given a near record this list, by slot */
 static uint8_t near_drawn[OBJECT_COUNT];
 
-static unsigned slot_of(const Object *o) { return (unsigned)(obj_ref(o) - 1) / OBJECT_SIZE; }
-
 /* Object o's draw record at r: place relative to the view unless bit 7 of
    +$24 says absolute, its depth key, model, angles, link fields, flags,
    palette and frame bytes and the animation word. A far record (far) is
@@ -80,23 +78,27 @@ static uint8_t *draw_record(Object *o, uint8_t *r, int far)
     put16(r, 0x16, o->anim);
     if (far)
         return r + FX_FAR_SIZE;
-    near_drawn[slot_of(o)] = 1;
+    near_drawn[obj_slot(o)] = 1;
     objects.record_gaze[g.frame_record_count] = object_gaze(o, g.draw_side ? 1 : 0);
     g.frame_record_count++;
     return r + RECORD_SIZE;
 }
 
-/* not when bit 5 of +$24 is set; with bit 6, kind 2 only on the near side
-   and the rest only on the far side; at most $31 records, never model $A040 */
-static int drawn(const Object *o)
+/* by the object itself: not when bit 5 of +$24 is set; with bit 6, kind 2
+   only on the near side and the rest only on the far side; never model none */
+static int drawable(const Object *o)
 {
     if (o->flags24 & 0x20)
         return 0;
     if ((o->flags24 & 0x40) && (o->byte26 == 0x02 ? g.draw_side != 0 : g.draw_side == 0))
         return 0;
-    if ((int16_t)(g.frame_record_count - RECORD_MAX) >= 0)
-        return 0;
     return o->model != MODEL_NONE;
+}
+
+/* in the near list: drawable, and at most $31 records */
+static int drawn(const Object *o)
+{
+    return (int16_t)(g.frame_record_count - RECORD_MAX) < 0 && drawable(o);
 }
 
 /* A far record: the object's record, its place from the view in 32 bits
@@ -132,11 +134,9 @@ static void far_records(void)
             Object *o = obj_at(ref);
 
             ref = o->bucket_next;
-            if (near_drawn[slot_of(o)] || (o->flags24 & 0x84) || n >= FX_FAR_MAX)
+            if (near_drawn[obj_slot(o)] || (o->flags24 & 0x84) || n >= FX_FAR_MAX)
                 continue;
-            if ((o->flags24 & 0x20) || o->model == MODEL_NONE || o->model < 0x8000)
-                continue;
-            if ((o->flags24 & 0x40) && (o->byte26 == 0x02 ? g.draw_side != 0 : g.draw_side == 0))
+            if (!drawable(o) || o->model < 0x8000)
                 continue;
             far_record(o, (uint16_t)(FX_FAR_RECORDS + n * FX_FAR_SIZE));
             n++;
