@@ -629,6 +629,48 @@ backend.
 - **Bounds.** A face over more than 64 tiles keeps the texture as it is drawn now (no seen face is near that).
 - Shown to Jeff before and after (a scratch build's attract demo, 2026-11-09; the game's own on Aqua Tunnel once wired in); more patterns added the same way, each checked against its texels.
 
+#### Pictures as geometry: the HUD's fonts (2026-11-10)
+
+How it meets the direction: the CPU builds each picture's clean shapes once into flat pieces and lays them in the draw list
+at the picture's place and scale; the GPU fills them at the output's resolution; no pixel is made on the CPU and no art is
+filtered or scaled; one path for every backend.
+
+- **What a picture is.** `fx/fx_art.c`, data in `fx/fx_art_data.c`: each picture's fill as loops of corners (x, y and the
+  corner's radius in its texels), straight from corner to corner and each corner rounded by the arc tangent to both its edges
+  (0 sharp), so every curve eases into the straights it meets. The other colours come from the fill as the art makes them:
+  the outline is the fill grown by one texel (each straight moved out by one, each arc one larger about the same centre, or
+  one smaller at a concave corner; where a cusp's two grown arcs cross they are cut there), the drop shadow that outline moved
+  1 (16 x 32) or 1 and 2 (24 x 40, places) texels right and down, and the 8 x 16 set's bevel the fill where the fill also
+  lies a texel right, down and both (dark the rest). The art's in-between texels (2) at the fill's edge are not drawn: the
+  GPU's smoothing of that edge makes them.
+- **How the pieces were decided and fitted.** From the art first: straights (runs with three or more texels fully in, or
+  uniformly half), regular stairs as slanted straights (a stair longer than any curve of the art's radii makes kept as a
+  straight unless it fits worse; a shorter one only where it takes three texels off), the art's extremes as tangent lines, a
+  notch made a cusp (two arcs running into a point, as at the waists of the 3 and 8), a corner, or two straights meeting
+  sharp, whichever fits best. Then every number fitted to the texels (the fill's exact share of each texel against full 1,
+  in-between 1/2, else 0, and the outline's share of the texels only it explains). Glyphs whose decided pieces were wrong
+  were built one by one by hand (their corners and sharp points read from the texels, the numbers fitted): the 16 x 32
+  4 M R W X; the 24 x 40 K; the places' 1 t n; the 8 x 16 1 4 7 I K M N Q W X ' ". The fitting tool is outside the game.
+- **Texels off** (the texels the clean shapes leave on the other side, by the rule the check uses: outlined, the fill's
+  exact share 3 from 3/4, 2 above 1/4, else 1 where half of 8 x 8 points lie in the outline or shadow; bevelled, the colour
+  at the texel's centre). Each picture states its count; the first use checks it exactly against the cartridge's texels and
+  draws the picture from its texels if it differs (all 102 passed in the sheet tool built from the game's own `fx_art.c`).
+  Most of the larger counts are the drop shadow's outer stair along slanted edges, as the red U-turn's outline.
+  - 16 x 32 (37, 47 in all): 0 0, 1 1, 2 0, 3 2, 4 1, 5 0, 6 0, 7 0, 8 3, 9 1, A 0, B 4, C 0, D 0, E 0, F 0, G 1, H 0, I 0,
+    L 0, M 1, N 6, O 0, P 0, R 1, S 0, T 0, U 0, V 5, W 0, X 3, Y 9, Z 1, . 0, ' 0, " 8, ! 0.
+  - 8 x 16 (39, 115): 0 0, 1 0, 2 0, 3 0, 4 11, 5 0, 6 0, 7 13, 8 0, 9 0, A 0, B 5, C 2, D 0, E 0, F 0, G 2, H 0, I 0, J 0,
+    K 8, L 0, M 10, N 4, O 0, P 0, Q 3, R 0, S 0, T 4, U 0, V 3, W 11, X 11, Y 5, Z 6, . 0, ' 6, " 11.
+  - 24 x 40 letters (18, 257): A 10, C 12, E 24, F 16, G 13, H 11, I 21, K 26, L 15, M 13, N 14, O 8, P 12, R 8, S 17,
+    T 9, U 9, V 19.
+  - places (8, 118): 1 0, 2 13, 3 20, t 21, d 33, s 9, n 16, r 6.
+- **Where drawn.** `fx_draw.c`: a run of glyph rows (`fx_glyph_row`'s blocks) inside a picture with geometry draws that
+  part of it (rolling digits cut to their rows); `hud.c`'s scaled sprites ask `fx_glyph_scaled` to draw the whole sprite from
+  its geometry at its scale, cut to the sprite's box and the view as the rows were. Anything else is drawn as before.
+- Compiled on macOS and iOS; not run in the game (the sheets were made by a tool built from the game's own files).
+- **Not done yet:** the other HUD pictures in these banks (the pieces sheet at $15:$9A00, the rank badges, Stunt Trax's
+  marks, the lap banner's LAP 2 FINAL at $15:$3D00), the console's sprite and background art (the race panel's digits and
+  MPH, gauges, map markers, panels) and the menu screens, and a census of the 3D faces' textures beyond the patterns.
+
 ### Stage 11. Whole game
 Finder zero on `native/stuntracefx`; section 8's criteria; every play through `nshvc-check`; every reachable platform.
 

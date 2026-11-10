@@ -4,7 +4,9 @@
  *
  * The glyphs and digits, the banner's rising picture and the scaled sprites
  * take the piece they draw (hud.h) and hand each row to the GPU
- * (fx_glyph_row, fx_glyph_scaled_row). Their pictures are 2 bits a pixel in
+ * (fx_glyph_row, fx_glyph_scaled_row); a picture with clean geometry
+ * (fx_art.c) is drawn from that instead, a scaled sprite whole
+ * (fx_glyph_scaled). Their pictures are 2 bits a pixel in
  * the cartridge, 32 bytes a row; the low two bits of a byte are its leftmost
  * pixel, each value one of the piece's four colours.
  *
@@ -338,6 +340,9 @@ static void scaled_sprite(const FxPiece *p, uint16_t x, uint16_t y, uint16_t w, 
                           uint16_t bottom)
 {
     uint16_t left, row_y;
+
+    if (fx_glyph_scaled(x, y, w, h, right, bottom, p->u, p->v, hud_glyphs_bank(), p->glyph, p->colours))
+        return;
 
     if (x & 0x8000) {
         w = (uint16_t)(x + w);
