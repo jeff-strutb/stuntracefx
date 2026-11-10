@@ -1,0 +1,109 @@
+/* terrain.shade: the race's land as a surface over the course's own heights
+   (fx/fx_ground.c). uv is the pixel's place on the screen, in the view's
+   pixels. Each pixel's ray from the eye goes out over the height grid until
+   it passes under the ground (world y is down), then is narrowed to the
+   meeting point: the pixel shows the ground there, with the kind's marks
+   over it: rock in the shade the course gives a rock face facing its way,
+   other land in the band's colour for its distance, lit a little by its
+   slope; a ray
+   that meets no ground leaves the pixel. Past the grid the ground is at its
+   edge's height. The image (RGBA, 256 across, each texel a word):
+     words 0-31     the header (fx_ground.c's T_*), floats;
+     words 32-1055  the kind's 64 x 16 cell, alpha set on a mark;
+     from 1056      the band's colour on each screen row from the first row;
+     from header 11 (0 none)  rock's shades' colours, darkest first; at +8
+                    the light (three floats), +11 the bias, +12 the count
+                    (an outward normal n's shade is light . n + bias);
+     from the grid's word (header 17)  the heights, nx a row, floats. */
+const int W = 256;
+const int CELL_AT = 32;
+const int STRIP = 1056;
+
+uint word_at(int i) {
+    uvec4 b = uvec4(nshvc_image(ivec2(i % W, i / W)) * 255.0 + 0.5);
+    return b.a << 24 | b.r << 16 | b.g << 8 | b.b;
+}
+
+float header(int i) { return uintBitsToFloat(word_at(i)); }
+
+vec3 colour_at(int i) { return nshvc_image(ivec2(i % W, i / W)).rgb; }
+
+/* the grid: its corner, cell, size and first word */
+struct Grid { float x0, z0, cell; int nx, nz, at; };
+
+float height_at(Grid g, float x, float z) {
+    float gx = clamp((x - g.x0) / g.cell - 0.5, 0.0, float(g.nx - 1));
+    float gz = clamp((z - g.z0) / g.cell - 0.5, 0.0, float(g.nz - 1));
+    int ix = min(int(gx), g.nx - 2), iz = min(int(gz), g.nz - 2);
+    float fx = gx - float(ix), fz = gz - float(iz);
+    int a = g.at + iz * g.nx + ix;
+    float h00 = uintBitsToFloat(word_at(a)), h10 = uintBitsToFloat(word_at(a + 1));
+    float h01 = uintBitsToFloat(word_at(a + g.nx)), h11 = uintBitsToFloat(word_at(a + g.nx + 1));
+    return mix(mix(h00, h10, fx), mix(h01, h11, fx), fz);
+}
+
+vec4 shade(vec2 uv) {
+    Grid g = Grid(header(12), header(13), header(14), int(header(15)), int(header(16)), int(header(17)));
+    /* the ray: the view's direction through the pixel turned to the world
+       (the rows of the view's matrix), from the eye */
+    vec3 d = vec3((uv.x - header(9)) / 128.0, (uv.y - header(10)) / 128.0, 1.0);
+    vec3 dir = vec3(dot(vec3(header(0), header(1), header(2)), d),
+                    dot(vec3(header(3), header(4), header(5)), d),
+                    dot(vec3(header(6), header(7), header(8)), d));
+    vec3 eye = vec3(header(19), header(20), header(21));
+    float far_t = header(22), t = 8.0, last = t;
+    bool hit = false;
+    for (int i = 0; i < 400; i++) {
+        vec3 p = eye + dir * t;
+        if (p.y >= height_at(g, p.x, p.z)) {
+            hit = true;
+            break;
+        }
+        last = t;
+        t += max(g.cell * 0.25, t * 0.02);
+        if (t > far_t)
+            break;
+    }
+    if (!hit)
+        return vec4(0.0);
+    float lo = last, hi = t;            /* narrowed to the meeting point */
+    for (int i = 0; i < 10; i++) {
+        float mid = 0.5 * (lo + hi);
+        vec3 q = eye + dir * mid;
+        if (q.y >= height_at(g, q.x, q.z))
+            hi = mid;
+        else
+            lo = mid;
+    }
+    vec3 p = eye + dir * hi;
+    /* the land's colour for the depth: the row a flat ground at the
+       camera's usual height below the eye would show this depth on, under
+       the horizon at this column */
+    float horizon = header(31) + header(18) * (uv.x - header(30));
+    float rows = header(24), row = horizon + 128.0 * header(23) / hi - header(25);
+    vec3 band = colour_at(STRIP + int(clamp(row, 0.0, rows - 1.0)));
+    /* its outward normal (y down: up is -y, leaning the way the ground
+       falls) */
+    float e = g.cell * 0.5;
+    vec3 n = normalize(vec3(height_at(g, p.x + e, p.z) - height_at(g, p.x - e, p.z), -2.0 * e,
+                            height_at(g, p.x, p.z + e) - height_at(g, p.x, p.z - e)));
+    float light = 0.78 + 0.3 * max(dot(n, normalize(vec3(0.35, -1.0, 0.45))), 0.0);
+    /* the kind's marks: the cell's texel at the ground's place, left out
+       where a texel is smaller than an output pixel */
+    float tu = p.x / header(26), tv = p.z / header(27);
+    int cu = clamp(int(tu - 64.0 * floor(tu / 64.0)), 0, 63), cv = clamp(int(tv - 16.0 * floor(tv / 16.0)), 0, 15);
+    int cw = CELL_AT + cv * 64 + cu;
+    float mark = nshvc_image(ivec2(cw % W, cw / W)).a;
+    float texel_px = 128.0 * header(26) / hi / header(28);
+    vec3 colour = band * light;
+    float rock_at = header(11);
+    if (rock_at > 0.5) {
+        int at = int(rock_at), last = int(header(at + 12)) - 1;
+        float shade = clamp(dot(vec3(header(at + 8), header(at + 9), header(at + 10)), n) + header(at + 11), 0.0, float(last));
+        int lo = int(shade);
+        colour = mix(colour_at(at + lo), colour_at(at + min(lo + 1, last)), shade - float(lo));
+    }
+    if (mark > 0.5 && texel_px > 1.0)
+        colour *= header(29);
+    return vec4(colour, 1.0);
+}

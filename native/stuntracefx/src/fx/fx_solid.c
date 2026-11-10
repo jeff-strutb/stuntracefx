@@ -31,9 +31,12 @@
  * The sprite's code runs as ever (its state, its clipping, its colour);
  * only its quads are left out (fx_solid_hiding). The solid's faces are
  * points in view space, projected and clipped by fx_face_triangles and
- * filled by the GPU. Effects stay sprites. A picture of four bits a pixel
- * (two players) keeps its sprites: a solid's colours are the 8-bit
- * palette's.
+ * filled by the GPU. Effects stay sprites. In two players' pictures (four
+ * bits a pixel, their colours one palette row's) the tyres and wheels take
+ * one player's colours, entries of palette row 14, which the battle palette
+ * has the same; the eyes take the battle row's colours at the same places
+ * (its body blue, its white and black are one player's at those places);
+ * the trees keep their sprites.
  *
  * In a shape's own coordinates x is across, y down and z ahead.
  */
@@ -142,7 +145,7 @@ static const Solid solids[] = {
 static const Solid *object, *armed;
 static const Mark *face;                /* an eye's face for its look */
 static int nface, record_index, cap_seen;
-static int coloured;
+static int coloured, two, tyre_row;
 static uint8_t hi, tex_bank, tex_nib;
 static uint16_t tex_base;
 static float pos[3], view[3][3], scale;
@@ -167,8 +170,22 @@ static void emit(const float (*p)[3], int n, uint8_t c)
     static FxCorner corners[3 * (SEGMENTS_MAX + 8)];
     uint32_t k = fx_face_triangles(p, n, corners, N(corners));
 
-    if (k)
+    if (!k)
+        return;
+    if (fx_face_cutting()) {            /* past the water from the eye, or not: by the face's middle */
+        float m[3] = { 0, 0, 0 };
+        int i, j;
+
+        for (i = 0; i < n; i++)
+            for (j = 0; j < 3; j++)
+                m[j] += p[i][j] / n;
+        fx_draw_side(fx_face_past_water(m[0], m[1], m[2]));
+    }
+    if (tyre_row)
+        fx_draw_flat_entry(corners, k, (uint8_t)(0xE0 | (c & 0x0F)));  /* a tyre's: row 14 */
+    else
         fx_draw_flat(corners, k, c);
+    fx_draw_side(0);
 }
 
 /* FxObjectsDraw's object: its shape (the draw record's model) and its draw
@@ -228,8 +245,12 @@ void fx_solid_begin(void)
     armed = NULL;
     coloured = 0;
     face = NULL;
-    if (!object || !fx_draw_full_colour())
+    if (!object)
         return;
+    two = !fx_draw_full_colour();
+    if (two && (object->tree || !fx_draw_two_players()))
+        return;
+    tyre_row = two && object->shape != 0xA190;
     if (object->shape == 0xA190) {      /* an eye: by its gaze, in its look */
         uint16_t look, gz = record_index >= 0 ? draw_record_gaze(record_index) : 0;
         float phi, d[3];

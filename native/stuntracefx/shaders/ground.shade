@@ -1,0 +1,63 @@
+/* ground.shade: the race's ground or water surface (fx/fx_ground.c). uv is
+   the pixel's place on the screen less the surface's origin. Inputs 0-7 are
+   the projective map from it to the plane's texels:
+     u = (i0 x + i1 y + i2) / (i6 x + i7 y + 1), v = (i3 x + i4 y + i5) / (same).
+   The image (RGBA, 160 across, each texel a word): row 0 the header (the
+   origin, the strip's first row and its count, the kind, the marks' mean
+   cover, the depth at a denominator of 1, the marks' brightness against the
+   band's, texels a screen pixel to an output pixel's); rows 1-16 the 64 x 16 cell, alpha set
+   on a mark; from word 2720 the band's colour on each screen row; from word
+   4768 Aqua Tunnel's ripple colours by strip row, from 4848 those rows'
+   depths. Land and plain water (kind 0): the band itself is the console's
+   and shows through; a pixel is drawn only on a mark, the cell's texel at
+   its centre, in a darker shade of the band's colour on its row; where an
+   output pixel spans more than a texel the marks are left out, as they
+   could only flicker there. Aqua Tunnel's water (kind 1) is drawn whole:
+   the band's colour on the row, the ripples over it in the colour of the
+   first strip row as deep as the pixel, going to their mean cover where an
+   output pixel spans more than a texel. */
+const int W = 160;
+const int STRIP = 17 * 160;
+const int RIPPLES = STRIP + 2048;
+const int DEPTHS = RIPPLES + 80;
+
+uint word_at(int i) {
+    uvec4 b = uvec4(nshvc_image(ivec2(i % W, i / W)) * 255.0 + 0.5);
+    return b.a << 24 | b.r << 16 | b.g << 8 | b.b;
+}
+
+float header(int i) { return uintBitsToFloat(word_at(i)); }
+
+vec3 colour_at(int i) { return nshvc_image(ivec2(i % W, i / W)).rgb; }
+
+vec4 shade(vec2 uv) {
+    float den = nshvc_input(6) * uv.x + nshvc_input(7) * uv.y + 1.0;
+    if (den <= 0.0)
+        return vec4(0.0);
+    float u = (nshvc_input(0) * uv.x + nshvc_input(1) * uv.y + nshvc_input(2)) / den;
+    float v = (nshvc_input(3) * uv.x + nshvc_input(4) * uv.y + nshvc_input(5)) / den;
+    /* the texels a screen pixel spans, then an output pixel's */
+    float dudx = (nshvc_input(0) - u * nshvc_input(6)) / den, dudy = (nshvc_input(1) - u * nshvc_input(7)) / den;
+    float dvdx = (nshvc_input(3) - v * nshvc_input(6)) / den, dvdy = (nshvc_input(4) - v * nshvc_input(7)) / den;
+    float foot = max(max(abs(dudx), abs(dudy)), max(abs(dvdx), abs(dvdy))) * header(8);
+    float fu = u - 64.0 * floor(u / 64.0), fv = v - 16.0 * floor(v / 16.0);
+    float mark = nshvc_image(ivec2(clamp(int(fu), 0, 63), 1 + clamp(int(fv), 0, 15))).a > 0.5 ? 1.0 : 0.0;
+    float rows = header(3);
+    float row = floor(uv.y + header(1)) - header(2);
+    vec3 band = colour_at(STRIP + int(clamp(row, 0.0, rows - 1.0)));
+    if (header(4) > 0.5) {
+        float depth = header(6) / den, cover = mix(mark, header(5), clamp(foot - 0.5, 0.0, 1.0));
+        int lo = 0, hi = 79;
+        while (lo < hi) {
+            int m = (lo + hi) / 2;
+            if (header(DEPTHS + m) >= depth)
+                hi = m;
+            else
+                lo = m + 1;
+        }
+        return vec4(mix(band, colour_at(RIPPLES + lo), cover), 1.0);
+    }
+    if (mark < 0.5 || foot > 1.0)
+        return vec4(0.0);
+    return vec4(band * header(7), 1.0);
+}

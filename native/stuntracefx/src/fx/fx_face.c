@@ -45,6 +45,7 @@ enum {
 #define NEAR_Z 1.0              /* the near plane: the chip's clip is at 0, its depth 0 taken as 1 */
 #define CUT 1.25                /* a textured piece's far over near depth */
 #define CHIP_FAR 17406.0        /* $43FE: the depth FxModelProject's far table stops at */
+#define HOLE_LEAST 4096.0       /* a hole in the water: at least this much of the plane (64 x 64) */
 
 /* A word of the chip's RAM, read without moving its last RAM address. */
 static uint16_t word(uint16_t a)
@@ -60,9 +61,23 @@ static struct {
 } point[POINTS];
 static uint32_t projection;
 
+static FxSurveyPoint survey_sink;
+static FxSurveyFace survey_face;
+static void *survey_context;
+
+void fx_face_survey(FxSurveyPoint point, FxSurveyFace face, void *context)
+{
+    survey_sink = point;
+    survey_face = face;
+    survey_context = context;
+}
+
 void fx_face_point(uint16_t record, uint16_t x, uint16_t y, uint16_t z)
 {
     unsigned i = (uint16_t)(record - TABLE) / 6u;
+
+    if (survey_sink)
+        survey_sink((int16_t)x, (int16_t)y, (int16_t)z, survey_context);
 
     if (i >= POINTS)
         return;
@@ -224,10 +239,22 @@ typedef struct {
     double x, y, z, u, v;
 } Corner3;
 
+/* The colour FxModelMaterial chose last (fx_face_material), taken by the
+   face queued next. */
+typedef struct {
+    int8_t kind;
+    uint8_t tier;
+    uint16_t index;
+    float light;
+} Tint;
+
+static Tint chosen = { -1, 0, 0, 0 };
+
 static struct {
     int open, textured, whole, n;
     uint16_t entry;
     View view;
+    Tint tint;
     Corner3 c[MOST];
 } face;
 
@@ -278,12 +305,36 @@ static void settle_face(void)
         commit(end);
 }
 
+/* The model's distance tier is the place of its colour table ($0052) past
+   the tables' base ($004E), $88 bytes a tier (FxModelProject), or of its
+   light table among the four of its set ($2C bytes each: $A1C5 near, $A275
+   far). A lit face's row is kept as the nearest tier's, the haze added
+   apart. */
+void fx_face_material(int kind, uint16_t index, uint16_t table, uint16_t light)
+{
+    unsigned tier = (uint16_t)(word(0x0052) - word(0x004E)) / 0x88u;
+
+    chosen.kind = (int8_t)kind;
+    chosen.index = index;
+    chosen.light = 0;
+    if (kind == 1) {
+        uint16_t set = table >= 0xA275 ? 0xA275 : 0xA1C5, at = (uint16_t)(set + 2 * index);
+
+        tier = (uint16_t)(table - set) / 0x2Cu;
+        chosen.index = (uint16_t)(fx_rom_read(3, at) | fx_rom_read(3, (uint16_t)(at + 1)) << 8);
+        chosen.light = (float)((int16_t)light / 1024.0);
+    }
+    chosen.tier = (uint8_t)(tier > 3 ? 3 : tier);
+}
+
 void fx_face_begin(uint16_t entry, int textured)
 {
     settle_face();
     face.open = 1;
     face.entry = entry;
     face.textured = textured != 0;
+    face.tint = chosen;
+    chosen.kind = -1;
     face.whole = 1;
     face.n = 0;
     face.view = view_now();
@@ -448,6 +499,19 @@ static int fan(const Corner3 *in, int n, const View *v)
    bounds n. */
 uint32_t fx_face_triangles(const float (*p)[3], int n, FxCorner *out, uint32_t room)
 {
+    double q[MOST][3];
+    int i, j;
+
+    if (n < 3 || n > MOST)
+        return 0;
+    for (i = 0; i < n; i++)
+        for (j = 0; j < 3; j++)
+            q[i][j] = p[i][j];
+    return fx_face_triangles_d((const double (*)[3])q, n, out, room);
+}
+
+uint32_t fx_face_triangles_d(const double (*p)[3], int n, FxCorner *out, uint32_t room)
+{
     Corner3 a[WORK], b[WORK];
     Corner2 c[WORK], d[WORK];
     View v = view_now();
@@ -546,22 +610,278 @@ static int line(const Corner3 *in, const View *v)
     return 1;
 }
 
+/* ---- the water's cut (fx_ground.c: Aqua Tunnel) ----
+
+   While a picture's water cuts the picture (fx_face_cut), each face is cut
+   by its plane n . v = d in view space: the part on the far side of it from
+   the eye is kept apart (FxShape under_*) and drawn before the water, the
+   rest after it. Where a model crosses the plane (a track piece going below
+   the water), the region its faces' crossings enclose on the plane is a hole
+   in the water: what lies past the water is drawn again inside the hole,
+   after the water (fx_draw.c). */
+
+static struct {
+    int on;
+    double n[3], d;
+} cut;
+
+enum { HOLES = 64, HOLE_POINTS = 256, HOLE_MOST = 32 };
+
+static FxHole holes[HOLES];
+static int nholes;
+static double hole_point[HOLE_POINTS][3];
+static int nhole_points;
+static uint32_t hole_model;             /* the projection the points are of */
+
+void fx_face_cut(int on, const double n[3], double d)
+{
+    cut.on = on;
+    if (on) {
+        memcpy(cut.n, n, sizeof cut.n);
+        cut.d = d;
+    }
+    nholes = 0;
+    nhole_points = 0;
+    hole_model = 0;
+}
+
+int fx_face_cutting(void) { return cut.on; }
+
+/* a view-space point's side of the water: 1 past it from the eye */
+int fx_face_past_water(double x, double y, double z)
+{
+    double s;
+
+    if (!cut.on)
+        return 0;
+    s = cut.n[0] * x + cut.n[1] * y + cut.n[2] * z - cut.d;
+    return cut.d > 0 ? s > 0 : s < 0;
+}
+
+static double side_of(const Corner3 *c)
+{
+    double s = cut.n[0] * c->x + cut.n[1] * c->y + cut.n[2] * c->z - cut.d;
+
+    return cut.d > 0 ? s : -s;          /* > 0: past the water */
+}
+
+/* the part of a polygon on one side of the water: past it (past) or not */
+static int clip_water(const Corner3 *in, int n, Corner3 *out, int past)
+{
+    int i, m = 0;
+
+    for (i = 0; i < n; i++) {
+        const Corner3 *a = &in[i], *b = &in[(i + 1) % n];
+        double sa = side_of(a), sb = side_of(b);
+        int ain = past ? sa >= 0 : sa <= 0, bin = past ? sb >= 0 : sb <= 0;
+
+        if (ain)
+            out[m++] = *a;
+        if (ain != bin) {
+            double t = sa / (sa - sb);
+
+            out[m].x = a->x + (b->x - a->x) * t;
+            out[m].y = a->y + (b->y - a->y) * t;
+            out[m].z = a->z + (b->z - a->z) * t;
+            out[m].u = a->u + (b->u - a->u) * t;
+            out[m].v = a->v + (b->v - a->v) * t;
+            m++;
+        }
+    }
+    return m;
+}
+
+/* The points where a face's edges cross the water, kept for its model's
+   hole. */
+static void hole_points_of(const Corner3 *in, int n)
+{
+    int i;
+
+    for (i = 0; i < n && nhole_points < HOLE_POINTS; i++) {
+        const Corner3 *a = &in[i], *b = &in[(i + 1) % n];
+        double sa = side_of(a), sb = side_of(b), t;
+
+        if ((sa > 0) == (sb > 0) || sa == sb)
+            continue;
+        t = sa / (sa - sb);
+        hole_point[nhole_points][0] = a->x + (b->x - a->x) * t;
+        hole_point[nhole_points][1] = a->y + (b->y - a->y) * t;
+        hole_point[nhole_points][2] = a->z + (b->z - a->z) * t;
+        nhole_points++;
+    }
+}
+
+static int hull_turn(const double *o, const double *a, const double *b)
+{
+    double c = (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+
+    return c > 0;
+}
+
+static int by_x(const void *pa, const void *pb)
+{
+    const double *a = pa, *b = pb;
+
+    return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] < b[1] ? -1 : a[1] > b[1];
+}
+
+/* The model's crossings made into a hole: their convex hull on the plane
+   (in two directions across it), kept when it encloses more than a sliver
+   (a road crossing the water makes a line, not a hole), clipped against the
+   near plane and projected. */
+static void hole_finish(void)
+{
+    double e1[3], e2[3], q[HOLE_POINTS][5], hull[2 * HOLE_POINTS][5], area = 0;
+    Corner3 h3[HOLE_MOST + 8], c3[HOLE_MOST + 8];
+    View v = view_now();
+    int n = nhole_points, i, k = 0, t, m;
+    FxHole *hole;
+
+    nhole_points = 0;
+    if (n < 3 || nholes == HOLES)
+        return;
+    /* two directions across the plane: n x (an axis not along n) */
+    {
+        double a[3] = { fabs(cut.n[0]) < 0.9 ? 1 : 0, fabs(cut.n[0]) < 0.9 ? 0 : 1, 0 }, l;
+
+        e1[0] = cut.n[1] * a[2] - cut.n[2] * a[1];
+        e1[1] = cut.n[2] * a[0] - cut.n[0] * a[2];
+        e1[2] = cut.n[0] * a[1] - cut.n[1] * a[0];
+        l = sqrt(e1[0] * e1[0] + e1[1] * e1[1] + e1[2] * e1[2]);
+        for (i = 0; i < 3; i++)
+            e1[i] /= l;
+        e2[0] = cut.n[1] * e1[2] - cut.n[2] * e1[1];
+        e2[1] = cut.n[2] * e1[0] - cut.n[0] * e1[2];
+        e2[2] = cut.n[0] * e1[1] - cut.n[1] * e1[0];
+    }
+    for (i = 0; i < n; i++) {
+        q[i][0] = hole_point[i][0] * e1[0] + hole_point[i][1] * e1[1] + hole_point[i][2] * e1[2];
+        q[i][1] = hole_point[i][0] * e2[0] + hole_point[i][1] * e2[1] + hole_point[i][2] * e2[2];
+        q[i][2] = hole_point[i][0];
+        q[i][3] = hole_point[i][1];
+        q[i][4] = hole_point[i][2];
+    }
+    qsort(q, (size_t)n, sizeof q[0], by_x);
+    for (i = 0; i < n; i++) {           /* the lower hull, then the upper */
+        while (k >= 2 && !hull_turn(hull[k - 2], hull[k - 1], q[i]))
+            k--;
+        memcpy(hull[k++], q[i], sizeof q[0]);
+    }
+    for (i = n - 2, t = k + 1; i >= 0; i--) {
+        while (k >= t && !hull_turn(hull[k - 2], hull[k - 1], q[i]))
+            k--;
+        memcpy(hull[k++], q[i], sizeof q[0]);
+    }
+    k--;
+    if (k < 3 || k > HOLE_MOST)
+        return;
+    for (i = 0; i < k; i++)
+        area += hull[i][0] * hull[(i + 1) % k][1] - hull[(i + 1) % k][0] * hull[i][1];
+    if (fabs(area) / 2 < HOLE_LEAST)
+        return;
+    for (i = 0; i < k; i++) {
+        h3[i].x = hull[i][2];
+        h3[i].y = hull[i][3];
+        h3[i].z = hull[i][4];
+        h3[i].u = h3[i].v = 0;
+    }
+    m = clip_depth(h3, k, c3, NEAR_Z, 1);
+    if (m < 3)
+        return;
+    hole = &holes[nholes++];
+    hole->n = m;
+    for (i = 0; i < m; i++) {
+        double x, y;
+
+        place(&v, c3[i].x, c3[i].y, c3[i].z, &x, &y);
+        hole->x[i] = (float)x;
+        hole->y[i] = (float)y;
+    }
+}
+
+const FxHole *fx_face_holes(int *n)
+{
+    if (cut.on && nhole_points)
+        hole_finish();
+    *n = cut.on ? nholes : 0;
+    return holes;
+}
+
+/* A polygon in view space made into the shape's corners (near-clipped, cut
+   by depth when textured, fanned). Returns 0 when the corners are full. */
+static int polygon_corners(const Corner3 *in, int n0, int textured)
+{
+    Corner3 a[WORK];
+    int n, ok = 1;
+
+    n = clip_depth(in, n0, a, NEAR_Z, 1);
+    if (n >= 3 && textured) {
+        double zmin = a[0].z, zmax = a[0].z, r;
+        int i, m = 1;
+
+        for (i = 1; i < n; i++) {
+            if (a[i].z < zmin)
+                zmin = a[i].z;
+            if (a[i].z > zmax)
+                zmax = a[i].z;
+        }
+        if (zmax > zmin * CUT) {
+            m = (int)ceil(log(zmax / zmin) / log(CUT));
+            if (m > 16)
+                m = 16;
+        }
+        r = pow(zmax / zmin, 1.0 / m);
+        for (i = 0; i < m && ok; i++) {
+            Corner3 b[WORK], c[WORK];
+            int k = n;
+
+            memcpy(b, a, sizeof(Corner3) * (size_t)n);
+            if (i > 0)
+                k = clip_depth(a, k, b, zmin * pow(r, i), 1);
+            if (i < m - 1) {
+                k = clip_depth(b, k, c, zmin * pow(r, i + 1), 0);
+                memcpy(b, c, sizeof(Corner3) * (size_t)k);
+            }
+            if (k >= 3)
+                ok = fan(b, k, &face.view);
+        }
+    } else if (n >= 3) {
+        ok = fan(a, n, &face.view);
+    }
+    return ok;
+}
+
 /* The face noted, queued from its entry up to `end`, made into a shape. A
    face not wholly known (a point not projected with this model's table)
    makes none, and the chip's entries are drawn as they stand. */
 static void commit(uint16_t end)
 {
-    Corner3 a[WORK];
     FxShape *s;
     uint32_t first = ncorners;
-    int n, ok = 1;
+    int ok = 1;
 
     if (!face.whole || face.n < 2 || nshapes == SHAPES)
         return;
+    if (survey_face && face.n >= 3) {
+        double c[MOST][3];
+        int i;
+
+        for (i = 0; i < face.n; i++) {
+            c[i][0] = face.c[i].x;
+            c[i][1] = face.c[i].y;
+            c[i][2] = face.c[i].z;
+        }
+        survey_face((const double (*)[3])c, face.n, fx_ram[(uint16_t)(face.entry + 1)], face.textured, survey_context);
+    }
     s = &shapes[nshapes];
     s->entry = face.entry;
     s->end = end;
     s->line = face.n == 2;
+    s->tint = face.textured ? -1 : face.tint.kind;
+    s->tier = face.tint.tier;
+    s->tint_index = face.tint.index;
+    s->light = face.tint.light;
+    s->under_first = s->under_count = 0;
     s->pattern = 0;
     if (!s->line && face.textured && npatterns < PATTERN_FACES) {
         const FxPattern *pattern = entry_pattern(face.entry);
@@ -576,41 +896,35 @@ static void commit(uint16_t end)
     }
     if (s->line) {
         ok = line(face.c, &face.view);
-    } else {
-        n = clip_depth(face.c, face.n, a, NEAR_Z, 1);
-        if (n >= 3 && face.textured) {
-            double zmin = a[0].z, zmax = a[0].z, r;
-            int i, m = 1;
+    } else if (cut.on) {
+        Corner3 near_part[WORK], past_part[WORK];
+        int nn, np;
 
-            for (i = 1; i < n; i++) {
-                if (a[i].z < zmin)
-                    zmin = a[i].z;
-                if (a[i].z > zmax)
-                    zmax = a[i].z;
-            }
-            if (zmax > zmin * CUT) {
-                m = (int)ceil(log(zmax / zmin) / log(CUT));
-                if (m > 16)
-                    m = 16;
-            }
-            r = pow(zmax / zmin, 1.0 / m);
-            for (i = 0; i < m && ok; i++) {
-                Corner3 b[WORK], c[WORK];
-                int k = n;
-
-                memcpy(b, a, sizeof(Corner3) * (size_t)n);
-                if (i > 0)
-                    k = clip_depth(a, k, b, zmin * pow(r, i), 1);
-                if (i < m - 1) {
-                    k = clip_depth(b, k, c, zmin * pow(r, i + 1), 0);
-                    memcpy(b, c, sizeof(Corner3) * (size_t)k);
-                }
-                if (k >= 3)
-                    ok = fan(b, k, &face.view);
-            }
-        } else if (n >= 3) {
-            ok = fan(a, n, &face.view);
+        if (hole_model != projection) {
+            if (nhole_points)
+                hole_finish();
+            hole_model = projection;
         }
+        hole_points_of(face.c, face.n);
+        nn = clip_water(face.c, face.n, near_part, 0);
+        np = clip_water(face.c, face.n, past_part, 1);
+        if (nn >= 3)
+            ok = polygon_corners(near_part, nn, face.textured);
+        s->first = first;
+        s->count = ncorners - first;
+        if (ok && np >= 3) {
+            s->under_first = ncorners;
+            ok = polygon_corners(past_part, np, face.textured);
+            s->under_count = ncorners - s->under_first;
+        }
+        if (!ok) {
+            ncorners = first;
+            return;
+        }
+        nshapes++;
+        return;
+    } else {
+        ok = polygon_corners(face.c, face.n, face.textured);
     }
     if (!ok) {
         ncorners = first;
@@ -626,39 +940,31 @@ static void commit(uint16_t end)
 typedef struct {
     const View *view;
     FxCorner *out;
-    uint8_t *values;
+    uint8_t *values, *past;
     uint32_t room, made;
     int full;
-} Cut;
+} PatternCut;
 
-/* A flat piece: near clip, projection, the view's rectangle, fanned. */
-static void cut_piece(void *context, const double (*p)[3], int n, uint8_t value)
+/* A flat piece's part on one side of the water (past: 1 past it from the
+   eye): near clip, projection, the view's rectangle, fanned. */
+static void piece_part(PatternCut *pc, const Corner3 *a, int n, uint8_t value, uint8_t past)
 {
-    Cut *cut = (Cut *)context;
-    Corner3 a[WORK], b[WORK];
+    Corner3 b[WORK];
     Corner2 c[WORK], d[WORK];
     int i, m;
 
-    if (n > MOST || cut->full)
-        return;
-    for (i = 0; i < n; i++) {
-        a[i].x = p[i][0];
-        a[i].y = p[i][1];
-        a[i].z = p[i][2];
-        a[i].u = a[i].v = 0;
-    }
     m = clip_depth(a, n, b, NEAR_Z, 1);
     if (m < 3)
         return;
-    project(b, m, c, cut->view);
-    m = clip_side(c, m, d, 0, cut->view->left, 1);
-    m = clip_side(d, m, c, 0, cut->view->right, 0);
-    m = clip_side(c, m, d, 1, cut->view->top, 1);
-    m = clip_side(d, m, c, 1, cut->view->bottom, 0);
+    project(b, m, c, pc->view);
+    m = clip_side(c, m, d, 0, pc->view->left, 1);
+    m = clip_side(d, m, c, 0, pc->view->right, 0);
+    m = clip_side(c, m, d, 1, pc->view->top, 1);
+    m = clip_side(d, m, c, 1, pc->view->bottom, 0);
     if (m < 3)
         return;
-    if (cut->made + (uint32_t)(m - 2) * 3 > cut->room) {
-        cut->full = 1;
+    if (pc->made + (uint32_t)(m - 2) * 3 > pc->room) {
+        pc->full = 1;
         return;
     }
     for (i = 1; i + 1 < m; i++) {
@@ -666,20 +972,47 @@ static void cut_piece(void *context, const double (*p)[3], int n, uint8_t value)
         int j;
 
         for (j = 0; j < 3; j++) {
-            FxCorner *o = &cut->out[cut->made];
+            FxCorner *o = &pc->out[pc->made];
 
             o->x = (float)t[j]->x;
             o->y = (float)t[j]->y;
             o->u = o->v = 0;
-            cut->values[cut->made++] = value;
+            pc->past[pc->made] = past;
+            pc->values[pc->made++] = value;
         }
     }
 }
 
-uint32_t fx_face_pattern(const FxShape *sh, double u_off, double v_off, FxCorner *out, uint8_t *values, uint32_t room)
+/* A flat piece; while the water cuts the picture, cut by it as a face is,
+   each part to its side. */
+static void cut_piece(void *context, const double (*p)[3], int n, uint8_t value)
+{
+    PatternCut *pc = (PatternCut *)context;
+    Corner3 a[WORK], w[WORK];
+    int i, m;
+
+    if (n > MOST || pc->full)
+        return;
+    for (i = 0; i < n; i++) {
+        a[i].x = p[i][0];
+        a[i].y = p[i][1];
+        a[i].z = p[i][2];
+        a[i].u = a[i].v = 0;
+    }
+    if (!cut.on) {
+        piece_part(pc, a, n, value, 0);
+        return;
+    }
+    if ((m = clip_water(a, n, w, 0)) >= 3)
+        piece_part(pc, w, m, value, 0);
+    if ((m = clip_water(a, n, w, 1)) >= 3)
+        piece_part(pc, w, m, value, 1);
+}
+
+uint32_t fx_face_pattern(const FxShape *sh, double u_off, double v_off, FxCorner *out, uint8_t *values, uint8_t *past, uint32_t room)
 {
     double xyz[MOST][3], uv[MOST][2];
-    Cut cut;
+    PatternCut pc;
     int i, k;
 
     if (!sh->pattern || sh->pattern > npatterns)
@@ -692,21 +1025,22 @@ uint32_t fx_face_pattern(const FxShape *sh, double u_off, double v_off, FxCorner
         uv[i][0] = pattern_faces[k].c[i].u + u_off;
         uv[i][1] = pattern_faces[k].c[i].v + v_off;
     }
-    cut.view = &pattern_faces[k].view;
-    cut.out = out;
-    cut.values = values;
-    cut.room = room;
-    cut.made = 0;
-    cut.full = 0;
-    if (!fx_pattern_cut(pattern_faces[k].pattern, (const double (*)[3])xyz, (const double (*)[2])uv, pattern_faces[k].n, cut_piece, &cut) || cut.full)
+    pc.view = &pattern_faces[k].view;
+    pc.out = out;
+    pc.values = values;
+    pc.past = past;
+    pc.room = room;
+    pc.made = 0;
+    pc.full = 0;
+    if (!fx_pattern_cut(pattern_faces[k].pattern, (const double (*)[3])xyz, (const double (*)[2])uv, pattern_faces[k].n, cut_piece, &pc) || pc.full)
         return 0;
-    return cut.made;
+    return pc.made;
 }
 
 /* ---- scaled sprites ---- */
 
 static struct {
-    int set;
+    int set, past;
     uint16_t left, top, bx, by;
     double cx, cy, k;
 } sprite;
@@ -720,6 +1054,7 @@ void fx_sprite_place(uint16_t x, uint16_t y, uint16_t depth, uint16_t size, uint
     double d = depth ? depth : 1, half = (screen_size >> 1) + (screen_size & 1);
 
     sprite.set = screen_size != 0;
+    sprite.past = fx_face_past_water((int16_t)x, (int16_t)y, d);
     sprite.cx = v.cx + FOCAL * (int16_t)x / d;
     sprite.cy = v.cy + FOCAL * (int16_t)y / d;
     sprite.k = size ? (FOCAL * size / d) / screen_size : 1.0;
@@ -728,6 +1063,8 @@ void fx_sprite_place(uint16_t x, uint16_t y, uint16_t depth, uint16_t size, uint
     sprite.left = (uint16_t)(centre_x - half);
     sprite.top = (uint16_t)(centre_y - half);
 }
+
+int fx_sprite_past_water(void) { return sprite.set && sprite.past; }
 
 int fx_sprite_map(uint16_t left, uint16_t top, float *cx, float *cy, float *bx, float *by, float *k)
 {

@@ -123,6 +123,12 @@ void fx_face_begin(uint16_t entry, int textured);
    faces); the chip's byte as it is when a point is not known. */
 uint8_t fx_face_facing(uint16_t a, uint16_t b, uint16_t c, uint8_t chip);
 void fx_face_vertex(uint8_t point, uint8_t u, uint8_t v);
+/* How FxModelMaterial chose the colour of the face it is about to queue,
+   for the Enhanced two players' colours: 0 its own index, 1 lit (`index`
+   the shade row's place in the light table `table`; `light` the light's
+   sum before the chip's shifts, its level 1024ths), 2 from the distance
+   table (`index` the place in it). */
+void fx_face_material(int kind, uint16_t index, uint16_t table, uint16_t light);
 void fx_sprite_place(uint16_t x, uint16_t y, uint16_t depth, uint16_t size, uint16_t centre_x, uint16_t centre_y, uint16_t screen_size);
 /* The frame program's drawing is the picture's 3D (0); what is drawn after
    it, the HUD's (1). */

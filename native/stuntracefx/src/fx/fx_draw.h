@@ -79,7 +79,31 @@ void fx_tween_draw(float between);
    whether a solid is drawn in the place of the sprite being drawn. */
 #include "fx/fx_face.h"
 void fx_draw_flat(const FxCorner *c, uint32_t n, uint8_t colour);
+void fx_draw_flat_entry(const FxCorner *c, uint32_t n, uint8_t entry);
 int fx_draw_full_colour(void);
+/* Whether the picture is two players' Enhanced one: 4 bits a pixel, each
+   player's 3D filling its part of the window, its faces' colours computed
+   (fx_draw.c, "two players' colours"). */
+int fx_draw_two_players(void);
+/* The ground's surface (fx/fx_ground.c): triangles over `image` drawn by
+   `shader` with its eight inputs, each vertex's u, v its screen place less
+   (ox, oy); and the picture being drawn (0, or 1 for two players' second). */
+void fx_draw_surface(const FxCorner *c, uint32_t n, nshvc_image image, nshvc_shader shader, const float in[8], float ox, float oy);
+int fx_draw_picture_now(void);
+int fx_draw_tweening(void);
+/* The palette entry a face's colour byte is shown in at the screen's depth
+   (its kept bits and palette row; 0: not plotted), and where the picture
+   being drawn sits on the screen: its view's pixel (0, 0) at screen pixel
+   (x, y). */
+uint8_t fx_draw_ink(uint8_t c);
+void fx_draw_offset(int *x, int *y);
+/* What is drawn from now on lies past the water from the eye (1) or not
+   (0), while the water cuts the picture (fx_face_cut): fx_solid.c's solids
+   say so by their places. */
+void fx_draw_side(int past);
+/* While on, nothing the frame program does is drawn (the ground's survey of
+   the course's shapes). */
+void fx_draw_hold(int on);
 int fx_solid_hiding(void);
 /* The list drawn into, by size in pixels (the checks). */
 void fx_draw_set_target(nshvc_draw_list list, uint32_t width, uint32_t height);

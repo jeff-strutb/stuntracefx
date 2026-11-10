@@ -9,6 +9,8 @@
 
 #include "fx/fx.h"
 #include "fx/fx_far.h"
+#include "fx/fx_ground.h"
+#include "video/video.h"
 
 /*
  * @routine 01:AB13 FxFrameProgram
@@ -60,6 +62,8 @@ static FxFrameProgramResult frame_program(uint16_t draw_list_end)
     }
     *stack = 0x0240;
     fx_stw(FX_MODEL_1B4, 0);
+    if (race_full_window() || race_two_full_window())
+        fx_ground_draw();               /* the course's ground or water under everything (fx_ground.c) */
     fx_far_pass(stack);                 /* the objects past the near list's block, first (fx_far.c) */
     *stack = 0x0240;
     { FxObjectsDrawResult r_ = FxObjectsDraw(draw_list_end, stack); up_ = r_.up; };

@@ -29,6 +29,8 @@ typedef struct {
     uint32_t first, count;
     uint32_t image;             /* 0: the vertices' colours */
     uint8_t lines;
+    uint32_t shader;            /* 0: none; else the shader and its inputs (the ground's) */
+    float in[8];
 } Shape;
 
 typedef struct {
@@ -42,6 +44,13 @@ typedef struct {
        horizon_row), rising horizon_slope rows a column; known or not */
     float horizon_x, horizon_row, horizon_slope;
     int horizon_known;
+    /* while the water cuts the picture (fx_face_cut): the parts past the
+       water from the eye, kept apart until the 3D is done, and where the
+       water's own shapes are */
+    nshvc_vertex *uv;
+    Shape *us;
+    uint32_t nuv, nus, cap_uv, cap_us;
+    int32_t water_from, water_to;
 } Recording;
 
 static nshvc_draw_list target;  /* a list drawn into directly (the checks) */
@@ -65,6 +74,8 @@ static struct {
 static int offset_x, offset_y;
 static int drawing_3d;          /* the recording's 3D is being drawn: from its frame program's start to the HUD's */
 static int origin_x, origin_y;  /* where a screen other than the race's puts the picture; 0, 0: none */
+static int side_under;          /* what is drawn now lies past the water from the eye */
+static void under_splice(Recording *r);
 static int palette_row;         /* the 16 colours a 4-bit picture's tiles show it in */
 /* The list's pixels per screen pixel (target: the checks' list; screen: the
    layer's, which the frame art drawn into it scales by too). */
@@ -100,6 +111,11 @@ static uint8_t ink(uint8_t c)
         return 0;
     return mask == 0xFF ? c : (uint8_t)(palette_row * 16 + (c & mask));
 }
+
+uint8_t fx_draw_ink(uint8_t c)
+{
+    return ink(c);
+}
 static uint64_t composed_key[2];
 static nshvc_draw_list screen_list;
 static int composed_picture = -1, composed_split = -1;
@@ -123,9 +139,21 @@ void fx_draw_init(void)
 }
 
 /* Where each picture's pixel (x, y) goes on the screen. */
+static int picture_now;
+
+int fx_draw_picture_now(void) { return picture_now; }
+
+void fx_draw_offset(int *x, int *y)
+{
+    *x = recording ? recording->ox : offset_x;
+    *y = recording ? recording->oy : offset_y;
+}
+int fx_draw_tweening(void) { return tweening != 0; }
+
 void fx_draw_begin(int picture)
 {
     picture &= 1;
+    picture_now = picture;
     drawing_3d = 0;                     /* its view is known at its frame program's start */
     target.id = 0;
     recording = tweening ? &between[picture] : &recordings[picture];
@@ -163,6 +191,10 @@ void fx_draw_begin(int picture)
     }
     recording->ox = offset_x;
     recording->oy = offset_y;
+    recording->nuv = recording->nus = 0;
+    recording->water_from = recording->water_to = -1;
+    side_under = 0;
+    fx_face_cut(0, NULL, 0);
     recording->gen++;
 }
 
@@ -293,8 +325,19 @@ void fx_draw_part(int hud)
     drawing_3d = recording && !hud;
     if (recording && !hud)
         horizon_of_view(recording);
-    if (recording && hud)
+    if (recording && hud) {
+        under_splice(recording);
         recording->hud_from = recording->ns;
+    }
+    if (hud) {                          /* the HUD's drawing is not cut by the water */
+        side_under = 0;
+        fx_face_cut(0, NULL, 0);
+    }
+}
+
+void fx_draw_side(int past)
+{
+    side_under = past != 0;
 }
 
 void fx_draw_set_origin(int x, int y)
@@ -309,11 +352,18 @@ void fx_draw_set_origin(int x, int y)
     }
 }
 
-static void emit(const nshvc_vertex *v, uint32_t count, uint32_t image, int lines)
+static int held;                /* nothing is drawn (the ground's survey) */
+
+void fx_draw_hold(int on) { held = on; }
+
+static void emit_with(const nshvc_vertex *v, uint32_t count, uint32_t image, int lines, uint32_t shader, const float *in)
 {
     Recording *r = recording;
     nshvc_material m;
     uint32_t i;
+
+    if (held)
+        return;
 
     if (!r) {
         nshvc_vertex scaled[48];
@@ -323,6 +373,9 @@ static void emit(const nshvc_vertex *v, uint32_t count, uint32_t image, int line
             return;
         memset(&m, 0, sizeof m);
         m.image.id = image;
+        m.shader.id = shader;
+        if (shader)
+            memcpy(m.inputs, in, sizeof m.inputs);
         while (done < count) {
             uint32_t n = count - done > 48 ? 48 : count - done;
 
@@ -337,6 +390,33 @@ static void emit(const nshvc_vertex *v, uint32_t count, uint32_t image, int line
                 nshvc_draw_tris(target, scaled, n, image ? &m : NULL);
             done += n;
         }
+        return;
+    }
+    if (side_under && fx_face_cutting()) {
+        if (r->nuv + count > r->cap_uv) {
+            r->cap_uv = r->cap_uv ? r->cap_uv * 2 : 4096;
+            while (r->nuv + count > r->cap_uv)
+                r->cap_uv *= 2;
+            r->uv = realloc(r->uv, r->cap_uv * sizeof *r->uv);
+        }
+        if (r->nus == r->cap_us) {
+            r->cap_us = r->cap_us ? r->cap_us * 2 : 1024;
+            r->us = realloc(r->us, r->cap_us * sizeof *r->us);
+        }
+        if (!r->uv || !r->us)
+            abort();
+        memset(&r->us[r->nus], 0, sizeof r->us[r->nus]);
+        r->us[r->nus].first = r->nuv;
+        r->us[r->nus].count = count;
+        r->us[r->nus].image = image;
+        r->us[r->nus].lines = (uint8_t)lines;
+        r->nus++;
+        for (i = 0; i < count; i++) {
+            r->uv[r->nuv + i] = v[i];
+            r->uv[r->nuv + i].x += (float)offset_x;
+            r->uv[r->nuv + i].y += (float)offset_y;
+        }
+        r->nuv += count;
         return;
     }
     if (r->nv + count > r->cap_v) {
@@ -355,6 +435,9 @@ static void emit(const nshvc_vertex *v, uint32_t count, uint32_t image, int line
     r->s[r->ns].count = count;
     r->s[r->ns].image = image;
     r->s[r->ns].lines = (uint8_t)lines;
+    r->s[r->ns].shader = shader;
+    if (shader)
+        memcpy(r->s[r->ns].in, in, sizeof r->s[r->ns].in);
     r->ns++;
     for (i = 0; i < count; i++) {
         r->v[r->nv + i] = v[i];
@@ -363,6 +446,11 @@ static void emit(const nshvc_vertex *v, uint32_t count, uint32_t image, int line
     }
     r->nv += count;
     r->gen++;
+}
+
+static void emit(const nshvc_vertex *v, uint32_t count, uint32_t image, int lines)
+{
+    emit_with(v, count, image, lines, 0, NULL);
 }
 
 /* The full window's HUD pieces: the shapes drawn after the frame program
@@ -503,6 +591,9 @@ static void compose_recording(const Recording *r, uint32_t from, uint32_t to, in
         const Shape *sh = &r->s[i];
 
         m.image.id = sh->image;
+        m.shader.id = sh->shader;
+        if (sh->shader)
+            memcpy(m.inputs, sh->in, sizeof m.inputs);
         if (sh->lines)
             nshvc_draw_lines(screen_list, scaled + sh->first, sh->count, sh->image ? &m : NULL);
         else
@@ -821,12 +912,14 @@ uint16_t fx_sprite_shrink(uint16_t size, uint16_t c8, uint16_t step, uint16_t le
 
     sprite_map.on = fx_sprite_map(left, top, &sprite_map.cx, &sprite_map.cy, &sprite_map.bx, &sprite_map.by, &sprite_map.k);
     hide_quads = fx_solid_hiding();
+    side_under = fx_sprite_past_water();
     texels.on = 1;
     texels.across = c8;
     texels.down = (mask & 0x8000) ? c8 + 1 : c8;   /* a mirrored sprite's columns read a row on (the chip's) */
     r = sprite_shrink(size, c8, step, left, top, bank, base, mask);
     texels.on = 0;
     hide_quads = 0;
+    side_under = 0;
     sprite_map.on = 0;
     return r;
 }
@@ -837,12 +930,14 @@ uint16_t fx_sprite_magnify(uint16_t c8, uint16_t step, uint16_t left, uint16_t t
 
     sprite_map.on = fx_sprite_map(left, top, &sprite_map.cx, &sprite_map.cy, &sprite_map.bx, &sprite_map.by, &sprite_map.k);
     hide_quads = fx_solid_hiding();
+    side_under = fx_sprite_past_water();
     texels.on = 1;
     texels.across = c8;
     texels.down = (mask & 0x8000) ? c8 + 1 : c8;   /* a mirrored sprite's columns read a row on (the chip's) */
     r = sprite_magnify(c8, step, left, top, bank, base, mask);
     texels.on = 0;
     hide_quads = 0;
+    side_under = 0;
     sprite_map.on = 0;
     return r;
 }
@@ -1146,10 +1241,202 @@ int fx_draw_full_colour(void)
 /* A solid's triangles (fx_solid.c), flat in palette colour c. */
 void fx_draw_flat(const FxCorner *c, uint32_t n, uint8_t colour)
 {
+    fx_draw_flat_entry(c, n, ink(colour));
+}
+
+/* ---- the water's cut: the parts past it spliced in ----
+
+   At the end of a picture's 3D, the parts kept apart (past the water from
+   the eye) go before the water's shapes, and again after them clipped to
+   each hole in the water (fx_face_holes): there what lies past the water
+   shows, as inside a track piece that goes below it. */
+
+static int hole_inside_sign(const FxHole *h)
+{
+    double a = 0;
+    int i;
+
+    for (i = 0; i < h->n; i++)
+        a += (double)h->x[i] * h->y[(i + 1) % h->n] - (double)h->x[(i + 1) % h->n] * h->y[i];
+    return a > 0 ? 1 : -1;
+}
+
+/* a polygon of vertices clipped to a convex hole, offset by (ox, oy) */
+static int clip_to_hole(const nshvc_vertex *in, int n, nshvc_vertex *out, const FxHole *h, float ox, float oy)
+{
+    nshvc_vertex a[64], b[64];
+    int sign = hole_inside_sign(h), e, m = n, i;
+
+    if (n > 64)
+        return 0;
+    memcpy(a, in, sizeof(nshvc_vertex) * (size_t)n);
+    for (e = 0; e < h->n && m >= 3; e++) {
+        float x0 = h->x[e] + ox, y0 = h->y[e] + oy, x1 = h->x[(e + 1) % h->n] + ox, y1 = h->y[(e + 1) % h->n] + oy;
+        int k = 0;
+
+        for (i = 0; i < m && k < 62; i++) {
+            const nshvc_vertex *p = &a[i], *q = &a[(i + 1) % m];
+            double sp = sign * ((x1 - x0) * (p->y - y0) - (y1 - y0) * (p->x - x0));
+            double sq = sign * ((x1 - x0) * (q->y - y0) - (y1 - y0) * (q->x - x0));
+
+            if (sp >= 0)
+                b[k++] = *p;
+            if ((sp >= 0) != (sq >= 0)) {
+                double t = sp / (sp - sq);
+
+                b[k] = *p;
+                b[k].x = (float)(p->x + (q->x - p->x) * t);
+                b[k].y = (float)(p->y + (q->y - p->y) * t);
+                b[k].u = (float)(p->u + (q->u - p->u) * t);
+                b[k].v = (float)(p->v + (q->v - p->v) * t);
+                k++;
+            }
+        }
+        memcpy(a, b, sizeof(nshvc_vertex) * (size_t)k);
+        m = k;
+    }
+    if (m < 3)
+        return 0;
+    memcpy(out, a, sizeof(nshvc_vertex) * (size_t)m);
+    return m;
+}
+
+static void under_splice(Recording *r)
+{
+    const FxHole *holes;
+    Shape *order;
+    nshvc_vertex *cv = NULL;
+    Shape *cs = NULL;
+    uint32_t ncv = 0, ncs = 0, cap_cv = 0, cap_cs = 0, i, k, n = 0, base, cbase, from, to;
+    int nh, h;
+
+    if (!r->nus) {
+        return;
+    }
+    holes = fx_face_holes(&nh);
+    /* the parts past the water clipped to each hole: triangle by triangle */
+    for (i = 0; i < r->nus; i++) {
+        const Shape *sh = &r->us[i];
+
+        if (sh->lines)
+            continue;
+        for (h = 0; h < nh; h++)
+            for (k = 0; k + 2 < sh->count; k += 3) {
+                nshvc_vertex poly[64];
+                int m = clip_to_hole(&r->uv[sh->first + k], 3, poly, &holes[h], (float)r->ox, (float)r->oy), j;
+
+                if (m < 3)
+                    continue;
+                if (ncv + 3 * (uint32_t)(m - 2) > cap_cv) {
+                    cap_cv = cap_cv ? cap_cv * 2 : 1024;
+                    while (ncv + 3 * (uint32_t)(m - 2) > cap_cv)
+                        cap_cv *= 2;
+                    cv = realloc(cv, cap_cv * sizeof *cv);
+                }
+                if (ncs == cap_cs) {
+                    cap_cs = cap_cs ? cap_cs * 2 : 256;
+                    cs = realloc(cs, cap_cs * sizeof *cs);
+                }
+                if (!cv || !cs)
+                    abort();
+                memset(&cs[ncs], 0, sizeof cs[ncs]);
+                cs[ncs].first = ncv;
+                cs[ncs].image = sh->image;
+                for (j = 1; j + 1 < m; j++) {
+                    cv[ncv++] = poly[0];
+                    cv[ncv++] = poly[j];
+                    cv[ncv++] = poly[j + 1];
+                }
+                cs[ncs].count = ncv - cs[ncs].first;
+                ncs++;
+            }
+    }
+    /* the vertices: the parts past the water and the clipped copies after
+       the recording's own */
+    if (r->nv + r->nuv + ncv > r->cap_v) {
+        r->cap_v = r->cap_v ? r->cap_v : 4096;
+        while (r->nv + r->nuv + ncv > r->cap_v)
+            r->cap_v *= 2;
+        r->v = realloc(r->v, r->cap_v * sizeof *r->v);
+    }
+    order = malloc((r->ns + r->nus + ncs + 1) * sizeof *order);
+    if (!r->v || !order)
+        abort();
+    base = r->nv;
+    memcpy(r->v + base, r->uv, r->nuv * sizeof *r->v);
+    cbase = base + r->nuv;
+    if (ncv)
+        memcpy(r->v + cbase, cv, ncv * sizeof *r->v);
+    r->nv = cbase + ncv;
+    from = r->water_from >= 0 ? (uint32_t)r->water_from : 0;
+    to = r->water_to >= 0 ? (uint32_t)r->water_to : from;
+    for (i = 0; i < from; i++)
+        order[n++] = r->s[i];
+    for (i = 0; i < r->nus; i++) {
+        order[n] = r->us[i];
+        order[n++].first += base;
+    }
+    for (i = from; i < to; i++)
+        order[n++] = r->s[i];
+    for (i = 0; i < ncs; i++) {
+        order[n] = cs[i];
+        order[n++].first += cbase;
+    }
+    for (i = to; i < r->ns; i++)
+        order[n++] = r->s[i];
+    if (n > r->cap_s) {
+        r->cap_s = n;
+        r->s = realloc(r->s, r->cap_s * sizeof *r->s);
+        if (!r->s)
+            abort();
+    }
+    memcpy(r->s, order, n * sizeof *order);
+    r->ns = n;
+    r->nus = r->nuv = 0;
+    r->water_from = r->water_to = -1;
+    r->gen++;
+    free(order);
+    free(cv);
+    free(cs);
+}
+
+/* The ground's surface (fx_ground.c): triangles drawn by `shader` over
+   `image` with its inputs, each vertex's u, v its place on the screen less
+   (ox, oy). */
+void fx_draw_surface(const FxCorner *c, uint32_t n, nshvc_image image, nshvc_shader shader, const float in[8], float ox, float oy)
+{
     nshvc_vertex v[48];
     uint32_t done = 0, i;
 
-    colour = ink(colour);
+    if ((!target.id && !recording) || !shader.id)
+        return;
+    blocks_flush();
+    memset(v, 0, sizeof v);
+    while (done < n) {
+        uint32_t k = n - done > 48 ? 48 : n - done;
+
+        for (i = 0; i < k; i++) {
+            v[i].x = c[done + i].x;
+            v[i].y = c[done + i].y;
+            v[i].u = c[done + i].x - ox;
+            v[i].v = c[done + i].y - oy;
+            v[i].colour = 0xFF000000u;
+        }
+        if (recording && recording->water_from < 0)
+            recording->water_from = (int32_t)recording->ns;
+        emit_with(v, k, image.id, 0, shader.id, in);
+        if (recording)
+            recording->water_to = (int32_t)recording->ns;
+        done += k;
+    }
+}
+
+/* The same in the palette's entry e as it is, of the whole palette. */
+void fx_draw_flat_entry(const FxCorner *c, uint32_t n, uint8_t colour)
+{
+    nshvc_vertex v[48];
+    uint32_t done = 0, i;
+
     if ((!target.id && !recording) || !colour)
         return;
     blocks_flush();
@@ -1305,34 +1592,213 @@ static int pattern_draw(const FxShape *sh, uint8_t colour, uint8_t options, doub
 {
     enum { ROOM = 16383 };
     static FxCorner c[ROOM];
-    static uint8_t value[ROOM];
+    static uint8_t value[ROOM], past[ROOM];
     nshvc_vertex v[48];
-    uint32_t n = fx_face_pattern(sh, u_off, v_off, c, value, ROOM), i, k = 0;
+    uint32_t n = fx_face_pattern(sh, u_off, v_off, c, value, past, ROOM), i, k = 0;
+    int side;
 
     if (!n)
         return 0;
     memset(v, 0, sizeof v);
-    for (i = 0; i + 2 < n; i += 3) {
-        uint8_t ink_c = pattern_colour(value[i], colour, options);
-        int j;
+    for (side = 0; side < 2; side++) {  /* the pieces on the eye's side of the water, then those past it (kept apart) */
+        side_under = side;
+        for (i = 0; i + 2 < n; i += 3) {
+            uint8_t ink_c = pattern_colour(value[i], colour, options);
+            int j;
 
-
-        if (!ink_c)
-            continue;
-        for (j = 0; j < 3; j++) {
-            v[k].x = c[i + j].x;
-            v[k].y = c[i + j].y;
-            v[k].colour = ink_c;
-            k++;
+            if (!ink_c || past[i] != side)
+                continue;
+            for (j = 0; j < 3; j++) {
+                v[k].x = c[i + j].x;
+                v[k].y = c[i + j].y;
+                v[k].colour = ink_c;
+                k++;
+            }
+            if (k == 48) {
+                emit(v, k, 0, 0);
+                k = 0;
+            }
         }
-        if (k == 48) {
+        if (k)
             emit(v, k, 0, 0);
-            k = 0;
+        k = 0;
+    }
+    side_under = 0;
+    return 1;
+}
+
+/* ---- two players' colours ----
+
+   The original's two players draw 4 bits a pixel: each face one of the 16
+   colours of a palette row, from a table ($A545) the same at every
+   distance, where one player's ($A325) gives each colour eight shades and
+   fades them toward the haze in four distance tiers. The Enhanced pictures
+   of two players take the 16 colours as they are and give them one
+   player's depth: the shades each colour stands for, rebuilt from one
+   player's steps between them, lit faces blended between their light
+   levels, and one player's haze by the model's tier. The colour is
+   computed and given to the GPU as it is; the palette is not touched. */
+
+#define TABLE_ONE 0xA325        /* one player's distance table, nearest tier */
+#define TABLE_TWO 0xA545        /* two players' */
+#define TABLE_LEN 0x88
+#define STEPS_PALETTE 0x8800    /* bank $1F: one player's palette, where the steps are measured */
+
+/* One player's haze: the colour its far tiers fade toward and how far
+   (tier 1, 2, 3), fitted from its distance tables over its palette. */
+static const float haze_rgb[3] = { 160, 188, 193 };
+static const float haze_part[4] = { 0, 0.447f, 0.687f, 0.687f };
+
+/* a palette colour as the console widens it: 5 bits to 8, the top bits
+   repeated below */
+static void bgr555(uint16_t c, float rgb[3])
+{
+    int i;
+
+    for (i = 0; i < 3; i++) {
+        unsigned x = c >> (5 * i) & 31;
+
+        rgb[i] = (float)(x << 3 | x >> 2);
+    }
+}
+
+static float luma(const float rgb[3]) { return 0.299f * rgb[0] + 0.587f * rgb[1] + 0.114f * rgb[2]; }
+
+/* For each place in the distance table, its shade's brightness over the
+   mean of the shades that take the same colour in two players: the places
+   whose one-player colours are of one palette row and whose two-player
+   colour is the same. Only where those one-player colours are a run of
+   consecutive palette entries, as a colour's shades are laid out; one
+   player's row 1 holds the 16 fixed colours two players have, in no order
+   of brightness (places $70-$7F), and those stay as they are. Measured on
+   one player's palette. */
+static float shade_step[TABLE_LEN];
+static int shade_steps_made;
+
+static void make_shade_steps(void)
+{
+    float lum[256];
+    int m, k;
+
+    for (k = 0; k < 256; k++) {
+        uint16_t at = (uint16_t)(STEPS_PALETTE + 2 * k);
+        float rgb[3];
+
+        bgr555((uint16_t)(fx_rom_read(0x1F, at) | fx_rom_read(0x1F, (uint16_t)(at + 1)) << 8), rgb);
+        lum[k] = luma(rgb);
+    }
+    for (m = 0; m < TABLE_LEN; m++) {
+        uint8_t one = fx_rom_read(3, (uint16_t)(TABLE_ONE + m)), two = fx_rom_read(3, (uint16_t)(TABLE_TWO + m)) & 0x0F;
+        uint8_t seen[256] = { 0 };
+        float sum = 0;
+        int count = 0, low = 255, high = 0;
+
+        for (k = 0; k < TABLE_LEN; k++) {
+            uint8_t o = fx_rom_read(3, (uint16_t)(TABLE_ONE + k));
+
+            if ((fx_rom_read(3, (uint16_t)(TABLE_TWO + k)) & 0x0F) == two && (o >> 4) == (one >> 4) && !seen[o]) {
+                seen[o] = 1;
+                sum += lum[o];
+                count++;
+                if (o < low)
+                    low = o;
+                if (o > high)
+                    high = o;
+            }
+        }
+        shade_step[m] = count > 1 && high - low + 1 == count && sum > 0 ? lum[one] / (sum / count) : 1.0f;
+    }
+    shade_steps_made = 1;
+}
+
+/* A colour made brighter or darker by `step`, its hue kept: past full
+   brightness in a channel it goes toward white instead. */
+static void shade(float rgb[3], float step)
+{
+    float top = rgb[0], want = luma(rgb) * step, l;
+    int i;
+
+    for (i = 1; i < 3; i++)
+        if (rgb[i] > top)
+            top = rgb[i];
+    if (top * step <= 255 || top <= 0) {
+        for (i = 0; i < 3; i++)
+            rgb[i] *= step;
+        return;
+    }
+    for (i = 0; i < 3; i++)
+        rgb[i] *= 255 / top;
+    l = luma(rgb);
+    if (l < 255 && want > l) {
+        float t = (want - l) / (255 - l);
+
+        if (t > 1)
+            t = 1;
+        for (i = 0; i < 3; i++)
+            rgb[i] += (255 - rgb[i]) * t;
+    }
+}
+
+static void row_colour(uint8_t c, float rgb[3])
+{
+    bgr555(pic.palette[(palette_row * 16 + (c & 0x0F)) & 0xFF], rgb);
+}
+
+int fx_draw_two_players(void)
+{
+    return depth_mask() == 0x0F && race_two_full_window();
+}
+
+/* The colour of a flat face of two players' Enhanced pictures, the chip's
+   colour c: 0xFFRRGGBB, or 0 to draw it as the chip has it. */
+static uint32_t two_player_colour(const FxShape *sh, uint8_t c)
+{
+    float rgb[3];
+    int i;
+
+    if (sh->tint < 0 || !(c & 0x0F) || !fx_draw_two_players())
+        return 0;
+    if (sh->tint == 1) {
+        /* the light level unrounded, between the levels' colours: the
+           chip's level is the floor, so each level's colour is at its
+           middle */
+        float x = sh->light - 0.5f, f, b[3];
+        int at;
+
+        if (x < 6)
+            x = 6;
+        if (x > 15)
+            x = 15;
+        at = (int)x;
+        f = x - (float)at;
+        row_colour(fx_rom_read(3, (uint16_t)(sh->tint_index + at - 6)), rgb);
+        if (at < 15 && f > 0) {
+            uint8_t next = fx_rom_read(3, (uint16_t)(sh->tint_index + at - 5));
+
+            if (next & 0x0F) {
+                row_colour(next, b);
+                for (i = 0; i < 3; i++)
+                    rgb[i] += (b[i] - rgb[i]) * f;
+            }
+        }
+    } else {
+        row_colour(c, rgb);
+        if (sh->tint == 2 && sh->tint_index < TABLE_LEN) {
+            if (!shade_steps_made)
+                make_shade_steps();
+            shade(rgb, shade_step[sh->tint_index]);
         }
     }
-    if (k)
-        emit(v, k, 0, 0);
-    return 1;
+    if (sh->tint != 0)
+        for (i = 0; i < 3; i++)
+            rgb[i] += (haze_rgb[i] - rgb[i]) * haze_part[sh->tier & 3];
+    for (i = 0; i < 3; i++) {
+        if (rgb[i] < 0)
+            rgb[i] = 0;
+        if (rgb[i] > 255)
+            rgb[i] = 255;
+    }
+    return 0xFF000000u | (uint32_t)(rgb[0] + 0.5f) << 16 | (uint32_t)(rgb[1] + 0.5f) << 8 | (uint32_t)(rgb[2] + 0.5f);
 }
 
 /* A face's shape in floats (fx_face.c) in place of the chip's entries for
@@ -1341,7 +1807,7 @@ static void shape_draw(const FxShape *sh, uint16_t p, int8_t type)
 {
     const FxCorner *c = fx_face_corners() + sh->first;
     nshvc_vertex v[48];
-    uint32_t image = 0, done = 0, i;
+    uint32_t image = 0, done = 0, i, tinted = 0;
     uint8_t colour;
     double u_off = 0, v_off = 0;
 
@@ -1356,14 +1822,16 @@ static void shape_draw(const FxShape *sh, uint16_t p, int8_t type)
             return;
         u_off = (int16_t)rd(0x00C0) / 256.0;
         v_off = (int16_t)rd(0x00C2) / 256.0;
+        /* a pattern face as its flat pieces (cut by the water as the face is) */
         if (sh->pattern && pattern_draw(sh, colour, fxs.por, u_off, v_off))
-            return;                     /* drawn as the pattern's flat pieces */
+            return;
         image = texture(bank, base, mask, colour, fxs.por).id;
         colour = 1;
     } else {
         colour = fx_ram[p];
         fxs.por = 0;
         fxs.colr = colour;
+        tinted = two_player_colour(sh, colour);
         colour = ink(colour);
         if ((!target.id && !recording) || !colour)
             return;
@@ -1377,10 +1845,28 @@ static void shape_draw(const FxShape *sh, uint16_t p, int8_t type)
             v[i].y = c[done + i].y;
             v[i].u = (float)(c[done + i].u + u_off);
             v[i].v = (float)(c[done + i].v + v_off);
-            v[i].colour = colour;
+            v[i].colour = tinted ? tinted : colour;
         }
         emit(v, n, image, sh->line);
         done += n;
+    }
+    if (sh->under_count) {              /* the part past the water from the eye */
+        const FxCorner *u = fx_face_corners() + sh->under_first;
+
+        side_under = 1;
+        for (done = 0; done < sh->under_count; done += 48) {
+            uint32_t n = sh->under_count - done > 48 ? 48 : sh->under_count - done;
+
+            for (i = 0; i < n; i++) {
+                v[i].x = u[done + i].x;
+                v[i].y = u[done + i].y;
+                v[i].u = (float)(u[done + i].u + u_off);
+                v[i].v = (float)(u[done + i].v + v_off);
+                v[i].colour = tinted ? tinted : colour;
+            }
+            emit(v, n, image, 0);
+        }
+        side_under = 0;
     }
 }
 

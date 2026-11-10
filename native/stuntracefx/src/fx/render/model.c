@@ -2520,6 +2520,7 @@ uint16_t FxModelMaterial(uint16_t rom_at)
                     shade_class = ((uint16_t)((uint16_t)(material_entry >> 8) + 1) & 0x003F);
                     if (shade_class == 0) {
                         reject_status = (uint16_t)(material_entry & 0xFF);
+                        fx_face_material(0, reject_status, 0, 0);
                         fx_color((uint8_t)reject_status);
                         break;
                     } else {
@@ -2555,6 +2556,7 @@ uint16_t FxModelMaterial(uint16_t rom_at)
                             } else {
                                 light_level = 6;
                             }
+                            fx_face_material(1, shade_index, shade_table, (uint16_t)((uint16_t)((uint16_t)((int8_t)face_normal_z * (int8_t)light_local_z) + (uint16_t)((int8_t)face_normal_y * (int8_t)light_local_y)) + (uint16_t)((int8_t)face_normal_x * (int8_t)light_local_x)));
                             fx_romb(3);
                             fx_r14((uint16_t)((uint16_t)(shade_row_base + light_level) - 6));
                             reject_status = fx_getb();
@@ -2562,6 +2564,7 @@ uint16_t FxModelMaterial(uint16_t rom_at)
                             break;
                         } else {
                             shade_at = fx_ldw(FX_SHADE_AT);
+                            fx_face_material(2, (uint16_t)(material_entry & 0xFF), 0, 0);
                             fx_r14((uint16_t)((uint16_t)(material_entry & 0xFF) + shade_at));
                             reject_status = fx_getb();
                             fx_color((uint8_t)reject_status);
