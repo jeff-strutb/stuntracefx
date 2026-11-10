@@ -36,6 +36,8 @@ considered.
 
 ## 4. Binding a controller's buttons
 
+Done in nativeshvc c190de1 (API 4.6): `nshvc_control_bind_controller`, `nshvc_control_defaults`, `nshvc_control_name`.
+
 Part of Jeff's direction 1: every native input reaches the game as a true input, and a player can rebind it.
 
 API 4.5 binds keyboard keys only: `nshvc_control_bind(player, button, nshvc_key)`. The engine maps every controller to
@@ -63,6 +65,9 @@ way it takes a key now.
 A touch screen's on-screen controls are the engine's, with nothing to rebind; nothing is asked for touch.
 
 ## 5. The game's icon on every platform (Jeff's bug, 2026-11-09)
+
+Done in nativeshvc c190de1 (API 4.6). Checked on macOS: the app's Info.plist names `AppIcon` and its `.icns` holds the art
+at 16 to 1024. Not built yet: iOS, Windows, Linux.
 
 Jeff: "Built app (mac at least, probably all platforms) doesn't use the app icon specified." The game now passes
 `ICON icon/icon.png` (800 x 800, no alpha) to `nshvc_game()`. Today `cmake/NshvcGame.cmake` uses `ICON` only on Android
