@@ -64,6 +64,10 @@ uint16_t fx_static_seed(int line);             /* fx_draw.c: the seed line 0-127
 void race_two_full_window_ready(int on);       /* interim: the 3D's side turns it on with its two-player rectangles */
 void race_hills_full(void);                    /* its hills and sky for the picture shown, or one between steps */
 uint16_t sky_colour_at(int at);                /* colour 1 at place `at` of the day and night lists */
+uint16_t race_ground_colour(int panel, float row);   /* colour 1 shown on a screen row of a player's view (picture.c) */
+uint16_t race_sky_offset_now(void);                 /* the full window's sky place for the picture being drawn */
+uint16_t race_two_sky_colour(int player, int row);  /* two players' colour 1 on a screen row */
+int race_underwater_cells(uint8_t texels[80][64], uint16_t colours[16]); /* Aqua Tunnel's ripple cells; 0 if not loaded */
 void sprites_place_full(nshvc_sprite *out, const nshvc_sprite *in, uint32_t count); /* the race's sprites on the larger screen */
 void sprites_place_two(nshvc_sprite *out, const nshvc_sprite *in, uint32_t count);  /* two players' */
 unsigned sprite_name_of(const nshvc_sprite *s);  /* a sprite's 9-bit character name, as the original's table holds it */

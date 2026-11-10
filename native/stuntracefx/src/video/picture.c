@@ -2,6 +2,7 @@
  * picture.c: the screen as the game has described it, handed to the engine
  * once per picture.
  */
+#include <math.h>
 #include <string.h>
 
 #include "fx/fx_draw.h"
@@ -88,32 +89,32 @@ static void blank_lines_send(void)
 }
 
 /* The gradient: colour 1 by row. One player: row 0's value held to row 31,
-   then the second list row by row to row 158. Two players: the first band's
-   start held, each half's list row by row. */
+   then the second list row by row to row 158, its last held. Two players:
+   the first band's start held, each half's list row by row, the last held. */
+static uint16_t band_line_colour(int r)
+{
+    uint32_t a = pic.race.gradient_start[0], b = pic.race.gradient_start[1];
+
+    r = r < 0 ? 0 : r > 223 ? 223 : r;
+    if (pic.race.split) {
+        if (r < 23 || (r >= 103 && r < 127))
+            return gradient_colour(0);
+        if (r < 103)
+            return gradient_colour(a + (uint32_t)(r - 23));
+        return gradient_colour(b + (uint32_t)((r < 207 ? r : 206) - 127));
+    }
+    if (r < 32)
+        return gradient_colour(0);
+    return gradient_colour(a + (uint32_t)((r < 159 ? r : 158) - 32));
+}
+
 static void gradient_lines_send(void)
 {
     int32_t v[224];
     int r;
 
-    if (pic.race.split) {
-        for (r = 0; r < 23; r++)
-            v[r] = gradient_colour(0);
-        for (; r < 103; r++)
-            v[r] = gradient_colour((uint32_t)pic.race.gradient_start[0] + (uint32_t)(r - 23));
-        for (; r < 127; r++)
-            v[r] = gradient_colour(0);
-        for (; r < 207; r++)
-            v[r] = gradient_colour((uint32_t)pic.race.gradient_start[1] + (uint32_t)(r - 127));
-        for (; r < 224; r++)
-            v[r] = v[r - 1];
-    } else {
-        for (r = 0; r < 32; r++)
-            v[r] = gradient_colour(0);
-        for (; r < 159; r++)
-            v[r] = gradient_colour((uint32_t)pic.race.gradient_start[0] + (uint32_t)(r - 32));
-        for (; r < 224; r++)
-            v[r] = v[r - 1];
-    }
+    for (r = 0; r < 224; r++)
+        v[r] = band_line_colour(r);
     nshvc_lines(0, 224, (nshvc_line_field)(NSHVC_LINE_PALETTE + 1), v);
 }
 
@@ -316,11 +317,41 @@ static void race_lines_send(void)
    the horizon, read from the day and night lists as a band reads them,
    from the band's start at the original's line 32; black while the
    tunnel's black list is up. */
-static int32_t full_sky_at(int row, int origin_y)
+static uint16_t full_sky_colour(uint16_t sky_offset, int line)
 {
     if (pic.race.gradient_start[0] >= GRADIENT_AT_BLACK)
         return 0;
-    return (int32_t)sky_colour_at(pic.race.sky_offset / 2 + (row - origin_y) - 32);
+    return sky_colour_at(sky_offset / 2 + line - 32);
+}
+
+static int32_t full_sky_at(int row, int origin_y)
+{
+    return (int32_t)full_sky_colour(pic.race.sky_offset, row - origin_y);
+}
+
+/*
+ * Colour 1 as the race screen shows it on screen row `row` (the screen's
+ * pixels, as screen_shape gives them) in player `panel`'s view, for the
+ * picture being drawn: what the 3D's ground lays its marks over. The one
+ * player's full window reads the day and night lists by the row's height
+ * (its sky place from the picture's pitch, between steps too), or shows
+ * colour 1 itself while the sky's lines are off; two players' rectangles
+ * read their bands about their middles; the original's screens read their
+ * bands by line. Rows past a band's end give its last.
+ */
+uint16_t race_ground_colour(int panel, float row)
+{
+    int r = (int)floorf(row), line = r - screen_shape()->origin_y;
+
+    if (race_two_full_window())
+        return race_two_sky_colour(panel, r);
+    if (pic.race.split)
+        return band_line_colour(line);
+    if (!g.line_effects.sky)
+        return pic.palette[1];
+    if (race_full_window())
+        return full_sky_colour(race_sky_offset_now(), line);
+    return band_line_colour(line);
 }
 
 /* Whether each window of the band table covers any of the screen: the

@@ -616,13 +616,20 @@ void race_picture_shown(int buffer)
    those rows change; across, the heading's column and fine scroll; down,
    the pitch's scroll over the rows dropped; the sky's place in the day and
    night lists. */
+/* the sky's place in the day and night lists, in bytes, for a pitch */
+static uint16_t sky_offset_of(uint16_t pitch)
+{
+    uint16_t s = (uint16_t)((uint16_t)(pitch << 1) + 0x42 + (pitch >> 15));
+
+    return s < 0x0300 ? s : 0x0300;
+}
+
 static void hills_from_angles(int buffer, uint16_t heading, uint16_t pitch)
 {
     static uint16_t map[WIDE_COLUMNS * WIDE_ROWS];
     static int written_map = -1, written_row = -1, written_buffer = -1;
     int row = (int)(((uint16_t)(pitch + wide_band[buffer].row_adjust) >> 3) & 0x3F);
     int first = WIDE_DROP + (buffer ? 47 : 30), r, c;
-    uint16_t s = (uint16_t)((uint16_t)(pitch << 1) + 0x42 + (pitch >> 15));
 
     if (wide_band[buffer].map != written_map || row != written_row || buffer != written_buffer) {
         const uint16_t *panorama = backdrop_map(wide_band[buffer].map);
@@ -643,7 +650,7 @@ static void hills_from_angles(int buffer, uint16_t heading, uint16_t pitch)
     }
     pic.race.wide_x = (((heading >> 3) & 0xFE) * 4 + ((heading >> 1) & 7) - 0x18) & (WIDE_COLUMNS * 8 - 1);
     pic.race.wide_y = (int16_t)(uint16_t)((pitch & 7) - 0x20 + ram_code_7e16((uint16_t)(0xE811 + buffer * 2))) + WIDE_DROP * 8;
-    pic.race.sky_offset = s < 0x0300 ? s : 0x0300;
+    pic.race.sky_offset = sky_offset_of(pitch);
 }
 
 /* The hills of the picture shown: its step's angles, or those of a picture
@@ -656,6 +663,18 @@ void race_hills_full(void)
         hills_from_angles(shown_buffer, heading[0], pitch[0]);
     else
         hills_from_angles(shown_buffer, wide_band[shown_buffer].heading, wide_band[shown_buffer].pitch);
+}
+
+/* The full window's sky place for the picture being drawn, as
+   race_hills_full will take it: its step's pitch, or an in-between
+   picture's. For a caller that composes before the video does. */
+uint16_t race_sky_offset_now(void)
+{
+    uint16_t heading[2], pitch[2];
+
+    if (fx_tween_backdrop_angles(heading, pitch))
+        return sky_offset_of(pitch[0]);
+    return sky_offset_of(wide_band[shown_buffer].pitch);
 }
 
 /* The race screen handed back: the next screen sets its own layers, and
@@ -1493,6 +1512,56 @@ static void image_wrap(nshvc_draw_list list, nshvc_image image, int size, int x,
  * finished player's panel) at that player's scroll, the image's row the
  * original line's + 1 + scroll as the hardware counted.
  */
+/* Two players in the full window: colour 1 on screen row `row` for player
+   p, the band read from its start by the row's height about the
+   rectangle's middle, held at the lists' ends. */
+uint16_t race_two_sky_colour(int p, int row)
+{
+    int x, y, w, h, at;
+
+    screen_two_rect(p & 1, &x, &y, &w, &h);
+    at = (int)pic.race.gradient_start[p & 1] + (row - (y + h / 2)) + 40;
+    if (at < GRADIENT_AT_DAY)
+        at = GRADIENT_AT_DAY;
+    if (at > GRADIENT_AT_DAY + 511)
+        at = GRADIENT_AT_DAY + 511;
+    return gradient_colour((uint32_t)at);
+}
+
+/* Aqua Tunnel's underwater backdrop as the 3D's water takes it: its ripple
+   cells, the course's backdrop map rows 51-60 at 160 entries a row from the
+   first map (running on into the second, as the original's did), eight
+   entries across, as 4-bit texels of the race art (BG2's characters from
+   RACE_ART_SPRITES with one player, flips kept); and palette 0's colours
+   from the course's other set (the weather's, $7F:39D7). 0 on any other
+   course (those rows hold their own art) and while the one-player race's
+   backdrop isn't loaded (two players load other maps). */
+enum { AQUA_TUNNEL = 1 };
+
+int race_underwater_cells(uint8_t texels[80][64], uint16_t colours[16])
+{
+    int x, y, any = 0;
+
+    if (!pic.race.on || pic.race.split || pic.race.course_screen || g.course != AQUA_TUNNEL)
+        return 0;
+    for (y = 0; y < 80; y++)
+        for (x = 0; x < 64; x++) {
+            uint16_t e = bank7f_words[(51 + y / 8) * 160 + x / 8];
+            unsigned ch = ((e & 0x3FFu) + RACE_ART_SPRITES) & 0x3FFu, p;
+            int px = (e & 0x4000) ? 7 - (x & 7) : (x & 7), py = (e & 0x8000) ? 7 - (y & 7) : (y & 7);
+            const uint8_t *d = race_art_bytes + ch * 32u;
+            uint8_t c = 0;
+
+            for (p = 0; p < 4; p++)
+                c = (uint8_t)(c | ((d[py * 2 + (p / 2) * 16 + (p & 1)] >> (7 - px)) & 1) << p);
+            texels[y][x] = c;
+            any |= c;
+        }
+    for (x = 0; x < 16; x++)
+        colours[x] = palettes.night[x];
+    return any != 0;
+}
+
 static void two_full_backdrop(nshvc_draw_list list)
 {
     static const int centre_x[2] = { 88, 168 }, centre_y[2] = { 63, 167 };
@@ -1507,15 +1576,8 @@ static void two_full_backdrop(nshvc_draw_list list)
         screen_two_rect(p, &x, &y, &w, &h);
         rcx = x + w / 2;
         rcy = y + h / 2;
-        for (r = 0; r < h; r++) {
-            int at = (int)pic.race.gradient_start[p] + (y + r - rcy) + 40;
-
-            if (at < GRADIENT_AT_DAY)
-                at = GRADIENT_AT_DAY;
-            if (at > GRADIENT_AT_DAY + 511)
-                at = GRADIENT_AT_DAY + 511;
-            colour_rect(list, x, y + r, x + w, y + r + 1, direct_of(gradient_colour((uint32_t)at)));
-        }
+        for (r = 0; r < h; r++)
+            colour_rect(list, x, y + r, x + w, y + r + 1, direct_of(race_two_sky_colour(p, y + r)));
         if (pic.race.panel[p])
             image_wrap(list, race_video.panel_image, 256, x, y, w, h,
                        x - rcx + centre_x[p] + sx, y - rcy + centre_y[p] + 1 + sy);
