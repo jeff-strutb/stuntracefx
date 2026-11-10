@@ -170,10 +170,6 @@ static void emit(const float (*p)[3], int n, uint8_t c)
         fx_draw_flat(corners, k, c);
 }
 
-/* Interim, until Jeff has seen the eyes' look: an eye stays its sprite
-   unless this is set (a private build for the pictures). */
-static const int eyes_shown = 0;
-
 /* FxObjectsDraw's object: its shape (the draw record's model) and its draw
    record's address (the n-th record from $0AAA, 30 bytes each) */
 void fx_solid_object(uint16_t shape, uint16_t record)
@@ -236,7 +232,7 @@ void fx_solid_begin(void)
         uint16_t look, gz = record_index >= 0 ? draw_record_gaze(record_index) : 0;
         float phi, d[3];
 
-        if (!eyes_shown || !(gz & 0x100))
+        if (!(gz & 0x100))
             return;
         look = word((uint16_t)(0x0AAA + 30 * record_index + 0x16));     /* the record's +$16: the eye's anim word */
         switch (look) {
