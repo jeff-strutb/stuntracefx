@@ -108,11 +108,11 @@ static void entry_FxAngleVector(void)
 {
     uint16_t ret = gsu.r[11];
 
-    FxAngleVectorResult r_ = FxAngleVector(gsu.r[0], gsu.r[4]);
-    gsu.r[1] = (uint16_t)r_.vector_x;
-    gsu.r[2] = (uint16_t)r_.vector_y;
-    gsu.r[3] = (uint16_t)r_.vector_z;
-    gsu.r[14] = (uint16_t)r_.rom_at;
+    FxVec3 v = FxAngleVector(gsu.r[0], (int16_t)gsu.r[4]);
+    gsu.r[1] = (uint16_t)v.x;
+    gsu.r[2] = (uint16_t)v.y;
+    gsu.r[3] = (uint16_t)v.z;
+    gsu.r[14] = (uint16_t)(0x973E + (gsu.r[0] >> 8));   /* the chip's cursor, left on the cosine byte */
     fx_code(0x040000 | ret, 1);          /* the byte the return goes to */
 }
 

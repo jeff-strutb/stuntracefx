@@ -309,7 +309,6 @@ _Noreturn void fx_bad_dispatch(uint16_t at);
 
 typedef struct { uint16_t touch_pos_result; uint16_t record_z_out; uint16_t last_contact_ptr_out; uint16_t last_contact_flags_out; } FxAllTouchesResult;
 typedef struct { uint16_t angle; uint16_t xor_negative; uint16_t swap_marker_out; } FxAngleOfResult;
-typedef struct { uint16_t vector_x; uint16_t vector_y; uint16_t vector_z; uint16_t rom_at; } FxAngleVectorResult;
 typedef struct { uint16_t angle; uint16_t angle_sign_xor; uint16_t swap_mark_out; } FxBearingToResult;
 typedef struct { uint16_t words_4; uint16_t entry_out; uint16_t segment_scratch_a_out; uint16_t segment_scratch_b_out; uint16_t rom_at; } FxCarCatchUpResult;
 typedef struct { uint16_t share_before; uint16_t next_entry_end_ptr; uint16_t model_record_out; uint16_t caller_scratch_back; uint16_t record_ptr; uint16_t rom_at_out; int up; } FxCarCollideResult;
@@ -479,7 +478,6 @@ void FxAbove100Scaled(uint16_t value);
 FxAllTouchesResult FxAllTouches(uint16_t touch_pos_scratch, uint16_t prior_record_z, uint16_t last_contact_ptr, uint16_t last_contact_flags, uint16_t *stack);
 FxAngleOfResult FxAngleOf(uint16_t vector_x, uint16_t vector_y, uint16_t prior_swap_marker, uint16_t *stack, uint16_t rom_at);
 void FxAngleProgram(uint16_t rom_at);
-FxAngleVectorResult FxAngleVector(uint16_t heading_angle, uint16_t length);
 uint16_t FxAtan2(uint16_t vector_x, uint16_t vector_y, uint16_t *stack, uint16_t rom_at);
 FxBearingToResult FxBearingTo(uint16_t x, uint16_t z, uint16_t swap_mark, uint16_t record, uint16_t *stack, uint16_t rom_at);
 uint16_t FxCarAddPart(uint16_t car_record, uint16_t *stack, uint16_t rom_at);

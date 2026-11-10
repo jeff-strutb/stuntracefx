@@ -13,6 +13,7 @@
  * C: src/stuntracefx/math/fx_rotate.c.
  */
 
+#include "data/race_tables.h"
 #include "fx/fx.h"
 
 /*
@@ -460,48 +461,20 @@ FxAngleOfResult FxAngleOf(uint16_t vector_x, uint16_t vector_y, uint16_t prior_s
 
 /*
  * @routine 04:CD98 FxAngleVector
- * WHAT IT DOES: The vector of length R4 at the angle in R0's high byte:
- * R1 = -sin * length, R3 = cos * length, both scaled by 16 / 128 (a byte
- * table value of 64 gives length * 8), and R2 = 0.
- * HOW: HIB for the angle, ROMB 0, then for each table the byte SWAPped up,
- * FMULT by R6 = length, (NOT and INC for the sine), and four ADDs to
- * itself.
- * Entry: R0 high byte = angle; R4 = length; R11 = return address. Exit: R1,
- * R3 as above, R0 = R3; R2 = 0; R6 = length; R14 = $973E + angle; ROMBR =
- * 0; OV, S, CY, Z from the last ADD.
+ * WHAT IT DOES: The vector along the heading: x = -sin * length * 8, z = cos * length * 8, y = 0, sin and cos being the
+ * table bytes / 128 (a byte of 64, one half, gives four times the length).
+ * HOW: Each table byte as the high byte of a 1.15 fraction (the chip's SWAP), times the length as the product's high
+ * word (FMULT), the sine's negated, then sixteen times (four doublings), all in 16 bits as on the chip. The chip left
+ * its ROM bank at $00 and its ROM cursor on the cosine byte; nothing after it reads either (the fx chip-state analysis).
  */
-FxAngleVectorResult FxAngleVector(uint16_t heading_angle, uint16_t length)
+FxVec3 FxAngleVector(uint16_t heading, int16_t length)
 {
-    uint16_t cos_x2;
-    uint16_t cos_x4;
-    uint16_t cos_x8;
-    uint16_t cos_value;
-    uint16_t sin_value;
-    uint16_t cos_scaled;
-    uint16_t neg_sin_x2;
-    uint16_t neg_sin_x4;
-    uint16_t neg_sin_x8;
-    uint16_t angle_index;
-    uint16_t cos_table_addr;
-    uint16_t neg_sin_scaled;
+    uint8_t angle = (uint8_t)(heading >> 8);
+    int16_t sine = (int16_t)(uint16_t)(trig_sine(angle) << 8);
+    int16_t cosine = (int16_t)(uint16_t)(trig_cosine(angle) << 8);
+    uint16_t sine_part = (uint16_t)((uint32_t)((int32_t)sine * length) >> 16);
+    uint16_t cosine_part = (uint16_t)((uint32_t)((int32_t)cosine * length) >> 16);
 
-    angle_index = (uint16_t)(heading_angle >> 8);
-    fx_romb(0);
-    fx_r14(ROT_SIN_TABLE);
-    fx_r14((uint16_t)((uint16_t)(angle_index & 0xFF) + ROT_SIN_TABLE));
-    sin_value = fx_getb();
-    neg_sin_scaled = (uint16_t)((uint16_t)~(uint16_t)((uint32_t)((int32_t)(int16_t)(uint16_t)(sin_value << 8 | sin_value >> 8) * (int16_t)length) >> 16) + 1);
-    neg_sin_x2 = (uint16_t)(neg_sin_scaled + neg_sin_scaled);
-    neg_sin_x4 = (uint16_t)(neg_sin_x2 + neg_sin_x2);
-    neg_sin_x8 = (uint16_t)(neg_sin_x4 + neg_sin_x4);
-    fx_r14(ROT_COS_TABLE);
-    cos_table_addr = (uint16_t)((uint16_t)(angle_index & 0xFF) + ROT_COS_TABLE);
-    fx_r14(cos_table_addr);
-    cos_value = fx_getb();
-    cos_scaled = (uint16_t)((uint32_t)((int32_t)(int16_t)(uint16_t)(cos_value << 8 | cos_value >> 8) * (int16_t)length) >> 16);
-    cos_x2 = (uint16_t)(cos_scaled + cos_scaled);
-    cos_x4 = (uint16_t)(cos_x2 + cos_x2);
-    cos_x8 = (uint16_t)(cos_x4 + cos_x4);
-    return (FxAngleVectorResult){(uint16_t)(neg_sin_x8 + neg_sin_x8), 0, (uint16_t)(cos_x8 + cos_x8), cos_table_addr};
+    return (FxVec3){(int16_t)(uint16_t)((0u - sine_part) << 4), 0, (int16_t)(uint16_t)(cosine_part << 4)};
 }
 

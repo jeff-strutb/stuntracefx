@@ -940,7 +940,7 @@ FxCarVelocityFromSegmentResult FxCarVelocityFromSegment(uint16_t in_scratch_4, u
         drive_factor = (uint16_t)((drive_factor_lo & 0xFF) | fx_getb() << 8);
         in_scratch_4 = (uint16_t)((uint32_t)((int32_t)(int16_t)(uint16_t)(words_4 + words_4) * (int16_t)drive_factor) >> 16);
         pitch = fx_ldw((uint16_t)(car_record + FXREC_HEADING));
-        { FxAngleVectorResult r_ = FxAngleVector(pitch, in_scratch_4); vector_x = r_.vector_x; vector_y = r_.vector_y; vector_z = r_.vector_z; rom_at = r_.rom_at; };
+        { FxVec3 v = FxAngleVector(pitch, (int16_t)in_scratch_4); vector_x = (uint16_t)v.x; vector_y = (uint16_t)v.y; vector_z = (uint16_t)v.z; };
         fx_stw((uint16_t)(car_record + 0x002E), vector_x);
         fx_stw((uint16_t)(car_record + 0x0030), vector_y);
         course_followed_2 = (uint16_t)(car_record + 0x0032);
