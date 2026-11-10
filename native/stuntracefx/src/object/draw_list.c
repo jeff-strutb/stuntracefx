@@ -144,6 +144,8 @@ static void far_records(void)
     }
     fx_ram[FX_FAR_BANK + FX_FAR_COUNT] = (uint8_t)n;
     fx_ram[FX_FAR_BANK + FX_FAR_COUNT + 1] = (uint8_t)(n >> 8);
+    for (cell = 0; cell < 3; cell++)    /* the view's place, for the ground's surface */
+        put16(&fx_ram[FX_FAR_BANK + FX_FAR_VIEW], 2 * cell, g.view_pos[cell]);
 }
 
 /*

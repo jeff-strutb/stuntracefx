@@ -19,6 +19,7 @@
 #include "fx/fx.h"
 #include "fx/fx_draw.h"
 #include "fx/fx_far.h"
+#include "fx/fx_tween.h"
 #include "object/object.h"
 #include "race/race.h"
 #include "system/state.h"
@@ -121,6 +122,7 @@ static uint8_t angle8_between(uint8_t a, uint8_t b, float t, uint8_t *frac)
 static uint8_t object_frac[OBJECT_COUNT][3];
 static uint8_t record_frac[64][3], current_frac[3];
 static int fractions_on;
+static float picture_t;              /* the picture being drawn between steps: its t */
 
 void fx_angle_record(uint16_t record)
 {
@@ -266,6 +268,7 @@ int fx_tween_begin(float t)
         t = 1;
     was = &ends[!last];
     end = &ends[last];
+    picture_t = t;
     memcpy(&kept.g, &g, sizeof g);
     memcpy(&kept.objects, &objects, sizeof objects);
     memcpy(kept.cameras, cameras, sizeof kept.cameras);
@@ -290,6 +293,11 @@ void fx_tween_end(void)
     memcpy(fx_ram, kept.fx, sizeof fx_ram);
     fxs = kept.fxs;
     drawing = 0;
+}
+
+float fx_tween_t(void)
+{
+    return drawing ? picture_t : -1.0f;
 }
 
 void fx_tween_draw(float between)

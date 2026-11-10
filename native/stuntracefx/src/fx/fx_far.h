@@ -13,14 +13,21 @@
    draw record as the near ones at $0AAA (30 bytes), its place from the
    view in 32 bits (X, Y, Z at +FX_FAR_PLACE, 4 bytes each, low first) and
    whether its depth key is lifted by $1F40 (+FX_FAR_LIFT), as the near
-   record's. The frame program takes them once: the count is cleared. */
+   record's; +FX_FAR_PARKED 1: a parked tyre of a car in the near list,
+   drawn among the near objects by depth, not behind them (its car's
+   child, which ObjectChildFollow hides). The frame program takes them
+   once: the count is cleared.
+   Beside them the view's place in the world the records are from (X, Y,
+   Z words at FX_FAR_VIEW), which the ground's surface is placed by. */
 enum {
     FX_FAR_BANK = 0x10000,
     FX_FAR_COUNT = 0x0000,
+    FX_FAR_VIEW = 0x0002,
     FX_FAR_RECORDS = 0x0100,
     FX_FAR_SIZE = 0x30,
     FX_FAR_PLACE = 0x20,
     FX_FAR_LIFT = 0x2C,
+    FX_FAR_PARKED = 0x2D,
     FX_FAR_MAX = 1024
 };
 
