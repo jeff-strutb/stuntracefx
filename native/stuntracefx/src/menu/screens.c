@@ -1104,7 +1104,12 @@ static void champion_open(void)
         page_write(0, w);
     }
     tiles_from_picture(menu_video.sprites, 0, picture_unpack(PIC_CHAMPION_SPRITES), 32);
-    tiles_from_picture(tiles_8bpp, 0x100, picture_unpack(PIC_CHAMPION_8BPP), 64);
+    /* one picture at video word $2000, which both backgrounds read: BG1's
+       8-bit tiles from $100 and BG2's 4-bit tiles from $200 (the courses'
+       names in the panels' boxes) */
+    n = picture_unpack(PIC_CHAMPION_8BPP);
+    tiles_from_picture(tiles_8bpp, 0x100, n, 64);
+    tiles_from_picture(menu_video.tiles_a, 0x200, n, 32);
     tiles_from_picture(menu_video.tiles_a, 0, picture_unpack(PIC_CHAMPION_BG2_TILES), 32);
 
     n = picture_unpack(PIC_CHAMPION_MAP);
