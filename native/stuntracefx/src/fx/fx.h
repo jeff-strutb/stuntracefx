@@ -67,7 +67,21 @@ _Noreturn void fx_bad_dispatch(uint16_t at);
 #define FXREC_Y_HELD 0x0060
 /* The record fields both sides read, settled between the objects and the
    chip's code (2026-11-09). An object's record: */
-#define FXREC_HANDLER 0x000A            /* the Super FX handler it runs each step (FXRUN_*) */
+/* What a record's handler (+$0A) runs: the record pool's FxHandler (stage 5's
+   design). The words a record keeps for them are written once, in
+   data/fx_handlers. */
+typedef enum {
+    FX_HANDLER_NONE,                    /* runs nothing: the word 0 (a still) */
+    FX_HANDLER_BOUNCE,                  /* falls and bounces (FxObjectBounce) */
+    FX_HANDLER_MARK_TOUCHED,            /* marks what it touches (FxObjectMarkTouched) */
+    FX_HANDLER_FALL,                    /* falls while it touches something (FxObjectFall) */
+    FX_HANDLER_COLLIDE_ONLY,            /* collides without moving (FxObjectCollideOnly) */
+    FX_HANDLER_DROP,                    /* FxObjectDrop: in the dispatch, set by no record maker */
+    FX_HANDLER_CAR,                     /* a car (FxCarHandler; FxCarNew sets it) */
+    FX_HANDLER_UNKNOWN                  /* a word none of these has */
+} FxHandler;
+
+#define FXREC_HANDLER 0x000A            /* the Super FX handler it runs each step (an FxHandler's word) */
 #define FXREC_OFFSET_X 0x000C           /* the object's model offsets (a contact entry's +$0C-$10 are FXCON_OTHER, FXREC_NEXT, FXREC_FLAGS10) */
 #define FXREC_OFFSET_Y 0x000E
 #define FXREC_OFFSET_Z 0x0010

@@ -16,6 +16,7 @@
    boost (the original's +$400); what reads it is not worked out here */
 enum { CHEAT_WORD_PAST_RECORD = 0x0400 };
 #include "object/object.h"
+#include "data/fx_handlers.h"
 #include "system/chip.h"
 #include "system/game.h"
 #include "system/state.h"
@@ -224,32 +225,32 @@ void GsuRecordBobTriggers(void)
 /* the tail of the record-making routines: the new record becomes the
    object's +$22; with one, its +$0A is set and it is filled from the
    object. Returns 1 when the object got one. */
-static int record_new(Object *o, uint16_t word0a)
+static int record_new(Object *o, FxHandler run)
 {
     uint16_t rec = fxram_get(GSU_RECORD_ARG);
 
     o->record = rec;
     if (!rec)
         return 0;
-    rec_put(rec, FXREC_HANDLER, word0a);
+    rec_put(rec, FXREC_HANDLER, fx_handler_word(run));
     GsuRecordFromObject(o);
     return 1;
 }
 
 /* @routine 08:CB98 GsuRecordNew422: a record that runs nothing, from the second pool (mode $0422) */
-int GsuRecordNewStill(Object *o) { FxRecordNew422(); return record_new(o, FXRUN_NONE); }
+int GsuRecordNewStill(Object *o) { FxRecordNew422(); return record_new(o, FX_HANDLER_NONE); }
 /* @routine 08:CBB2 GsuRecordNew42D: a trigger: no mass, it marks what touches it (mode $042D) */
-int GsuRecordNewTrigger(Object *o) { FxRecordNew42D(); return record_new(o, FXRUN_MARK_TOUCHED); }
+int GsuRecordNewTrigger(Object *o) { FxRecordNew42D(); return record_new(o, FX_HANDLER_MARK_TOUCHED); }
 /* @routine 08:CBCC GsuRecordNew424Piece: a piece that falls and bounces (mode $0424) */
-int GsuRecordNewBouncing(Object *o) { FxRecordNew424(); return record_new(o, FXRUN_BOUNCE); }
+int GsuRecordNewBouncing(Object *o) { FxRecordNew424(); return record_new(o, FX_HANDLER_BOUNCE); }
 /* @routine 08:CBE6 GsuRecordNew424: a body of mass $40 that falls while it touches something (mode $0424) */
-int GsuRecordNewFalling(Object *o) { FxRecordNew424(); return record_new(o, FXRUN_FALL); }
+int GsuRecordNewFalling(Object *o) { FxRecordNew424(); return record_new(o, FX_HANDLER_FALL); }
 /* @routine 08:CC18 GsuRecordNew424Alt: a trigger of mass $40, marking what touches it (mode $0424) */
-int GsuRecordNewSolidTrigger(Object *o) { FxRecordNew424(); return record_new(o, FXRUN_MARK_TOUCHED); }
+int GsuRecordNewSolidTrigger(Object *o) { FxRecordNew424(); return record_new(o, FX_HANDLER_MARK_TOUCHED); }
 /* @routine 08:CC4A GsuRecordNewCamera */
-int GsuRecordNewCamera(Object *o) { FxRecordNewCamera(); return record_new(o, FXRUN_COLLIDE_ONLY); }
+int GsuRecordNewCamera(Object *o) { FxRecordNewCamera(); return record_new(o, FX_HANDLER_COLLIDE_ONLY); }
 /* @routine 08:CC63 GsuRecordNew426: as GsuRecordNewFalling, mode $0426: it also takes contacts with records whose +$16 has bit 1 */
-int GsuRecordNewFallingPart(Object *o) { FxRecordNew426(); return record_new(o, FXRUN_FALL); }
+int GsuRecordNewFallingPart(Object *o) { FxRecordNew426(); return record_new(o, FX_HANDLER_FALL); }
 
 /* the record and the amount (as the high byte) go to the Super FX */
 static void record_amount_args(uint16_t rec, uint8_t amount)

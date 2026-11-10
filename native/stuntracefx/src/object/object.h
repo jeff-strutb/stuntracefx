@@ -185,15 +185,6 @@ enum {
    child's or an attachment's */
 enum { DATA_MODEL = 0, DATA_LOOK = 2, DATA_SIZE = 4, DATA_HANDLER = 6, DATA_HANDLER_BANK = 8 };
 
-/* The Super FX handlers a record runs each step (its +$0A) */
-enum {
-    FXRUN_NONE = 0x0000,
-    FXRUN_BOUNCE = 0x907A,              /* falls and bounces (FxObjectBounce) */
-    FXRUN_MARK_TOUCHED = 0x90E8,        /* marks what it touches (FxObjectMarkTouched) */
-    FXRUN_FALL = 0x910A,                /* falls while it touches something (FxObjectFall) */
-    FXRUN_COLLIDE_ONLY = 0x916D         /* collides without moving (FxObjectCollideOnly) */
-};
-
 /* sign-extended byte */
 static inline int16_t sx8(uint8_t v) { return (int16_t)(int8_t)v; }
 
