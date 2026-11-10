@@ -259,6 +259,12 @@ game's own logic (its physics, objects, menus, rules) stays the game's, and reco
 - Frame rate: whole steps every 6 updates, the 3D drawn between them from interpolated cameras and objects, and pictures between
   updates on displays faster than 60 Hz.
 - Menus in the whole window.
+- Unlimited view distance: nothing culled or faded out by distance where the original cut it off for the chip's sake
+  (earlier work: 218f69f1).
+- The ground as a real surface: each course's colour-band ground and water replaced by a generated ground or water plane
+  with its own polygons, textures and layers, the track drawn over it, water seen from above and overhead when under it
+  (earlier work, merged on main then: 8931a216..c68f1373, af4032ea, be60bbb9; `remaster/fullwindow.c`'s surface table;
+  Aqua Tunnel's sea level -1280).
 - Solid shapes for the sprites that show solid things: the cars' tyres, the 4WD's eyes, the bonus trucks' wheels, the trees
   (faceted, as approved); effects stay sprites. No filtered or upscaled art.
 - The pause screen with the controller panel and key remapping on every host, the options (auto-accelerate), and typing the
