@@ -18,6 +18,16 @@
  * are kept and put back after, so the near list draws from what it would
  * have: only the picture changes. Which objects are active stays the
  * trigger list's.
+ *
+ * A parked tyre of a car in the near list (FX_FAR_PARKED: its car's child,
+ * which ObjectChildFollow hides) is not drawn with the far ones but among
+ * the near objects by depth (c918c678's): once the near list is drawn, it
+ * is drawn again with the tyres in it, each before the first slot whose key
+ * is not above its own (the sort's order), so a tyre behind its car's body
+ * is under it and one in front over it; the chip's RAM put back after.
+ * While a pass draws, a slot holds another record than its own place says:
+ * fx_far_original gives the near record it holds (none for a far one or a
+ * tyre), for the eyes' gaze and the angles between steps.
  */
 #include <stdlib.h>
 #include <string.h>
@@ -35,9 +45,11 @@ typedef struct {
     uint16_t depth, rec;
 } Far;
 
-static Far far[FX_FAR_MAX];
+static Far far[FX_FAR_MAX], parked[FX_FAR_MAX];
+static unsigned nparked;
 static uint8_t slot_shift[SLOTS];
 static uint16_t slot_depth[SLOTS];
+static uint16_t slot_original[SLOTS];   /* the near record a slot holds in a pass; 0 none */
 static int drawing, shift_now;
 static uint16_t depth_now;
 static uint8_t kept[0x10000];
@@ -80,6 +92,7 @@ void fx_far_pass(uint16_t *stack)
     int32_t m[9], centre, half;
     FxState state = fxs;
 
+    nparked = 0;
     if (!count)
         return;
     if (count > FX_FAR_MAX)
@@ -117,13 +130,21 @@ void fx_far_pass(uint16_t *stack)
                 big = magnitude(v[k]);
         while ((big >> s) > 0x3FFF)
             s++;
-        far[n].key = (magnitude(d[1]) << 1) + (fx_ram[FX_FAR_BANK + (uint16_t)(rec + FX_FAR_LIFT)] ? 0x1F40 : 0) + bias + v[2];
-        for (k = 0; k < 3; k++)
-            far[n].at[k] = (int16_t)(v[k] >> s);
-        far[n].shift = (uint8_t)s;
-        far[n].depth = (uint16_t)(v[2] > 0x7FFF ? 0x7FFF : v[2] < 0 ? 0 : v[2]);
-        far[n].rec = rec;
-        n++;
+        {
+            Far *f = fx_ram[FX_FAR_BANK + (uint16_t)(rec + FX_FAR_PARKED)] ? &parked[nparked++] : &far[n++];
+
+            /* a parked tyre's key as the sort keys a slot: its record's
+               +$02, its depth and its shape's bias, in 16 bits */
+            if (f >= parked && f < parked + FX_FAR_MAX)
+                f->key = (int16_t)(uint16_t)(far_word((uint16_t)(rec + 0x02)) + (uint16_t)v[2] + (uint16_t)bias);
+            else
+                f->key = (magnitude(d[1]) << 1) + (fx_ram[FX_FAR_BANK + (uint16_t)(rec + FX_FAR_LIFT)] ? 0x1F40 : 0) + bias + v[2];
+            for (k = 0; k < 3; k++)
+                f->at[k] = (int16_t)(v[k] >> s);
+            f->shift = (uint8_t)s;
+            f->depth = (uint16_t)(v[2] > 0x7FFF ? 0x7FFF : v[2] < 0 ? 0 : v[2]);
+            f->rec = rec;
+        }
     }
     if (!n)
         return;
@@ -146,6 +167,7 @@ void fx_far_pass(uint16_t *stack)
             ram_put((uint16_t)(slot + 0x14), (uint16_t)f->at[2]);
             slot_shift[k] = f->shift;
             slot_depth[k] = f->depth;
+            slot_original[k] = 0;
         }
         ram_put(GSU_DRAW_LIST, SLOT_FIRST);
         *stack = 0x0240;
@@ -157,6 +179,105 @@ void fx_far_pass(uint16_t *stack)
     shift_now = 0;
     memcpy(fx_ram, kept, sizeof kept);
     fxs = state;
+}
+
+/* slot k filled with far record f: its record, its link, key and place */
+static void far_slot(unsigned k, const Far *f, int last)
+{
+    uint16_t slot = (uint16_t)(SLOT_FIRST + k * SLOT_SIZE);
+    int64_t key = f->key < 0 ? 0 : f->key > 0xFFFF ? 0xFFFF : f->key;
+
+    memcpy(&fx_ram[slot], &fx_ram[FX_FAR_BANK + f->rec], SLOT_SIZE);
+    ram_put(slot, last ? 0 : (uint16_t)(slot + SLOT_SIZE));
+    ram_put((uint16_t)(slot + 0x02), (uint16_t)key);
+    ram_put((uint16_t)(slot + 0x12), (uint16_t)f->at[0]);
+    ram_put((uint16_t)(slot + 0x10), (uint16_t)f->at[1]);
+    ram_put((uint16_t)(slot + 0x14), (uint16_t)f->at[2]);
+    slot_shift[k] = f->shift;
+    slot_depth[k] = f->depth;
+    slot_original[k] = 0;
+}
+
+void fx_far_parked(uint16_t *stack)
+{
+    static struct {
+        int tyre;
+        unsigned at;
+    } order[SLOTS + FX_FAR_MAX];
+    static uint8_t used[FX_FAR_MAX];
+    FxState state = fxs;
+    unsigned n = 0, i, j, b, k, near = 0;
+    uint16_t slot;
+
+    if (!nparked)
+        return;
+    qsort(parked, nparked, sizeof parked[0], farther_first);
+    memset(used, 0, nparked);
+    for (slot = ram_word(GSU_DRAW_LIST); slot && near < SLOTS; slot = ram_word(slot)) {
+        int16_t key = (int16_t)ram_word((uint16_t)(slot + 0x02));
+
+        for (j = 0; j < nparked; j++)   /* the tyres keyed at or above it go before it */
+            if (!used[j] && (int16_t)(key - 1 - (int16_t)parked[j].key) < 0) {
+                used[j] = 1;
+                order[n].tyre = 1;
+                order[n++].at = j;
+            }
+        order[n].tyre = 0;
+        order[n++].at = (unsigned)(uint16_t)(slot - SLOT_FIRST) / SLOT_SIZE;
+        near++;
+    }
+    for (j = 0; j < nparked; j++)
+        if (!used[j]) {
+            order[n].tyre = 1;
+            order[n++].at = j;
+        }
+    memcpy(kept, fx_ram, sizeof kept);
+    {
+        /* the near slots' bytes by their own place, from before the pass */
+        static uint8_t by_slot[SLOTS][SLOT_SIZE];
+
+        for (i = 0; i < SLOTS; i++)
+            memcpy(by_slot[i], &kept[SLOT_FIRST + i * SLOT_SIZE], SLOT_SIZE);
+        drawing = 1;
+        for (b = 0; b < n; b += SLOTS) {
+            unsigned in = n - b < SLOTS ? n - b : SLOTS;
+
+            for (k = 0; k < in; k++) {
+                if (order[b + k].tyre) {
+                    far_slot(k, &parked[order[b + k].at], k + 1 == in);
+                    continue;
+                }
+                slot = (uint16_t)(SLOT_FIRST + k * SLOT_SIZE);
+                memcpy(&fx_ram[slot], by_slot[order[b + k].at], SLOT_SIZE);
+                ram_put(slot, k + 1 < in ? (uint16_t)(slot + SLOT_SIZE) : 0);
+                slot_shift[k] = 0;
+                slot_depth[k] = 0;
+                slot_original[k] = (uint16_t)(SLOT_FIRST + order[b + k].at * SLOT_SIZE);
+            }
+            ram_put(GSU_DRAW_LIST, SLOT_FIRST);
+            *stack = 0x0240;
+            fx_stw(FX_MODEL_1B4, 0);
+            (void)FxObjectsDraw(0, stack);
+        }
+    }
+    fx_draw_flush();
+    drawing = 0;
+    shift_now = 0;
+    nparked = 0;
+    memcpy(fx_ram, kept, sizeof kept);
+    fxs = state;
+}
+
+uint16_t fx_far_original(uint16_t record)
+{
+    unsigned k;
+
+    if (!drawing)
+        return record;
+    if ((uint16_t)(record - SLOT_FIRST) % SLOT_SIZE)
+        return 0;
+    k = (uint16_t)(record - SLOT_FIRST) / SLOT_SIZE;
+    return k < SLOTS ? slot_original[k] : 0;
 }
 
 void fx_far_record(uint16_t record)

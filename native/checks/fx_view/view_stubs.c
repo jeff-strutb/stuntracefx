@@ -23,3 +23,6 @@ int screen_view_anchor_x(int x0, int x1) { (void)x0; (void)x1; return 0; }
 int screen_anchor_y(int y0, int y1) { (void)y0; (void)y1; return 0; }
 #include "video/video.h"
 const ScreenShape *screen_shape(void) { static const ScreenShape s = { 256, 224, 0, 0, { 0, 0, 0, 0 } }; return &s; }
+uint16_t race_ground_colour(int panel, float row) { (void)panel; (void)row; return 0; }
+int race_underwater_cells(uint8_t texels[80][64], uint16_t colours[16]) { (void)texels; (void)colours; return 0; }
+int ObjectOrbitBetween(int slot, const ObjectTable *was, const ObjectTable *end, float t, int16_t add[3]) { (void)slot; (void)was; (void)end; (void)t; (void)add; return 0; }

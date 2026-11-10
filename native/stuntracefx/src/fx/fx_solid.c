@@ -178,7 +178,8 @@ void fx_solid_object(uint16_t shape, uint16_t record)
     int i;
 
     object = NULL;
-    record_index = (uint16_t)(record - 0x0AAA) % 30u ? -1 : (int)((uint16_t)(record - 0x0AAA) / 30u);
+    record = fx_far_original(record);   /* in a far or parked pass, the near record the slot holds */
+    record_index = !record || (uint16_t)(record - 0x0AAA) % 30u ? -1 : (int)((uint16_t)(record - 0x0AAA) / 30u);
     for (i = 0; i < N(solids); i++)
         if (solids[i].shape == shape)
             object = &solids[i];

@@ -126,9 +126,11 @@ static float picture_t;              /* the picture being drawn between steps: i
 
 void fx_angle_record(uint16_t record)
 {
-    unsigned i = (uint16_t)(record - 0x0AAA) / 30u;
+    unsigned i;
 
-    if (!fractions_on || fx_far_drawing() || (uint16_t)(record - 0x0AAA) % 30u || i >= 64) {     /* a far object's slot is not the step's record */
+    record = fx_far_original(record);   /* in a far or parked pass, the near record the slot holds (0: none) */
+    i = (uint16_t)(record - 0x0AAA) / 30u;
+    if (!fractions_on || !record || (uint16_t)(record - 0x0AAA) % 30u || i >= 64) {
         current_frac[0] = current_frac[1] = current_frac[2] = 0;
         return;
     }
@@ -232,6 +234,15 @@ static void objects_between(const ObjectTable *was, const ObjectTable *end, floa
         o->x = place_between(w->x, e->x, t);
         o->y = place_between(w->y, e->y, t);
         o->z = place_between(w->z, e->z, t);
+        {                               /* the circling pieces back on their circle (object/animate.c) */
+            int16_t add[3];
+
+            if (ObjectOrbitBetween(k, was, end, t, add)) {
+                o->x = (uint16_t)(o->x + add[0]);
+                o->y = (uint16_t)(o->y + add[1]);
+                o->z = (uint16_t)(o->z + add[2]);
+            }
+        }
         o->pitch = angle8_between(w->pitch, e->pitch, t, &object_frac[k][0]);
         o->heading = angle8_between(w->heading, e->heading, t, &object_frac[k][1]);
         o->roll = angle8_between(w->roll, e->roll, t, &object_frac[k][2]);

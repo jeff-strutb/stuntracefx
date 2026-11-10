@@ -43,5 +43,11 @@ void fx_far_record(uint16_t record);
 int fx_far_shift(void);
 uint16_t fx_far_depth(uint16_t depth);
 int fx_far_drawing(void);
+/* After the near list is drawn (render/frame.c): it again with the parked
+   tyres among its objects by depth, when there are any. */
+void fx_far_parked(uint16_t *stack);
+/* While a pass draws: the near record a slot holds (its $0AAA address), 0
+   for a far record or a tyre; `record` as it is outside a pass. */
+uint16_t fx_far_original(uint16_t record);
 
 #endif
