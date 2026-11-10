@@ -66,12 +66,12 @@ enum { FX_PICTURE_0 = 0x2C00, FX_PICTURE_1 = 0x9400, FX_PICTURE_0_CLEARED_END = 
    FX_TURN_PICTURE_HIGH. */
 enum { FX_TURN_UNPACK_HIGH = 0xC000, FX_TURN_PICTURE_LOW = 0x4000, FX_TURN_PICTURE_HIGH = 0xD000 };
 
-/* The view's right and bottom edges as the chip's words hold them when the
-   HUD draws a scaled sprite, which clips to them. The car physics keeps its
-   own values in the same two words between its runs, so these are read at
-   the moment of drawing, as the original's programs read them. Interim:
-   they go with the renderer's inputs as named fields (the fx session's
-   frame inputs). */
+/* The view's right and bottom edges, which the HUD's scaled sprites clip
+   to. Only GsuParamsFromDp writes them (FXCAR_STEER_BIAS and FXCAR_PARTS,
+   at the same numbers, are offsets in a car's record, not these words; the
+   sound/fx session measured no job writing $0038-$003F). Interim: they go
+   with the renderer's inputs as named fields (the frame inputs in
+   FxShared). */
 static inline uint16_t chip_view_right(void) { return fx16(FXIN_VIEW_RIGHT); }
 static inline uint16_t chip_view_bottom(void) { return fx16(FXIN_VIEW_BOTTOM); }
 
