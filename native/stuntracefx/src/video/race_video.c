@@ -67,6 +67,14 @@ int race_full_window(void)
     return pic.race.on && !pic.race.split && !pic.race.course_screen && !g.results_page_shown;
 }
 
+/* The results' page over the one-player race screen (the results, the menu
+   after a stunt race, the championship's pages): BG2 shows the page, BG1
+   the frame and panel rows (results_bg1_off turns its 3D rows off). */
+int race_results_page(void)
+{
+    return pic.race.on && !pic.race.split && !pic.race.course_screen && g.results_page_shown;
+}
+
 /* ---- the objects ---- */
 
 void race_video_init(void)
@@ -81,6 +89,8 @@ void race_video_init(void)
     race_video.course_tiles = nshvc_tiles_create(4, 1024, 1);
     race_video.course_map = nshvc_map_create(32, 64);
     race_video.frame_image = nshvc_image_create(256, 224, NSHVC_IMAGE_INDEXED);
+    race_video.frame_tiles_one = nshvc_tiles_create(8, 1024, 1);
+    race_video.frame_map_one = nshvc_map_create(32, 32);
     sprites_use_tiles(race_video.tiles, 0x200, 0x300);
 }
 
@@ -142,6 +152,11 @@ static int frame_image_stale = 1;
 
 static void frame_art_clear(void)
 {
+    static const uint8_t zero_art_8[1024 * 64];
+    static const uint16_t zero_words[32 * 32];
+
+    video_tiles_write(race_video.frame_tiles_one, 0, zero_art_8, 1024, NSHVC_TILES_PLANAR, sizeof zero_art_8);
+    video_map_write(race_video.frame_map_one, 0, 0, 32, 32, zero_words);
     video_fill(frame_art_8, 0, sizeof frame_art_8);
     video_fill(race_art_bytes, 0, sizeof race_art_bytes);
     video_fill(backdrop_two_words, 0, sizeof backdrop_two_words);
@@ -156,6 +171,7 @@ void race_frame_art_write(unsigned character, const uint8_t *data, uint32_t byte
 {
     if (character * 64u + bytes > sizeof frame_art_8)
         return;
+    video_tiles_write(race_video.frame_tiles_one, character, data, bytes / 64u, NSHVC_TILES_PLANAR, bytes);
     video_copy(frame_art_8 + character * 64u, data, bytes);
     stale(&frame_image_stale);
 }
@@ -277,10 +293,14 @@ static uint32_t unpacked(uint16_t out, uint16_t in)
    the mode's HUD pieces from FRAME_HUD_PIECES, the car's from FRAME_HUD_CAR. */
 enum { FRAME_HUD = 0x2B0, FRAME_HUD_PIECES = 0x2D6, FRAME_HUD_CAR = 0x2DA };
 
-/* A frame row's word and a picture's words to the first (buffer 0) or second page. */
+/* A frame row's word and a picture's words to the first (buffer 0) or second
+   page. The first is also BG1's map as the results' page shows it: its 3D
+   rows name characters below FRAME_HUD, which the 8-bit set never gets
+   (the 3D is the list's), so they show nothing. */
 void race_map_page_write(int page, const uint16_t *words)
 {
     if (page == 0) {
+        video_map_write(race_video.frame_map_one, 0, 0, 32, 32, words);
         video_copy(frame_words_1p, words, sizeof frame_words_1p);
         stale(&frame_image_stale);
     }
@@ -933,7 +953,8 @@ static uint16_t fixed_from(const uint8_t *c)
    the order is then the original's, sprites of priority 3 over the picture,
    the backdrop behind it and over sprites of priority 0 and 1. (The original's
    one-player screen is mode 3; in mode 3 the backdrop could not sit between
-   the draw list and those sprites.) */
+   the draw list and those sprites. The results' page, with BG1 as tiles and
+   no list, shows in mode 3: results_bg1_send in picture.c.) */
 static void race_screen_layers(void)
 {
     pic.race.on = 1;

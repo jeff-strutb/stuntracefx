@@ -57,6 +57,7 @@ void screen_two_anchor(int player, int x0, int x1, int y0, int y1, int *dx, int 
 void screen_two_box_source(int player, int box, int *x, int *y, int *w, int *h); /* a box's place in the player's 80 x 96 */
 void screen_two_box(int player, int box, float *x, float *y, float *w, float *h);   /* and where it floats, scaled */
 int race_full_window(void);                    /* the one-player race fills the window */
+int race_results_page(void);                   /* the one-player race screen shows the results' page */
 int race_two_full_window(void);                /* two players fill the window */
 int race_course_full_window(void);             /* the course screen fills the window */
 nshvc_image fx_noise_image(void);              /* fx_draw.c: the static's noise texture */
@@ -84,6 +85,8 @@ typedef struct {
     nshvc_tiles course_tiles;           /* the course screen's backdrop art */
     nshvc_map course_map;               /* and its map, 32 x 64 */
     nshvc_image frame_image;            /* the frame and panels around the 3D, at screen positions */
+    nshvc_tiles frame_tiles_one;        /* the one-player frame and panels as the original's BG1 art, 8bpp */
+    nshvc_map frame_map_one;            /* and its BG1 map (the results' page shows BG1 so) */
 } RaceVideo;
 
 extern RaceVideo race_video;

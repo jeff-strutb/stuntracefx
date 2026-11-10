@@ -82,6 +82,22 @@ static void set_background(int n)
     layer_send(n, &pic.bg[n]);
 }
 
+/* The results' page (race_results_page) shows BG1 as the original did: the
+   frame and panel rows as 8-bit tiles at their own priority, the map's row 0
+   at line 16 as the frame's image has it, in the original's mode 3 (see
+   draw_picture). The 3D's list is not shown: its rows are off. */
+static void results_bg1_send(void)
+{
+    Background b = pic.bg[0];
+
+    b.tiles = race_video.frame_tiles_one;
+    b.map = race_video.frame_map_one;
+    b.draw_list.id = 0;
+    b.scroll_x = 0;
+    b.scroll_y = 256 - 17;              /* line r shows the layer's line r + 1 + scroll, as the SNES's did */
+    layer_send(0, &b);
+}
+
 /* ---- the race screen's lines ---- */
 
 /* The rows the screen is lit on, by screen: one player one band, two players two. */
@@ -556,7 +572,7 @@ static void draw_picture(void)
 {
     nshvc_screen s;
     const ScreenShape *sh;
-    int i, full, menu_full, course_full;
+    int i, full, menu_full, course_full, results;
 
     screen_update();
     sh = screen_shape();
@@ -575,7 +591,12 @@ static void draw_picture(void)
     nshvc_screen_set(&s);
     if (pic.blank)
         return;
-    nshvc_mode_set(pic.mode, pic.bg3_priority, 0);
+    /* The race keeps mode 1 for its draw list (race_screen_layers); the
+       results' page has no list and BG2's page at priority 0, so it takes the
+       original's mode 3: the page's sprites (the car, priority 1) over the
+       page and under the frame, as they showed. */
+    results = race_results_page();
+    nshvc_mode_set(results ? 3 : pic.mode, pic.bg3_priority, 0);
     {
         nshvc_limits l;
 
@@ -597,6 +618,8 @@ static void draw_picture(void)
         race_two_player_list();
     for (i = 0; i < 3; i++)
         set_background(i);
+    if (results)
+        results_bg1_send();
     nshvc_windows_set(&pic.windows);
     nshvc_blend_set(&pic.blend);
     nshvc_palette_write(0, 256, pic.palette);
