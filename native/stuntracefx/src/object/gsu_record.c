@@ -12,6 +12,10 @@
 #include "fx/fx.h"
 #include "math/math.h"
 #include "object/handlers.h"
+
+/* a word $400 past a record, which the button sequence sets to $1000 with the
+   boost (the original's +$400); what reads it is not worked out here */
+enum { CHEAT_WORD_PAST_RECORD = 0x0400 };
 #include "object/object.h"
 #include "system/chip.h"
 #include "system/game.h"
@@ -150,10 +154,10 @@ void GsuRecordBoostRecharge(Object *o)
     rec = o->record;
     if (rec_get(rec, FXREC_SIDES) & 0x0400)
         return;
-    s = (uint16_t)(rec_get(rec, FXREC_6A) + (rec_get(rec, FXREC_RANK) == 1 ? 1 : 3));
+    s = (uint16_t)(rec_get(rec, FXREC_BOOST) + (rec_get(rec, FXREC_RANK) == 1 ? 1 : 3));
     if (!((uint16_t)(s - 0x0180) & 0x8000))
         s = 0x0180;
-    rec_put(rec, FXREC_6A, s);
+    rec_put(rec, FXREC_BOOST, s);
 }
 
 static uint16_t asr3(uint16_t v) { return (uint16_t)((int16_t)v >> 3); }
@@ -183,15 +187,15 @@ void GsuRecordFromObject(Object *o)
 
     if (!rec)
         return;
-    rec_put(rec, 0x000C, o->offset_x);
-    rec_put(rec, 0x000E, o->offset_y);
-    rec_put(rec, 0x0010, o->offset_z);
-    rec_put(rec, 0x0014, o->script);
+    rec_put(rec, FXREC_OFFSET_X, o->offset_x);
+    rec_put(rec, FXREC_OFFSET_Y, o->offset_y);
+    rec_put(rec, FXREC_OFFSET_Z, o->offset_z);
+    rec_put(rec, FXREC_OBJECT_SCRIPT, o->script);
     rec_put(rec, FXREC_POS_X, o->x);
     rec_put(rec, FXREC_POS_Y, o->y);
     rec_put(rec, FXREC_POS_Z, o->z);
     rec_put(rec, FXREC_HEADING, (uint16_t)(o->heading << 8));
-    rec_put(rec, 0x0012, o->shown_frame & 0x7F);
+    rec_put(rec, FXREC_FRAME, o->shown_frame & 0x7F);
 }
 
 /*
@@ -228,7 +232,7 @@ static int record_new(Object *o, uint16_t word0a)
     o->record = rec;
     if (!rec)
         return 0;
-    rec_put(rec, 0x000A, word0a);
+    rec_put(rec, FXREC_HANDLER, word0a);
     GsuRecordFromObject(o);
     return 1;
 }
@@ -296,8 +300,8 @@ void GsuRecordBoostRaise(uint16_t rec, uint8_t amount)
  */
 void ObjectTurnFromRecord(uint16_t rec, Object *o)
 {
-    o->roll = rec_get8(rec, 0x0029);
-    o->heading = rec_get8(rec, 0x0025);
+    o->roll = rec_get8(rec, FXREC_ROLL + 1);
+    o->heading = rec_get8(rec, FXREC_HEADING + 1);
     ObjectBillboardTilt(o);
 }
 
@@ -326,7 +330,7 @@ int ObjectSyncFromRecord(Object *o)
     }
     record_contacts.next = rec_get(rec, FXREC_LIST);
     rec_put(rec, FXREC_HEADING, (uint16_t)(o->heading << 8));
-    rec_put(rec, 0x0012, o->shown_frame & 0x7F);
+    rec_put(rec, FXREC_FRAME, o->shown_frame & 0x7F);
     o->x = rec_get(rec, FXREC_POS_X);
     o->y = rec_get(rec, FXREC_POS_Y);
     o->z = rec_get(rec, FXREC_POS_Z);
@@ -357,7 +361,7 @@ int ObjectSyncToRecord(Object *o)
         return 0;
     }
     rec_put(rec, FXREC_HEADING, (uint16_t)(o->heading << 8));
-    rec_put(rec, 0x0012, o->shown_frame & 0x7F);
+    rec_put(rec, FXREC_FRAME, o->shown_frame & 0x7F);
     record_contacts.next = rec_get(rec, FXREC_LIST);
     rec_put(rec, FXREC_POS_X, o->x);
     rec_put(rec, FXREC_POS_Y, o->y);
@@ -405,17 +409,17 @@ void GsuRecordLand(Object *o)
     if (!fxram_get(FX_RECORDS_422))
         return;
     rec = o->record;
-    if (!(rec_get(rec, 0x002C) & 0x0040) || !(rec_get(rec, FXREC_FLAGS8A) & 0x0010) || (rec_get(rec, FXREC_FLAGS40) & 0x0100))
+    if (!(rec_get(rec, FXREC_CONTACT_FLAGS) & 0x0040) || !(rec_get(rec, FXREC_FLAGS8A) & 0x0010) || (rec_get(rec, FXREC_FLAGS40) & 0x0100))
         return;
     rec_put(rec, FXREC_VEL_X, 0);
     rec_put(rec, FXREC_VEL_Y, 0);
     rec_put(rec, FXREC_VEL_Z, 0);
-    rec_put(rec, 0x0036, 0);
-    rec_put(rec, 0x0034, 0);
-    rec_put(rec, 0x0038, 0);
-    if (rec_get(rec, 0x0082) == 0x0200)
+    rec_put(rec, FXREC_PITCH_RATE, 0);
+    rec_put(rec, FXREC_HEADING_RATE, 0);
+    rec_put(rec, FXREC_ROLL_RATE, 0);
+    if (rec_get(rec, FXREC_DAMAGE) == 0x0200)
         return;
-    rec_put(rec, 0x0082, 0x0200);
+    rec_put(rec, FXREC_DAMAGE, 0x0200);
     rec_put(rec, FXREC_FLAGS40, (uint16_t)((rec_get(rec, FXREC_FLAGS40) & 0xFF9F) | 0x1001));
 }
 
@@ -433,13 +437,13 @@ uint16_t RecordNextContact(void)
 
     if (!e)
         return 0;
-    while (!(rec_get(e, 0x0010) & 0x0002)) {
-        e = rec_get(e, 0x000E);
+    while (!(rec_get(e, FXREC_FLAGS10) & 0x0002)) {
+        e = rec_get(e, FXREC_NEXT);
         if (!e)
             return 0;
     }
-    r = rec_get(e, 0x000C);
-    c->next = rec_get(e, 0x000E);
+    r = rec_get(e, FXCON_OTHER);
+    c->next = rec_get(e, FXREC_NEXT);
     c->word = (rec_get(r, FXREC_FLAGS16) & 0x0002) ? rec_get(r, FXREC_FLAGS64) : 0;
     c->flags = rec_get(r, FXREC_FLAGS16);
     c->summary = 0;
@@ -466,15 +470,15 @@ uint16_t RecordContactSummary(const Object *o)
         if (fxram_get(FX_COURSE_FLAGS) & 0x0020)
             c->summary |= 0x0080;
     }
-    c->summary |= rec_get(rec, 0x002C) & 0x0020;
+    c->summary |= rec_get(rec, FXREC_CONTACT_FLAGS) & 0x0020;
     c->flags = 0;
     c->word = 0;
-    for (e = rec_get(rec, FXREC_LIST); e; e = rec_get(e, 0x000E)) {
+    for (e = rec_get(rec, FXREC_LIST); e; e = rec_get(e, FXREC_NEXT)) {
         uint16_t r, f;
 
-        if (!(rec_get(e, 0x0010) & 0x0002))
+        if (!(rec_get(e, FXREC_FLAGS10) & 0x0002))
             continue;
-        r = rec_get(e, 0x000C);
+        r = rec_get(e, FXCON_OTHER);
         f = rec_get(r, FXREC_FLAGS16);
         if (f & 0x0002)
             c->word |= rec_get(r, FXREC_FLAGS64);
@@ -518,8 +522,8 @@ static void RecordButtonSequence(uint16_t rec, uint16_t held)
     }
     SoundPort0QueuePush(0x48);
     rec_or(rec, FXREC_FLAGS40, 0x2000);
-    rec_put(rec, FXREC_6A, 0x0180);
-    rec_put(rec, 0x0400, 0x1000);
+    rec_put(rec, FXREC_BOOST, 0x0180);
+    rec_put(rec, CHEAT_WORD_PAST_RECORD, 0x1000);
     g.seq_count = 0;
     g.seq_stage = 0;
 }
@@ -592,7 +596,7 @@ void CarControlsToRecord(Object *o, uint16_t held, uint16_t prev, int player)
         if ((uint16_t)(rec_get(rec, FXREC_SPEED) - 0x0032) & 0x8000)
             rec_or(rec, FXREC_SIDES, 0x0020);
     }
-    if ((held & 0x4000) && !rec_get(rec, FXREC_6A)) {
+    if ((held & 0x4000) && !rec_get(rec, FXREC_BOOST)) {
         if (!(g.player_flags[player] & 0x0010)) {
             SoundPort0QueuePush(0x5E);
             g.player_flags[player] |= 0x0010;
@@ -608,9 +612,9 @@ void CarControlsToRecord(Object *o, uint16_t held, uint16_t prev, int player)
         rec_or(rec, FXREC_SIDES, 0x0010);
     if (rec_get(rec, FXREC_FLAGS40) & 0x0100) {
         if (held & 0x0400)
-            rec_put(rec, 0x0026, (uint16_t)(rec_get(rec, 0x0026) - 0x0600));
+            rec_put(rec, FXREC_PITCH, (uint16_t)(rec_get(rec, FXREC_PITCH) - 0x0600));
         if (held & 0x0800)
-            rec_put(rec, 0x0026, (uint16_t)(rec_get(rec, 0x0026) + 0x0600));
+            rec_put(rec, FXREC_PITCH, (uint16_t)(rec_get(rec, FXREC_PITCH) + 0x0600));
     }
 }
 
@@ -656,13 +660,13 @@ void ObjectPoseFromRecord(Object *o)
         rec_and(o->record, FXREC_FLAGS16, 0xFBFF);
     }
     rec = o->record;
-    rec_put(rec, 0x0090, rec_get(rec, FXREC_FLAGS40));
+    rec_put(rec, FXCAR_FLAGS40_KEPT, rec_get(rec, FXREC_FLAGS40));
     o->x = rec_get(rec, FXREC_POS_X);
     o->y = rec_get(rec, FXREC_POS_Y);
     o->z = rec_get(rec, FXREC_POS_Z);
-    o->pitch = rec_get8(rec, 0x0027);
-    o->roll = rec_get8(rec, 0x0029);
-    o->heading = rec_get8(rec, 0x0025);
+    o->pitch = rec_get8(rec, FXREC_PITCH + 1);
+    o->roll = rec_get8(rec, FXREC_ROLL + 1);
+    o->heading = rec_get8(rec, FXREC_HEADING + 1);
 }
 
 /*
@@ -673,6 +677,6 @@ void ObjectPoseFromRecord(Object *o)
 void GsuRecordSetMass(Object *o, uint8_t value)
 {
     if (o->record)
-        rec_put(o->record, 0x002A, (uint16_t)(value << 8));
+        rec_put(o->record, FXREC_MASS, (uint16_t)(value << 8));
 }
 

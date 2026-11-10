@@ -64,14 +64,14 @@ void PlayerStatsFromRecord(uint16_t rec, int player)
         g.car_flags_low[player] = (uint8_t)f;
         g.car_flags_high[player] = (uint8_t)(f >> 8);
         g.status_flags[player] = rec_get(rec, FXREC_SIDES);
-        w = rec_get(rec, FXREC_82) >> 3;
+        w = rec_get(rec, FXREC_DAMAGE) >> 3;
         v = (uint8_t)w;
         g.gauge_one[player] = v;
         if (v >= 0x3F)
             v = 0x3F;
         g.kept_rate[player] = (uint8_t)((v << 1) + 0x30);
         SpeedSampleAdd(rec_get(rec, FXREC_SPEED), player);
-        g.kept_enable[player] = (uint8_t)(rec_get(rec, FXREC_6A) >> 3);
+        g.kept_enable[player] = (uint8_t)(rec_get(rec, FXREC_BOOST) >> 3);
         g.laps_done[player] = (uint8_t)rec_get(rec, FXREC_LAPS);
         g.player_rank[player] = (uint8_t)(rec_get(rec, FXREC_RANK) & 0x0F);
     }

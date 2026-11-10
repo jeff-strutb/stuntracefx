@@ -70,10 +70,10 @@ static int parked_child(const Object *o, uint16_t at[3], uint8_t turn[3])
         if (!ObjectsDrawnBetween() && !(rec_get(cr, FXREC_FLAGS16) & 0x0400)) {   /* a step's own: its car's and its records together */
             h = rec_get(cr, FXREC_HEADING) * (2 * M_PI / 65536);
             c = cos(h), s = sin(h);
-            x = (int16_t)(uint16_t)(rec_get(r, FXREC_POS_X) + rec_get(r, 0x004A) - rec_get(cr, FXREC_POS_X));
-            z = (int16_t)(uint16_t)(rec_get(r, FXREC_POS_Z) + rec_get(r, 0x004E) - rec_get(cr, FXREC_POS_Z));
+            x = (int16_t)(uint16_t)(rec_get(r, FXREC_POS_X) + rec_get(r, FXPART_OFFSET_X) - rec_get(cr, FXREC_POS_X));
+            z = (int16_t)(uint16_t)(rec_get(r, FXREC_POS_Z) + rec_get(r, FXPART_OFFSET_Z) - rec_get(cr, FXREC_POS_Z));
             child_seat[k].at[0] = (int16_t)lround(x * c + z * s);
-            child_seat[k].at[1] = (int16_t)(uint16_t)(rec_get(r, FXREC_POS_Y) + rec_get(r, 0x004C) - o->size - 0x0014
+            child_seat[k].at[1] = (int16_t)(uint16_t)(rec_get(r, FXREC_POS_Y) + rec_get(r, FXPART_OFFSET_Y) - o->size - 0x0014
                                                       - rec_get(cr, FXREC_POS_Y));
             child_seat[k].at[2] = (int16_t)lround(z * c - x * s);
             child_seat[k].a14 = o->pitch;

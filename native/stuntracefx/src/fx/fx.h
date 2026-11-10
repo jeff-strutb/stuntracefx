@@ -18,30 +18,23 @@ _Noreturn void fx_bad_dispatch(uint16_t at);
 
 /* the port's renderer calls (render/fx_ops.c, fxhooks.txt) */
 
-#define FXCAR_0A 0x000A
+#define FXCAR_0A FXREC_HANDLER     /* interim: render/frame.c's name, until the 3D session's work there lands */
 #define FXCAR_44 0x0044
 #define FXCAR_64 0x0064
 #define FXCAR_8C 0x008C
 #define FXCAR_ENTRY 0x006E
 #define FXCAR_IMPACT 0x0062
 #define FXCAR_PARTS 0x003E
-#define FXCAR_PITCH 0x0024
-#define FXCAR_ROLL 0x0028
 #define FXCAR_SCRIPT 0x0066
 #define FXCAR_STEER_BIAS 0x003A
 #define FXCAR_STUCK 0x007E
-#define FXCAR_YAW 0x0026
 #define FXCON_OTHER 0x000C
 #define FXHIT_VELOCITY 0x0004
 #define FXHIT_X 0x0008
-#define FXPART_12 0x0012
 #define FXPART_3C 0x003C
-#define FXPART_46 0x0046
 #define FXPART_50 0x0050
 #define FXPART_NEXT 0x0034
 #define FXPART_WORLD 0x0036
-#define FXREC_6A 0x006A
-#define FXREC_82 0x0082
 #define FXREC_ALIGN 0x006C
 #define FXREC_ALL_NEXT 0x0004
 #define FXREC_ALL_PREV 0x0006
@@ -70,8 +63,46 @@ _Noreturn void fx_bad_dispatch(uint16_t at);
 #define FXREC_TO_GO 0x0084
 #define FXREC_VELOCITY 0x002E
 #define FXREC_Y 0x0020
-#define FXREC_YAW_RATE 0x0034
 #define FXREC_Y_HELD 0x0060
+/* The record fields both sides read, settled between the objects and the
+   chip's code (2026-11-09). An object's record: */
+#define FXREC_HANDLER 0x000A            /* the Super FX handler it runs each step (FXRUN_*) */
+#define FXREC_OFFSET_X 0x000C           /* the object's model offsets (a contact entry's +$0C-$10 are FXCON_OTHER, FXREC_NEXT, FXREC_FLAGS10) */
+#define FXREC_OFFSET_Y 0x000E
+#define FXREC_OFFSET_Z 0x0010
+#define FXREC_FRAME 0x0012              /* the frame shown */
+#define FXREC_OBJECT_SCRIPT 0x0014      /* the object's script word */
+#define FXREC_POS_X 0x001E              /* its place (+$1E is also FXREC_HALF_X, +$20 FXREC_Y in the chip code) */
+#define FXREC_POS_Y 0x0020
+#define FXREC_POS_Z 0x0022
+#define FXREC_HEADING 0x0024            /* its angles: the high byte the object's heading, pitch, roll */
+#define FXREC_PITCH 0x0026
+#define FXREC_ROLL 0x0028
+#define FXREC_CONTACT_FLAGS 0x002C
+#define FXREC_VEL_X 0x002E              /* its velocity (+$2E is also FXREC_VELOCITY, FXREC_SCALED_X) */
+#define FXREC_VEL_Y 0x0030
+#define FXREC_VEL_Z 0x0032
+#define FXREC_HEADING_RATE 0x0034       /* its turn rates */
+#define FXREC_PITCH_RATE 0x0036
+#define FXREC_ROLL_RATE 0x0038
+#define FXREC_FLAGS64 0x0064            /* also FXCAR_64 */
+#define FXREC_BOOST 0x006A              /* a car's boost: $180 full, raised by the raise balls and hits */
+#define FXREC_DAMAGE 0x0082             /* a car's damage: lowered by repairs, $200 wrecked */
+#define FXREC_FLAGS8A 0x008A            /* started from the course's flags ($26F2); bonus gates set bit 0 */
+/* a car's */
+#define FXCAR_SLIDE 0x0056              /* the slide total (a word) */
+#define FXCAR_JUMP_TIMER 0x005E         /* $20 when it jumps, counted down; no jump while set */
+#define FXCAR_PARTNER 0x008E            /* the car it tows or is towed by */
+#define FXCAR_FLAGS40_KEPT 0x0090       /* the copy of +$40 its pose keeps */
+#define FXCAR_PART_CONTACTS 0x0092      /* its parts' contact flags (+$2C) gathered */
+#define FXCAR_PUSH_TOTAL 0x0094         /* the push amounts its hits added */
+/* a part's */
+#define FXPART_CHILD 0x0012             /* its child's entry, an offset into bank $09's object data */
+#define FXPART_FLAGS 0x0046             /* bit 9 no child; bits 0 and 4 it can break off; bit 5 */
+#define FXPART_OFFSET_X 0x004A          /* its offset from its record's place (its child is drawn there) */
+#define FXPART_OFFSET_Y 0x004C
+#define FXPART_OFFSET_Z 0x004E
+
 #define FX_ATAN_TABLE 0x9E40
 #define FX_CARS 0x262E
 #define FX_CAR_FRAME 0x2394

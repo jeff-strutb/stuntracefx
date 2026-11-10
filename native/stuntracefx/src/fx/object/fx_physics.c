@@ -71,7 +71,7 @@ FxPhysicsProgramResult FxPhysicsProgram(uint16_t entry_scratch_a, uint16_t pose_
             if (current_record == 0) {
                 break;
             } else {
-                fxcar_0a = fx_ldw((uint16_t)(record_out + FXCAR_0A));
+                fxcar_0a = fx_ldw((uint16_t)(record_out + FXREC_HANDLER));
                 if (fxcar_0a == 0) {
                 } else {
                     count = fxcar_0a;
@@ -351,7 +351,7 @@ FxObjectDropResult FxObjectDrop(uint16_t place_x, uint16_t last_other_ptr, uint1
     half_x_2 = fx_pull(stack);
     hit_depth = fx_ldw(FX_HIT_DEPTH);
     if (hit_depth != 0) {
-        fx_stw((uint16_t)(record_out + FXCAR_0A), 0);
+        fx_stw((uint16_t)(record_out + FXREC_HANDLER), 0);
         pulled_record_stopped = fx_pull(stack);
         fx_unspill(stack);
         return (FxObjectDropResult){world_sum_x_out, world_sum_y_out, push_flags_high_out, pulled_record_stopped, record_out, rom_at_out_2, 0};
@@ -754,7 +754,7 @@ FxCollideModelResult FxCollideModel(uint16_t place_x, uint16_t place_y, uint16_t
     fx_spill(stack);
     fx_push(stack, caller_scratch);
     fx_push(stack, record);
-    fxpart_12 = fx_ldw((uint16_t)(model_record + FXPART_12));
+    fxpart_12 = fx_ldw((uint16_t)(model_record + FXPART_CHILD));
     fx_stw(0x0044, fxpart_12);
     fx_stw(FX_PUSHES, 0);
     fx_stw(0x23B0, 0x7D00);
@@ -822,7 +822,7 @@ FxCollideModelResult FxCollideModel(uint16_t place_x, uint16_t place_y, uint16_t
             delta_z = (uint16_t)(record_z - model_z);
             fx_stw(0x0024, delta_z);
             fx_stw(FX_PUSH_TURN, 0);
-            pitch = fx_ldw((uint16_t)(model_record + FXCAR_PITCH));
+            pitch = fx_ldw((uint16_t)(model_record + FXREC_HEADING));
             if (pitch != 0) {
                 model_turn = (uint16_t)(pitch >> 8);
                 fx_stw(FX_PUSH_TURN, model_turn);
@@ -2169,7 +2169,7 @@ FxPartsUpdateResult FxPartsUpdate(uint16_t entry_product_lo, uint16_t push_y, ui
 
     fx_spill(stack);
     fx_stw((uint16_t)(car + 0x0044), 0);
-    fx_stw((uint16_t)(car + FXPART_46), 0);
+    fx_stw((uint16_t)(car + FXPART_FLAGS), 0);
     fx_stw((uint16_t)(car + 0x0056), 0);
     parts = fx_ldw((uint16_t)(car + FXCAR_PARTS));
     for (;;) {
@@ -2178,7 +2178,7 @@ FxPartsUpdateResult FxPartsUpdate(uint16_t entry_product_lo, uint16_t push_y, ui
         if (current_part_ptr == 0) {
             break;
         } else {
-            fxpart_46 = fx_ldw((uint16_t)(wheel_out + FXPART_46));
+            fxpart_46 = fx_ldw((uint16_t)(wheel_out + FXPART_FLAGS));
             if ((fxpart_46 & 0x0800) == 0) {
                 { FxWheelUpdateResult r_ = FxWheelUpdate(entry_product_lo, push_y, model_record, car, wheel_out, stack, rom_at); up_ = r_.up; entry_product_lo = r_.last_low; push_y = r_.y_row; model_record = r_.model_record_out; car = r_.car_out; wheel_out = r_.wheel_out; rom_at = r_.rom_at_out; };
                 if (up_) {                       /* it returned past us */
@@ -2314,11 +2314,11 @@ FxPartPullResult FxPartPull(uint16_t push_y, uint16_t model_record, uint16_t car
     fxcar_64 = fx_ldw((uint16_t)(car + FXCAR_64));
     if ((fxcar_64 & 1) == 0) {
         fx_spill(stack);
-        fxpart_46 = fx_ldw((uint16_t)(part + FXPART_46));
+        fxpart_46 = fx_ldw((uint16_t)(part + FXPART_FLAGS));
         if ((4 & fxpart_46) != 0) {
             anchor_part = fx_ldw((uint16_t)(car + 0x008E));
-            roll = fx_ldw((uint16_t)(anchor_part + FXCAR_ROLL));
-            fx_stw((uint16_t)(car + FXCAR_ROLL), roll);
+            roll = fx_ldw((uint16_t)(anchor_part + FXREC_ROLL));
+            fx_stw((uint16_t)(car + FXREC_ROLL), roll);
             parts = fx_ldw((uint16_t)(anchor_part + FXCAR_PARTS));
             for (;;) {
                 next_part_ptr = parts;
@@ -2326,7 +2326,7 @@ FxPartPullResult FxPartPull(uint16_t push_y, uint16_t model_record, uint16_t car
                     break;
                 } else {
                     anchor_part = next_part_ptr;
-                    fxpart_46_2 = fx_ldw((uint16_t)(anchor_part + FXPART_46));
+                    fxpart_46_2 = fx_ldw((uint16_t)(anchor_part + FXPART_FLAGS));
                     if ((fxpart_46_2 & 0x0800) != 0) {
                         break;
                     } else {
@@ -2440,7 +2440,7 @@ FxPartPullResult FxPartPull(uint16_t push_y, uint16_t model_record, uint16_t car
         car_speed_z = fx_ldw(0x2338);
         fx_stw((uint16_t)(part + 0x0032), car_speed_z);
         fx_spill(stack);
-        fxpart_46_3 = fx_ldw((uint16_t)(part + FXPART_46));
+        fxpart_46_3 = fx_ldw((uint16_t)(part + FXPART_FLAGS));
         if ((4 & fxpart_46_3) != 0) {
             anchor_part_car = fx_ldw((uint16_t)(car + 0x008E));
             parts_3 = fx_ldw((uint16_t)(anchor_part_car + FXCAR_PARTS));
@@ -2450,7 +2450,7 @@ FxPartPullResult FxPartPull(uint16_t push_y, uint16_t model_record, uint16_t car
                     break;
                 } else {
                     anchor_part_car = next_part_ptr_car;
-                    fxpart_46_4 = fx_ldw((uint16_t)(anchor_part_car + FXPART_46));
+                    fxpart_46_4 = fx_ldw((uint16_t)(anchor_part_car + FXPART_FLAGS));
                     if ((fxpart_46_4 & 0x0800) != 0) {
                         break;
                     } else {
@@ -2678,7 +2678,7 @@ FxWheelUpdateResult FxWheelUpdate(uint16_t entry_product_lo, uint16_t push_y, ui
     uint16_t wheel_contact_flags_surface;
 
     fx_spill(stack);
-    fxpart_46 = fx_ldw((uint16_t)(wheel + FXPART_46));
+    fxpart_46 = fx_ldw((uint16_t)(wheel + FXPART_FLAGS));
     fx_stw(FX_WHEEL_FLAGS, fxpart_46);
     fx_stw((uint16_t)(wheel + 0x002C), 0);
     flags40 = fx_ldw((uint16_t)(car + FXREC_FLAGS40));
@@ -2696,15 +2696,15 @@ FxWheelUpdateResult FxWheelUpdate(uint16_t entry_product_lo, uint16_t push_y, ui
     if (run_lA8CC) {
         run_lA8CC = 0;
         fx_sbk(flags_without_400);
-        pitch = fx_ldw((uint16_t)(car + FXCAR_PITCH));
-        fx_stw((uint16_t)(wheel + FXCAR_PITCH), pitch);
-        roll = fx_ldw((uint16_t)(car + FXCAR_ROLL));
-        fx_stw((uint16_t)(wheel + FXCAR_ROLL), roll);
+        pitch = fx_ldw((uint16_t)(car + FXREC_HEADING));
+        fx_stw((uint16_t)(wheel + FXREC_HEADING), pitch);
+        roll = fx_ldw((uint16_t)(car + FXREC_ROLL));
+        fx_stw((uint16_t)(wheel + FXREC_ROLL), roll);
         wheel_flags_2 = fx_ldw(FX_WHEEL_FLAGS);
         if ((2 & wheel_flags_2) == 0) {
         } else {
             steer_bias = fx_ldw((uint16_t)(car + FXCAR_STEER_BIAS));
-            pitch_2 = fx_ldw((uint16_t)(wheel + FXCAR_PITCH));
+            pitch_2 = fx_ldw((uint16_t)(wheel + FXREC_HEADING));
             fx_sbk((uint16_t)(steer_bias + pitch_2));
         }
         wheel_flags_3 = fx_ldw(FX_WHEEL_FLAGS);
@@ -2942,7 +2942,7 @@ FxWheelUpdateResult FxWheelUpdate(uint16_t entry_product_lo, uint16_t push_y, ui
             } else {
                 contact_force_side = fx_ldw(FX_CONTACT_FORCE_SIDE);
                 fx_stw(FX_CONTACT_FORCE, contact_force_side);
-                fxpart_46_2 = fx_ldw((uint16_t)(car + FXPART_46));
+                fxpart_46_2 = fx_ldw((uint16_t)(car + FXPART_FLAGS));
                 fx_sbk((uint16_t)(fxpart_46_2 + 1));
                 world_sum_y_check = fx_ldw(0x2342);
                 if (world_sum_y_check != 0) {
@@ -3000,8 +3000,8 @@ FxWheelUpdateResult FxWheelUpdate(uint16_t entry_product_lo, uint16_t push_y, ui
                     }
                 }
                 fx_romb(0);
-                pitch_3 = fx_ldw((uint16_t)(wheel + FXCAR_PITCH));
-                pitch_4 = fx_ldw((uint16_t)(car + FXCAR_PITCH));
+                pitch_3 = fx_ldw((uint16_t)(wheel + FXREC_HEADING));
+                pitch_4 = fx_ldw((uint16_t)(car + FXREC_HEADING));
                 pitch_diff_index = (uint16_t)((uint16_t)(pitch_3 - pitch_4) >> 8);
                 fx_r14(0x96FE);
                 fx_r14((uint16_t)((uint16_t)(pitch_diff_index & 0xFF) - 0x6902));
@@ -3258,16 +3258,16 @@ FxWheelUpdateResult FxWheelUpdate(uint16_t entry_product_lo, uint16_t push_y, ui
             }
         } else {
         }
-        fxpart_46_3 = fx_ldw((uint16_t)(wheel + FXPART_46));
+        fxpart_46_3 = fx_ldw((uint16_t)(wheel + FXPART_FLAGS));
         if ((2 & fxpart_46_3) == 0) {
         } else {
-            pitch_5 = fx_ldw((uint16_t)(wheel + FXCAR_PITCH));
+            pitch_5 = fx_ldw((uint16_t)(wheel + FXREC_HEADING));
             steer_bias_4 = fx_ldw((uint16_t)(car + FXCAR_STEER_BIAS));
-            fx_stw((uint16_t)(wheel + FXCAR_PITCH), (uint16_t)(pitch_5 + steer_bias_4));
+            fx_stw((uint16_t)(wheel + FXREC_HEADING), (uint16_t)(pitch_5 + steer_bias_4));
         }
     }
     wheel_flags_11 = fx_ldw(FX_WHEEL_FLAGS);
-    fx_stw((uint16_t)(wheel + FXPART_46), wheel_flags_11);
+    fx_stw((uint16_t)(wheel + FXPART_FLAGS), wheel_flags_11);
     fx_unspill(stack);
     return (FxWheelUpdateResult){entry_product_lo, push_y, model_record, car, wheel, rom_at, 0};
 }
@@ -3463,7 +3463,7 @@ FxWheelUpdateNoSlotResult FxWheelUpdateNoSlot(uint16_t entry_product_lo, uint16_
     } else {
         contact_force_side = fx_ldw(FX_CONTACT_FORCE_SIDE);
         fx_stw(FX_CONTACT_FORCE, contact_force_side);
-        fxpart_46 = fx_ldw((uint16_t)(car + FXPART_46));
+        fxpart_46 = fx_ldw((uint16_t)(car + FXPART_FLAGS));
         fx_sbk((uint16_t)(fxpart_46 + 1));
         world_sum_y_check = fx_ldw(0x2342);
         if (world_sum_y_check != 0) {
@@ -3521,8 +3521,8 @@ FxWheelUpdateNoSlotResult FxWheelUpdateNoSlot(uint16_t entry_product_lo, uint16_
             }
         }
         fx_romb(0);
-        pitch = fx_ldw((uint16_t)(wheel + FXCAR_PITCH));
-        pitch_2 = fx_ldw((uint16_t)(car + FXCAR_PITCH));
+        pitch = fx_ldw((uint16_t)(wheel + FXREC_HEADING));
+        pitch_2 = fx_ldw((uint16_t)(car + FXREC_HEADING));
         pitch_diff_index = (uint16_t)((uint16_t)(pitch - pitch_2) >> 8);
         fx_r14(0x96FE);
         fx_r14((uint16_t)((uint16_t)(pitch_diff_index & 0xFF) - 0x6902));
@@ -3774,15 +3774,15 @@ FxWheelUpdateNoSlotResult FxWheelUpdateNoSlot(uint16_t entry_product_lo, uint16_
         car_counter_44 = fx_ldw((uint16_t)(car + 0x0044));
         fx_sbk((uint16_t)(car_counter_44 + 1));
     }
-    fxpart_46_2 = fx_ldw((uint16_t)(wheel + FXPART_46));
+    fxpart_46_2 = fx_ldw((uint16_t)(wheel + FXPART_FLAGS));
     if ((2 & fxpart_46_2) == 0) {
     } else {
-        pitch_3 = fx_ldw((uint16_t)(wheel + FXCAR_PITCH));
+        pitch_3 = fx_ldw((uint16_t)(wheel + FXREC_HEADING));
         steer_bias_3 = fx_ldw((uint16_t)(car + FXCAR_STEER_BIAS));
-        fx_stw((uint16_t)(wheel + FXCAR_PITCH), (uint16_t)(pitch_3 + steer_bias_3));
+        fx_stw((uint16_t)(wheel + FXREC_HEADING), (uint16_t)(pitch_3 + steer_bias_3));
     }
     wheel_flags_7 = fx_ldw(FX_WHEEL_FLAGS);
-    fx_stw((uint16_t)(wheel + FXPART_46), wheel_flags_7);
+    fx_stw((uint16_t)(wheel + FXPART_FLAGS), wheel_flags_7);
     fx_unspill(stack);
     return (FxWheelUpdateNoSlotResult){1};
 }
@@ -4611,9 +4611,9 @@ FxCarHandlerResult FxCarHandler(uint16_t pose_cos, uint16_t pose_sin, uint16_t p
             fx_push(stack, car);
             car_yaw = fx_ldw((uint16_t)(car + 0x0026));
             fx_stw(0x0020, (uint16_t)((uint16_t)~car_yaw + 1));
-            pitch = fx_ldw((uint16_t)(car + FXCAR_PITCH));
+            pitch = fx_ldw((uint16_t)(car + FXREC_HEADING));
             fx_stw(0x0022, (uint16_t)((uint16_t)~pitch + 1));
-            roll = fx_ldw((uint16_t)(car + FXCAR_ROLL));
+            roll = fx_ldw((uint16_t)(car + FXREC_ROLL));
             fx_stw(0x0024, (uint16_t)((uint16_t)~roll + 1));
             { FxMatrixFromAnglesResult r_ = FxMatrixFromAngles(0x00E4); s1 = r_.s1; c2 = r_.c2; s2 = r_.s2; rom_at_2 = r_.rom_at; };
             matrix_out = FxMatrixTranspose04(0x00E4);
@@ -4730,7 +4730,7 @@ FxCarHandlerResult FxCarHandler(uint16_t pose_cos, uint16_t pose_sin, uint16_t p
                 } else {
                     if ((0x0010 & flags40_3) != 0) {
                     } else {
-                        fxpart_46 = fx_ldw((uint16_t)(car + FXPART_46));
+                        fxpart_46 = fx_ldw((uint16_t)(car + FXPART_FLAGS));
                         if (fxpart_46 == 0) {
                         } else {
                             speed_2 = fx_ldw((uint16_t)(car + FXREC_SPEED));
@@ -4799,7 +4799,7 @@ FxCarHandlerResult FxCarHandler(uint16_t pose_cos, uint16_t pose_sin, uint16_t p
                 }
             } else {
                 fx_ldw(FX_PARAM_THRUST_BOOST);
-                fxrec_6a = fx_ldw((uint16_t)(car + FXREC_6A));
+                fxrec_6a = fx_ldw((uint16_t)(car + FXREC_BOOST));
                 if (fxrec_6a == 0) {
                     param_thrust = fx_ldw(FX_PARAM_THRUST_BOOST);
                 } else {
@@ -4816,7 +4816,7 @@ FxCarHandlerResult FxCarHandler(uint16_t pose_cos, uint16_t pose_sin, uint16_t p
                         hit_flags_26f2 = fx_ldw(0x26F2);
                         if ((hit_flags_26f2 & 0x0200) != 0) {
                         } else {
-                            fx_stw((uint16_t)(car + FXREC_6A), fxrec_6a_2);
+                            fx_stw((uint16_t)(car + FXREC_BOOST), fxrec_6a_2);
                         }
                     }
                     param_thrust = fx_ldw(FX_PARAM_THRUST);
@@ -5028,7 +5028,7 @@ FxCarHandlerResult FxCarHandler(uint16_t pose_cos, uint16_t pose_sin, uint16_t p
                 record_state_flags = fx_ldw((uint16_t)(caller_scratch_back + 0x008A));
                 if ((0x0100 & record_state_flags) != 0) {
                     { FxRecordHeadingAheadResult r_ = FxRecordHeadingAhead(spread_out, car_y_out, car_z_out, caller_scratch_back, other_car_out, stack); heading_angle = r_.heading_angle; spread_out = r_.angle_sign_xor; car_y_out = r_.swap_mark; car_z_out = r_.nearest_number_out; other_car_out = r_.nearest_dist_x_out; rom_at_out_5 = r_.rom_at; };
-                    pitch_2 = fx_ldw((uint16_t)(caller_scratch_back + FXCAR_PITCH));
+                    pitch_2 = fx_ldw((uint16_t)(caller_scratch_back + FXREC_HEADING));
                     fx_sbk((uint16_t)(fx_div2(fx_div2((uint16_t)(heading_angle - pitch_2))) + pitch_2));
                     fx_stw(FX_SPIN, 0);
                     fx_stw((uint16_t)(caller_scratch_back + 0x0034), 0);
@@ -5192,7 +5192,7 @@ FxCarHandlerClampResult FxCarHandlerClamp(uint16_t pose_cos, uint16_t pose_sin, 
         }
     }
     fx_sbk(clamped_spin);
-    roll = fx_ldw((uint16_t)(car + FXCAR_ROLL));
+    roll = fx_ldw((uint16_t)(car + FXREC_ROLL));
     if (roll & 0x8000) {
         if (!((uint16_t)(roll + 0x2000) & 0x8000)) {
         } else {
@@ -5372,8 +5372,8 @@ FxCarHandlerClampResult FxCarHandlerClamp(uint16_t pose_cos, uint16_t pose_sin, 
     if ((uint16_t)(count_word_44 - 4) & 0x8000) {
     } else {
         fxpart_50 = (uint16_t)(fxpart_50 + fxpart_50);
-        roll_2 = fx_ldw((uint16_t)(car + FXCAR_ROLL));
-        fx_stw((uint16_t)(car + FXCAR_ROLL), (uint16_t)(roll_2 - fx_div2(fx_div2(roll_2))));
+        roll_2 = fx_ldw((uint16_t)(car + FXREC_ROLL));
+        fx_stw((uint16_t)(car + FXREC_ROLL), (uint16_t)(roll_2 - fx_div2(fx_div2(roll_2))));
     }
     old_word_52 = fx_ldw((uint16_t)(car + 0x0052));
     fx_stw((uint16_t)(car + 0x0052), (uint16_t)(fx_div2((uint16_t)(fxpart_50 - old_word_52)) + old_word_52));
@@ -5622,8 +5622,8 @@ FxCarHandlerFlipResult FxCarHandlerFlip(uint16_t pose_aux, uint16_t car, uint16_
     if ((uint16_t)(contact_count - 4) & 0x8000) {
     } else {
         fxpart_50 = (uint16_t)(fxpart_50 + fxpart_50);
-        roll = fx_ldw((uint16_t)(car + FXCAR_ROLL));
-        fx_stw((uint16_t)(car + FXCAR_ROLL), (uint16_t)(roll - fx_div2(fx_div2(roll))));
+        roll = fx_ldw((uint16_t)(car + FXREC_ROLL));
+        fx_stw((uint16_t)(car + FXREC_ROLL), (uint16_t)(roll - fx_div2(fx_div2(roll))));
     }
     old_smoothed_value = fx_ldw((uint16_t)(car + 0x0052));
     fx_stw((uint16_t)(car + 0x0052), (uint16_t)(fx_div2((uint16_t)(fxpart_50 - old_smoothed_value)) + old_smoothed_value));

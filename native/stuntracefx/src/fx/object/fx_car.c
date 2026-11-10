@@ -77,7 +77,7 @@ uint16_t FxCarAddPart(uint16_t car_record, uint16_t *stack, uint16_t rom_at)
         fxpart_12 = (uint16_t)((field12_low & 0xFF) | fx_getb() << 8);
         field3c_ptr = (uint16_t)(field12_hi_ptr + 1);
         fx_r14(field3c_ptr);
-        fx_stw((uint16_t)(record + FXPART_12), fxpart_12);
+        fx_stw((uint16_t)(record + FXPART_CHILD), fxpart_12);
         field3c_low = fx_getb();
         field3c_hi_ptr = (uint16_t)(field3c_ptr + 1);
         fx_r14(field3c_hi_ptr);
@@ -119,7 +119,7 @@ uint16_t FxCarAddPart(uint16_t car_record, uint16_t *stack, uint16_t rom_at)
         fxpart_46 = (uint16_t)((field46_low & 0xFF) | fx_getb() << 8);
         rom_at = (uint16_t)(field46_hi_ptr + 1);
         fx_r14(rom_at);
-        fx_stw((uint16_t)(record + FXPART_46), fxpart_46);
+        fx_stw((uint16_t)(record + FXPART_FLAGS), fxpart_46);
         parts_2 = fx_ldw((uint16_t)(FXCAR_PARTS + car_ptr));
         fx_stw((uint16_t)(record + 0x0034), parts_2);
         fx_stw((uint16_t)(FXCAR_PARTS + car_ptr), record);
@@ -206,7 +206,7 @@ void FxCarFromScript(uint16_t car_record, uint16_t *stack, uint16_t rom_at)
     entries_end_ptr = (uint16_t)(rom_ptr_entries + (uint16_t)(uint32_t)((int32_t)(int16_t)entry_count * (int16_t)5));
     fx_r14(entries_end_ptr);
     fx_stw((uint16_t)(FXCAR_ENTRY + car_record), entries_end_ptr);
-    fx_stw((uint16_t)(FXREC_6A + car_record), 0x0180);
+    fx_stw((uint16_t)(FXREC_BOOST + car_record), 0x0180);
     fx_stw((uint16_t)(FXCAR_8C + car_record), 0x1000);
     start_value = fx_ldw(0x26F2);
     fx_stw((uint16_t)(car_record + 0x008A), start_value);
@@ -285,7 +285,7 @@ FxCarMovePartsResult FxCarMoveParts(uint16_t entry_scratch_a, uint16_t entry_scr
     for (;;) {
         part_ptr = parts;
         if (part_ptr != 0) {
-            fxpart_46 = fx_ldw((uint16_t)(FXPART_46 + part_ptr));
+            fxpart_46 = fx_ldw((uint16_t)(FXPART_FLAGS + part_ptr));
             if ((0x0400 & fxpart_46) == 0) {
                 offset_ptr = (uint16_t)(FXPART_3C + part_ptr);
                 world_offset_ptr = (uint16_t)(FXPART_WORLD + part_ptr);
@@ -421,11 +421,11 @@ FxCarPoseResult FxCarPose(uint16_t car_record, uint16_t *stack)
 
     fx_spill(stack);
     fx_push(stack, car_record);
-    yaw = fx_ldw((uint16_t)(FXCAR_YAW + car_record));
+    yaw = fx_ldw((uint16_t)(FXREC_PITCH + car_record));
     fx_stw(0x0020, (uint16_t)((uint16_t)~yaw + 1));
-    pitch = fx_ldw((uint16_t)(FXCAR_PITCH + car_record));
+    pitch = fx_ldw((uint16_t)(FXREC_HEADING + car_record));
     fx_stw(0x0022, (uint16_t)((uint16_t)~pitch + 1));
-    roll = fx_ldw((uint16_t)(FXCAR_ROLL + car_record));
+    roll = fx_ldw((uint16_t)(FXREC_ROLL + car_record));
     fx_stw(0x0024, (uint16_t)((uint16_t)~roll + 1));
     { FxMatrixFromAnglesResult r_ = FxMatrixFromAngles(FX_MATRIX_W); s1 = r_.s1; c2 = r_.c2; s2 = r_.s2; rom_at_2 = r_.rom_at; };
     FxMatrixTranspose04(FX_MATRIX_W);
@@ -579,11 +579,11 @@ void FxCarNew(void)
         start_z = fx_ldw(0x002E);
         fx_stw((uint16_t)(record + 0x0022), start_z);
         pitch = fx_ldw(0x0022);
-        fx_stw((uint16_t)(record + FXCAR_PITCH), pitch);
+        fx_stw((uint16_t)(record + FXREC_HEADING), pitch);
         amount = fx_ldw(GSU_IN_AMOUNT);
         fx_stw((uint16_t)(record + FXCAR_64), amount);
         fx_stw((uint16_t)(record + FXCAR_SCRIPT), record_arg);
-        fx_stw((uint16_t)(record + FXCAR_0A), 0xB1A1);
+        fx_stw((uint16_t)(record + FXREC_HANDLER), 0xB1A1);
         amount_low_byte = fx_getb();
         script_ptr_1 = (uint16_t)(record_arg + 1);
         fx_r14(script_ptr_1);
@@ -815,7 +815,7 @@ FxCarHitResult FxCarHit(uint16_t spread_in, uint16_t car_y_in, uint16_t prior_ca
                         } else {
                             damage_step = 0x0060;
                         }
-                        fxrec_82 = fx_ldw((uint16_t)(FXREC_82 + car_record));
+                        fxrec_82 = fx_ldw((uint16_t)(FXREC_DAMAGE + car_record));
                         fx_sbk((uint16_t)(fxrec_82 + damage_step));
                         if ((uint16_t)(damage_step - 0x0018) & 0x8000) {
                             flags40_2 = fx_ldw((uint16_t)(FXREC_FLAGS40 + car_record));
@@ -842,7 +842,7 @@ FxCarHitResult FxCarHit(uint16_t spread_in, uint16_t car_y_in, uint16_t prior_ca
                                 fx_unspill(stack);
                             }
                         }
-                        fxrec_82_2 = fx_ldw((uint16_t)(FXREC_82 + car_record));
+                        fxrec_82_2 = fx_ldw((uint16_t)(FXREC_DAMAGE + car_record));
                         if ((uint16_t)(fxrec_82_2 - 0x0200) & 0x8000) {
                         } else {
                             flags40_6 = fx_ldw((uint16_t)(FXREC_FLAGS40 + car_record));

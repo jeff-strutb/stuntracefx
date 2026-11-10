@@ -17,7 +17,7 @@
 static void frames_to_record(Object *o)
 {
     if (o->record)
-        rec_put(o->record, 0x0012, o->shown_frame & 0x7F);
+        rec_put(o->record, FXREC_FRAME, o->shown_frame & 0x7F);
     GsuRecordKeep(o);
 }
 

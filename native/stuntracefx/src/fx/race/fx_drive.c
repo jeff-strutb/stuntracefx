@@ -72,12 +72,12 @@ FxDriveDecideResult FxDriveDecide(uint16_t point_x, uint16_t point_z, uint16_t s
     }
     fx_push(stack, speed_wanted);
     { FxBearingToResult r_ = FxBearingTo(point_x, point_z, 0x0020, car_record, stack, rom_at); angle = r_.angle; swap_mark_out = r_.swap_mark_out; };
-    pitch = fx_ldw((uint16_t)(FXCAR_PITCH + car_record));
+    pitch = fx_ldw((uint16_t)(FXREC_HEADING + car_record));
     bearing_error = (uint16_t)(angle - pitch);
     flags40 = fx_ldw((uint16_t)(FXREC_FLAGS40 + car_record));
     if ((flags40 & 0x0100) == 0) {
     } else {
-        yaw = fx_ldw((uint16_t)(FXCAR_YAW + car_record));
+        yaw = fx_ldw((uint16_t)(FXREC_PITCH + car_record));
         fx_sbk((uint16_t)(yaw - fx_div2(fx_div2(yaw))));
     }
     pulled_wanted_speed = fx_pull(stack);

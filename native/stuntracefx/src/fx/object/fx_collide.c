@@ -76,7 +76,7 @@ FxCollidePushResult FxCollidePush(uint16_t contact_words, uint16_t other_record,
     fx_stw(0x0020, offset_x);
     fx_stw(0x0022, 0);
     record_z = fx_ldw((uint16_t)(record + 0x0022));
-    fxcar_0a = fx_ldw((uint16_t)(contact_words + FXCAR_0A));
+    fxcar_0a = fx_ldw((uint16_t)(contact_words + FXREC_HANDLER));
     offset_z = (uint16_t)(record_z - fxcar_0a);
     fx_stw(0x0024, offset_z);
     fx_push(stack, other_record);
@@ -315,7 +315,7 @@ FxContactNoteResult FxContactNote(uint16_t record, uint16_t contact_ptr_in, uint
                         half_x = fx_ldw((uint16_t)(FXREC_HALF_X + other));
                         fx_stw((uint16_t)(FXHIT_X + contact_ptr_in), half_x);
                         fxcar_0a = fx_ldw((uint16_t)(other + 0x0022));
-                        fx_stw((uint16_t)(contact_ptr_in + FXCAR_0A), fxcar_0a);
+                        fx_stw((uint16_t)(contact_ptr_in + FXREC_HANDLER), fxcar_0a);
                     }
                     flags10_2 = fx_ldw((uint16_t)(FXREC_FLAGS10 + contact_ptr_in));
                     contact_flag = 1;
@@ -399,7 +399,7 @@ FxContactNoteResult FxContactNote(uint16_t record, uint16_t contact_ptr_in, uint
                 half_x = fx_ldw((uint16_t)(FXREC_HALF_X + other));
                 fx_stw((uint16_t)(FXHIT_X + contact_ptr_in), half_x);
                 fxcar_0a = fx_ldw((uint16_t)(other + 0x0022));
-                fx_stw((uint16_t)(contact_ptr_in + FXCAR_0A), fxcar_0a);
+                fx_stw((uint16_t)(contact_ptr_in + FXREC_HANDLER), fxcar_0a);
             }
             flags10_2 = fx_ldw((uint16_t)(FXREC_FLAGS10 + contact_ptr_in));
             contact_flag = 1;

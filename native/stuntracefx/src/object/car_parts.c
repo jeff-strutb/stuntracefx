@@ -469,7 +469,7 @@ void ObjectRivalCarStep(Object *o)
     }
     if (RandomStep() >= 0xF2)
         rec_put(rec, FXREC_DIRECTION, (uint16_t)(rec_get(rec, FXREC_DIRECTION) ^ 0x0002));
-    if (rec_get(rec, 0x002C) & 0x0004) {
+    if (rec_get(rec, FXREC_CONTACT_FLAGS) & 0x0004) {
         o->car.state |= CAR_WRECKED;
         if (!CarCrashParts(o, 0x03)) {
             g.rivals_left--;

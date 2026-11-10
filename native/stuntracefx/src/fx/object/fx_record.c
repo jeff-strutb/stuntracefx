@@ -242,7 +242,7 @@ void FxRecordRaise6A(void)
     fx_ramb(0);
     record_arg = fx_ldw(GSU_RECORD_ARG);
     amount = fx_ldw(GSU_IN_AMOUNT);
-    fxrec_6a = fx_ldw((uint16_t)(FXREC_6A + record_arg));
+    fxrec_6a = fx_ldw((uint16_t)(FXREC_BOOST + record_arg));
     raised_6a_value = (uint16_t)((uint16_t)((uint32_t)((int32_t)(int16_t)(uint16_t)(0 + 0x0300) * (int16_t)amount) >> 16) + fxrec_6a);
     if ((uint16_t)(raised_6a_value - 0x0180) & 0x8000) {
     } else {
@@ -278,7 +278,7 @@ void FxRecordLower82(void)
     fx_ramb(0);
     record_arg = fx_ldw(GSU_RECORD_ARG);
     amount = fx_ldw(GSU_IN_AMOUNT);
-    fxrec_82 = fx_ldw((uint16_t)(FXREC_82 + record_arg));
+    fxrec_82 = fx_ldw((uint16_t)(FXREC_DAMAGE + record_arg));
     lowered_value_82 = (uint16_t)(fxrec_82 - (uint16_t)((uint32_t)((int32_t)(int16_t)(uint16_t)(0 + 0x0400) * (int16_t)amount) >> 16));
     new_value_82 = lowered_value_82;
     if (!(lowered_value_82 & 0x8000)) {
@@ -490,7 +490,7 @@ uint16_t FxParticlesDraw(uint16_t key, uint16_t *stack)
             view_offset_y = fx_ldw(0x0028);
             rel_y = (uint16_t)(particle_y + view_offset_y);
             delta_z_byte = fx_ldb((uint16_t)(particle_ptr + 5));
-            fxcar_0a = fx_ldw((uint16_t)(particle_ptr + FXCAR_0A));
+            fxcar_0a = fx_ldw((uint16_t)(particle_ptr + FXREC_HANDLER));
             particle_z = (uint16_t)((uint16_t)(int16_t)(int8_t)delta_z_byte + fxcar_0a);
             fx_sbk(particle_z);
             view_offset_z = fx_ldw(0x002A);

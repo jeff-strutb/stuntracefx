@@ -168,15 +168,6 @@ typedef struct {
 
 extern RecordContacts record_contacts;
 
-/* the Super FX record fields the object code uses that fx.h does not name */
-enum {
-    FXREC_POS_X = 0x001E, FXREC_POS_Y = 0x0020, FXREC_POS_Z = 0x0022,
-    FXREC_HEADING = 0x0024,             /* its high byte the object's heading */
-    FXREC_VEL_X = 0x002E, FXREC_VEL_Y = 0x0030, FXREC_VEL_Z = 0x0032,
-    FXCAR_JUMP_TIMER = 0x005E,          /* a car's: $20 when it jumps, counted down; no jump while set */
-    FXREC_FLAGS64 = 0x0064, FXREC_FLAGS8A = 0x008A
-};
-
 /* Super FX RAM the object code shares with the chip's programs */
 enum {
     FX_NEW_CAR_X = 0x0068, FX_NEW_CAR_Y = 0x002C, FX_NEW_CAR_Z = 0x002E, /* FxCarNew's place */

@@ -200,7 +200,7 @@ static void records_between(const uint8_t *was, const uint8_t *end, float t)
         int i, m;
 
         for (i = 0; i < 3; i++) {
-            uint16_t a = (uint16_t)(rec + FXREC_HALF_X + 2 * i), b = (uint16_t)(rec + FXCAR_PITCH + 2 * i);
+            uint16_t a = (uint16_t)(rec + FXREC_HALF_X + 2 * i), b = (uint16_t)(rec + FXREC_HEADING + 2 * i);
 
             wr(fx_ram, a, place_between(rd(was, a), rd(end, a), t));
             wr(fx_ram, b, angle_between(rd(was, b), rd(end, b), t));

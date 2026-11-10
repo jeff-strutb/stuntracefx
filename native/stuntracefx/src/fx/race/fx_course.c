@@ -847,14 +847,14 @@ FxCarPlaceOnSegmentResult FxCarPlaceOnSegment(uint16_t prior_word4, uint16_t swa
         car_vel_z = (uint16_t)((uint16_t)~(uint16_t)(car_z - words_3) + 1);
         fx_stw((uint16_t)(car_record + 0x0032), car_vel_z);
         fx_stw((uint16_t)(car_record + 0x0026), 0);
-        fx_stw((uint16_t)(car_record + FXCAR_ROLL), 0);
+        fx_stw((uint16_t)(car_record + FXREC_ROLL), 0);
         fx_stw((uint16_t)(car_record + FXPART_WORLD), 0);
         fx_stw((uint16_t)(car_record + 0x0034), 0);
         fx_stw((uint16_t)(car_record + 0x0038), 0);
         number = fx_pull(stack);
         { FxCourseNextEntryResult r_ = FxCourseNextEntry(number, words_3, car_vel_z, address, car_record, rom_at_2); words_1_2 = r_.words_1; words_3_2 = r_.words_3; entry_out = r_.entry_out; rom_at = r_.rom_at_out; };
         { FxBearingToResult r_ = FxBearingTo(words_1_2, words_3_2, entry_out, car_record, stack, rom_at); angle = r_.angle; prior_word4 = r_.angle_sign_xor; swap_mark = r_.swap_mark_out; };
-        fx_stw((uint16_t)(car_record + FXCAR_PITCH), angle);
+        fx_stw((uint16_t)(car_record + FXREC_HEADING), angle);
         fx_push(stack, car_record);
         parts = fx_ldw((uint16_t)(car_record + FXCAR_PARTS));
         for (;;) {
@@ -939,7 +939,7 @@ FxCarVelocityFromSegmentResult FxCarVelocityFromSegment(uint16_t in_scratch_4, u
         fx_r14((uint16_t)(drive_factor_ptr + 1));
         drive_factor = (uint16_t)((drive_factor_lo & 0xFF) | fx_getb() << 8);
         in_scratch_4 = (uint16_t)((uint32_t)((int32_t)(int16_t)(uint16_t)(words_4 + words_4) * (int16_t)drive_factor) >> 16);
-        pitch = fx_ldw((uint16_t)(car_record + FXCAR_PITCH));
+        pitch = fx_ldw((uint16_t)(car_record + FXREC_HEADING));
         { FxAngleVectorResult r_ = FxAngleVector(pitch, in_scratch_4); vector_x = r_.vector_x; vector_y = r_.vector_y; vector_z = r_.vector_z; rom_at = r_.rom_at; };
         fx_stw((uint16_t)(car_record + 0x002E), vector_x);
         fx_stw((uint16_t)(car_record + 0x0030), vector_y);

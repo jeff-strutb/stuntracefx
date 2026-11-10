@@ -301,7 +301,7 @@ FxSpreadCarsResult FxSpreadCars(uint16_t entry_distance, uint16_t car_record, ui
                     fx_sbk((uint16_t)((uint16_t)((uint32_t)((int32_t)(int16_t)scaled_vector_x * (int16_t)push_strength) >> 16) + velocity));
                     other_velocity_z = fx_ldw((uint16_t)(other_car + 0x0032));
                     fx_sbk((uint16_t)((uint16_t)((uint32_t)((int32_t)(int16_t)scaled_vector_z * (int16_t)push_strength) >> 16) + other_velocity_z));
-                    yaw_rate = fx_ldw((uint16_t)(FXREC_YAW_RATE + other_car));
+                    yaw_rate = fx_ldw((uint16_t)(FXREC_HEADING_RATE + other_car));
                     spin_gain = 0xC180;
                     if (yaw_rate & 0x8000) {
                     } else {

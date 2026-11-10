@@ -108,7 +108,7 @@ void FxSortObjectsProgram(void)
             record_flags_byte = fx_ldb((uint16_t)(draw_list + 7));
             if ((record_flags_byte & 0x0080) != 0) {
             } else {
-                fxpart_12 = fx_ldw((uint16_t)(draw_list + FXPART_12));
+                fxpart_12 = fx_ldw((uint16_t)(draw_list + FXPART_CHILD));
                 flags10 = fx_ldw((uint16_t)(draw_list + FXREC_FLAGS10));
                 rec_pos_z = fx_ldw((uint16_t)(draw_list + 0x0014));
                 matrix_elem_0 = fx_ldw(0x00E4);
@@ -117,7 +117,7 @@ void FxSortObjectsProgram(void)
                 y_col0_prod = (uint32_t)((int32_t)(int16_t)flags10 * (int16_t)object_matrix_3);
                 object_matrix_6 = fx_ldw(FX_OBJECT_MATRIX_6);
                 z_col0_prod = (uint32_t)((int32_t)(int16_t)rec_pos_z * (int16_t)object_matrix_6);
-                fx_stw((uint16_t)(draw_list + FXPART_12), (uint16_t)((uint16_t)((uint16_t)((uint16_t)(z_col0_prod >> 16) << 1 | (int)(z_col0_prod >> 15 & 1)) + (uint16_t)((uint16_t)(x_col0_prod >> 16) << 1 | (int)(x_col0_prod >> 15 & 1))) + (uint16_t)((uint16_t)(y_col0_prod >> 16) << 1 | (int)(y_col0_prod >> 15 & 1))));
+                fx_stw((uint16_t)(draw_list + FXPART_CHILD), (uint16_t)((uint16_t)((uint16_t)((uint16_t)(z_col0_prod >> 16) << 1 | (int)(z_col0_prod >> 15 & 1)) + (uint16_t)((uint16_t)(x_col0_prod >> 16) << 1 | (int)(x_col0_prod >> 15 & 1))) + (uint16_t)((uint16_t)(y_col0_prod >> 16) << 1 | (int)(y_col0_prod >> 15 & 1))));
                 object_matrix_1 = fx_ldw(FX_OBJECT_MATRIX_1);
                 x_col1_prod = (uint32_t)((int32_t)(int16_t)fxpart_12 * (int16_t)object_matrix_1);
                 object_matrix_4 = fx_ldw(FX_OBJECT_MATRIX_4);
@@ -147,7 +147,7 @@ void FxSortObjectsProgram(void)
                 } else {
                     view_z_abs = (uint16_t)((uint16_t)~view_z_abs + 1);
                 }
-                fxpart_12_2 = fx_ldw((uint16_t)(draw_list + FXPART_12));
+                fxpart_12_2 = fx_ldw((uint16_t)(draw_list + FXPART_CHILD));
                 view_x_abs = fxpart_12_2;
                 if (!(fxpart_12_2 & 0x8000)) {
                 } else {

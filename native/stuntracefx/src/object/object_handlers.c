@@ -344,10 +344,10 @@ static void child_break_off(Object *o, const Object *p, uint16_t own)
     car_flags = rec_get(p->record, FXREC_FLAGS40);
     if (!(rec_get(p->record, FXREC_FLAGS64) & 0x0003))
         return;
-    w = rec_get(own, FXPART_46);
+    w = rec_get(own, FXPART_FLAGS);
     if (!(w & 0x0001) || !(w & 0x0010))
         return;
-    d = rec_get(own, 0x002C);
+    d = rec_get(own, FXREC_CONTACT_FLAGS);
     if (d & 0x0080) {
         if ((n = ObjectBreakOffChance(o)) != NULL)
             ObjectSetHandler(n, record_fast(own) ? H_BREAK_OFF_F : H_BREAK_OFF_E);
@@ -373,7 +373,7 @@ static void child_break_off(Object *o, const Object *p, uint16_t own)
             ObjectSetHandler(n, H_BREAK_OFF_G);
         return;
     }
-    if (!(car_flags & 0x0800) && !(rec_get(own, FXPART_46) & 0x0020))
+    if (!(car_flags & 0x0800) && !(rec_get(own, FXPART_FLAGS) & 0x0020))
         return;
     if ((n = ObjectBreakOffChance(o)) != NULL)
         ObjectSetHandler(n, H_BREAK_OFF_H);
@@ -401,9 +401,9 @@ void ObjectChildFollow(Object *o)
     rec_and(o->record, FXREC_FLAGS16, 0xFB7F);
     own = o->record;
     child_break_off(o, p, own);
-    o->x = (uint16_t)(rec_get(own, FXREC_POS_X) + rec_get(own, 0x004A));
-    o->y = (uint16_t)(0xFFEC - o->size + rec_get(own, FXREC_POS_Y) + rec_get(own, 0x004C));
-    o->z = (uint16_t)(rec_get(own, FXREC_POS_Z) + rec_get(own, 0x004E));
+    o->x = (uint16_t)(rec_get(own, FXREC_POS_X) + rec_get(own, FXPART_OFFSET_X));
+    o->y = (uint16_t)(0xFFEC - o->size + rec_get(own, FXREC_POS_Y) + rec_get(own, FXPART_OFFSET_Y));
+    o->z = (uint16_t)(rec_get(own, FXREC_POS_Z) + rec_get(own, FXPART_OFFSET_Z));
     ObjectTurnFromRecord(own, o);
 }
 
@@ -419,13 +419,13 @@ void ObjectChildrenSpawn(Object *o)
 
     if (!o->record)
         return;
-    for (rec = rec_get(o->record, 0x003E); rec; rec = rec_get(rec, 0x0034)) {
+    for (rec = rec_get(o->record, FXCAR_PARTS); rec; rec = rec_get(rec, FXPART_NEXT)) {
         uint16_t t, look;
         Object *n;
 
-        if (rec_get(rec, FXPART_46) & 0x0200)
+        if (rec_get(rec, FXPART_FLAGS) & 0x0200)
             continue;
-        t = rec_get(rec, 0x0012);
+        t = rec_get(rec, FXPART_CHILD);
         look = object_data16(t, DATA_LOOK);
         n = ObjectSpawn(object_data16(t, DATA_MODEL));
         if (!n)
@@ -508,9 +508,9 @@ void ObjectChildReturn(Object *o)
     int moved;
 
     ObjectVelocityFromRecordOf(o, p);
-    tx = (uint16_t)(rec_get(rec, FXREC_POS_X) + rec_get(rec, 0x004A));
-    ty = (uint16_t)(child_y(o->size, rec_get(rec, FXREC_POS_Y)) + rec_get(rec, 0x004C));
-    tz = (uint16_t)(rec_get(rec, FXREC_POS_Z) + rec_get(rec, 0x004E));
+    tx = (uint16_t)(rec_get(rec, FXREC_POS_X) + rec_get(rec, FXPART_OFFSET_X));
+    ty = (uint16_t)(child_y(o->size, rec_get(rec, FXREC_POS_Y)) + rec_get(rec, FXPART_OFFSET_Y));
+    tz = (uint16_t)(rec_get(rec, FXREC_POS_Z) + rec_get(rec, FXPART_OFFSET_Z));
     ObjectTurnFromRecord(rec, o);
     o->x = ApproachQuarterMin4(o->x, tx, &moved);
     o->y = ApproachQuarterMin4(o->y, ty, &moved);
@@ -577,9 +577,9 @@ void ObjectChildLoose(Object *o)
     GsuRecordNewFallingPart(o);
     p = obj_at(o->parent);
     ObjectVelocityFromRecordOf(o, p);
-    o->vx = asr1(rec_get(o->child.own_record, 0x0036));
+    o->vx = asr1(rec_get(o->child.own_record, FXPART_WORLD));
     o->vy = 0xFFCE;
-    o->vz = asr1(rec_get(o->child.own_record, 0x003A));
+    o->vz = asr1(rec_get(o->child.own_record, FXPART_WORLD + 4));
     GsuRecordVelocity(o);
     o->child.flight = (uint8_t)((RandomStep() & 0x0F) + 0x0A);
     ObjectChildFlying(o);
@@ -842,8 +842,8 @@ void ObjectAttachFollow(Object *o)
     o->x = rec_get(rec, FXREC_POS_X);
     o->z = rec_get(rec, FXREC_POS_Z);
     o->y = rec_get(rec, FXREC_Y_HELD);
-    o->pitch = fx_ram[(uint16_t)(rec + 0x0027)];
-    o->heading = fx_ram[(uint16_t)(rec + 0x0025)];
+    o->pitch = fx_ram[(uint16_t)(rec + FXREC_PITCH + 1)];
+    o->heading = fx_ram[(uint16_t)(rec + FXREC_HEADING + 1)];
     ObjectApplyVelocity(o);
     ObjectRebucket(o);
     o->draw_flags &= 0xDF;
@@ -879,7 +879,7 @@ void ObjectAttachTurned(Object *o)
     if (attach_parent_gone(o))
         return;
     p = obj_at(o->parent);
-    o->heading = (uint8_t)(fx_ram[(uint16_t)(p->record + 0x003B)] + p->heading);
+    o->heading = (uint8_t)(fx_ram[(uint16_t)(p->record + FXCAR_STEER_BIAS + 1)] + p->heading);
     o->pitch = p->pitch;
     o->roll = p->roll;
     offset_on_parent(o, p, 3, 1);
@@ -969,9 +969,9 @@ void ObjectCarAttachedStart(Object *o)
     o->z = (uint16_t)(o->z - 0x0640);
     o->y = (uint16_t)(o->y + 0xFE20);
     ObjectCarRecordNew(o, 0);
-    rec_put(o->record, 0x008E, p->record);
+    rec_put(o->record, FXCAR_PARTNER, p->record);
     rec_or(o->record, FXREC_FLAGS1C, 0x0008);
-    rec_put(p->record, 0x008E, o->record);
+    rec_put(p->record, FXCAR_PARTNER, o->record);
     ObjectSetHandler(o, H_CAR_ATTACHED_STEP);
     ObjectCarAttachedStep(o);
 }
@@ -1129,13 +1129,13 @@ void PlayerCarEvents(Object *o)
     if (!(o->car.state & CAR_WRECKED)) {
         if (!(rec_get(rec, FXREC_FLAGS40) & 0x0100)) {
             if (g.course_flags & 0x0020) {
-                uint16_t r = rec_get(rec, 0x003E);
+                uint16_t r = rec_get(rec, FXCAR_PARTS);
 
                 found = 0;
                 do {
-                    if ((rec_get(r, 0x002C) & 0x0080) && (rec_get(r, FXPART_46) & 0x0001) && (rec_get(r, FXPART_46) & 0x0010))
+                    if ((rec_get(r, FXREC_CONTACT_FLAGS) & 0x0080) && (rec_get(r, FXPART_FLAGS) & 0x0001) && (rec_get(r, FXPART_FLAGS) & 0x0010))
                         found = 1;
-                    r = rec_get(r, 0x0034);
+                    r = rec_get(r, FXPART_NEXT);
                 } while (r);
                 if (found) {
                     if (!g.split_screen)
@@ -1143,7 +1143,7 @@ void PlayerCarEvents(Object *o)
                     SoundAtRateForLevel(abs16(rec_get(rec, FXREC_SPEED)));
                 }
             } else {
-                if (rec_get(rec, 0x0092) & 0x0020)
+                if (rec_get(rec, FXCAR_PART_CONTACTS) & 0x0020)
                     latch(0x0004, 1, PlayerSound12);
                 else
                     latch(0x0004, 0, PlayerSound0C);
@@ -1156,7 +1156,7 @@ void PlayerCarEvents(Object *o)
         found = (rec_get(rec, FXREC_SIDES) & 0x2000) && (rec_get(rec, FXREC_FLAGS40) & 0x0800)
                 && !(rec_get(rec, FXREC_FLAGS40) & 0x0100);
         latch(0x0002, found, found ? PlayerSound0D : PlayerSound0B);
-        v = fx_ram[(uint16_t)(rec + 0x0057)];
+        v = fx_ram[(uint16_t)(rec + FXCAR_SLIDE + 1)];
         if (!(v & 0x80)) {
             if (v < 0x01)
                 PlayerStopHeldSound();
@@ -1169,7 +1169,7 @@ void PlayerCarEvents(Object *o)
             else if (v < 0x64)
                 PlayerHoldSound35();
         }
-        w = rec_get(rec, 0x0094);
+        w = rec_get(rec, FXCAR_PUSH_TOTAL);
         if (w && !(w & 0x8000) && !below(w, 0x0032)) {
             if (below(w, 0x01F4))
                 SoundPort0QueuePush(0x54);
@@ -1181,12 +1181,12 @@ void PlayerCarEvents(Object *o)
                 SoundPort0QueuePush(0x57);
             ObjectSpawnSparklePair(o);
         }
-        w = rec_get(rec, 0x002C);
+        w = rec_get(rec, FXREC_CONTACT_FLAGS);
         if (w & 0x0100)
             SoundPort0QueuePush(0x0A);
         else if (w & 0x0200)
             SoundPort0QueuePush(0x0D);
-        w = rec_get(rec, 0x0062);
+        w = rec_get(rec, FXCAR_IMPACT);
         if (w & 0x8000) {
             w = (uint16_t)-w;
             if (!below(w, 0x0041)) {
@@ -1227,7 +1227,7 @@ void PlayerCarEvents(Object *o)
             } else if ((rec_get(rec, FXREC_SIDES) & 0x0400) && RandomStep() >= 0xF2) {
                 ObjectSpawnTrail(o);
             }
-            if (!below(rec_get(rec, 0x0082), 0x0199)) {
+            if (!below(rec_get(rec, FXREC_DAMAGE), 0x0199)) {
                 uint16_t *f = &g.player_flags[g.current_player ? 1 : 0];
 
                 if (!(*f & 0x0020)) {
