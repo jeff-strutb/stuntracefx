@@ -643,13 +643,21 @@ void race_picture_shown(int buffer)
     video_copy(&shown_buffer, &buffer, sizeof shown_buffer);
 }
 
-/* The full window's hills and sky from the view's angles, as
-   BackdropRowsUpdate works them out: the panorama's 17 rows the pitch
-   looks at, its whole round across, at the band's place for this buffer
-   and sky everywhere else (the other buffer's band too), written when
-   those rows change; across, the heading's column and fine scroll; down,
-   the pitch's scroll over the rows dropped; the sky's place in the day and
-   night lists. */
+/* The full window's hills and sky. The original placed both by the view's
+   pitch, one row a pitch step (2 pi / 1024 radians, about 163 rows a
+   radian, held past its ends), and showed 17 rows of the 32-row panorama,
+   those the pitch looked at. The 3D's horizon is 128 tan of the angle
+   (fx_draw_horizon), so the two parted as the view tilted, and in a tall
+   window the panorama's top was cut off. Here the whole panorama is in
+   the map, and both sit on the 3D's horizon.
+   The day and night lists' entry at the horizon: the original's one-player
+   band read entry pitch + $21 + line - 32, its two-player halves pitch +
+   $18 + $49 + the rows from their middle; on a level view (pitch $98) the
+   horizon is at the view's centre row, line 96 or the half's middle, and
+   both read entry 249 there. The camera mode's +8 is in the pitch of both
+   the sky and the hills, so it falls out. */
+enum { SKY_AT_HORIZON = 249 };
+
 /* the sky's place in the day and night lists, in bytes, for a pitch */
 static uint16_t sky_offset_of(uint16_t pitch)
 {
@@ -658,33 +666,80 @@ static uint16_t sky_offset_of(uint16_t pitch)
     return s < 0x0300 ? s : 0x0300;
 }
 
+/* The pitch of the picture being drawn: its step's, or an in-between
+   picture's. */
+static uint16_t full_pitch_now(void)
+{
+    uint16_t heading[2], pitch[2];
+
+    if (fx_tween_backdrop_angles(heading, pitch))
+        return pitch[0];
+    return wide_band[shown_buffer].pitch;
+}
+
+/* The 3D's horizon on the one-player full window, in screen rows, for the
+   picture shown: its row at the screen's middle (the view's centre across),
+   rounded. 0 while its view isn't known (nothing drawn yet, or a view
+   straight up or down): the original's places then. */
+static int full_horizon_row(int *row)
+{
+    float x, r, slope;
+    int picture = fx_draw_shown_picture();
+
+    if (picture < 0 || !fx_draw_horizon(picture, &x, &r, &slope))
+        return 0;
+    if (r < -65536.0f)
+        r = -65536.0f;
+    if (r > 65536.0f)
+        r = 65536.0f;
+    *row = (int)(r >= 0.0f ? r + 0.5f : r - 0.5f);
+    return 1;
+}
+
+/* The whole panorama (32 rows, its round of 128 entries of each 160) as
+   the full window's map, panorama row n at map row WIDE_DROP + n, sky
+   elsewhere; written when the panorama shown differs from the one in it. */
+static void hills_map_write(int which)
+{
+    static uint16_t map[WIDE_COLUMNS * WIDE_ROWS], in_map[32 * WIDE_COLUMNS], now[32 * WIDE_COLUMNS];
+    static int written;
+    const uint16_t *panorama = backdrop_map(which);
+    int r, c;
+
+    for (r = 0; r < 32; r++)
+        memcpy(now + r * WIDE_COLUMNS, panorama + r * 160, WIDE_COLUMNS * sizeof now[0]);
+    if (written && !memcmp(now, in_map, sizeof now))
+        return;
+    for (r = 0; r < WIDE_ROWS; r++) {
+        int from = r - WIDE_DROP;
+
+        for (c = 0; c < WIDE_COLUMNS; c++) {
+            uint16_t w = from >= 0 && from < 32 ? now[from * WIDE_COLUMNS + c] : SKY_TILE;
+
+            map[r * WIDE_COLUMNS + c] = (uint16_t)((w & 0xDC00) | (((w & 0x3FF) + 0x200) & 0x3FF));
+        }
+    }
+    nshvc_map_write_snes(race_video.backdrop_wide, 0, 0, WIDE_COLUMNS, WIDE_ROWS, map);
+    memcpy(in_map, now, sizeof in_map);
+    written = 1;
+}
+
+/* Across: the heading's column and fine scroll, as BackdropRowsUpdate
+   works them out (Jeff: the hills keep the original's turn rate). Down:
+   the original's place for the pitch (its scroll over its band's rows,
+   the band at its buffer's place), moved by the rows the 3D's horizon is
+   below the row the original put entry SKY_AT_HORIZON on. */
 static void hills_from_angles(int buffer, uint16_t heading, uint16_t pitch)
 {
-    static uint16_t map[WIDE_COLUMNS * WIDE_ROWS];
-    static int written_map = -1, written_row = -1, written_buffer = -1;
     int row = (int)(((uint16_t)(pitch + wide_band[buffer].row_adjust) >> 3) & 0x3F);
-    int first = WIDE_DROP + (buffer ? 47 : 30), r, c;
+    int band = buffer ? 47 : 30, horizon;
 
-    if (wide_band[buffer].map != written_map || row != written_row || buffer != written_buffer) {
-        const uint16_t *panorama = backdrop_map(wide_band[buffer].map);
-
-        for (r = 0; r < WIDE_ROWS; r++) {
-            int n = r - first, from = row + n;
-
-            for (c = 0; c < WIDE_COLUMNS; c++) {
-                uint16_t w = n >= 0 && n < 17 && from < 32 ? panorama[from * 160 + c] : SKY_TILE;
-
-                map[r * WIDE_COLUMNS + c] = (uint16_t)((w & 0xDC00) | (((w & 0x3FF) + 0x200) & 0x3FF));
-            }
-        }
-        nshvc_map_write_snes(race_video.backdrop_wide, 0, 0, WIDE_COLUMNS, WIDE_ROWS, map);
-        written_map = wide_band[buffer].map;
-        written_row = row;
-        written_buffer = buffer;
-    }
+    hills_map_write(wide_band[buffer].map);
     pic.race.wide_x = (((heading >> 3) & 0xFE) * 4 + ((heading >> 1) & 7) - 0x18) & (WIDE_COLUMNS * 8 - 1);
-    pic.race.wide_y = (int16_t)(uint16_t)((pitch & 7) - 0x20 + ram_code_7e16((uint16_t)(0xE811 + buffer * 2))) + WIDE_DROP * 8;
-    pic.race.sky_offset = sky_offset_of(pitch);
+    pic.race.wide_y = (int16_t)(uint16_t)((pitch & 7) - 0x20 + ram_code_7e16((uint16_t)(0xE811 + buffer * 2)))
+                      + (WIDE_DROP + row - band) * 8;
+    if (full_horizon_row(&horizon))
+        pic.race.wide_y -= horizon - (screen_shape()->origin_y + SKY_AT_HORIZON - 1 - (int)pitch);
 }
 
 /* The hills of the picture shown: its step's angles, or those of a picture
@@ -699,16 +754,19 @@ void race_hills_full(void)
         hills_from_angles(shown_buffer, wide_band[shown_buffer].heading, wide_band[shown_buffer].pitch);
 }
 
-/* The full window's sky place for the picture being drawn, as
-   race_hills_full will take it: its step's pitch, or an in-between
-   picture's. For a caller that composes before the video does. */
-uint16_t race_sky_offset_now(void)
+/* Colour 1 on a row of the one-player full window's screen, for the
+   picture being drawn: the lists' entry at the row's height from the 3D's
+   horizon; with no horizon known, at its pitch's place as the original's
+   band read it; black while the tunnel's black list is up. */
+uint16_t race_full_sky_colour(int row)
 {
-    uint16_t heading[2], pitch[2];
+    int horizon;
 
-    if (fx_tween_backdrop_angles(heading, pitch))
-        return sky_offset_of(pitch[0]);
-    return sky_offset_of(wide_band[shown_buffer].pitch);
+    if (pic.race.gradient_start[0] >= GRADIENT_AT_BLACK)
+        return 0;
+    if (full_horizon_row(&horizon))
+        return sky_colour_at(SKY_AT_HORIZON + row - horizon);
+    return sky_colour_at(sky_offset_of(full_pitch_now()) / 2 + row - screen_shape()->origin_y - 32);
 }
 
 /* The race screen handed back: the next screen sets its own layers, and
@@ -1552,12 +1610,35 @@ static void image_wrap(nshvc_draw_list list, nshvc_image image, int size, int x,
 /* Two players in the full window: colour 1 on screen row `row` for player
    p, the band read from its start by the row's height about the
    rectangle's middle, held at the lists' ends. */
+/* Player p's 3D horizon on the two-player full window, in screen rows, as
+   full_horizon_row gives the one player's. */
+static int two_horizon_row(int p, int *row)
+{
+    float x, r, slope;
+
+    if (!fx_draw_horizon(p & 1, &x, &r, &slope))
+        return 0;
+    if (r < -65536.0f)
+        r = -65536.0f;
+    if (r > 65536.0f)
+        r = 65536.0f;
+    *row = (int)(r >= 0.0f ? r + 0.5f : r - 0.5f);
+    return 1;
+}
+
+/* Colour 1 on a row of player p's rectangle: the day list's entry at the
+   row's height from that player's 3D horizon (SKY_AT_HORIZON); with none
+   known, or the tunnel's black list up, its band's place as the original
+   read it about the half's middle. */
 uint16_t race_two_sky_colour(int p, int row)
 {
-    int x, y, w, h, at;
+    int x, y, w, h, at, horizon;
 
     screen_two_rect(p & 1, &x, &y, &w, &h);
-    at = (int)pic.race.gradient_start[p & 1] + (row - (y + h / 2)) + 40;
+    if (pic.race.gradient_start[p & 1] < GRADIENT_AT_NIGHT && two_horizon_row(p, &horizon))
+        at = GRADIENT_AT_DAY + SKY_AT_HORIZON + row - horizon;
+    else
+        at = (int)pic.race.gradient_start[p & 1] + (row - (y + h / 2)) + 40;
     if (at < GRADIENT_AT_DAY)
         at = GRADIENT_AT_DAY;
     if (at > GRADIENT_AT_DAY + 511)
@@ -1608,11 +1689,20 @@ static void two_full_backdrop(nshvc_draw_list list)
     /* the seam between the players black, as the original's blank lines between its halves */
     colour_rect(list, 0, 0, sh->width, sh->height, 0xFF000000u);
     for (p = 0; p < 2; p++) {
-        int x, y, w, h, rcx, rcy, r, sx = pic.race.backdrop_x[p], sy = pic.race.backdrop_y[p];
+        int x, y, w, h, rcx, rcy, r, sx = pic.race.backdrop_x[p], sy = pic.race.backdrop_y[p], horizon;
 
         screen_two_rect(p, &x, &y, &w, &h);
         rcx = x + w / 2;
         rcy = y + h / 2;
+        if (two_horizon_row(p, &horizon)) {
+            /* the hills down by the rows the 3D's horizon is below where the
+               original put the half's sky entry SKY_AT_HORIZON: the half's
+               middle + SKY_AT_HORIZON - $21 - 40 - its pitch (BackdropScrollFromView's
+               h, its scroll less the half's table word) */
+            int pitch = (int16_t)(uint16_t)(pic.race.backdrop_y[p] - ram_code_7e16((uint16_t)(0xE920 + p * 2)));
+
+            sy -= horizon - (rcy + SKY_AT_HORIZON - 0x21 - 40 - pitch);
+        }
         for (r = 0; r < h; r++)
             colour_rect(list, x, y + r, x + w, y + r + 1, direct_of(race_two_sky_colour(p, y + r)));
         if (pic.race.panel[p])

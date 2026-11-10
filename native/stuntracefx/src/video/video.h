@@ -67,7 +67,7 @@ void race_hills_full(void);                    /* its hills and sky for the pict
 uint16_t sky_colour_at(int at);                /* colour 1 at place `at` of the day and night lists */
 void video_newest_lines_take(void);                 /* picture.c, from video_between_begin */
 uint16_t race_ground_colour(int panel, float row);   /* colour 1 shown on a screen row of a player's view (picture.c) */
-uint16_t race_sky_offset_now(void);                 /* the full window's sky place for the picture being drawn */
+uint16_t race_full_sky_colour(int row);             /* one player's full window: colour 1 on a screen row, by the 3D's horizon */
 uint16_t race_two_sky_colour(int player, int row);  /* two players' colour 1 on a screen row */
 int race_underwater_cells(uint8_t texels[80][64], uint16_t colours[16]); /* Aqua Tunnel's ripple cells; 0 if not loaded */
 void sprites_place_full(nshvc_sprite *out, const nshvc_sprite *in, uint32_t count); /* the race's sprites on the larger screen */

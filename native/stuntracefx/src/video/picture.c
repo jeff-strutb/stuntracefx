@@ -408,31 +408,21 @@ static void race_lines_send(void)
    224 is placed here, in the layers' scrolls and the lines' numbers, so
    that every row of the screen can take its own sky. */
 
-/* The sky (colour 1) on a screen row: the colour at the same height above
-   the horizon, read from the day and night lists as a band reads them,
-   from the band's start at the original's line 32; black while the
-   tunnel's black list is up. */
-static uint16_t full_sky_colour(uint16_t sky_offset, int line)
+/* The sky (colour 1) on a screen row: race_full_sky_colour, by the row's
+   height from the 3D's horizon. */
+static int32_t full_sky_at(int row)
 {
-    if (pic.race.gradient_start[0] >= GRADIENT_AT_BLACK)
-        return 0;
-    return sky_colour_at(sky_offset / 2 + line - 32);
-}
-
-static int32_t full_sky_at(int row, int origin_y)
-{
-    return (int32_t)full_sky_colour(pic.race.sky_offset, row - origin_y);
+    return (int32_t)race_full_sky_colour(row);
 }
 
 /*
  * Colour 1 as the race screen shows it on screen row `row` (the screen's
  * pixels, as screen_shape gives them) in player `panel`'s view, for the
- * picture being drawn: what the 3D's ground lays its marks over. The one
- * player's full window reads the day and night lists by the row's height
- * (its sky place from the picture's pitch, between steps too), or shows
- * colour 1 itself while the sky's lines are off; two players' rectangles
- * read their bands about their middles; the original's screens read their
- * bands by line. Rows past a band's end give its last.
+ * picture being drawn: what the 3D's ground lays its marks over. The full
+ * windows read the day and night lists by the row's height from the 3D's
+ * horizon (race_full_sky_colour, race_two_sky_colour), the one player's
+ * showing colour 1 itself while the sky's lines are off; the original's
+ * screens read their bands by line. Rows past a band's end give its last.
  */
 uint16_t race_ground_colour(int panel, float row)
 {
@@ -446,7 +436,7 @@ uint16_t race_ground_colour(int panel, float row)
     if (!w->line_effects.sky)
         return pic.palette[1];
     if (pic.race.on && !pic.race.course_screen && !w->results_page_shown)    /* race_full_window's, with the picture's state */
-        return full_sky_colour(race_sky_offset_now(), line);
+        return race_full_sky_colour(r);
     return band_line_colour(line);
 }
 
@@ -498,14 +488,14 @@ static void full_window_draw(const ScreenShape *sh)
     nshvc_blend_set(&pic.blend);
     memcpy(palette, pic.palette, sizeof palette);
     if (sky)
-        palette[1] = (uint16_t)full_sky_at(0, sh->origin_y);
+        palette[1] = (uint16_t)full_sky_at(0);
     nshvc_palette_write(0, 256, palette);
     nshvc_sprites_show((pic.main_screen >> 4) & 1, (pic.sub_screen >> 4) & 1);
     sprites_place_full(placed, pic.sprites, pic.sprite_count);
     nshvc_sprites_set(placed, pic.sprite_count, 0);
     if (sky) {
         for (r = 0; r < sh->height; r++)
-            rows[r] = full_sky_at(r, sh->origin_y);
+            rows[r] = full_sky_at(r);
         nshvc_lines(0, (uint32_t)sh->height, (nshvc_line_field)(NSHVC_LINE_PALETTE + 1), rows);
     }
     if (g.line_effects.fixed_bands) {
