@@ -8,6 +8,7 @@
 
 #include "audio/sound.h"
 #include "data/cart.h"
+#include "data/menu_tables.h"
 #include "data/unpack.h"
 #include "fx/fx.h"
 #include "fx/fx_draw.h"
@@ -220,6 +221,26 @@ void race_results_picture_write(const uint8_t *picture)
 void race_car_picture_write(const uint8_t *picture)
 {
     race_art_write(CAR_PICTURE, picture, 0x0C00);
+}
+
+/*
+ * @routine 7F:0B56 CoursePictureToVram
+ * @routine 7F:0BCE VramWriteRowFromGsuRam
+ * WHAT IT DOES: Four 64-word rows of the course's picture, as unpacked at
+ * FX_UNPACK_AREA, to the sprites' characters $48, $58, $4C and $5C (four
+ * each), from the place the course's entry gives
+ * (menu_course_picture_place). The race's art load and the two-player
+ * course screen both call it.
+ */
+void race_course_picture_write(void)
+{
+    static const unsigned to[4] = { RACE_ART_SPRITES + 0x48, RACE_ART_SPRITES + 0x58, RACE_ART_SPRITES + 0x4C, RACE_ART_SPRITES + 0x5C };
+    uint16_t w = menu_course_picture_place(g.course), t = (uint16_t)(w & 0xFFFC);
+    uint16_t at = (uint16_t)((uint16_t)((uint16_t)(t >> 8 | t << 8) << 1) + ((w & 3) << 7));
+    int i;
+
+    for (i = 0; i < 4; i++, at = (uint16_t)(at + 0x0200))
+        race_art_write(to[i], fx_ram + FX_UNPACK_AREA + at, 0x80);
 }
 
 /* two players: the half's 3D characters (0 the top, 1 the bottom), from the
@@ -466,19 +487,7 @@ void RaceVideoSetup(void)
         race_art_write(RACE_ART_SPRITES + 0x140, fx_ram + FX_UNPACK_AREA, unpacked(0xF85A, (uint16_t)(0xF54D + k3)));
     race_art_write(RACE_ART_SPRITES + 0x040, fx_ram + FX_UNPACK_AREA, unpacked(0xF814, 0xF7DD));
     chip_unpack(0x1D << 16 | 0xD970, FX_UNPACK_AREA);
-    {
-        /* four rows of the course picture's sprite art: the sprites' characters $48, $58, $4C, $5C, four each */
-        uint16_t w = ram_code_7f16((uint16_t)(0x0B96 + 2 * g.course)), t = (uint16_t)(w & 0xFFFC);
-        static const unsigned row_at[4] = { RACE_ART_SPRITES + 0x48, RACE_ART_SPRITES + 0x58, RACE_ART_SPRITES + 0x4C, RACE_ART_SPRITES + 0x5C };
-        int r;
-
-        t = (uint16_t)((uint16_t)(t >> 8 | t << 8) << 1);
-        t = (uint16_t)(t + ((w & 3) << 7));
-        for (r = 0; r < 4; r++) {
-            race_art_write(row_at[r], fx_ram + FX_UNPACK_AREA + t, 0x80);
-            t = (uint16_t)(t + 0x200);
-        }
-    }
+    race_course_picture_write();
     switch (g.hud_mode) {
     case 1:
         if (!g.hud_blank) {

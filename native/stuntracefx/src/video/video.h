@@ -115,6 +115,7 @@ void race_panel_map_write(const uint16_t *words);  /* two players: the panel's m
 /* the results screens' pictures, by what they hold (the art the sprites draw from) */
 void race_results_picture_write(const uint8_t *picture); /* the big picture, $A00 bytes: 5 rows of 16 characters */
 void race_car_picture_write(const uint8_t *picture);     /* the car's picture, $C00 bytes */
+void race_course_picture_write(void);   /* the course's picture, unpacked at FX_UNPACK_AREA: its four rows to the sprites' art */
 void race_half_characters_write(int half, const uint8_t *characters); /* two players: a half's 3D characters, $1680 bytes, for the quit menu */
 void race_frame_map_two_write(const uint16_t *words);
 void race_two_player_list(void);
