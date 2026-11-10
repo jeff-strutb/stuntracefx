@@ -512,40 +512,31 @@ static void ResultsTotalLineWords(void)
 
 /* ---- counting the results up ---- */
 
-/* The decimal add and subtract of the processor's decimal mode. */
-static uint8_t dec_add(uint8_t a, uint8_t b, int *carry)
+/* A two-digit decimal count one on, wrapping at 100 as two digits do. */
+static uint8_t count_on(uint8_t count)
 {
-    int lo = (a & 0x0F) + (b & 0x0F) + *carry, sum;
-
-    if (lo > 0x09)
-        lo += 0x06;
-    sum = (a & 0xF0) + (b & 0xF0) + (lo > 0x0F ? 0x10 : 0) + (lo & 0x0F);
-    if (sum > 0x9F)
-        sum += 0x60;
-    *carry = sum > 0xFF;
-    return (uint8_t)sum;
+    return (uint8_t)BcdOf((BcdValue(count) + 1u) % 100u);
 }
 
-/* carry is the 65816's: 1 no borrow */
-static uint8_t dec_sub(uint8_t a, uint8_t b, int *carry)
+/* A results time, [0] hundredths, [1] seconds, [2] minutes, two decimal
+   digits each, in hundredths of a second; and a value back into one, its
+   minutes wrapping at 100 as two digits do. */
+static unsigned time_hundredths(const uint8_t t[3])
 {
-    int lo = (a & 0x0F) - (b & 0x0F) - !*carry, r;
+    return BcdValue(t[2]) * 6000u + BcdValue(t[1]) * 100u + BcdValue(t[0]);
+}
 
-    if (lo < 0)
-        lo = ((lo - 0x06) & 0x0F) - 0x10;
-    r = (a & 0xF0) - (b & 0xF0) + lo;
-    if (r < 0)
-        r -= 0x60;
-    *carry = r >= 0;
-    return (uint8_t)r;
+static void time_set(uint8_t t[3], unsigned hundredths)
+{
+    t[0] = (uint8_t)BcdOf(hundredths % 100u);
+    t[1] = (uint8_t)BcdOf(hundredths / 100u % 60u);
+    t[2] = (uint8_t)BcdOf(hundredths / 6000u % 100u);
 }
 
 /* A count one more (decimal) shown as two digits in the buffer. */
 static void count_digits(uint8_t *count, uint16_t hi, uint16_t lo)
 {
-    int c = 0;
-
-    *count = dec_add(*count, 0x01, &c);
+    *count = count_on(*count);
     map_byte_set(lo, digit_low(*count));
     map_byte_set(hi, digit_high(*count));
 }
@@ -699,98 +690,49 @@ static void RecordTimeTiles(void)
     map_byte_set(0x036E, digit_low(r[0]));
 }
 
-/* Seconds past 59 carry a minute (decimal). */
-static void seconds_carry(void)
+/* `hundredths` of the bonus moved into the total, the total's seconds
+   carrying into its minutes; the bonus holds at least that much. */
+static void bonus_move(unsigned hundredths)
 {
-    int c = 1;
-
-    if (g.race_time[1] >= 0x60) {
-        g.race_time[1] = dec_sub(g.race_time[1], 0x60, &c);
-        c = 0;
-        g.race_time[2] = dec_add(g.race_time[2], 0x01, &c);
-    }
-}
-
-/* The bonus moved by hundredths `lo` and seconds `mid` into the total. */
-static void bonus_move(uint8_t lo, uint8_t mid)
-{
-    int c = 1;
-    uint8_t *bonus = g.race_time_best, *total = g.race_time;
-
-    bonus[0] = dec_sub(bonus[0], lo, &c);
-    bonus[1] = dec_sub(bonus[1], mid, &c);
-    c = 0;
-    total[0] = dec_add(total[0], lo, &c);
-    total[1] = dec_add(total[1], mid, &c);
+    time_set(g.race_time_best, time_hundredths(g.race_time_best) - hundredths);
+    time_set(g.race_time, time_hundredths(g.race_time) + hundredths);
 }
 
 /*
  * @routine 07:D268 ResultsBonusCount
  * WHAT IT DOES: Counts the time bonus into the total a step a frame (from
  * frame $12 B or START adds all of it at once): 2.17 seconds a step with a
- * minute or more, else $73 or $57 hundredths by the seconds, else one; then
- * the bonus's digits and the total's.
+ * minute or more, else 0.73 (one second left) or 0.57 seconds with a second
+ * or more, else a hundredth; then the bonus's digits and the total's.
  */
 static void ResultsBonusCount(void)
 {
     uint8_t *bonus = g.race_time_best, *total = g.race_time;
     uint8_t n = (uint8_t)(g.banner_timer[0] + 1);
-    int c;
 
     if (n >= 0xFA)
         n = 0xFA;
     g.banner_timer[0] = n;
     if (n >= 0x12 && pressed(0x9000)) {
-        c = 0;
-        total[0] = dec_add(total[0], bonus[0], &c);
-        total[1] = dec_add(total[1], bonus[1], &c);
-        if (c) {
-            c = 1;
-            total[1] = dec_sub(total[1], 0x60, &c);
-            c = 0;
-            total[2] = dec_add(total[2], 0x01, &c);
-            c = 0;
-        }
-        if (total[1] >= 0x60) {
-            c = 1;
-            total[1] = dec_sub(total[1], 0x60, &c);
-            c = 0;
-            total[2] = dec_add(total[2], 0x01, &c);
-        }
-        total[2] = dec_add(total[2], bonus[2], &c);
+        time_set(total, time_hundredths(total) + time_hundredths(bonus));
         bonus[0] = bonus[1] = bonus[2] = 0;
         step_next();
         g.overlay_state = 0x02;
         SoundPort0QueuePushRaw(0x3F);
-    } else {
-        if (bonus[2]) {
-            c = 1;
-            bonus[0] = dec_sub(bonus[0], 0x17, &c);
-            bonus[1] = dec_sub(bonus[1], 0x02, &c);
-            if (!c) {
-                c = 0;
-                bonus[1] = dec_add(bonus[1], 0x60, &c);
-                c = 1;
-                bonus[2] = dec_sub(bonus[2], 0x01, &c);
-            }
-            c = 0;
-            total[0] = dec_add(total[0], 0x17, &c);
-            total[1] = dec_add(total[1], 0x02, &c);
-        } else if (!bonus[1]) {
-            c = 1;
-            bonus[0] = dec_sub(bonus[0], 0x01, &c);
-            if (!bonus[0]) {
-                step_next();
-                g.overlay_state = 0x02;
-                SoundPort0QueuePushRaw(0x3F);
-            }
-            c = 0;
-            total[0] = dec_add(total[0], 0x01, &c);
-            total[1] = dec_add(total[1], 0x00, &c);
-        } else {
-            bonus_move(bonus[1] == 0x01 ? 0x73 : 0x57, 0x00);
+    } else if (bonus[2]) {
+        bonus_move(217);
+    } else if (!bonus[1]) {
+        /* under a second: its hundredths one less, as two digits (a bonus
+           of 0 would wrap to 99, as the original's did) */
+        bonus[0] = (uint8_t)BcdOf((BcdValue(bonus[0]) + 99u) % 100u);
+        if (!bonus[0]) {
+            step_next();
+            g.overlay_state = 0x02;
+            SoundPort0QueuePushRaw(0x3F);
         }
-        seconds_carry();
+        time_set(total, time_hundredths(total) + 1u);
+    } else {
+        bonus_move(bonus[1] == 0x01 ? 73u : 57u);
     }
     map_byte_set(0x038E, digit_low(bonus[2]));
     map_byte_set(0x0392, digit_high(bonus[1]));

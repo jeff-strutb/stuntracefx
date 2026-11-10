@@ -6,40 +6,29 @@
 #include "race/race.h"
 #include "system/state.h"
 
-/* Decimal add of two four-digit values and a carry in; *carry is the carry out. */
-uint16_t BcdAdd16(uint16_t a, uint16_t b, unsigned *carry)
+/* The game keeps its times and counts as four decimal digits, a nibble
+   each (the original's decimal mode). Their value, and a value (taken
+   modulo 10000) as such a number. */
+unsigned BcdValue(uint16_t v)
 {
-    uint16_t r = 0;
-    unsigned c = *carry;
-
-    for (int shift = 0; shift < 16; shift += 4) {
-        unsigned d = ((a >> shift) & 0xFu) + ((b >> shift) & 0xFu) + c;
-
-        c = d > 9;
-        if (c)
-            d -= 10;
-        r |= (uint16_t)(d << shift);
-    }
-    *carry = c;
-    return r;
+    return (v >> 12 & 0xFu) * 1000u + (v >> 8 & 0xFu) * 100u + (v >> 4 & 0xFu) * 10u + (v & 0xFu);
 }
 
-/* Decimal subtract, a - b - (1 - carry); *carry = 1 when there was no borrow. */
-uint16_t BcdSub16(uint16_t a, uint16_t b, unsigned *carry)
+uint16_t BcdOf(unsigned n)
 {
-    uint16_t r = 0;
-    unsigned borrow = !*carry;
+    n %= 10000u;
+    return (uint16_t)((n / 1000u) << 12 | (n / 100u % 10u) << 8 | (n / 10u % 10u) << 4 | n % 10u);
+}
 
-    for (int shift = 0; shift < 16; shift += 4) {
-        int d = (int)((a >> shift) & 0xFu) - (int)((b >> shift) & 0xFu) - (int)borrow;
+/* Four-digit decimal sum and difference, wrapping as four digits do. */
+uint16_t BcdAdd(uint16_t a, uint16_t b)
+{
+    return BcdOf(BcdValue(a) + BcdValue(b));
+}
 
-        borrow = d < 0;
-        if (borrow)
-            d += 10;
-        r |= (uint16_t)(d << shift);
-    }
-    *carry = !borrow;
-    return r;
+uint16_t BcdSub(uint16_t a, uint16_t b)
+{
+    return BcdOf(BcdValue(a) + 10000u - BcdValue(b));
 }
 
 /* @routine 03:EFBB CourseIndex12: tables with twelve bytes per course and three per entry. */
@@ -51,16 +40,12 @@ static uint8_t course_index_12(uint8_t entry)
 /* @routine 03:EF9F RaceTimeAddD815, 03:EF93 RaceTimeAddD814: the time left gains this course's value. */
 void RaceTimeAddD815(void)
 {
-    unsigned c = 0;
-
-    g.time_left = BcdAdd16(cart8(0x03, (uint16_t)(0xD815 + course_index_12(g.car[0]))), g.time_left, &c);
+    g.time_left = BcdAdd(cart8(0x03, (uint16_t)(0xD815 + course_index_12(g.car[0]))), g.time_left);
 }
 
 void RaceTimeAddD814(void)
 {
-    unsigned c = 0;
-
-    g.time_left = BcdAdd16(cart8(0x03, (uint16_t)(0xD814 + course_index_12(g.car[0]))), g.time_left, &c);
+    g.time_left = BcdAdd(cart8(0x03, (uint16_t)(0xD814 + course_index_12(g.car[0]))), g.time_left);
 }
 
 /*
@@ -89,40 +74,39 @@ void RaceTimeInit(void)
  * @routine 7E:B072 RaceClockStep
  * WHAT IT DOES: While the clock runs, adds the step to the race time and
  * takes it off the countdown, borrowing from the time left; the clock holds
- * at 9:59.9999 and the countdown stops when the time left is gone.
+ * at 9:59.9999 and the countdown stops when the time left is gone. The
+ * fractions are in ten-thousandths of a second.
  */
 void RaceClockStep(void)
 {
-    unsigned c;
-    uint16_t a;
+    unsigned step = BcdValue(g.clock_step), fraction, seconds, countdown;
 
     if (!g.finish_mark)
         return;
-    c = 0;
-    g.clock_fraction = BcdAdd16(g.clock_fraction, g.clock_step, &c);
-    a = BcdAdd16(g.clock_seconds, 0, &c);
-    g.clock_seconds = a;
-    if (a >= 0x0060) {
+    fraction = BcdValue(g.clock_fraction) + step;
+    seconds = BcdValue(g.clock_seconds) + fraction / 10000u;
+    g.clock_fraction = BcdOf(fraction);
+    g.clock_seconds = BcdOf(seconds);
+    if (seconds >= 60) {
+        unsigned minutes = BcdValue(g.clock_minutes) + 1;
+
         g.clock_seconds = 0;
-        c = 0;
-        a = BcdAdd16(g.clock_minutes, 1, &c);
-        g.clock_minutes = a;
-        if (a >= 0x0010) {
+        g.clock_minutes = BcdOf(minutes);
+        if (minutes >= 10) {
             g.clock_minutes = 0x0009;
             g.clock_seconds = 0x0059;
             g.clock_fraction = 0x9999;
         }
     }
-    c = 1;
-    g.countdown_fraction = BcdSub16(g.countdown_fraction, g.clock_step, &c);
-    if (!c) {
-        if (g.time_left) {
-            c = 1;
-            g.time_left = BcdSub16(g.time_left, 1, &c);
-        } else {
-            g.countdown_fraction = 0;
-            g.time_left = 0;
-        }
+    countdown = BcdValue(g.countdown_fraction);
+    g.countdown_fraction = BcdOf(countdown + 10000u - step);
+    if (countdown >= step)
+        return;
+    if (g.time_left) {
+        g.time_left = BcdSub(g.time_left, 1);
+    } else {
+        g.countdown_fraction = 0;
+        g.time_left = 0;
     }
 }
 
@@ -134,23 +118,21 @@ void RaceClockStep(void)
  */
 void LapSplitTimes(int offset)
 {
-    uint8_t frac = (uint8_t)(g.clock_fraction >> 8);
-    uint8_t secs = (uint8_t)g.clock_seconds, mins = (uint8_t)g.clock_minutes;
-    uint8_t minutes = mins;
-    unsigned c = 1;
-    uint16_t v;
+    int hundredths = (int)BcdValue(g.clock_fraction >> 8) - (int)BcdValue(g.lap_mark[0]);
+    int seconds = (int)BcdValue((uint8_t)g.clock_seconds) - (int)BcdValue(g.lap_mark[1]);
+    uint8_t minutes = (uint8_t)g.clock_minutes;
 
-    v = BcdSub16(frac, g.lap_mark[0], &c);
-    g.lap_splits[offset] = (uint8_t)v;
-    v = BcdSub16(secs, g.lap_mark[1], &c);
-    if (!c) {
-        c = 0;
-        v = BcdAdd16(v, 0x60, &c);
+    if (hundredths < 0) {
+        hundredths += 100;
+        seconds--;
+    }
+    if (seconds < 0) {
+        seconds += 60;
         minutes--;
     }
-    g.lap_splits[offset + 1] = (uint8_t)v;
-    c = 1;
-    g.lap_splits[offset + 2] = (uint8_t)BcdSub16(minutes, g.lap_mark[2], &c);
+    g.lap_splits[offset] = (uint8_t)BcdOf((unsigned)hundredths);
+    g.lap_splits[offset + 1] = (uint8_t)BcdOf((unsigned)seconds);
+    g.lap_splits[offset + 2] = (uint8_t)BcdSub(minutes, g.lap_mark[2]);
 }
 
 void LapSplit(int offset)

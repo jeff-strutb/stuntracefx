@@ -70,8 +70,10 @@ void RaceClockStep(void);
 void LapSplit(int offset);
 void LapSplitTimes(int offset);
 void RaceTimeKeep(void);
-uint16_t BcdAdd16(uint16_t a, uint16_t b, unsigned *carry);
-uint16_t BcdSub16(uint16_t a, uint16_t b, unsigned *carry);
+unsigned BcdValue(uint16_t v);           /* four decimal digits, a nibble each, as a number */
+uint16_t BcdOf(unsigned n);              /* a number (modulo 10000) as four decimal digits */
+uint16_t BcdAdd(uint16_t a, uint16_t b); /* decimal sum and difference, wrapping at four digits */
+uint16_t BcdSub(uint16_t a, uint16_t b);
 void TimeUnpackBcd(uint16_t packed, uint16_t *minutes, uint16_t *seconds, uint16_t *hundredths);
 void ChampionshipFinish(void);
 

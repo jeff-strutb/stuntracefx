@@ -142,20 +142,14 @@ static void draw_pieces(void)
 /* State 6's count: the bonus into the time, the step at a time. */
 static void count_bonus(void)
 {
-    uint16_t v = g.digit_pair;
-    unsigned c = 1;
-
-    if (!v)
+    if (!g.digit_pair)
         return;
-    v = BcdSub16(v, g.bonus_step, &c);
-    if (!c) {
-        c = 0;
-        g.time_left = BcdAdd16(g.time_left, g.digit_pair, &c);
+    if (g.digit_pair < g.bonus_step) {  /* decimal digits compare as their values */
+        g.time_left = BcdAdd(g.time_left, g.digit_pair);
         g.digit_pair = 0;
     } else {
-        g.digit_pair = v;
-        c = 0;
-        g.time_left = BcdAdd16(g.time_left, g.bonus_step, &c);
+        g.digit_pair = BcdSub(g.digit_pair, g.bonus_step);
+        g.time_left = BcdAdd(g.time_left, g.bonus_step);
     }
 }
 
@@ -163,19 +157,16 @@ static void count_bonus(void)
 static void take_from_time(void)
 {
     uint16_t v = g.time_left;
-    unsigned c = 1;
 
     if (v >= 0x0009) {
-        g.time_left = BcdSub16(v, 0x0003, &c);
-        c = 0;
-        v = BcdAdd16(g.digit_pair, 0x0003, &c);
+        g.time_left = BcdSub(v, 0x0003);
+        v = BcdAdd(g.digit_pair, 0x0003);
     } else {
-        v = BcdSub16(v, 0x0001, &c);
+        v = BcdSub(v, 0x0001);
         g.time_left = v;
         if (v == 0)
             SoundPort0QueuePushRaw(0x44);
-        c = 0;
-        v = BcdAdd16(g.digit_pair, 0x0001, &c);
+        v = BcdAdd(g.digit_pair, 0x0001);
     }
     if (v >= 0x0099) {
         SoundPort0QueuePushRaw(0x44);
@@ -221,9 +212,7 @@ void TimeBonusTally(void)
         return;
     case 6:
         if (g.start_substate >= 0x08) {
-            unsigned c = 0;
-
-            g.time_left = BcdAdd16(g.time_left, g.digit_pair, &c);
+            g.time_left = BcdAdd(g.time_left, g.digit_pair);
             g.digit_pair = 0;
             g.finish_lines--;
             g.tally_state += 2;
@@ -337,28 +326,22 @@ static void transfer_digits(void)
  */
 void TimeBonusTransfer(void)
 {
-    unsigned c;
-
     if (!g.finish_lines)
         return;
     if (!g.stunt_score_add) {
         g.bonus_step = 0;
         if (g.tally_state)
             g.tally_state = 0x18;
-        if (g.hits_bcd != g.digit_pair) {
-            c = 0;
-            g.digit_pair = BcdAdd16(g.digit_pair, 0x0001, &c);
-        }
+        if (g.hits_bcd != g.digit_pair)
+            g.digit_pair = BcdAdd(g.digit_pair, 0x0001);
     } else {
         uint16_t step = g.stunt_score_add >= 0x18 ? 0x0017 : g.stunt_score_add >= 0x05 ? 0x0003 : 0x0001;
         uint16_t left;
 
-        c = 1;
-        left = BcdSub16(g.stunt_score_add, step, &c);
+        left = BcdSub(g.stunt_score_add, step);
         g.stunt_score_add = (uint8_t)left;
         g.digit_pair = left;
-        c = 0;
-        g.time_left = BcdAdd16(g.time_left, step, &c);
+        g.time_left = BcdAdd(g.time_left, step);
         if (!g.tally_state)
             g.tally_state = 0x12;
     }

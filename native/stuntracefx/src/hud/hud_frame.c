@@ -216,13 +216,6 @@ void HudSlideOut(void)
     g.hud_slide = v;
 }
 
-/* A sprite Y through SpriteYOnScreen; c is the carry it leaves. */
-static uint8_t on_screen(uint8_t y, unsigned *c)
-{
-    *c = y >= 0xB0;
-    return SpriteYOnScreen(y);
-}
-
 /* The slide plus the panel's offset as the panel's Y, into its sprites' Y
    bytes (`at` table offsets plus the panel's sprite base). */
 static void hud_sprites_y(uint8_t y_offset, uint16_t base)
@@ -231,20 +224,22 @@ static void hud_sprites_y(uint8_t y_offset, uint16_t base)
     static const struct { uint8_t add; int clc; uint16_t at; } tail[3] = {
         {0x0A, 0, 0x0090}, {0x18, 0, 0x0094}, {0x26, 1, 0x0098}};
     uint8_t v0 = (uint8_t)(g.hud_slide + y_offset), v = v0, y;
-    unsigned c = 0;
 
     for (int i = 0; i < 4; i++) {
         if (i)
             v = (uint8_t)(v + 0x10);
-        y = on_screen(v, &c);
+        y = SpriteYOnScreen(v);
         OamByteSet((uint16_t)(row[i][0] + base), y);
         OamByteSet((uint16_t)(row[i][1] + base), y);
     }
+    /* The tail's first two sit a line lower after a sprite at or past line
+       $B0 (the original's add took the carry of the test before it); the
+       third does not. */
     for (int i = 0; i < 3; i++) {
-        if (tail[i].clc)
-            c = 0;
-        y = on_screen((uint8_t)(v0 + tail[i].add + c), &c);
-        OamByteSet((uint16_t)(tail[i].at + base), y);
+        int lower = !tail[i].clc && v >= 0xB0;
+
+        v = (uint8_t)(v0 + tail[i].add + lower);
+        OamByteSet((uint16_t)(tail[i].at + base), SpriteYOnScreen(v));
     }
 }
 
@@ -301,7 +296,9 @@ static void hud_marker_y(void)
 }
 
 /* Gauge B's X and the row of Xs after it: the first five skipped while
-   negative, the rest carrying on. */
+   negative, the rest carrying on. The Xs add up in 8 bits; where a step
+   does not start afresh, an X after one that wrapped past 255 is a pixel
+   further (the original's add took the carry the one before left). */
 static void hud_gauge_b_x(void)
 {
     static const struct { uint8_t add; int sub, clc, skip; uint16_t at[2]; int n; } step[11] = {
@@ -312,22 +309,17 @@ static void hud_gauge_b_x(void)
         {0x04, 0, 0, 0, {0x0150, 0}, 1}, {0x08, 0, 0, 0, {0x0154, 0}, 1},
         {0x08, 0, 0, 0, {0x0158, 0}, 1}};
     uint8_t v = g.gauge_place[4];
-    unsigned c = 0;
+    int wrapped = 0;                    /* the X before went past 255 (or, after the subtract, did not go below 0) */
 
     for (int i = 0; i < 11; i++) {
         if (i) {
             if (step[i].sub) {
-                unsigned d = (unsigned)v - step[i].add;
-
-                c = d < 0x100;
-                v = (uint8_t)d;
+                wrapped = v >= step[i].add;
+                v = (uint8_t)(v - step[i].add);
             } else {
-                unsigned s;
+                unsigned s = (unsigned)v + step[i].add + (step[i].clc ? 0u : (unsigned)wrapped);
 
-                if (step[i].clc)
-                    c = 0;
-                s = (unsigned)v + step[i].add + c;
-                c = s > 0xFF;
+                wrapped = s > 0xFF;
                 v = (uint8_t)s;
             }
         }
