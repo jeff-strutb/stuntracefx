@@ -30,7 +30,6 @@ typedef struct {
     uint16_t selection_derived[4];      /* $18E3: each racer's word from the choice tables */
     uint16_t settings_row[3];           /* $18EF-$18F3: the settings also shown as initials */
     uint8_t car_settings[3];            /* $1184-$1186 */
-    uint16_t word_1168;                 /* $1168 */
     uint16_t course_menu_seen;          /* $1917 */
     uint16_t demo_number;               /* $1915: the next attract demo */
     uint16_t record_times[12];          /* $0F2B: sorted times; the first is the best, $FFFF for none */
@@ -41,7 +40,6 @@ typedef struct {
     uint8_t times_total[3][3];          /* $0F9A: each group of four summed */
     uint8_t names_bytes[9];             /* $10CF */
     uint8_t best_digits[5];             /* $0F69: minutes, seconds, hundredths as digits */
-    uint16_t word_0f6e[4];              /* $0F6E */
     uint16_t record_tag, record_place;  /* $10C7, $10C9 */
     uint8_t race_time[3];               /* $0EED: hundredths, seconds, minutes */
     uint8_t stunt_score_high, stunt_score_add; /* $19EC, $19F0 */

@@ -238,7 +238,7 @@ static void results_lower(Actor *a)
         return;
     a->handler = HANDLER_RESULTS_RISE_AGAIN;
     a->count = 0;
-    menu.panel_b1925 = 0x005F;
+    menu.panel_top_lowered = 0x005F;
     for (k = 0x14; k <= 0x17; k++)
         actors_set_hidden((uint16_t)k, 0xFFFF);
     for (k = 0x1A; k <= 0x25; k++)

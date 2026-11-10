@@ -67,10 +67,10 @@ static void table_indirect(uint16_t at, int32_t *values, int32_t before)
         switch (addr) {
         case 0x18BB: value = menu.slide_top; break;
         case 0x18BD: value = menu.slide_low; break;
-        case 0x1919: value = menu.panel_b1919; break;
-        case 0x191B: value = menu.panel_b191b; break;
-        case 0x191D: value = menu.panel_b191d; break;
-        case 0x191F: value = menu.panel_b191f; break;
+        case 0x1919: value = menu.panel_class_scroll; break;
+        case 0x191B: value = menu.panel_top_scroll; break;
+        case 0x191D: value = menu.panel_low_scroll; break;
+        case 0x191F: value = menu.panel_still_scroll; break;
         default: value = last; break;
         }
         for (i = 0; i < n && v < LINES; i++, v++)

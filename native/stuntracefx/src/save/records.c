@@ -440,15 +440,16 @@ void RecordTagCar8(void) { g.record_tag = (uint16_t)(RecordCarTimes12() + 8); }
  * entries the time and the player's name: below the first moves the others
  * down and, unless the time is still above another of the course's entries,
  * keeps the race's packed lap times; below the second or third likewise.
- * No place: the tag $FFFF. Then the course's check sum. With HUD mode 0, a
- * mark first; course $0C or more, or car 4 or more: nothing else.
+ * No place: the tag $FFFF. Then the course's check sum. Course $0C or
+ * more, or car 4 or more: nothing.
  */
 void SpecialRecordInsert(uint16_t time)
 {
     SaveEntry *e;
 
-    if (g.hud_mode == 0)
-        g.word_0f6e[g.champ_stage] = (uint16_t)((g.champ_stage * 2) & 0x00FF);
+    /* The original also marked the stage in HUD mode 0 ($0F6E + stage * 2),
+       a word nothing reads (the lap digits before it are read only to
+       $0F6D); it is not kept. */
     if (g.course >= 0x0C || g.car[0] >= 4)
         return;
     e = &save.blocks[g.course][g.car[0] * 3];

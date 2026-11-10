@@ -43,8 +43,14 @@ typedef struct {
     uint16_t blink_count, blink_phase;  /* $1901, $18FF: colour $D9's blink */
     uint16_t hold_up, hold_down;        /* $190B, $190D */
     uint16_t leader_timer, leader_step; /* $190F, $1911: where the place marker's blink stands */
-    uint16_t panel_rise;                /* $1921 */
-    uint16_t panel_b1919, panel_b191b, panel_b191d, panel_b191f, panel_b1925, panel_b1927;
+    uint16_t panel_rise;                /* $1921: how far the panels have risen */
+    /* the championship screen's panels, as BG2's vertical scroll by band */
+    uint16_t panel_class_scroll;        /* $1919: the class's title, 32 lines a class */
+    uint16_t panel_top_scroll;          /* $191B: the upper panel as it rises */
+    uint16_t panel_low_scroll;          /* $191D: the lower panel as it rises */
+    uint16_t panel_still_scroll;        /* $191F: a band that stays (0) */
+    uint16_t panel_top_lowered;         /* $1925: added to the upper panel's once the results lower */
+    uint16_t panel_low_start;           /* $1927: the lower panel's start, 0 for a finished player */
     uint8_t blink_on;                   /* $18B9 */
     uint8_t shown_3d;                   /* a handler showed a race frame this run */
     uint8_t fixed_colour_queued;        /* a fixed colour was queued this run: the original's queue is

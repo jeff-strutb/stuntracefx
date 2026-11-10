@@ -314,8 +314,8 @@ static void window_open_close_step(void)
         uint8_t n = (uint8_t)(menu.panel_rise + 1);
 
         t[0x12DB] = t[0x12E8] = t[0x12F6] = t[0x1301] = n;
-        menu.panel_b191b = (uint16_t)(0x0016 - menu.panel_rise + menu.panel_b1925);
-        menu.panel_b191d = (uint16_t)(0x0045 - menu.panel_rise + menu.panel_b1927);
+        menu.panel_top_scroll = (uint16_t)(0x0016 - menu.panel_rise + menu.panel_top_lowered);
+        menu.panel_low_scroll = (uint16_t)(0x0045 - menu.panel_rise + menu.panel_low_start);
         return;
     }
     if (menu.window_mode == 1) {
@@ -635,7 +635,6 @@ int CourseMenuRun(void)
     case S_COURSE_START:
         g.draw_side = 0;
         g.menu_mode = 0;
-        g.word_1168 = 0;
         if (!g.course_menu_seen) {
             state = S_TITLE_OPEN;
         } else {
@@ -1085,10 +1084,10 @@ static void champion_open(void)
     menu_state_clear();
     menu.window_mode = 3;
     menu.panel_rise = 0;
-    menu.panel_b1925 = 0;
-    menu.panel_b1919 = (uint16_t)(g.course_class << 5);
-    menu.panel_b1927 = g.player_phase[0] == 8 ? 0x0000 : 0x0020;
-    menu.panel_b191f = 0;
+    menu.panel_top_lowered = 0;
+    menu.panel_class_scroll = (uint16_t)(g.course_class << 5);
+    menu.panel_low_start = g.player_phase[0] == 8 ? 0x0000 : 0x0020;
+    menu.panel_still_scroll = 0;
     actors.scroll_y = 0x0066;
     actors_reset();
     actors_spawn_list(0x0036);
