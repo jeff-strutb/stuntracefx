@@ -96,9 +96,9 @@ void ObjectHeading90(Object *o)
 void ObjectScoreGateStep(Object *o)
 {
     if (ObjectSyncFromRecord(o) && (RecordContactSummary(o) & 0x01))
-        o->flags25 |= 0x01;
+        o->gate.state |= GATE_DONE;
     else
-        o->flags25 &= 0xFE;
+        o->gate.state &= (uint8_t)~GATE_DONE;
 }
 
 /* @routine 09:8CAF ObjectScoreGateRecord */
@@ -320,9 +320,9 @@ static int hit(Object *o)
    first time, a sound and two firework shells */
 void ObjectFinishGateStep(Object *o)
 {
-    if (!hit(o) || g.laps_counted[0] != 0x02 || (o->flags25 & 0x01))
+    if (!hit(o) || g.laps_counted[0] != 0x02 || (o->gate.state & GATE_DONE))
         return;
-    o->flags25 |= 0x01;
+    o->gate.state |= GATE_DONE;
     SoundPort0QueuePush(0x11);
     shell(o, 0x03C0, 0x3C, 0x32, 0x23);
     shell(o, 0xFC40, 0x78, 0x3C, 0x0C);
@@ -505,13 +505,13 @@ void ObjectPostBStep(Object *o)
 {
     if (!hit(o))
         return;
-    if (!(o->flags25 & 0x01)) {
-        o->flags25 |= 0x01;
+    if (!(o->gate.state & POST_COUNTED)) {
+        o->gate.state |= POST_COUNTED;
         g.posts_hit |= 0x02;
     }
-    if (g.posts_hit != 0x03 || (o->flags25 & 0x02))
+    if (g.posts_hit != 0x03 || (o->gate.state & POST_BALL_LAUNCHED))
         return;
-    o->flags25 |= 0x02;
+    o->gate.state |= POST_BALL_LAUNCHED;
     {
         Object *n = sky_ball(o);
 
@@ -760,9 +760,9 @@ static void wave_ball(Object *o, uint16_t h, uint16_t dx, uint16_t dy, uint16_t 
 
 static void wave_gate_frame(Object *o, int which)
 {
-    if (!hit_to(o) || g.laps_counted[0] != 0x01 || (o->flags25 & 0x01))
+    if (!hit_to(o) || g.laps_counted[0] != 0x01 || (o->gate.state & GATE_DONE))
         return;
-    o->flags25 |= 0x01;
+    o->gate.state |= GATE_DONE;
     if (which == 0)
         wave_ball(o, H9_WAVE_BALL_BIG, 0xDA80, 0xFE80, 0xDD00, 0xE0, 0xFF00, 0x0F00, 0x0F00, 0x0F);
     else if (which == 1)
@@ -901,12 +901,12 @@ void ObjectWaveBallBig(Object *o)
 void ObjectLanternStep(Object *o)
 {
     if (!hit(o)) {
-        o->flags25 &= 0xFE;
+        o->gate.state &= (uint8_t)~GATE_DONE;
         return;
     }
-    if (o->flags25 & 0x01)
+    if (o->gate.state & GATE_DONE)
         return;
-    o->flags25 |= 0x01;
+    o->gate.state |= GATE_DONE;
     SoundPort0QueuePush(0x10);
     ObjectRelease(o);
     spark(o, 0x14, 0x0028, 0xFFD3, 0x0000);
@@ -957,17 +957,17 @@ static void gate_trigger(Object *o, uint16_t s)
 void ObjectChimeGateStep(Object *o)
 {
     if (hit(o)) {
-        if (o->flags25 & 0x01)
+        if (o->gate.state & CHIME_IN)
             return;
-        o->flags25 |= 0x01;
-        o->flags25 &= 0xFD;
+        o->gate.state |= CHIME_IN;
+        o->gate.state &= (uint8_t)~CHIME_OUT;
         SoundPort1QueuePush(0x13);
         return;
     }
-    if (o->flags25 & 0x02)
+    if (o->gate.state & CHIME_OUT)
         return;
-    o->flags25 |= 0x02;
-    o->flags25 &= 0xFE;
+    o->gate.state |= CHIME_OUT;
+    o->gate.state &= (uint8_t)~CHIME_IN;
     SoundPort1QueuePush(0x0E);
 }
 
@@ -989,16 +989,16 @@ void ObjectChimeGate(Object *o)
 static void flash_frame(Object *o, uint16_t flash, uint16_t step, uint16_t end)
 {
     if (hit(o)) {
-        if (o->flags25 & 0x01)
+        if (o->gate.state & GATE_DONE)
             return;
-        o->flags25 |= 0x01;
+        o->gate.state |= GATE_DONE;
         windows.level_step = flash;
         palettes.weather_step = step;
         palettes.weather_goal = end;
         g.picture_effects |= 0x21;
         return;
     }
-    o->flags25 &= 0xFE;
+    o->gate.state &= (uint8_t)~GATE_DONE;
 }
 
 /* @routine 09:A371 ObjectBrightGateStep */
@@ -1041,12 +1041,12 @@ static void car_flag_frame(Object *o, int on, uint8_t snd)
     uint16_t r = synced(o) ? next_contact() : 0;
 
     if (!r) {
-        o->flags25 &= 0xFE;
+        o->gate.state &= (uint8_t)~GATE_DONE;
         return;
     }
-    if (o->flags25 & 0x01)
+    if (o->gate.state & GATE_DONE)
         return;
-    o->flags25 |= 0x01;
+    o->gate.state |= GATE_DONE;
     if (!palettes.weather) {
         if (on)
             GsuRecordCourseFlagsSet(r, 0x02);
@@ -1115,9 +1115,9 @@ void ObjectSlideGateStep(Object *o)
 {
     uint16_t r = synced(o) ? next_contact() : 0;
 
-    if (!r || g.laps_counted[0] != 0x01 || (o->flags25 & 0x01))
+    if (!r || g.laps_counted[0] != 0x01 || (o->gate.state & GATE_DONE))
         return;
-    o->flags25 |= 0x01;
+    o->gate.state |= GATE_DONE;
     g.picture_effects |= 0xA0;
     GsuRecordCourseFlagsClear(r, 0x02);
     fade_set(0x0020, 0x2000);
@@ -1155,16 +1155,16 @@ void ObjectLapFlashGateStep(Object *o)
     if (lap > 0x02)
         return;
     if (lap == 0x02) {
-        if (o->flags25 & 0x02)
+        if (o->gate.state & LAP_FLASH_FADED)
             return;
-        o->flags25 |= 0x02;
+        o->gate.state |= LAP_FLASH_FADED;
         GateFadeUp();
         ObjectRelease(o);
         return;
     }
-    if (o->flags25 & 0x01)
+    if (o->gate.state & LAP_FLASH_FLASHED)
         return;
-    o->flags25 |= 0x01;
+    o->gate.state |= LAP_FLASH_FLASHED;
     GateFlashOnClock();
 }
 
@@ -1175,12 +1175,12 @@ GATE(ObjectLapFlashGate, ObjectLapFlashGateRecord, ObjectLapFlashGateStep, H9_LA
 void ObjectSweepGateStep(Object *o)
 {
     if (!hit(o)) {
-        o->flags25 &= 0xFE;
+        o->gate.state &= (uint8_t)~GATE_DONE;
         return;
     }
-    if (g.laps_counted[0] != 0x00 || (o->flags25 & 0x01))
+    if (g.laps_counted[0] != 0x00 || (o->gate.state & GATE_DONE))
         return;
-    o->flags25 |= 0x01;
+    o->gate.state |= GATE_DONE;
     g.picture_effects |= 0x10;
     SoundPort0QueuePush(0x36);
     ObjectRelease(o);
@@ -1194,25 +1194,25 @@ void ObjectSlideChimeGateStep(Object *o)
 {
     ObjectSyncFromRecord(o);
     if (RecordContactSummary(o) & 0x01) {
-        if (!(o->flags25 & 0x02)) {
-            o->flags25 |= 0x02;
-            o->flags25 &= 0xFB;
+        if (!(o->gate.state & SLIDE_CHIME_IN)) {
+            o->gate.state |= SLIDE_CHIME_IN;
+            o->gate.state &= (uint8_t)~SLIDE_CHIME_OUT;
             SoundPort1QueuePush(0x13);
         }
-        if (g.laps_counted[0] != 0x01 || (o->flags25 & 0x01))
+        if (g.laps_counted[0] != 0x01 || (o->gate.state & SLIDE_CHIME_SLID))
             return;
-        o->flags25 |= 0x01;
+        o->gate.state |= SLIDE_CHIME_SLID;
         g.picture_effects |= 0xA0;
         slide_set(0x0080, 0xFF80, 0x8000);
         g.slide_wobble_step = 0xFF;
         fade_set(0x0020, 0x2000);
         return;
     }
-    if (!(o->flags25 & 0x04)) {
-        o->flags25 |= 0x04;
+    if (!(o->gate.state & SLIDE_CHIME_OUT)) {
+        o->gate.state |= SLIDE_CHIME_OUT;
         SoundPort1QueuePush(0x0E);
     }
-    o->flags25 &= 0xFD;
+    o->gate.state &= (uint8_t)~SLIDE_CHIME_IN;
 }
 
 /* @routine 09:A788 ObjectSlideChimeGate, 09:A7A6 ObjectSlideChimeGateRecord */
@@ -1220,9 +1220,9 @@ GATE(ObjectSlideChimeGate, ObjectSlideChimeGateRecord, ObjectSlideChimeGateStep,
 
 static void fade_frame(Object *o, uint8_t lap, uint16_t step, uint16_t end)
 {
-    if (!synced(o) || !next_contact() || g.laps_counted[0] != lap || (o->flags25 & 0x01))
+    if (!synced(o) || !next_contact() || g.laps_counted[0] != lap || (o->gate.state & GATE_DONE))
         return;
-    o->flags25 |= 0x01;
+    o->gate.state |= GATE_DONE;
     g.picture_effects |= 0x20;
     fade_set(step, end);
 }
@@ -1278,13 +1278,13 @@ void ObjectBonusGateStep(Object *o)
     uint16_t r = synced(o) ? next_contact() : 0;
 
     if (!r) {
-        o->flags25 &= 0xFE;
+        o->gate.state &= (uint8_t)~GATE_DONE;
         return;
     }
     g.picture_effects = (uint8_t)((g.picture_effects & 0xF7) | 0x04);
-    if (o->flags25 & 0x01)
+    if (o->gate.state & GATE_DONE)
         return;
-    o->flags25 |= 0x01;
+    o->gate.state |= GATE_DONE;
     SoundPort1QueuePush(0x10);
     if (g.laps_counted[0] != 0x00 || !g.bonus_markers_taken)
         return;
@@ -1300,13 +1300,13 @@ void ObjectBonusEndGateStep(Object *o)
     uint16_t r = synced(o) ? next_contact() : 0;
 
     if (!r) {
-        o->flags25 &= 0xFE;
+        o->gate.state &= (uint8_t)~GATE_DONE;
         return;
     }
     g.picture_effects |= 0x0A;
-    if (o->flags25 & 0x01)
+    if (o->gate.state & GATE_DONE)
         return;
-    o->flags25 |= 0x01;
+    o->gate.state |= GATE_DONE;
     SoundPort1QueuePush(0x0F);
     if (g.laps_counted[0] == 0x02 || !g.bonus_markers_taken)
         return;
@@ -1508,9 +1508,9 @@ void ObjectLapBallDown(Object *o)
 /* @routine 09:AFFC ObjectCountGateStep */
 void ObjectCountGateStep(Object *o)
 {
-    if (!hit(o) || (o->flags25 & 0x01))
+    if (!hit(o) || (o->gate.state & GATE_DONE))
         return;
-    o->flags25 |= 0x01;
+    o->gate.state |= GATE_DONE;
     HitsToScoreAdd();
     g.stunt_finished = 0x08;
 }
@@ -1560,8 +1560,8 @@ void ObjectCountTriggerStep(Object *o)
         if (record_contacts.summary & 0x01)
             break;
     }
-    if (!(o->flags25 & 0x01)) {
-        o->flags25 |= 0x01;
+    if (!(o->gate.state & GATE_DONE)) {
+        o->gate.state |= GATE_DONE;
         HitsCollect(r);
     }
     g.switches_hit[0] = 0x01;
@@ -1969,12 +1969,12 @@ void ObjectSpinnerCentreStep(Object *o)
 void ObjectBellGateStep(Object *o)
 {
     if (!hit(o)) {
-        o->flags25 &= 0xFE;
+        o->gate.state &= (uint8_t)~GATE_DONE;
         return;
     }
-    if (o->flags25 & 0x01)
+    if (o->gate.state & GATE_DONE)
         return;
-    o->flags25 |= 0x01;
+    o->gate.state |= GATE_DONE;
     SoundPort0QueuePush(0x2E);
 }
 
@@ -2229,23 +2229,23 @@ void ObjectBreakableGate2(Object *o)
 void ObjectDuoGateStep(Object *o)
 {
     if (!synced(o)) {
-        o->flags25 &= 0xFC;
+        o->gate.state &= (uint8_t)~(DUO_FIRST | DUO_SECOND);
         return;
     }
     if (!(RecordContactSummary(o) & 0x01)) {
-        o->flags25 &= 0xFE;
-    } else if (!(o->flags25 & 0x01)) {
-        o->flags25 |= 0x01;
+        o->gate.state &= (uint8_t)~DUO_FIRST;
+    } else if (!(o->gate.state & DUO_FIRST)) {
+        o->gate.state |= DUO_FIRST;
         g.current_player = 0x00;
         SoundPort0QueuePush(0x5A);
     }
     if (!(RecordContactSummary(o) & 0x02)) {
-        o->flags25 &= 0xFD;
+        o->gate.state &= (uint8_t)~DUO_SECOND;
         return;
     }
-    if (o->flags25 & 0x02)
+    if (o->gate.state & DUO_SECOND)
         return;
-    o->flags25 |= 0x02;
+    o->gate.state |= DUO_SECOND;
     g.current_player = 0x01;
     SoundPort0QueuePush(0x5A);
 }
@@ -2283,12 +2283,12 @@ void ObjectBurstGateStep(Object *o)
     int i;
 
     if (!hit(o)) {
-        o->flags25 &= 0xFE;
+        o->gate.state &= (uint8_t)~GATE_DONE;
         return;
     }
-    if (o->flags25 & 0x01)
+    if (o->gate.state & GATE_DONE)
         return;
-    o->flags25 |= 0x01;
+    o->gate.state |= GATE_DONE;
     for (i = 0; i < 8; i++)
         burst_piece(o, p[i][0], 0x0000, p[i][1], p[i][2], p[i][3]);
     SoundPort0QueuePush(0x5A);
@@ -2334,19 +2334,19 @@ void ObjectLampPost(Object *o)
 void ObjectLampPostStep(Object *o)
 {
     if (!hit(o)) {
-        o->flags25 &= 0xFE;
+        o->gate.state &= (uint8_t)~LAMP_POST_RANG;
         return;
     }
-    if (!(o->flags25 & 0x04)) {
-        o->flags25 |= 0x04;
+    if (!(o->gate.state & LAMP_POST_BURST)) {
+        o->gate.state |= LAMP_POST_BURST;
         burst_piece(o, MODEL_BREAKABLE_PIECE, 0xFFA6, 0x0023, 0xFFFE, 0x000A);
         burst_piece(o, MODEL_BREAKABLE_PIECE, 0xFF60, 0xFFE2, 0xFFFF, 0x000F);
         burst_piece(o, MODEL_BREAKABLE_PIECE, 0xFFA6, 0x001E, 0xFFFE, 0xFFF3);
         burst_piece(o, MODEL_BREAKABLE_PIECE, 0xFF4C, 0xFFDD, 0xFFFF, 0xFFF6);
     }
-    if (o->flags25 & 0x01)
+    if (o->gate.state & LAMP_POST_RANG)
         return;
-    o->flags25 |= 0x01;
+    o->gate.state |= LAMP_POST_RANG;
     SoundPort0QueuePush(0x58);
 }
 
@@ -2503,9 +2503,9 @@ void ObjectTrailRightStep(Object *o) { trail_frame(o, 0x0003, 0x001E, 0xFFC0); }
 /* @routine 09:E7C6 ObjectFadeGate1Step */
 void ObjectFadeGate1Step(Object *o)
 {
-    if (!hit(o) || g.laps_counted[0] != 0x01 || (o->flags25 & 0x01))
+    if (!hit(o) || g.laps_counted[0] != 0x01 || (o->gate.state & GATE_DONE))
         return;
-    o->flags25 |= 0x01;
+    o->gate.state |= GATE_DONE;
     g.picture_effects |= 0x20;
     fade_set(0x0080, 0x2000);
 }
@@ -2538,12 +2538,12 @@ GATE(ObjectWindowOffGate, ObjectWindowOffGateRecord, ObjectWindowOffGateStep, H9
 static void beep_frame(Object *o, uint8_t sound)
 {
     if (!hit(o)) {
-        o->flags25 &= 0xFE;
+        o->gate.state &= (uint8_t)~GATE_DONE;
         return;
     }
-    if (o->flags25 & 0x01)
+    if (o->gate.state & GATE_DONE)
         return;
-    o->flags25 |= 0x01;
+    o->gate.state |= GATE_DONE;
     SoundPort1QueuePush(sound);
 }
 
@@ -2560,13 +2560,13 @@ GATE(ObjectBeepGate10, ObjectBeepGate10Record, ObjectBeepGate10Step, H9_BEEP_10_
 static void slide_bits_frame(Object *o, uint8_t and_mask, uint8_t or_mask, uint8_t sound)
 {
     if (!hit(o)) {
-        o->flags25 &= 0xFE;
+        o->gate.state &= (uint8_t)~GATE_DONE;
         return;
     }
     g.picture_effects = (uint8_t)((g.picture_effects & and_mask) | or_mask);
-    if (o->flags25 & 0x01)
+    if (o->gate.state & GATE_DONE)
         return;
-    o->flags25 |= 0x01;
+    o->gate.state |= GATE_DONE;
     SoundPort1QueuePush(sound);
 }
 
@@ -2623,10 +2623,10 @@ void ObjectSlideGateUpStep(Object *o)
             slide_set(0x0100, 0x0700, 0x0000);
             g.picture_effects |= 0x80;
         }
-        if (o->flags25 & 0x01)
+        if (o->gate.state & CHIME_IN)
             return;
-        o->flags25 |= 0x01;
-        o->flags25 &= 0xFD;
+        o->gate.state |= CHIME_IN;
+        o->gate.state &= (uint8_t)~CHIME_OUT;
         SoundPort1QueuePush(0x11);
         return;
     }
@@ -2636,10 +2636,10 @@ void ObjectSlideGateUpStep(Object *o)
     }
     if (palettes.target != 0x7FFF)
         slide_set(0x0100, 0xFF00, 0x8000);
-    if (o->flags25 & 0x02)
+    if (o->gate.state & CHIME_OUT)
         return;
-    o->flags25 |= 0x02;
-    o->flags25 &= 0xFE;
+    o->gate.state |= CHIME_OUT;
+    o->gate.state &= (uint8_t)~CHIME_IN;
     SoundPort1QueuePush(0x10);
 }
 
@@ -2897,8 +2897,8 @@ static int hit_switch_frame(Object *o)
 
     if (!synced(o) || (r = next_contact()) == 0)
         return 0;
-    if (!(o->flags25 & 0x01)) {
-        o->flags25 |= 0x01;
+    if (!(o->gate.state & GATE_DONE)) {
+        o->gate.state |= GATE_DONE;
         HitsCollect(r);
     }
     return 1;

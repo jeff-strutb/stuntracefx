@@ -9,6 +9,7 @@
 #ifndef STUNTRACEFX_OBJECT_H
 #define STUNTRACEFX_OBJECT_H
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include "data/cart.h"
@@ -21,55 +22,109 @@ typedef uint16_t ObjRef;
 #define OBJECT_SIZE 0x62
 
 #pragma pack(push, 1)
-typedef struct Object {
-    ObjRef next, prev;                  /* +00 the used list; next is also the free list's link */
-    uint16_t model;                     /* +04 the model the draw list uses */
-    union {
-        ObjRef parent;                  /* +06 for a child, the object it follows */
-        uint16_t script_flags;          /* +06 from the course script: bit 9 adds the model record's offsets */
-    };
-    uint8_t flags08, flags09;           /* +08 */
-    uint8_t byte0a, byte0b;             /* +0A */
-    uint16_t x, y, z;                   /* +0C the place */
-    uint8_t byte12, byte13;
-    uint8_t pitch, heading, roll;       /* +14 */
-    uint8_t speed;                      /* +17 also the step's target in some handlers */
-    uint8_t sprite_turn[2];             /* +18, +19: bit 7 marks them; per side of a split */
-    uint16_t handler;                   /* +1A the running handler, with its bank */
-    uint8_t handler_bank;               /* +1C */
-    uint16_t handler2;                  /* +1D the handler a far object runs, with its bank */
-    uint8_t handler2_bank;              /* +1F */
-    uint16_t script;                    /* +20 the record the script named, an address in its data */
-    uint16_t record;                    /* +22 the object's Super FX record, 0 for none */
-    uint8_t flags24, flags25;           /* +24 */
-    uint8_t byte26;                     /* +26 */
-    uint16_t link27;                    /* +27 a parent, a child chain, or an acceleration word */
-    uint16_t word29;                    /* +29 */
-    uint16_t word2b;                    /* +2B */
-    uint8_t byte2d;
-    uint16_t vx, vy, vz;                /* +2E the velocity; or the objects an object holds */
-    uint16_t word34;                    /* +34 */
-    uint8_t timer;                      /* +36 $FF runs the far handler, 1 clears the record, 0 stopped */
-    uint8_t byte37, byte38;
-    uint8_t byte39, byte3a, byte3b;     /* +39 */
-    ObjRef bucket_next, bucket_prev;    /* +3C */
-    uint16_t bucket;                    /* +40 the map cell's bucket key, doubled */
-    uint8_t bytes42[4];
-    uint8_t byte46, byte47;
-    uint8_t count48, byte49, byte4a, byte4b; /* +48: counters, by handler */
-    uint8_t byte4c, byte4d, byte4e;
-    uint16_t link;                      /* +4F another object, or a camera (camera_of) */
-    uint8_t byte51, byte52;
-    uint16_t offset_x, offset_y, offset_z; /* +53 */
-    uint8_t byte59;
-    uint8_t frame5a;                    /* +5A the frame the object shows when bit 7 is set, else the game's */
-    uint8_t byte5b, byte5c;
-    uint16_t anim;                      /* +5D */
-    uint8_t byte5f, byte60, byte61;     /* +5F */
-} Object;
+/*
+ * An object's record, $62 bytes, as the original's at $7E:2001 + slot *
+ * $62 (fx_tween copies the table as bytes; the offsets are kept). Every
+ * object keeps the fields of OBJECT_VIEW; each kind keeps its own in five
+ * regions: A at +$0A-$0B, B at +$25-$2D, C at +$37-$39, D at +$42-$4E and
+ * E at +$59. A kind's view names them for what that kind keeps there (the
+ * views below the common one); the common view names none of them.
+ */
+#define OBJECT_VIEW(A, B, C, D, E)                                                          \
+    ObjRef next, prev;                  /* +00 the used list; next is also the free list's link */ \
+    uint16_t model;                     /* +04 the model the draw list uses */            \
+    union {                                                                                 \
+        ObjRef parent;                  /* +06 for a child, the object it follows */      \
+        uint16_t script_flags;          /* +06 from the course script: bit 9 adds the model record's offsets */ \
+    };                                                                                      \
+    uint8_t unused1;                    /* +08: no routine uses it */                      \
+    uint8_t flags09;                    /* +09: bit 0 lifts the depth key by $1F40 */      \
+    A                                   /* +0A-+0B */                                      \
+    uint16_t x, y, z;                   /* +0C the place */                                \
+    uint8_t unused2[2];                 /* +12 */                                          \
+    uint8_t pitch, heading, roll;       /* +14 */                                          \
+    uint8_t unused3;                    /* +17 */                                          \
+    uint8_t sprite_turn[2];             /* +18, +19: bit 7 marks them; per side of a split */ \
+    uint16_t handler;                   /* +1A the running handler, with its bank */       \
+    uint8_t handler_bank;               /* +1C */                                          \
+    uint16_t handler2;                  /* +1D the handler a far object runs, with its bank */ \
+    uint8_t handler2_bank;              /* +1F */                                          \
+    uint16_t script;                    /* +20 the record the script named, an address in its data */ \
+    uint16_t record;                    /* +22 the object's Super FX record, 0 for none */ \
+    uint8_t flags24;                    /* +24 how it is drawn: bit 7 absolute, 5 hidden, 3 a sprite, 2 an effect emitter */ \
+    B                                   /* +25-+2D */                                      \
+    uint16_t vx, vy, vz;                /* +2E the velocity */                             \
+    uint8_t unused4[2];                 /* +34 */                                          \
+    uint8_t timer;                      /* +36 $FF runs the far handler, 1 clears the record, 0 stopped */ \
+    C                                   /* +37-+39 */                                      \
+    uint8_t byte3a;                     /* +3A */                                          \
+    uint8_t unused5;                    /* +3B */                                          \
+    ObjRef bucket_next, bucket_prev;    /* +3C */                                          \
+    uint16_t bucket;                    /* +40 the map cell's bucket key, doubled */       \
+    D                                   /* +42-+4E */                                      \
+    uint16_t link;                      /* +4F another object, or a camera (camera_of) */  \
+    uint8_t unused6[2];                 /* +51 */                                          \
+    uint16_t offset_x, offset_y, offset_z; /* +53 */                                       \
+    E                                   /* +59 */                                          \
+    uint8_t frame5a;                    /* +5A the frame the object shows when bit 7 is set, else the game's */ \
+    uint8_t unused7[2];                 /* +5B */                                          \
+    uint16_t anim;                      /* +5D */                                          \
+    uint8_t byte5f, byte60;             /* +5F */                                          \
+    uint8_t unused8;                    /* +61 */
 
+/* the regions while the kinds are being given their views: the record's
+   own byte names (interim; each kind's code moves to its view) */
+#define OBJECT_A_BYTES uint8_t byte0a, byte0b;
+#define OBJECT_B_BYTES uint8_t flags25; uint8_t byte26; uint16_t link27; uint16_t word29; uint16_t word2b; uint8_t byte2d;
+#define OBJECT_C_BYTES uint8_t byte37, byte38, byte39;
+#define OBJECT_D_BYTES uint8_t bytes42[4]; uint8_t byte46, byte47; uint8_t count48, byte49, byte4a, byte4b; uint8_t byte4c, byte4d, byte4e;
+#define OBJECT_E_BYTES uint8_t byte59;
+
+/* a region a kind does not use */
+#define OBJECT_A_UNUSED uint8_t a_unused[2];
+#define OBJECT_B_UNUSED uint8_t b_unused[9];
+#define OBJECT_C_UNUSED uint8_t c_unused[3];
+#define OBJECT_D_UNUSED uint8_t d_unused[13];
+#define OBJECT_E_UNUSED uint8_t e_unused;
+
+/* A gate, switch, post or lamp a car's touch sets off (bank $09's course
+   objects): its state latches. */
+#define GATE_B uint8_t state; uint8_t b_unused[8];
+typedef struct { OBJECT_VIEW(OBJECT_A_UNUSED, GATE_B, OBJECT_C_UNUSED, OBJECT_D_UNUSED, OBJECT_E_UNUSED) } GateObject;
+enum {
+    GATE_DONE = 0x01,                   /* its effect done: for most cleared when no car touches it,
+                                           for those that act once a race or a lap never cleared */
+    CHIME_IN = 0x01, CHIME_OUT = 0x02,  /* a chime gate's (ObjectChimeGate, ObjectSlideGateUp): its
+                                           sound played on going in, on coming out */
+    SLIDE_CHIME_SLID = 0x01, SLIDE_CHIME_IN = 0x02, SLIDE_CHIME_OUT = 0x04, /* ObjectSlideChimeGate's:
+                                           the second lap's slide set off; the in and out sounds played */
+    LAP_FLASH_FLASHED = 0x01, LAP_FLASH_FADED = 0x02, /* ObjectLapFlashGate's: the flash on the first
+                                           two laps, the fade on the last */
+    POST_COUNTED = 0x01, POST_BALL_LAUNCHED = 0x02, /* ObjectPostB's: its hit counted, the sky ball sent */
+    LAMP_POST_RANG = 0x01, LAMP_POST_BURST = 0x04, /* ObjectLampPost's: its sound for this touch, its
+                                           pieces (once) */
+    DUO_FIRST = 0x01, DUO_SECOND = 0x02 /* ObjectDuoGate's: the first and the second of a touch's two
+                                           contacts (summary bits 0 and 1), each once a touch */
+};
+
+typedef union Object {
+    struct { OBJECT_VIEW(OBJECT_A_BYTES, OBJECT_B_BYTES, OBJECT_C_BYTES, OBJECT_D_BYTES, OBJECT_E_BYTES) };
+    GateObject gate;
+} Object;
+#pragma pack(pop)
+
+#define OBJECT_VIEW_ASSERTS(T, view)                                                        \
+    _Static_assert(sizeof(T) == OBJECT_SIZE, #T " record");                               \
+    _Static_assert(offsetof(Object, view.x) == 0x0C && offsetof(Object, view.flags24) == 0x24 \
+                   && offsetof(Object, view.vx) == 0x2E && offsetof(Object, view.byte3a) == 0x3A \
+                   && offsetof(Object, view.link) == 0x4F && offsetof(Object, view.frame5a) == 0x5A \
+                   && offsetof(Object, view.unused8) == 0x61, #T " regions")
+OBJECT_VIEW_ASSERTS(GateObject, gate);
+_Static_assert(offsetof(Object, gate.state) == 0x25, "a gate's state");
+_Static_assert(offsetof(Object, count48) == 0x48 && offsetof(Object, link27) == 0x27 && offsetof(Object, byte59) == 0x59, "the record's bytes");
 _Static_assert(sizeof(Object) == OBJECT_SIZE, "Object record");
 
+#pragma pack(push, 1)
 typedef struct Camera {
     uint16_t mode;                      /* +00 */
     ObjRef object;                      /* +02 the object it is tied to */
