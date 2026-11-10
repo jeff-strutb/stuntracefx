@@ -10,7 +10,9 @@
 enum {
     SCRIPT_BANK_START = 0x8000,         /* a script bank's first entry: where a restart goes */
     MODEL_BANK = 0x00,                  /* the model records' bank */
-    MODEL_TOUCH = 0x0A                  /* a model record's touch box x, y, z */
+    MODEL_DEPTH_BIAS = 0x05,            /* a model record's depth bias, a word */
+    MODEL_TOUCH = 0x0A,                 /* its touch box x, y, z */
+    MODEL_RADIUS = 0x10                 /* its radius */
 };
 
 typedef struct { uint8_t bank; uint16_t at; } Place;
@@ -55,6 +57,12 @@ uint16_t model_record_touch(uint16_t record, int axis)
 {
     return cart16(MODEL_BANK, (uint16_t)(record + MODEL_TOUCH + 2 * axis));
 }
+
+uint16_t model_record_radius(uint16_t record) { return cart16(MODEL_BANK, (uint16_t)(record + MODEL_RADIUS)); }
+uint16_t model_record_depth_bias(uint16_t record) { return cart16(MODEL_BANK, (uint16_t)(record + MODEL_DEPTH_BIAS)); }
+
+uint8_t model_points_byte(CartRef script, uint16_t at) { return cart8(script.bank, (uint16_t)(script.addr + at)); }
+uint16_t model_points_word(CartRef script, uint16_t at) { return cart16(script.bank, (uint16_t)(script.addr + at)); }
 
 uint16_t object_entry_word(uint16_t entry, unsigned field) { return word_at(OBJECT_DATA, (unsigned)(uint16_t)(entry + field)); }
 uint8_t object_list_byte(uint16_t at) { return byte_at(OBJECT_LISTS, at); }

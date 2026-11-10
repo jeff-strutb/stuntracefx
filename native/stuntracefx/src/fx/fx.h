@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include "fx/fx_rt.h"
 #include "fx/math/fx_math.h"
+#include "fx/render/fx_points.h"
 
 /* DIV2: half, rounded down, except that -1 halves to 0. */
 static inline uint16_t fx_div2(uint16_t a)
@@ -727,7 +728,6 @@ FxModelListStart3CResult FxModelListStart3C(uint16_t draw_list_start, uint16_t d
 uint16_t FxModelMaterial(uint16_t rom_at);
 FxModelMirrorProgramResult FxModelMirrorProgram(uint16_t draw_list_end);
 FxModelNextResult FxModelNext(uint16_t draw_list_start, uint16_t draw_list_end, uint16_t *stack, uint16_t rom_at, uint16_t command_code);
-void FxModelPoints(uint16_t script, uint16_t *stack);
 FxModelPoints01Result FxModelPoints01(uint16_t *stack, uint16_t rom_at);
 FxModelPointsFullResult FxModelPointsFull(uint16_t *stack, uint16_t rom_at);
 FxModelPointsMirroredResult FxModelPointsMirrored(uint16_t *stack, uint16_t rom_at);

@@ -22,6 +22,15 @@ uint16_t course_script_word(CartRef entry, unsigned field);
 
 /* ---- the model records: 28 bytes each, an object's script word names one ---- */
 uint16_t model_record_touch(uint16_t record, int axis);         /* its touch box, half its size along x, y, z (axis 0-2) */
+uint16_t model_record_radius(uint16_t record);                  /* the radius the draw list's sort culls it by */
+uint16_t model_record_depth_bias(uint16_t record);              /* what the sort adds to its draw record's depth key */
+
+/* ---- a collision model's point script (the Super FX's FxModelPoints) ----
+   `script` is the reference its collision record holds; `at` an offset into
+   it, the address sum kept to 16 bits within the bank as the chip's cursor
+   kept it. */
+uint8_t model_points_byte(CartRef script, uint16_t at);
+uint16_t model_points_word(CartRef script, uint16_t at);
 
 /* ---- bank $09's object data: entries (a child's, an attachment's) and
    lists (a car's attachments, its camera points), each named by the data

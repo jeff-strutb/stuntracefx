@@ -1609,11 +1609,9 @@ static void entry_FxWeatherDropNext(void)
 
 static void entry_FxModelPoints(void)
 {
-    uint16_t stack = gsu.r[10];
     uint16_t ret = gsu.r[11];
 
-    FxModelPoints(gsu.r[9], &stack);
-    gsu.r[10] = stack;
+    FxModelPoints(cart_ref(fxs.rombr, gsu.r[9]), fx_ldw(0x0044));
     fx_code(0x040000 | ret, 1);          /* the byte the return goes to */
 }
 

@@ -910,14 +910,14 @@ FxCollideModelResult FxCollideModel(uint16_t place_x, uint16_t place_y, uint16_t
             if (init_2380_2 != init_2380) {
                 fx_stw(FX_INIT_2380, init_2380);
                 fx_stw(FX_INIT_2382, init_2382);
-                FxModelPoints(script, stack);
+                FxModelPoints(cart_ref((uint8_t)(points_bank & 0x7F), script), init_2382);
             } else {
                 init_2382_2 = fx_ldw(FX_INIT_2382);
                 if (init_2382_2 == init_2382) {
                 } else {
                     fx_stw(FX_INIT_2380, init_2380);
                     fx_stw(FX_INIT_2382, init_2382);
-                    FxModelPoints(script, stack);
+                    FxModelPoints(cart_ref((uint8_t)(points_bank & 0x7F), script), init_2382);
                 }
             }
             point_table_ptr = 0x2488;

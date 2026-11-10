@@ -1,173 +1,76 @@
 /*
- * fx_points.c: the Super FX code of asm/stuntracefx/render/fx_points.asm, written from it by
- * the generator.
+ * fx_points.c: a collision model's points, the Super FX code of
+ * asm/stuntracefx/render/fx_points.asm (C: src/stuntracefx/render/fx_points.c).
  *
- * fx_points.asm: the Super FX unpacks a model's points from a byte script in
- * ROM into the list at $70:2488, three words (x, y, z) a point.
- *
- * The script is read through the ROM buffer. Commands: 4, a count, then
+ * A model's points are a byte script in the cartridge, unpacked into the
+ * point table, three words (x, y, z) a point. Commands: 4, a count, then
  * that many points as three signed bytes; $38, a count, then that many
- * points each stored twice, as (x, y, z) and (-x, y, z); $20, a word
- * added to R14 (a jump, counted from the word's second byte); $1C, a skipped
- * byte, then a jump through a table of such words indexed by the word at
- * $0044. Anything else ends the script.
- * C: src/stuntracefx/render/fx_points.c.
+ * points each stored twice, as (x, y, z) and (-x, y, z); $20, a word added
+ * to the cursor (a jump, counted from the word's second byte); $1C, a
+ * skipped byte, then a jump through a table of such words, one for each of
+ * the model's frames. Anything else ends the script. A count of 0 runs
+ * 65,536 times, as the chip's LOOP ran it.
+ *
+ * Interim (plan section 8.2): the table stays in the chip's RAM at $2488
+ * (FX_POINTS_W) in the original's layout, because FxCollideModel's face
+ * walk (fx/object/fx_physics.c) reads it there; it moves with that walk
+ * into FxStateBlock. That is this file's one place in the chip's RAM,
+ * written only through put.
  */
 
+#include "data/object_tables.h"
 #include "fx/fx.h"
+#include "fx/render/fx_points.h"
+
+enum { POINTS = 0x04, MIRRORED_POINTS = 0x38, JUMP_BY_FRAME = 0x1C, JUMP = 0x20 };
+
+/* one word of the table; the place after it */
+static uint16_t put(uint16_t at, int16_t value)
+{
+    fx_ram[at] = (uint8_t)value;
+    fx_ram[(uint16_t)(at + 1)] = (uint8_t)((uint16_t)value >> 8);
+    return (uint16_t)(at + 2);
+}
 
 /*
  * @routine 04:A154 FxModelPoints
- * WHAT IT DOES: Unpacks the point script at R9 (in ROMBR's bank) into the
- * list at $2488, as described above.
- * HOW: R14 takes the script and R9 the list; each command byte is GETBS
- * and compared with 4, $38, $1C and $20 in turn. Points go out with STW
- * under LOOP (the last INC R9 in its delay slot); the jumps add to R14.
- * R3, R1 and R2 are kept on the R10 stack. The routine runs under CACHE
- * (the code cache only; nothing the C has to do).
- * Entry: R9 = the script; R10 = stack; R11 = return address. Exit: R9 =
- * just past the last point; R14 = just past the ending byte; R0 = that
- * byte (sign-extended); R1, R2, R3 as on entry; R12, R13 from the last
- * count; S, Z from R10, OV, CY from the compare with $20; the last RAM
- * address R10.
+ * WHAT IT DOES: Unpacks a collision model's point script into the point
+ * table, as described above; `frame` is the model's frame (its record's
+ * FXREC_FRAME), which picks the jump of a $1C command.
+ * HOW: A cursor through the script, each command byte signed. The chip
+ * read the frame from $0044, where FxCollideModel had just put it, and
+ * kept three registers on its stack; it left its cursor and ROM buffer
+ * past the ending byte, which nothing after it reads.
  */
-void FxModelPoints(uint16_t script, uint16_t *stack)
+void FxModelPoints(CartRef script, uint16_t frame)
 {
-    uint16_t count;
-    uint16_t rom_at;
-    uint16_t count_2;
-    uint16_t rom_at_2;
-    uint16_t point_a_x;
-    uint16_t point_a_y;
-    uint16_t point_a_z;
-    uint16_t point_b_x;
-    uint16_t point_b_y;
-    uint16_t point_b_z;
-    uint16_t out_ptr_a1;
-    uint16_t out_ptr_a2;
-    uint16_t out_ptr_b1;
-    uint16_t out_ptr_b2;
-    uint16_t out_ptr_b3;
-    uint16_t out_ptr_b4;
-    uint16_t out_ptr_b5;
-    uint16_t jump_offset;
-    uint16_t command_byte;
-    uint16_t point_out_ptr;
-    uint16_t script_ptr_a1;
-    uint16_t script_ptr_a2;
-    uint16_t script_ptr_b1;
-    uint16_t script_ptr_b2;
-    uint16_t variant_index;
-    uint16_t jump_offset_lo;
-    uint16_t jump_table_ptr;
-    uint16_t jump_offset_hi_ptr;
+    uint16_t at = 0, out = FX_POINTS_W;
 
-    fx_spill(stack);
-    fx_spill(stack);
-    fx_spill(stack);
-    rom_at = script;
-    fx_r14(rom_at);
-    point_out_ptr = FX_POINTS_W;
     for (;;) {
-        command_byte = (uint16_t)(int16_t)(int8_t)fx_getb();
-        rom_at_2 = (uint16_t)(rom_at + 1);
-        fx_r14(rom_at_2);
-        if (command_byte == 4) {
-            count = fx_getb();
-            rom_at = (uint16_t)(rom_at_2 + 1);
-            fx_r14(rom_at);
-            for (;;) {
-                point_a_x = (uint16_t)(int16_t)(int8_t)fx_getb();
-                script_ptr_a1 = (uint16_t)(rom_at + 1);
-                fx_r14(script_ptr_a1);
-                fx_stw(point_out_ptr, point_a_x);
-                out_ptr_a1 = (uint16_t)(point_out_ptr + 2);
-                point_a_y = (uint16_t)(int16_t)(int8_t)fx_getb();
-                script_ptr_a2 = (uint16_t)(script_ptr_a1 + 1);
-                fx_r14(script_ptr_a2);
-                fx_stw(out_ptr_a1, point_a_y);
-                out_ptr_a2 = (uint16_t)(out_ptr_a1 + 2);
-                point_a_z = (uint16_t)(int16_t)(int8_t)fx_getb();
-                rom_at = (uint16_t)(script_ptr_a2 + 1);
-                fx_r14(rom_at);
-                fx_stw(out_ptr_a2, point_a_z);
-                count = (uint16_t)(count - 1);
-                point_out_ptr = (uint16_t)(out_ptr_a2 + 2);
-                if (count != 0) {
-                    continue;
-                } else {
-                    break;
-                }
-            }
-            continue;
+        int8_t command = (int8_t)model_points_byte(script, at);
+
+        at = (uint16_t)(at + 1);
+        if (command == POINTS || command == MIRRORED_POINTS) {
+            uint16_t count = model_points_byte(script, at);
+
+            at = (uint16_t)(at + 1);
+            do {
+                int8_t x = (int8_t)model_points_byte(script, at);
+                int8_t y = (int8_t)model_points_byte(script, (uint16_t)(at + 1));
+                int8_t z = (int8_t)model_points_byte(script, (uint16_t)(at + 2));
+
+                at = (uint16_t)(at + 3);
+                out = put(put(put(out, x), y), z);
+                if (command == MIRRORED_POINTS)
+                    out = put(put(put(out, (int16_t)-x), y), z);
+            } while (--count);
+        } else if (command == JUMP_BY_FRAME) {
+            at = (uint16_t)(at + 1 + 2 * frame);         /* past the skipped byte, to the frame's word */
+            at = (uint16_t)(at + 1 + model_points_word(script, at));
+        } else if (command == JUMP) {
+            at = (uint16_t)(at + 1 + model_points_word(script, at));
         } else {
-            if (command_byte == 0x0038) {
-                count_2 = fx_getb();
-                rom_at = (uint16_t)(rom_at_2 + 1);
-                fx_r14(rom_at);
-                for (;;) {
-                    point_b_x = (uint16_t)(int16_t)(int8_t)fx_getb();
-                    script_ptr_b1 = (uint16_t)(rom_at + 1);
-                    fx_r14(script_ptr_b1);
-                    fx_stw(point_out_ptr, point_b_x);
-                    out_ptr_b1 = (uint16_t)(point_out_ptr + 2);
-                    point_b_y = (uint16_t)(int16_t)(int8_t)fx_getb();
-                    script_ptr_b2 = (uint16_t)(script_ptr_b1 + 1);
-                    fx_r14(script_ptr_b2);
-                    fx_stw(out_ptr_b1, point_b_y);
-                    out_ptr_b2 = (uint16_t)(out_ptr_b1 + 2);
-                    point_b_z = (uint16_t)(int16_t)(int8_t)fx_getb();
-                    rom_at = (uint16_t)(script_ptr_b2 + 1);
-                    fx_r14(rom_at);
-                    fx_stw(out_ptr_b2, point_b_z);
-                    out_ptr_b3 = (uint16_t)(out_ptr_b2 + 2);
-                    fx_stw(out_ptr_b3, (uint16_t)((uint16_t)~point_b_x + 1));
-                    out_ptr_b4 = (uint16_t)(out_ptr_b3 + 2);
-                    fx_stw(out_ptr_b4, point_b_y);
-                    out_ptr_b5 = (uint16_t)(out_ptr_b4 + 2);
-                    fx_stw(out_ptr_b5, point_b_z);
-                    count_2 = (uint16_t)(count_2 - 1);
-                    point_out_ptr = (uint16_t)(out_ptr_b5 + 2);
-                    if (count_2 != 0) {
-                        continue;
-                    } else {
-                        break;
-                    }
-                }
-                continue;
-            } else {
-                if (command_byte == 0x001C) {
-                    jump_table_ptr = (uint16_t)(rom_at_2 + 1);
-                    fx_r14(jump_table_ptr);
-                    variant_index = fx_ldw(0x0044);
-                    rom_at_2 = (uint16_t)((uint16_t)(jump_table_ptr + variant_index) + variant_index);
-                    fx_r14(rom_at_2);
-                    jump_offset_lo = fx_getb();
-                    jump_offset_hi_ptr = (uint16_t)(rom_at_2 + 1);
-                    fx_r14(jump_offset_hi_ptr);
-                    jump_offset = (uint16_t)((jump_offset_lo & 0xFF) | fx_getb() << 8);
-                    rom_at = (uint16_t)(jump_offset_hi_ptr + jump_offset);
-                    fx_r14(rom_at);
-                    continue;
-                } else {
-                    if (command_byte == 0x0020) {
-                        jump_offset_lo = fx_getb();
-                        jump_offset_hi_ptr = (uint16_t)(rom_at_2 + 1);
-                        fx_r14(jump_offset_hi_ptr);
-                        jump_offset = (uint16_t)((jump_offset_lo & 0xFF) | fx_getb() << 8);
-                        rom_at = (uint16_t)(jump_offset_hi_ptr + jump_offset);
-                        fx_r14(rom_at);
-                        continue;
-                    } else {
-                        break;
-                    }
-                }
-            }
+            return;
         }
     }
-    fx_unspill(stack);
-    fx_unspill(stack);
-    fx_unspill(stack);
-    return;
 }
-
