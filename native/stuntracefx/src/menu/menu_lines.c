@@ -11,6 +11,7 @@
 #include "menu/menu.h"
 #include "menu/menu_tables.h"
 #include "menu/menu_window.h"
+#include "video/between.h"
 #include "video/picture.h"
 
 enum { LINES = 225 };
@@ -99,6 +100,41 @@ enum { FIELDS = 128 };
 static int32_t line0[FIELDS];
 static uint8_t sent[FIELDS];
 
+/* The positional lines (scrolls and window edges), eased between the last
+   two updates' tables as menu_tween eases the rest (video's tween_table). */
+enum { EASED = 12, FAR_LINE = 64 };
+static struct {
+    int used, field;
+    TweenTable keep;
+} eased[EASED];
+
+static int is_scroll(int field)
+{
+    return field >= NSHVC_LINE_SCROLL_X && field < NSHVC_LINE_SCROLL_Y + 4;
+}
+
+static int positional(int field)
+{
+    return is_scroll(field) || (field >= NSHVC_LINE_WIN1_LEFT && field <= NSHVC_LINE_WIN2_RIGHT);
+}
+
+static void ease_lines(int field, int32_t *values)
+{
+    int e, free_e = -1;
+
+    for (e = 0; e < EASED && !(eased[e].used && eased[e].field == field); e++)
+        if (!eased[e].used && free_e < 0)
+            free_e = e;
+    if (e == EASED) {
+        if (free_e < 0)
+            return;
+        e = free_e;
+        eased[e].used = 1;
+        eased[e].field = field;
+    }
+    tween_table(&eased[e].keep, values, LINES, FAR_LINE, is_scroll(field) ? TWEEN_SCROLL : 0);
+}
+
 static void send(nshvc_line_field field, const int32_t *values)
 {
     int32_t moved[LINES];
@@ -113,6 +149,13 @@ static void send(nshvc_line_field field, const int32_t *values)
         for (v = 0; v < LINES; v++)
             moved[v] = left ? menu_window_left(values[v]) : menu_window_right(values[v]);
         values = moved;
+    }
+    if (positional(field) && video_between_drawing()) {
+        if (values != moved) {
+            memcpy(moved, values, sizeof moved);
+            values = moved;
+        }
+        ease_lines(field, moved);
     }
     if ((int)field < FIELDS) {
         line0[field] = values[1];

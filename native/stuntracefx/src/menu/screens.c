@@ -18,6 +18,7 @@
 #include "save/save.h"
 #include "system/game.h"
 #include "system/state.h"
+#include "video/between.h"
 #include "video/picture.h"
 #include "video/video.h"
 
@@ -1239,6 +1240,7 @@ int menu_on_stage20(void)
 
 void session_start(void)
 {
+    video_between_menu_set(menu_tween);
     state = S_SOUND_START;
     actors_load();
     menu_video_more_init();

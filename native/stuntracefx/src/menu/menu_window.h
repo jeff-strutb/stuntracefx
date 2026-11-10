@@ -10,6 +10,7 @@
 #include <stdint.h>
 
 #include "nshvc/nshvc.h"
+#include "video/picture.h"
 
 /* the layers a screen keeps to the original's picture (picture.h layer_clip) */
 enum { KEEP_BG1 = 1, KEEP_BG2 = 2, KEEP_BG3 = 4, KEEP_SPRITES = 16 };
@@ -34,6 +35,10 @@ void menu_window_frame_begin(void);
 /* the menus' updates so far: a picture between two updates eases between
    the last two (menu_tween.c) */
 uint32_t menu_window_updates(void);
+
+/* the menu screens' moving 2D eased in place for a picture between two
+   updates (menu_tween.c); video calls it while it draws */
+void menu_tween(Picture *shown, float between);
 
 /* A window's edge from the original's columns to the screen's: the left
    edge at column 0 and the right at 255 reach the screen's edges. */
