@@ -313,6 +313,54 @@ After: `fx_check` over the five plays and the battle recording's 898 steps, one 
 and the split's list added here; `FxRecord`, `FxPool` and `FxShared` in fx.h; then the shares file by file (sound:
 fx/object, fx/race, fx/math, 13,400 lines and 105 functions), each row counting lines and functions converted.
 
+#### The render share in native C (the fx session's design, 2026-11-09)
+
+How it meets the direction: the CPU walks each model's script and builds its faces, sprites and particles as values; fx_face
+and fx_draw clip and project them and hand them to the GPU, which fills every pixel; no pixel is made on the CPU and no part of
+the chip's program is imitated.
+
+**The files.** `fx/render/frame.c`, `model.c`, `polygon.c`, `raster.c`, `project.c`, `points.c` and `effects.c` (only the
+drawing calls the last three), and matrix.c's polygon clips (FxPolygonClipNear/Left/Right/Top/Bottom, FxSegmentCrossZ; matrix.c
+is race's): about 10,200 live generated lines, 12,100 with the dead. Dead with the original's proof (nothing in the original jumps or branches to them; only fx_check's entry table
+calls them): FxWeatherUnused, FxWeatherUnusedLoop, FxWeatherUnusedClear, FxWeatherUnusedFull, FxEffectsAddUnused,
+FxModelProjectEach and FxModelFacesGatheredUV, listed in `fx/NOTES`. (FxModelDrawFlags8000's note says only an uncalled
+program reaches it, but FxModelDraw falls into it whenever $01B4's low byte is 0: it is live, and so is FxModelDrawWithFlags.) Not reached by any recording but reachable, so converted from the code: the model commands $08,
+$10, $34, $4C, $50, $54, the textured screen clip and FxModelFacesOnScreenUV.
+
+**Today.** The objects' sort fills the slots at $0AAA; FxFrameProgram walks them (FxObjectsDraw), picking each model's level of
+detail by depth from its record in the cartridge; model.c interprets the model's byte script command by command, turning its
+points into $0340 and projecting them into $04E4 in fixed point; faces are gathered, clipped to the screen in fixed point and
+queued at $08AA (polygon.c, raster.c, project.c, points.c, matrix.c's clips); FxDrawList walks the queue and draws each entry as
+the float shape fx_face took from the same points (the chip's own screen corners when it took none).
+
+**Native form.**
+1. Models through `data/`: a model's record (its script, points, levels of detail, material table, detail) read as a reference
+   and a byte cursor over the script, no bank or address. The interpreter is one loop with a switch on the command byte; the
+   script's calls and returns are an explicit stack of cursors, the chip's two (R10's and $0056's) kept where their order
+   matters.
+2. Points: turned by the object's matrix in the chip's integer arithmetic (the same numbers as now) into a local array in view
+   space; no tables at $0340 or $04E4 and no fixed-point projection.
+3. Facing: from the points in floats (fx_face_facing, as now), the flags a local array the script's branches read.
+4. Faces: each face's corners (its points) and material go to fx_face as values, which clips, projects and keeps the shape in
+   drawing order. The queue, its walk, the chip's screen corners and its fixed-point clips go. Materials (shade rows by tier and
+   light, textures) as values from `data/`; a texture's key a data reference, not a bank and address.
+5. Object sprites, weather and effects: functions taking their records (FxRecord pointers and FxShared fields as they land).
+6. FxFrameProgram with real inputs: the ground, the far pass, the objects, the parked tyres, weather, effects and the notice
+   text in order; the generated stack, `rom_at` and `up` parameters gone.
+7. fx_face, fx_far, fx_solid, fx_tween and fx_ground read these structures instead of the chip's RAM.
+
+**Check.** Each piece lands with the game's pictures compared frame by frame against the build before it, on the attract
+demos, the menus' race walk and the battle input (one and two players); identical, or every difference counted and explained
+before it lands. fx_check's frame-program entries go with the queue (their RAM is drawing scratch); it keeps the compute jobs.
+The limit, said before building: in piece c fx_face decides each face's visibility in floats where the chip's fixed-point
+clip and queue decided it, so faces at the screen's edges and the chip's overflow guards can differ; those are counted and
+shown, not called identical.
+
+**Order.** (a) The dead routines out with their proof. (b) The interpreter and the points as C, the queue still feeding
+FxDrawList (pictures identical). (c) Faces straight to fx_face; the queue, its walk, the fixed-point clips, project.c's vertex
+projection and points.c gone. (d) Materials and textures through `data/`. (e) Sprites, weather, effects. (f) The frame
+program's inputs and the hooks' reads. Each lands on its own with its check.
+
 ### Stage 6. Menus and saves (13,358 lines)
 Menus, course preview, records, the 3D car display, saves. **Check:** `nshvc-check` on the menu plays. Expected: frames with no
 polygons byte identical; 3D frames differ on polygon edges only (section 1, item 3).
