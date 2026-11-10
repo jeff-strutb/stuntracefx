@@ -477,7 +477,7 @@ void ObjectChildStep(Object *o)
 void ObjectChildStart(Object *o)
 {
     ObjectSetHandler(o, H_CHILD_STEP);
-    o->byte26 = obj_at(o->parent)->byte26;
+    o->list_kind = obj_at(o->parent)->list_kind;
     ObjectChildStep(o);
 }
 
@@ -1371,7 +1371,7 @@ void ObjectLampWait(Object *o)
  */
 void ObjectLampStart(Object *o)
 {
-    o->byte26 = obj_at(o->parent)->byte26;
+    o->list_kind = obj_at(o->parent)->list_kind;
     ObjectLampWait(o);
 }
 

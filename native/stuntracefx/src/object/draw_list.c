@@ -158,7 +158,7 @@ static int drawable(const Object *o, int hidden_ok)
 {
     if ((o->flags24 & 0x20) && !hidden_ok)
         return 0;
-    if ((o->flags24 & 0x40) && (o->byte26 == 0x02 ? g.draw_side != 0 : g.draw_side == 0))
+    if ((o->flags24 & 0x40) && (o->list_kind == 0x02 ? g.draw_side != 0 : g.draw_side == 0))
         return 0;
     return o->model != MODEL_NONE;
 }

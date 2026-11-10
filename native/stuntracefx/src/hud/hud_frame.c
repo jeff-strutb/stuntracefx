@@ -175,7 +175,7 @@ static void map_marker_sprites(uint8_t origin_x, uint8_t origin_y, int step, int
         v = (uint16_t)((uint16_t)(v + (uint16_t)(origin_y << 8)) & 0xFF00);
         sprite_x_set(n, (uint8_t)sx);
         sprite_y_set(n, (uint8_t)(v >> 8));
-        v = ram_code_7f16((uint16_t)(0x0B46 + 2 * (o->byte26 & 0x07)));
+        v = ram_code_7f16((uint16_t)(0x0B46 + 2 * (o->list_kind & 0x07)));
         sprite_tile_set(n, (uint8_t)v);
         sprite_attributes_set(n, (uint8_t)(v >> 8));
         n += step;

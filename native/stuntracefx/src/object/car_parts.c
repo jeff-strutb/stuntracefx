@@ -300,7 +300,7 @@ static void player_attach(Object *o, uint16_t h, ObjRef bare)
  */
 void PlayerCar1(Object *o)
 {
-    o->byte26 = 0x01;
+    o->list_kind = 0x01;
     ObjectListAppend(o);
     o->y = (uint16_t)(o->y + 0xFF60);
     if (g.hud_mode == 0 && obj_at(g.director[0])->handler == H_DIRECTOR_PATH_START)
@@ -330,7 +330,7 @@ void PlayerCar2Step(Object *o)
  */
 void PlayerCar2(Object *o)
 {
-    o->byte26 = 0x02;
+    o->list_kind = 0x02;
     ObjectListAppend(o);
     o->y = (uint16_t)(o->y + 0xFF60);
     player_record(o, 0x0002, FXIN_PLAYER2_RECORD);
@@ -351,7 +351,7 @@ void ObjectCarSpawnListed(Object *o)
 static void car_of_kind(Object *o, uint8_t v, uint8_t k)
 {
     o->count48 = v;
-    o->byte26 = k;
+    o->list_kind = k;
     ObjectCarSpawnListed(o);
 }
 
@@ -491,7 +491,7 @@ void ObjectRivalCar(Object *o)
 {
     g.rivals_left++;
     o->count48 = 0;
-    o->byte26 = 0;
+    o->list_kind = 0;
     ObjectCarSpawnListed(o);
     rec_or(o->record, FXREC_FLAGS64, 0x0010);
     ObjectSetHandler(o, H_RIVAL_CAR_STEP);

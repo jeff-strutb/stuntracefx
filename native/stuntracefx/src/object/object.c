@@ -561,7 +561,7 @@ void ObjectInit(Object *o)
     ObjectMade(o);
     memset(&o->model, 0, sizeof(Object) - offsetof(Object, model));
     ObjectBucketInsert(o);
-    o->byte59 = 0x69;
+    o->made_mark = 0x69;
 }
 
 /*

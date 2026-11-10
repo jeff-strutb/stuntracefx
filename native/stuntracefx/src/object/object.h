@@ -25,12 +25,12 @@ typedef uint16_t ObjRef;
 /*
  * An object's record, $62 bytes, as the original's at $7E:2001 + slot *
  * $62 (fx_tween copies the table as bytes; the offsets are kept). Every
- * object keeps the fields of OBJECT_VIEW; each kind keeps its own in five
- * regions: A at +$0A-$0B, B at +$25-$2D, C at +$37-$39, D at +$42-$4E and
- * E at +$59. A kind's view names them for what that kind keeps there (the
- * views below the common one); the common view names none of them.
+ * object keeps the fields of OBJECT_VIEW; each kind keeps its own in six
+ * regions: A at +$0A-$0B, S (its state bits) at +$25, B at +$27-$2D, V at
+ * +$2E-$33 (the velocity, for most), C at +$37-$39 and D at +$42-$4E. A
+ * kind's view (views.h) names them for what that kind keeps there.
  */
-#define OBJECT_VIEW(A, B, C, D, E)                                                          \
+#define OBJECT_VIEW(A, S, B, V, C, D)                                                       \
     ObjRef next, prev;                  /* +00 the used list; next is also the free list's link */ \
     uint16_t model;                     /* +04 the model the draw list uses */            \
     union {                                                                                 \
@@ -51,9 +51,11 @@ typedef uint16_t ObjRef;
     uint8_t handler2_bank;              /* +1F */                                          \
     uint16_t script;                    /* +20 the record the script named, an address in its data */ \
     uint16_t record;                    /* +22 the object's Super FX record, 0 for none */ \
-    uint8_t flags24;                    /* +24 how it is drawn: bit 7 absolute, 5 hidden, 3 a sprite, 2 an effect emitter */ \
-    B                                   /* +25-+2D */                                      \
-    uint16_t vx, vy, vz;                /* +2E the velocity */                             \
+    uint8_t flags24;                    /* +24 how it is drawn: bit 7 absolute, 6 one side of a split, 5 hidden, 3 a sprite, 2 an effect emitter */ \
+    S                                   /* +25 */                                          \
+    uint8_t list_kind;                  /* +26 a car's (copied to its children and eyes): 1 player 1's, 2 player 2's (the split's sides), else a rival's or the course's */ \
+    B                                   /* +27-+2D */                                      \
+    V                                   /* +2E-+33 */                                      \
     uint8_t unused4[2];                 /* +34 */                                          \
     uint8_t timer;                      /* +36 $FF runs the far handler, 1 clears the record, 0 stopped */ \
     C                                   /* +37-+39 */                                      \
@@ -65,7 +67,7 @@ typedef uint16_t ObjRef;
     uint16_t link;                      /* +4F another object, or a camera (camera_of) */  \
     uint8_t unused6[2];                 /* +51 */                                          \
     uint16_t offset_x, offset_y, offset_z; /* +53 */                                       \
-    E                                   /* +59 */                                          \
+    uint8_t made_mark;                  /* +59 $69 from ObjectInit; nothing reads it */    \
     uint8_t frame5a;                    /* +5A the frame the object shows when bit 7 is set, else the game's */ \
     uint8_t unused7[2];                 /* +5B */                                          \
     uint16_t anim;                      /* +5D */                                          \
@@ -75,22 +77,24 @@ typedef uint16_t ObjRef;
 /* the regions while the kinds are being given their views: the record's
    own byte names (interim; each kind's code moves to its view) */
 #define OBJECT_A_BYTES uint8_t byte0a, byte0b;
-#define OBJECT_B_BYTES uint8_t flags25; uint8_t byte26; uint16_t link27; uint16_t word29; uint16_t word2b; uint8_t byte2d;
+#define OBJECT_S_BYTES uint8_t flags25;
+#define OBJECT_B_BYTES uint16_t link27; uint16_t word29; uint16_t word2b; uint8_t byte2d;
 #define OBJECT_C_BYTES uint8_t byte37, byte38, byte39;
 #define OBJECT_D_BYTES uint8_t bytes42[4]; uint8_t byte46, byte47; uint8_t count48, byte49, byte4a, byte4b; uint8_t byte4c, byte4d, byte4e;
-#define OBJECT_E_BYTES uint8_t byte59;
 
-/* a region a kind does not use */
+/* a region a kind does not use; the velocity most keep at V */
 #define OBJECT_A_UNUSED uint8_t a_unused[2];
-#define OBJECT_B_UNUSED uint8_t b_unused[9];
+#define OBJECT_S_UNUSED uint8_t s_unused;
+#define OBJECT_S_STATE uint8_t state;
+#define OBJECT_B_UNUSED uint8_t b_unused[7];
+#define OBJECT_V_VELOCITY uint16_t vx, vy, vz;
 #define OBJECT_C_UNUSED uint8_t c_unused[3];
 #define OBJECT_D_UNUSED uint8_t d_unused[13];
-#define OBJECT_E_UNUSED uint8_t e_unused;
 
 #include "object/views.h"
 
 typedef union Object {
-    struct { OBJECT_VIEW(OBJECT_A_BYTES, OBJECT_B_BYTES, OBJECT_C_BYTES, OBJECT_D_BYTES, OBJECT_E_BYTES) };
+    struct { OBJECT_VIEW(OBJECT_A_BYTES, OBJECT_S_BYTES, OBJECT_B_BYTES, OBJECT_V_VELOCITY, OBJECT_C_BYTES, OBJECT_D_BYTES) };
     OBJECT_VIEW_MEMBERS
 } Object;
 #pragma pack(pop)
@@ -98,11 +102,12 @@ typedef union Object {
 #define OBJECT_VIEW_ASSERTS(T, view)                                                        \
     _Static_assert(sizeof(T) == OBJECT_SIZE, #T " record");                               \
     _Static_assert(offsetof(Object, view.x) == 0x0C && offsetof(Object, view.flags24) == 0x24 \
-                   && offsetof(Object, view.vx) == 0x2E && offsetof(Object, view.byte3a) == 0x3A \
+                   && offsetof(Object, view.unused4) == 0x34 && offsetof(Object, view.byte3a) == 0x3A \
                    && offsetof(Object, view.link) == 0x4F && offsetof(Object, view.frame5a) == 0x5A \
-                   && offsetof(Object, view.unused8) == 0x61, #T " regions")
+                   && offsetof(Object, view.list_kind) == 0x26 && offsetof(Object, view.timer) == 0x36 \
+                   && offsetof(Object, view.made_mark) == 0x59 && offsetof(Object, view.unused8) == 0x61, #T " regions")
 OBJECT_VIEW_CHECKS;
-_Static_assert(offsetof(Object, count48) == 0x48 && offsetof(Object, link27) == 0x27 && offsetof(Object, byte59) == 0x59, "the record's bytes");
+_Static_assert(offsetof(Object, count48) == 0x48 && offsetof(Object, link27) == 0x27 && offsetof(Object, vx) == 0x2E, "the record's bytes");
 _Static_assert(sizeof(Object) == OBJECT_SIZE, "Object record");
 
 #pragma pack(push, 1)
