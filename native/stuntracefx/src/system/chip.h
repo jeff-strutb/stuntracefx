@@ -25,7 +25,6 @@ enum {
     FXIN_VECTOR_X = 0x0068,             /* a vector's first word; also a program's input */
     FXIN_VECTOR_Y = 0x002C,
     FXIN_VECTOR_Z = 0x002E,
-    FXIN_LENGTH_RESULT = 0x006A,        /* the length program's ($01:80BC) result */
     FXIN_ANGLE_RESULT = 0x0040,         /* the program $01:81E3's result */
     FXIN_ROTATED = 0x0026,              /* $01:82CE's three results */
     FXIN_ANGLES = 0x0020,               /* $01:8325's three angles */

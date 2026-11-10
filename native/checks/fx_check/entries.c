@@ -1256,22 +1256,6 @@ static void entry_FxAtan2(void)
     fx_code(0x010000 | ret, 1);          /* the byte the return goes to */
 }
 
-static void entry_FxSqrt32(void)
-{
-    uint16_t ret = gsu.r[11];
-
-    gsu.r[6] = (uint16_t)FxSqrt32(gsu.r[4], gsu.r[5]);
-    fx_code(0x010000 | ret, 1);          /* the byte the return goes to */
-}
-
-static void entry_FxLengthProgram(void)
-{
-    uint16_t stack = gsu.r[10];
-
-    gsu.r[11] = (uint16_t)FxLengthProgram(&stack);
-    gsu.r[10] = stack;
-}
-
 static void entry_FxDivideSigned(void)
 {
     uint16_t ret = gsu.r[11];
@@ -2465,8 +2449,6 @@ static void entry_FxTextDraw(void)
 
 const FxEntry fx_entries[] = {
     {0x018000, entry_FxModelCommands, "FxModelCommands"},
-    {0x018096, entry_FxSqrt32, "FxSqrt32"},
-    {0x0180BC, entry_FxLengthProgram, "FxLengthProgram"},
     {0x018186, entry_FxDivideSigned, "FxDivideSigned"},
     {0x0181BC, entry_FxDivide32By16Halving, "FxDivide32By16Halving"},
     {0x0181CB, entry_FxDivide32By16, "FxDivide32By16"},

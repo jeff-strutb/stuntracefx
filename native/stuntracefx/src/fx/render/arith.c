@@ -17,106 +17,48 @@
  */
 
 #include "fx/fx.h"
+#include "fx/render/arith.h"
 
 /*
  * @routine 01:8096 FxSqrt32
- * WHAT IT DOES: The integer square root of the 32-bit value R4:R5 (R4 the
- * high word): R6 = the root, R8 = the remainder.
- * HOW: 16 passes, each shifting the next two bits of R4:R5 into R8 and
- * doubling R6; when R8 exceeds twice R6 (R7), R8 loses twice R6 plus 1 and
- * R6 gains 1. The pass loop starts at $80A0, the ADD R5 after the first
- * WITH R5: LOOP's delay slot is the WITH R5 for the next pass, and the
- * JMP R11 after the last pass runs with it pending.
- * Entry: R4:R5 = value; R11 = return address. Exit: R6 = root, R8 =
- * remainder; R4 = R5 = 0; R7 = twice the root before its last bit; R0 =
- * R7 - R8 as the last pass compared them; R12 = 0; R13 = $80A0; Z set, S
- * clear; CY and OV from the last pass's SUB R8, or from its SBC R7 when the
- * root gained a bit.
+ * WHAT IT DOES: The integer square root of a 32-bit value, digit by digit:
+ * 16 passes, each moving the value's top two bits into the remainder and
+ * doubling the root; when the remainder is more than twice the root, it
+ * loses twice the root plus one and the root gains one. The remainder is a
+ * word, so a pass that would carry it past 16 bits loses the top, as the
+ * chip's did.
  */
-uint16_t FxSqrt32(uint16_t radicand_lo, uint16_t radicand_hi)
+uint16_t FxSqrt32(uint32_t value)
 {
-    uint16_t count;
-    uint16_t r_t_8;
-    uint16_t root_2;
-    uint16_t remainder;
-    int pending_here;
-    uint16_t trial_divisor;
-    uint16_t pending_here_2;
-    uint16_t radicand_hi_x2;
-    uint16_t radicand_lo_shifted;
-    int trial_exceeds_remainder;
+    uint16_t root = 0, remainder = 0;
 
-    root_2 = 0;
-    remainder = 0;
-    count = 0x0010;
-    pending_here = ((uint32_t)radicand_hi + radicand_hi > 0xFFFF);
-    pending_here_2 = (uint16_t)(radicand_hi + radicand_hi);
-    for (;;) {
-        radicand_lo_shifted = (uint16_t)(radicand_lo << 1 | pending_here);
-        r_t_8 = (uint16_t)(remainder << 1 | (radicand_lo >> 15));
-        radicand_hi_x2 = (uint16_t)(pending_here_2 + pending_here_2);
-        radicand_lo = (uint16_t)(radicand_lo_shifted << 1 | ((uint32_t)pending_here_2 + pending_here_2 > 0xFFFF));
-        remainder = (uint16_t)(r_t_8 << 1 | (radicand_lo_shifted >> 15));
-        root_2 = (uint16_t)(root_2 + root_2);
-        trial_divisor = (uint16_t)(root_2 + root_2);
-        trial_exceeds_remainder = (trial_divisor >= remainder);
-        if (trial_exceeds_remainder) {
-            count = (uint16_t)(count - 1);
-            if (count != 0) {
-                pending_here = ((uint32_t)radicand_hi_x2 + radicand_hi_x2 > 0xFFFF);
-                pending_here_2 = (uint16_t)(radicand_hi_x2 + radicand_hi_x2);
-                continue;
-            } else {
-                break;
-            }
-        } else {
-            remainder = (uint16_t)(remainder - trial_divisor - !trial_exceeds_remainder);
-            root_2 = (uint16_t)(root_2 + 1);
-            count = (uint16_t)(count - 1);
-            if (count != 0) {
-                pending_here = ((uint32_t)radicand_hi_x2 + radicand_hi_x2 > 0xFFFF);
-                pending_here_2 = (uint16_t)(radicand_hi_x2 + radicand_hi_x2);
-                continue;
-            } else {
-                break;
-            }
+    for (int pass = 0; pass < 16; pass++) {
+        uint16_t twice;
+
+        remainder = (uint16_t)(remainder << 2 | value >> 30);
+        value <<= 2;
+        root = (uint16_t)(root << 1);
+        twice = (uint16_t)(root << 1);
+        if (twice < remainder) {
+            remainder = (uint16_t)(remainder - twice - 1);
+            root = (uint16_t)(root + 1);
         }
     }
-    return root_2;
+    return root;
 }
 
 
 /*
- * @routine 01:80BC FxLengthProgram
- * WHAT IT DOES: A program the S-CPU starts: the length of the vector
- * ($0068, $002E), stored at $006A.
- * HOW: Sets the R10 stack to $0240; squares each word with LMULT (signed,
- * R4 the low word), adds the two 32-bit squares (ADD, ADC) and takes
- * FxSqrt32 of the sum; SM stores the root. Then STOP.
- * Entry: started by the S-CPU. Exit: (at the STOP) R10 = $0240; R11 =
- * $80DF; the registers and flags as FxSqrt32 leaves them; the last RAM
- * address $006A.
- * Returns the sum of the squares; *root = the length.
+ * @routine 01:80BC FxLengthProgram (FxVectorLength)
+ * WHAT IT DOES: The length of the vector (x, z): each word squared signed,
+ * the two 32-bit squares added, and their FxSqrt32.
  */
-uint16_t FxLengthProgram(uint16_t *stack)
+uint16_t FxVectorLength(uint16_t x, uint16_t z)
 {
-    uint16_t root;
-    uint16_t vec_x;
-    uint16_t vec_z;
-    uint32_t vec_x_sq;
-    uint32_t vec_z_sq;
-    uint16_t vec_x_sq_lo;
-    uint16_t vec_z_sq_lo;
+    uint32_t xx = (uint32_t)((int32_t)(int16_t)x * (int16_t)x);
+    uint32_t zz = (uint32_t)((int32_t)(int16_t)z * (int16_t)z);
 
-    vec_x = fx_ldw(0x0068);
-    vec_x_sq = (uint32_t)((int32_t)(int16_t)vec_x * (int16_t)vec_x);
-    vec_x_sq_lo = (uint16_t)vec_x_sq;
-    vec_z = fx_ldw(0x002E);
-    vec_z_sq = (uint32_t)((int32_t)(int16_t)vec_z * (int16_t)vec_z);
-    vec_z_sq_lo = (uint16_t)vec_z_sq;
-    root = FxSqrt32((uint16_t)((uint16_t)(vec_z_sq >> 16) + (uint16_t)(vec_x_sq >> 16) + ((uint32_t)vec_z_sq_lo + vec_x_sq_lo > 0xFFFF)), (uint16_t)(vec_z_sq_lo + vec_x_sq_lo));
-    fx_stw(0x006A, root);
-    return 0;
+    return FxSqrt32(xx + zz);
 }
 
 

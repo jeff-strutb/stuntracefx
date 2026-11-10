@@ -11,6 +11,7 @@
 #include <string.h>
 
 #include "fx/fx.h"
+#include "fx/render/arith.h"
 #include "object/object.h"
 #include "system/chip.h"
 #include "system/state.h"
@@ -62,17 +63,17 @@ void GsuRecordsUpload(void)
 
 /*
  * @routine 03:C9EE ObjectGsu80BC
- * WHAT IT DOES: Runs program $01:80BC on an object's offset from a point
- * and returns its result.
+ * WHAT IT DOES: The length of an object's offset from a point
+ * (FxVectorLength). Interim: the two words are still written where the
+ * original put them, because other jobs read those words for their own
+ * values (FX_NEW_CAR_X, FX_FAR_LIFT and the rest, kept between programs);
+ * they go when the measurement shows no later job reads what these leave.
  */
 uint16_t VectorLength(uint16_t x, uint16_t z)
 {
-    uint16_t stack = 0x0240;
-
     fx16_set(FXIN_VECTOR_X, x);
     fx16_set(FXIN_VECTOR_Z, z);
-    (void)FxLengthProgram(&stack);
-    return fx16(FXIN_LENGTH_RESULT);
+    return FxVectorLength(x, z);
 }
 
 /*

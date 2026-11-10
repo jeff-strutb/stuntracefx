@@ -692,7 +692,6 @@ FxHitAddUnitResult FxHitAddUnit(uint16_t vector_x, uint16_t vector_y, uint16_t v
 void FxInit(void);
 void FxInitRamBad(void);
 FxLapSegmentResult FxLapSegment(uint16_t car_record, uint16_t rom_at);
-uint16_t FxLengthProgram(uint16_t *stack);
 void FxListClearBit0(uint16_t record_holding);
 FxListSweepResult FxListSweep(uint16_t record_holding, uint16_t prior_next_rec, uint16_t prior_keep_bit, uint16_t *stack);
 uint16_t FxMatrixApply(uint16_t vector_x, uint16_t vector_y, uint16_t vector_z, uint16_t where_store);
@@ -845,7 +844,6 @@ FxSpreadCarsResult FxSpreadCars(uint16_t entry_distance, uint16_t car_record, ui
 void FxSprite32Program(void);
 FxSpriteMaterialResult FxSpriteMaterial(uint16_t material_index, uint16_t model_stream_ptr, uint16_t sprite_scale_word);
 void FxSqrt16(uint16_t value);
-uint16_t FxSqrt32(uint16_t radicand_lo, uint16_t radicand_hi);
 void FxSqrt32Test(void);
 FxSteerFromInputResult FxSteerFromInput(uint16_t control_bits, uint16_t car_record);
 void FxSumScale(uint16_t scale);
