@@ -42,6 +42,8 @@ static uint16_t word_at(Place p, unsigned offset) { return cart16(p.bank, (uint1
 
 uint8_t trig_sine(uint8_t angle) { return byte_at(SINE, angle); }
 uint8_t trig_cosine(uint8_t angle) { return byte_at(COSINE, angle); }
+uint8_t trig_sine_in_bank(uint8_t bank, uint8_t angle) { return cart8(bank, (uint16_t)(SINE.at + angle)); }
+uint8_t trig_cosine_in_bank(uint8_t bank, uint8_t angle) { return cart8(bank, (uint16_t)(COSINE.at + angle)); }
 
 uint8_t demo_script_byte(uint16_t at) { return byte_at(DEMO_SCRIPTS, at); }
 uint16_t demo_script_word(uint16_t at) { return word_at(DEMO_SCRIPTS, at); }

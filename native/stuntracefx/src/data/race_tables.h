@@ -17,6 +17,12 @@
 /* ---- math ---- */
 uint8_t trig_sine(uint8_t angle);       /* the byte sine and cosine tables */
 uint8_t trig_cosine(uint8_t angle);
+/* The same places in a given ROM bank: the Super FX's FxTurn reads them in
+   whichever bank the physics last selected, which at FxContactResolve and
+   FxPushApply can be $04, $09 or a collision model's; bank $00 gives the
+   tables, another bank that bank's bytes there, as the original's reads. */
+uint8_t trig_sine_in_bank(uint8_t bank, uint8_t angle);
+uint8_t trig_cosine_in_bank(uint8_t bank, uint8_t angle);
 
 /* ---- the attract demos' scripts, by the byte offset of a script's field ---- */
 uint8_t demo_script_byte(uint16_t at);
