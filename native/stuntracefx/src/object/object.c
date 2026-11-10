@@ -710,10 +710,11 @@ void ObjectsRunHandlers(void)
 /*
  * @routine 08:826E ObjectSpawnFromScript
  * WHAT IT DOES: Makes an object from the course script entry `entry`:
- * model, script word, place, handler, flags, offsets (added to those of the
- * record +$20 names when bit 9 of the flags is set; X and Z swapped when the
- * spawn heading is not 0 or $80), then its bucket, and +$36 = 3 when its
- * handler starts with a NOP.
+ * model, script word, place, handler, flags, its record's touch box (added
+ * to that of the model record +$20 names when bit 9 of the flags is set; X
+ * and Z swapped, as a quarter turn swaps a box's, when the spawn heading is
+ * not 0 or $80), then its bucket, and +$36 = 3 when its handler starts with
+ * a NOP.
  */
 Object *ObjectSpawnFromScript(CartRef entry)
 {
@@ -738,24 +739,24 @@ Object *ObjectSpawnFromScript(CartRef entry)
     w = course_script_word(entry, ENTRY_FLAGS);
     o->script_flags = w;
     if (w & 0x0200) {
-        if (o->script) {                /* the model record's offsets (the data's are all from $8000) */
-            o->offset_x = model_record_offset(o->script, 0);
-            o->offset_y = model_record_offset(o->script, 1);
-            o->offset_z = model_record_offset(o->script, 2);
+        if (o->script) {                /* the model record's touch box (the data's are all from $8000) */
+            o->touch_x = model_record_touch(o->script, 0);
+            o->touch_y = model_record_touch(o->script, 1);
+            o->touch_z = model_record_touch(o->script, 2);
         } else {                        /* none: the original reads work RAM $000A-$000F there */
-            o->offset_x = g.last_worked_y;
-            o->offset_y = 0;            /* $000C-$000F: written only by the power-on clear */
-            o->offset_z = 0;
+            o->touch_x = g.last_worked_y;
+            o->touch_y = 0;            /* $000C-$000F: written only by the power-on clear */
+            o->touch_z = 0;
         }
     }
-    o->offset_x = (uint16_t)(o->offset_x + course_script_word(entry, ENTRY_OFFSET_X));
-    o->offset_y = (uint16_t)(o->offset_y + course_script_word(entry, ENTRY_OFFSET_Y));
-    o->offset_z = (uint16_t)(o->offset_z + course_script_word(entry, ENTRY_OFFSET_Z));
+    o->touch_x = (uint16_t)(o->touch_x + course_script_word(entry, ENTRY_TOUCH_X));
+    o->touch_y = (uint16_t)(o->touch_y + course_script_word(entry, ENTRY_TOUCH_Y));
+    o->touch_z = (uint16_t)(o->touch_z + course_script_word(entry, ENTRY_TOUCH_Z));
     if (g.spawn_mirror != 0x00 && g.spawn_mirror != 0x80) {
-        uint16_t t = o->offset_x;
+        uint16_t t = o->touch_x;
 
-        o->offset_x = o->offset_z;
-        o->offset_z = t;
+        o->touch_x = o->touch_z;
+        o->touch_z = t;
     }
     ObjectRebucket(o);
     if (handler_runs_from_start(object_handler_of(o->handler_bank, o->handler)))

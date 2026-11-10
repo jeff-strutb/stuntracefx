@@ -60,14 +60,17 @@ void GsuRecordSolid(Object *o)
 
 /*
  * @routine 08:CCD2 GsuRecordPosition
- * WHAT IT DOES: Copies a position into the record's +$0C, +$0E, +$10.
+ * WHAT IT DOES: Sets the record's touch box, +$0C, +$0E, +$10: half its size
+ * along x, y and z. Records touch where their boxes overlap (the chip's
+ * FxCollide sums the two records' halves on each axis against their
+ * distance).
  */
-void GsuRecordPosition(Object *o, uint16_t x, uint16_t y, uint16_t z)
+void GsuRecordTouchBox(Object *o, uint16_t x, uint16_t y, uint16_t z)
 {
     if (o->record) {
-        rec_put(o->record, FXREC_SIZE, x);
-        rec_put(o->record, FXREC_NEXT, y);
-        rec_put(o->record, FXREC_FLAGS10, z);
+        rec_put(o->record, FXREC_OFFSET_X, x);
+        rec_put(o->record, FXREC_OFFSET_Y, y);
+        rec_put(o->record, FXREC_OFFSET_Z, z);
     }
 }
 
@@ -178,8 +181,8 @@ void ObjectVelocityFromRecordOf(Object *o, const Object *from)
 
 /*
  * @routine 08:D86F GsuRecordFromObject
- * WHAT IT DOES: Copies the object's state into its record: its offsets, its
- * script word, place, heading and frame.
+ * WHAT IT DOES: Copies the object's state into its record: its touch box,
+ * its script word, place, heading and frame.
  */
 void GsuRecordFromObject(Object *o)
 {
@@ -187,9 +190,9 @@ void GsuRecordFromObject(Object *o)
 
     if (!rec)
         return;
-    rec_put(rec, FXREC_OFFSET_X, o->offset_x);
-    rec_put(rec, FXREC_OFFSET_Y, o->offset_y);
-    rec_put(rec, FXREC_OFFSET_Z, o->offset_z);
+    rec_put(rec, FXREC_OFFSET_X, o->touch_x);
+    rec_put(rec, FXREC_OFFSET_Y, o->touch_y);
+    rec_put(rec, FXREC_OFFSET_Z, o->touch_z);
     rec_put(rec, FXREC_OBJECT_SCRIPT, o->script);
     rec_put(rec, FXREC_POS_X, o->x);
     rec_put(rec, FXREC_POS_Y, o->y);

@@ -68,7 +68,7 @@ typedef uint16_t ObjRef;
     D                                   /* +42-+4E */                                      \
     uint16_t link;                      /* +4F another object, or a camera (camera_of) */  \
     uint8_t unused6[2];                 /* +51 */                                          \
-    uint16_t offset_x, offset_y, offset_z; /* +53 */                                       \
+    uint16_t touch_x, touch_y, touch_z; /* +53 its record's touch box, half its size each way */ \
     uint8_t made_mark;                  /* +59 $69 from ObjectInit; nothing reads it */    \
     uint8_t shown_frame;                /* +5A the frame the object shows when bit 7 is set, else the game's */ \
     uint8_t unused7[2];                 /* +5B */                                          \
@@ -236,7 +236,8 @@ void ObjectsRunHandlers(void);
 enum {
     ENTRY_X = 0x01, ENTRY_Y = 0x03, ENTRY_Z = 0x05, ENTRY_MODEL = 0x07, ENTRY_SCRIPT = 0x09,
     ENTRY_HANDLER = 0x0B, ENTRY_HANDLER_BANK = 0x0D,
-    ENTRY_OFFSET_X = 0x0E, ENTRY_OFFSET_Y = 0x10, ENTRY_OFFSET_Z = 0x12, ENTRY_FLAGS = 0x14,
+    ENTRY_TOUCH_X = 0x0E, ENTRY_TOUCH_Y = 0x10, ENTRY_TOUCH_Z = 0x12, /* added to its model's touch box */
+    ENTRY_FLAGS = 0x14,
     ENTRY_LINK = 0x16,                  /* a numbered object's or a car's +$27 */
     ENTRY_COUNT = 0x16, ENTRY_STEP = 0x17, ENTRY_COUNTER = 0x18, /* a counted object's +$48, +$49, +$4A */
     ENTRY_PLAYER = 0x18, ENTRY_HEADING = 0x19 /* a car's: bit 0 player 1's, bit 1 player 2's, bits 2-4 not in a demo; its heading */
@@ -421,7 +422,7 @@ void CameraPathGo(Object *o);
 void GsuRecordTouchesAll(Object *o);
 void GsuRecordSetFlags(Object *o, uint16_t bits);
 void GsuRecordSolid(Object *o);
-void GsuRecordPosition(Object *o, uint16_t x, uint16_t y, uint16_t z);
+void GsuRecordTouchBox(Object *o, uint16_t x, uint16_t y, uint16_t z);
 uint16_t GsuRecordParentRank(const Object *o);
 uint16_t GsuRecordParentSegment(const Object *o, int *clear);
 int GsuRecordKeep(Object *o);

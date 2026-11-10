@@ -21,7 +21,7 @@ uint8_t course_script_byte(CartRef entry, unsigned field);
 uint16_t course_script_word(CartRef entry, unsigned field);
 
 /* ---- the model records: 28 bytes each, an object's script word names one ---- */
-uint16_t model_record_offset(uint16_t record, int axis);        /* its offsets x, y, z (axis 0-2) */
+uint16_t model_record_touch(uint16_t record, int axis);         /* its touch box, half its size along x, y, z (axis 0-2) */
 
 /* ---- bank $09's object data: entries (a child's, an attachment's) and
    lists (a car's attachments, its camera points), each named by the data

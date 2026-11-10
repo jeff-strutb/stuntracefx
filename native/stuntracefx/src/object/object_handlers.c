@@ -158,10 +158,10 @@ void ObjectBlinkerRise(Object *o)
     ObjectBlinkerFade(o);
 }
 
-/* the record's place, then its flags */
-static void record_place(Object *o, uint16_t x, uint16_t y, uint16_t z, uint16_t flags)
+/* the record's touch box, then its flags */
+static void record_box(Object *o, uint16_t x, uint16_t y, uint16_t z, uint16_t flags)
 {
-    GsuRecordPosition(o, x, y, z);
+    GsuRecordTouchBox(o, x, y, z);
     GsuRecordSetFlags(o, flags);
 }
 
@@ -185,7 +185,7 @@ void ObjectBlinkerStart(Object *o)
     o->script = object_script_word(OBJECT_SCRIPT_BLINKER);
     if (!GsuRecordNewStill(o))
         return;
-    record_place(o, 0x02D0, 0x0190, 0x02D0, 0x4000);
+    record_box(o, 0x02D0, 0x0190, 0x02D0, 0x4000);
     ObjectBlinkerRise(o);
 }
 
@@ -299,7 +299,7 @@ void ObjectPaceCarSetup(Object *o)
     o->script = object_script_word(OBJECT_SCRIPT_SIGNAL);
     if (!GsuRecordNewStill(o))
         return;
-    record_place(o, 0x0640, 0x0640, 0x0640, 0xC100);
+    record_box(o, 0x0640, 0x0640, 0x0640, 0xC100);
     o->signal.unread = 0x14;
     ObjectSignalStep(o);
 }

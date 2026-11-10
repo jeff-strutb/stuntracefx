@@ -95,7 +95,7 @@ void ObjectScoreGateRecord(Object *o)
 {
     GsuRecordNewTrigger(o);
     GsuRecordSolid(o);
-    GsuRecordPosition(o, 0x0F00, 0x0F00, 0x0F00);
+    GsuRecordTouchBox(o, 0x0F00, 0x0F00, 0x0F00);
     ObjectScoreGateStep(o);
 }
 
@@ -265,7 +265,7 @@ void ObjectFireworkShellRecord(Object *o)
     GsuRecordNewBouncing(o);
     GsuRecordVelocity(o);
     GsuRecordSetMass(o, 0x08);
-    GsuRecordPosition(o, 0x0190, 0x0190, 0x0190);
+    GsuRecordTouchBox(o, 0x0190, 0x0190, 0x0190);
     ObjectFireworkShellStep(o);
 }
 
@@ -320,7 +320,7 @@ void ObjectFinishGateRecord(Object *o)
 {
     GsuRecordNewTrigger(o);
     GsuRecordSolid(o);
-    GsuRecordPosition(o, 0x1680, 0x1680, 0x1680);
+    GsuRecordTouchBox(o, 0x1680, 0x1680, 0x1680);
     ObjectFinishGateStep(o);
 }
 
@@ -441,7 +441,7 @@ static void post_record(Object *o, uint16_t v)
 {
     GsuRecordNewTrigger(o);
     GsuRecordSolid(o);
-    GsuRecordPosition(o, v, v, v);
+    GsuRecordTouchBox(o, v, v, v);
 }
 
 /* @routine 09:939D ObjectPostARecord */
@@ -608,7 +608,7 @@ void ObjectBallDropRecord(Object *o)
     GsuRecordNewTrigger(o);
     GsuRecordSolid(o);
     GsuRecordSetMass(o, 0x14);
-    GsuRecordPosition(o, 0x00A0, 0x00A0, 0x00A0);
+    GsuRecordTouchBox(o, 0x00A0, 0x00A0, 0x00A0);
     ObjectBallDropStep(o);
 }
 
@@ -1512,7 +1512,7 @@ void ObjectCountMarkerRecord(Object *o)
     GsuRecordNewSolidTrigger(o);
     GsuRecordTouchesAll(o);
     GsuRecordSetMass(o, 0x14);
-    GsuRecordPosition(o, 0x0500, 0x0500, 0x0500);
+    GsuRecordTouchBox(o, 0x0500, 0x0500, 0x0500);
     ObjectCountMarkerStep(o);
 }
 
@@ -1552,7 +1552,7 @@ void ObjectCountTriggerRecord(Object *o)
 {
     GsuRecordNewTrigger(o);
     GsuRecordSolid(o);
-    GsuRecordPosition(o, 0x03C0, 0x03C0, 0x03C0);
+    GsuRecordTouchBox(o, 0x03C0, 0x03C0, 0x03C0);
     ObjectCountTriggerStep(o);
 }
 
@@ -1671,7 +1671,7 @@ void ObjectBreakableRecord(Object *o)
     }
     GsuRecordSolid(o);
     GsuRecordSetMass(o, 0x46);
-    GsuRecordPosition(o, 0x00C0, 0x00C0, 0x00C0);
+    GsuRecordTouchBox(o, 0x00C0, 0x00C0, 0x00C0);
     ObjectBreakableStep(o);
 }
 
@@ -2843,7 +2843,7 @@ static void hit_lamp_record(Object *o)
     GsuRecordNewSolidTrigger(o);
     GsuRecordTouchesAll(o);
     GsuRecordSetMass(o, 0x14);
-    GsuRecordPosition(o, 0x0500, 0x0500, 0x0500);
+    GsuRecordTouchBox(o, 0x0500, 0x0500, 0x0500);
 }
 
 static void hit_lamp_frame(Object *o, uint8_t lit)
@@ -2857,7 +2857,7 @@ static void hit_switch_record(Object *o)
 {
     GsuRecordNewTrigger(o);
     GsuRecordSolid(o);
-    GsuRecordPosition(o, 0x03C0, 0x03C0, 0x03C0);
+    GsuRecordTouchBox(o, 0x03C0, 0x03C0, 0x03C0);
 }
 
 /* returns 1 on a car's contact, having moved the count the first time */

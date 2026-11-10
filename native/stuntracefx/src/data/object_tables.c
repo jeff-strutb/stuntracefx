@@ -10,7 +10,7 @@
 enum {
     SCRIPT_BANK_START = 0x8000,         /* a script bank's first entry: where a restart goes */
     MODEL_BANK = 0x00,                  /* the model records' bank */
-    MODEL_OFFSETS = 0x0A                /* a model record's offsets x, y, z */
+    MODEL_TOUCH = 0x0A                  /* a model record's touch box x, y, z */
 };
 
 typedef struct { uint8_t bank; uint16_t at; } Place;
@@ -51,9 +51,9 @@ CartRef course_script_restart(CartRef entry)
 uint8_t course_script_byte(CartRef entry, unsigned field) { return cart8(entry.bank, (uint16_t)(entry.addr + field)); }
 uint16_t course_script_word(CartRef entry, unsigned field) { return cart16(entry.bank, (uint16_t)(entry.addr + field)); }
 
-uint16_t model_record_offset(uint16_t record, int axis)
+uint16_t model_record_touch(uint16_t record, int axis)
 {
-    return cart16(MODEL_BANK, (uint16_t)(record + MODEL_OFFSETS + 2 * axis));
+    return cart16(MODEL_BANK, (uint16_t)(record + MODEL_TOUCH + 2 * axis));
 }
 
 uint16_t object_entry_word(uint16_t entry, unsigned field) { return word_at(OBJECT_DATA, (unsigned)(uint16_t)(entry + field)); }
