@@ -260,7 +260,7 @@ void ObjectVelocityFromRecord(Object *o)
  */
 uint16_t ObjectCarLookByKind(Object *o, uint8_t kind)
 {
-    o->anim = kind == 1 ? LOOK_CAR_COUPE : kind == 2 ? LOOK_CAR_4WD : kind == 3 ? LOOK_CAR_2WD : LOOK_CAR_F_TYPE;
+    o->anim = kind == 1 ? look_word(LOOK_CAR_COUPE) : kind == 2 ? look_word(LOOK_CAR_4WD) : kind == 3 ? look_word(LOOK_CAR_2WD) : look_word(LOOK_CAR_F_TYPE);
     return o->anim;
 }
 
@@ -780,7 +780,7 @@ void ObjectPieceSprayChance(Object *o)
 
     if (RandomStep() < 0xB2)
         return;
-    n = ObjectSpawn(MODEL_COMMON);
+    n = ObjectSpawn(model_word(MODEL_COMMON));
     if (!n)
         return;
     ObjectSetHandler(n, H_PIECE_SPRAY);
@@ -798,7 +798,7 @@ void ObjectPieceSprayUnlessSplit(Object *o)
 
     if (g.split_screen)
         return;
-    n = ObjectSpawn(MODEL_COMMON);
+    n = ObjectSpawn(model_word(MODEL_COMMON));
     if (!n)
         return;
     ObjectSetHandler(n, H_PIECE_SPRAY);
@@ -813,12 +813,12 @@ void ObjectPieceSprayUnlessSplit(Object *o)
 void ObjectLookForSplit(Object *o)
 {
     if (g.split_screen)
-        o->anim = (uint16_t)(o->anim + 2);
+        o->anim = look_word_split(o->anim);
 }
 
 static void spawn_sparkle(Object *o)
 {
-    Object *n = ObjectSpawn(MODEL_COMMON);
+    Object *n = ObjectSpawn(model_word(MODEL_COMMON));
 
     if (!n)
         return;
@@ -869,7 +869,7 @@ void ObjectSparkleStart(Object *o)
     uint8_t r;
 
     o->draw_flags |= 0x08;
-    o->anim = LOOK_SPARKLE;
+    o->anim = look_word(LOOK_SPARKLE);
     r = RandomStep();
     o->sprite_turn[0] = (uint8_t)((r & 0x03) | 0x80);
     ObjectSetHandler(o, H_SPARKLE_STEP);
@@ -935,7 +935,7 @@ void ObjectSpawnTrail(Object *o)
 
     if (g.split_screen)
         return;
-    n = ObjectSpawn(MODEL_COMMON);
+    n = ObjectSpawn(model_word(MODEL_COMMON));
     if (!n)
         return;
     n->draw_flags |= 0x04;
@@ -1003,7 +1003,7 @@ void ObjectSpawnAttached(Object *o, uint8_t y_off, uint8_t z_off)
 
     if (g.split_screen)
         return;
-    n = ObjectSpawn(MODEL_COMMON);
+    n = ObjectSpawn(model_word(MODEL_COMMON));
     if (!n)
         return;
     n->draw_flags |= 0x04;
@@ -1189,7 +1189,7 @@ void ObjectBillboardTilt(Object *o)
         facing = (uint8_t)-facing;
     if (!((uint8_t)(facing - 0x40) & 0x80))
         tilt = (uint8_t)-tilt;
-    o->anim = (uint16_t)(sx8(tilt) + 8 + o->child.look);
+    o->anim = look_word_tilted(o->child.look, (int8_t)tilt);
     o->sprite_turn[0] = (uint8_t)(ObjectFacingFrame64(o, turn) | 0x80);
     if (g.split_screen)
         o->sprite_turn[1] = (uint8_t)(ObjectFacingFrame64(o, (uint8_t)-(uint8_t)(cameras[1].turn >> 8)) | 0x80);
@@ -1206,10 +1206,10 @@ void ObjectSpawnPuff(Object *o)
 
     g.hits++;
     g.hits_bcd = bcd_inc16(g.hits_bcd);
-    n = ObjectSpawn(MODEL_COMMON);
+    n = ObjectSpawn(model_word(MODEL_COMMON));
     if (!n)
         return;
-    n->anim = LOOK_PUFF;
+    n->anim = look_word(LOOK_PUFF);
     n->puff.unread2 = 0xFE0C;
     n->draw_flags |= 0x08;
     n->material = 0;

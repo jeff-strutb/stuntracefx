@@ -304,7 +304,7 @@ void PlayerCar1(Object *o)
     ObjectListAppend(o);
     o->y = (uint16_t)(o->y + 0xFF60);
     if (g.hud_mode == 0 && obj_at(g.director[0])->handler == H_DIRECTOR_PATH_START)
-        o->car.car_script = CAR_BONUS_TRUCK;
+        o->car.car_script = car_script_word(CAR_BONUS_TRUCK);
     player_record(o, 0x0001, FXIN_PLAYER1_RECORD);
     player_attach(o, H_PLAYER_CAR_1_STEP, g.director[0]);
     PlayerCar1Step(o);
@@ -364,40 +364,40 @@ void ObjectCarKind5(Object *o) { car_of_kind(o, 0x00, 0x05); }
 
 /* one shed part: its kind and offset bytes, a count, whether it is marked */
 typedef struct {
-    uint16_t model;
     uint8_t o48, o49, o4a, count;
     int mark;
 } ShedPart;
 
-/* The parts of one car set: the first knocked off at once on a hit. */
+/* The parts of one car set (their models: data/'s crash_part_model_word): the
+   first knocked off at once on a hit. */
 static const ShedPart crash_sets[4][6] = {
     {   /* 08:A5E4: the F-Type's */
-        {MODEL(31), 0x00, 0xE3, 0xC5, 0x23, 1}, {MODEL(26), 0x00, 0xF9, 0x2D, 0x00, 0},
-        {MODEL(27), 0xE9, 0xFA, 0xF8, 0x0A, 1}, {MODEL(28), 0x17, 0xFA, 0xF8, 0x14, 0},
-        {MODEL(29), 0x00, 0xF6, 0xF6, 0x19, 1}, {MODEL(30), 0x00, 0xF7, 0xDA, 0x1E, 0}
+        {0x00, 0xE3, 0xC5, 0x23, 1}, {0x00, 0xF9, 0x2D, 0x00, 0},
+        {0xE9, 0xFA, 0xF8, 0x0A, 1}, {0x17, 0xFA, 0xF8, 0x14, 0},
+        {0x00, 0xF6, 0xF6, 0x19, 1}, {0x00, 0xF7, 0xDA, 0x1E, 0}
     },
     {   /* 08:A88B: the Coupe's */
-        {MODEL(43), 0x00, 0xEC, 0xC5, 0x23, 1}, {MODEL(38), 0x00, 0xFA, 0x21, 0x00, 0},
-        {MODEL(39), 0x00, 0xD5, 0xEE, 0x0A, 1}, {MODEL(40), 0xEF, 0xF6, 0xEC, 0x14, 0},
-        {MODEL(41), 0x11, 0xF6, 0xEC, 0x19, 1}, {MODEL(42), 0x00, 0xF8, 0xC9, 0x1E, 0}
+        {0x00, 0xEC, 0xC5, 0x23, 1}, {0x00, 0xFA, 0x21, 0x00, 0},
+        {0x00, 0xD5, 0xEE, 0x0A, 1}, {0xEF, 0xF6, 0xEC, 0x14, 0},
+        {0x11, 0xF6, 0xEC, 0x19, 1}, {0x00, 0xF8, 0xC9, 0x1E, 0}
     },
     {   /* 08:A33D: the 4WD's */
-        {MODEL(37), 0x00, 0xEE, 0x42, 0x23, 1}, {MODEL(36), 0x00, 0xF1, 0x3C, 0x00, 0},
-        {MODEL(32), 0x00, 0xCE, 0x0F, 0x0A, 1}, {MODEL(33), 0x00, 0xD0, 0xE9, 0x14, 0},
-        {MODEL(34), 0x00, 0xEF, 0xF6, 0x19, 1}, {MODEL(35), 0x00, 0x0F, 0x02, 0x1E, 0}
+        {0x00, 0xEE, 0x42, 0x23, 1}, {0x00, 0xF1, 0x3C, 0x00, 0},
+        {0x00, 0xCE, 0x0F, 0x0A, 1}, {0x00, 0xD0, 0xE9, 0x14, 0},
+        {0x00, 0xEF, 0xF6, 0x19, 1}, {0x00, 0x0F, 0x02, 0x1E, 0}
     },
     {   /* 08:A096: the 2WD's */
-        {MODEL(78), 0xD8, 0xEC, 0xB6, 0x23, 1}, {MODEL(73), 0x00, 0xDC, 0x14, 0x00, 0},
-        {MODEL(74), 0x00, 0xEC, 0x1C, 0x0A, 1}, {MODEL(75), 0x00, 0xE0, 0xE2, 0x14, 0},
-        {MODEL(76), 0x00, 0xE8, 0xC6, 0x19, 1}, {MODEL(77), 0x28, 0xEC, 0xB6, 0x1E, 0}
+        {0xD8, 0xEC, 0xB6, 0x23, 1}, {0x00, 0xDC, 0x14, 0x00, 0},
+        {0x00, 0xEC, 0x1C, 0x0A, 1}, {0x00, 0xE0, 0xE2, 0x14, 0},
+        {0x00, 0xE8, 0xC6, 0x19, 1}, {0x28, 0xEC, 0xB6, 0x1E, 0}
     }
 };
 
 /* One part shed. Returns 1 when the crash must end at once: no first part,
    or the first part's hit left the car's +$25 bit 2 clear. */
-static int shed(Object *car, const ShedPart *part, uint8_t flags, int first)
+static int shed(Object *car, uint16_t model, const ShedPart *part, uint8_t flags, int first)
 {
-    Object *n = ObjectSpawn(part->model);
+    Object *n = ObjectSpawn(model);
 
     if (!n)
         return first;
@@ -432,17 +432,17 @@ static int shed(Object *car, const ShedPart *part, uint8_t flags, int first)
  */
 int CarCrashParts(Object *o, uint8_t flags)
 {
-    static const uint16_t model[8] = {CAR_F_TYPE, CAR_COUPE, CAR_4WD, CAR_2WD, CAR_RIVAL_F_TYPE, CAR_RIVAL_COUPE, CAR_RIVAL_4WD, CAR_RIVAL_2WD};
+    static const CarScript cars[8] = {CAR_F_TYPE, CAR_COUPE, CAR_4WD, CAR_2WD, CAR_RIVAL_F_TYPE, CAR_RIVAL_COUPE, CAR_RIVAL_4WD, CAR_RIVAL_2WD};
     int i;
 
     if (o->car.state & (CAR_LOOSE | CAR_DETACHING))
         return 1;
-    for (i = 0; i < 8 && o->car.car_script != model[i]; i++)
+    for (i = 0; i < 8 && o->car.car_script != car_script_word(cars[i]); i++)
         ;
     if (i == 8)
         return 1;
     for (int p = 0; p < 6; p++)
-        if (shed(o, &crash_sets[i & 3][p], flags, p == 0) && p == 0)
+        if (shed(o, crash_part_model_word(i & 3, p), &crash_sets[i & 3][p], flags, p == 0) && p == 0)
             return 1;
     SoundPort0QueuePush((flags & 0x01) ? 0x5B : 0x43);
     return 0;

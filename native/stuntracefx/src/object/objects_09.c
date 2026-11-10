@@ -60,14 +60,14 @@ void ObjectLampTower(Object *o)
     Object *n;
 
     o->y = (uint16_t)(o->y + 0xFF74);
-    o->anim = LOOK_LAMP_LIGHT;
+    o->anim = look_word(LOOK_LAMP_LIGHT);
     lamp(o, 0x3C);
-    o->model = MODEL_LAMP_TOWER;
+    o->model = model_word(MODEL_LAMP_TOWER);
     o->depth_lift &= 0xFE;
-    n = ObjectSpawn(MODEL_LAMP_TOWER_LIGHT);
+    n = ObjectSpawn(model_word(MODEL_LAMP_TOWER_LIGHT));
     if (n) {
         lamp(n, 0x64);
-        n->anim = LOOK_LAMP_LIGHT_RAISED;
+        n->anim = look_word(LOOK_LAMP_LIGHT_RAISED);
         ObjectCopyPosition(n, o);
         n->y = (uint16_t)(n->y + 0xFA88);
         ObjectRebucket(n);
@@ -79,7 +79,7 @@ void ObjectLampTower(Object *o)
 void ObjectLampLow(Object *o)
 {
     lamp(o, 0x50);
-    o->anim = LOOK_LAMP_LIGHT_RAISED;
+    o->anim = look_word(LOOK_LAMP_LIGHT_RAISED);
     o->y = (uint16_t)(o->y + 0xFE84);
     handler_none(o);
 }
@@ -121,7 +121,7 @@ void ObjectScoreGate(Object *o)
     o->handler2 = H9_SCORE_GATE_RECORD;
     o->handler2_bank = 0x09;
     handler(o, H9_SCORE_GATE_STEP);
-    n = ObjectSpawn(MODEL_NONE);
+    n = ObjectSpawn(model_word(MODEL_NONE));
     if (n) {
         ObjectCopyPosition(n, o);
         n->score_counter.gate = obj_ref(o);
@@ -191,7 +191,7 @@ void ObjectScoreCounterStep(Object *o)
         if (g.laps_counted[0] == 0x01) {
             if (!(o->score_counter.state & COUNTER_ON)) {
                 o->score_counter.state |= COUNTER_ON;
-                o->model = MODEL_SCORE_COUNTER_ON;
+                o->model = model_word(MODEL_SCORE_COUNTER_ON);
             }
             counter_tick(o);
         } else if (g.laps_counted[0] == 0x02) {
@@ -226,11 +226,11 @@ void ObjectFlyingPiece(Object *o)
 
 static void spark(Object *o, uint8_t t, uint16_t vx, uint16_t vy, uint16_t vz)
 {
-    Object *n = ObjectSpawn(MODEL_FIREWORK_SPARK);
+    Object *n = ObjectSpawn(model_word(MODEL_FIREWORK_SPARK));
 
     if (!n)
         return;
-    n->anim = LOOK_FIREWORK_SPARK;
+    n->anim = look_word(LOOK_FIREWORK_SPARK);
     lamp(n, t);
     ObjectCopyPosition(n, o);
     handler(n, H9_FLYING_PIECE);
@@ -291,7 +291,7 @@ void ObjectFireworkShell(Object *o)
 
 static void shell(Object *o, uint16_t dx, uint8_t pitch, uint8_t heading, uint8_t roll)
 {
-    Object *n = ObjectSpawn(MODEL_FIREWORK_SHELL);
+    Object *n = ObjectSpawn(model_word(MODEL_FIREWORK_SHELL));
 
     if (!n)
         return;
@@ -476,7 +476,7 @@ void ObjectPostA(Object *o)
    original stores the post there first and its caller then the target) */
 static void sky_ball(Object *o, uint16_t target_z)
 {
-    Object *n = ObjectSpawn(MODEL_BALL);
+    Object *n = ObjectSpawn(model_word(MODEL_BALL));
 
     if (!n)
         return;
@@ -563,7 +563,7 @@ void ObjectSkyBallStep(Object *o)
                 Object *n;
 
                 o->sky_ball.state |= SKY_BALL_DROPPED;
-                n = ObjectSpawn(MODEL_RAISE_BALL);
+                n = ObjectSpawn(model_word(MODEL_RAISE_BALL));
                 if (n) {
                     ObjectCopyPosition(n, o);
                     handler(n, H9_BALL_DROP);
@@ -603,7 +603,7 @@ void ObjectBallDropStep(Object *o)
     }
     GsuRecordBoostRaise(r, 0x40);
     SoundPort0QueuePush(0x25);
-    n = ObjectSpawn(MODEL_RAISE_BALL);
+    n = ObjectSpawn(model_word(MODEL_RAISE_BALL));
     if (n) {
         Object *p = obj_at(g.player_car);
 
@@ -636,7 +636,7 @@ void ObjectBallDrop(Object *o)
 static void cannon_ball(Object *o, uint16_t h, uint16_t dx, uint16_t dy, uint16_t dz, uint8_t s,
                         uint16_t rise, uint16_t drift, uint8_t life, uint8_t home)
 {
-    Object *n = ObjectSpawn(MODEL_BALL);
+    Object *n = ObjectSpawn(model_word(MODEL_BALL));
 
     if (!n)
         return;
@@ -734,7 +734,7 @@ static int hit_to(Object *o)
 static void wave_ball(Object *o, uint16_t h, uint16_t dx, uint16_t dy, uint16_t dz, uint8_t s,
                       uint16_t rise, uint16_t gx, uint16_t gz, uint8_t life)
 {
-    Object *n = ObjectSpawn(MODEL_BALL);
+    Object *n = ObjectSpawn(model_word(MODEL_BALL));
 
     if (!n)
         return;
@@ -831,11 +831,11 @@ void ObjectStarSparkleStep(Object *o)
 /* a sparkle at the object's place, $C8 back */
 static void sparkle(Object *o)
 {
-    Object *n = ObjectSpawn(MODEL_COMMON);
+    Object *n = ObjectSpawn(model_word(MODEL_COMMON));
 
     if (!n)
         return;
-    n->anim = LOOK_STAR_SPARKLE;
+    n->anim = look_word(LOOK_STAR_SPARKLE);
     n->sprite_turn[0] = 0x82;
     lamp(n, 0x64);
     ObjectCopyPosition(n, o);
@@ -922,7 +922,7 @@ void ObjectLanternRecord(Object *o)
 void ObjectLantern(Object *o)
 {
     o->y = (uint16_t)(o->y + 0xFF88);
-    o->anim = LOOK_LANTERN;
+    o->anim = look_word(LOOK_LANTERN);
     lamp(o, 0x64);
     handlers2(o, H9_LANTERN_RECORD, H9_LANTERN_STEP);
     ObjectLanternRecord(o);
@@ -1326,7 +1326,7 @@ void ObjectPopMarker(Object *o)
 
     if (released_by_hud(o))
         return;
-    n = ObjectSpawn(MODEL_POP_MARKER);
+    n = ObjectSpawn(model_word(MODEL_POP_MARKER));
     if (n) {
         ObjectCopyPosition(n, o);
         n->heading = o->heading;
@@ -1404,7 +1404,7 @@ static int lap_matches_0a(const Object *o) { return g.laps_counted[0] == o->lap_
 static void lap_take_0a(Object *o)
 {
     o->lap_gate.lap = g.laps_counted[0];
-    o->model = MODEL_NONE;
+    o->model = model_word(MODEL_NONE);
 }
 
 /* a spark of `model` at the player's place following it */
@@ -1427,7 +1427,7 @@ static void lap_ball_record(Object *o, uint16_t model)
     GsuRecordNewTrigger(o);
     GsuRecordSolid(o);
     GsuRecordSetMass(o, 0x14);
-    o->model = lap_matches_0a(o) ? MODEL_NONE : model;
+    o->model = lap_matches_0a(o) ? model_word(MODEL_NONE) : model;
 }
 
 /* @routine 09:ADB6 ObjectLapBallUpStep */
@@ -1451,13 +1451,13 @@ void ObjectLapBallUpStep(Object *o)
     lap_take_0a(o);
     GsuRecordBoostRaise(r, 0x40);
     SoundPort0QueuePush(0x25);
-    spark_follow(MODEL_RAISE_BALL);
+    spark_follow(model_word(MODEL_RAISE_BALL));
 }
 
 /* @routine 09:AD81 ObjectLapBallUpRecord */
 void ObjectLapBallUpRecord(Object *o)
 {
-    lap_ball_record(o, MODEL_RAISE_BALL);
+    lap_ball_record(o, model_word(MODEL_RAISE_BALL));
     ObjectLapBallUpStep(o);
 }
 
@@ -1481,13 +1481,13 @@ void ObjectLapBallDownStep(Object *o)
     lap_take_0a(o);
     GsuRecordRepair(r, 0x40);
     SoundPort0QueuePush(0x1B);
-    spark_follow(MODEL_LOWER_BALL);
+    spark_follow(model_word(MODEL_LOWER_BALL));
 }
 
 /* @routine 09:AEE2 ObjectLapBallDownRecord */
 void ObjectLapBallDownRecord(Object *o)
 {
-    lap_ball_record(o, MODEL_LOWER_BALL);
+    lap_ball_record(o, model_word(MODEL_LOWER_BALL));
     ObjectLapBallDownStep(o);
 }
 
@@ -1534,7 +1534,7 @@ void ObjectCountMarkerRecord(Object *o)
 void ObjectCountMarker(Object *o)
 {
     handlers2(o, H9_COUNT_MARKER_RECORD, H9_COUNT_MARKER_STEP);
-    o->script = OBJECT_SCRIPT_MARKER;
+    o->script = object_script_word(OBJECT_SCRIPT_MARKER);
     o->shown_frame = 0x80;
     o->meter.frame = 0x04;
     ObjectCountMarkerRecord(o);
@@ -1658,7 +1658,7 @@ static void breakable_burst(Object *o)
     int i;
 
     for (i = 0; i < 8; i++)
-        burst_piece(o, MODEL_BREAKABLE_PIECE, 0x0000, v[i][0], v[i][1], v[i][2]);
+        burst_piece(o, model_word(MODEL_BREAKABLE_PIECE), 0x0000, v[i][0], v[i][1], v[i][2]);
 }
 
 /* @routine 09:C560 ObjectBreakableStep: it grows by $0C, the three words
@@ -1740,7 +1740,7 @@ void ObjectSwing(Object *o)
 /* A lap's crowd: at the gate moved, sound $52 */
 static void crowd_spawn(Object *o, uint16_t dx, uint16_t dy, uint16_t dz, uint8_t heading, uint8_t life, uint16_t h)
 {
-    Object *n = ObjectSpawn(MODEL_CROWD);
+    Object *n = ObjectSpawn(model_word(MODEL_CROWD));
 
     if (!n)
         return;
@@ -1824,7 +1824,7 @@ void ObjectFloaterSpawner(Object *o)
     Object *n;
 
     handler(o, H9_FLOATER_SPAWNER_STEP);
-    n = ObjectSpawn(MODEL_FLOATER);
+    n = ObjectSpawn(model_word(MODEL_FLOATER));
     if (!n)
         return;
     ObjectCopyPosition(n, o);
@@ -1869,7 +1869,7 @@ static const Object *orbit(Object *o, int8_t x, int8_t y, int8_t z, int all_thre
 /* An orbiter's set-up: a centre of kind $A040 at its place */
 static void orbiter(Object *o, uint16_t centre_handler, uint16_t frame)
 {
-    Object *c = ObjectSpawn(MODEL_NONE);
+    Object *c = ObjectSpawn(model_word(MODEL_NONE));
 
     if (c) {
         ObjectCopyPosition(c, o);
@@ -1972,7 +1972,7 @@ static void fan_frame(Object *o, int all_three, uint16_t lit, uint8_t sound)
     o->roll = orbit(o, 0x64, 0x46, 0x00, all_three)->roll;
     roll = o->roll;
     if (roll == 0x3A || ((uint8_t)(roll - 0x3A) & 0x80) || !(roll == 0xC0 || ((uint8_t)(roll - 0xC0) & 0x80))) {
-        o->model = MODEL_NONE;
+        o->model = model_word(MODEL_NONE);
         o->orbiter.state &= (uint8_t)~ORBITER_LIT;
     } else {
         o->model = lit;
@@ -1987,7 +1987,7 @@ static void fan_frame(Object *o, int all_three, uint16_t lit, uint8_t sound)
 }
 
 /* @routine 09:CEE8 ObjectFanStep */
-void ObjectFanStep(Object *o) { fan_frame(o, 0, MODEL_FAN_LIT, 0x00); }
+void ObjectFanStep(Object *o) { fan_frame(o, 0, model_word(MODEL_FAN_LIT), 0x00); }
 
 /* @routine 09:CEA8 ObjectFan */
 void ObjectFan(Object *o)
@@ -2004,7 +2004,7 @@ void ObjectFanCentreStep(Object *o)
 }
 
 /* @routine 09:D023 ObjectWheelStep */
-void ObjectWheelStep(Object *o) { fan_frame(o, 1, MODEL_WHEEL_LIT, 0x38); }
+void ObjectWheelStep(Object *o) { fan_frame(o, 1, model_word(MODEL_WHEEL_LIT), 0x38); }
 
 /* @routine 09:CFE3 ObjectWheel */
 void ObjectWheel(Object *o)
@@ -2056,7 +2056,7 @@ void RailRise(Object *o)
 {
     o->rail.target_z = (uint16_t)(o->z + 0x0500);
     o->shown_frame = rail_colour();
-    o->model = MODEL_RAIL_RISING;
+    o->model = model_word(MODEL_RAIL_RISING);
     handler(o, H9_RAIL_RISE_STEP);
     RailRiseStep(o);
 }
@@ -2080,14 +2080,14 @@ void RailDropStep(Object *o)
 void RailDrop(Object *o)
 {
     o->shown_frame = rail_colour();
-    o->model = MODEL_RAIL_DROPPING;
+    o->model = model_word(MODEL_RAIL_DROPPING);
     handler(o, H9_RAIL_DROP_STEP);
     RailDropStep(o);
 }
 
 static void rail(Object *o, uint16_t dx, uint16_t dz, uint16_t travel)
 {
-    Object *n = ObjectSpawn(MODEL_RAIL_RISING);
+    Object *n = ObjectSpawn(model_word(MODEL_RAIL_RISING));
 
     if (!n)
         return;
@@ -2120,7 +2120,7 @@ GATE(ObjectFinaleGate, ObjectFinaleGateRecord, ObjectFinaleGateStep, H9_FINALE_R
 /* A breakable at the gate's place moved; the gate's own angles set */
 static void breakable_put(Object *o, uint16_t dy, uint16_t dz, uint16_t dx, uint8_t size)
 {
-    Object *n = ObjectSpawn(MODEL_FINALE_BREAKABLE);
+    Object *n = ObjectSpawn(model_word(MODEL_FINALE_BREAKABLE));
 
     if (!n)
         return;
@@ -2272,7 +2272,7 @@ void ObjectBurstGateStep(Object *o)
         return;
     o->gate.state |= GATE_DONE;
     for (i = 0; i < 8; i++)
-        burst_piece(o, p[i][0], 0x0000, p[i][1], p[i][2], p[i][3]);
+        burst_piece(o, model_word((ObjectModel)p[i][0]), 0x0000, p[i][1], p[i][2], p[i][3]);
     SoundPort0QueuePush(0x5A);
 }
 
@@ -2298,14 +2298,14 @@ void ObjectLampPost(Object *o)
     Object *n;
 
     o->y = (uint16_t)(o->y + 0xFF74);
-    o->anim = LOOK_LAMP_LIGHT;
+    o->anim = look_word(LOOK_LAMP_LIGHT);
     lamp(o, 0x64);
     handler(o, H9_LAMP_POST_LIGHT);
-    n = ObjectSpawn(MODEL_LAMP_POST_LIGHT);
+    n = ObjectSpawn(model_word(MODEL_LAMP_POST_LIGHT));
     if (!n)
         return;
     lamp(n, 0x64);
-    n->anim = LOOK_LAMP_LIGHT_RAISED;
+    n->anim = look_word(LOOK_LAMP_LIGHT_RAISED);
     ObjectCopyPosition(n, o);
     n->y = (uint16_t)(n->y + 0xFD94);
     ObjectRebucket(n);
@@ -2321,10 +2321,10 @@ void ObjectLampPostStep(Object *o)
     }
     if (!(o->gate.state & LAMP_POST_BURST)) {
         o->gate.state |= LAMP_POST_BURST;
-        burst_piece(o, MODEL_BREAKABLE_PIECE, 0xFFA6, 0x0023, 0xFFFE, 0x000A);
-        burst_piece(o, MODEL_BREAKABLE_PIECE, 0xFF60, 0xFFE2, 0xFFFF, 0x000F);
-        burst_piece(o, MODEL_BREAKABLE_PIECE, 0xFFA6, 0x001E, 0xFFFE, 0xFFF3);
-        burst_piece(o, MODEL_BREAKABLE_PIECE, 0xFF4C, 0xFFDD, 0xFFFF, 0xFFF6);
+        burst_piece(o, model_word(MODEL_BREAKABLE_PIECE), 0xFFA6, 0x0023, 0xFFFE, 0x000A);
+        burst_piece(o, model_word(MODEL_BREAKABLE_PIECE), 0xFF60, 0xFFE2, 0xFFFF, 0x000F);
+        burst_piece(o, model_word(MODEL_BREAKABLE_PIECE), 0xFFA6, 0x001E, 0xFFFE, 0xFFF3);
+        burst_piece(o, model_word(MODEL_BREAKABLE_PIECE), 0xFF4C, 0xFFDD, 0xFFFF, 0xFFF6);
     }
     if (o->gate.state & LAMP_POST_RANG)
         return;
@@ -2671,18 +2671,20 @@ static void shatter(Object *o, const uint16_t kinds[6])
 /* @routine 09:B30B ObjectShatter */
 static void object_shatter(Object *o)
 {
-    static const uint16_t kinds[6] = {MODEL_SHARDS, MODEL_SHARDS + MODEL_SIZE, MODEL_SHARDS + 2 * MODEL_SIZE,
-                                      MODEL_SHARDS + 3 * MODEL_SIZE, MODEL_SHARDS + 4 * MODEL_SIZE, MODEL_SHARDS + 5 * MODEL_SIZE};
+    uint16_t kinds[6];
 
+    for (int k = 0; k < 6; k++)
+        kinds[k] = model_word_after(MODEL_SHARDS, k);
     shatter(o, kinds);
 }
 
 /* @routine 09:B876 ObjectShatter2 */
 static void object_shatter2(Object *o)
 {
-    static const uint16_t kinds[6] = {MODEL_SHARDS_2, MODEL_SHARDS_2 + MODEL_SIZE, MODEL_SHARDS_2 + 2 * MODEL_SIZE,
-                                      MODEL_SHARDS_2 + 3 * MODEL_SIZE, MODEL_SHARDS_2 + 4 * MODEL_SIZE, MODEL_SHARDS_2 + 5 * MODEL_SIZE};
+    uint16_t kinds[6];
 
+    for (int k = 0; k < 6; k++)
+        kinds[k] = model_word_after(MODEL_SHARDS_2, k);
     shatter(o, kinds);
 }
 
@@ -2802,7 +2804,7 @@ static void bonus_marker_init(Object *o)
 }
 
 /* @routine 09:BF34 ObjectBonusMarker2Step */
-void ObjectBonusMarker2Step(Object *o) { bonus_marker_frame(o, object_shatter, MODEL_BONUS_2, 0x02); }
+void ObjectBonusMarker2Step(Object *o) { bonus_marker_frame(o, object_shatter, model_word(MODEL_BONUS_2), 0x02); }
 
 /* @routine 09:BF26 ObjectBonusMarker2Record */
 void ObjectBonusMarker2Record(Object *o)
@@ -2823,7 +2825,7 @@ void ObjectBonusMarker2(Object *o)
 }
 
 /* @routine 09:BFF6 ObjectBonusMarker5Step */
-void ObjectBonusMarker5Step(Object *o) { bonus_marker_frame(o, object_shatter2, MODEL_BONUS_5, 0x05); }
+void ObjectBonusMarker5Step(Object *o) { bonus_marker_frame(o, object_shatter2, model_word(MODEL_BONUS_5), 0x05); }
 
 /* @routine 09:BFEE ObjectBonusMarker5Record */
 void ObjectBonusMarker5Record(Object *o)
@@ -2845,7 +2847,7 @@ void ObjectBonusMarker5(Object *o)
 static void hit_lamp(Object *o, uint16_t record_handler, uint16_t step)
 {
     handlers2(o, record_handler, step);
-    o->script = OBJECT_SCRIPT_MARKER;
+    o->script = object_script_word(OBJECT_SCRIPT_MARKER);
     o->shown_frame = 0x80;
     o->meter.frame = 0x04;
 }

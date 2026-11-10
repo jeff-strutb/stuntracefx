@@ -243,7 +243,7 @@ static int drawable(const Object *o, int hidden_ok)
         return 0;
     if ((o->draw_flags & 0x40) && (o->list_kind == 0x02 ? g.draw_side != 0 : g.draw_side == 0))
         return 0;
-    return o->model != MODEL_NONE;
+    return o->model != model_word(MODEL_NONE);
 }
 
 /* in the near list: drawable, and at most $31 records */
@@ -307,7 +307,7 @@ static void far_records(void)
             if (ObjectFarLeftOut(o))    /* waiting for its set-up, or a short life stopped (animate.c) */
                 continue;
             seated = seat_place(o, place, turn);     /* parked or unseated */
-            if (!drawable(o, seated) || o->model < 0x8000)
+            if (!drawable(o, seated) || !model_word_in_cartridge(o->model))
                 continue;
             far_record(o, (uint16_t)(FX_FAR_RECORDS + n * FX_FAR_SIZE), seated ? place : NULL, turn);
             n++;

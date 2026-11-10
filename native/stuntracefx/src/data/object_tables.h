@@ -66,4 +66,104 @@ TriggerAreaRef trigger_area_for_height(uint16_t at);   /* by the view's height; 
 TriggerAreaRef trigger_area_fixed(TriggerFixed which); /* the split screen's (or with course flag bit 7) or the other */
 TriggerArea trigger_area(TriggerAreaRef area);
 
+/* ---- what the objects name in the cartridge, by meaning (plan section 3):
+   each id resolves to the word a record keeps, the original's, which the
+   Super FX's code and the recordings read ---- */
+
+/* models: the model table's records (28 bytes each) */
+typedef enum {
+    MODEL_NONE,                      /* none: drawn by its record or not at all */
+    MODEL_FIREWORK_SPARK,            /* a firework shell's sparks */
+    MODEL_LAMP_POST_LIGHT,           /* a lamp post's second light */
+    MODEL_LAMP_TOWER,
+    MODEL_LAMP_TOWER_LIGHT,          /* a lamp tower's second light */
+    MODEL_COMMON,                    /* the sprite the effects use, their look choosing the picture */
+    MODEL_BREAK_OFF_PIECE,           /* a piece a knock breaks off a car's child */
+    MODEL_TRUCK_WHEEL,               /* the bonus truck's wheels */
+    MODEL_BURST_PIECE,               /* a burst's four pieces, this and the next three */
+    MODEL_PLAYER_AT_GO,              /* the player's car's object once the pace car's signal says go */
+    MODEL_SIGNAL_LIGHT_COUNTING,     /* the signal's light while it counts down */
+    MODEL_SIGNAL_LIGHT,              /* the pace car's signal light */
+    MODEL_BLINKER,                   /* a blinker's light */
+    MODEL_BALL,                      /* the sky, cannon and wave balls */
+    MODEL_BREAKABLE_PIECE,           /* a breakable's pieces, two kinds */
+    MODEL_BREAKABLE_PIECE_2,
+    MODEL_FAN_LIT,                   /* a fan over the lit part of its turn */
+    MODEL_WHEEL_LIT,                 /* a wheel the same */
+    MODEL_SHARDS,                    /* ObjectShatter's six shards, this and the next five */
+    MODEL_SHARDS_2,                  /* ObjectShatter2's six */
+    MODEL_RAIL_RISING,
+    MODEL_RAIL_DROPPING,
+    MODEL_FLOATER,
+    MODEL_FINALE_BREAKABLE,
+    MODEL_BONUS_5,                   /* a bonus marker's figure at the player, by its bonus */
+    MODEL_BONUS_2,
+    MODEL_FIREWORK_SHELL,
+    MODEL_SCORE_COUNTER_ON,          /* the score counter from the second lap */
+    MODEL_CROWD,                     /* a lap's crowd */
+    MODEL_RAISE_BALL,                /* a ball that raises a car's record (+$6A); a sky ball drops one */
+    MODEL_LOWER_BALL,                /* one that lowers it (+$82) */
+    MODEL_POP_MARKER,
+} ObjectModel;
+uint16_t model_word(ObjectModel model);
+/* the model k records on: a run the code takes in order (a burst's four
+   pieces, a shatter's six shards) */
+uint16_t model_word_after(ObjectModel first, int k);
+/* the part (0-5) a crashing car sheds, by its set (CarCrashParts: the
+   F-Type's, the Coupe's, the 4WD's, the 2WD's) */
+uint16_t crash_part_model_word(int set, int part);
+uint16_t ring_part_model_word(int part);              /* the ring's four parts */
+/* whether a record's model word names a place in the cartridge (a bare
+   object's is 0) */
+int model_word_in_cartridge(uint16_t word);
+
+/* looks: an object's animation word (+$5D), where its pictures are listed */
+typedef enum {
+    LOOK_CAR_F_TYPE,                 /* a car's far looks, by its kind (the menu's order) */
+    LOOK_CAR_COUPE,
+    LOOK_CAR_4WD,
+    LOOK_CAR_2WD,
+    LOOK_FIREWORK_SPARK,
+    LOOK_LANTERN,
+    LOOK_LAMP_LIGHT,                 /* a lamp's light */
+    LOOK_LAMP_LIGHT_RAISED,          /* a lamp's light raised */
+    LOOK_STAR_SPARKLE,
+    LOOK_BREAK_OFF_A,                /* the pieces' looks, by the routine that breaks them off */
+    LOOK_SPARKLE,
+    LOOK_EYE_PLAIN,                  /* a car's eyes: plain */
+    LOOK_EYE_STARTLED,               /* startled: more white, the pupil small */
+    LOOK_BREAK_OFF_H,
+    LOOK_BREAK_OFF_G,
+    LOOK_BREAK_OFF_E_FLAT,           /* ObjectBreakOffE's piece once it lies flat */
+    LOOK_BREAK_OFF_E,
+    LOOK_BREAK_OFF_D,
+    LOOK_BREAK_OFF_B,
+    LOOK_PUFF,
+    LOOK_WHEEL,                      /* a car's tyres and the bonus truck's wheels */
+} ObjectLook;
+uint16_t look_word(ObjectLook look);
+/* a look word's split screen form: the list after it, the two players' pictures */
+uint16_t look_word_split(uint16_t look);
+/* a tilted billboard's look: the word `tilt` bytes (a multiple of 4, -8 to
+   8) from the middle of its list */
+uint16_t look_word_tilted(uint16_t look, int8_t tilt);
+
+/* the records objects name in their +$20 (an object's script word): its
+   shape and offsets */
+typedef enum {
+    OBJECT_SCRIPT_SIGNAL,            /* the pace car's signal */
+    OBJECT_SCRIPT_BLINKER,
+    OBJECT_SCRIPT_MARKER,            /* the count marker's and the switch lamps' */
+} ObjectScript;
+uint16_t object_script_word(ObjectScript script);
+
+/* the car scripts (an object's +$27 for its car record, FxCarNew); the
+   first four in the menu's order */
+typedef enum {
+    CAR_F_TYPE, CAR_COUPE, CAR_4WD, CAR_2WD,
+    CAR_RIVAL_F_TYPE, CAR_RIVAL_COUPE, CAR_RIVAL_4WD, CAR_RIVAL_2WD,
+    CAR_BONUS_TRUCK
+} CarScript;
+uint16_t car_script_word(CarScript script);
+
 #endif
