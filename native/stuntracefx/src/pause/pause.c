@@ -15,11 +15,11 @@
  * was taken, so every button keeps one of each. The keys and the controller
  * buttons are kept in the save folder ("keys", "buttons") and laid out at
  * the game's first update. RESUME, Escape or Select + Start again goes on;
- * DEFAULTS puts the engine's own keys and buttons back; AUTO-ACCELERATE
+ * DEFAULTS puts the game's own keys and buttons back; AUTO-ACCELERATE
  * turns the option over (on a touch screen the gas is held while driving;
  * the menus' save keeps it, option_auto_accelerate_set). Buttons held as the
  * screen closes reach the game only once let go. Each tag names what is
- * bound on the device the player last used (nshvc_control_name).
+ * bound on the device the player last used (controls_name).
  *
  * Every picture is drawn once into an image (pause_art.c) and laid over the
  * window as an overlay the GPU blends. What changes is its own image (a tag,
@@ -28,14 +28,11 @@
  *
  * A button in the window's top left corner, two bars (a play triangle while
  * paused), opens and shuts the screen as Escape does, by the pointer or a
- * touch; not on iOS, whose touch controls give Select and Start.
+ * touch; not on iOS, whose touch controls have their own pause button
+ * (input/controls.c).
  *
- * Keys as keys (Escape, the key pressed for a button), the pointer and the
- * touches come with the engine's input of 4.5; built on an engine before it,
- * the screen opens with Select + Start alone, no key can be changed and
- * there is no corner button. A controller's buttons are rebound from the
- * engine's 4.6 on (nshvc_control_bind_controller); before it, only keys.
- * The left stick always steers.
+ * The bindings are the game's own (input/controls.c, which reads every
+ * device as the engine reports it); a controller's left stick always steers.
  */
 #include <math.h>
 #include <stdio.h>
@@ -43,9 +40,11 @@
 #include <string.h>
 
 #include "audio/music.h"
+#include "input/controls.h"
 #include "pause/pause.h"
 #include "pause/pause_art.h"
 #include "save/save.h"
+#include "system/game.h"
 
 #define KEY_EVENTS (NSHVC_VERSION_MAJOR > 4 || (NSHVC_VERSION_MAJOR == 4 && NSHVC_VERSION_MINOR >= 5))
 #define CONTROLLER_BIND (NSHVC_VERSION_MAJOR > 4 || (NSHVC_VERSION_MAJOR == 4 && NSHVC_VERSION_MINOR >= 6))
@@ -89,13 +88,13 @@
 enum { O_TINT = 12, O_PANEL, O_TAGS, O_LIT = O_TAGS + PAUSE_CONTROLS, O_OPTION, O_HINT, O_BUTTON, O_END };
 _Static_assert(O_END <= NSHVC_OVERLAYS, "the pause screen's overlays fit the engine's");
 
-/* the buttons in the engine's order (its input.c), which the save keeps, and
-   the engine's own keys for them, which DEFAULTS puts back */
+/* the buttons in the order the save keeps, and the game's own keys for
+   them, which DEFAULTS puts back (input/controls.c's) */
 #define BUTTONS 12
-static const uint16_t k_buttons[BUTTONS] = { NSHVC_B, NSHVC_Y, NSHVC_SELECT, NSHVC_START, NSHVC_UP, NSHVC_DOWN,
-                                             NSHVC_LEFT, NSHVC_RIGHT, NSHVC_A, NSHVC_X, NSHVC_L, NSHVC_R };
+static const uint16_t k_buttons[BUTTONS] = { PAD_B, PAD_Y, PAD_SELECT, PAD_START, PAD_UP, PAD_DOWN,
+                                             PAD_LEFT, PAD_RIGHT, PAD_A, PAD_X, PAD_L, PAD_R };
 static const uint8_t k_default_keys[BUTTONS] = { 'Z', 'A', 0x10, 0x0D, 0x26, 0x28, 0x25, 0x27, 'X', 'S', 'Q', 'W' };
-/* the controller's buttons for them, the engine's own (its input.c pad_bit) */
+/* the controller's buttons for them, by place: the SNES's own layout */
 static const uint16_t k_default_ctl[BUTTONS] = { NSHVC_CTL_SOUTH, NSHVC_CTL_WEST, NSHVC_CTL_BACK, NSHVC_CTL_MENU,
                                                  NSHVC_CTL_UP, NSHVC_CTL_DOWN, NSHVC_CTL_LEFT, NSHVC_CTL_RIGHT,
                                                  NSHVC_CTL_EAST, NSHVC_CTL_NORTH, NSHVC_CTL_LB, NSHVC_CTL_RB };
@@ -116,7 +115,6 @@ static struct {
     uint16_t ctl[BUTTONS];              /* each button's button on player 1's controller (one NSHVC_CTL_* bit) */
     uint16_t ctl_last;                  /* that controller's buttons at the last update */
     int ctl_on;                         /* it is connected */
-    nshvc_input copy;
 
     /* the pictures: made at `density` pixels a point; 0 none yet */
     float density;
@@ -175,7 +173,7 @@ static void keys_apply(void)
     int b;
 
     for (b = 0; b < BUTTONS; b++)
-        nshvc_control_bind(0, k_buttons[b], p.keys[b]);
+        controls_bind_key(k_buttons[b], p.keys[b]);
 }
 
 static void keys_save(void)
@@ -209,7 +207,7 @@ static void ctl_apply(void)
     int b;
 
     for (b = 0; b < BUTTONS; b++)
-        nshvc_control_bind_controller(0, k_buttons[b], p.ctl[b]);
+        controls_bind_controller(k_buttons[b], p.ctl[b]);
 #endif
 }
 
@@ -249,16 +247,13 @@ static void keys_load(void)
     }
 }
 
-/* DEFAULTS: the engine's own keys and controller buttons, the saves gone */
+/* DEFAULTS: the game's own keys and controller buttons, the saves gone */
 static void keys_default(void)
 {
     memcpy(p.keys, k_default_keys, BUTTONS);
     memcpy(p.ctl, k_default_ctl, sizeof p.ctl);
-#if CONTROLLER_BIND
-    nshvc_control_defaults(0);
-#else
     keys_apply();
-#endif
+    ctl_apply();
     nshvc_save_delete(SAVE_NAME);
     nshvc_save_delete(SAVE_NAME_CTL);
 }
@@ -285,10 +280,10 @@ static void rebind(int c, int vk)
         if (j != b && p.keys[j] == vk)
             other = j;
     p.keys[b] = (uint8_t)vk;
-    nshvc_control_bind(0, k_buttons[b], vk);
+    controls_bind_key(k_buttons[b], vk);
     if (other >= 0) {
         p.keys[other] = old;
-        nshvc_control_bind(0, k_buttons[other], old);
+        controls_bind_key(k_buttons[other], old);
     }
     keys_save();
 }
@@ -307,10 +302,10 @@ static void rebind_ctl(int c, uint16_t ctl)
         if (j != b && p.ctl[j] == ctl)
             other = j;
     p.ctl[b] = ctl;
-    nshvc_control_bind_controller(0, k_buttons[b], ctl);
+    controls_bind_controller(k_buttons[b], ctl);
     if (other >= 0) {
         p.ctl[other] = old;
-        nshvc_control_bind_controller(0, k_buttons[other], old);
+        controls_bind_controller(k_buttons[other], old);
     }
     ctl_save();
 #else
@@ -428,7 +423,7 @@ static void option_refresh(void)
 /* A tag's key as the player's device names it, in capitals. */
 static void tag_text(int c, char *out, size_t n)
 {
-    const char *s = nshvc_control_name(0, pause_controls[c].button);
+    const char *s = controls_name(pause_controls[c].button);
     size_t i;
 
     if (!s || !*s)
@@ -529,25 +524,19 @@ static int corner_box(float box[4])
 static int in_box(const float b[4], float x, float y) { return x >= b[0] && x < b[2] && y >= b[1] && y < b[3]; }
 #endif
 
-/* whether the pointer's button went down, or a new touch began, on the
-   corner button this update */
+/* whether the pointer's button went down on the corner button this update
+   (on a touch screen the touch controls' own pause button opens the
+   screen, input/controls.c) */
 static int corner_pressed(const nshvc_input *in)
 {
 #if CORNER_BUTTON
     float b[4];
-    int hit = 0, i, k, down = in->pointer.buttons & 1, n = in->touches < 10 ? in->touches : 10;
+    int hit = 0, i, down = in->pointer.buttons & 1, n = in->touches < 10 ? in->touches : 10;
 
     if (corner_box(b)) {
-        if (down && !p.pointer_down && in->pointer.inside && in_box(b, in->pointer.x, in->pointer.y))
+        if (down && !p.pointer_down && in->pointer.inside && in_box(b, in->pointer.x, in->pointer.y) &&
+            controls_source() != CONTROLS_TOUCH)
             hit = 1;
-        for (i = 0; i < n; i++) {
-            int seen = 0;
-
-            for (k = 0; k < p.touches; k++)
-                seen |= p.touch_id[k] == in->touch[i].id;
-            if (!seen && in_box(b, in->touch[i].x, in->touch[i].y))
-                hit = 1;
-        }
     }
     p.pointer_down = down;
     p.touches = n;
@@ -567,7 +556,7 @@ static void corner_show(void)
     float b[4], c[6], want;
     int i;
 
-    if (!corner_box(b)) {
+    if (!corner_box(b) || controls_source() == CONTROLS_TOUCH) {
         nshvc_image none = { 0 };
 
         nshvc_overlay_set(O_BUTTON, none, NULL, 0);
@@ -682,21 +671,21 @@ static int move(int i, uint16_t dir)
     int right, row;
 
     if (i >= PAUSE_CONTROLS) {
-        if (dir & NSHVC_UP)
+        if (dir & PAD_UP)
             return control_at(i != PAUSE_RESUME, 5);
-        if (dir & NSHVC_LEFT)
+        if (dir & PAD_LEFT)
             return i == PAUSE_RESUME ? PAUSE_OPTION : i - 1;
-        if (dir & NSHVC_RIGHT)
+        if (dir & PAD_RIGHT)
             return i == PAUSE_OPTION ? PAUSE_RESUME : i + 1;
         return i;
     }
     right = pause_controls[i].right;
     row = pause_controls[i].row;
-    if (dir & NSHVC_UP)
+    if (dir & PAD_UP)
         return row > 0 ? control_at(right, row - 1) : i;
-    if (dir & NSHVC_DOWN)
+    if (dir & PAD_DOWN)
         return row < 5 ? control_at(right, row + 1) : right ? PAUSE_DEFAULTS : PAUSE_RESUME;
-    if (dir & (NSHVC_LEFT | NSHVC_RIGHT))
+    if (dir & (PAD_LEFT | PAD_RIGHT))
         return control_at(!right, row);
     return i;
 }
@@ -814,45 +803,42 @@ static void screen_close(const uint16_t pad[2])
     music_pause(0);
 }
 
-/* The input the game reads while the screen is shut, from the update that
+/* The pads the game reads while the screen is shut, from the update that
    shut it (so the game is held exactly as long as the sound): any button
    held as it shut is kept from the game until let go. */
-static const nshvc_input *held_back(const nshvc_input *in, const uint16_t pad[2])
+static int held_back(uint16_t pad[2])
 {
     int i;
 
-    if (!(p.swallow[0] | p.swallow[1]))
-        return in;
-    p.copy = *in;
     for (i = 0; i < 2; i++) {
         p.swallow[i] &= pad[i];
-        p.copy.pad[i] = (uint16_t)(pad[i] & ~p.swallow[i]);
+        pad[i] = (uint16_t)(pad[i] & ~p.swallow[i]);
     }
-    return &p.copy;
+    return 1;
 }
 
-static const nshvc_input *pause_step(const nshvc_input *in);
+static int pause_step(const nshvc_input *in, uint16_t pad[2]);
 
 /* the updates held, for the game's own count of its updates */
 static uint64_t held;
 
-const nshvc_input *pause_update(const nshvc_input *in)
+int pause_update(const nshvc_input *in, uint16_t pad[2])
 {
-    const nshvc_input *out = pause_step(in);
+    int run = pause_step(in, pad);
 
-    if (!out)
+    if (!run)
         held++;
     corner_show();
-    return out;
+    return run;
 }
 
 int pause_holding(void) { return p.open; }
 
 uint64_t pause_game_updates(void) { return nshvc_updates() - held; }
 
-static const nshvc_input *pause_step(const nshvc_input *in)
+static int pause_step(const nshvc_input *in, uint16_t pad[2])
 {
-    uint16_t pad[2], press[2], nav, ctl_press = 0, ctl;
+    uint16_t press[2], nav, ctl_press = 0, ctl;
     int i, toggle = 0, vk;
 
     if (!p.ready)
@@ -867,10 +853,9 @@ static const nshvc_input *pause_step(const nshvc_input *in)
     }
 #endif
     for (i = 0; i < 2; i++) {
-        pad[i] = in->pad[i];
         press[i] = (uint16_t)(pad[i] & ~p.last[i]);
         p.last[i] = pad[i];
-        if ((pad[i] & NSHVC_SELECT) && (press[i] & NSHVC_START))
+        if ((pad[i] & PAD_SELECT) && (press[i] & PAD_START))
             toggle = 1;
     }
     if (key_pressed(in, VK_ESCAPE))
@@ -882,9 +867,9 @@ static const nshvc_input *pause_step(const nshvc_input *in)
         if (toggle) {
             screen_open();
             show();
-            return NULL;
+            return 0;
         }
-        return held_back(in, pad);
+        return held_back(pad);
     }
 
     if (p.asking >= 0) {
@@ -902,29 +887,29 @@ static const nshvc_input *pause_step(const nshvc_input *in)
             p.wait_release = 1;
         }
         show();
-        return NULL;
+        return 0;
     }
     if (toggle) {
         screen_close(pad);
-        return held_back(in, pad);
+        return held_back(pad);
     }
     if (p.wait_release) {
         if (pad[0] | pad[1]) {
             show();
-            return NULL;
+            return 0;
         }
         p.wait_release = 0;
     }
     nav = (uint16_t)(press[0] | press[1]);
-    if (nav & (NSHVC_UP | NSHVC_DOWN | NSHVC_LEFT | NSHVC_RIGHT)) {
-        p.chosen = move(p.chosen, nav & NSHVC_UP     ? NSHVC_UP
-                                  : nav & NSHVC_DOWN ? NSHVC_DOWN
-                                  : nav & NSHVC_LEFT ? NSHVC_LEFT
-                                                     : NSHVC_RIGHT);
-    } else if (nav & (NSHVC_B | NSHVC_A | NSHVC_START)) {
+    if (nav & (PAD_UP | PAD_DOWN | PAD_LEFT | PAD_RIGHT)) {
+        p.chosen = move(p.chosen, nav & PAD_UP     ? PAD_UP
+                                  : nav & PAD_DOWN ? PAD_DOWN
+                                  : nav & PAD_LEFT ? PAD_LEFT
+                                                   : PAD_RIGHT);
+    } else if (nav & (PAD_B | PAD_A | PAD_START)) {
         if (p.chosen == PAUSE_RESUME) {
             screen_close(pad);
-            return held_back(in, pad);
+            return held_back(pad);
         }
         if (p.chosen == PAUSE_DEFAULTS)
             keys_default();
@@ -934,5 +919,5 @@ static const nshvc_input *pause_step(const nshvc_input *in)
             p.asking = p.chosen;
     }
     show();
-    return NULL;
+    return 0;
 }

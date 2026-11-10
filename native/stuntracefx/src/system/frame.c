@@ -9,12 +9,12 @@
 
 FrameState frame_state;
 
-void input_read(const nshvc_input *input)
+void input_read(const uint16_t pad[2])
 {
     int i;
 
     for (i = 0; i < 2; i++)
-        frame_state.pad_now[i] = input->pad[i];
+        frame_state.pad_now[i] = pad[i];
     if (g.raster_chain)
         return;                         /* the race's raster reads them */
     for (i = 0; i < 2; i++) {

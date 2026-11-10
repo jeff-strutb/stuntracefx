@@ -8,6 +8,7 @@
 #include "audio/sound.h"
 #include "data/cart.h"
 #include "fx/fx_draw.h"
+#include "input/controls.h"
 #include "nshvc/nshvc.h"
 #include "pause/pause.h"
 #include "system/game.h"
@@ -26,19 +27,22 @@ static void init(void)
 
 static void update(const nshvc_input *input)
 {
+    uint16_t pad[2];
+
     if (system_stopped())
         return;
-    input = pause_update(input);        /* the pause screen; NULL while it holds the game */
-    if (!input)
+    controls_read(input, pad);          /* the devices as the game's pads */
+    if (!pause_update(input, pad))      /* the pause screen; 0 while it holds the game */
         return;
     video_update_begin();               /* the update before's world kept, its art and maps written */
-    input_read(input);
+    input_read(pad);
     session_update();
     video_update_end();
 }
 
 static void draw(float between)
 {
+    controls_draw();                    /* the touch screen's controls, over everything */
     if (pause_draw())
         return;                         /* the pause screen's picture: the last one, blurred */
     if (pause_holding())

@@ -30,7 +30,7 @@ PauseImg pause_img_new(float x, float y, float w, float h, float density);
    bottom, then the right */
 #define PAUSE_CONTROLS 12
 typedef struct {
-    uint16_t button;                    /* NSHVC_B... */
+    uint16_t button;                    /* PAD_B... (system/game.h) */
     const char *name;
     uint32_t colour;                    /* its name's on the tag */
     float bx, by, br;                   /* the button's spot on the controller, its reach */

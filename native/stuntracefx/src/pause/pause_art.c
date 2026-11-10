@@ -17,6 +17,7 @@
 
 #include "nshvc/nshvc.h"
 #include "pause/pause_art.h"
+#include "system/game.h"
 
 #define GOLD 0xF5D34A
 #define PLATE 0x141414
@@ -215,18 +216,18 @@ static void text_centre(PauseImg *m, const char *s, float cx, float top, float d
 
 const PauseControl pause_controls[PAUSE_CONTROLS] = {
     /* the spots: the drawing's (pad_art.c) at PADK, its (500, 300) at (PAD_CX, PAD_CY) */
-    { NSHVC_L, "L", WHITE, 228.9f, 124.8f, 10, 0, 0 },
-    { NSHVC_UP, "UP", WHITE, 227.9f, 173.1f, 7, 0, 1 },
-    { NSHVC_LEFT, "LEFT", WHITE, 211.1f, 189.8f, 7, 0, 2 },
-    { NSHVC_RIGHT, "RIGHT", WHITE, 244.4f, 189.8f, 7, 0, 3 },
-    { NSHVC_DOWN, "DOWN", WHITE, 227.9f, 206.4f, 7, 0, 4 },
-    { NSHVC_SELECT, "SELECT", WHITE, 297.6f, 201.0f, 8, 0, 5 },
-    { NSHVC_R, "R", WHITE, 411.3f, 124.8f, 10, 1, 0 },
-    { NSHVC_X, "X", 0x5A8CF5, 407.7f, 163.6f, 10.5f, 1, 1 },
-    { NSHVC_Y, "Y", 0x3CC070, 383.3f, 188.2f, 10.5f, 1, 2 },
-    { NSHVC_A, "A", 0xF0504A, 437.2f, 191.1f, 10.5f, 1, 3 },
-    { NSHVC_B, "B", 0xF5D34A, 412.6f, 215.9f, 10.5f, 1, 4 },
-    { NSHVC_START, "START", WHITE, 332.3f, 201.0f, 8, 1, 5 },
+    { PAD_L, "L", WHITE, 228.9f, 124.8f, 10, 0, 0 },
+    { PAD_UP, "UP", WHITE, 227.9f, 173.1f, 7, 0, 1 },
+    { PAD_LEFT, "LEFT", WHITE, 211.1f, 189.8f, 7, 0, 2 },
+    { PAD_RIGHT, "RIGHT", WHITE, 244.4f, 189.8f, 7, 0, 3 },
+    { PAD_DOWN, "DOWN", WHITE, 227.9f, 206.4f, 7, 0, 4 },
+    { PAD_SELECT, "SELECT", WHITE, 297.6f, 201.0f, 8, 0, 5 },
+    { PAD_R, "R", WHITE, 411.3f, 124.8f, 10, 1, 0 },
+    { PAD_X, "X", 0x5A8CF5, 407.7f, 163.6f, 10.5f, 1, 1 },
+    { PAD_Y, "Y", 0x3CC070, 383.3f, 188.2f, 10.5f, 1, 2 },
+    { PAD_A, "A", 0xF0504A, 437.2f, 191.1f, 10.5f, 1, 3 },
+    { PAD_B, "B", 0xF5D34A, 412.6f, 215.9f, 10.5f, 1, 4 },
+    { PAD_START, "START", WHITE, 332.3f, 201.0f, 8, 1, 5 },
 };
 
 static const struct {
@@ -267,7 +268,7 @@ static void control_line(int i, float *ex, float *ey, float *fx, float *fy, int 
     dx = k->bx - *ex;
     dy = k->by - *ey;
     l = hypotf(dx, dy);
-    end = k->button & (NSHVC_A | NSHVC_B | NSHVC_X | NSHVC_Y) ? k->br : 0;
+    end = k->button & (PAD_A | PAD_B | PAD_X | PAD_Y) ? k->br : 0;
     *fx = k->bx - dx / l * end;
     *fy = k->by - dy / l * end;
     *dot = end == 0;

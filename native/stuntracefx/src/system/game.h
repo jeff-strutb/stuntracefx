@@ -29,12 +29,12 @@ extern FrameState frame_state;
 
 uint16_t frame_menu_pressed(void);              /* player 1's presses since the screen last cleared them */
 void frame_menu_pressed_clear(int player);
-void input_read(const nshvc_input *input);
+void input_read(const uint16_t pad[2]);    /* both players' pads this update (input/controls.c) */
 void frame_end(void);
 int system_stopped(void);                /* crash.c */
 void JoypadAccumulate(void);
 void JoypadRead(void);
-void JoypadAutoAccelerate(void);        /* touch: player 1's gas held while driving (input/joypad.c) */
+void JoypadAutoAccelerate(void);        /* the player drives: the touch screen is the wheel and pedals (input/joypad.c) */
 
 /* menu/screens.c */
 void session_start(void);
