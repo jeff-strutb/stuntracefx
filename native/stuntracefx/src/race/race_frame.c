@@ -122,11 +122,11 @@ void RaceStart(void)
 {
     g.fx_screen_mode = 3;
     g.split_screen = 0;
-    fx16_set(0x004E, 0xA545);
+    fx16_set(FXIN_SHADE_BASE, FX_SHADE_BASE_RACE);
     ObjectPoolInit();
     ViewDefaults();
-    fx16_set(GSU_SCREEN_START, 0x2C00);
-    g.screen_start = 0x2C00;
+    fx16_set(GSU_SCREEN_START, FX_PICTURE_0);
+    g.screen_start = FX_PICTURE_0;
     fx16_set(GSU_WORD_1C4, 2);
     fx16_set(FXIN_NOT_MENU, 0);
     FxInit();
@@ -137,7 +137,7 @@ void RaceStart(void)
     RaceFrameStep(1);
     cameras[0].object = g.demo_cars[0];
     g.picture_uploaded = 1;
-    memset(&fx_ram[0x2C00], 0, 0x3400);
+    memset(&fx_ram[FX_PICTURE_0], 0, FX_PICTURE_0_CLEARED_END - FX_PICTURE_0);
 }
 
 /* The camera a car's links lead to: the object two links on names one. */
@@ -182,7 +182,7 @@ static void frame_time(void)
         g.time_count_06d6 = 0;
         g.time_sum_06d5 = (uint8_t)(g.time_sum_06d5 - 0x3C);
     }
-    fx16_set(FXIN_FRAMES_108E, g.frames_last_step);
+    fx16_set(FXIN_STEP_FRAMES, g.frames_last_step);
 }
 
 /*
@@ -494,9 +494,9 @@ void RaceFinishSplit(int player)
 
 /*
  * @routine 03:E838 RaceVarsReset
- * WHAT IT DOES: Resets the race's work variables before a race. The IRQ
- * timers, NMITIMEN and BG3 scroll the original wrote here have no meaning on
- * the engine. Addresses with no reader converted yet are not stored: $0D9E,
+ * WHAT IT DOES: Resets the race's work variables before a race. The raster
+ * interrupt's timers, the interrupt enable and BG3's scroll the original
+ * wrote here have no meaning on the engine. Addresses with no reader converted yet are not stored: $0D9E,
  * $0DA0, $0DD8-$0DD9, $0E07, $0E08, $0E0B, $0E1A, $0E4F-$0E53, $0E54, $0E90,
  * $117E, $1180, the $7F:3462, $346A, $346E, $3466, $3476,
  * $345E halves.
@@ -508,8 +508,8 @@ void RaceVarsReset(void)
     g.fade_level = 0;
     g.clock_step = 0x0166;
     g.fx_buffer = 0;
-    fx16_set(GSU_SCREEN_START, 0x2C00);
-    g.screen_start = 0x2C00;
+    fx16_set(GSU_SCREEN_START, FX_PICTURE_0);
+    g.screen_start = FX_PICTURE_0;
     g.picture_flip_0d81 = 0;
     g.clock_fraction = 0;
     g.clock_seconds = 0;
@@ -637,7 +637,7 @@ static void view_words_follow(void)
 /* @routine 7E:F29F AttractViewStart: the race view's parameters, the setup tail. */
 static void attract_view_start(void)
 {
-    fx16_set(FXIN_DEFAULT_1D0, 0x1234);
+    fx16_set(FXIN_EFFECTS_SEED, 0x1234);
     fx16_set(GSU_WORD_1C4, 1);
     fx8_set(FXIN_NOT_MENU, g.split_screen);
     g.view_ef = 0xFF;

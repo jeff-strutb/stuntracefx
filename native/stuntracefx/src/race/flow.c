@@ -437,14 +437,15 @@ static void course_script_start(void)
                     (uint16_t)(cart16(0x03, (uint16_t)(0xF4A5 + i)) - 0x8000));
 }
 
-/* @routine 03:8BF8 BootWarmAttract's start and BootWarm's end: the race's setup. */
+/* @routine 03:8BF8 BootWarmAttract's start and BootWarm's end: the race's
+   setup. Its clear of the chip's byte at $023A is left out: only a screen
+   the game never shows reads that byte. */
 static void attract_setup(void)
 {
     WindowsInit();
     AttractCourseSetup();
     course_script_start();
     ObjectPlaceAll();
-    fx8_set(0x023A, 0);
     g.byte_1a32 = 0;
     g.object_frames = 0;
     g.byte_0713 = 1;

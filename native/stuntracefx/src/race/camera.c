@@ -88,12 +88,12 @@ void CameraFollowStep(Camera *cam)
         uint16_t view = fx16(FXIN_VIEW_RECORD);
         uint16_t lag = (uint16_t)((uint16_t)-heading_hi - cam->word16);
 
-        if ((rec_get(view, 0x0042) & 0x000C) && !(flags & 0x0200)) {
+        if ((rec_get(view, FXREC_SIDES) & 0x000C) && !(flags & 0x0200)) {
             a = asr_n(lag, 1);
         } else {
             switch (flags & 0x1C00) {
             case 0x0400: {
-                uint16_t w = rec_get(view, 0x006C);
+                uint16_t w = rec_get(view, FXREC_ALIGN);
 
                 if (w & 0x8000)
                     w = (uint16_t)-w;

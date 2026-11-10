@@ -907,11 +907,11 @@ static void unpacked(uint16_t out, uint16_t in, int course_layout)
 {
     uint16_t word = cart16(0x03, (uint16_t)(out + 1)), bytes = cart16(0x03, (uint16_t)(out + 5));
 
-    unpack((uint32_t)cart8(0x03, (uint16_t)(in + 2)) << 16 | cart16(0x03, in), fx_ram + 0x3000, 0xC000);
+    unpack((uint32_t)cart8(0x03, (uint16_t)(in + 2)) << 16 | cart16(0x03, in), fx_ram + FX_UNPACK_AREA, 0xC000);
     if (course_layout)
-        race_course_vram_write(word, fx_ram + 0x3000, bytes);
+        race_course_vram_write(word, fx_ram + FX_UNPACK_AREA, bytes);
     else
-        race_vram_write(word, fx_ram + 0x3000, bytes);
+        race_vram_write(word, fx_ram + FX_UNPACK_AREA, bytes);
 }
 
 /* @routine 03:CF42 GsuCF42ToVram (as the race calls it): the block to the race's layout. */

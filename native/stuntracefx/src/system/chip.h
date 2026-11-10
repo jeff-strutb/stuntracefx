@@ -25,7 +25,7 @@ enum {
     FXIN_VECTOR_X = 0x0068,             /* a vector's first word; also a program's input */
     FXIN_VECTOR_Y = 0x002C,
     FXIN_VECTOR_Z = 0x002E,
-    FXIN_RESULT_6A = 0x006A,            /* the program $01:80BC's result */
+    FXIN_LENGTH_RESULT = 0x006A,        /* the length program's ($01:80BC) result */
     FXIN_ANGLE_RESULT = 0x0040,         /* the program $01:81E3's result */
     FXIN_ROTATED = 0x0026,              /* $01:82CE's three results */
     FXIN_ANGLES = 0x0020,               /* $01:8325's three angles */
@@ -50,14 +50,22 @@ enum {
     FXIN_PIECE_V = 0x0214,
     FXIN_PIECE = 0x0216,                /* the glyph or piece */
     FXIN_RAMP = 0x3C00,                 /* the noise program's eight-word ramp */
-    FXIN_DEFAULT_1D0 = 0x01D0,          /* $1234 once the view is set */
+    FXIN_EFFECTS_SEED = 0x01D0,         /* the renderer's effects random seed, $1234 once the view is set */
     FXIN_NOT_MENU = 0x108C,             /* 0 for the course menu's view, else the players */
     FXIN_TEXT_NOTICE = 0x2732,          /* 0 no notice, else draw the text */
     FXIN_PLAYER1_RECORD = 0x2476,       /* the record of player 1's car */
     FXIN_PLAYER2_RECORD = 0x2478,
     FXIN_VIEW_RECORD = 0x247A,          /* the record the view follows */
-    FXIN_FRAMES_108E = 0x108E,          /* the frames of the last step, for the renderer */
+    FXIN_STEP_FRAMES = 0x108E,          /* the frames of the last step, for the renderer */
+    FXIN_SHADE_BASE = 0x004E,           /* the faces' colour tables' base (the frame program's shade base) */
 };
+
+/* The shade bases the screens use: the race's 3D, the HUD's pieces. */
+enum { FX_SHADE_BASE_RACE = 0xA545, FX_SHADE_BASE_HUD = 0xA325 };
+
+/* The chip's RAM the main CPU lays out: its two picture buffers (the frame
+   program's screen start), and where a packed screen is unpacked. */
+enum { FX_PICTURE_0 = 0x2C00, FX_PICTURE_1 = 0x9400, FX_PICTURE_0_CLEARED_END = 0x6000, FX_UNPACK_AREA = 0x3000 };
 
 /* The renderer's inputs that only the glyph programs read: the colours. */
 void GlyphColours(uint8_t b1, uint8_t b2, uint8_t b3);

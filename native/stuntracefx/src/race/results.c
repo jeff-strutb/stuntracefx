@@ -62,9 +62,9 @@ static void panel(uint8_t bank, uint16_t end)
 {
     unsigned i;
 
-    picture_unpack(bank, end, 0x3000);
+    picture_unpack(bank, end, FX_UNPACK_AREA);
     for (i = 0; i < 0x440; i++)
-        map_byte_set((uint16_t)i, fx_ram[0x3000 + i]);
+        map_byte_set((uint16_t)i, fx_ram[FX_UNPACK_AREA + i]);
     DigitTiles1184();
 }
 
@@ -438,7 +438,7 @@ static void champion_palette(void)
         palettes.buffer[i] = cart16(0x1F, (uint16_t)(0x8600 + 2 * i));
 }
 
-/* BG2 at (-24, -32) and its map at $5C00 (BG2SC $5C). */
+/* BG2 at (-24, -32), showing the results' page of its map ($5C00). */
 static void results_bg2(void)
 {
     g.backdrop_y[0] = 0xFFE0;
@@ -904,9 +904,9 @@ void ChampionshipStagePicture(void)
 
     g.race_again = 0;
     palettes.tile_cycle = 0;
-    picture_unpack(0x1F, 0xFB99, 0x3000);
+    picture_unpack(0x1F, 0xFB99, FX_UNPACK_AREA);
     for (i = 0; i < 0x440; i++)
-        map_byte_set((uint16_t)i, fx_ram[0x3000 + i]);
+        map_byte_set((uint16_t)i, fx_ram[FX_UNPACK_AREA + i]);
     DigitTiles1184();
     step_next();
     g.hdma_enable = (uint8_t)((g.hdma_enable | 0x02) & 0xF3);

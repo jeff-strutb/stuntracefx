@@ -247,7 +247,7 @@ void RaceHudSetup(void)
     uint16_t list = 0;
 
     (void)SoundFromTableD89();
-    fx16_set(0x004E, 0xA325);
+    fx16_set(FXIN_SHADE_BASE, FX_SHADE_BASE_HUD);
     OamBufferClear();
     OamFromList(0x03, &slot, &list);
     oam_high_table_from_list(0x01AA);
@@ -296,7 +296,7 @@ void RaceHudSetupTwoPlayers(void)
 {
     uint16_t x, v;
 
-    fx16_set(0x004E, 0xA545);
+    fx16_set(FXIN_SHADE_BASE, FX_SHADE_BASE_RACE);
     g.fx_screen_mode = 0x01;
     fx16_set(GSU_WORD_1C4, 2);
     MenuCourseScreenSetup();

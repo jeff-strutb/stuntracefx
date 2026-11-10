@@ -72,7 +72,7 @@ uint16_t ObjectGsu80BC(uint16_t x, uint16_t z)
     fx16_set(FXIN_VECTOR_X, x);
     fx16_set(FXIN_VECTOR_Z, z);
     (void)FxLengthProgram(&stack);
-    return fx16(FXIN_RESULT_6A);
+    return fx16(FXIN_LENGTH_RESULT);
 }
 
 /*
@@ -164,7 +164,7 @@ void ViewSetupTail(void)
  */
 void ViewDefaults(void)
 {
-    fx16_set(FXIN_DEFAULT_1D0, 0x1234);
+    fx16_set(FXIN_EFFECTS_SEED, 0x1234);
     fx16_set(GSU_WORD_1C4, 1);
     fx16_set(FXIN_NOT_MENU, 0);
     g.view_ef = 0xFF;
@@ -251,7 +251,7 @@ void GsuScreenFlip(void)
         g.fx_buffer = 1;
         g.fx_upload_stage = 0x0000;
     }
-    screen_start_set(0x2C00);
+    screen_start_set(FX_PICTURE_0);
 }
 
 /*
@@ -266,10 +266,10 @@ void GsuScreenToggle(void)
 {
     if (g.fx_buffer) {
         g.fx_buffer = 0;
-        screen_start_set(0x2C00);
+        screen_start_set(FX_PICTURE_0);
     } else {
         g.fx_buffer = 1;
-        screen_start_set(0x9400);
+        screen_start_set(FX_PICTURE_1);
     }
 }
 

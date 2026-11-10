@@ -58,14 +58,14 @@ void SpeedSampleAdd(uint16_t speed, int player)
 void PlayerStatsFromRecord(uint16_t rec, int player)
 {
     if (!g.lap_shown) {
-        uint16_t f = rec_get(rec, 0x0040), w;
+        uint16_t f = rec_get(rec, FXREC_FLAGS40), w;
         uint8_t v;
 
         g.car_flags_low[player] = (uint8_t)f;
         g.car_flags_high[player] = (uint8_t)(f >> 8);
-        g.status_flags[player] = rec_get(rec, 0x0042);
+        g.status_flags[player] = rec_get(rec, FXREC_SIDES);
         g.status_df6[player] = (uint8_t)rec_get(rec, 0x004E);
-        w = rec_get(rec, 0x0082) >> 3;
+        w = rec_get(rec, FXREC_82) >> 3;
         v = (uint8_t)w;
         g.gauge_one[player] = v;
         if (v >= 0x3F)
