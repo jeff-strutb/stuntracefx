@@ -426,6 +426,9 @@ static void preview_full_mode(void)
     memset(&pic.blend, 0, sizeof pic.blend);
     pic.blend.use_fixed = 1;
     pic.bg[1].scroll_x = (int16_t)0xFF00;
+    /* the per-line tables first: what an earlier screen's channels left is
+       the original's long before; this screen's own windows stand */
+    menu_lines_set(MENU_LINES_PREVIEW, 0x90);
     pic.windows.w[0].left = 0;
     pic.windows.w[0].right = 0xFF;
     memset(pic.windows.layer_use, 0, sizeof pic.windows.layer_use);
@@ -439,7 +442,6 @@ static void preview_full_mode(void)
     menu.slide_top = menu.slide_top_next = 0;
     menu.slide_low = menu.slide_low_next = 0x00A8;
     *menu_table_byte(MENU_TABLE_PREVIEW_WINDOW, 1) = 0xFF;   /* the first run's left edge: none */
-    menu_lines_set(MENU_LINES_PREVIEW, 0x90);
     menu_window_screen(KEEP_BG2 | KEEP_BG3 | KEEP_SPRITES, 1);    /* past the picture: the granite */
 }
 
@@ -984,12 +986,15 @@ static void champion_open(void)
     memset(&pic.blend, 0, sizeof pic.blend);
     pic.blend.use_fixed = 1;
     pic.sub_screen = 0;
+    /* the per-line tables first: the course menu's mask channel went off
+       before the race in the original; this screen's own windows stand (the
+       sprites shown only inside window 1, which the bands open) */
+    menu_lines_set(MENU_LINES_CHAMPION, 0);
     memset(&pic.windows, 0, sizeof pic.windows);
     pic.windows.mask_main[4] = 1;
     pic.windows.layer_use[4] = NSHVC_WIN1 | NSHVC_WIN1_INVERT;
     pic.windows.w[0].left = 0;
     pic.windows.w[0].right = 0;
-    menu_lines_set(MENU_LINES_CHAMPION, 0);
 
     sound_upload_begin();
     menu_sounds_upload(MENU_SOUNDS_CHAMPION);
