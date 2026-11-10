@@ -24,7 +24,7 @@ static uint16_t size_grow(void) { return cart16(HUD_BANK, (uint16_t)(DIGIT_GROW_
 static void digit(uint16_t d)
 {
     DigitGlyphSelect(d);
-    FxGlyph16RowsFromTop();
+    FxGlyph16RowsFromTop(&hud_piece);
 }
 
 /* @routine 07:91B1 GsuTimeDigits: the time left at X $AC, Y 8; the hundreds first at $9E when it is $100 or more. */
@@ -32,14 +32,14 @@ void GsuTimeDigits(void)
 {
     uint16_t v = g.time_left;
 
-    fx16_set(FXIN_PIECE_X, 0x00AC);
-    fx16_set(FXIN_PIECE_Y, 0x0008);
-    fx16_set(FXIN_PIECE_W, 0x0010);
+    hud_piece.x = 0x00AC;
+    hud_piece.y = 0x0008;
+    hud_piece.w = 0x0010;
     if (v >= 0x0100) {
         DigitGlyphSelect((v >> 8) & 0x000F);
-        fx16_set(FXIN_PIECE_X, 0x009E);
-        FxGlyph16RowsFromTop();
-        fx16_set(FXIN_PIECE_X, 0x00AC);
+        hud_piece.x = 0x009E;
+        FxGlyph16RowsFromTop(&hud_piece);
+        hud_piece.x = 0x00AC;
     }
     digit((v >> 4) & 0x000F);
     digit(v & 0x000F);
@@ -48,7 +48,7 @@ void GsuTimeDigits(void)
 /* @routine 07:919D GsuTimeDigitsGrow */
 static void time_digits_grow(void)
 {
-    fx16_set(FXIN_PIECE_H, size_grow());
+    hud_piece.h = size_grow();
     GlyphColours(0xBF, 0xB5, 0xBB);
     GsuTimeDigits();
 }
@@ -56,7 +56,7 @@ static void time_digits_grow(void)
 /* @routine 07:91A6 GsuTimeDigitsFull */
 void GsuTimeDigitsFull(void)
 {
-    fx16_set(FXIN_PIECE_H, 0x0020);
+    hud_piece.h = 0x0020;
     GlyphColours(0xBF, 0xB5, 0xBB);
     GsuTimeDigits();
 }
@@ -64,7 +64,7 @@ void GsuTimeDigitsFull(void)
 /* @routine 07:922F GsuBonusDigitsGrow */
 static void bonus_digits_grow(void)
 {
-    fx16_set(FXIN_PIECE_H, size_grow());
+    hud_piece.h = size_grow();
     if (!g.time_shown)
         return;
     GlyphColours(0xBF, 0xB7, 0xB6);
@@ -102,10 +102,10 @@ static void draw_mirrored(void)
 static void draw_bonus_then_time(void)
 {
     time_digit_bytes();
-    fx16_set(FXIN_PIECE_H, size_grow());
+    hud_piece.h = size_grow();
     BonusDigitsDraw();
     time_digit_bytes();
-    fx16_set(FXIN_PIECE_H, 0x0020);
+    hud_piece.h = 0x0020;
     time_digit_bytes();
     GsuTimeDigits();
     draw_mirrored();
@@ -274,7 +274,7 @@ void TimeBonusTally(void)
         g.hud_point_index = (uint16_t)(a - 2);
         g.hud_point_x = 0x0037;
         time_digit_bytes();
-        fx16_set(FXIN_PIECE_H, size_grow());
+        hud_piece.h = size_grow();
         BonusDigitsDraw();
         time_digits_grow();
         draw_mirrored();
@@ -318,7 +318,7 @@ void TimeBonusTally(void)
 static void transfer_digits(void)
 {
     GlyphColours(0xBF, 0xBA, 0xB9);
-    fx16_set(FXIN_PIECE_H, g.time_bonus_2);
+    hud_piece.h = g.time_bonus_2;
     BonusDigitsDraw();
 }
 
@@ -396,14 +396,14 @@ void TimeLeftDigits(void)
         g.time_left_shown = v;
         DigitGlyphSelect((v >> 8) & 0x000F);
         GlyphColours(0xBF, 0xB5, 0xBB);
-        fx16_set(FXIN_PIECE_X, 0x009E);
-        fx16_set(FXIN_PIECE_Y, 0x0008);
-        FxGlyph16x32();
-        fx16_set(FXIN_PIECE_X, 0x00AC);
+        hud_piece.x = 0x009E;
+        hud_piece.y = 0x0008;
+        FxGlyph16x32(&hud_piece);
+        hud_piece.x = 0x00AC;
         DigitGlyphSelect((v >> 4) & 0x000F);
-        FxGlyph16x32();
+        FxGlyph16x32(&hud_piece);
         DigitGlyphSelect(v & 0x000F);
-        FxGlyph16x32();
+        FxGlyph16x32(&hud_piece);
         return;
     }
     if (v >= 0x0010) {
@@ -413,11 +413,11 @@ void TimeLeftDigits(void)
             GlyphColours(0xBF, 0xB5, 0xBB);
         else
             GlyphColours(0xBF, 0xBC, 0xBD);
-        fx16_set(FXIN_PIECE_X, 0x00AC);
-        fx16_set(FXIN_PIECE_Y, 0x0008);
-        FxGlyph16x32();
+        hud_piece.x = 0x00AC;
+        hud_piece.y = 0x0008;
+        FxGlyph16x32(&hud_piece);
         DigitGlyphSelect(v & 0x000F);
-        FxGlyph16x32();
+        FxGlyph16x32(&hud_piece);
         return;
     }
     if (v != g.time_left_shown) {
@@ -428,24 +428,24 @@ void TimeLeftDigits(void)
     {
         uint16_t at = (uint16_t)(COUNTDOWN_DIGIT_SHAPES + (uint16_t)(((g.countdown_fraction >> 8) >> 4) * 8));
 
-        fx16_set(FXIN_PIECE_W, cart16(HUD_BANK, at));
-        fx16_set(FXIN_PIECE_H, cart16(HUD_BANK, at));
-        fx16_set(FXIN_PIECE_U, cart16(HUD_BANK, (uint16_t)(at + 2)));
-        fx16_set(FXIN_PIECE_V, cart16(HUD_BANK, (uint16_t)(at + 2)));
-        fx16_set(FXIN_PIECE_X, cart16(HUD_BANK, (uint16_t)(at + 4)));
-        fx16_set(FXIN_PIECE_Y, cart16(HUD_BANK, (uint16_t)(at + 6)));
+        hud_piece.w = cart16(HUD_BANK, at);
+        hud_piece.h = cart16(HUD_BANK, at);
+        hud_piece.u = cart16(HUD_BANK, (uint16_t)(at + 2));
+        hud_piece.v = cart16(HUD_BANK, (uint16_t)(at + 2));
+        hud_piece.x = cart16(HUD_BANK, (uint16_t)(at + 4));
+        hud_piece.y = cart16(HUD_BANK, (uint16_t)(at + 6));
     }
     GlyphColours(0xBF, 0xB7, 0xB6);
-    FxScaledSpriteAdvance(0);
+    FxScaledSpriteAdvance(&hud_piece, chip_view_right(), chip_view_bottom());
 }
 
 /* @routine 07:925C GsuDigitPair0E74At: the two digits of the bonus at (x, 8). */
 void BonusDigitsDrawAt(uint16_t x)
 {
-    fx16_set(FXIN_PIECE_X, x);
-    fx16_set(FXIN_PIECE_Y, 0x0008);
+    hud_piece.x = x;
+    hud_piece.y = 0x0008;
     DigitGlyphSelect((g.digit_pair >> 4) & 0x000F);
-    FxGlyph16RowsFromTop();
+    FxGlyph16RowsFromTop(&hud_piece);
     DigitGlyphSelect(g.digit_pair & 0x000F);
-    FxGlyph16RowsFromTop();
+    FxGlyph16RowsFromTop(&hud_piece);
 }

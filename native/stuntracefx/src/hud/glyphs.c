@@ -1,6 +1,6 @@
 /*
  * glyphs.c: the HUD's glyphs and sprites, drawn by the Super FX's picture
- * programs from their inputs in the chip's RAM.
+ * programs (fx/render/hud.c) from the HUD's piece.
  *
  * The colour setters of the original, GsuBytes200_* at 04:D7A2 to 04:DA03
  * (twenty-one of them, one per four bytes), are GlyphColours here.
@@ -38,17 +38,23 @@ enum {
     MESSAGES = 0xDF6D
 };
 
+/* The piece the HUD draws next: what it sets before each program, kept
+   between them as the original's words were (a program that moves x on
+   leaves the next piece's x). */
+FxPiece hud_piece;
+
+/* the piece's four colours: pixel 0 draws colour 0, the others b1-b3 */
 void GlyphColours(uint8_t b1, uint8_t b2, uint8_t b3)
 {
-    fx8_set(FXIN_GLYPH_BYTES + 0, 0x00);
-    fx8_set(FXIN_GLYPH_BYTES + 1, b1);
-    fx8_set(FXIN_GLYPH_BYTES + 2, b2);
-    fx8_set(FXIN_GLYPH_BYTES + 3, b3);
+    hud_piece.colours[0] = 0x00;
+    hud_piece.colours[1] = b1;
+    hud_piece.colours[2] = b2;
+    hud_piece.colours[3] = b3;
 }
 
-/* $70:0216 from the word tables at $07:8E3E and $07:8E52 (DigitGlyphSelect, B). */
-static void piece_big_digit(uint16_t index) { fx16_set(FXIN_PIECE, cart16(HUD_BANK, (uint16_t)(BIG_DIGIT_GLYPHS + index))); }
-static void piece_small_digit(uint16_t index) { fx16_set(FXIN_PIECE, cart16(HUD_BANK, (uint16_t)(SMALL_DIGIT_GLYPHS + index))); }
+/* the glyph from the word tables at $07:8E3E and $07:8E52 (DigitGlyphSelect, B) */
+static void piece_big_digit(uint16_t index) { hud_piece.glyph = cart16(HUD_BANK, (uint16_t)(BIG_DIGIT_GLYPHS + index)); }
+static void piece_small_digit(uint16_t index) { hud_piece.glyph = cart16(HUD_BANK, (uint16_t)(SMALL_DIGIT_GLYPHS + index)); }
 
 void DigitGlyphSelect(uint16_t digit) { piece_big_digit((uint16_t)(digit << 1)); }
 
@@ -56,7 +62,7 @@ void DigitGlyphSelect(uint16_t digit) { piece_big_digit((uint16_t)(digit << 1));
 static void small_digit(uint16_t digit)
 {
     piece_small_digit((uint16_t)((digit & 0x000F) << 1));
-    FxGlyph8x16();
+    FxGlyph8x16(&hud_piece);
 }
 
 /* @routine 07:A684 GsuF441Player1, 07:A694 GsuF441Player2 (RankBadgePlayer1, 2): program $07:F441,
@@ -65,14 +71,14 @@ static void rank_badge(uint8_t kind)
 {
     if ((kind & 0x0F) == 1) {
         GlyphColours(0x0F, 0x05, 0x0E);
-        fx16_set(FXIN_PIECE, 0x080E);
+        hud_piece.glyph = 0x080E;
     } else {
         GlyphColours(0x0F, 0x08, 0x0E);
-        fx16_set(FXIN_PIECE, 0x0A0E);
+        hud_piece.glyph = 0x0A0E;
     }
-    fx16_set(FXIN_PIECE_X, 0x0074);
-    fx16_set(FXIN_PIECE_Y, 0x003C);
-    FxGlyph24x16();
+    hud_piece.x = 0x0074;
+    hud_piece.y = 0x003C;
+    FxGlyph24x16(&hud_piece);
 }
 
 void RankBadgePlayer1(void) { rank_badge(g.player_rank[0]); }
@@ -85,54 +91,54 @@ void RankBadgePlayer2(void) { rank_badge(g.player_rank[1]); }
  */
 void LapBannerRise(uint16_t input)
 {
-    fx16_set(FXIN_PIECE_Y, input);
+    hud_piece.y = input;
     if (g.split_screen) {
         GlyphColours(0x0F, 0x09, 0x0A);
-        FxPictureRise40();
+        FxPictureRise40(hud_piece.colours, hud_piece.y);
     } else {
         GlyphColours(0xBF, 0xBC, 0xBD);
-        FxPictureRise60();
+        FxPictureRise60(hud_piece.colours, hud_piece.y);
     }
 }
 
 /* @routine 07:8619 GsuEEF5OrEFCD: as above, for the last lap's banner. */
 void LastLapBannerRise(uint16_t input)
 {
-    fx16_set(FXIN_PIECE_Y, input);
+    hud_piece.y = input;
     if (g.split_screen) {
         GlyphColours(0x0F, 0x04, 0x05);
-        FxPictureRiseSplit40();
+        FxPictureRiseSplit40(hud_piece.colours, hud_piece.y);
     } else {
         GlyphColours(0xBF, 0xB7, 0xB6);
-        FxPictureRiseSplit60();
+        FxPictureRiseSplit60(hud_piece.colours, hud_piece.y);
     }
 }
 
 /* @routine 07:9252 GsuDigitPair0E74: the two digits of the byte at $0E74. */
 void BonusDigitsDraw(void)
 {
-    fx16_set(FXIN_PIECE_W, 0x0010);
-    fx16_set(FXIN_PIECE_X, 0x0004);
-    fx16_set(FXIN_PIECE_Y, 0x0008);
+    hud_piece.w = 0x0010;
+    hud_piece.x = 0x0004;
+    hud_piece.y = 0x0008;
     piece_big_digit((uint16_t)((g.digit_pair >> 4 & 0x000F) << 1));
-    FxGlyph16RowsFromTop();
+    FxGlyph16RowsFromTop(&hud_piece);
     piece_big_digit((uint16_t)((g.digit_pair & 0x000F) << 1));
-    FxGlyph16RowsFromTop();
+    FxGlyph16RowsFromTop(&hud_piece);
 }
 
 static void word_at(uint16_t x, uint16_t y)
 {
-    fx16_set(FXIN_PIECE_H, 0x0020);
-    fx16_set(FXIN_PIECE_W, 0x0010);
-    fx16_set(FXIN_PIECE_X, x);
-    fx16_set(FXIN_PIECE_Y, y);
+    hud_piece.h = 0x0020;
+    hud_piece.w = 0x0010;
+    hud_piece.x = x;
+    hud_piece.y = y;
 }
 
 static void word_letters(const uint16_t *pieces, int n)
 {
     for (int i = 0; i < n; i++) {
-        fx16_set(FXIN_PIECE, pieces[i]);
-        FxGlyph16RowsFromTop();
+        hud_piece.glyph = pieces[i];
+        FxGlyph16RowsFromTop(&hud_piece);
     }
 }
 
@@ -183,23 +189,23 @@ void ShowGetAllTheStars(uint16_t input)
     static const uint16_t second[13] = {0x8408, 0x8814, 0x8814, 0x0000, 0x8C14, 0x8804, 0x8418,
                                         0x0000, 0x8C10, 0x8C14, 0x8408, 0x8C0C, 0x8C10};
 
-    fx16_set(FXIN_PIECE_H, input);
-    fx16_set(FXIN_PIECE_W, 0x0010);
-    fx16_set(FXIN_PIECE_X, 0x0050);
-    fx16_set(FXIN_PIECE_Y, 0x0008);
+    hud_piece.h = input;
+    hud_piece.w = 0x0010;
+    hud_piece.x = 0x0050;
+    hud_piece.y = 0x0008;
     GlyphColours(0xBF, 0xB7, 0xB6);
     word_letters(first, 3);
-    fx16_set(FXIN_PIECE_X, 0x0000);
-    fx16_set(FXIN_PIECE_Y, 0x002C);
+    hud_piece.x = 0x0000;
+    hud_piece.y = 0x002C;
     word_letters(second, 13);
 }
 
 static void glyph_rows_at(uint16_t input, uint16_t x, const uint16_t *pieces, int n)
 {
-    fx16_set(FXIN_PIECE_H, input);
-    fx16_set(FXIN_PIECE_W, 0x0010);
-    fx16_set(FXIN_PIECE_X, x);
-    fx16_set(FXIN_PIECE_Y, 0x0028);
+    hud_piece.h = input;
+    hud_piece.w = 0x0010;
+    hud_piece.x = x;
+    hud_piece.y = 0x0028;
     GlyphColours(0xBF, 0xB7, 0xB6);
     word_letters(pieces, n);
 }
@@ -222,18 +228,18 @@ void GlyphRowsAt56(uint16_t input)
 
 static void piece_scale(uint16_t w, uint16_t h, uint16_t u, uint16_t v)
 {
-    fx16_set(FXIN_PIECE_W, w);
-    fx16_set(FXIN_PIECE_H, h);
-    fx16_set(FXIN_PIECE_U, u);
-    fx16_set(FXIN_PIECE_V, v);
+    hud_piece.w = w;
+    hud_piece.h = h;
+    hud_piece.u = u;
+    hud_piece.v = v;
 }
 
 static void scaled_piece(uint16_t x, uint16_t y, uint16_t piece)
 {
-    fx16_set(FXIN_PIECE_X, x);
-    fx16_set(FXIN_PIECE_Y, y);
-    fx16_set(FXIN_PIECE, piece);
-    FxScaledSpriteEighth(0);
+    hud_piece.x = x;
+    hud_piece.y = y;
+    hud_piece.glyph = piece;
+    FxScaledSpriteEighth(&hud_piece, chip_view_right(), chip_view_bottom());
 }
 
 /* @routine 07:976B GsuFA1BFromTables */
@@ -242,17 +248,17 @@ void TimeFrameTailB(void)
     uint16_t v;
 
     GlyphColours(0xBF, 0xBC, 0xBD);
-    fx16_set(FXIN_PIECE_X, g.hud_point_x);
-    fx16_set(FXIN_PIECE_Y, (uint16_t)(g.hud_point_y + 8));
-    fx16_set(FXIN_PIECE_H, 0x0100);
-    fx16_set(FXIN_PIECE_V, 0x0100);
+    hud_piece.x = g.hud_point_x;
+    hud_piece.y = (uint16_t)(g.hud_point_y + 8);
+    hud_piece.h = 0x0100;
+    hud_piece.v = 0x0100;
     v = cart16(HUD_BANK, (uint16_t)(FRAME_TAIL_B_WIDTHS + g.hud_point_index));
     if (!v)
         return;
-    fx16_set(FXIN_PIECE_W, v);
-    fx16_set(FXIN_PIECE_U, cart16(HUD_BANK, (uint16_t)(FRAME_TAIL_B_STEPS + g.hud_point_index)));
-    fx16_set(FXIN_PIECE, 0x1E00);
-    FxScaledSprite13(0);
+    hud_piece.w = v;
+    hud_piece.u = cart16(HUD_BANK, (uint16_t)(FRAME_TAIL_B_STEPS + g.hud_point_index));
+    hud_piece.glyph = 0x1E00;
+    FxScaledSprite13(&hud_piece, chip_view_right(), chip_view_bottom());
 }
 
 /* @routine 07:9718 GsuFA35FromTables */
@@ -261,17 +267,17 @@ void TimeFrameTailA(void)
     uint16_t v;
 
     GlyphColours(0xBF, 0xBC, 0xBD);
-    fx16_set(FXIN_PIECE_X, g.hud_point_x);
-    fx16_set(FXIN_PIECE_Y, (uint16_t)(g.hud_point_y + 8));
-    fx16_set(FXIN_PIECE_H, 0x0100);
-    fx16_set(FXIN_PIECE_V, 0x0100);
+    hud_piece.x = g.hud_point_x;
+    hud_piece.y = (uint16_t)(g.hud_point_y + 8);
+    hud_piece.h = 0x0100;
+    hud_piece.v = 0x0100;
     v = cart16(HUD_BANK, (uint16_t)(FRAME_TAIL_A_WIDTHS + g.hud_point_index));
     if (!v)
         return;
-    fx16_set(FXIN_PIECE_W, v);
-    fx16_set(FXIN_PIECE_U, cart16(HUD_BANK, (uint16_t)(FRAME_TAIL_A_STEPS + g.hud_point_index)));
-    fx16_set(FXIN_PIECE, 0x1C00);
-    FxScaledSprite12(0);
+    hud_piece.w = v;
+    hud_piece.u = cart16(HUD_BANK, (uint16_t)(FRAME_TAIL_A_STEPS + g.hud_point_index));
+    hud_piece.glyph = 0x1C00;
+    FxScaledSprite12(&hud_piece, chip_view_right(), chip_view_bottom());
 }
 
 /* @routine 07:92B5 GsuFA5AThree: three pieces around the point. */
@@ -333,11 +339,11 @@ void TimeFrameMiddle(void)
 
     piece_scale(cart16(HUD_BANK, (uint16_t)(FRAME_MIDDLE_WIDTHS + i)), 0x0100, cart16(HUD_BANK, (uint16_t)(FRAME_MIDDLE_STEPS + i)), 0x0100);
     scaled_piece(g.hud_point_x, g.hud_point_y, 0x1B18);
-    fx16_set(FXIN_PIECE_H, 0x0100);
-    fx16_set(FXIN_PIECE_V, 0x0100);
+    hud_piece.h = 0x0100;
+    hud_piece.v = 0x0100;
     scaled_piece(g.hud_point_x, (uint16_t)(g.hud_point_y + 0x18), 0x1D18);
-    fx16_set(FXIN_PIECE_H, 0x0200);
-    fx16_set(FXIN_PIECE_V, 0x0080);
+    hud_piece.h = 0x0200;
+    hud_piece.v = 0x0080;
     scaled_piece(g.hud_point_x, (uint16_t)(g.hud_point_y + 8), 0x1A55);
 }
 
@@ -351,19 +357,19 @@ void ShowLapsToGo(void)
     if (n >= 0x0014)
         n = 0x0014;
     g.piece_step = n;
-    fx16_set(FXIN_PIECE_W, 0x0010);
-    fx16_set(FXIN_PIECE_X, 0x0010);
-    fx16_set(FXIN_PIECE_Y, 0x0028);
+    hud_piece.w = 0x0010;
+    hud_piece.x = 0x0010;
+    hud_piece.y = 0x0028;
     GlyphColours(0xBF, 0xBA, 0xB9);
-    fx16_set(FXIN_PIECE_H, cart8(HUD_BANK, (uint16_t)(LAPS_TO_GO_HEIGHTS + n)));
+    hud_piece.h = cart8(HUD_BANK, (uint16_t)(LAPS_TO_GO_HEIGHTS + n));
     for (int i = 0; i < 11; i++) {
-        fx16_set(FXIN_PIECE, piece[i]);
+        hud_piece.glyph = piece[i];
         if (n < 8)
-            FxGlyph16RowsFromTop();
+            FxGlyph16RowsFromTop(&hud_piece);
         else
-            FxGlyph16RowsFromBottom();
+            FxGlyph16RowsFromBottom(&hud_piece);
         if (i == 0)
-            fx16_set(FXIN_PIECE_X, (uint16_t)(fx16(FXIN_PIECE_X) + 4));
+            hud_piece.x = (uint16_t)(hud_piece.x + 4);
     }
 }
 
@@ -380,8 +386,8 @@ void HudSixGlyphs(void)
 /* A 24 x 40 sprite, piece src. */
 static void sprite24x40(uint16_t src)
 {
-    fx16_set(FXIN_PIECE, src);
-    FxSprite24x40(0);
+    hud_piece.glyph = src;
+    FxSprite24x40(&hud_piece, chip_view_right(), chip_view_bottom());
 }
 
 /*
@@ -394,17 +400,17 @@ static void big_sprites_count_draw(void)
     static const uint16_t near_[4] = {0xA018, 0xA000, 0xA518, 0xA00C}, far_[4] = {0xAA06, 0xB00C, 0xA00C, 0xAA12};
     static const uint8_t need_far[3] = {7, 8, 9};
 
-    fx16_set(FXIN_PIECE_U, 0x0100);
-    fx16_set(FXIN_PIECE_V, 0x0100);
-    fx16_set(FXIN_PIECE_X, 0x0030);
-    fx16_set(FXIN_PIECE_Y, 0x0010);
+    hud_piece.u = 0x0100;
+    hud_piece.v = 0x0100;
+    hud_piece.x = 0x0030;
+    hud_piece.y = 0x0010;
     for (int i = 0; i < 4; i++) {
         sprite24x40(near_[i]);
         if (i < 3 && g.sprite_count < i + 1)
             goto count;
     }
-    fx16_set(FXIN_PIECE_X, 0x0040);
-    fx16_set(FXIN_PIECE_Y, 0x0040);
+    hud_piece.x = 0x0040;
+    hud_piece.y = 0x0040;
     if (g.sprite_count < 6)
         goto count;
     for (int i = 0; i < 4; i++) {
@@ -431,10 +437,10 @@ static int big_sprites_start(uint8_t b1, uint8_t b2, uint8_t b3)
 
 static void big_sprites_at(uint16_t x, uint16_t y)
 {
-    fx16_set(FXIN_PIECE_X, x);
-    fx16_set(FXIN_PIECE_Y, y);
-    fx16_set(FXIN_PIECE_U, 0x0100);
-    fx16_set(FXIN_PIECE_V, 0x0100);
+    hud_piece.x = x;
+    hud_piece.y = y;
+    hud_piece.u = 0x0100;
+    hud_piece.v = 0x0100;
 }
 
 /* @routine 07:9D67 BigSpritesRow6 */
@@ -447,7 +453,7 @@ void BigSpritesRow6(void)
     big_sprites_at(0x0018, 0x0028);
     for (int i = 0; i < 4; i++)
         sprite24x40(first[i]);
-    fx16_set(FXIN_PIECE_X, (uint16_t)(fx16(FXIN_PIECE_X) + 0x0010));
+    hud_piece.x = (uint16_t)(hud_piece.x + 0x0010);
     for (int i = 0; i < 2; i++)
         sprite24x40(second[i]);
 }
@@ -487,11 +493,11 @@ void BigSpritesNine(void)
     big_sprites_at(0x0029, 0x0021);
     for (int i = 0; i < 3; i++)
         sprite24x40(first[i]);
-    fx16_set(FXIN_PIECE_X, (uint16_t)(fx16(FXIN_PIECE_X) + 0x0006));
+    hud_piece.x = (uint16_t)(hud_piece.x + 0x0006);
     for (int i = 0; i < 2; i++)
         sprite24x40(second[i]);
-    fx16_set(FXIN_PIECE_X, 0x0038);
-    fx16_set(FXIN_PIECE_Y, 0x0050);
+    hud_piece.x = 0x0038;
+    hud_piece.y = 0x0050;
     for (int i = 0; i < 4; i++)
         sprite24x40(third[i]);
 }
@@ -500,20 +506,20 @@ void BigSpritesNine(void)
 static void time_digits(const uint8_t *digits)
 {
     small_digit(digits[0]);
-    fx16_set(FXIN_PIECE, 0x980A);
-    FxGlyph8x16();
+    hud_piece.glyph = 0x980A;
+    FxGlyph8x16(&hud_piece);
     small_digit(digits[1]);
     small_digit(digits[2]);
-    fx16_set(FXIN_PIECE, 0x980C);
-    FxGlyph8x16();
+    hud_piece.glyph = 0x980C;
+    FxGlyph8x16(&hud_piece);
     small_digit(digits[3]);
     small_digit(digits[4]);
 }
 
 static void times_at(uint16_t y)
 {
-    fx16_set(FXIN_PIECE_X, 0x0093);
-    fx16_set(FXIN_PIECE_Y, y);
+    hud_piece.x = 0x0093;
+    hud_piece.y = y;
 }
 
 /* @routine 07:89E4 HudHoldDraw */
@@ -529,11 +535,11 @@ void HudHoldDraw(void)
 /* @routine 04:DDB0 GlyphAtY60: a glyph at (x, 96). */
 void GlyphAtY60(uint16_t glyph, uint16_t x)
 {
-    fx16_set(FXIN_PIECE_X, x);
-    fx16_set(FXIN_PIECE, glyph);
-    fx16_set(FXIN_PIECE_Y, 0x0060);
+    hud_piece.x = x;
+    hud_piece.glyph = glyph;
+    hud_piece.y = 0x0060;
     GlyphColours(0xBF, 0xB5, 0xBB);
-    FxGlyph8x16();
+    FxGlyph8x16(&hud_piece);
 }
 
 /* @routine 04:DD61 GlyphRowY60From0 and its entries DD6E, DD7B, DD88, DD95, DDA2 */
@@ -558,33 +564,33 @@ void GlyphListDraw(void)
     do {
         if (!g.glyph_on[i])
             continue;
-        fx16_set(FXIN_PIECE, g.glyph_word[i]);
-        fx16_set(FXIN_PIECE_X, g.glyph_x_y[i * 2]);
-        fx16_set(FXIN_PIECE_Y, g.glyph_x_y[i * 2 + 1]);
+        hud_piece.glyph = g.glyph_word[i];
+        hud_piece.x = g.glyph_x_y[i * 2];
+        hud_piece.y = g.glyph_x_y[i * 2 + 1];
         if (i >= g.glyph_first_end)
             GlyphColours(0xBF, 0xB3, 0xBE);
         else
             GlyphColours(0xBF, 0xBC, 0xBD);
-        FxGlyph8x16();
+        FxGlyph8x16(&hud_piece);
     } while (++i < g.glyph_end);
 }
 
 /* @routine 07:A426 GlyphSpriteDraw: sprite `sprite` at its own place. */
 void GlyphSpriteDraw(int sprite)
 {
-    fx16_set(FXIN_PIECE_X, g.glyph_sprite_x[sprite]);
-    fx16_set(FXIN_PIECE_Y, g.glyph_sprite_y[sprite]);
-    fx16_set(FXIN_PIECE, g.glyph_sprite_glyph[sprite]);
-    FxGlyph8x16();
+    hud_piece.x = g.glyph_sprite_x[sprite];
+    hud_piece.y = g.glyph_sprite_y[sprite];
+    hud_piece.glyph = g.glyph_sprite_glyph[sprite];
+    FxGlyph8x16(&hud_piece);
 }
 
 /* @routine 07:A41D GlyphSpriteDrawLeft8 */
 static void glyph_sprite_draw_left8(int sprite)
 {
-    fx16_set(FXIN_PIECE_X, (uint16_t)(g.glyph_sprite_x[sprite] - 8));
-    fx16_set(FXIN_PIECE_Y, g.glyph_sprite_y[sprite]);
-    fx16_set(FXIN_PIECE, g.glyph_sprite_glyph[sprite]);
-    FxGlyph8x16();
+    hud_piece.x = (uint16_t)(g.glyph_sprite_x[sprite] - 8);
+    hud_piece.y = g.glyph_sprite_y[sprite];
+    hud_piece.glyph = g.glyph_sprite_glyph[sprite];
+    FxGlyph8x16(&hud_piece);
 }
 
 /* @routine 04:DA3C GlyphSpritesInit */
@@ -663,7 +669,7 @@ void ShowBonusTrax(void)
     word_at(0x001C, 0x0028);
     GlyphColours(0xBF, 0xBC, 0xBD);
     word_letters(g1, 5);
-    fx16_set(FXIN_PIECE_X, (uint16_t)(fx16(FXIN_PIECE_X) + 4));
+    hud_piece.x = (uint16_t)(hud_piece.x + 4);
     word_letters(g2, 4);
 }
 
@@ -672,16 +678,16 @@ static void glyph_grid3(uint16_t first, int switch_colours)
 {
     for (int r = 0; r < 3; r++) {
         if (r) {
-            fx16_set(FXIN_PIECE_Y, (uint16_t)(fx16(FXIN_PIECE_Y) + 8));
-            fx16_set(FXIN_PIECE_X, (uint16_t)(fx16(FXIN_PIECE_X) - 0x18));
+            hud_piece.y = (uint16_t)(hud_piece.y + 8);
+            hud_piece.x = (uint16_t)(hud_piece.x - 0x18);
             if (r == 1 && switch_colours)
                 GlyphColours(0xBF, 0xB3, 0xBE);
         }
         for (int c = 0; c < 3; c++) {
             if (r == 0 && c == 2 && switch_colours)
                 GlyphColours(0xBF, 0xBA, 0xB9);
-            fx16_set(FXIN_PIECE, (uint16_t)((first + r) << 8 | (0x1A + 2 * c)));
-            FxGlyph8x8();
+            hud_piece.glyph = (uint16_t)((first + r) << 8 | (0x1A + 2 * c));
+            FxGlyph8x8(&hud_piece);
         }
     }
 }
@@ -689,8 +695,8 @@ static void glyph_grid3(uint16_t first, int switch_colours)
 /* @routine 07:A158 GlyphGrid1A */
 void GlyphGrid1A(void)
 {
-    fx16_set(FXIN_PIECE_X, 0x0038);
-    fx16_set(FXIN_PIECE_Y, 0x0030);
+    hud_piece.x = 0x0038;
+    hud_piece.y = 0x0030;
     GlyphColours(0xBF, 0xB7, 0xB6);
     glyph_grid3(0x1A, 1);
 }
@@ -698,8 +704,8 @@ void GlyphGrid1A(void)
 /* @routine 07:A27D GlyphGrid1D */
 void GlyphGrid1D(void)
 {
-    fx16_set(FXIN_PIECE_X, 0x0038);
-    fx16_set(FXIN_PIECE_Y, 0x0048);
+    hud_piece.x = 0x0038;
+    hud_piece.y = 0x0048;
     GlyphColours(0xBF, 0xBB, 0xBE);
     glyph_grid3(0x1D, 0);
 }
@@ -832,14 +838,14 @@ void GlyphSpritesGrowAndTimes(void)
             if (!step)
                 continue;
             y = (uint16_t)(step * 2);
-            fx16_set(FXIN_PIECE_W, cart16(GLYPH_SPRITE_BANK, (uint16_t)(GROW_SIZES + y)));
-            fx16_set(FXIN_PIECE_H, cart16(GLYPH_SPRITE_BANK, (uint16_t)(GROW_SIZES + y)));
-            fx16_set(FXIN_PIECE_U, cart16(GLYPH_SPRITE_BANK, (uint16_t)(GROW_SCALES + y)));
-            fx16_set(FXIN_PIECE_V, cart16(GLYPH_SPRITE_BANK, (uint16_t)(GROW_SCALES + y)));
-            fx16_set(FXIN_PIECE_X, (uint16_t)(g.glyph_sprite_x[i] + cart16(GLYPH_SPRITE_BANK, (uint16_t)(GROW_X_OFFSETS + y))));
-            fx16_set(FXIN_PIECE_Y, (uint16_t)(g.glyph_sprite_y[i] + cart16(GLYPH_SPRITE_BANK, (uint16_t)(GROW_Y_OFFSETS + y))));
-            fx16_set(FXIN_PIECE, g.glyph_sprite_glyph[i]);
-            FxScaledSpriteAdvance(0);
+            hud_piece.w = cart16(GLYPH_SPRITE_BANK, (uint16_t)(GROW_SIZES + y));
+            hud_piece.h = cart16(GLYPH_SPRITE_BANK, (uint16_t)(GROW_SIZES + y));
+            hud_piece.u = cart16(GLYPH_SPRITE_BANK, (uint16_t)(GROW_SCALES + y));
+            hud_piece.v = cart16(GLYPH_SPRITE_BANK, (uint16_t)(GROW_SCALES + y));
+            hud_piece.x = (uint16_t)(g.glyph_sprite_x[i] + cart16(GLYPH_SPRITE_BANK, (uint16_t)(GROW_X_OFFSETS + y)));
+            hud_piece.y = (uint16_t)(g.glyph_sprite_y[i] + cart16(GLYPH_SPRITE_BANK, (uint16_t)(GROW_Y_OFFSETS + y)));
+            hud_piece.glyph = g.glyph_sprite_glyph[i];
+            FxScaledSpriteAdvance(&hud_piece, chip_view_right(), chip_view_bottom());
         }
     }
     GlyphTimesSequence();
@@ -853,9 +859,9 @@ void GlyphSlideThree(void)
 
         x = x >= step && (uint16_t)(x - step) >= g.glyph_sprite_target[i] ? (uint16_t)(x - step) : g.glyph_sprite_target[i];
         g.glyph_sprite_x[i] = x;
-        fx16_set(FXIN_PIECE_X, x);
-        fx16_set(FXIN_PIECE_Y, 0x0050);
-        fx16_set(FXIN_PIECE, g.glyph_sprite_glyph[i]);
+        hud_piece.x = x;
+        hud_piece.y = 0x0050;
+        hud_piece.glyph = g.glyph_sprite_glyph[i];
         switch (g.glyph_sprite_glyph[i]) {
         case 0x8000:
             GlyphColours(0xBF, 0xB7, 0xB6);
@@ -870,7 +876,7 @@ void GlyphSlideThree(void)
             GlyphColours(0xBF, 0xB3, 0xBE);
             break;
         }
-        FxGlyph24x32Bank04();
+        FxGlyph24x32Bank04(&hud_piece);
     }
 }
 
@@ -998,38 +1004,38 @@ void HudLeadWordDraw(void)
     static const uint16_t rest[6] = {0x9616, 0x941C, 0x9418, 0x9610, 0x9616, 0x941A};
 
     GlyphColours(0xBF, 0x11, 0xBD);
-    fx16_set(FXIN_PIECE_X, 0x003C);
-    fx16_set(FXIN_PIECE_Y, 0x0048);
+    hud_piece.x = 0x003C;
+    hud_piece.y = 0x0048;
     for (int i = 0; i < 4; i++) {
-        fx16_set(FXIN_PIECE, first[i]);
-        FxGlyph8x16();
+        hud_piece.glyph = first[i];
+        FxGlyph8x16(&hud_piece);
     }
-    fx16_set(FXIN_PIECE_X, (uint16_t)(fx16(FXIN_PIECE_X) + 8));
+    hud_piece.x = (uint16_t)(hud_piece.x + 8);
     for (int i = 0; i < 6; i++) {
-        fx16_set(FXIN_PIECE, rest[i]);
-        FxGlyph8x16();
+        hud_piece.glyph = rest[i];
+        FxGlyph8x16(&hud_piece);
     }
 }
 
 static void lap_digit(uint8_t digit)
 {
     piece_big_digit((uint16_t)(digit << 1));
-    FxGlyph16x32();
+    FxGlyph16x32(&hud_piece);
 }
 
 /* @routine 07:A8D3 HudLapDigitsDraw: five digits as M:SS:HH at (48, 40). */
 void HudLapDigitsDraw(void)
 {
     GlyphColours(0xBF, 0xB3, 0xBE);
-    fx16_set(FXIN_PIECE_X, 0x0030);
-    fx16_set(FXIN_PIECE_Y, 0x0028);
+    hud_piece.x = 0x0030;
+    hud_piece.y = 0x0028;
     lap_digit(g.best_digits[0]);
-    fx16_set(FXIN_PIECE, 0x9014);
-    FxSprite16x32(0);
+    hud_piece.glyph = 0x9014;
+    FxSprite16x32(&hud_piece, chip_view_right(), chip_view_bottom());
     lap_digit(g.best_digits[1]);
     lap_digit(g.best_digits[2]);
-    fx16_set(FXIN_PIECE, 0x9018);
-    FxSprite16x32(0);
+    hud_piece.glyph = 0x9018;
+    FxSprite16x32(&hud_piece, chip_view_right(), chip_view_bottom());
     lap_digit(g.best_digits[3]);
     lap_digit(g.best_digits[4]);
 }
@@ -1041,20 +1047,20 @@ void HudBlankDraw(void)
     uint16_t n;
 
     GlyphColours(0xBF, 0xBA, 0xBD);
-    fx16_set(FXIN_PIECE, 0x0C08);
-    fx16_set(FXIN_PIECE_Y, 0x006C);
+    hud_piece.glyph = 0x0C08;
+    hud_piece.y = 0x006C;
     for (int i = 0; i < 3; i++) {
-        fx16_set(FXIN_PIECE_X, xs[i]);
-        FxGlyph16x16();
+        hud_piece.x = xs[i];
+        FxGlyph16x16(&hud_piece);
     }
     GlyphColours(0xBF, 0xB7, 0xB6);
-    fx16_set(FXIN_PIECE, 0x0E08);
+    hud_piece.glyph = 0x0E08;
     n = g.rivals_left & 0x000F;
     if (n > 2)
         return;
     for (int i = 2; i >= (int)n; i--) {
-        fx16_set(FXIN_PIECE_X, xs[i]);
-        FxGlyph16x16();
+        hud_piece.x = xs[i];
+        FxGlyph16x16(&hud_piece);
     }
 }
 
@@ -1065,22 +1071,22 @@ static void glyph_slide_draw(void)
     static const uint16_t two[8] = {0x8C14, 0x8804, 0x8418, 0x8410, 0x8408, 0x8C0C, 0x8C10, 0x901C};
 
     GlyphColours(0xBF, 0xB7, 0xB6);
-    fx16_set(FXIN_PIECE_X, g.glyph_sprite_x[0]);
-    fx16_set(FXIN_PIECE_Y, g.glyph_sprite_y[0]);
+    hud_piece.x = g.glyph_sprite_x[0];
+    hud_piece.y = g.glyph_sprite_y[0];
     for (int i = 0; i < 6; i++) {
         if (i == 3)
-            fx16_set(FXIN_PIECE_X, (uint16_t)(fx16(FXIN_PIECE_X) + 8));
-        fx16_set(FXIN_PIECE, one[i]);
-        FxSprite16x32(0);
+            hud_piece.x = (uint16_t)(hud_piece.x + 8);
+        hud_piece.glyph = one[i];
+        FxSprite16x32(&hud_piece, chip_view_right(), chip_view_bottom());
     }
     GlyphColours(0xBF, 0xBC, 0xBD);
-    fx16_set(FXIN_PIECE_X, g.glyph_sprite_x[1]);
-    fx16_set(FXIN_PIECE_Y, g.glyph_sprite_y[1]);
+    hud_piece.x = g.glyph_sprite_x[1];
+    hud_piece.y = g.glyph_sprite_y[1];
     for (int i = 0; i < 8; i++) {
         if (i == 3)
-            fx16_set(FXIN_PIECE_X, (uint16_t)(fx16(FXIN_PIECE_X) + 8));
-        fx16_set(FXIN_PIECE, two[i]);
-        FxSprite16x32(0);
+            hud_piece.x = (uint16_t)(hud_piece.x + 8);
+        hud_piece.glyph = two[i];
+        FxSprite16x32(&hud_piece, chip_view_right(), chip_view_bottom());
     }
 }
 

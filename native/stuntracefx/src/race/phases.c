@@ -76,7 +76,7 @@ enum { PHASE_BANK = 0x07, START_TIME_SIZES = 0xE33A, BANNER_SIZES = 0xE95A };
 /* @routine 07:E323 RaceStartStepsDraw: the race time at the size the timer picks. */
 static void start_draw(void)
 {
-    fx16_set(FXIN_PIECE_H, (uint8_t)cart16(PHASE_BANK, (uint16_t)(START_TIME_SIZES + g.race_timer)));
+    hud_piece.h = (uint8_t)cart16(PHASE_BANK, (uint16_t)(START_TIME_SIZES + g.race_timer));
     GlyphColours(0xBF, 0xB5, 0xBB);
     GsuTimeDigits();
 }

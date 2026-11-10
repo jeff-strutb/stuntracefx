@@ -259,7 +259,6 @@ _Noreturn void fx_bad_dispatch(uint16_t at);
 #define FX_WHEEL_SIDE 0x2366
 #define FX_WORLD_SUM 0x2340
 #define GSU_DRAW_LIST 0x023C
-#define GSU_IN_216 0x0216
 #define GSU_IN_A2 0x00A2
 #define GSU_IN_A4 0x00A4
 #define GSU_IN_AMOUNT 0x2390
@@ -522,15 +521,6 @@ FxFrameProgramResult FxFrameProgram(uint16_t draw_list_end);
 void FxGaugeLeft(uint16_t *stack);
 void FxGaugeRight(uint16_t *stack);
 void FxGaugeTop(uint16_t *stack);
-void FxGlyph16RowsFromBottom(void);
-void FxGlyph16RowsFromTop(void);
-void FxGlyph16x16(void);
-void FxGlyph16x32(void);
-void FxGlyph16x32Double(void);
-void FxGlyph24x16(void);
-void FxGlyph24x32Bank04(void);
-void FxGlyph8x16(void);
-void FxGlyph8x8(void);
 uint16_t FxHazePlot(uint16_t entry_plot_y);
 uint16_t FxHazeSample(uint16_t time, uint16_t x, uint16_t y, uint16_t *stack);
 void FxHitAddRotated(uint16_t push_x, uint16_t push_y, uint16_t push_z, uint16_t place_x, uint16_t model_record, uint16_t hit_work_reg, uint16_t *stack);
@@ -616,10 +606,6 @@ FxPartPullResult FxPartPull(uint16_t push_y, uint16_t model_record, uint16_t car
 uint16_t FxParticlesDraw(uint16_t key, uint16_t *stack);
 FxPartsUpdateResult FxPartsUpdate(uint16_t entry_product_lo, uint16_t push_y, uint16_t model_record, uint16_t car, uint16_t *stack, uint16_t rom_at);
 FxPhysicsProgramResult FxPhysicsProgram(uint16_t entry_scratch_a, uint16_t pose_sin, uint16_t entry_scratch_b, uint16_t entry_scratch_c, uint16_t rom_at);
-void FxPictureRise40(void);
-void FxPictureRise60(void);
-void FxPictureRiseSplit40(void);
-void FxPictureRiseSplit60(void);
 void FxPixelRun(uint16_t colour, uint16_t start_x, uint16_t start, uint16_t count);
 void FxPlotTestProgram(void);
 FxPointsGatherResult FxPointsGather(uint16_t count, uint16_t rom_at);
@@ -691,16 +677,10 @@ void FxRotateXZByte(uint16_t point_x, uint16_t angle, uint16_t point_z, uint16_t
 void FxRowsCopyProgram(void);
 void FxScaleFromTable14(void);
 FxScaleFromTable14PullResult FxScaleFromTable14Pull(uint16_t *stack);
-void FxScaledSprite12(uint16_t entry_row_y);
-void FxScaledSprite13(uint16_t entry_row_y);
-void FxScaledSpriteAdvance(uint16_t rpix_y);
-void FxScaledSpriteEighth(uint16_t entry_row_y);
 void FxScreenClear(void);
 FxSegmentCrossZResult FxSegmentCrossZ(uint16_t ends_1, uint16_t ends_2, uint16_t ends_3, uint16_t ends_4, uint16_t ends_5, uint16_t ends_6);
 void FxSortObjectsProgram(void);
 FxSpreadCarsResult FxSpreadCars(uint16_t entry_distance, uint16_t car_record, uint16_t *stack);
-void FxSprite16x32(uint16_t entry_row_y);
-void FxSprite24x40(uint16_t entry_row_y);
 void FxSprite32Program(void);
 FxSpriteMaterialResult FxSpriteMaterial(uint16_t material_index, uint16_t model_stream_ptr, uint16_t sprite_scale_word);
 void FxSqrt16(uint16_t value);

@@ -41,14 +41,6 @@ enum {
     FXIN_VIEW_ANGLES = 0x00DE,          /* $00DE, $00E0, $00E2 */
     FXIN_CAMERA_FLAGS = 0x2736,
     FXIN_RECORDS = 0x0AAA,              /* the frame's records, 30 bytes each */
-    FXIN_GLYPH_BYTES = 0x0200,          /* four colour bytes for the glyph programs */
-    FXIN_PIECE_X = 0x020A,
-    FXIN_PIECE_Y = 0x020C,
-    FXIN_PIECE_W = 0x020E,              /* width, or step, as the program takes it */
-    FXIN_PIECE_H = 0x0210,
-    FXIN_PIECE_U = 0x0212,
-    FXIN_PIECE_V = 0x0214,
-    FXIN_PIECE = 0x0216,                /* the glyph or piece */
     FXIN_RAMP = 0x3C00,                 /* the noise program's eight-word ramp */
     FXIN_EFFECTS_SEED = 0x01D0,         /* the renderer's effects random seed, $1234 once the view is set */
     FXIN_NOT_MENU = 0x108C,             /* 0 for the course menu's view, else the players */
@@ -74,8 +66,14 @@ enum { FX_PICTURE_0 = 0x2C00, FX_PICTURE_1 = 0x9400, FX_PICTURE_0_CLEARED_END = 
    FX_TURN_PICTURE_HIGH. */
 enum { FX_TURN_UNPACK_HIGH = 0xC000, FX_TURN_PICTURE_LOW = 0x4000, FX_TURN_PICTURE_HIGH = 0xD000 };
 
-/* The renderer's inputs that only the glyph programs read: the colours. */
-void GlyphColours(uint8_t b1, uint8_t b2, uint8_t b3);
+/* The view's right and bottom edges as the chip's words hold them when the
+   HUD draws a scaled sprite, which clips to them. The car physics keeps its
+   own values in the same two words between its runs, so these are read at
+   the moment of drawing, as the original's programs read them. Interim:
+   they go with the renderer's inputs as named fields (the fx session's
+   frame inputs). */
+static inline uint16_t chip_view_right(void) { return fx16(FXIN_VIEW_RIGHT); }
+static inline uint16_t chip_view_bottom(void) { return fx16(FXIN_VIEW_BOTTOM); }
 
 void GsuParamsUpdate(void);
 void GsuParamsFromDp(void);

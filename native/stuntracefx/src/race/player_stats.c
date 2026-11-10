@@ -286,7 +286,7 @@ static void player_one_phase_tally(void)
         a = 0x00AC;
     }
     g.glyph_sprite_x[0] = a;
-    fx16_set(FXIN_PIECE_H, 0x0020);
+    hud_piece.h = 0x0020;
     GlyphColours(0xBF, 0xBA, 0xB9);
     BonusDigitsDrawAt(g.glyph_sprite_x[0]);
     GlyphSpritesDrawAll();

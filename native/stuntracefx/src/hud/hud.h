@@ -6,7 +6,12 @@
 
 #include <stdint.h>
 
+#include "fx/render/hud.h"
 #include "object/object.h"
+
+/* the piece the HUD's Super FX programs draw (glyphs.c), and its colours */
+extern FxPiece hud_piece;
+void GlyphColours(uint8_t b1, uint8_t b2, uint8_t b3);
 
 /* the frame's HUD work (hud_frame.c) */
 void HudDrawTime(void);
