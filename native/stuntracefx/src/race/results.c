@@ -299,11 +299,11 @@ static void ResultsCarPicture(void)
 
 /* ---- the menu after the race ---- */
 
-static void menu_rows(unsigned at, int count, void (*a)(void), void (*c)(void))
+static void menu_rows(unsigned at, int count, void (*other_row)(void), void (*last_row)(void))
 {
     TilemapPaletteCycle(at, count);
-    a();
-    c();
+    other_row();
+    last_row();
 }
 
 static void rows_retry(void) { menu_rows(0x0187, 9, TilemapRow207Palette4, TilemapRow287Palette4); }

@@ -287,10 +287,10 @@ Vec16 VectorDoubled(Vec16 v)
 
 /* Two 8-bit vector components rotated by a sine and cosine: x cos + v sin
    and v cos - x sin, each sign-extended from eight bits. */
-static void rotate8(uint8_t s, uint8_t c, int8_t x, int8_t v, int16_t *a, int16_t *b)
+static void rotate8(uint8_t s, uint8_t c, int8_t x, int8_t v, int16_t *out_x, int16_t *out_v)
 {
-    *a = (int8_t)(uint8_t)(smul((uint8_t)x, c) + smul((uint8_t)v, s));
-    *b = (int8_t)(uint8_t)(smul((uint8_t)v, c) - smul((uint8_t)x, s));
+    *out_x = (int8_t)(uint8_t)(smul((uint8_t)x, c) + smul((uint8_t)v, s));
+    *out_v = (int8_t)(uint8_t)(smul((uint8_t)v, c) - smul((uint8_t)x, s));
 }
 
 /* @routine 03:C27F RotateXZ: by the angle negated. */

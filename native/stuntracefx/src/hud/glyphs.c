@@ -589,13 +589,14 @@ static uint16_t digit_glyph(uint8_t digit)
     return (uint16_t)(0x9400 + ((digit & 0x0F) << 1));
 }
 
-static void time_glyph(int *y, uint16_t glyph, uint8_t x)
+/* The glyph list's next slot: a glyph of the time row at x, line $68. */
+static void time_glyph(int *slot, uint16_t glyph, uint8_t x)
 {
-    g.glyph_word[*y] = glyph;
-    g.glyph_on[*y] = 0;
-    g.glyph_x_y[*y * 2] = x;
-    g.glyph_x_y[*y * 2 + 1] = 0x68;
-    (*y)++;
+    g.glyph_word[*slot] = glyph;
+    g.glyph_on[*slot] = 0;
+    g.glyph_x_y[*slot * 2] = x;
+    g.glyph_x_y[*slot * 2 + 1] = 0x68;
+    (*slot)++;
 }
 
 /*
@@ -608,7 +609,7 @@ static void glyph_list_message_and_time(uint16_t index, uint8_t min, uint8_t sec
 {
     uint16_t s = cart16(0x04, (uint16_t)(0xDF6D + index));
     uint16_t letters = (uint16_t)(cart16(0x04, s) & 0x00FF), x;
-    int y = 0;
+    int slot = 0;
 
     x = (uint16_t)-(uint16_t)((uint16_t)(letters * 4) - 0x0068);
     g.glyph_first_end = (uint16_t)(letters - 1);
@@ -617,22 +618,22 @@ static void glyph_list_message_and_time(uint16_t index, uint8_t min, uint8_t sec
         uint16_t w = cart16(0x04, (uint16_t)(s + 1));
 
         if (w) {
-            g.glyph_word[y] = w;
-            g.glyph_x_y[y * 2] = (uint8_t)x;
-            g.glyph_x_y[y * 2 + 1] = 0x58;
-            g.glyph_on[y] = 0;
-            y++;
+            g.glyph_word[slot] = w;
+            g.glyph_x_y[slot * 2] = (uint8_t)x;
+            g.glyph_x_y[slot * 2 + 1] = 0x58;
+            g.glyph_on[slot] = 0;
+            slot++;
         }
         x = (uint16_t)(x + 8);
         s = (uint16_t)(s + 2);
     }
-    time_glyph(&y, digit_glyph(hund), 0x4C);
-    time_glyph(&y, 0x980A, 0x54);
-    time_glyph(&y, digit_glyph((uint8_t)(sec >> 4)), 0x5C);
-    time_glyph(&y, digit_glyph(sec), 0x64);
-    time_glyph(&y, 0x980C, 0x6C);
-    time_glyph(&y, digit_glyph((uint8_t)(min >> 4)), 0x74);
-    time_glyph(&y, digit_glyph(min), 0x7C);
+    time_glyph(&slot, digit_glyph(hund), 0x4C);
+    time_glyph(&slot, 0x980A, 0x54);
+    time_glyph(&slot, digit_glyph((uint8_t)(sec >> 4)), 0x5C);
+    time_glyph(&slot, digit_glyph(sec), 0x64);
+    time_glyph(&slot, 0x980C, 0x6C);
+    time_glyph(&slot, digit_glyph((uint8_t)(min >> 4)), 0x74);
+    time_glyph(&slot, digit_glyph(min), 0x7C);
 }
 
 /* @routine 07:A03F GlyphWordAt1C28 */
