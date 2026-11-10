@@ -47,8 +47,8 @@ void screen_two_box(int player, int box, float *x, float *y, float *w, float *h)
 int race_full_window(void);                    /* the one-player race fills the window */
 int race_two_full_window(void);                /* two players fill the window */
 int race_course_full_window(void);             /* the course screen fills the window */
-nshvc_image fx_noise_image(void);              /* wanted from fx_draw: the static's noise texture */
-uint16_t fx_static_seed(int line);             /* wanted from fx_draw: the seed line 0-127 of the static's block was drawn with */
+nshvc_image fx_noise_image(void);              /* fx_draw.c: the static's noise texture */
+uint16_t fx_static_seed(int line);             /* fx_draw.c: the seed line 0-127 of the static's block was drawn with */
 void race_two_full_window_ready(int on);       /* interim: the 3D's side turns it on with its two-player rectangles */
 void race_hills_full(void);                    /* its hills and sky for the picture shown, or one between steps */
 uint16_t sky_colour_at(int at);                /* colour 1 at place `at` of the day and night lists */

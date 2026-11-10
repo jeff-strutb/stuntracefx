@@ -802,28 +802,8 @@ void VramNoiseTiles(void)
     }
 }
 
-/* wanted from fx_draw (the Enhanced 3D session): the static's noise texture
-   and the seed each line of the static's 16 x 128 block was drawn with; until
-   they exist the course screen keeps the original's layout */
-__attribute__((weak)) nshvc_image fx_noise_image(void)
-{
-    static int said;
-    nshvc_image none = { 0 };
-
-    if (!said) {
-        said = 1;
-        fprintf(stderr, "not converted yet: fx_noise_image\n");
-    }
-    return none;
-}
-
-__attribute__((weak)) uint16_t fx_static_seed(int line)
-{
-    (void)line;
-    return 0;
-}
-
-/* The course screen fills the window once the static can be laid out. */
+/* The course screen fills the window once the static can be laid out
+   (fx_draw's noise texture and the static's seeds). */
 int race_course_full_window(void)
 {
     return pic.race.on && pic.race.course_screen && fx_noise_image().id != 0;
