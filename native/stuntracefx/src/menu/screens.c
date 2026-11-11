@@ -4,6 +4,7 @@
  * the update returns.
  */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "audio/sound.h"
@@ -1168,6 +1169,53 @@ void session_start(void)
 
 static int after_race = S_COURSE_START;
 
+/* A launch straight into a course's race, for looking at a course while it
+   is worked on: SRFX_COURSE=<course> in the environment (decimal, or hex
+   after 0x; $00-$16). The logo, title, menus and course screen are left
+   out, their choices made as data, as the course menu's end makes them
+   (S_COURSE_DONE): the mode the course's (Stunt Trax $0C-$0F, Battle Trax
+   $10-$13, else Speed Trax), the first car, the save's initials; the race's
+   flow then chooses the course (race_launch_course). After the race the
+   game goes on to the course menu as after any race. -2: not read yet. */
+static int launch_course = -2;
+
+static int launch_course_now(void)
+{
+    if (launch_course == -2) {
+        const char *s = getenv("SRFX_COURSE");
+        char *end = NULL;
+        long n = s && *s ? strtol(s, &end, 0) : -1;
+
+        launch_course = (end && !*end && n >= 0 && n <= 0x16) ? (int)n : -1;
+        if (s && *s && launch_course < 0)
+            fprintf(stderr, "SRFX_COURSE=%s: not a course ($00-$16); starting as usual\n", s);
+    }
+    return launch_course;
+}
+
+static void launch_race(int course)
+{
+    int i;
+
+    g.menu_mode = (uint16_t)(course >= 0x0C && course <= 0x0F ? 1 : course >= 0x10 && course <= 0x13 ? 2 : 0);
+    g.hud_mode = (uint8_t)g.menu_mode;
+    g.course_menu_seen = 1;
+    if (g.menu_mode == 2)
+        SelectionCommit();
+    else
+        SelectionSave();
+    for (i = 0; i < 3; i++) {
+        g.settings_row[i] = save.settings[i];
+        g.car_settings[i] = save.settings[i];
+    }
+    SaveChecksum();
+    pic.blank = 1;
+    race_launch_course(course);
+    after_race = S_COURSE_START;
+    race_session_begin();
+    state = S_RACE;
+}
+
 void session_race_ended(int to_course_menu)
 {
     after_race = to_course_menu ? S_COURSE_START : S_SOUND_START;
@@ -1177,6 +1225,10 @@ void session_race_ended(int to_course_menu)
    demos end their own frames. */
 void session_update(void)
 {
+    if (state == S_SOUND_START && launch_course_now() >= 0) {
+        launch_race(launch_course);
+        launch_course = -1;
+    }
     if (state == S_RACE) {
         stage20_on = 0;
         if (race_session_update())

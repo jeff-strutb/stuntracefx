@@ -431,13 +431,55 @@ static void attract_setup(void)
     g.picture_uploaded = 1;
 }
 
+/* A launch straight into a course's race (race_launch_course): -1 none. */
+static int launch_course = -1;
+
+void race_launch_course(int course) { launch_course = course; }
+
+/* the course screen's choice of the launch's course, as its zooms make it
+   (CourseFromSelection, course_choose): Speed Trax's class and stage (from
+   $14 the courses its time override picks by class), Stunt and Battle
+   Trax's slot in their lists */
+static void launch_choose(int course)
+{
+    uint16_t slot;
+
+    g.course = (uint8_t)course;
+    g.course_high = 0;
+    if (g.hud_mode == 1 || g.hud_mode == 2) {
+        for (slot = 0; slot < 4; slot++)
+            if (course_in_list(g.hud_mode == 1 ? COURSE_LIST_STUNT : COURSE_LIST_BATTLE, slot) == course)
+                g.champ_stage = (uint8_t)slot;
+    } else if (course >= 0x14) {
+        g.time_override = 1;
+        g.course_class = (uint8_t)(course - 0x14);
+    } else {
+        g.course_class = (uint8_t)(course / 4);
+        g.champ_stage = (uint8_t)(course % 4);
+    }
+}
+
 /* @routine 03:8BCD BootWarmRace: the screen blanked, sound on, the course
-   screen before the race (RaceLoop). */
+   screen before the race (RaceLoop). A launch's course screen is begun (the
+   race's load) and left at once, as its fade out leaves it, the course
+   chosen as data. */
 static void race_load(void)
 {
     pic.blank = 1;
     sound_muted = 0;                    /* $0E4E */
-    flow.state = CourseScreenBegin() ? FLOW_COURSE : FLOW_VIDEO_INIT;
+    if (launch_course >= 0)
+        launch_choose(launch_course);   /* the course as the race's load reads it (RaceVarsReset) */
+    if (!CourseScreenBegin()) {
+        flow.state = FLOW_VIDEO_INIT;
+        return;
+    }
+    flow.state = FLOW_COURSE;
+    if (launch_course >= 0) {
+        launch_choose(launch_course);   /* again: the load clears Battle Trax's slot */
+        launch_course = -1;
+        g.raster_chain = RASTER_NONE;
+        flow.state = FLOW_VIDEO_INIT;
+    }
 }
 
 /* One update of the course screen: its blank lines, its loop's frame, then

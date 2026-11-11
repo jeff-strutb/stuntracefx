@@ -62,6 +62,10 @@ uint8_t CourseFromSelection(void);
 /* the race after the course menu: begin once, then each update until nonzero */
 void race_session_begin(void);
 int race_session_update(void);
+/* the next race's course screen left out: its choice made as data, course
+   `course` in the mode already set (a launch straight into a course's race,
+   menu/screens.c) */
+void race_launch_course(int course);
 
 void RaceTimeInit(void);
 void TimeLeftAddLap2(void);
