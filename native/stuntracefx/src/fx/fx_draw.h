@@ -89,6 +89,11 @@ int fx_draw_two_players(void);
    `shader` with its eight inputs, each vertex's u, v its screen place less
    (ox, oy); and the picture being drawn (0, or 1 for two players' second). */
 void fx_draw_surface(const FxCorner *c, uint32_t n, nshvc_image image, nshvc_shader shader, const float in[8], float ox, float oy);
+/* The land's polygons (fx/fx_ground.c): triangles of n vertices, x and y
+   in the picture's pixels, each vertex's colour and depth its own (z in
+   (0, 1): past every other shape of the 3D, drawn at depth 0, so they
+   cover none of them). */
+void fx_draw_land(const nshvc_vertex *v, uint32_t n);
 int fx_draw_picture_now(void);
 int fx_draw_tweening(void);
 /* The palette entry a face's colour byte is shown in at the screen's depth

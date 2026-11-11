@@ -6,11 +6,16 @@
  * Each course's surface is land or water, by its band's ground colours and
  * what its scenery is (the table below).
  *
- * Land follows the course's own heights: once a course, the survey (below)
- * takes where its shapes meet the ground into a grid of heights, and
- * terrain.shade casts each pixel's ray from the eye over the grid on the
- * GPU, the land's colour by distance (the band's, or the course's rock's),
- * lit a little by its slope, with the kind's marks.
+ * Land, on the courses done so far (Easy Ride; Jeff, 2026-11-11, track by
+ * track), is solid polygons in the course's own style: a plane at the
+ * course's ground level out to the horizon and a ring of polygon mountains
+ * round the course, each face shaded as the chip shades the course's own
+ * lit faces ("the land as polygons", below). On the rest, until each is
+ * done, land follows the course's own heights: once a course, the survey
+ * (below) takes where its shapes meet the ground into a grid of heights,
+ * and terrain.shade colours a few planes over it on the GPU, the land's
+ * colour by distance (the band's, or the course's rock's), lit a little by
+ * its slope, with the kind's marks.
  *
  * Water is a plane at the course's water level. Per picture and player it
  * is one convex polygon: the plane turned to the view
@@ -52,6 +57,7 @@
  * no water.
  */
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -72,6 +78,14 @@
 #define TEXEL_U 33.6
 #define TEXEL_V 53.7
 #define INK 0.8                 /* the marks' colour: the band's on their row, this much as bright */
+/* the chip's light for lit faces, fixed in view space (y down, z ahead;
+   FxModelProject's $0100-$0104), and a lit face's level against it where a
+   course has no lit faces to fit it from (land as polygons, below): the
+   chip's level is (its normal . the light, each as 127 a unit) / 1024, its
+   normals facing in */
+#define LIGHT_Y (0x393E / 32768.0)
+#define LIGHT_Z (0x727C / 32768.0)
+#define LIGHT_K (-127.0 * 127.0 / 1024.0)
 #define HORIZON_GAP 0.01        /* the polygon's far edge this far from the horizon, in output pixels */
 
 enum { SURF_NONE, SURF_GRASS, SURF_ROCK, SURF_CEMENT, SURF_SNOW, SURF_ICE, SURF_DIRT, SURF_WATER, SURF_AQUA };
@@ -86,36 +100,40 @@ enum { SURF_NONE, SURF_GRASS, SURF_ROCK, SURF_CEMENT, SURF_SNOW, SURF_ICE, SURF_
    night city (Jeff). Water is at the height where its lowest road's pieces
    end (a road piece reaches 640 below the road), measured from the
    course's shapes, so the road stands in it and nothing of the road hangs
-   above it. */
+   above it. Land with a shade class (cls, a class of the chip's lit faces'
+   shade rows) is drawn as polygons in that class's shades (the land as
+   polygons, below); the rest as before, until each course is done (Jeff,
+   2026-11-11: track by track, Easy Ride first). */
 static const struct {
     uint8_t kind;
     int16_t y;
+    uint8_t cls;
 } surface[0x20] = {
-    [0x00] = { SURF_GRASS, 0 },         /* Easy Ride */
-    [0x01] = { SURF_AQUA, -1280 },      /* Aqua Tunnel: under the road, over the glass tube, where its
+    [0x00] = { SURF_GRASS, 0, 10 },     /* Easy Ride: class 10, the chip's grass green (82,131,0 to 148,197,57) */
+    [0x01] = { SURF_AQUA, -1280, 0 },   /* Aqua Tunnel: under the road, over the glass tube, where its
                                            road's pieces end (the road -1920, the pieces 640 below) */
-    [0x02] = { SURF_ROCK, 0 },          /* the canyon */
-    [0x03] = { SURF_CEMENT, 0 },        /* the night city, the airport */
-    [0x04] = { SURF_GRASS, 0 },         /* the foggy forest */
-    [0x05] = { SURF_GRASS, 0 },         /* Sea Breeze: its band green beside the road, the sea's teal only
+    [0x02] = { SURF_ROCK, 0, 0 },       /* the canyon */
+    [0x03] = { SURF_CEMENT, 0, 0 },     /* the night city, the airport */
+    [0x04] = { SURF_GRASS, 0, 0 },      /* the foggy forest */
+    [0x05] = { SURF_GRASS, 0, 0 },      /* Sea Breeze: its band green beside the road, the sea's teal only
                                            toward the horizon, which the land takes by distance */
-    [0x06] = { SURF_SNOW, 0 },          /* White Land */
-    [0x07] = { SURF_CEMENT, 0 },        /* the sunset city */
-    [0x08] = { SURF_GRASS, 0 },         /* Lake Side: as Sea Breeze */
-    [0x09] = { SURF_ROCK, 0 },          /* the wild-west desert: red rock, its band green */
-    [0x0A] = { SURF_NONE, 0 },          /* Sky Ramp */
-    [0x0B] = { SURF_WATER, -3840 },     /* the night harbour: where its lowest road's (-4480) pieces end */
-    [0x0C] = { SURF_DIRT, 0 },          /* the stunt arenas: dirt, grass, ice, water */
-    [0x0D] = { SURF_GRASS, 0 },
-    [0x0E] = { SURF_ICE, 0 },
-    [0x0F] = { SURF_WATER, 0 },         /* its floor */
-    [0x10] = { SURF_GRASS, 0 },         /* the battle arenas: the countryside */
-    [0x11] = { SURF_ROCK, 0 },          /* the red-rock desert, its band the canyon's tan */
-    [0x12] = { SURF_GRASS, 0 },         /* the beach: its band Sea Breeze's */
-    [0x13] = { SURF_WATER, 0 },         /* the night city: its band the night harbour's, at its floor */
-    [0x14] = { SURF_GRASS, 0 },         /* the countryside courses */
-    [0x15] = { SURF_GRASS, 0 },
-    [0x16] = { SURF_GRASS, 0 },
+    [0x06] = { SURF_SNOW, 0, 0 },       /* White Land */
+    [0x07] = { SURF_CEMENT, 0, 0 },     /* the sunset city */
+    [0x08] = { SURF_GRASS, 0, 0 },      /* Lake Side: as Sea Breeze */
+    [0x09] = { SURF_ROCK, 0, 0 },       /* the wild-west desert: red rock, its band green */
+    [0x0A] = { SURF_NONE, 0, 0 },       /* Sky Ramp */
+    [0x0B] = { SURF_WATER, -3840, 0 },  /* the night harbour: where its lowest road's (-4480) pieces end */
+    [0x0C] = { SURF_DIRT, 0, 0 },       /* the stunt arenas: dirt, grass, ice, water */
+    [0x0D] = { SURF_GRASS, 0, 0 },
+    [0x0E] = { SURF_ICE, 0, 0 },
+    [0x0F] = { SURF_WATER, 0, 0 },      /* its floor */
+    [0x10] = { SURF_GRASS, 0, 0 },      /* the battle arenas: the countryside */
+    [0x11] = { SURF_ROCK, 0, 0 },       /* the red-rock desert, its band the canyon's tan */
+    [0x12] = { SURF_GRASS, 0, 0 },      /* the beach: its band Sea Breeze's */
+    [0x13] = { SURF_WATER, 0, 0 },      /* the night city: its band the night harbour's, at its floor */
+    [0x14] = { SURF_GRASS, 0, 0 },      /* the countryside courses */
+    [0x15] = { SURF_GRASS, 0, 0 },
+    [0x16] = { SURF_GRASS, 0, 0 },
 };
 
 /* the land's marks: the size of a texel on the ground, and each kind's
@@ -290,7 +308,9 @@ static struct {
     double light[3], bias;      /* a face with outward normal n has shade light . n + bias */
     float h[GRID_MOST * GRID_MOST];
     double level;               /* the course's ground level: the grid's median height */
-} grid = { -1, 0, 0, 0, 0, 0, 0, { 0 }, { 0, 0, 0 }, 0, { 0 }, 0 };
+    double xmin, xmax, zmin, zmax;      /* the course's footprint: where its shapes meet the ground */
+    double light_k;             /* a lit face's level: light_k * (its outward normal . the light) */
+} grid = { -1, 0, 0, 0, 0, 0, 0, { 0 }, { 0, 0, 0 }, 0, { 0 }, 0, 0, 0, 0, 0, 0 };
 
 /* the survey's untextured faces by colour byte: area on steep faces (the
    normal less than 45 degrees from level; y is the world's up axis, the
@@ -301,6 +321,7 @@ static struct {
 static struct {
     double steep[256], area[256], n[256][3], nn[256][3][3];
     double facing;
+    double lit_ln, lit_nn, lit_area;    /* lit faces: sums of area * level * (n . light), area * (n . light)^2, area */
 } rock_survey;
 
 static float survey_point[SURVEY_POINTS][3];
@@ -318,8 +339,12 @@ static void survey_sink(double x, double y, double z, void *context)
     survey_points++;
 }
 
-/* a face the chip queued, into the sums of its colour */
-static void survey_face(const double (*c)[3], int n, uint8_t colour, int textured, void *context)
+/* a face the chip queued, into the sums of its colour; a lit face also
+   into the fit of its light level against its facing (the land as
+   polygons, below): the survey's view is the identity, so its normal is
+   in the world's axes, and the light the chip gave it the view's light
+   in the same axes */
+static void survey_face(const double (*c)[3], int n, uint8_t colour, int textured, int lit, float light, void *context)
 {
     double nv[3] = { 0, 0, 0 }, len, area, u[3];
     int i, j;
@@ -339,6 +364,13 @@ static void survey_face(const double (*c)[3], int n, uint8_t colour, int texture
     for (i = 0; i < 3; i++)
         u[i] = nv[i] / len;
     rock_survey.facing += u[2];
+    if (lit) {
+        double x = u[1] * LIGHT_Y + u[2] * LIGHT_Z;
+
+        rock_survey.lit_ln += area * light * x;
+        rock_survey.lit_nn += area * x * x;
+        rock_survey.lit_area += area;
+    }
     if (textured)
         return;
     rock_survey.area[colour] += area;
@@ -561,6 +593,21 @@ static void ground_survey(unsigned course, const double eye[3], const double m[9
         zmax = fmax(zmax, survey_point[i][2]);
     }
     grid.course = (int)course;
+    grid.xmin = xmin;
+    grid.xmax = xmax;
+    grid.zmin = zmin;
+    grid.zmax = zmax;
+    /* a lit face's level against its facing, fitted by least squares over
+       the course's lit faces by area: level = k (n . light), n as Newell's
+       normals point; then turned to outward normals (rock_shades says
+       which way Newell's point) */
+    grid.light_k = LIGHT_K;
+    if (rock_survey.lit_area > 0 && rock_survey.lit_nn > 1e-6 * rock_survey.lit_area) {
+        double k = rock_survey.lit_ln / rock_survey.lit_nn;
+
+        if (fabs(k) >= 4 && fabs(k) <= 32)     /* the chip's own is 15.75; else too few faces to tell */
+            grid.light_k = rock_survey.facing < 0 ? k : -k;
+    }
     if (!survey_points) {
         grid.nx = grid.nz = 0;
         return;
@@ -630,6 +677,9 @@ static void ground_survey(unsigned course, const double eye[3], const double m[9
     memcpy(next, grid.h, sizeof(float) * (size_t)(grid.nx * grid.nz));
     qsort(next, (size_t)(grid.nx * grid.nz), sizeof(float), float_order);
     grid.level = next[grid.nx * grid.nz / 2];
+    fprintf(stderr, "ground: course %u, level %.0f, footprint x %.0f to %.0f, z %.0f to %.0f, lit level %.2f a unit of"
+            " facing (%s)\n", course, grid.level, grid.xmin, grid.xmax, grid.zmin, grid.zmax, grid.light_k,
+            grid.light_k == LIGHT_K ? "no lit faces: the chip's own scale" : "fitted from the course's lit faces");
 }
 
 /* ---- the land drawn: a few planes, terrain.shade colouring them ----
@@ -888,6 +938,244 @@ static void land_draw(int kind, const double eye[3], const double m[9], int p)
     }
 }
 
+/* ---- the land as polygons: a plane to the horizon and a ring of mountains ----
+
+   Jeff (2026-11-11): the ground as clear solid polygons in the style of the
+   course's own design, out to the horizon with no gaps. Courses whose
+   surface names a shade class (the table's cls; Easy Ride first, the rest
+   track by track) draw their land so; the rest as above.
+
+   The ground is one plane at the course's level (grid.level), from under
+   the eye out to where it meets the horizon within HORIZON_GAP of an output
+   pixel in every direction, so nothing of the backdrop shows below the
+   horizon. It is never above the eye: where the eye is lower than
+   EYE_CLEAR over the level (a tunnel), it lies EYE_CLEAR under the eye, so
+   it is never seen from below. Round the course stands a ring of MOUNTAINS
+   pyramids of SIDES faces, made once a course from the survey's footprint
+   (their places, sizes and shapes from a hash of the course and their
+   number; their size in proportion to the footprint's), each base wholly
+   GAP of the footprint's half size outside it, so no mountain can stand
+   between the eye and the course's shapes; their bases on the plane.
+
+   Each face is shaded as the chip shades a lit face of a course's model
+   (FxModelMaterial): its light level its normal against the light (fixed in
+   view space), floored and kept to 6-15; its colour the byte at that level
+   in the class's shade row, the nearest tier's (bank 3, SHADE_ROWS); and
+   that byte's colour in the palette (two players' pictures, whose palette
+   is in 16-colour rows: one player's, ONE_PALETTE). The level's scale and
+   sign come from the survey's fit of the course's own lit faces
+   (grid.light_k), so the land takes the shades the course's own faces take
+   facing the same way.
+
+   Depths: the 3D is drawn at depth 0, in the order the frame program gives;
+   the land lies past it all (fx_draw_land), so it covers none of the
+   course's shapes whatever the order. The plane is at PLANE_Z, past the
+   mountains; a mountain face at 0.998 (1 - LAND_NEAR / its depth) at each
+   corner, from the face's own plane, which is exact across the face (one
+   over the depth is linear across the screen), so the mountains hide each
+   other as they stand. Triangles: the plane's quad (2, at most 6 once kept
+   to the view) and MOUNTAINS x SIDES faces (50), those facing away left
+   out. No image and no shader: the GPU fills each in its colour. */
+
+enum { MOUNTAINS = 10, SIDES = 5, LAND_VERTICES = 3 * (6 + MOUNTAINS * SIDES * 5) };   /* each kept to the view in at most 6 or 5 */
+#define SHADE_ROWS 0xA1C5       /* bank 3: the lit faces' shade rows by class, two bytes each, the nearest tier's */
+#define ONE_PALETTE 0x8800      /* bank $1F: one player's palette */
+#define PLANE_Z 0.999f
+#define FACE_Z 0.998
+#define LAND_NEAR 256.0
+#define EYE_CLEAR 64.0
+#define GAP 0.3
+
+static struct {
+    int course;
+    double base[MOUNTAINS][SIDES][2];   /* each base corner's x, z (on the plane) */
+    double peak[MOUNTAINS][3];          /* the peak in the world */
+} range = { -1, { { { 0 } } }, { { 0 } } };
+
+/* a number in [0, 1) from the course, the mountain and which of its numbers */
+static double hash01(unsigned course, unsigned i, unsigned k)
+{
+    uint32_t h = (course + 1) * 0x9E3779B9u ^ (i + 1) * 0x85EBCA6Bu ^ (k + 1) * 0xC2B2AE35u;
+
+    h ^= h >> 16;
+    h *= 0x7FEB352Du;
+    h ^= h >> 15;
+    h *= 0x846CA68Bu;
+    h ^= h >> 16;
+    return (double)(h & 0xFFFFFF) / 16777216.0;
+}
+
+/* how far (x, z) is outside the course's footprint (0 inside) */
+static double footprint_distance(double x, double z)
+{
+    double dx = fmax(fabs(x - (grid.xmin + grid.xmax) / 2) - (grid.xmax - grid.xmin) / 2, 0);
+    double dz = fmax(fabs(z - (grid.zmin + grid.zmax) / 2) - (grid.zmax - grid.zmin) / 2, 0);
+
+    return sqrt(dx * dx + dz * dz);
+}
+
+/* The ring for the course: mountain i at angle 2 pi i / MOUNTAINS round the
+   footprint's middle (give or take a third of a step), its base's mean
+   radius 0.55-0.75 of the footprint's larger half size, its peak 0.45-0.75
+   of its radius over the plane (faces 25-40 degrees steep), a little off
+   its middle; its base's corners
+   round it at 0.8-1.15 of the mean radius (each angle give or take 0.3 of
+   a step), so its peak stands inside its base and every face looks up. Its
+   middle is carried out along its angle until its base, at the most
+   1.15 its mean radius, is GAP of the half size clear of the footprint. */
+static void range_make(unsigned course)
+{
+    double cx = (grid.xmin + grid.xmax) / 2, cz = (grid.zmin + grid.zmax) / 2;
+    double size = fmax(grid.xmax - grid.xmin, grid.zmax - grid.zmin) / 2;
+    const double turn = 6.283185307179586;
+    int i, k, step;
+
+    range.course = (int)course;
+    for (i = 0; i < MOUNTAINS; i++) {
+        double angle = turn * (i + 0.6 * (hash01(course, i, 0) - 0.5)) / MOUNTAINS;
+        double r = size * (0.55 + 0.2 * hash01(course, i, 1)), height = r * (0.45 + 0.3 * hash01(course, i, 2));
+        double clear = 1.15 * r + GAP * size, t = clear, x = cx, z = cz, turned = turn * hash01(course, i, 3);
+        double off_angle = turn * hash01(course, i, 4), off = 0.2 * r * hash01(course, i, 5);
+
+        for (step = 0; step < 32; step++) {
+            double d;
+
+            x = cx + cos(angle) * t;
+            z = cz + sin(angle) * t;
+            d = footprint_distance(x, z);
+            if (d >= clear - 1)
+                break;
+            t += clear - d;
+        }
+        for (k = 0; k < SIDES; k++) {
+            double a = turned + turn * (k + 0.6 * (hash01(course, i, 6 + k) - 0.5)) / SIDES;
+            double rr = r * (0.8 + 0.35 * hash01(course, i, 6 + SIDES + k));
+
+            range.base[i][k][0] = x + cos(a) * rr;
+            range.base[i][k][1] = z + sin(a) * rr;
+        }
+        range.peak[i][0] = x + cos(off_angle) * off;
+        range.peak[i][1] = grid.level - height;         /* y is down */
+        range.peak[i][2] = z + sin(off_angle) * off;
+    }
+}
+
+/* the colour of a face of class cls whose outward normal is n in view
+   space, as the chip shades a lit face */
+static uint32_t land_colour(int cls, const double n[3])
+{
+    double len = sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+    double x = len > 0 ? (n[1] * LIGHT_Y + n[2] * LIGHT_Z) / len : 0;
+    double level = floor(grid.light_k * x);
+    uint16_t row = (uint16_t)(fx_rom_read(3, (uint16_t)(SHADE_ROWS + 2 * cls)) | fx_rom_read(3, (uint16_t)(SHADE_ROWS + 2 * cls + 1)) << 8);
+    uint8_t c;
+    uint16_t bgr;
+
+    if (level < 6)
+        level = 6;
+    if (level > 15)
+        level = 15;
+    c = fx_rom_read(3, (uint16_t)(row + (int)level - 6));
+    if (fx_draw_full_colour())
+        bgr = pic.palette[c];
+    else
+        bgr = (uint16_t)(fx_rom_read(0x1F, (uint16_t)(ONE_PALETTE + 2 * c)) | fx_rom_read(0x1F, (uint16_t)(ONE_PALETTE + 2 * c + 1)) << 8);
+    return rgb_of(bgr);
+}
+
+/* a world point to view space (world axis k turns to row k of m) */
+static void to_view(const double w[3], const double eye[3], const double m[9], double v[3])
+{
+    double d[3] = { w[0] - eye[0], w[1] - eye[1], w[2] - eye[2] };
+    int k;
+
+    for (k = 0; k < 3; k++)
+        v[k] = d[0] * m[k] + d[1] * m[3 + k] + d[2] * m[6 + k];
+}
+
+static void land_polygons(unsigned course, int cls, const double eye[3], const double m[9])
+{
+    static nshvc_vertex v[LAND_VERTICES];
+    static FxCorner c[64];
+    double plane_y = fmax(grid.level, eye[1] + EYE_CLEAR), dh = plane_y - eye[1], reach, q[4][3], up[3];
+    double vcx = (int16_t)ram_word(0x0034), vcy = (int16_t)ram_word(0x0036);
+    float sx, sy, scale;
+    uint32_t nv = 0, nc, j, colour;
+    int i, k;
+
+    if (!grid.nx)
+        return;
+    if (range.course != (int)course)
+        range_make(course);
+    fx_draw_list_scale(&sx, &sy);
+    scale = sx > sy ? sx : sy;
+    /* the plane: a quad about the eye, far enough out that its far edges
+       lie HORIZON_GAP output pixels from the horizon, up its normal */
+    reach = 128.0 * dh * scale / HORIZON_GAP;
+    for (i = 0; i < 4; i++) {
+        double w[3] = { eye[0] + ((i == 1 || i == 2) ? reach : -reach), plane_y, eye[2] + (i >= 2 ? reach : -reach) };
+
+        to_view(w, eye, m, q[i]);
+    }
+    for (k = 0; k < 3; k++)
+        up[k] = -m[3 + k];
+    colour = land_colour(cls, up);
+    nc = fx_face_triangles_d((const double (*)[3])q, 4, c, sizeof c / sizeof c[0]);
+    for (j = 0; j < nc && nv < LAND_VERTICES; j++, nv++) {
+        memset(&v[nv], 0, sizeof v[nv]);
+        v[nv].x = c[j].x;
+        v[nv].y = c[j].y;
+        v[nv].z = PLANE_Z;
+        v[nv].colour = colour;
+    }
+    /* the mountains' faces that look toward the eye */
+    for (i = 0; i < MOUNTAINS; i++)
+        for (k = 0; k < SIDES; k++) {
+            const double *p = range.peak[i];
+            double b0[3] = { range.base[i][k][0], plane_y, range.base[i][k][1] };
+            double b1[3] = { range.base[i][(k + 1) % SIDES][0], plane_y, range.base[i][(k + 1) % SIDES][1] };
+            double e1[3], e2[3], n[3], nview[3], tri[3][3], d;
+
+            for (j = 0; j < 3; j++) {
+                e1[j] = b0[j] - p[j];
+                e2[j] = b1[j] - p[j];
+            }
+            n[0] = e1[1] * e2[2] - e1[2] * e2[1];
+            n[1] = e1[2] * e2[0] - e1[0] * e2[2];
+            n[2] = e1[0] * e2[1] - e1[1] * e2[0];
+            if (n[1] > 0)                       /* outward: up (y is down) */
+                for (j = 0; j < 3; j++)
+                    n[j] = -n[j];
+            if (n[0] * (eye[0] - p[0]) + n[1] * (eye[1] - p[1]) + n[2] * (eye[2] - p[2]) <= 0)
+                continue;
+            to_view(p, eye, m, tri[0]);
+            to_view(b0, eye, m, tri[1]);
+            to_view(b1, eye, m, tri[2]);
+            for (j = 0; j < 3; j++)
+                nview[j] = n[0] * m[j] + n[1] * m[3 + j] + n[2] * m[6 + j];
+            /* the face's plane nview . V = d; one over the depth at screen
+               (x, y) is nview . ((x - cx) / 128, (y - cy) / 128, 1) / d */
+            d = nview[0] * tri[0][0] + nview[1] * tri[0][1] + nview[2] * tri[0][2];
+            if (fabs(d) < 1e-9)
+                continue;
+            nc = fx_face_triangles_d((const double (*)[3])tri, 3, c, sizeof c / sizeof c[0]);
+            if (!nc || nv + nc > LAND_VERTICES)
+                continue;
+            colour = land_colour(cls, nview);
+            for (j = 0; j < nc; j++, nv++) {
+                double inv = (nview[0] * (c[j].x - vcx) / 128.0 + nview[1] * (c[j].y - vcy) / 128.0 + nview[2]) / d;
+                double z = FACE_Z * (1.0 - LAND_NEAR * inv);
+
+                memset(&v[nv], 0, sizeof v[nv]);
+                v[nv].x = c[j].x;
+                v[nv].y = c[j].y;
+                v[nv].z = (float)(z < 0 ? 0 : z > FACE_Z ? FACE_Z : z);
+                v[nv].colour = colour;
+            }
+        }
+    fx_draw_land(v, nv);
+}
+
 void fx_ground_draw(void)
 {
     unsigned course = g.course;
@@ -908,10 +1196,15 @@ void fx_ground_draw(void)
         eye[i] = (int16_t)ram_word(FX_FAR_BANK + FX_FAR_VIEW + 2 * i);
     for (i = 0; i < 9; i++)
         m[i] = (int16_t)ram_word((uint32_t)(0x00E4 + 2 * i)) / 32768.0;
-    if (IS_LAND(kind)) {                /* land: its heights once a course, the terrain over the view */
-        if (grid.course != (int)course)
+    if (IS_LAND(kind)) {                /* land: its heights once a course, then polygons or the terrain over the view */
+        if (grid.course != (int)course) {
             ground_survey(course, eye, m);
-        land_draw(kind, eye, m, p);
+            range.course = -1;
+        }
+        if (surface[course].cls)
+            land_polygons(course, surface[course].cls, eye, m);
+        else
+            land_draw(kind, eye, m, p);
         return;
     }
     dh = surface[course].y - eye[1];            /* world y is down: > 0, the surface below the eye */

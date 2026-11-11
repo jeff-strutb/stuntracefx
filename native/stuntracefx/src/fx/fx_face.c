@@ -829,7 +829,8 @@ static void commit(const FxMaterial *m)
             c[i][1] = face.c[i].y;
             c[i][2] = face.c[i].z;
         }
-        survey_face((const double (*)[3])c, face.n, m->colour, face.textured, survey_context);
+        survey_face((const double (*)[3])c, face.n, m->colour, face.textured, !face.textured && face.tint.kind == 1,
+                    face.tint.light, survey_context);
     }
     s = &shapes[nshapes];
     s->material = *m;

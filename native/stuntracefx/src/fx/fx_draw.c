@@ -1460,6 +1460,16 @@ void fx_draw_surface(const FxCorner *c, uint32_t n, nshvc_image image, nshvc_sha
     }
 }
 
+/* The land's polygons (fx_ground.c): in their vertices' colours, at their
+   own depths. */
+void fx_draw_land(const nshvc_vertex *v, uint32_t n)
+{
+    if ((!target.id && !recording) || !n)
+        return;
+    blocks_flush();
+    emit(v, n, 0, 0);
+}
+
 /* The same in the palette's entry e as it is, of the whole palette. */
 void fx_draw_flat_entry(const FxCorner *c, uint32_t n, uint8_t colour)
 {
