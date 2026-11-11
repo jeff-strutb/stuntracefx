@@ -456,6 +456,14 @@ static float emit_z(void)
 
 int fx_draw_depth_on(void) { return drawing_3d; }
 
+/* Faces drawn from both sides: while the 3D has its depths, except while the
+   eye is in a sealed tunnel (bit 3 of $0DA5, which the tunnel's gates set
+   and clear, its backdrop black): there, as the original, a face turned
+   away is left out. A tunnel's way out is a hill's face one-sided toward
+   the outside with its mouth painted on it (Sunset Valley's E3BC); from
+   inside, its back would stand across the way out. */
+int fx_draw_both_sides(void) { return drawing_3d && !(g.picture_effects & 0x08); }
+
 static void emit_with(const nshvc_vertex *v, uint32_t count, uint32_t image, int lines, uint32_t shader, const float *in)
 {
     Recording *r = recording;

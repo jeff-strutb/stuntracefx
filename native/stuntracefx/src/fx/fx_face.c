@@ -92,7 +92,22 @@ void fx_face_point(uint16_t record, uint16_t x, uint16_t y, uint16_t z)
     point[i].made = projection;
 }
 
+static int survey_all;                  /* every face shown (fx_face_survey_all) */
+
+void fx_face_survey_all(int on) { survey_all = on; }
+
+static uint8_t facing_of(uint16_t a, uint16_t b, uint16_t c, uint8_t chip);
+
+/* bit 7: the face looks at the eye (its points' winding, Newell's normal,
+   toward it); while the survey takes every face, every one */
 uint8_t fx_face_facing(uint16_t a, uint16_t b, uint16_t c, uint8_t chip)
+{
+    uint8_t r = facing_of(a, b, c, chip);
+
+    return survey_all ? (uint8_t)(r | 0x80) : r;
+}
+
+static uint8_t facing_of(uint16_t a, uint16_t b, uint16_t c, uint8_t chip)
 {
     uint16_t at[3] = { a, b, c };
     unsigned i[3], k;
@@ -1056,7 +1071,9 @@ static int polygon_corners(const Corner3 *in, int n0, int textured)
    may light it by another face's normal (a two-sided part's two faces share
    one). A face painted in the course's own rock (fx_ground_rock_back) takes
    the rock's shade for a face turned that way, as the land's rock is
-   shaded; any other keeps its colour. */
+   shaded, a distance table's colour by its index (a far canyon wall is the
+   rock's colours darkened, 44 to 47 for 93 to 97); any other keeps its
+   colour. */
 static void back_shade(FxShape *s)
 {
     double n[3] = { 0, 0, 0 }, light;
@@ -1080,6 +1097,25 @@ static void back_shade(FxShape *s)
         level = level < 6 ? 6 : level > 15 ? 15 : level;
         s->material.colour = fx_rom_read(3, (uint16_t)(face.tint.index + (int)level - 6));
         s->light = (float)light;
+        return;
+    }
+    if (face.tint.kind == 2) {
+        /* a colour from the distance table: its own index's colour at the
+           nearest tier (the table at $004E, as the survey saw the course's
+           rock), and the shade chosen drawn at the face's tier (the table
+           at $0052) by the index whose nearest colour it is */
+        uint16_t near_at = word(0x004E);
+        int i;
+
+        c = fx_ground_rock_back(fx_rom_read(3, (uint16_t)(near_at + (s->tint_index & 0xFF))), n);
+        if (c < 0)
+            return;
+        for (i = 0; i < 256 && fx_rom_read(3, (uint16_t)(near_at + i)) != c; i++)
+            ;
+        if (i == 256)
+            return;
+        s->tint_index = (uint16_t)i;
+        s->material.colour = fx_rom_read(3, (uint16_t)(word(0x0052) + i));
         return;
     }
     c = fx_ground_rock_back(s->material.colour, n);

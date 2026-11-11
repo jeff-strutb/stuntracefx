@@ -334,6 +334,22 @@ static struct {
 static float survey_point[SURVEY_POINTS][3];
 static int survey_points;
 
+/* The record being surveyed, at its second look (every face, those looking
+   away from the eye too: fx_face_survey_all): its faces' area by the way
+   their Newell normals point most (+x, -x, +y, -y, +z, -z; y is down) and
+   the area times their middles' place along that axis; and each record's
+   shape, place, box and those sums, to find the pieces the rock encloses
+   (the canyon's and the tunnels' rock, below). */
+enum { DIRS = 6 };
+static double rec_area[DIRS], rec_pos[DIRS];
+static int second_look;
+enum { CANDIDATES = 0x31 + FX_FAR_MAX };
+static struct {
+    uint16_t shape;
+    double at[3], lo[3], hi[3], area[DIRS], pos[DIRS];
+} cand[CANDIDATES];
+static int ncand;
+
 static void survey_sink(double x, double y, double z, void *context)
 {
     const double *at = (const double *)context;
@@ -370,6 +386,18 @@ static void survey_face(const double (*c)[3], int n, uint8_t colour, int texture
     area = 0.5 * len;
     for (i = 0; i < 3; i++)
         u[i] = nv[i] / len;
+    if (second_look) {                  /* the record's faces by direction, their middles' places in the world */
+        const double *at = (const double *)context;
+        int axis = fabs(u[0]) >= fabs(u[1]) && fabs(u[0]) >= fabs(u[2]) ? 0 : fabs(u[1]) >= fabs(u[2]) ? 1 : 2, d = 2 * axis + (u[axis] < 0);
+        double mid = 0;
+
+        for (i = 0; i < n; i++)
+            mid += c[i][axis];
+        mid = mid / n + at[axis] - (axis == 2 ? SURVEY_AHEAD : 0);
+        rec_area[d] += area;
+        rec_pos[d] += area * mid;
+        return;
+    }
     rock_survey.facing += u[2];
     if (lit) {
         double x = u[1] * LIGHT_Y + u[2] * LIGHT_Z;
@@ -503,13 +531,9 @@ static void rock_shades(void)
     grid.bias = x[3];
 }
 
-/* one record (30 bytes) in the first slot, its place in the world `at` */
-static void survey_record(const uint8_t *record, double at[3], uint16_t *stack)
+/* the record alone in the first slot, SURVEY_AHEAD ahead of the eye */
+static void survey_slot(const uint8_t *record)
 {
-    uint8_t flags = record[0x07];
-
-    if (flags & 0x8C)                   /* placed in view space, an effect, a sprite */
-        return;
     memcpy(&fx_ram[0x0AAA], record, 0x1E);
     fx_ram[0x0AAA] = fx_ram[0x0AAB] = 0;
     fx_ram[0x0AAA + 0x12] = fx_ram[0x0AAA + 0x13] = 0;
@@ -518,6 +542,16 @@ static void survey_record(const uint8_t *record, double at[3], uint16_t *stack)
     fx_ram[0x0AAA + 0x15] = (uint8_t)(SURVEY_AHEAD >> 8);
     fx_ram[GSU_DRAW_LIST] = 0xAA;
     fx_ram[GSU_DRAW_LIST + 1] = 0x0A;
+}
+
+/* one record (30 bytes) in the first slot, its place in the world `at` */
+static void survey_record(const uint8_t *record, double at[3], uint16_t *stack)
+{
+    uint8_t flags = record[0x07];
+
+    if (flags & 0x8C)                   /* placed in view space, an effect, a sprite */
+        return;
+    survey_slot(record);
     {
         int from = survey_points, i, kept_n = from;
         float lowest = -1e9f;
@@ -526,6 +560,36 @@ static void survey_record(const uint8_t *record, double at[3], uint16_t *stack)
         *stack = 0x0240;
         (void)FxObjectsDraw(0, stack);
         fx_face_survey(NULL, NULL, NULL);
+        /* the second look: every face, by direction */
+        memset(rec_area, 0, sizeof rec_area);
+        memset(rec_pos, 0, sizeof rec_pos);
+        survey_slot(record);
+        second_look = 1;
+        fx_face_survey_all(1);
+        fx_face_survey(NULL, survey_face, at);
+        *stack = 0x0240;
+        (void)FxObjectsDraw(0, stack);
+        fx_face_survey(NULL, NULL, NULL);
+        fx_face_survey_all(0);
+        second_look = 0;
+        if (survey_points > from && ncand < CANDIDATES) {
+            int q;
+
+            cand[ncand].shape = (uint16_t)(record[0x08] | record[0x09] << 8);
+            for (q = 0; q < 3; q++) {
+                cand[ncand].at[q] = at[q];
+                cand[ncand].lo[q] = 1e9;
+                cand[ncand].hi[q] = -1e9;
+            }
+            for (i = from; i < survey_points; i++)
+                for (q = 0; q < 3; q++) {
+                    cand[ncand].lo[q] = fmin(cand[ncand].lo[q], survey_point[i][q]);
+                    cand[ncand].hi[q] = fmax(cand[ncand].hi[q], survey_point[i][q]);
+                }
+            memcpy(cand[ncand].area, rec_area, sizeof rec_area);
+            memcpy(cand[ncand].pos, rec_pos, sizeof rec_pos);
+            ncand++;
+        }
         /* where the shape meets the ground: its lowest part (world y is
            down: the largest y), the points within FOOT of it; the rest of
            it (a gantry's beam, a banner) stands above the ground */
@@ -538,6 +602,103 @@ static void survey_record(const uint8_t *record, double at[3], uint16_t *stack)
     }
 }
 
+
+/* ---- the rock round the canyon's walls and over the tunnels ----
+
+   Jeff, 2026-11-11: "the arrows in the tunnel also show outside the
+   tunnel, meaning the tunnel is not properly enclosed"; "the canyon and
+   tunnel still appear to be floating ... there isn't enough terrain rock
+   around". A tunnel piece's model is its inside only (roof, walls with gaps
+   between their pillars, lights), and a canyon's walls are slabs of rock
+   that look into the canyon: seen from outside, through the tunnel's gaps
+   its inside shows, and the walls stand on the ground with nothing behind
+   them. So the land's rock closes round them: over each tunnel piece a
+   ridge of rock from the ground, SHELL_THICK outside its walls and above
+   its roof, open at both ends where the road goes in and out; behind each
+   canyon wall's open back a slope of rock from the wall's top out to the
+   ground a third of its height away, closed at its ends. They are the
+   land's (fx_ground_draw: drawn with the mesas and the fill, at their true
+   depths, only the faces that look at the eye, shaded as the mesas are),
+   so whatever lies behind them is hidden by depth, and from inside the
+   tunnel or the canyon the piece's own faces are nearer.
+
+   Found by the survey's records (Sunset Valley's, dumped 2026-11-11): a
+   tunnel piece is no more than TUNNEL_HIGH high and at least TUNNEL_WIDE
+   across both ways, its area facing down (outward, a roof seen from below)
+   at least half its box's ground and its area facing sideways at least a
+   quarter of that (seven $E384, 3,840 x 3,903 and 960 high; one $E480);
+   its open ends where no walls face. A wall piece is at least WALL_HIGH
+   high with at least WALL_SIDEWAYS of its area sideways, and along each
+   level axis a side of its box has an open back where its faces look
+   inward from it (the faces facing +x lie on the low x half, facing in), or
+   where all its faces look one way (a slab): the canyon on the start
+   straight is pieces 3,840 across holding both its walls ($D9C8, $DA00,
+   $D9AC), the slabs by the far road face one way ($F30C, $F328, $F344,
+   $E2DC); a closed rock ($E42C) faces out on every side and has none. */
+#define TUNNEL_HIGH 2000.0
+#define TUNNEL_WIDE 2000.0
+#define SHELL_THICK 256.0
+#define WALL_HIGH 2000.0
+#define WALL_SIDEWAYS 0.7
+enum { TUNNELS = 64, WALLS = 256, ENCLOSED_VERTICES = 24576 };
+
+static struct {
+    int course, n, nw;
+    struct {
+        double lo[3], hi[3];
+        int along;                      /* a tunnel: the world axis its open ends lie along: 0 x, 2 z */
+        int backs;                      /* a wall: its open backs, bits: 1 low x, 2 high x, 4 low z, 8 high z */
+    } t[TUNNELS], w[WALLS];
+} enclosed = { -1, 0, 0, { { { 0 }, { 0 }, 0, 0 } }, { { { 0 }, { 0 }, 0, 0 } } };
+
+static void enclosed_find(unsigned course)
+{
+    int i, k;
+
+    enclosed.course = (int)course;
+    enclosed.n = enclosed.nw = 0;
+    for (i = 0; i < ncand; i++) {
+        double w = cand[i].hi[0] - cand[i].lo[0], h = cand[i].hi[1] - cand[i].lo[1], d = cand[i].hi[2] - cand[i].lo[2];
+        double ar[DIRS], ps[DIRS], roof, side, all;
+        int backs = 0;
+
+        /* Newell's normals look outward where the visible faces' did */
+        for (k = 0; k < DIRS; k++) {
+            int from = rock_survey.facing < 0 ? k : k ^ 1;
+
+            ar[k] = cand[i].area[from];
+            ps[k] = cand[i].pos[from];
+        }
+        roof = ar[2];                   /* facing down (+y): a roof seen from below */
+        side = ar[0] + ar[1] + ar[4] + ar[5];
+        all = side + ar[2] + ar[3];
+        if (h >= WALL_HIGH && all > 0 && side >= WALL_SIDEWAYS * all) {
+            for (k = 0; k < 2; k++) {
+                int plus = 4 * k, minus = 4 * k + 1, axis = 2 * k;
+                double c = (cand[i].lo[axis] + cand[i].hi[axis]) / 2;
+
+                if (ar[plus] >= 0.15 * side && (ps[plus] / ar[plus] < c || ar[minus] < 0.1 * ar[plus]))
+                    backs |= 1 << (2 * k);              /* +axis faces looking in from the low side: its back the low side */
+                if (ar[minus] >= 0.15 * side && (ps[minus] / ar[minus] > c || ar[plus] < 0.1 * ar[minus]))
+                    backs |= 2 << (2 * k);
+            }
+            if (backs && enclosed.nw < WALLS) {
+                memcpy(enclosed.w[enclosed.nw].lo, cand[i].lo, sizeof cand[i].lo);
+                memcpy(enclosed.w[enclosed.nw].hi, cand[i].hi, sizeof cand[i].hi);
+                enclosed.w[enclosed.nw].backs = backs;
+                enclosed.nw++;
+            }
+            continue;
+        }
+        if (enclosed.n == TUNNELS || h > TUNNEL_HIGH || w < TUNNEL_WIDE || d < TUNNEL_WIDE || roof < 0.5 * w * d
+            || side < 0.25 * roof)
+            continue;
+        memcpy(enclosed.t[enclosed.n].lo, cand[i].lo, sizeof cand[i].lo);
+        memcpy(enclosed.t[enclosed.n].hi, cand[i].hi, sizeof cand[i].hi);
+        enclosed.t[enclosed.n].along = ar[0] + ar[1] >= ar[4] + ar[5] ? 2 : 0;  /* walls facing x: open along z */
+        enclosed.n++;
+    }
+}
 
 static int float_order(const void *a, const void *b)
 {
@@ -560,6 +721,7 @@ static void ground_survey(unsigned course, const double eye[3], const double m[9
     int x, z, it, head = 0, tail = 0;
 
     survey_points = 0;
+    ncand = 0;
     memset(&rock_survey, 0, sizeof rock_survey);
     memcpy(kept, fx_ram, sizeof kept);
     fx_draw_hold(1);
@@ -593,6 +755,7 @@ static void ground_survey(unsigned course, const double eye[3], const double m[9
     memcpy(fx_ram, kept, sizeof kept);
     fxs = state;
     rock_shades();
+    enclosed_find(course);
     for (i = 0; i < (unsigned)survey_points; i++) {
         xmin = fmin(xmin, survey_point[i][0]);
         xmax = fmax(xmax, survey_point[i][0]);
@@ -1362,6 +1525,94 @@ static void fill_faces(unsigned course, int cls, double plane_y, const double ey
         }
 }
 
+/* The rock round the canyon's walls and over the tunnels (above, "the rock
+   round the canyon's walls"), its faces that look at the eye, into v from
+   *nv; the ground under them at plane_y (or a piece's foot, where that is
+   lower). */
+static void enclosed_faces(int cls, double plane_y, const double eye[3], const double m[9], nshvc_vertex *v, uint32_t *nv,
+                           uint32_t room)
+{
+    int i, j, k, bit, s;
+
+    for (i = 0; i < enclosed.nw; i++) {             /* each wall's open backs: a slope of rock */
+        const double *lo = enclosed.w[i].lo, *hi = enclosed.w[i].hi;
+        double top = lo[1], base = fmax(hi[1], plane_y), spread = (base - top) / 3;
+
+        if (base <= top)
+            continue;
+        for (bit = 0; bit < 4; bit++) {
+            int a = bit < 2 ? 0 : 2, b = 2 - a, high = bit & 1;
+            double c = high ? hi[a] : lo[a], out = high ? c + spread : c - spread, sgn = high ? 1 : -1;
+            double quad[4][3], tri[2][3][3], n[3];
+
+            if (!(enclosed.w[i].backs & (1 << bit)))
+                continue;
+            for (k = 0; k < 4; k++) {
+                quad[k][b] = k == 1 || k == 2 ? hi[b] : lo[b];
+                quad[k][1] = k < 2 ? top : base;
+                quad[k][a] = k < 2 ? c : out;
+            }
+            normal_of(quad[0], quad[1], quad[3], n);
+            if (n[a] * sgn < 0)                     /* outward: past the box's side */
+                for (j = 0; j < 3; j++)
+                    n[j] = -n[j];
+            land_face((const double (*)[3])quad, 4, n, cls, eye, m, v, nv, room);
+            for (k = 0; k < 2; k++) {               /* its ends */
+                double e = k ? hi[b] : lo[b];
+
+                tri[k][0][b] = tri[k][1][b] = tri[k][2][b] = e;
+                tri[k][0][1] = top;
+                tri[k][0][a] = c;
+                tri[k][1][1] = base;
+                tri[k][1][a] = out;
+                tri[k][2][1] = base;
+                tri[k][2][a] = c;
+                normal_of(tri[k][0], tri[k][1], tri[k][2], n);
+                if (n[b] * (k ? 1 : -1) < 0)
+                    for (j = 0; j < 3; j++)
+                        n[j] = -n[j];
+                land_face((const double (*)[3])tri[k], 3, n, cls, eye, m, v, nv, room);
+            }
+        }
+    }
+    for (i = 0; i < enclosed.n; i++) {              /* each tunnel piece: a ridge of rock over it */
+        int a = enclosed.t[i].along, p = 2 - a;
+        double p0 = enclosed.t[i].lo[p], p1 = enclosed.t[i].hi[p], cp = (p0 + p1) / 2, half = (p1 - p0) / 2;
+        double a0 = enclosed.t[i].lo[a], a1 = enclosed.t[i].hi[a];
+        double top = enclosed.t[i].lo[1] - SHELL_THICK;                         /* y is down */
+        double base = fmax(enclosed.t[i].hi[1], plane_y), ridge = top - 0.3 * half, spread = (base - top) / 3;
+        double mid_y = (enclosed.t[i].lo[1] + enclosed.t[i].hi[1]) / 2, prof[5][2];
+
+        /* its cross-section across the tunnel: ground, wall top, ridge,
+           wall top, ground */
+        prof[0][0] = cp - half - SHELL_THICK - spread;
+        prof[0][1] = base;
+        prof[1][0] = cp - half - SHELL_THICK;
+        prof[1][1] = top;
+        prof[2][0] = cp;
+        prof[2][1] = ridge;
+        prof[3][0] = cp + half + SHELL_THICK;
+        prof[3][1] = top;
+        prof[4][0] = cp + half + SHELL_THICK + spread;
+        prof[4][1] = base;
+        for (s = 0; s < 4; s++) {
+            double quad[4][3], n[3], mp = (prof[s][0] + prof[s + 1][0]) / 2 - cp, my = (prof[s][1] + prof[s + 1][1]) / 2 - mid_y;
+            static const int end[4] = { 0, 0, 1, 1 }, edge[4] = { 0, 1, 1, 0 };
+
+            for (k = 0; k < 4; k++) {
+                quad[k][p] = prof[s + edge[k]][0];
+                quad[k][1] = prof[s + edge[k]][1];
+                quad[k][a] = end[k] ? a1 : a0;
+            }
+            normal_of(quad[0], quad[1], quad[2], n);
+            if (n[p] * mp + n[1] * my < 0)          /* outward: away from the tunnel's middle */
+                for (k = 0; k < 3; k++)
+                    n[k] = -n[k];
+            land_face((const double (*)[3])quad, 4, n, cls, eye, m, v, nv, room);
+        }
+    }
+}
+
 static void land_polygons(unsigned course, int cls, const double eye[3], const double m[9])
 {
     static nshvc_vertex v[LAND_VERTICES];
@@ -1434,6 +1685,14 @@ static void land_polygons(unsigned course, int cls, const double eye[3], const d
             fill_make(course);
         fill_faces(course, cls, plane_y, eye, m, fv, &nf, FILL_VERTICES);
         fx_draw_land(fv, nf);
+    }
+    /* the rock round the canyon's walls and over the tunnels */
+    if (mesas && enclosed.course == (int)course) {
+        static nshvc_vertex ev[ENCLOSED_VERTICES];
+        uint32_t ne = 0;
+
+        enclosed_faces(cls, plane_y, eye, m, ev, &ne, ENCLOSED_VERTICES);
+        fx_draw_land(ev, ne);
     }
 }
 

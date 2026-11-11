@@ -127,6 +127,9 @@ typedef void (*FxSurveyPoint)(double x, double y, double z, void *context);
 typedef void (*FxSurveyFace)(const double (*corner)[3], int n, uint8_t colour, int textured, int lit, float light,
                              void *context);
 void fx_face_survey(FxSurveyPoint point, FxSurveyFace face, void *context);
+/* While on, every face of a model is shown, those looking away from the
+   eye too (the survey's second look at a record, fx_ground.c). */
+void fx_face_survey_all(int on);
 
 /* The view's rectangle in the picture's pixels: left, right (past its last
    column), top, bottom (past its last row). */

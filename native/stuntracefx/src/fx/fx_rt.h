@@ -135,6 +135,7 @@ void fx_draw_part(int hud);
 /* The 3D is being drawn at its true depths (fx_draw.c, "depth"): from its
    frame program's start to the HUD's; both sides of its faces then. */
 int fx_draw_depth_on(void);
+int fx_draw_both_sides(void);         /* faces turned away drawn too (fx_draw.c) */
 /* In a picture between steps (fx/fx_tween.c), the 256ths of the angle
    bytes of the object whose draw record is at `record`: chosen as
    FxObjectsDraw takes the record, read as the model's matrix is made (0
