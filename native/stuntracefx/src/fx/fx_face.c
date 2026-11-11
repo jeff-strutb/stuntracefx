@@ -247,9 +247,10 @@ typedef struct {
     uint8_t tier;
     uint16_t index;
     float light;
+    int16_t cls;                        /* a lit face's shade class; -1 none */
 } Tint;
 
-static Tint chosen = { -1, 0, 0, 0 };
+static Tint chosen = { -1, 0, 0, 0, -1 };
 
 static struct {
     int open, textured, whole, n;
@@ -277,6 +278,7 @@ void fx_face_material(int kind, uint16_t index, uint16_t table, uint16_t light)
     chosen.kind = (int8_t)kind;
     chosen.index = index;
     chosen.light = 0;
+    chosen.cls = (int16_t)(kind == 1 ? index : -1);
     if (kind == 1) {
         uint16_t set = table >= 0xA275 ? 0xA275 : 0xA1C5, at = (uint16_t)(set + 2 * index);
 
@@ -293,6 +295,7 @@ void fx_face_begin(int textured)
     face.textured = textured != 0;
     face.tint = chosen;
     chosen.kind = -1;
+    chosen.cls = -1;
     face.whole = 1;
     face.n = 0;
     face.view = view_now();
@@ -844,7 +847,7 @@ static void commit(const FxMaterial *m)
             c[i][2] = face.c[i].z;
         }
         survey_face((const double (*)[3])c, face.n, m->colour, face.textured, !face.textured && face.tint.kind == 1,
-                    face.tint.light, survey_context);
+                    face.tint.light, !face.textured && face.tint.kind == 1 ? face.tint.cls : -1, survey_context);
     }
     s = &shapes[nshapes];
     s->material = *m;
