@@ -22,6 +22,7 @@
 #include "fx/fx_tween.h"
 #include "object/object.h"
 #include "race/race.h"
+#include "system/perf.h"
 #include "system/state.h"
 
 /* Further than a step moves a thing: a place set anew (a reset, a new
@@ -317,8 +318,12 @@ void fx_tween_draw(float between)
     int panel, panels = 0;
     uint16_t heading[2], pitch[2];
 
-    if (!fx_tween_begin(race_step_progress(between)))
+    nshvc_profile_begin(perf_tween_state);
+    if (!fx_tween_begin(race_step_progress(between))) {
+        nshvc_profile_end();
         return;
+    }
+    nshvc_profile_end();
     for (panel = 0; panel < 2; panel++) {
         /* one player: into the picture shown, whichever buffer it is; the
            original shows a step's picture only once its uploads are done,
@@ -334,11 +339,15 @@ void fx_tween_draw(float between)
         records_take_fractions();
         fractions_on = 1;
         fx_draw_begin(picture);
+        nshvc_profile_begin(perf_frame);
         (void)FxFrameProgram(0);
+        nshvc_profile_end();
         fx_draw_flush();
         fractions_on = 0;
     }
+    nshvc_profile_begin(perf_tween_state);
     fx_tween_end();
+    nshvc_profile_end();
     if (panels) {
         /* one player's or each player's; one player's in both places */
         view.on = 1;
@@ -347,5 +356,7 @@ void fx_tween_draw(float between)
         view.heading[1] = heading[panels - 1];
         view.pitch[1] = pitch[panels - 1];
     }
+    nshvc_profile_begin(perf_compose);
     fx_draw_recompose();
+    nshvc_profile_end();
 }

@@ -14,6 +14,7 @@
 #include "fx/fx_draw.h"
 #include "fx/fx_face.h"
 #include "system/state.h"
+#include "system/perf.h"
 #include "video/picture.h"
 #include "video/video.h"
 
@@ -418,6 +419,7 @@ static void emit_with(const nshvc_vertex *v, uint32_t count, uint32_t image, int
                 nshvc_draw_lines(target, scaled, n, image ? &m : NULL);
             else
                 nshvc_draw_tris(target, scaled, n, image ? &m : NULL);
+            perf_draw_call(n);
             done += n;
         }
         return;
@@ -628,6 +630,7 @@ static void compose_recording(const Recording *r, uint32_t from, uint32_t to, in
             nshvc_draw_lines(screen_list, scaled + sh->first, sh->count, sh->image ? &m : NULL);
         else
             nshvc_draw_tris(screen_list, scaled + sh->first, sh->count, sh->image ? &m : NULL);
+        perf_draw_call(sh->count);
     }
 }
 

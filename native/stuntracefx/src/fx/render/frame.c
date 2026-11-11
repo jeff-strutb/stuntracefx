@@ -10,6 +10,8 @@
 #include "fx/fx.h"
 #include "fx/fx_far.h"
 #include "fx/fx_ground.h"
+#include "nshvc/nshvc.h"
+#include "system/perf.h"
 #include "video/video.h"
 
 /*
@@ -62,11 +64,18 @@ static FxFrameProgramResult frame_program(uint16_t draw_list_end)
     }
     *stack = 0x0240;
     fx_stw(FX_MODEL_1B4, 0);
-    if (race_full_window() || race_two_full_window())
+    if (race_full_window() || race_two_full_window()) {
+        nshvc_profile_begin(perf_ground);
         fx_ground_draw();               /* the course's ground or water under everything (fx_ground.c) */
+        nshvc_profile_end();
+    }
+    nshvc_profile_begin(perf_far);
     fx_far_pass(stack);                 /* the objects past the near list's block, first (fx_far.c) */
+    nshvc_profile_end();
     *stack = 0x0240;
+    nshvc_profile_begin(perf_near);
     { FxObjectsDrawResult r_ = FxObjectsDraw(draw_list_end, stack); up_ = r_.up; };
+    nshvc_profile_end();
     if (up_) {                       /* it returned past us */
         return (FxFrameProgramResult){up_ == 0 ? 0 : up_ - 0};
     }

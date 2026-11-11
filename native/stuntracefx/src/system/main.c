@@ -13,6 +13,7 @@
 #include "pause/pause.h"
 #include "system/fps.h"
 #include "system/game.h"
+#include "system/perf.h"
 #include "video/between.h"
 #include "video/picture.h"
 #include "video/video.h"
@@ -26,7 +27,7 @@ static void init(void)
     session_start();
 }
 
-static void update(const nshvc_input *input)
+static void update_body(const nshvc_input *input)
 {
     uint16_t pad[2];
 
@@ -41,7 +42,14 @@ static void update(const nshvc_input *input)
     video_update_end();
 }
 
-static void draw(float between)
+static void update(const nshvc_input *input)
+{
+    perf_update_begin();
+    update_body(input);
+    perf_update_end();
+}
+
+static void draw_body(float between)
 {
     if (pause_capturing()) {
         controls_hide();                /* nothing over the pictures the pause's blur is made from */
@@ -56,8 +64,17 @@ static void draw(float between)
         between = 1.0f;                 /* the picture as the game's last update left it */
     video_between_begin(between);       /* the moving 2D between the last two updates (pic eased in place) */
     fx_tween_draw(between);             /* the race's 3D at the step's progress, between steps */
+    nshvc_profile_begin(perf_video);
     video_draw();
+    nshvc_profile_end();
     video_between_end();                /* the game's own pic back */
+}
+
+static void draw(float between)
+{
+    perf_draw_begin();
+    draw_body(between);
+    perf_draw_end();                    /* SRFX_PROFILE=1: where the time goes, once a second (perf.c) */
 }
 
 int main(int argc, char **argv)
