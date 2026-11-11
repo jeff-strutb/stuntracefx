@@ -31,6 +31,7 @@
 #include "fx/fx.h"
 #include "fx/fx_draw.h"
 #include "fx/fx_face.h"
+#include "fx/fx_far.h"
 
 enum {
     POINTS = 256,               /* a model's point records ($04E4 + 6i, i a byte) */
@@ -577,7 +578,14 @@ static int line(const Corner3 *in, const View *v)
    rest after it. Where a model crosses the plane (a track piece going below
    the water), the region its faces' crossings enclose on the plane is a hole
    in the water: what lies past the water is drawn again inside the hole,
-   after the water (fx_draw.c). */
+   after the water (fx_draw.c).
+
+   A far object (fx_far.c) is drawn with its view-space points halved
+   fx_far_shift() times, its projection the same: its points are tested
+   against the plane at that scale (cut_d), and its crossings kept at full
+   size for its hole. Tested at full size, a far piece under the water
+   (Aqua Tunnel's glass tube) counted as above it and was drawn after the
+   water, over it (Jeff's picture, 2026-11-11). */
 
 static struct {
     int on;
@@ -606,6 +614,12 @@ void fx_face_cut(int on, const double n[3], double d)
 
 int fx_face_cutting(void) { return cut.on; }
 
+/* the plane's distance from the eye at the scale of the points being drawn */
+static double cut_d(void)
+{
+    return ldexp(cut.d, -fx_far_shift());
+}
+
 /* a view-space point's side of the water: 1 past it from the eye */
 int fx_face_past_water(double x, double y, double z)
 {
@@ -613,13 +627,13 @@ int fx_face_past_water(double x, double y, double z)
 
     if (!cut.on)
         return 0;
-    s = cut.n[0] * x + cut.n[1] * y + cut.n[2] * z - cut.d;
+    s = cut.n[0] * x + cut.n[1] * y + cut.n[2] * z - cut_d();
     return cut.d > 0 ? s > 0 : s < 0;
 }
 
 static double side_of(const Corner3 *c)
 {
-    double s = cut.n[0] * c->x + cut.n[1] * c->y + cut.n[2] * c->z - cut.d;
+    double s = cut.n[0] * c->x + cut.n[1] * c->y + cut.n[2] * c->z - cut_d();
 
     return cut.d > 0 ? s : -s;          /* > 0: past the water */
 }
@@ -651,10 +665,10 @@ static int clip_water(const Corner3 *in, int n, Corner3 *out, int past)
 }
 
 /* The points where a face's edges cross the water, kept for its model's
-   hole. */
+   hole, at full size (a far object's scaled back). */
 static void hole_points_of(const Corner3 *in, int n)
 {
-    int i;
+    int i, shift = fx_far_shift();
 
     for (i = 0; i < n && nhole_points < HOLE_POINTS; i++) {
         const Corner3 *a = &in[i], *b = &in[(i + 1) % n];
@@ -663,9 +677,9 @@ static void hole_points_of(const Corner3 *in, int n)
         if ((sa > 0) == (sb > 0) || sa == sb)
             continue;
         t = sa / (sa - sb);
-        hole_point[nhole_points][0] = a->x + (b->x - a->x) * t;
-        hole_point[nhole_points][1] = a->y + (b->y - a->y) * t;
-        hole_point[nhole_points][2] = a->z + (b->z - a->z) * t;
+        hole_point[nhole_points][0] = ldexp(a->x + (b->x - a->x) * t, shift);
+        hole_point[nhole_points][1] = ldexp(a->y + (b->y - a->y) * t, shift);
+        hole_point[nhole_points][2] = ldexp(a->z + (b->z - a->z) * t, shift);
         nhole_points++;
     }
 }
