@@ -619,9 +619,9 @@ enum { TUNNELS = 64, WALLS = 256, SHELL_VERTICES = 3 * 8 * 7 };
    cut, closed, which always show a face). Seen from behind, the chip shows
    none of its faces, as they all look away: a wall piece that made no
    shape while it was drawn gets a mound of rock over its box, sloping out
-   to the ground, only the faces that look at the eye, drawn right after it
-   in the 3D's order. Seen from the canyon its faces show, and nothing is
-   added. */
+   to the ground, only the faces that look at the eye, at its true depth,
+   so it hides what lies behind it (the canyon's road) whenever that is
+   drawn. Seen from the canyon its faces show, and nothing is added. */
 
 static struct {
     int course, n, nw;
@@ -1384,9 +1384,11 @@ float fx_ground_depth_z(double depth)
    with FILL_CLEAR at 1.5 it is flat at the course's level there: the rock
    never stands over the course. Each triangle with a raised corner is a
    face, shaded as the mesas are; those all at the level are the plane's.
-   The far objects are drawn at depths of their own while it is drawn
-   (fx_far_occlude), so it hides those behind it; the near objects, at the
-   3D's own depth 0, are never hidden by it. */
+   The far and near objects are drawn at depths of their own while it is
+   drawn (fx_far_occlude), never deeper than the one drawn before's, so it
+   hides those behind it and their order among themselves stands (Jeff,
+   2026-11-11: the canyon's road showed over the rock in front of it while
+   only the far objects had depths). */
 
 enum { FILL_STEP = 4, FILL_MOST = GRID_MOST / FILL_STEP + 2, FILL_VERTICES = 3 * 2 * FILL_MOST * FILL_MOST * 2 };
 #define FILL_CLEAR 1.5
@@ -1550,7 +1552,6 @@ static void wall_cover(int i)
 
     if (base <= top)
         return;
-    face_at_zero = 1;
     for (k = 0; k < 4; k++) {
         double quad[4][3], n[3];
         int k1 = (k + 1) % 4;
@@ -1566,7 +1567,6 @@ static void wall_cover(int i)
         land_face((const double (*)[3])quad, 4, n, shell_view.cls, shell_view.eye, shell_view.m, sv, &ns, SHELL_VERTICES);
     }
     land_face((const double (*)[3])ring_top, 4, up_world, shell_view.cls, shell_view.eye, shell_view.m, sv, &ns, SHELL_VERTICES);
-    face_at_zero = 0;
     fx_draw_land(sv, ns);
 }
 
