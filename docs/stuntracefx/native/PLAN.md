@@ -31,6 +31,17 @@ screen's pixels, made once as the screen opens in three pictures with no overlay
 down), each read back, the last kept and drawn as it is; the touch controls and the corner button are no longer in it.
 Compiled on every host; not run.
 
+The land (2026-11-11, from Jeff's pictures of Easy Ride; a scratch run dumped the courses' height grids and the eye's
+places, compared offline): (1) the land showed above a tunnel's opening: the grid keeps the lowest place a shape meets the
+ground, so it has a trench where the road runs under the ground, which the 24 planes (9a513326), flat over it as the
+ground over a tunnel is, do not; the eye was tested against the grid, so in the tunnel it counted as above the ground and
+the planes, above it, were drawn from below. The eye is now tested against the land as drawn: on Easy Ride's demo the land
+is left out at exactly its four tunnel samples. (2) The land beside the road was the sea's teal: its colour for a depth
+took the eye as 180 over the ground (the eye over the road), but Easy Ride's road runs high over its ground (the eye a
+median 529 over it; 770 on the night city), so land by the road took the colours of rows near the horizon. It now takes
+the eye's height over the course's level (the grid's median height), so flat ground has the band's colour of its own row,
+as the original shows it. Compiled on every host; not run since the change.
+
 Not done (2026-11-09, evening): perspective textures, the hills, weather and particles between steps; section 8 in the Super FX code (a rewrite, under way) and the chip-RAM reads that wait on it; a won championship's closing screen not reached (four races won by input); the controllers' rebinding not run with a controller; Windows and Linux not run (other machines, Jeff's permission); the picture, sound and touch on iOS and Android not looked at (3-minute runs from logs only); the final section 8 audit and stage 11. The game plays headless from boot through the menus, races and battles to the results and back, as the Enhanced game (decisions 4 and 5): full window at any shape, high-resolution 3D drawn between steps, solids, unlimited view distance, the game's own pause screen. New C outside `src/fx`: about 39,900 lines; `src/fx`: 44,300 (the Super FX logic from the generator and its drawing on the GPU).
 
 | Stage | State |

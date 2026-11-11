@@ -55,9 +55,9 @@ vec4 shade(vec2 uv) {
         return vec4(0.0);
     float hi = 1.0 / inv;               /* the depth: d's z is 1, so the ray's own length */
     vec3 p = eye + dir * hi;
-    /* the land's colour for the depth: the row a flat ground at the
-       camera's usual height below the eye would show this depth on, under
-       the horizon at this column */
+    /* the land's colour for the depth: the row flat ground at the course's
+       level (header 23: the eye's height over it) would show this depth
+       on, under the horizon at this column */
     float horizon = header(31) + header(18) * (uv.x - header(30));
     float rows = header(24), row = horizon + 128.0 * header(23) / hi - header(25);
     vec3 band = colour_at(STRIP + int(clamp(row, 0.0, rows - 1.0)));

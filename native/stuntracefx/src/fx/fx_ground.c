@@ -122,12 +122,6 @@ static const struct {
    brightness against the band (a shade darker; snow and ice a shade
    lighter) */
 #define LAND_TEXEL 32.0
-/* the camera's usual height over the road, measured over races (the eye
-   over the player's car: median 186 on Easy Ride, 172 on the wild-west
-   desert): the land's colour for a depth is the band's on the row a flat
-   ground this far below the eye would show that depth on, whatever the
-   ground under the eye */
-#define EYE_OVER_ROAD 180.0
 static const float land_ink[] = { [SURF_GRASS] = 0.8f, [SURF_ROCK] = 0.7f, [SURF_CEMENT] = 0.84f,
                                   [SURF_SNOW] = 1.12f, [SURF_ICE] = 1.1f, [SURF_DIRT] = 0.78f };
 
@@ -295,7 +289,8 @@ static struct {
     uint8_t shade[ROCK_MOST];   /* their colour bytes */
     double light[3], bias;      /* a face with outward normal n has shade light . n + bias */
     float h[GRID_MOST * GRID_MOST];
-} grid = { -1, 0, 0, 0, 0, 0, 0, { 0 }, { 0, 0, 0 }, 0, { 0 } };
+    double level;               /* the course's ground level: the grid's median height */
+} grid = { -1, 0, 0, 0, 0, 0, 0, { 0 }, { 0, 0, 0 }, 0, { 0 }, 0 };
 
 /* the survey's untextured faces by colour byte: area on steep faces (the
    normal less than 45 degrees from level; y is the world's up axis, the
@@ -505,6 +500,13 @@ static void survey_record(const uint8_t *record, double at[3], uint16_t *stack)
 }
 
 
+static int float_order(const void *a, const void *b)
+{
+    float x = *(const float *)a, y = *(const float *)b;
+
+    return (x > y) - (x < y);
+}
+
 static void ground_survey(unsigned course, const double eye[3], const double m[9])
 {
     static uint8_t kept[0x10000];
@@ -623,6 +625,11 @@ static void ground_survey(unsigned course, const double eye[3], const double m[9
             }
         memcpy(grid.h, next, sizeof(float) * (size_t)(grid.nx * grid.nz));
     }
+    /* the course's ground level: the median of its heights (most of a
+       course's grid is its open ground) */
+    memcpy(next, grid.h, sizeof(float) * (size_t)(grid.nx * grid.nz));
+    qsort(next, (size_t)(grid.nx * grid.nz), sizeof(float), float_order);
+    grid.level = next[grid.nx * grid.nz / 2];
 }
 
 /* ---- the land drawn: a few planes, terrain.shade colouring them ----
@@ -641,8 +648,8 @@ static void ground_survey(unsigned course, const double eye[3], const double m[9
    none): its shades' colours, darkest first (the palette entries as shown
    now), from word 8 the light's three numbers, the bias and the count of
    shades; the grid's heights from T_GRID, nx a row. Land other than rock is in the band's
-   colour on the row a flat ground EYE_OVER_ROAD below the eye shows its
-   depth on, below the 3D's horizon (fx_draw_horizon_now) at the pixel's
+   colour on the row a flat ground at the course's level (grid.level) shows
+   its depth on, below the 3D's horizon (fx_draw_horizon_now) at the pixel's
    column (race_ground_colour), lit a little by its slope. Rock is in the
    shade the course gives a rock face facing its way, between its shades'
    colours. */
@@ -721,11 +728,35 @@ static int land_triangles(double reach, double t[LAND_TRIS][3][3])
     return n;
 }
 
+/* The land's height as drawn (its triangles t, n of them) at world (x, z):
+   the triangle over the place, else the grid's. Not the grid's where a
+   triangle is over it: the grid keeps the lowest place a course's shapes
+   meet the ground, so it has a trench where a road runs under the ground
+   (a tunnel), which the triangles, as the ground over a tunnel is, do not. */
+static double land_height(const double (*t)[3][3], int n, double x, double z)
+{
+    int i;
+
+    for (i = 0; i < n; i++) {
+        const double *a = t[i][0], *b = t[i][1], *c = t[i][2];
+        double d = (b[2] - c[2]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[2] - c[2]), l1, l2, l3;
+
+        if (fabs(d) < 1e-9)
+            continue;
+        l1 = ((b[2] - c[2]) * (x - c[0]) + (c[0] - b[0]) * (z - c[2])) / d;
+        l2 = ((c[2] - a[2]) * (x - c[0]) + (a[0] - c[0]) * (z - c[2])) / d;
+        l3 = 1 - l1 - l2;
+        if (l1 >= -1e-9 && l2 >= -1e-9 && l3 >= -1e-9)
+            return l1 * a[1] + l2 * b[1] + l3 * c[1];
+    }
+    return grid_height(x, z);
+}
+
 static void land_draw(int kind, const double eye[3], const double m[9], int p)
 {
     double top = (int16_t)ram_word(0x003C), bottom = (int16_t)ram_word(0x003E);
     double vcx = (int16_t)ram_word(0x0034), vcy = (int16_t)ram_word(0x0036);
-    double h_eye = grid_height(eye[0], eye[2]) - eye[1];        /* > 0: the eye above the ground */
+    double h_eye;
     static double world[LAND_TRIS][3][3], view[LAND_TRIS][3][3];
     static FxCorner c[64];
     double depth[LAND_TRIS];
@@ -734,7 +765,13 @@ static void land_draw(int kind, const double eye[3], const double m[9], int p)
     unsigned i, x, y, first, rows;
     int slot, ox, oy, t, a, b, k;
 
-    if (!grid.nx || h_eye < 16)         /* not while the eye is under the ground (a tunnel) */
+    if (!grid.nx)
+        return;
+    /* the eye over the land as drawn (> 0: above it); not while it is under
+       it (a tunnel), where the land would be seen from below */
+    ntri = land_triangles(1e7, world);
+    h_eye = land_height((const double (*)[3][3])world, ntri, eye[0], eye[2]) - eye[1];
+    if (h_eye < 16)
         return;
     fx_draw_list_scale(&sx, &sy);
     scale = sx > sy ? sx : sy;
@@ -765,7 +802,11 @@ static void land_draw(int kind, const double eye[3], const double m[9], int p)
     land_words[T_HZ_SLOPE] = float_word(hz_slope);
     for (i = 0; i < 3; i++)
         land_words[T_EYE + i] = float_word((float)eye[i]);
-    land_words[T_EYE_HEIGHT] = float_word((float)EYE_OVER_ROAD);
+    /* the eye over the course's level: the land's colour for a depth is the
+       band's on the row flat ground at that level shows it on, so flat
+       ground takes the band's colour of its own row, as the original
+       shows it, however high the road runs over the ground */
+    land_words[T_EYE_HEIGHT] = float_word((float)fmax(grid.level - eye[1], 16.0));
     first = top > 0 ? (unsigned)top : 0;
     rows = (unsigned)(bottom - first) + 1;
     if (rows > T_STRIP_MAX)
