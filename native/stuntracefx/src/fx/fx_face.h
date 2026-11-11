@@ -99,12 +99,10 @@ const FxHole *fx_face_holes(int *n);
    face the chip queues to `face`: its corners in view space, its colour
    byte (the draw list's, after the kind; a textured face's is its
    texture's), whether it is textured, and whether the chip shaded it by
-   the light (a lit face), with its light level unrounded and its shade
-   class (the row of the shade tables it took, -1 for a face not lit)
-   (NULLs end it). */
+   the light (a lit face), with its light level unrounded (NULLs end it). */
 typedef void (*FxSurveyPoint)(double x, double y, double z, void *context);
 typedef void (*FxSurveyFace)(const double (*corner)[3], int n, uint8_t colour, int textured, int lit, float light,
-                             int cls, void *context);
+                             void *context);
 void fx_face_survey(FxSurveyPoint point, FxSurveyFace face, void *context);
 
 /* The view's rectangle in the picture's pixels: left, right (past its last

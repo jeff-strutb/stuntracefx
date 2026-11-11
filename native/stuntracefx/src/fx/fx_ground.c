@@ -314,8 +314,7 @@ static struct {
     double xmin, xmax, zmin, zmax;      /* the course's footprint: where its shapes meet the ground */
     double light_k;             /* a lit face's level: light_k * (its outward normal . the light) */
     double deepest;             /* the lowest place a shape meets the ground (y is down: the largest) */
-    int rock_cls;               /* the shade class with the most area on the course's steep lit faces; -1 none */
-} grid = { -1, 0, 0, 0, 0, 0, 0, { 0 }, { 0, 0, 0 }, 0, { 0 }, 0, 0, 0, 0, 0, 0, 0, -1 };
+} grid = { -1, 0, 0, 0, 0, 0, 0, { 0 }, { 0, 0, 0 }, 0, { 0 }, 0, 0, 0, 0, 0, 0, 0 };
 
 /* the survey's untextured faces by colour byte: area on steep faces (the
    normal less than 45 degrees from level; y is the world's up axis, the
@@ -327,7 +326,6 @@ static struct {
     double steep[256], area[256], n[256][3], nn[256][3][3];
     double facing;
     double lit_ln, lit_nn, lit_area;    /* lit faces: sums of area * level * (n . light), area * (n . light)^2, area */
-    double lit_steep[64];               /* lit faces' area on steep faces, by shade class */
 } rock_survey;
 
 static float survey_point[SURVEY_POINTS][3];
@@ -350,8 +348,7 @@ static void survey_sink(double x, double y, double z, void *context)
    polygons, below): the survey's view is the identity, so its normal is
    in the world's axes, and the light the chip gave it the view's light
    in the same axes */
-static void survey_face(const double (*c)[3], int n, uint8_t colour, int textured, int lit, float light, int cls,
-                        void *context)
+static void survey_face(const double (*c)[3], int n, uint8_t colour, int textured, int lit, float light, void *context)
 {
     double nv[3] = { 0, 0, 0 }, len, area, u[3];
     int i, j;
@@ -377,8 +374,6 @@ static void survey_face(const double (*c)[3], int n, uint8_t colour, int texture
         rock_survey.lit_ln += area * light * x;
         rock_survey.lit_nn += area * x * x;
         rock_survey.lit_area += area;
-        if (cls >= 0 && cls < 64 && fabs(u[1]) < 0.70710678)
-            rock_survey.lit_steep[cls] += area;
     }
     if (textured)
         return;
@@ -612,12 +607,6 @@ static void ground_survey(unsigned course, const double eye[3], const double m[9
        the course's lit faces by area: level = k (n . light), n as Newell's
        normals point; then turned to outward normals (rock_shades says
        which way Newell's point) */
-    /* the course's rock as the chip shades it: the class of the most lit
-       area on steep faces (cliffs, mesas, banks) */
-    grid.rock_cls = -1;
-    for (i = 0; i < 64; i++)
-        if (rock_survey.lit_steep[i] > 0 && (grid.rock_cls < 0 || rock_survey.lit_steep[i] > rock_survey.lit_steep[grid.rock_cls]))
-            grid.rock_cls = (int)i;
     grid.light_k = LIGHT_K;
     if (rock_survey.lit_area > 0 && rock_survey.lit_nn > 1e-6 * rock_survey.lit_area) {
         double k = rock_survey.lit_ln / rock_survey.lit_nn;
@@ -695,9 +684,8 @@ static void ground_survey(unsigned course, const double eye[3], const double m[9
     qsort(next, (size_t)(grid.nx * grid.nz), sizeof(float), float_order);
     grid.level = next[grid.nx * grid.nz / 2];
     fprintf(stderr, "ground: course %u, level %.0f, footprint x %.0f to %.0f, z %.0f to %.0f, lit level %.2f a unit of"
-            " facing (%s), %d rock shades, rock's lit class %d\n", course, grid.level, grid.xmin, grid.xmax, grid.zmin,
-            grid.zmax, grid.light_k, grid.light_k == LIGHT_K ? "no lit faces: the chip's own scale" : "fitted from the course's lit faces",
-            grid.shades, grid.rock_cls);
+            " facing (%s), %d rock shades\n", course, grid.level, grid.xmin, grid.xmax, grid.zmin, grid.zmax, grid.light_k,
+            grid.light_k == LIGHT_K ? "no lit faces: the chip's own scale" : "fitted from the course's lit faces", grid.shades);
 }
 
 /* ---- the land drawn: a few planes, terrain.shade colouring them ----
@@ -1108,17 +1096,20 @@ static uint32_t row_colour(int cls, int level)
     return rgb_of(bgr);
 }
 
-static uint32_t land_colour(int cls, const double n[3])
+/* the light level the chip gives a lit face whose normal in view space is n:
+   floor(k (n . the light)), kept to 6-15 */
+static int chip_level(const double n[3])
 {
     double len = sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
     double x = len > 0 ? (n[1] * LIGHT_Y + n[2] * LIGHT_Z) / len : 0;
     double level = floor(grid.light_k * x);
 
-    if (level < 6)
-        level = 6;
-    if (level > 15)
-        level = 15;
-    return row_colour(cls, (int)level);
+    return level < 6 ? 6 : level > 15 ? 15 : (int)level;
+}
+
+static uint32_t land_colour(int cls, const double n[3])
+{
+    return row_colour(cls, chip_level(n));
 }
 
 /* a world point to view space (world axis k turns to row k of m) */
@@ -1163,18 +1154,25 @@ static void plane_vertices(double y, uint32_t colour, float z, const double eye[
     }
 }
 
-/* A face's colour: class cls's as the chip shades a lit face (by its
-   normal in view space, nv, against the light fixed in view space, so a
-   face's shade changes as the view turns, as the course's own do). The
-   course's own rock (CLS_ROCK): the class of the course's steep lit faces
-   (grid.rock_cls, Jeff 2026-11-11: shaded as the track's rocks are, one
-   colour for every face looked wrong); with none, the survey's fit of its
-   rock's palette shades against facing in the world's axes (nw), the
-   nearest shade; with neither, the browns of class 11. */
-static uint32_t face_colour(int cls, const double nv[3], const double nw[3])
+/* A face's colour: class cls's as the chip shades a lit face (by its normal
+   in view space, nv: the light is fixed in view space, so a face's shade
+   turns with the view). The course's own rock (CLS_ROCK): its colours, the
+   survey's run of the shades of its steep faces, darkest first (a canyon's
+   rock is painted face by face in them, not lit by the chip); a mesa's face
+   takes the one at the chip's light level for it, level 6 the darkest and
+   15 the lightest, so its faces are shaded by the way they face as the
+   chip's lit faces are (Jeff, 2026-11-11: one colour for every face looked
+   wrong; the class of the most steep lit area was a pink one, not the
+   rock); the ground (ground) the one the survey's fit of shade against
+   facing gives a level face (nw, in the world's axes). With one shade, it;
+   with none, the browns of class 11. */
+static uint32_t face_colour(int cls, const double nv[3], const double nw[3], int ground)
 {
-    if (cls == CLS_ROCK && grid.rock_cls >= 0)
-        return land_colour(grid.rock_cls, nv);
+    if (cls == CLS_ROCK && grid.shades > 1 && !ground) {
+        int k = (int)floor((chip_level(nv) - 6) / 9.0 * (grid.shades - 1) + 0.5);
+
+        return rgb_of(pic.palette[fx_draw_ink(grid.shade[k < 0 ? 0 : k >= grid.shades ? grid.shades - 1 : k])]);
+    }
     if (cls == CLS_ROCK && grid.shades) {
         double len = sqrt(nw[0] * nw[0] + nw[1] * nw[1] + nw[2] * nw[2]), s;
         int k;
@@ -1214,7 +1212,7 @@ static void land_face(const double (*pts)[3], int n, const double nw[3], int cls
     nc = fx_face_triangles_d((const double (*)[3])vp, n, c, sizeof c / sizeof c[0]);
     if (!nc || *nv + nc > room)
         return;
-    colour = face_colour(cls, nview, nw);
+    colour = face_colour(cls, nview, nw, 0);
     for (j = 0; j < nc; j++, (*nv)++) {
         double inv = (nview[0] * (c[j].x - vcx) / 128.0 + nview[1] * (c[j].y - vcy) / 128.0 + nview[2]) / d;
         double z = FACE_Z * (1.0 - LAND_NEAR * inv);
@@ -1252,7 +1250,7 @@ static void land_polygons(unsigned course, int cls, const double eye[3], const d
     /* the plane, its colour up its normal */
     for (k = 0; k < 3; k++)
         up[k] = -m[3 + k];
-    plane_vertices(plane_y, face_colour(cls, up, up_world), PLANE_Z, eye, m, v, &nv, LAND_VERTICES);
+    plane_vertices(plane_y, face_colour(cls, up, up_world, 1), PLANE_Z, eye, m, v, &nv, LAND_VERTICES);
     /* the mountains' or mesas' faces that look toward the eye, their bases
        on the plane */
     for (i = 0; i < MOUNTAINS; i++) {
