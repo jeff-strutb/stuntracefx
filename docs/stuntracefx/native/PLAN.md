@@ -37,8 +37,11 @@ course's level out to within 0.01 px of the horizon in every direction, never ab
 five-sided polygon mountains outside the course's footprint, each face shaded as the chip shades a lit face of a model
 (class 10's shade row; the level's scale and sign fitted from the course's own lit faces), drawn past the 3D's depth 0
 with their own depths, so they cover none of the course: 52 triangles, flat colours, no shader (c8b535bc). Compiled on
-every host; not run, not yet shown to Jeff. The other courses keep the land below until their turn; Aqua Tunnel's waves
-and partly see-through water not started.
+every host; Jeff looked at it in his own window (launched with `SRFX_COURSE=0`, 2449d64b): "Easy Ride is really good
+now!". The other courses keep the land below until their turn; Aqua Tunnel's waves and partly see-through water not
+started. For checking as the courses are done: `SRFX_COURSE=<course>` starts that course's race at once (logo, title,
+menus and course screen left out, their choices made as data), and an FPS counter (31d5ad46) shows the pictures drawn a
+second at the top left (`SRFX_FPS=0` hides it); neither run by me.
 
 The land (2026-11-11, from Jeff's pictures of Easy Ride; a scratch run dumped the courses' height grids and the eye's
 places, compared offline): (1) the land showed above a tunnel's opening: the grid keeps the lowest place a shape meets the
