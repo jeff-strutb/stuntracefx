@@ -94,6 +94,11 @@ void fx_draw_surface(const FxCorner *c, uint32_t n, nshvc_image image, nshvc_sha
    (0, 1): past every other shape of the 3D, drawn at depth 0, so they
    cover none of them). */
 void fx_draw_land(const nshvc_vertex *v, uint32_t n);
+/* The ocean (fx/fx_ground.c): triangles of n vertices drawn by `shader`
+   over `image` with its eight inputs, each vertex's u, v and w its own (its
+   place on the water and its depth, so u and v follow perspective), at the
+   3D's depth 0 in order, marked as the water for its cut (fx_face_cut). */
+void fx_draw_water(const nshvc_vertex *v, uint32_t n, nshvc_image image, nshvc_shader shader, const float in[8]);
 int fx_draw_picture_now(void);
 int fx_draw_tweening(void);
 /* The palette entry a face's colour byte is shown in at the screen's depth

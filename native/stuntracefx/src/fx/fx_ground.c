@@ -110,7 +110,7 @@ static const struct {
     uint8_t cls;
 } surface[0x20] = {
     [0x00] = { SURF_GRASS, 0, 10 },     /* Easy Ride: class 10, the chip's grass green (82,131,0 to 148,197,57) */
-    [0x01] = { SURF_AQUA, -1280, 0 },   /* Aqua Tunnel: under the road, over the glass tube, where its
+    [0x01] = { SURF_AQUA, -1280, 12 },  /* Aqua Tunnel: under the road, over the glass tube, where its
                                            road's pieces end (the road -1920, the pieces 640 below) */
     [0x02] = { SURF_ROCK, 0, 0 },       /* the canyon */
     [0x03] = { SURF_CEMENT, 0, 0 },     /* the night city, the airport */
@@ -310,7 +310,8 @@ static struct {
     double level;               /* the course's ground level: the grid's median height */
     double xmin, xmax, zmin, zmax;      /* the course's footprint: where its shapes meet the ground */
     double light_k;             /* a lit face's level: light_k * (its outward normal . the light) */
-} grid = { -1, 0, 0, 0, 0, 0, 0, { 0 }, { 0, 0, 0 }, 0, { 0 }, 0, 0, 0, 0, 0, 0 };
+    double deepest;             /* the lowest place a shape meets the ground (y is down: the largest) */
+} grid = { -1, 0, 0, 0, 0, 0, 0, { 0 }, { 0, 0, 0 }, 0, { 0 }, 0, 0, 0, 0, 0, 0, 0 };
 
 /* the survey's untextured faces by colour byte: area on steep faces (the
    normal less than 45 degrees from level; y is the world's up axis, the
@@ -591,6 +592,8 @@ static void ground_survey(unsigned course, const double eye[3], const double m[9
         xmax = fmax(xmax, survey_point[i][0]);
         zmin = fmin(zmin, survey_point[i][2]);
         zmax = fmax(zmax, survey_point[i][2]);
+        if (i == 0 || survey_point[i][1] > grid.deepest)
+            grid.deepest = survey_point[i][1];
     }
     grid.course = (int)course;
     grid.xmin = xmin;
@@ -1062,25 +1065,31 @@ static void range_make(unsigned course)
 
 /* the colour of a face of class cls whose outward normal is n in view
    space, as the chip shades a lit face */
-static uint32_t land_colour(int cls, const double n[3])
+/* class cls's colour at light level `level` (6-15) */
+static uint32_t row_colour(int cls, int level)
 {
-    double len = sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
-    double x = len > 0 ? (n[1] * LIGHT_Y + n[2] * LIGHT_Z) / len : 0;
-    double level = floor(grid.light_k * x);
     uint16_t row = (uint16_t)(fx_rom_read(3, (uint16_t)(SHADE_ROWS + 2 * cls)) | fx_rom_read(3, (uint16_t)(SHADE_ROWS + 2 * cls + 1)) << 8);
-    uint8_t c;
+    uint8_t c = fx_rom_read(3, (uint16_t)(row + level - 6));
     uint16_t bgr;
 
-    if (level < 6)
-        level = 6;
-    if (level > 15)
-        level = 15;
-    c = fx_rom_read(3, (uint16_t)(row + (int)level - 6));
     if (fx_draw_full_colour())
         bgr = pic.palette[c];
     else
         bgr = (uint16_t)(fx_rom_read(0x1F, (uint16_t)(ONE_PALETTE + 2 * c)) | fx_rom_read(0x1F, (uint16_t)(ONE_PALETTE + 2 * c + 1)) << 8);
     return rgb_of(bgr);
+}
+
+static uint32_t land_colour(int cls, const double n[3])
+{
+    double len = sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+    double x = len > 0 ? (n[1] * LIGHT_Y + n[2] * LIGHT_Z) / len : 0;
+    double level = floor(grid.light_k * x);
+
+    if (level < 6)
+        level = 6;
+    if (level > 15)
+        level = 15;
+    return row_colour(cls, (int)level);
 }
 
 /* a world point to view space (world axis k turns to row k of m) */
@@ -1093,13 +1102,44 @@ static void to_view(const double w[3], const double eye[3], const double m[9], d
         v[k] = d[0] * m[k] + d[1] * m[3 + k] + d[2] * m[6 + k];
 }
 
+/* A level plane at height y under the eye, in one colour at depth z: a quad
+   about the eye, far enough out that its far edges lie HORIZON_GAP output
+   pixels from the horizon, kept to the view; its vertices into v from *nv. */
+static void plane_vertices(double y, uint32_t colour, float z, const double eye[3], const double m[9], nshvc_vertex *v,
+                           uint32_t *nv, uint32_t room)
+{
+    static FxCorner c[64];
+    double reach, q[4][3];
+    float sx, sy, scale;
+    uint32_t nc, j;
+    int i;
+
+    if (y - eye[1] <= 0)
+        return;
+    fx_draw_list_scale(&sx, &sy);
+    scale = sx > sy ? sx : sy;
+    reach = 128.0 * (y - eye[1]) * scale / HORIZON_GAP;
+    for (i = 0; i < 4; i++) {
+        double w[3] = { eye[0] + ((i == 1 || i == 2) ? reach : -reach), y, eye[2] + (i >= 2 ? reach : -reach) };
+
+        to_view(w, eye, m, q[i]);
+    }
+    nc = fx_face_triangles_d((const double (*)[3])q, 4, c, sizeof c / sizeof c[0]);
+    for (j = 0; j < nc && *nv < room; j++, (*nv)++) {
+        memset(&v[*nv], 0, sizeof v[*nv]);
+        v[*nv].x = c[j].x;
+        v[*nv].y = c[j].y;
+        v[*nv].z = z;
+        v[*nv].colour = colour;
+    }
+}
+
 static void land_polygons(unsigned course, int cls, const double eye[3], const double m[9])
 {
     static nshvc_vertex v[LAND_VERTICES];
     static FxCorner c[64];
-    double plane_y = fmax(grid.level, eye[1] + EYE_CLEAR), dh = plane_y - eye[1], reach, q[4][3], up[3];
+    double plane_y = fmax(grid.level, eye[1] + EYE_CLEAR), up[3];
     double vcx = (int16_t)ram_word(0x0034), vcy = (int16_t)ram_word(0x0036);
-    float sx, sy, scale;
     uint32_t nv = 0, nc, j, colour;
     int i, k;
 
@@ -1107,27 +1147,10 @@ static void land_polygons(unsigned course, int cls, const double eye[3], const d
         return;
     if (range.course != (int)course)
         range_make(course);
-    fx_draw_list_scale(&sx, &sy);
-    scale = sx > sy ? sx : sy;
-    /* the plane: a quad about the eye, far enough out that its far edges
-       lie HORIZON_GAP output pixels from the horizon, up its normal */
-    reach = 128.0 * dh * scale / HORIZON_GAP;
-    for (i = 0; i < 4; i++) {
-        double w[3] = { eye[0] + ((i == 1 || i == 2) ? reach : -reach), plane_y, eye[2] + (i >= 2 ? reach : -reach) };
-
-        to_view(w, eye, m, q[i]);
-    }
+    /* the plane, its colour up its normal */
     for (k = 0; k < 3; k++)
         up[k] = -m[3 + k];
-    colour = land_colour(cls, up);
-    nc = fx_face_triangles_d((const double (*)[3])q, 4, c, sizeof c / sizeof c[0]);
-    for (j = 0; j < nc && nv < LAND_VERTICES; j++, nv++) {
-        memset(&v[nv], 0, sizeof v[nv]);
-        v[nv].x = c[j].x;
-        v[nv].y = c[j].y;
-        v[nv].z = PLANE_Z;
-        v[nv].colour = colour;
-    }
+    plane_vertices(plane_y, land_colour(cls, up), PLANE_Z, eye, m, v, &nv, LAND_VERTICES);
     /* the mountains' faces that look toward the eye */
     for (i = 0; i < MOUNTAINS; i++)
         for (k = 0; k < SIDES; k++) {
@@ -1176,6 +1199,120 @@ static void land_polygons(unsigned course, int cls, const double eye[3], const d
     fx_draw_land(v, nv);
 }
 
+/* ---- the ocean: a plane of facets, partly see-through, over a sea bed ----
+
+   Jeff (2026-11-11): Aqua Tunnel an ocean with a polygonal water effect, a
+   shader allowed, simple and clear, in the game's look. The water is one
+   plane at the course's water level out to the horizon (as the land's), at
+   the 3D's depth 0 in the frame program's order, so its cut works as before
+   (fx_face_cut: what lies past it drawn first, the holes where the road goes
+   down). ocean.shade draws it as a lattice of OCEAN_CELL facets, each lattice
+   point rising and falling OCEAN_WAVE of a cell, each facet shaded as the
+   chip shades a lit face in the course's water class (the image's texels
+   0-9: the class's colours at levels 6-15, texel 10 the flat sea's), the
+   facets giving way to the flat sea where they are smaller than a pixel;
+   partly see-through, the more the steeper the eye looks down, whole toward
+   the horizon. Its vertices' u and v are their places on the water in cells
+   (the eye's place taken modulo OCEAN_PERIOD cells, the lattice's pattern,
+   so the numbers stay small) and w their depth, so the GPU takes each
+   pixel's place on the water in perspective.
+
+   Under it a sea bed, so that nothing of the backdrop shows through the
+   water: a plane SEABED_BELOW under the lowest place the course's shapes
+   meet the ground (or the water), opaque, in the class's darkest colour
+   darkened to SEABED_DARK, past every other shape (fx_draw_land's depths).
+   Triangles: the water's quad and the bed's, each kept to the view in at
+   most 6. */
+
+#define OCEAN_CELL 512.0
+#define OCEAN_PERIOD 64         /* ocean.shade's N */
+#define OCEAN_WAVE 0.08
+#define SEABED_BELOW 512.0
+#define SEABED_DARK 0.55
+
+static nshvc_image ocean_image[4];
+static nshvc_shader ocean_shader;
+
+static void ocean_draw(int cls, const double eye[3], const double m[9], double water_y, int p)
+{
+    static nshvc_vertex bed[24], v[24];
+    static FxCorner c[64];
+    uint32_t words[16] = { 0 }, nb = 0, nc, j, deep;
+    double dh = water_y - eye[1], reach, q[4][3], up[3], light[3], ex, ez, bed_y;
+    double vcx = (int16_t)ram_word(0x0034), vcy = (int16_t)ram_word(0x0036);
+    float in[8], sx, sy, scale;
+    int i, k, slot;
+
+    /* the sea bed */
+    bed_y = (grid.nx ? fmax(grid.deepest, water_y) : water_y) + SEABED_BELOW;
+    deep = row_colour(cls, 6);
+    deep = 0xFF000000u | (uint32_t)((deep >> 16 & 255) * SEABED_DARK) << 16 | (uint32_t)((deep >> 8 & 255) * SEABED_DARK) << 8
+           | (uint32_t)((deep & 255) * SEABED_DARK);
+    plane_vertices(bed_y, deep, PLANE_Z, eye, m, bed, &nb, sizeof bed / sizeof bed[0]);
+    fx_draw_land(bed, nb);
+    /* the water's quad about the eye, out to HORIZON_GAP of the horizon
+       (from above or below) */
+    fx_draw_list_scale(&sx, &sy);
+    scale = sx > sy ? sx : sy;
+    reach = 128.0 * fabs(dh) * scale / HORIZON_GAP;
+    for (i = 0; i < 4; i++) {
+        double w[3] = { eye[0] + ((i == 1 || i == 2) ? reach : -reach), water_y, eye[2] + (i >= 2 ? reach : -reach) };
+
+        to_view(w, eye, m, q[i]);
+    }
+    nc = fx_face_triangles_d((const double (*)[3])q, 4, c, sizeof c / sizeof c[0]);
+    if (!nc || nc > sizeof v / sizeof v[0])
+        return;
+    /* each corner's place on the water: the view's ray through it,
+       d = ((x - cx) / 128, (y - cy) / 128, 1), meets the water at depth
+       dh / (row 1 . d); its world x and z from rows 0 and 2 */
+    ex = wrap(eye[0], OCEAN_PERIOD * OCEAN_CELL) / OCEAN_CELL;
+    ez = wrap(eye[2], OCEAN_PERIOD * OCEAN_CELL) / OCEAN_CELL;
+    for (j = 0; j < nc; j++) {
+        double d[3] = { (c[j].x - vcx) / 128.0, (c[j].y - vcy) / 128.0, 1.0 }, r[3], z;
+
+        for (k = 0; k < 3; k++)
+            r[k] = m[3 * k] * d[0] + m[3 * k + 1] * d[1] + m[3 * k + 2] * d[2];
+        if (fabs(r[1]) < 1e-12)
+            return;
+        z = dh / r[1];
+        memset(&v[j], 0, sizeof v[j]);
+        v[j].x = c[j].x;
+        v[j].y = c[j].y;
+        v[j].u = (float)(ex + z * r[0] / OCEAN_CELL);
+        v[j].v = (float)(ez + z * r[2] / OCEAN_CELL);
+        v[j].w = (float)z;
+        v[j].colour = 0xFF000000u;
+    }
+    /* the image: the class's colours at levels 6-15, then the flat sea's
+       (up its normal) */
+    for (i = 0; i < 10; i++)
+        words[i] = row_colour(cls, 6 + i);
+    for (k = 0; k < 3; k++)
+        up[k] = -m[3 + k];
+    words[10] = land_colour(cls, up);
+    /* the inputs: the light by the level's scale in the world's axes (world
+       axis k's view components are m[3k..3k+2]), the time, the eye's place
+       and height in cells, the waves' height */
+    for (k = 0; k < 3; k++)
+        light[k] = grid.light_k * (m[3 * k + 1] * LIGHT_Y + m[3 * k + 2] * LIGHT_Z);
+    in[0] = (float)light[0];
+    in[1] = (float)light[1];
+    in[2] = (float)light[2];
+    in[3] = (float)fmod(nshvc_seconds(), 600.0);
+    in[4] = (float)ex;
+    in[5] = (float)ez;
+    in[6] = (float)(dh / OCEAN_CELL);
+    in[7] = (float)OCEAN_WAVE;
+    slot = fx_draw_tweening() * 2 + (p & 1);
+    if (!ocean_image[slot].id)
+        ocean_image[slot] = nshvc_image_create(16, 1, NSHVC_IMAGE_RGBA);
+    if (!ocean_shader.id)
+        ocean_shader = nshvc_shader_load("ocean");
+    nshvc_image_write(ocean_image[slot], words);
+    fx_draw_water(v, nc, ocean_image[slot], ocean_shader, in);
+}
+
 void fx_ground_draw(void)
 {
     unsigned course = g.course;
@@ -1196,11 +1333,11 @@ void fx_ground_draw(void)
         eye[i] = (int16_t)ram_word(FX_FAR_BANK + FX_FAR_VIEW + 2 * i);
     for (i = 0; i < 9; i++)
         m[i] = (int16_t)ram_word((uint32_t)(0x00E4 + 2 * i)) / 32768.0;
-    if (IS_LAND(kind)) {                /* land: its heights once a course, then polygons or the terrain over the view */
-        if (grid.course != (int)course) {
-            ground_survey(course, eye, m);
-            range.course = -1;
-        }
+    if ((IS_LAND(kind) || surface[course].cls) && grid.course != (int)course) {
+        ground_survey(course, eye, m);  /* the course's shapes, once a course */
+        range.course = -1;
+    }
+    if (IS_LAND(kind)) {                /* land: polygons, or the terrain over the view */
         if (surface[course].cls)
             land_polygons(course, surface[course].cls, eye, m);
         else
@@ -1210,6 +1347,15 @@ void fx_ground_draw(void)
     dh = surface[course].y - eye[1];            /* world y is down: > 0, the surface below the eye */
     if (dh == 0 || (dh < 0 && kind != SURF_AQUA))
         return;
+    if (surface[course].cls) {          /* the ocean; Aqua Tunnel's cuts the picture as below */
+        ocean_draw(surface[course].cls, eye, m, surface[course].y, p);
+        if (kind == SURF_AQUA) {
+            double plane[3] = { m[3], m[4], m[5] };
+
+            fx_face_cut(1, plane, dh);
+        }
+        return;
+    }
     cx = (int16_t)ram_word(0x0034);
     cy = (int16_t)ram_word(0x0036);
     top = (int16_t)ram_word(0x003C);

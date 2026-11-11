@@ -1470,6 +1470,26 @@ void fx_draw_land(const nshvc_vertex *v, uint32_t n)
     emit(v, n, 0, 0);
 }
 
+/* The ocean (fx_ground.c): its vertices as given, marked as the water. */
+void fx_draw_water(const nshvc_vertex *v, uint32_t n, nshvc_image image, nshvc_shader shader, const float in[8])
+{
+    uint32_t done = 0;
+
+    if ((!target.id && !recording) || !shader.id)
+        return;
+    blocks_flush();
+    while (done + 3 <= n) {
+        uint32_t k = n - done > 48 ? 48 : (n - done) / 3 * 3;
+
+        if (recording && recording->water_from < 0)
+            recording->water_from = (int32_t)recording->ns;
+        emit_with(v + done, k, image.id, 0, shader.id, in);
+        if (recording)
+            recording->water_to = (int32_t)recording->ns;
+        done += k;
+    }
+}
+
 /* The same in the palette's entry e as it is, of the whole palette. */
 void fx_draw_flat_entry(const FxCorner *c, uint32_t n, uint8_t colour)
 {

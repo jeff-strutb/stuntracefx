@@ -1,0 +1,79 @@
+/* ocean.shade: the sea as facets (fx/fx_ground.c, "the ocean"). uv is the
+   pixel's place on the water in lattice cells, u along the world's x and v
+   along its z, following perspective (the vertices' w).
+
+   The water is a lattice of square cells, each cut on one of its diagonals
+   (which, by a hash of the cell) into two triangles. Each lattice point
+   rises and falls on two waves of its own phase (periods 2.5 s and 4 s), and
+   each triangle is one flat facet, coloured as the chip colours a lit face:
+   its level, floor(its normal . k), kept to 6-15, picks that level's colour
+   of the shade row (the image's texels 0-9). Where a cell is smaller than
+   about a pixel the facets give way to the flat sea's colour (texel 10), as
+   there they could only flicker. Partly see-through: the more steeply the
+   eye looks down on the water the more of what lies under it shows; toward
+   the horizon it is whole.
+
+   Inputs: 0-2 k, the light by the level's scale in the world's axes (y
+   down); 3 the time in seconds (within 600, whole periods of both waves);
+   4-5 the eye's place in cells; 6 the eye's height over the water in cells
+   (below 0 under it); 7 the waves' height in cells. */
+const int N = 64;                   /* the lattice's pattern repeats every N cells (fx_ground.c's OCEAN_PERIOD) */
+const float ALPHA_NEAR = 0.6;       /* how much the water covers seen straight down */
+
+uint hash(ivec2 p, uint salt) {
+    uvec2 q = uvec2(p & (N - 1));
+    uint h = q.x * 0x9E3779B9u ^ q.y * 0x85EBCA6Bu ^ salt;
+    h ^= h >> 15;
+    h *= 0x2C1B3C6Du;
+    h ^= h >> 12;
+    h *= 0x297A2D39u;
+    h ^= h >> 15;
+    return h;
+}
+
+float height(ivec2 p, float t, float a) {
+    uint h = hash(p, 0u);
+    float ph1 = float(h & 1023u) * (6.2831853 / 1024.0);
+    float ph2 = float((h >> 10) & 1023u) * (6.2831853 / 1024.0);
+    return a * (sin(t * 2.5132741 + ph1) + 0.5 * sin(t * 1.5707963 + ph2));
+}
+
+vec4 shade(vec2 uv) {
+    float t = nshvc_input(3), a = nshvc_input(7);
+    vec3 k = vec3(nshvc_input(0), nshvc_input(1), nshvc_input(2));
+    ivec2 c = ivec2(floor(uv));
+    vec2 f = uv - vec2(c);
+    ivec2 o0, o1, o2;
+
+    /* the cell's triangle under the pixel: its diagonal from (0,0) to (1,1)
+       or from (1,0) to (0,1) */
+    if ((hash(c, 0x5BD1E995u) & 1u) == 0u) {
+        o0 = ivec2(0, 0);
+        o1 = f.x > f.y ? ivec2(1, 0) : ivec2(1, 1);
+        o2 = f.x > f.y ? ivec2(1, 1) : ivec2(0, 1);
+    } else {
+        o0 = ivec2(1, 0);
+        o1 = f.x + f.y < 1.0 ? ivec2(0, 0) : ivec2(1, 1);
+        o2 = ivec2(0, 1);
+    }
+    vec3 p0 = vec3(vec2(o0), 0.0).xzy + vec3(0.0, height(c + o0, t, a), 0.0);
+    vec3 p1 = vec3(vec2(o1), 0.0).xzy + vec3(0.0, height(c + o1, t, a), 0.0);
+    vec3 p2 = vec3(vec2(o2), 0.0).xzy + vec3(0.0, height(c + o2, t, a), 0.0);
+    /* its normal facing up (here y is up), then in the world's axes (y down) */
+    vec3 n = cross(p1 - p0, p2 - p0);
+    if (n.y < 0.0)
+        n = -n;
+    n = normalize(vec3(n.x, -n.y, n.z));
+    float level = clamp(floor(dot(n, k)), 6.0, 15.0);
+    vec3 colour = nshvc_image(ivec2(int(level) - 6, 0)).rgb;
+    /* far off, the flat sea */
+    vec2 fw = fwidth(uv);
+    float fade = smoothstep(0.3, 0.9, max(fw.x, fw.y));
+    colour = mix(colour, nshvc_image(ivec2(10, 0)).rgb, fade);
+    /* how much it covers: by how steeply the eye looks down on it */
+    float dh = abs(nshvc_input(6));
+    vec2 d = uv - vec2(nshvc_input(4), nshvc_input(5));
+    float steep = dh / sqrt(dh * dh + dot(d, d));
+    float alpha = mix(ALPHA_NEAR, 1.0, pow(1.0 - steep, 4.0));
+    return vec4(colour, max(alpha, fade));
+}
