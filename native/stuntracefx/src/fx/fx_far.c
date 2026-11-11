@@ -191,6 +191,7 @@ void fx_far_pass(uint16_t *stack)
         *stack = 0x0240;
         fx_stw(FX_MODEL_1B4, 0);
         (void)FxObjectsDraw(0, stack);
+        fx_ground_object_end();
     }
     fx_draw_flush();
     drawing = 0;
@@ -280,6 +281,7 @@ void fx_far_parked(uint16_t *stack)
             *stack = 0x0240;
             fx_stw(FX_MODEL_1B4, 0);
             (void)FxObjectsDraw(0, stack);
+            fx_ground_object_end();
         }
     }
     fx_draw_flush();
@@ -302,7 +304,16 @@ uint16_t fx_far_original(uint16_t record)
     return k < SLOTS ? slot_original[k] : 0;
 }
 
+static void fx_far_record_state(uint16_t record);
+
 void fx_far_record(uint16_t record)
+{
+    fx_ground_object_end();             /* the object before's tunnel rock, at its own depth */
+    fx_far_record_state(record);
+    fx_ground_object_begin(record, shift_now);
+}
+
+static void fx_far_record_state(uint16_t record)
 {
     unsigned k;
 

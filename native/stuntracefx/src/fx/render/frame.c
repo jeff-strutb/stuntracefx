@@ -75,6 +75,7 @@ static FxFrameProgramResult frame_program(uint16_t draw_list_end)
     *stack = 0x0240;
     nshvc_profile_begin(perf_near);
     { FxObjectsDrawResult r_ = FxObjectsDraw(draw_list_end, stack); up_ = r_.up; };
+    fx_ground_object_end();             /* the last near object's tunnel rock (fx_ground.c) */
     nshvc_profile_end();
     if (up_) {                       /* it returned past us */
         return (FxFrameProgramResult){up_ == 0 ? 0 : up_ - 0};

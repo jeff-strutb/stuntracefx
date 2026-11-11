@@ -1779,6 +1779,22 @@ static void shape_draw(const FxShape *sh)
     in_shape = 0;
 }
 
+/* The faces queued so far drawn now, as FxDrawList draws them, the chip's
+   state as it was (fx_ground.c: a tunnel piece's faces before its rock). */
+void fx_draw_queued(void)
+{
+    FxState keep = fxs;
+    uint32_t i, n = fx_face_count();
+
+    if (!n)
+        return;
+    blocks_flush();
+    for (i = 0; i < n; i++)
+        shape_draw(fx_face_at(i));
+    fx_face_reset();
+    fxs = keep;
+}
+
 FxDrawListResult FxDrawList(uint16_t caller_list_end, uint16_t caller_write_ptr, uint16_t *stack, uint16_t rom_at)
 {
     uint32_t i, n = fx_face_count();

@@ -334,6 +334,18 @@ static struct {
 static float survey_point[SURVEY_POINTS][3];
 static int survey_points;
 
+/* The record being surveyed: its faces' area by the way their Newell
+   normals point (down, up, across x, across z); and each record's shape,
+   place, box and those areas, to find the course's tunnel pieces (the
+   tunnels' rock, below). */
+static double rec_area[4];
+enum { CANDIDATES = 0x31 + FX_FAR_MAX };
+static struct {
+    uint16_t shape;
+    double at[3], lo[3], hi[3], area[4];
+} cand[CANDIDATES];
+static int ncand, surveying;
+
 static void survey_sink(double x, double y, double z, void *context)
 {
     const double *at = (const double *)context;
@@ -371,6 +383,12 @@ static void survey_face(const double (*c)[3], int n, uint8_t colour, int texture
     for (i = 0; i < 3; i++)
         u[i] = nv[i] / len;
     rock_survey.facing += u[2];
+    if (u[1] > 0.7)
+        rec_area[0] += area;
+    else if (u[1] < -0.7)
+        rec_area[1] += area;
+    else
+        rec_area[fabs(u[0]) >= fabs(u[2]) ? 2 : 3] += area;
     if (lit) {
         double x = u[1] * LIGHT_Y + u[2] * LIGHT_Z;
 
@@ -522,10 +540,28 @@ static void survey_record(const uint8_t *record, double at[3], uint16_t *stack)
         int from = survey_points, i, kept_n = from;
         float lowest = -1e9f;
 
+        memset(rec_area, 0, sizeof rec_area);
         fx_face_survey(survey_sink, survey_face, at);
         *stack = 0x0240;
         (void)FxObjectsDraw(0, stack);
         fx_face_survey(NULL, NULL, NULL);
+        if (survey_points > from && ncand < CANDIDATES) {
+            int q;
+
+            cand[ncand].shape = (uint16_t)(record[0x08] | record[0x09] << 8);
+            for (q = 0; q < 3; q++) {
+                cand[ncand].at[q] = at[q];
+                cand[ncand].lo[q] = 1e9;
+                cand[ncand].hi[q] = -1e9;
+            }
+            for (i = from; i < survey_points; i++)
+                for (q = 0; q < 3; q++) {
+                    cand[ncand].lo[q] = fmin(cand[ncand].lo[q], survey_point[i][q]);
+                    cand[ncand].hi[q] = fmax(cand[ncand].hi[q], survey_point[i][q]);
+                }
+            memcpy(cand[ncand].area, rec_area, sizeof rec_area);
+            ncand++;
+        }
         /* where the shape meets the ground: its lowest part (world y is
            down: the largest y), the points within FOOT of it; the rest of
            it (a gantry's beam, a banner) stands above the ground */
@@ -546,6 +582,62 @@ static int float_order(const void *a, const void *b)
     return (x > y) - (x < y);
 }
 
+/* ---- the tunnels' rock (Jeff, 2026-11-11: "give it rocky sides") ----
+
+   A tunnel piece's model is its inside only (roof, walls, lights): seen
+   from the side, across open ground, its inside showed. Found by the
+   survey's records (Sunset Valley's, dumped 2026-11-11: seven of shape
+   $E384, 3,840 x 3,903 and 960 high, a roof's area (16.6 million) and two
+   walls' (6.6), nothing facing up; one $E480 the same with its lights): a
+   piece no more than TUNNEL_HIGH high, at least TUNNEL_WIDE across both
+   ways, the area facing down (outward) at least half its box's ground and
+   the area facing sideways at least a quarter of that. Its open ends are
+   where no walls face: across x when its walls face x. Each gets a shell
+   of rock: walls from the ground (the plane, or its floor where that is
+   lower) widening out by a third of their height, SHELL_THICK outside its
+   walls, and a ridged roof SHELL_THICK above its ceiling, open at both
+   ends; drawn right after the piece's own faces in the 3D's order (at its
+   depth: 0, or a far object's), and only the faces that look at the eye,
+   so from outside the tunnel is rock with its mouths in it and from inside
+   nothing changes. Shaded as the mesas are. What the 3D draws after the
+   piece (a car inside it nearer the eye than it) still shows over its
+   rock. */
+
+#define TUNNEL_HIGH 2000.0
+#define TUNNEL_WIDE 2000.0
+#define SHELL_THICK 256.0
+enum { TUNNELS = 64, SHELL_VERTICES = 3 * 8 * 7 };
+
+static struct {
+    int course, n;
+    struct {
+        uint16_t shape;
+        double at[3], lo[3], hi[3];
+        int along;                      /* the world axis its open ends lie along: 0 x, 2 z */
+    } t[TUNNELS];
+} tunnels = { -1, 0, { { 0, { 0 }, { 0 }, { 0 }, 0 } } };
+
+static void tunnels_find(unsigned course)
+{
+    int i;
+
+    tunnels.course = (int)course;
+    tunnels.n = 0;
+    for (i = 0; i < ncand && tunnels.n < TUNNELS; i++) {
+        double w = cand[i].hi[0] - cand[i].lo[0], h = cand[i].hi[1] - cand[i].lo[1], d = cand[i].hi[2] - cand[i].lo[2];
+        double roof = rock_survey.facing < 0 ? cand[i].area[0] : cand[i].area[1], side = cand[i].area[2] + cand[i].area[3];
+
+        if (h > TUNNEL_HIGH || w < TUNNEL_WIDE || d < TUNNEL_WIDE || roof < 0.5 * w * d || side < 0.25 * roof)
+            continue;
+        tunnels.t[tunnels.n].shape = cand[i].shape;
+        memcpy(tunnels.t[tunnels.n].at, cand[i].at, sizeof cand[i].at);
+        memcpy(tunnels.t[tunnels.n].lo, cand[i].lo, sizeof cand[i].lo);
+        memcpy(tunnels.t[tunnels.n].hi, cand[i].hi, sizeof cand[i].hi);
+        tunnels.t[tunnels.n].along = cand[i].area[2] >= cand[i].area[3] ? 2 : 0;
+        tunnels.n++;
+    }
+}
+
 static void ground_survey(unsigned course, const double eye[3], const double m[9])
 {
     static uint8_t kept[0x10000];
@@ -560,6 +652,8 @@ static void ground_survey(unsigned course, const double eye[3], const double m[9
     int x, z, it, head = 0, tail = 0;
 
     survey_points = 0;
+    ncand = 0;
+    surveying = 1;
     memset(&rock_survey, 0, sizeof rock_survey);
     memcpy(kept, fx_ram, sizeof kept);
     fx_draw_hold(1);
@@ -590,9 +684,11 @@ static void ground_survey(unsigned course, const double eye[3], const double m[9
         survey_record(r, at, &stack_top);
     }
     fx_draw_hold(0);
+    surveying = 0;
     memcpy(fx_ram, kept, sizeof kept);
     fxs = state;
     rock_shades();
+    tunnels_find(course);
     for (i = 0; i < (unsigned)survey_points; i++) {
         xmin = fmin(xmin, survey_point[i][0]);
         xmax = fmax(xmax, survey_point[i][0]);
@@ -688,8 +784,9 @@ static void ground_survey(unsigned course, const double eye[3], const double m[9
     grid.level = next[grid.nx * grid.nz / 2];
     memcpy(grid_known, known, sizeof grid_known);
     fprintf(stderr, "ground: course %u, level %.0f, footprint x %.0f to %.0f, z %.0f to %.0f, lit level %.2f a unit of"
-            " facing (%s), %d rock shades\n", course, grid.level, grid.xmin, grid.xmax, grid.zmin, grid.zmax, grid.light_k,
-            grid.light_k == LIGHT_K ? "no lit faces: the chip's own scale" : "fitted from the course's lit faces", grid.shades);
+            " facing (%s), %d rock shades, %d tunnel pieces\n", course, grid.level, grid.xmin, grid.xmax, grid.zmin, grid.zmax,
+            grid.light_k, grid.light_k == LIGHT_K ? "no lit faces: the chip's own scale" : "fitted from the course's lit faces",
+            grid.shades, tunnels.n);
 }
 
 /* ---- the land drawn: a few planes, terrain.shade colouring them ----
@@ -1193,6 +1290,8 @@ static uint32_t face_colour(int cls, const double nv[3], const double nw[3], int
    and its outward normal nw: left out when it faces away from the eye;
    else turned to the view, kept to it, each corner at its depth (from the
    face's own plane), into v from *nv. */
+static int face_at_zero;                /* land_face's vertices at depth 0 (the tunnels' rock, in the 3D's order) */
+
 static void land_face(const double (*pts)[3], int n, const double nw[3], int cls, const double eye[3], const double m[9],
                       nshvc_vertex *v, uint32_t *nv, uint32_t room)
 {
@@ -1224,7 +1323,7 @@ static void land_face(const double (*pts)[3], int n, const double nw[3], int cls
         memset(&v[*nv], 0, sizeof v[*nv]);
         v[*nv].x = c[j].x;
         v[*nv].y = c[j].y;
-        v[*nv].z = (float)(z < 0 ? 0 : z > FACE_Z ? FACE_Z : z);
+        v[*nv].z = face_at_zero ? 0.0f : (float)(z < 0 ? 0 : z > FACE_Z ? FACE_Z : z);
         v[*nv].colour = colour;
     }
 }
@@ -1353,6 +1452,103 @@ static void fill_faces(unsigned course, int cls, double plane_y, const double ey
         }
 }
 
+/* The view the tunnels' rock is drawn in this picture (land_polygons sets
+   it; off where the course has none), and the tunnel piece being drawn. */
+static struct {
+    int on, cls;
+    double eye[3], m[9], plane_y;
+} shell_view;
+static int shell_pending = -1;
+
+void fx_ground_object_begin(uint16_t record, int shift)
+{
+    uint16_t shape;
+    double v[3], at[3];
+    int i, k;
+
+    shell_pending = -1;
+    if (!shell_view.on || surveying || tunnels.course != (int)g.course)
+        return;
+    shape = (uint16_t)(fx_ram[(uint16_t)(record + 0x08)] | fx_ram[(uint16_t)(record + 0x09)] << 8);
+    for (i = 0; i < tunnels.n; i++)
+        if (tunnels.t[i].shape == shape)
+            break;
+    if (i == tunnels.n)
+        return;
+    /* its place in the world: its place in view space (halved `shift`
+       times for a far one) turned back by the view's rows */
+    v[0] = ldexp((int16_t)(fx_ram[(uint16_t)(record + 0x12)] | fx_ram[(uint16_t)(record + 0x13)] << 8), shift);
+    v[1] = ldexp((int16_t)(fx_ram[(uint16_t)(record + 0x10)] | fx_ram[(uint16_t)(record + 0x11)] << 8), shift);
+    v[2] = ldexp((int16_t)(fx_ram[(uint16_t)(record + 0x14)] | fx_ram[(uint16_t)(record + 0x15)] << 8), shift);
+    for (k = 0; k < 3; k++)
+        at[k] = shell_view.eye[k] + shell_view.m[3 * k] * v[0] + shell_view.m[3 * k + 1] * v[1] + shell_view.m[3 * k + 2] * v[2];
+    for (; i < tunnels.n; i++) {
+        double dx = at[0] - tunnels.t[i].at[0], dz = at[2] - tunnels.t[i].at[2];
+
+        if (tunnels.t[i].shape == shape && dx * dx + dz * dz < 512.0 * 512.0 * (1 << (2 * shift)))
+            break;
+    }
+    if (i < tunnels.n)
+        shell_pending = i;
+}
+
+void fx_ground_object_end(void)
+{
+    static nshvc_vertex sv[SHELL_VERTICES];
+    uint32_t ns = 0;
+    double p0, p1, cp, half, a0, a1, top, base, ridge, spread, mid_y;
+    double prof[5][2];
+    int i = shell_pending, s, p, a, k;
+
+    if (i < 0)
+        return;
+    shell_pending = -1;
+    fx_draw_queued();                   /* the piece's own faces first */
+    a = tunnels.t[i].along;
+    p = 2 - a;
+    p0 = tunnels.t[i].lo[p];
+    p1 = tunnels.t[i].hi[p];
+    cp = (p0 + p1) / 2;
+    half = (p1 - p0) / 2;
+    a0 = tunnels.t[i].lo[a];
+    a1 = tunnels.t[i].hi[a];
+    top = tunnels.t[i].lo[1] - SHELL_THICK;                     /* y is down */
+    base = fmax(tunnels.t[i].hi[1], shell_view.plane_y);
+    ridge = top - 0.3 * half;
+    spread = (base - top) / 3;
+    mid_y = (tunnels.t[i].lo[1] + tunnels.t[i].hi[1]) / 2;
+    /* its cross-section across the tunnel: ground, wall top, ridge, wall
+       top, ground */
+    prof[0][0] = cp - half - SHELL_THICK - spread;
+    prof[0][1] = base;
+    prof[1][0] = cp - half - SHELL_THICK;
+    prof[1][1] = top;
+    prof[2][0] = cp;
+    prof[2][1] = ridge;
+    prof[3][0] = cp + half + SHELL_THICK;
+    prof[3][1] = top;
+    prof[4][0] = cp + half + SHELL_THICK + spread;
+    prof[4][1] = base;
+    face_at_zero = 1;
+    for (s = 0; s < 4; s++) {
+        double quad[4][3], n[3], mp = (prof[s][0] + prof[s + 1][0]) / 2 - cp, my = (prof[s][1] + prof[s + 1][1]) / 2 - mid_y;
+        static const int end[4] = { 0, 0, 1, 1 }, edge[4] = { 0, 1, 1, 0 };
+
+        for (k = 0; k < 4; k++) {
+            quad[k][p] = prof[s + edge[k]][0];
+            quad[k][1] = prof[s + edge[k]][1];
+            quad[k][a] = end[k] ? a1 : a0;
+        }
+        normal_of(quad[0], quad[1], quad[2], n);
+        if (n[p] * mp + n[1] * my < 0)      /* outward: away from the tunnel's middle */
+            for (k = 0; k < 3; k++)
+                n[k] = -n[k];
+        land_face((const double (*)[3])quad, 4, n, shell_view.cls, shell_view.eye, shell_view.m, sv, &ns, SHELL_VERTICES);
+    }
+    face_at_zero = 0;
+    fx_draw_land(sv, ns);
+}
+
 static void land_polygons(unsigned course, int cls, const double eye[3], const double m[9])
 {
     static nshvc_vertex v[LAND_VERTICES];
@@ -1420,6 +1616,12 @@ static void land_polygons(unsigned course, int cls, const double eye[3], const d
     if (mesas) {
         static nshvc_vertex fv[FILL_VERTICES];
         uint32_t nf = 0;
+
+        shell_view.on = 1;
+        shell_view.cls = cls;
+        shell_view.plane_y = plane_y;
+        memcpy(shell_view.eye, eye, sizeof shell_view.eye);
+        memcpy(shell_view.m, m, sizeof shell_view.m);
 
         if (fill.course != (int)course)
             fill_make(course);
@@ -1582,6 +1784,8 @@ void fx_ground_draw(void)
        original's underwater backdrop to show; the ocean is drawn there too,
        seen from below, over that backdrop (Jeff, 2026-11-11) */
     fx_far_occlude(0);                  /* the far objects at the 3D's own depth unless the land hides them */
+    shell_view.on = 0;                  /* the tunnels' rock only where the land sets it */
+    shell_pending = -1;
     if (kind == SURF_NONE || (kind == SURF_AQUA && (g.picture_effects & 0x08) && !surface[course].cls))
         return;
     for (i = 0; i < 3; i++)
