@@ -43,6 +43,14 @@ started. For checking as the courses are done: `SRFX_COURSE=<course>` starts tha
 menus and course screen left out, their choices made as data), and an FPS counter (31d5ad46) shows the pictures drawn a
 second at the top left (`SRFX_FPS=0` hides it); neither run by me.
 
+Where a picture's time goes (2026-11-11, measured; `SRFX_PROFILE=1`, ad4be3e7): Easy Ride's start line headless on
+the Mac, 89 pictures a second at 5120 x 2880, 124 at 2560 x 1440, 137 at 1280 x 720. The game's draw and the engine's
+build are about 0.9 ms a picture at every size (the far objects 0.55 of it); the render thread is 85-90%: about 6 ms
+that does not change with the window's size (about 4,500 draw calls a picture, one 3D face a call, about 1.3 us each)
+and about 0.28 ms a megapixel more. Whether the fixed part is encoding or the GPU is not told from inside the game. The
+full breakdown is in the notes folder (perf-2026-11-11-breakdown.md). Jeff's windowed 51 FPS at 5K was taken with the
+course launch's sound loop spinning the audio thread (fixed, 16484a5f) and is not yet measured again.
+
 The land (2026-11-11, from Jeff's pictures of Easy Ride; a scratch run dumped the courses' height grids and the eye's
 places, compared offline): (1) the land showed above a tunnel's opening: the grid keeps the lowest place a shape meets the
 ground, so it has a trench where the road runs under the ground, which the 24 planes (9a513326), flat over it as the
