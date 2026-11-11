@@ -31,6 +31,15 @@ screen's pixels, made once as the screen opens in three pictures with no overlay
 down), each read back, the last kept and drawn as it is; the touch controls and the corner button are no longer in it.
 Compiled on every host; not run.
 
+The land as polygons (2026-11-11, Jeff: "clear solid polygons ... terrain matching the style of the track design",
+"extend into the horizon point with no gaps"; track by track, Easy Ride first): Easy Ride's land is a plane at the
+course's level out to within 0.01 px of the horizon in every direction, never above the eye, and a ring of 10
+five-sided polygon mountains outside the course's footprint, each face shaded as the chip shades a lit face of a model
+(class 10's shade row; the level's scale and sign fitted from the course's own lit faces), drawn past the 3D's depth 0
+with their own depths, so they cover none of the course: 52 triangles, flat colours, no shader (c8b535bc). Compiled on
+every host; not run, not yet shown to Jeff. The other courses keep the land below until their turn; Aqua Tunnel's waves
+and partly see-through water not started.
+
 The land (2026-11-11, from Jeff's pictures of Easy Ride; a scratch run dumped the courses' height grids and the eye's
 places, compared offline): (1) the land showed above a tunnel's opening: the grid keeps the lowest place a shape meets the
 ground, so it has a trench where the road runs under the ground, which the 24 planes (9a513326), flat over it as the
