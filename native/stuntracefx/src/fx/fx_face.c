@@ -854,6 +854,7 @@ static void commit(const FxMaterial *m)
     s->tint_index = face.tint.index;
     s->light = face.tint.light;
     s->under_first = s->under_count = 0;
+    s->z = fx_far_z();
     if (s->line) {
         ok = line(face.c, &face.view);
     } else if (cut.on) {

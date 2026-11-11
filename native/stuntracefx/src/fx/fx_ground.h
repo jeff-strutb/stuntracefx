@@ -7,5 +7,8 @@
 /* The surface of the course into the picture being drawn: the frame
    program's first drawing after the screen clear (render/frame.c). */
 void fx_ground_draw(void);
+/* A view-space depth as the land's depth in the draw list: in (0, 0.998),
+   nearer smaller, one over the depth linear across the screen. */
+float fx_ground_depth_z(double depth);
 
 #endif

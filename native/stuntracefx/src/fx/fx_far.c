@@ -35,6 +35,7 @@
 #include "fx/fx.h"
 #include "fx/fx_draw.h"
 #include "fx/fx_far.h"
+#include "fx/fx_ground.h"
 
 enum { SLOTS = 0x31, SLOT_SIZE = 0x1E, SLOT_FIRST = 0x0AAA };
 
@@ -43,6 +44,7 @@ typedef struct {
     int16_t at[3];
     uint8_t shift;
     uint16_t depth, rec;
+    double near;                /* its nearest point's depth (its place's less its radius), no more than the one drawn before's */
 } Far;
 
 static Far far[FX_FAR_MAX], parked[FX_FAR_MAX];
@@ -50,8 +52,11 @@ static unsigned nparked;
 static uint8_t slot_shift[SLOTS];
 static uint16_t slot_depth[SLOTS];
 static uint16_t slot_original[SLOTS];   /* the near record a slot holds in a pass; 0 none */
-static int drawing, shift_now;
+static double slot_near[SLOTS];         /* a far slot's nearest depth */
+static uint8_t slot_far[SLOTS];         /* the slot holds a far object (not a near one or a tyre) */
+static int drawing, shift_now, occlude, far_now;
 static uint16_t depth_now;
+static double near_now;
 static uint8_t kept[0x10000];
 
 /* words of the chip's RAM (the second 64 KB, the first) and of ROM bank 0,
@@ -93,8 +98,10 @@ void fx_far_pass(uint16_t *stack)
     FxState state = fxs;
 
     nparked = 0;
-    if (!count)
+    if (!count) {
+        occlude = 0;
         return;
+    }
     if (count > FX_FAR_MAX)
         count = FX_FAR_MAX;
     fx_ram[FX_FAR_BANK + FX_FAR_COUNT] = fx_ram[FX_FAR_BANK + FX_FAR_COUNT + 1] = 0;
@@ -144,11 +151,20 @@ void fx_far_pass(uint16_t *stack)
             f->shift = (uint8_t)s;
             f->depth = (uint16_t)(v[2] > 0x7FFF ? 0x7FFF : v[2] < 0 ? 0 : v[2]);
             f->rec = rec;
+            f->near = (double)(v[2] - radius);
         }
     }
-    if (!n)
+    if (!n) {
+        occlude = 0;
         return;
+    }
     qsort(far, n, sizeof far[0], farther_first);
+    /* the depths never deeper than the one drawn before's, so that of two far
+       objects the later drawn is never hidden by the earlier: their order
+       among themselves stays the sort's */
+    for (i = 1; i < n; i++)
+        if (far[i].near > far[i - 1].near)
+            far[i].near = far[i - 1].near;
     memcpy(kept, fx_ram, sizeof kept);
     drawing = 1;
     for (b = 0; b < n; b += SLOTS) {
@@ -168,6 +184,8 @@ void fx_far_pass(uint16_t *stack)
             slot_shift[k] = f->shift;
             slot_depth[k] = f->depth;
             slot_original[k] = 0;
+            slot_near[k] = f->near;
+            slot_far[k] = 1;
         }
         ram_put(GSU_DRAW_LIST, SLOT_FIRST);
         *stack = 0x0240;
@@ -177,6 +195,8 @@ void fx_far_pass(uint16_t *stack)
     fx_draw_flush();
     drawing = 0;
     shift_now = 0;
+    far_now = 0;
+    occlude = 0;
     memcpy(fx_ram, kept, sizeof kept);
     fxs = state;
 }
@@ -196,6 +216,7 @@ static void far_slot(unsigned k, const Far *f, int last)
     slot_shift[k] = f->shift;
     slot_depth[k] = f->depth;
     slot_original[k] = 0;
+    slot_far[k] = 0;                    /* a tyre: among the near objects */
 }
 
 void fx_far_parked(uint16_t *stack)
@@ -252,6 +273,7 @@ void fx_far_parked(uint16_t *stack)
                 ram_put(slot, k + 1 < in ? (uint16_t)(slot + SLOT_SIZE) : 0);
                 slot_shift[k] = 0;
                 slot_depth[k] = 0;
+                slot_far[k] = 0;
                 slot_original[k] = (uint16_t)(SLOT_FIRST + order[b + k].at * SLOT_SIZE);
             }
             ram_put(GSU_DRAW_LIST, SLOT_FIRST);
@@ -286,11 +308,21 @@ void fx_far_record(uint16_t record)
 
     if (!drawing) {
         shift_now = 0;
+        far_now = 0;
         return;
     }
     k = (uint16_t)(record - SLOT_FIRST) / SLOT_SIZE % SLOTS;
     shift_now = slot_shift[k];
     depth_now = slot_depth[k];
+    near_now = slot_near[k];
+    far_now = slot_far[k];
+}
+
+void fx_far_occlude(int on) { occlude = on; }
+
+float fx_far_z(void)
+{
+    return drawing && occlude && far_now ? fx_ground_depth_z(near_now) : 0.0f;
 }
 
 int fx_far_shift(void) { return shift_now; }

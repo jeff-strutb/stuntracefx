@@ -42,6 +42,9 @@ typedef struct {
     /* while the water cuts the picture (fx_face_cut): the face's part past
        the water from the eye, drawn before it (count 0: none) */
     uint32_t under_first, under_count;
+    /* the depth it is drawn at (a far object's while the land hides them,
+       fx_far_z), 0 the 3D's own */
+    float z;
 } FxShape;
 
 /* A face: begun, its points given (fx_face_vertex, fx_rt.h), then ended

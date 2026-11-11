@@ -49,5 +49,13 @@ void fx_far_parked(uint16_t *stack);
 /* While a pass draws: the near record a slot holds (its $0AAA address), 0
    for a far record or a tyre; `record` as it is outside a pass. */
 uint16_t fx_far_original(uint16_t record);
+/* Far objects hidden by the land (fx_ground.c, where it fills a course's
+   empty space): while on, each far object is drawn at a depth of its own,
+   its nearest point's, that the land in front of it hides it at; off, as
+   the 3D always is, at depth 0 in the frame program's order. Set each
+   picture before the far pass, off after it. While a far object draws: its
+   depth for the draw list (fx_ground_depth_z), 0 for none. */
+void fx_far_occlude(int on);
+float fx_far_z(void);
 
 #endif

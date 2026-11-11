@@ -12,6 +12,7 @@
 
 #include "fx/fx.h"
 #include "fx/fx_draw.h"
+#include "fx/fx_far.h"
 #include "fx/fx_face.h"
 #include "system/state.h"
 #include "system/perf.h"
@@ -387,14 +388,28 @@ static int held;                /* nothing is drawn (the ground's survey) */
 
 void fx_draw_hold(int on) { held = on; }
 
+/* The depth of what is emitted (fx_far.c's fx_far_occlude): a queued face
+   its own (shape_draw sets it while it draws one), anything else the far
+   object drawing now's; 0 none, the 3D's own depth 0 in order. Only a
+   vertex at depth 0 takes it (the land's carry their own). */
+static int in_shape;
+static float shape_z;
+
+static float emit_z(void)
+{
+    return in_shape ? shape_z : fx_far_z();
+}
+
 static void emit_with(const nshvc_vertex *v, uint32_t count, uint32_t image, int lines, uint32_t shader, const float *in)
 {
     Recording *r = recording;
     nshvc_material m;
     uint32_t i;
+    float z;
 
     if (held)
         return;
+    z = emit_z();
 
     if (!r) {
         nshvc_vertex scaled[48];
@@ -414,6 +429,8 @@ static void emit_with(const nshvc_vertex *v, uint32_t count, uint32_t image, int
                 scaled[i] = v[done + i];
                 scaled[i].x = (scaled[i].x + (float)offset_x) * target_sx;
                 scaled[i].y = (scaled[i].y + (float)offset_y) * target_sy;
+                if (z > 0 && scaled[i].z == 0)
+                    scaled[i].z = z;
             }
             if (lines)
                 nshvc_draw_lines(target, scaled, n, image ? &m : NULL);
@@ -447,6 +464,8 @@ static void emit_with(const nshvc_vertex *v, uint32_t count, uint32_t image, int
             r->uv[r->nuv + i] = v[i];
             r->uv[r->nuv + i].x += (float)offset_x;
             r->uv[r->nuv + i].y += (float)offset_y;
+            if (z > 0 && r->uv[r->nuv + i].z == 0)
+                r->uv[r->nuv + i].z = z;
         }
         r->nuv += count;
         return;
@@ -475,6 +494,8 @@ static void emit_with(const nshvc_vertex *v, uint32_t count, uint32_t image, int
         r->v[r->nv + i] = v[i];
         r->v[r->nv + i].x += (float)offset_x;
         r->v[r->nv + i].y += (float)offset_y;
+        if (z > 0 && r->v[r->nv + i].z == 0)
+            r->v[r->nv + i].z = z;
     }
     r->nv += count;
     r->gen++;
@@ -1678,7 +1699,7 @@ static uint32_t two_player_colour(const FxShape *sh, uint8_t c)
 
 /* A face's shape in floats (fx_face.c) in place of the chip's entries for
    it, in the material of its first entry (p, after the kind byte). */
-static void shape_draw(const FxShape *sh)
+static void shape_draw_body(const FxShape *sh)
 {
     const FxCorner *c = fx_face_corners() + sh->first;
     const FxMaterial *m = &sh->material;
@@ -1747,6 +1768,15 @@ static void shape_draw(const FxShape *sh)
         }
         side_under = 0;
     }
+}
+
+/* a queued face at its own depth (FxShape z) */
+static void shape_draw(const FxShape *sh)
+{
+    in_shape = 1;
+    shape_z = sh->z;
+    shape_draw_body(sh);
+    in_shape = 0;
 }
 
 FxDrawListResult FxDrawList(uint16_t caller_list_end, uint16_t caller_write_ptr, uint16_t *stack, uint16_t rom_at)

@@ -316,6 +316,9 @@ static struct {
     double deepest;             /* the lowest place a shape meets the ground (y is down: the largest) */
 } grid = { -1, 0, 0, 0, 0, 0, 0, { 0 }, { 0, 0, 0 }, 0, { 0 }, 0, 0, 0, 0, 0, 0, 0 };
 
+/* the grid's cells where a course's shape meets the ground */
+static uint8_t grid_known[GRID_MOST * GRID_MOST];
+
 /* the survey's untextured faces by colour byte: area on steep faces (the
    normal less than 45 degrees from level; y is the world's up axis, the
    survey's view being the identity) and on all, and the sums for the
@@ -683,6 +686,7 @@ static void ground_survey(unsigned course, const double eye[3], const double m[9
     memcpy(next, grid.h, sizeof(float) * (size_t)(grid.nx * grid.nz));
     qsort(next, (size_t)(grid.nx * grid.nz), sizeof(float), float_order);
     grid.level = next[grid.nx * grid.nz / 2];
+    memcpy(grid_known, known, sizeof grid_known);
     fprintf(stderr, "ground: course %u, level %.0f, footprint x %.0f to %.0f, z %.0f to %.0f, lit level %.2f a unit of"
             " facing (%s), %d rock shades\n", course, grid.level, grid.xmin, grid.xmax, grid.zmin, grid.zmax, grid.light_k,
             grid.light_k == LIGHT_K ? "no lit faces: the chip's own scale" : "fitted from the course's lit faces", grid.shades);
@@ -1235,6 +1239,120 @@ static void normal_of(const double *a, const double *b, const double *c, double 
     n[2] = e1[0] * e2[1] - e1[1] * e2[0];
 }
 
+float fx_ground_depth_z(double depth)
+{
+    double z = depth > LAND_NEAR ? FACE_Z * (1.0 - LAND_NEAR / depth) : 0;
+
+    return (float)(z < 1e-6 ? 1e-6 : z > FACE_Z ? FACE_Z : z);
+}
+
+/* ---- the land filling a course's empty space (Jeff, 2026-11-11) ----
+
+   Where nothing of the course stands, rock rises, so the far track and a
+   tunnel's open sides are not seen across empty ground: heights on a
+   lattice over the survey's grid, FILL_STEP of its cells a step, each point
+   rising with its distance from the nearest cell where a shape of the course
+   meets the ground: flat within FILL_CLEAR steps of one, rising over the
+   next FILL_RISE steps to FILL_HEIGHT (give or take a quarter, by a hash).
+   A lattice triangle over a cell of the course has its three corners within
+   a step and a half of it (its longest side is the square's diagonal), so
+   with FILL_CLEAR at 1.5 it is flat at the course's level there: the rock
+   never stands over the course. Each triangle with a raised corner is a
+   face, shaded as the mesas are; those all at the level are the plane's.
+   The far objects are drawn at depths of their own while it is drawn
+   (fx_far_occlude), so it hides those behind it; the near objects, at the
+   3D's own depth 0, are never hidden by it. */
+
+enum { FILL_STEP = 4, FILL_MOST = GRID_MOST / FILL_STEP + 2, FILL_VERTICES = 3 * 2 * FILL_MOST * FILL_MOST * 2 };
+#define FILL_CLEAR 1.5
+#define FILL_RISE 3.0
+#define FILL_HEIGHT 3500.0
+
+static struct {
+    int course, nx, nz;
+    double x0, z0, step;
+    float y[FILL_MOST * FILL_MOST];     /* each lattice point's height (y is down) */
+    uint8_t raised[FILL_MOST * FILL_MOST];
+} fill = { -1, 0, 0, 0, 0, 0, { 0 }, { 0 } };
+
+static void fill_make(unsigned course)
+{
+    double clear, rise;
+    int i, j, reach;
+
+    fill.course = (int)course;
+    fill.step = FILL_STEP * grid.cell;
+    fill.x0 = grid.x0;
+    fill.z0 = grid.z0;
+    fill.nx = grid.nx / FILL_STEP + 2;
+    fill.nz = grid.nz / FILL_STEP + 2;
+    clear = FILL_CLEAR * fill.step;
+    rise = FILL_RISE * fill.step;
+    reach = (int)ceil((clear + rise) / grid.cell) + 1;
+    for (j = 0; j < fill.nz; j++)
+        for (i = 0; i < fill.nx; i++) {
+            double px = fill.x0 + i * fill.step, pz = fill.z0 + j * fill.step, best = clear + rise, t, h;
+            int cx = (int)floor((px - grid.x0) / grid.cell), cz = (int)floor((pz - grid.z0) / grid.cell), x, z;
+
+            for (z = cz - reach; z <= cz + reach; z++)
+                for (x = cx - reach; x <= cx + reach; x++) {
+                    double dx, dz, d;
+
+                    if (x < 0 || z < 0 || x >= grid.nx || z >= grid.nz || !grid_known[z * grid.nx + x])
+                        continue;
+                    dx = grid.x0 + (x + 0.5) * grid.cell - px;
+                    dz = grid.z0 + (z + 0.5) * grid.cell - pz;
+                    d = sqrt(dx * dx + dz * dz);
+                    if (d < best)
+                        best = d;
+                }
+            t = (best - clear) / rise;
+            t = t < 0 ? 0 : t > 1 ? 1 : t;
+            h = FILL_HEIGHT * (0.75 + 0.5 * hash01(course, 1000 + (unsigned)i, (unsigned)j)) * t * t * (3 - 2 * t);
+            fill.y[j * fill.nx + i] = (float)(grid.level - h);
+            fill.raised[j * fill.nx + i] = h > 0;
+        }
+}
+
+/* the fill's faces into v from *nv */
+static void fill_faces(unsigned course, int cls, double plane_y, const double eye[3], const double m[9], nshvc_vertex *v,
+                       uint32_t *nv, uint32_t room)
+{
+    int i, j, t, k;
+
+    for (j = 0; j + 1 < fill.nz; j++)
+        for (i = 0; i + 1 < fill.nx; i++) {
+            int at[4] = { j * fill.nx + i, j * fill.nx + i + 1, (j + 1) * fill.nx + i + 1, (j + 1) * fill.nx + i };
+            static const int split[2][2][3] = { { { 0, 1, 2 }, { 0, 2, 3 } }, { { 0, 1, 3 }, { 1, 2, 3 } } };
+            int diag = hash01(course, 2000 + (unsigned)i, (unsigned)j) < 0.5;
+            double c[4][3];
+
+            if (!fill.raised[at[0]] && !fill.raised[at[1]] && !fill.raised[at[2]] && !fill.raised[at[3]])
+                continue;
+            for (k = 0; k < 4; k++) {
+                int ix = i + (k == 1 || k == 2), iz = j + (k >= 2);
+
+                c[k][0] = fill.x0 + ix * fill.step;
+                c[k][1] = fill.raised[at[k]] ? fill.y[at[k]] : plane_y;
+                c[k][2] = fill.z0 + iz * fill.step;
+            }
+            for (t = 0; t < 2; t++) {
+                const int *s = split[diag][t];
+                double tri[3][3], n[3];
+
+                if (!fill.raised[at[s[0]]] && !fill.raised[at[s[1]]] && !fill.raised[at[s[2]]])
+                    continue;
+                for (k = 0; k < 3; k++)
+                    memcpy(tri[k], c[s[k]], sizeof tri[k]);
+                normal_of(tri[0], tri[1], tri[2], n);
+                if (n[1] > 0)                   /* outward: up (y is down) */
+                    for (k = 0; k < 3; k++)
+                        n[k] = -n[k];
+                land_face((const double (*)[3])tri, 3, n, cls, eye, m, v, nv, room);
+            }
+        }
+}
+
 static void land_polygons(unsigned course, int cls, const double eye[3], const double m[9])
 {
     static nshvc_vertex v[LAND_VERTICES];
@@ -1297,6 +1415,18 @@ static void land_polygons(unsigned course, int cls, const double eye[3], const d
             land_face((const double (*)[3])range.top[i], SIDES, up_world, cls, eye, m, v, &nv, LAND_VERTICES);
     }
     fx_draw_land(v, nv);
+    /* the canyon's empty space filled with rock, which hides the far
+       objects behind it */
+    if (mesas) {
+        static nshvc_vertex fv[FILL_VERTICES];
+        uint32_t nf = 0;
+
+        if (fill.course != (int)course)
+            fill_make(course);
+        fill_faces(course, cls, plane_y, eye, m, fv, &nf, FILL_VERTICES);
+        fx_draw_land(fv, nf);
+        fx_far_occlude(1);
+    }
 }
 
 /* ---- the ocean: a plane of facets, partly see-through, over a sea bed ----
@@ -1451,6 +1581,7 @@ void fx_ground_draw(void)
     /* in the sealed tunnel (bit 3 of $0DA5) the earlier water left the
        original's underwater backdrop to show; the ocean is drawn there too,
        seen from below, over that backdrop (Jeff, 2026-11-11) */
+    fx_far_occlude(0);                  /* the far objects at the 3D's own depth unless the land hides them */
     if (kind == SURF_NONE || (kind == SURF_AQUA && (g.picture_effects & 0x08) && !surface[course].cls))
         return;
     for (i = 0; i < 3; i++)
@@ -1460,6 +1591,7 @@ void fx_ground_draw(void)
     if ((IS_LAND(kind) || surface[course].cls) && grid.course != (int)course) {
         ground_survey(course, eye, m);  /* the course's shapes, once a course */
         range.course = -1;
+        fill.course = -1;
     }
     /* land: none in a tunnel (bit 3 of $0DA5, which the tunnel's gates set
        and clear: the original turns the backdrop's colours black there, so
