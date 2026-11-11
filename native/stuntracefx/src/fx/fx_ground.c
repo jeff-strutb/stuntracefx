@@ -91,6 +91,7 @@
 enum { SURF_NONE, SURF_GRASS, SURF_ROCK, SURF_CEMENT, SURF_SNOW, SURF_ICE, SURF_DIRT, SURF_WATER, SURF_AQUA };
 
 #define IS_LAND(k) ((k) >= SURF_GRASS && (k) <= SURF_DIRT)
+#define CLS_ROCK 0xFF           /* the surface table's class for the course's own rock (the survey's fit): mesas */
 
 /* Each course's surface (g.course, $0E3D), from pictures of every course
    (2026-11-09): its kind, and for water the height of its level (world y
@@ -114,7 +115,7 @@ static const struct {
     [0x00] = { SURF_GRASS, 0, 10, 0 },  /* Easy Ride: class 10, the chip's grass green (82,131,0 to 148,197,57) */
     [0x01] = { SURF_AQUA, -1280, 12, 9 }, /* Aqua Tunnel: under the road, over the glass tube, where its
                                            road's pieces end (the road -1920, the pieces 640 below) */
-    [0x02] = { SURF_ROCK, 0, 0, 0 },    /* the canyon */
+    [0x02] = { SURF_ROCK, 0, CLS_ROCK, 0 }, /* Sunset Valley, the canyon: mesas in its own rock's shades */
     [0x03] = { SURF_CEMENT, 0, 0, 0 },  /* the night city, the airport */
     [0x04] = { SURF_GRASS, 0, 0, 0 },   /* the foggy forest */
     [0x05] = { SURF_GRASS, 0, 0, 0 },   /* Sea Breeze: its band green beside the road, the sea's teal only
@@ -683,8 +684,8 @@ static void ground_survey(unsigned course, const double eye[3], const double m[9
     qsort(next, (size_t)(grid.nx * grid.nz), sizeof(float), float_order);
     grid.level = next[grid.nx * grid.nz / 2];
     fprintf(stderr, "ground: course %u, level %.0f, footprint x %.0f to %.0f, z %.0f to %.0f, lit level %.2f a unit of"
-            " facing (%s)\n", course, grid.level, grid.xmin, grid.xmax, grid.zmin, grid.zmax, grid.light_k,
-            grid.light_k == LIGHT_K ? "no lit faces: the chip's own scale" : "fitted from the course's lit faces");
+            " facing (%s), %d rock shades\n", course, grid.level, grid.xmin, grid.xmax, grid.zmin, grid.zmax, grid.light_k,
+            grid.light_k == LIGHT_K ? "no lit faces: the chip's own scale" : "fitted from the course's lit faces", grid.shades);
 }
 
 /* ---- the land drawn: a few planes, terrain.shade colouring them ----
@@ -982,7 +983,7 @@ static void land_draw(int kind, const double eye[3], const double m[9], int p)
    to the view) and MOUNTAINS x SIDES faces (50), those facing away left
    out. No image and no shader: the GPU fills each in its colour. */
 
-enum { MOUNTAINS = 10, SIDES = 5, LAND_VERTICES = 3 * (6 + MOUNTAINS * SIDES * 5) };   /* each kept to the view in at most 6 or 5 */
+enum { MOUNTAINS = 10, SIDES = 5, LAND_VERTICES = 3 * (6 + MOUNTAINS * (SIDES + 1) * 7) };    /* each face kept to the view in at most 7 */
 #define SHADE_ROWS 0xA1C5       /* bank 3: the lit faces' shade rows by class, two bytes each, the nearest tier's */
 #define ONE_PALETTE 0x8800      /* bank $1F: one player's palette */
 #define PLANE_Z 0.999f
@@ -992,10 +993,11 @@ enum { MOUNTAINS = 10, SIDES = 5, LAND_VERTICES = 3 * (6 + MOUNTAINS * SIDES * 5
 #define GAP 0.3
 
 static struct {
-    int course;
+    int course, mesas;
     double base[MOUNTAINS][SIDES][2];   /* each base corner's x, z (on the plane) */
-    double peak[MOUNTAINS][3];          /* the peak in the world */
-} range = { -1, { { { 0 } } }, { { 0 } } };
+    double peak[MOUNTAINS][3];          /* a mountain's peak in the world */
+    double top[MOUNTAINS][SIDES][3];    /* a mesa's top's corners in the world */
+} range = { -1, 0, { { { 0 } } }, { { 0 } }, { { { 0 } } } };
 
 /* a number in [0, 1) from the course, the mountain and which of its numbers */
 static double hash01(unsigned course, unsigned i, unsigned k)
@@ -1028,7 +1030,7 @@ static double footprint_distance(double x, double z)
    a step), so its peak stands inside its base and every face looks up. Its
    middle is carried out along its angle until its base, at the most
    1.15 its mean radius, is GAP of the half size clear of the footprint. */
-static void range_make(unsigned course)
+static void range_make(unsigned course, int mesas)
 {
     double cx = (grid.xmin + grid.xmax) / 2, cz = (grid.zmin + grid.zmax) / 2;
     double size = fmax(grid.xmax - grid.xmin, grid.zmax - grid.zmin) / 2;
@@ -1036,6 +1038,7 @@ static void range_make(unsigned course)
     int i, k, step;
 
     range.course = (int)course;
+    range.mesas = mesas;
     for (i = 0; i < MOUNTAINS; i++) {
         double angle = turn * (i + 0.6 * (hash01(course, i, 0) - 0.5)) / MOUNTAINS;
         double r = size * (0.55 + 0.2 * hash01(course, i, 1)), height = r * (0.45 + 0.3 * hash01(course, i, 2));
@@ -1062,6 +1065,18 @@ static void range_make(unsigned course)
         range.peak[i][0] = x + cos(off_angle) * off;
         range.peak[i][1] = grid.level - height;         /* y is down */
         range.peak[i][2] = z + sin(off_angle) * off;
+        /* a mesa: its top the base drawn in to 0.6-0.75 about its middle and
+           a little off it, flat, 0.35-0.55 of the base's radius high, so
+           its sides are steep */
+        if (mesas) {
+            double in = 0.6 + 0.15 * hash01(course, i, 7 + 2 * SIDES), h = r * (0.35 + 0.2 * hash01(course, i, 8 + 2 * SIDES));
+
+            for (k = 0; k < SIDES; k++) {
+                range.top[i][k][0] = x + (range.base[i][k][0] - x) * in + cos(off_angle) * off * 0.5;
+                range.top[i][k][1] = grid.level - h;
+                range.top[i][k][2] = z + (range.base[i][k][1] - z) * in + sin(off_angle) * off * 0.5;
+            }
+        }
     }
 }
 
@@ -1136,68 +1151,135 @@ static void plane_vertices(double y, uint32_t colour, float z, const double eye[
     }
 }
 
+/* A face's colour: the course's own rock's (CLS_ROCK: the survey's fit, by
+   its outward normal in the world's axes, nw, the nearest of the rock's
+   shades), else class cls's as the chip shades a lit face (by its normal in
+   view space, nv). With no rock found, the browns of class 11. */
+static uint32_t face_colour(int cls, const double nv[3], const double nw[3])
+{
+    if (cls == CLS_ROCK && grid.shades) {
+        double len = sqrt(nw[0] * nw[0] + nw[1] * nw[1] + nw[2] * nw[2]), s;
+        int k;
+
+        s = len > 0 ? (grid.light[0] * nw[0] + grid.light[1] * nw[1] + grid.light[2] * nw[2]) / len + grid.bias : grid.bias;
+        k = (int)floor(s + 0.5);
+        k = k < 0 ? 0 : k >= grid.shades ? grid.shades - 1 : k;
+        return rgb_of(pic.palette[fx_draw_ink(grid.shade[k])]);
+    }
+    return land_colour(cls == CLS_ROCK ? 11 : cls, nv);
+}
+
+/* One flat face of the land, its corners pts (world, in order round it)
+   and its outward normal nw: left out when it faces away from the eye;
+   else turned to the view, kept to it, each corner at its depth (from the
+   face's own plane), into v from *nv. */
+static void land_face(const double (*pts)[3], int n, const double nw[3], int cls, const double eye[3], const double m[9],
+                      nshvc_vertex *v, uint32_t *nv, uint32_t room)
+{
+    static FxCorner c[64];
+    double vp[8][3], nview[3], d;
+    double vcx = (int16_t)ram_word(0x0034), vcy = (int16_t)ram_word(0x0036);
+    uint32_t nc, j, colour;
+    int k;
+
+    if (n > 8 || nw[0] * (eye[0] - pts[0][0]) + nw[1] * (eye[1] - pts[0][1]) + nw[2] * (eye[2] - pts[0][2]) <= 0)
+        return;
+    for (k = 0; k < n; k++)
+        to_view(pts[k], eye, m, vp[k]);
+    for (k = 0; k < 3; k++)
+        nview[k] = nw[0] * m[k] + nw[1] * m[3 + k] + nw[2] * m[6 + k];
+    /* the face's plane nview . V = d; one over the depth at screen (x, y)
+       is nview . ((x - cx) / 128, (y - cy) / 128, 1) / d */
+    d = nview[0] * vp[0][0] + nview[1] * vp[0][1] + nview[2] * vp[0][2];
+    if (fabs(d) < 1e-9)
+        return;
+    nc = fx_face_triangles_d((const double (*)[3])vp, n, c, sizeof c / sizeof c[0]);
+    if (!nc || *nv + nc > room)
+        return;
+    colour = face_colour(cls, nview, nw);
+    for (j = 0; j < nc; j++, (*nv)++) {
+        double inv = (nview[0] * (c[j].x - vcx) / 128.0 + nview[1] * (c[j].y - vcy) / 128.0 + nview[2]) / d;
+        double z = FACE_Z * (1.0 - LAND_NEAR * inv);
+
+        memset(&v[*nv], 0, sizeof v[*nv]);
+        v[*nv].x = c[j].x;
+        v[*nv].y = c[j].y;
+        v[*nv].z = (float)(z < 0 ? 0 : z > FACE_Z ? FACE_Z : z);
+        v[*nv].colour = colour;
+    }
+}
+
+/* the normal of the plane through a, b and c ((b - a) x (c - a)) */
+static void normal_of(const double *a, const double *b, const double *c, double n[3])
+{
+    double e1[3] = { b[0] - a[0], b[1] - a[1], b[2] - a[2] }, e2[3] = { c[0] - a[0], c[1] - a[1], c[2] - a[2] };
+
+    n[0] = e1[1] * e2[2] - e1[2] * e2[1];
+    n[1] = e1[2] * e2[0] - e1[0] * e2[2];
+    n[2] = e1[0] * e2[1] - e1[1] * e2[0];
+}
+
 static void land_polygons(unsigned course, int cls, const double eye[3], const double m[9])
 {
     static nshvc_vertex v[LAND_VERTICES];
-    static FxCorner c[64];
     double plane_y = fmax(grid.level, eye[1] + EYE_CLEAR), up[3];
-    double vcx = (int16_t)ram_word(0x0034), vcy = (int16_t)ram_word(0x0036);
-    uint32_t nv = 0, nc, j, colour;
-    int i, k;
+    static const double up_world[3] = { 0, -1, 0 };
+    uint32_t nv = 0, j;
+    int i, k, mesas = cls == CLS_ROCK;
 
     if (!grid.nx)
         return;
-    if (range.course != (int)course)
-        range_make(course);
+    if (range.course != (int)course || range.mesas != mesas)
+        range_make(course, mesas);
     /* the plane, its colour up its normal */
     for (k = 0; k < 3; k++)
         up[k] = -m[3 + k];
-    plane_vertices(plane_y, land_colour(cls, up), PLANE_Z, eye, m, v, &nv, LAND_VERTICES);
-    /* the mountains' faces that look toward the eye */
-    for (i = 0; i < MOUNTAINS; i++)
+    plane_vertices(plane_y, face_colour(cls, up, up_world), PLANE_Z, eye, m, v, &nv, LAND_VERTICES);
+    /* the mountains' or mesas' faces that look toward the eye, their bases
+       on the plane */
+    for (i = 0; i < MOUNTAINS; i++) {
+        double mid[3] = { 0, plane_y, 0 };
+
         for (k = 0; k < SIDES; k++) {
-            const double *p = range.peak[i];
+            mid[0] += range.base[i][k][0] / SIDES;
+            mid[2] += range.base[i][k][1] / SIDES;
+        }
+        for (k = 0; k < SIDES; k++) {
+            int k1 = (k + 1) % SIDES;
             double b0[3] = { range.base[i][k][0], plane_y, range.base[i][k][1] };
-            double b1[3] = { range.base[i][(k + 1) % SIDES][0], plane_y, range.base[i][(k + 1) % SIDES][1] };
-            double e1[3], e2[3], n[3], nview[3], tri[3][3], d;
+            double b1[3] = { range.base[i][k1][0], plane_y, range.base[i][k1][1] };
+            double n[3];
 
-            for (j = 0; j < 3; j++) {
-                e1[j] = b0[j] - p[j];
-                e2[j] = b1[j] - p[j];
-            }
-            n[0] = e1[1] * e2[2] - e1[2] * e2[1];
-            n[1] = e1[2] * e2[0] - e1[0] * e2[2];
-            n[2] = e1[0] * e2[1] - e1[1] * e2[0];
-            if (n[1] > 0)                       /* outward: up (y is down) */
-                for (j = 0; j < 3; j++)
-                    n[j] = -n[j];
-            if (n[0] * (eye[0] - p[0]) + n[1] * (eye[1] - p[1]) + n[2] * (eye[2] - p[2]) <= 0)
-                continue;
-            to_view(p, eye, m, tri[0]);
-            to_view(b0, eye, m, tri[1]);
-            to_view(b1, eye, m, tri[2]);
-            for (j = 0; j < 3; j++)
-                nview[j] = n[0] * m[j] + n[1] * m[3 + j] + n[2] * m[6 + j];
-            /* the face's plane nview . V = d; one over the depth at screen
-               (x, y) is nview . ((x - cx) / 128, (y - cy) / 128, 1) / d */
-            d = nview[0] * tri[0][0] + nview[1] * tri[0][1] + nview[2] * tri[0][2];
-            if (fabs(d) < 1e-9)
-                continue;
-            nc = fx_face_triangles_d((const double (*)[3])tri, 3, c, sizeof c / sizeof c[0]);
-            if (!nc || nv + nc > LAND_VERTICES)
-                continue;
-            colour = land_colour(cls, nview);
-            for (j = 0; j < nc; j++, nv++) {
-                double inv = (nview[0] * (c[j].x - vcx) / 128.0 + nview[1] * (c[j].y - vcy) / 128.0 + nview[2]) / d;
-                double z = FACE_Z * (1.0 - LAND_NEAR * inv);
+            if (!mesas) {
+                const double *p = range.peak[i];
+                double tri[3][3];
 
-                memset(&v[nv], 0, sizeof v[nv]);
-                v[nv].x = c[j].x;
-                v[nv].y = c[j].y;
-                v[nv].z = (float)(z < 0 ? 0 : z > FACE_Z ? FACE_Z : z);
-                v[nv].colour = colour;
+                normal_of(p, b0, b1, n);
+                if (n[1] > 0)                   /* outward: up (y is down) */
+                    for (j = 0; j < 3; j++)
+                        n[j] = -n[j];
+                memcpy(tri[0], p, sizeof tri[0]);
+                memcpy(tri[1], b0, sizeof tri[1]);
+                memcpy(tri[2], b1, sizeof tri[2]);
+                land_face((const double (*)[3])tri, 3, n, cls, eye, m, v, &nv, LAND_VERTICES);
+            } else {
+                double quad[4][3];
+
+                memcpy(quad[0], b0, sizeof quad[0]);
+                memcpy(quad[1], b1, sizeof quad[1]);
+                memcpy(quad[2], range.top[i][k1], sizeof quad[2]);
+                memcpy(quad[3], range.top[i][k], sizeof quad[3]);
+                normal_of(quad[0], quad[1], quad[3], n);
+                /* outward: away from the mesa's middle */
+                if (n[0] * (b0[0] + b1[0] - 2 * mid[0]) + n[2] * (b0[2] + b1[2] - 2 * mid[2]) < 0)
+                    for (j = 0; j < 3; j++)
+                        n[j] = -n[j];
+                land_face((const double (*)[3])quad, 4, n, cls, eye, m, v, &nv, LAND_VERTICES);
             }
         }
+        if (mesas)                              /* its flat top */
+            land_face((const double (*)[3])range.top[i], SIDES, up_world, cls, eye, m, v, &nv, LAND_VERTICES);
+    }
     fx_draw_land(v, nv);
 }
 
