@@ -188,6 +188,7 @@ void fx_draw_begin(int picture)
 {
     picture &= 1;
     fx_seat_picture(picture);
+    fx_face_picture();
     picture_now = picture;
     drawing_3d = 0;                     /* its view is known at its frame program's start */
     target.id = 0;
@@ -403,20 +404,25 @@ int fx_draw_holding(void) { return held; }
    to (0, 0.998]; nearer than DEPTH_NEAR all at the nearest, in their order.
    The list's depth test keeps the nearer (of equal, the later), so faces
    hide one another as they stand, whichever is drawn first. A face lying
-   over an earlier face of its model (FxShape decal) is drawn DECAL_STEP of
-   its depth nearer for each level (a polygon offset), so a stripe on a road
-   stays on it. A face seen from its back (FxShape back) is drawn DECAL_STEP
-   further than its depth, and a step further again for each level it lies
-   over, so whatever faces the eye in its place is in front of it (a
-   two-sided part's other face, which the model gives the same corners) and
-   from behind a stripe is under the face it lies on, as it is. What an
+   over an earlier face of the picture that looks unlike it (FxShape decal:
+   a stripe on its road, a lamp on a tunnel's ceiling, a track piece's face
+   over its neighbour's, the chip's rounding leaving them up to 3 apart) is
+   drawn its level of steps nearer, each moving its plane DECAL_PLANE (4)
+   toward the eye (its iz times 1 + decal_k) and its z DECAL_Z less (a
+   polygon offset: the plane's move beats the pieces' gaps whatever angle
+   the face is seen at, the z the buffer's rounding), so the later stays in
+   front where they share a plane, as the original's order drew it. A face
+   seen from its back (FxShape back) is drawn one step and its level further,
+   so whatever faces the eye in its place is in front of it (a two-sided
+   part's other face, which the model gives the same corners) and from
+   behind a stripe is under the face it lies on, as it is. What an
    object draws that has no depth of its own (a sprite, a plotted row) is
    at its place's (fx_far_iz); the 2D (the HUD, the pause screen) at 0, in
    front of all. A list has about a sixteenth of the depth buffer (the
    engine's), about twenty bits for this z: depths a thousandth apart are
    told apart out to some 30,000. */
 #define DEPTH_NEAR 32.0
-#define DECAL_STEP 0.002
+#define DECAL_Z 4e-6                    /* a decal step's depth past its plane's move: four of the buffer's steps */
 #define DEPTH_FAR 0.998
 
 float fx_draw_depth(double iz)
@@ -431,12 +437,16 @@ float fx_draw_depth(double iz)
 
 static int in_shape;                    /* shape_draw: the vertices carry their own depths */
 static int shape_decal, shape_back;
+static float shape_decal_k;
 
 static float corner_z(const FxCorner *c)
 {
-    double k = shape_back ? 1.0 - DECAL_STEP * (1 + shape_decal) : 1.0 + DECAL_STEP * shape_decal;
+    double steps = shape_back ? -(1.0 + shape_decal) : shape_decal, k = 1.0 + steps * shape_decal_k, z;
 
-    return drawing_3d ? fx_draw_depth(c->iz * k) : 0.0f;
+    if (!drawing_3d)
+        return 0.0f;
+    z = fx_draw_depth(c->iz * (k > 0.5 ? k : 0.5)) - steps * DECAL_Z;
+    return (float)(z < 1e-6 ? 1e-6 : z > DEPTH_FAR ? DEPTH_FAR : z);
 }
 
 static float emit_z(void)
@@ -1828,6 +1838,7 @@ static void shape_draw(const FxShape *sh)
 {
     in_shape = 1;
     shape_decal = sh->decal;
+    shape_decal_k = sh->decal_k;
     shape_back = sh->back;
     shape_draw_body(sh);
     in_shape = 0;

@@ -25,6 +25,9 @@
  * is drawn again with the tyres in it, each before the first slot whose key
  * is not above its own (the sort's order), so a tyre behind its car's body
  * is under it and one in front over it; the chip's RAM put back after.
+ * While the 3D is drawn at its depths (fx/fx_draw.c, "depth") the tyres are
+ * drawn alone after the near list, the depth test putting each behind or in
+ * front of its car's body.
  * While a pass draws, a slot holds another record than its own place says:
  * fx_far_original gives the near record it holds (none for a far one or a
  * tyre), for the eyes' gaze and the angles between steps.
@@ -218,7 +221,10 @@ void fx_far_parked(uint16_t *stack)
         return;
     qsort(parked, nparked, sizeof parked[0], farther_first);
     memset(used, 0, nparked);
-    for (slot = ram_word(GSU_DRAW_LIST); slot && near < SLOTS; slot = ram_word(slot)) {
+    /* the 3D drawn at its depths (fx_draw_depth_on): the tyres alone, each
+       hidden by what is in front of it whatever is drawn after; drawing the
+       near list again drew each of its objects twice */
+    for (slot = fx_draw_depth_on() ? 0 : ram_word(GSU_DRAW_LIST); slot && near < SLOTS; slot = ram_word(slot)) {
         int16_t key = (int16_t)ram_word((uint16_t)(slot + 0x02));
 
         for (j = 0; j < nparked; j++)   /* the tyres keyed at or above it go before it */
@@ -291,7 +297,6 @@ void fx_far_record(uint16_t record)
     unsigned k;
     double z;
 
-    fx_face_object();                   /* its faces' planes, for the polygon offset */
     if (!drawing) {
         shift_now = 0;
     } else {

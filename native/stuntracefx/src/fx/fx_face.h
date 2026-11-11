@@ -44,12 +44,17 @@ typedef struct {
     /* while the water cuts the picture (fx_face_cut): the face's part past
        the water from the eye, drawn before it (count 0: none) */
     uint32_t under_first, under_count;
-    /* how many faces of its model it lies over (a stripe painted on a
-       road: 1), each drawn a little nearer the eye than the one under it (a
-       polygon offset), so the later stays in front where they share a
-       plane; of a face seen from its back (back), each a little further,
-       as the face under it hides it from that side */
+    /* its decal level: one more than the faces drawn before it in the
+       picture that it lies over and looks unlike (a stripe painted on a
+       road: 1; a track piece's face over its neighbour's), drawn that many
+       steps nearer the eye (a polygon offset), so the later stays in front
+       where they share a plane; of a face seen from its back (back), as
+       many steps and one more further, as the face under it hides it from
+       that side. A step moves its plane decal_k of its distance from the
+       eye toward it (fx_face.c's DECAL_PLANE over that distance) and its
+       depth a little more (fx_draw.c's DECAL_Z). */
     uint8_t decal;
+    float decal_k;
     /* it is seen from its back (fx_face_back): drawn behind whatever faces
        the eye in the same place (a two-sided part's other face) */
     uint8_t back;
@@ -63,9 +68,9 @@ void fx_face_begin(int textured);
    of every polygon are drawn); this says the next face does, so that a lit
    face is shaded as seen from its back. */
 void fx_face_back(int back);
-/* An object's drawing begins (fx_far_record): its faces' planes for the
+/* A picture's drawing begins (fx_draw_begin): its faces' planes for the
    polygon offset start again. */
-void fx_face_object(void);
+void fx_face_picture(void);
 void fx_face_end(const FxMaterial *material);
 /* The shapes made since they were last drawn, in order; whether there is
    room for another face's (else they are drawn first, as the chip drew its

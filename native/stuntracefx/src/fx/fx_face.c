@@ -265,21 +265,48 @@ static int back_next;
 
 void fx_face_back(int back) { back_next = back; }
 
-/* The object's faces so far (view space, at the object's scale), each
-   with its plane, its outline in that plane and its decal level, for the
-   polygon offset. A face's outline is its corners with the axis its
-   normal is most along dropped (its first PLANE_POINTS; more, its box
-   alone). */
-enum { PLANES = 96, PLANE_POINTS = 16 };
+/* The picture's faces so far, for the polygon offset (fx/fx_draw.c,
+   "depth"): each with its plane in view space at full size (a far
+   object's points scaled back by its halvings), its outline in that plane,
+   how it looks and its decal level. They are found by their normals: a
+   hash of the normal's cell (NORMAL_CELL a side) over BUCKETS lists. A
+   face's outline is its corners with the axis its normal is most along
+   dropped (its first PLANE_POINTS; more, its box alone). */
+enum { PLANES = 4096, PLANE_POINTS = 8, BUCKETS = 4096, DECAL_MOST = 63 };
+#define NORMAL_CELL 0.02
+#define PLANE_NEAR 3.0                  /* two faces' planes this near (along the normal) are one */
+#define DECAL_PLANE 4.0                 /* a decal level moves a face's plane this far toward the eye (fx_draw.c) */
 static struct {
     double n[3], d;
+    uint32_t look;
+    int cell[3], np, next;
     uint8_t decal;
-    int np;                             /* its outline's corners; 0: its box alone */
     double p[PLANE_POINTS][2], lo[2], hi[2];
 } planes[PLANES];
-static int nplanes;
+static int nplanes, bucket[BUCKETS];
 
-void fx_face_object(void) { nplanes = 0; }
+/* How a face looks, for the polygon offset: two faces that look alike may
+   show either where they overlap. A textured face looks like no other. */
+static uint32_t look_of(const FxShape *s, int textured)
+{
+    static uint32_t textures;
+
+    if (textured)
+        return 0x80000000u | (textures++ & 0x7FFFFFFFu);
+    return (uint32_t)(s->tint + 1) << 24 | (uint32_t)(s->tier & 3) << 22 | (uint32_t)s->material.colour << 8
+           | (s->tint == 1 ? (uint32_t)(int)floor(s->light) & 0xFF : s->tint == 2 ? (uint32_t)(s->tint_index & 0xFF) : 0);
+}
+
+void fx_face_picture(void)
+{
+    nplanes = 0;
+    memset(bucket, 0xFF, sizeof bucket);        /* none: -1 */
+}
+
+static unsigned bucket_of(const int *cell)
+{
+    return ((unsigned)cell[0] * 73856093u ^ (unsigned)cell[1] * 19349663u ^ (unsigned)cell[2] * 83492791u) & (BUCKETS - 1);
+}
 
 /* Whether two outlines in one plane overlap (more than touch): their
    boxes, then for convex outlines no edge of either separating them. */
@@ -324,33 +351,48 @@ static int outlines_overlap(int a, const double (*pb)[2], int nb, const double *
     return 1;
 }
 
-/* How many earlier faces of the object a face lies over: those on its
-   plane (facing the same way, at the same distance give or take a little)
-   whose outlines overlap its own, one more than the highest of their
-   levels; its plane and outline kept for the faces after it. Faces that
-   only meet it at an edge (a wall cut into triangles) leave it at 0. */
-static uint8_t decal_of(const Corner3 *c, int n)
+/* A face's decal level: one more than the highest of the earlier faces of
+   the picture it lies over and looks unlike (look), else 0: those on its
+   plane (facing the same way, their planes within PLANE_NEAR of each other
+   or 0.2% of their distance, as neighbouring track pieces' faces made from
+   different points are: a dump of Sunset Valley's tunnel showed them 0.4 to
+   3 apart) whose outlines overlap its own. A face only meeting another at
+   an edge (a wall cut into triangles), or lying over one that looks the
+   same (where either may show), adds none. Its plane, outline and look are
+   kept for the faces after it (not while the hold is on: the ground's
+   survey is not of the picture). *dist: its plane's distance from the eye. */
+static uint8_t decal_of(const Corner3 *c, int n, uint32_t look, double *dist)
 {
-    double nv[3] = { 0, 0, 0 }, len, d, p[PLANE_POINTS][2], lo[2] = { 1e300, 1e300 }, hi[2] = { -1e300, -1e300 };
-    int i, k, level = 0, drop, np;
+    double nv[3] = { 0, 0, 0 }, q[MOST][3], len, d, p[PLANE_POINTS][2], lo[2] = { 1e300, 1e300 }, hi[2] = { -1e300, -1e300 };
+    int i, k, level = 0, drop, np, cell[3], dc[3];
+    double scale = ldexp(1.0, fx_far_shift());
 
+    *dist = 0;
     for (i = 0; i < n; i++) {
-        const Corner3 *a = &c[i], *b = &c[(i + 1) % n];
+        q[i][0] = c[i].x * scale;
+        q[i][1] = c[i].y * scale;
+        q[i][2] = c[i].z * scale;
+    }
+    for (i = 0; i < n; i++) {
+        const double *a = q[i], *b = q[(i + 1) % n];
 
-        nv[0] += (a->y - b->y) * (a->z + b->z);
-        nv[1] += (a->z - b->z) * (a->x + b->x);
-        nv[2] += (a->x - b->x) * (a->y + b->y);
+        nv[0] += (a[1] - b[1]) * (a[2] + b[2]);
+        nv[1] += (a[2] - b[2]) * (a[0] + b[0]);
+        nv[2] += (a[0] - b[0]) * (a[1] + b[1]);
     }
     len = sqrt(nv[0] * nv[0] + nv[1] * nv[1] + nv[2] * nv[2]);
     if (len <= 0)
         return 0;
-    for (i = 0; i < 3; i++)
+    for (i = 0; i < 3; i++) {
         nv[i] /= len;
-    d = nv[0] * c[0].x + nv[1] * c[0].y + nv[2] * c[0].z;
+        cell[i] = (int)floor((nv[i] + 1.0) / NORMAL_CELL);
+    }
+    d = nv[0] * q[0][0] + nv[1] * q[0][1] + nv[2] * q[0][2];
+    *dist = fabs(d);
     drop = fabs(nv[0]) >= fabs(nv[1]) && fabs(nv[0]) >= fabs(nv[2]) ? 0 : fabs(nv[1]) >= fabs(nv[2]) ? 1 : 2;
     np = n <= PLANE_POINTS ? n : 0;
     for (i = 0; i < n; i++) {
-        double q[3] = { c[i].x, c[i].y, c[i].z }, u = q[drop == 0 ? 1 : 0], v = q[drop == 2 ? 1 : 2];
+        double u = q[i][drop == 0 ? 1 : 0], v = q[i][drop == 2 ? 1 : 2];
 
         if (i < np) {
             p[i][0] = u;
@@ -361,16 +403,28 @@ static uint8_t decal_of(const Corner3 *c, int n)
         lo[1] = v < lo[1] ? v : lo[1];
         hi[1] = v > hi[1] ? v : hi[1];
     }
-    for (i = 0; i < nplanes; i++)
-        if (nv[0] * planes[i].n[0] + nv[1] * planes[i].n[1] + nv[2] * planes[i].n[2] > 0.9999
-            && fabs(d - planes[i].d) <= 0.002 * fabs(d) + 1.0 && planes[i].decal + 1 > level
-            && outlines_overlap(i, (const double (*)[2])p, np, lo, hi))
-            level = planes[i].decal + 1;
-    if (level > 15)
-        level = 15;
-    if (nplanes < PLANES) {
+    for (dc[0] = -1; dc[0] <= 1; dc[0]++)
+        for (dc[1] = -1; dc[1] <= 1; dc[1]++)
+            for (dc[2] = -1; dc[2] <= 1; dc[2]++) {
+                int at[3] = { cell[0] + dc[0], cell[1] + dc[1], cell[2] + dc[2] };
+
+                for (i = bucket[bucket_of(at)]; i >= 0; i = planes[i].next)
+                    if (planes[i].cell[0] == at[0] && planes[i].cell[1] == at[1] && planes[i].cell[2] == at[2]
+                        && planes[i].look != look && planes[i].decal + 1 > level
+                        && nv[0] * planes[i].n[0] + nv[1] * planes[i].n[1] + nv[2] * planes[i].n[2] > 0.9999
+                        && fabs(d - planes[i].d) <= 0.002 * fabs(d) + PLANE_NEAR
+                        && outlines_overlap(i, (const double (*)[2])p, np, lo, hi))
+                        level = planes[i].decal + 1;
+            }
+    if (level > DECAL_MOST)
+        level = DECAL_MOST;
+    if (nplanes < PLANES && !fx_draw_holding()) {
+        unsigned b = bucket_of(cell);
+
         memcpy(planes[nplanes].n, nv, sizeof nv);
+        memcpy(planes[nplanes].cell, cell, sizeof cell);
         planes[nplanes].d = d;
+        planes[nplanes].look = look;
         planes[nplanes].decal = (uint8_t)level;
         planes[nplanes].np = np;
         memcpy(planes[nplanes].p, p, sizeof p);
@@ -378,6 +432,8 @@ static uint8_t decal_of(const Corner3 *c, int n)
             planes[nplanes].lo[k] = lo[k];
             planes[nplanes].hi[k] = hi[k];
         }
+        planes[nplanes].next = bucket[b];
+        bucket[b] = nplanes;
         nplanes++;
     }
     return (uint8_t)level;
@@ -1047,11 +1103,16 @@ static void commit(const FxMaterial *m)
     s->light = face.tint.light;
     s->under_first = s->under_count = 0;
     s->decal = 0;
+    s->decal_k = 0;
     s->back = face.back != 0;
     if (face.back && !face.textured && face.n >= 3)
         back_shade(s);
-    if (face.n >= 3)
-        s->decal = decal_of(face.c, face.n);
+    if (face.n >= 3) {
+        double dist = 0;
+
+        s->decal = decal_of(face.c, face.n, look_of(s, face.textured), &dist);
+        s->decal_k = (float)(dist > 2 * DECAL_PLANE ? DECAL_PLANE / dist : 0.5);
+    }
     if (s->line) {
         ok = line(face.c, &face.view);
     } else if (cut.on) {
