@@ -1,24 +1,39 @@
 /* ocean.shade: the sea as facets (fx/fx_ground.c, "the ocean"). uv is the
-   pixel's place on the water in lattice cells, u along the world's x and v
-   along its z, following perspective (the vertices' w).
+   pixel's place on the screen less the water's origin; inputs 0-7 are the
+   projective map from it to the pixel's place on the water in lattice
+   cells (u along the world's x, v along its z, the eye's place taken modulo
+   the lattice's pattern):
+     u = (i0 x + i1 y + i2) / (i6 x + i7 y + 1), v = (i3 x + i4 y + i5) / (same).
+   The water's vertices carry no depth divisor, so its depth is exactly the
+   3D's own and the shapes drawn after it (the road, what is above the
+   water) cover it as they are meant to.
 
    The water is a lattice of square cells, each cut on one of its diagonals
    (which, by a hash of the cell) into two triangles. Each lattice point
    rises and falls on two waves of its own phase (periods 2.5 s and 4 s), and
    each triangle is one flat facet, coloured as the chip colours a lit face:
    its level, floor(its normal . k), kept to 6-15, picks that level's colour
-   of the shade row (the image's texels 0-9). Where a cell is smaller than
-   about a pixel the facets give way to the flat sea's colour (texel 10), as
-   there they could only flicker. Partly see-through: the more steeply the
-   eye looks down on the water the more of what lies under it shows; toward
-   the horizon it is whole.
+   of the shade row. Where a cell is smaller than about a pixel the facets
+   give way to the flat sea's colour, as there they could only flicker.
+   Partly see-through: the more steeply the eye looks down on the water the
+   more of what lies under it shows; toward the horizon it is whole.
 
-   Inputs: 0-2 k, the light by the level's scale in the world's axes (y
-   down); 3 the time in seconds (within 600, whole periods of both waves);
-   4-5 the eye's place in cells; 6 the eye's height over the water in cells
-   (below 0 under it); 7 the waves' height in cells. */
+   The image (RGBA, a word a texel): texels 0-9 the shade row's colours at
+   levels 6-15, 10 the flat sea's colour; from 11 floats: k (3, the light by
+   the level's scale, in the world's axes, y down), the time in seconds
+   (within 600, whole periods of both waves), the eye's place in cells (2),
+   the eye's height over the water in cells (below 0 under it), the waves'
+   height in cells. */
 const int N = 64;                   /* the lattice's pattern repeats every N cells (fx_ground.c's OCEAN_PERIOD) */
 const float ALPHA_NEAR = 0.6;       /* how much the water covers seen straight down */
+const int H = 11;                   /* the floats' first texel */
+
+uint word_at(int i) {
+    uvec4 b = uvec4(nshvc_image(ivec2(i, 0)) * 255.0 + 0.5);
+    return b.a << 24 | b.r << 16 | b.g << 8 | b.b;
+}
+
+float header(int i) { return uintBitsToFloat(word_at(H + i)); }
 
 uint hash(ivec2 p, uint salt) {
     uvec2 q = uvec2(p & (N - 1));
@@ -38,9 +53,14 @@ float height(ivec2 p, float t, float a) {
     return a * (sin(t * 2.5132741 + ph1) + 0.5 * sin(t * 1.5707963 + ph2));
 }
 
-vec4 shade(vec2 uv) {
-    float t = nshvc_input(3), a = nshvc_input(7);
-    vec3 k = vec3(nshvc_input(0), nshvc_input(1), nshvc_input(2));
+vec4 shade(vec2 xy) {
+    float den = nshvc_input(6) * xy.x + nshvc_input(7) * xy.y + 1.0;
+    if (den <= 0.0)
+        return vec4(0.0);
+    vec2 uv = vec2(nshvc_input(0) * xy.x + nshvc_input(1) * xy.y + nshvc_input(2),
+                   nshvc_input(3) * xy.x + nshvc_input(4) * xy.y + nshvc_input(5)) / den;
+    vec3 k = vec3(header(0), header(1), header(2));
+    float t = header(3), a = header(7);
     ivec2 c = ivec2(floor(uv));
     vec2 f = uv - vec2(c);
     ivec2 o0, o1, o2;
@@ -71,8 +91,8 @@ vec4 shade(vec2 uv) {
     float fade = smoothstep(0.3, 0.9, max(fw.x, fw.y));
     colour = mix(colour, nshvc_image(ivec2(10, 0)).rgb, fade);
     /* how much it covers: by how steeply the eye looks down on it */
-    float dh = abs(nshvc_input(6));
-    vec2 d = uv - vec2(nshvc_input(4), nshvc_input(5));
+    float dh = abs(header(6));
+    vec2 d = uv - vec2(header(4), header(5));
     float steep = dh / sqrt(dh * dh + dot(d, d));
     float alpha = mix(ALPHA_NEAR, 1.0, pow(1.0 - steep, 4.0));
     return vec4(colour, max(alpha, fade));

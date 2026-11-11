@@ -1212,10 +1212,15 @@ static void land_polygons(unsigned course, int cls, const double eye[3], const d
    0-9: the class's colours at levels 6-15, texel 10 the flat sea's), the
    facets giving way to the flat sea where they are smaller than a pixel;
    partly see-through, the more the steeper the eye looks down, whole toward
-   the horizon. Its vertices' u and v are their places on the water in cells
-   (the eye's place taken modulo OCEAN_PERIOD cells, the lattice's pattern,
-   so the numbers stay small) and w their depth, so the GPU takes each
-   pixel's place on the water in perspective.
+   the horizon. It is drawn as the earlier water was (fx_draw_surface): its
+   vertices' u and v their screen places less an origin inside it, and no
+   depth divisor, so its depth is exactly the 3D's and what is drawn after
+   it covers it (a divisor, for u and v in perspective, came back from the
+   GPU's divide a rounding off the 3D's depth and the water showed through
+   the road in speckles, Jeff's picture of 2026-11-11); the shader's inputs
+   are the projective map from a screen place to the water in cells (the
+   eye's place taken modulo OCEAN_PERIOD cells, the lattice's pattern, so
+   the numbers stay small), its other numbers in its image.
 
    Under it a sea bed, so that nothing of the backdrop shows through the
    water: a plane SEABED_BELOW under the lowest place the course's shapes
@@ -1229,17 +1234,18 @@ static void land_polygons(unsigned course, int cls, const double eye[3], const d
 #define OCEAN_WAVE 0.08
 #define SEABED_BELOW 512.0
 #define SEABED_DARK 0.55
+#define OCEAN_IMAGE_W 24        /* ocean.shade's image: 11 colours, then 8 floats */
 
 static nshvc_image ocean_image[4];
 static nshvc_shader ocean_shader;
 
 static void ocean_draw(int cls, const double eye[3], const double m[9], double water_y, int p)
 {
-    static nshvc_vertex bed[24], v[24];
+    static nshvc_vertex bed[24];
     static FxCorner c[64];
-    uint32_t words[16] = { 0 }, nb = 0, nc, j, deep;
-    double dh = water_y - eye[1], reach, q[4][3], up[3], light[3], ex, ez, bed_y;
-    double vcx = (int16_t)ram_word(0x0034), vcy = (int16_t)ram_word(0x0036);
+    uint32_t words[OCEAN_IMAGE_W] = { 0 }, nb = 0, nc, j, deep;
+    double dh = water_y - eye[1], reach, q[4][3], up[3], light[3], ex, ez, bed_y, ox = 0, oy = 0;
+    double vcx = (int16_t)ram_word(0x0034), vcy = (int16_t)ram_word(0x0036), ra[3], rb[3], rc[3], c1;
     float in[8], sx, sy, scale;
     int i, k, slot;
 
@@ -1261,56 +1267,62 @@ static void ocean_draw(int cls, const double eye[3], const double m[9], double w
         to_view(w, eye, m, q[i]);
     }
     nc = fx_face_triangles_d((const double (*)[3])q, 4, c, sizeof c / sizeof c[0]);
-    if (!nc || nc > sizeof v / sizeof v[0])
+    if (!nc)
         return;
-    /* each corner's place on the water: the view's ray through it,
-       d = ((x - cx) / 128, (y - cy) / 128, 1), meets the water at depth
-       dh / (row 1 . d); its world x and z from rows 0 and 2 */
-    ex = wrap(eye[0], OCEAN_PERIOD * OCEAN_CELL) / OCEAN_CELL;
-    ez = wrap(eye[2], OCEAN_PERIOD * OCEAN_CELL) / OCEAN_CELL;
     for (j = 0; j < nc; j++) {
-        double d[3] = { (c[j].x - vcx) / 128.0, (c[j].y - vcy) / 128.0, 1.0 }, r[3], z;
-
-        for (k = 0; k < 3; k++)
-            r[k] = m[3 * k] * d[0] + m[3 * k + 1] * d[1] + m[3 * k + 2] * d[2];
-        if (fabs(r[1]) < 1e-12)
-            return;
-        z = dh / r[1];
-        memset(&v[j], 0, sizeof v[j]);
-        v[j].x = c[j].x;
-        v[j].y = c[j].y;
-        v[j].u = (float)(ex + z * r[0] / OCEAN_CELL);
-        v[j].v = (float)(ez + z * r[2] / OCEAN_CELL);
-        v[j].w = (float)z;
-        v[j].colour = 0xFF000000u;
+        ox += c[j].x;
+        oy += c[j].y;
     }
-    /* the image: the class's colours at levels 6-15, then the flat sea's
-       (up its normal) */
+    ox /= nc;
+    oy /= nc;
+    /* the map from a screen place (x, y), less (ox, oy), to the water in
+       cells: the view's ray d = ((x - cx) / 128, (y - cy) / 128, 1) meets
+       the water at depth dh / (row 1 . d); world x and z from rows 0 and 2,
+       each row k . d = ra_k x + rb_k y + rc_k (as the water's earlier map) */
+    for (k = 0; k < 3; k++) {
+        ra[k] = m[3 * k] / 128.0;
+        rb[k] = m[3 * k + 1] / 128.0;
+        rc[k] = m[3 * k + 2] - (m[3 * k] * vcx + m[3 * k + 1] * vcy) / 128.0 + ra[k] * ox + rb[k] * oy;
+    }
+    c1 = rc[1];
+    if (fabs(c1) < 1e-12)
+        return;
+    ex = wrap(eye[0], OCEAN_PERIOD * OCEAN_CELL);
+    ez = wrap(eye[2], OCEAN_PERIOD * OCEAN_CELL);
+    in[0] = (float)((ex * ra[1] + dh * ra[0]) / (OCEAN_CELL * c1));
+    in[1] = (float)((ex * rb[1] + dh * rb[0]) / (OCEAN_CELL * c1));
+    in[2] = (float)((ex * c1 + dh * rc[0]) / (OCEAN_CELL * c1));
+    in[3] = (float)((ez * ra[1] + dh * ra[2]) / (OCEAN_CELL * c1));
+    in[4] = (float)((ez * rb[1] + dh * rb[2]) / (OCEAN_CELL * c1));
+    in[5] = (float)((ez * c1 + dh * rc[2]) / (OCEAN_CELL * c1));
+    in[6] = (float)(ra[1] / c1);
+    in[7] = (float)(rb[1] / c1);
+    /* the image: the class's colours at levels 6-15, the flat sea's (up its
+       normal), then the floats: the light by the level's scale in the
+       world's axes (world axis k's view components are m[3k..3k+2]), the
+       time, the eye's place and height in cells, the waves' height */
     for (i = 0; i < 10; i++)
         words[i] = row_colour(cls, 6 + i);
     for (k = 0; k < 3; k++)
         up[k] = -m[3 + k];
     words[10] = land_colour(cls, up);
-    /* the inputs: the light by the level's scale in the world's axes (world
-       axis k's view components are m[3k..3k+2]), the time, the eye's place
-       and height in cells, the waves' height */
     for (k = 0; k < 3; k++)
         light[k] = grid.light_k * (m[3 * k + 1] * LIGHT_Y + m[3 * k + 2] * LIGHT_Z);
-    in[0] = (float)light[0];
-    in[1] = (float)light[1];
-    in[2] = (float)light[2];
-    in[3] = (float)fmod(nshvc_seconds(), 600.0);
-    in[4] = (float)ex;
-    in[5] = (float)ez;
-    in[6] = (float)(dh / OCEAN_CELL);
-    in[7] = (float)OCEAN_WAVE;
+    words[11] = float_word((float)light[0]);
+    words[12] = float_word((float)light[1]);
+    words[13] = float_word((float)light[2]);
+    words[14] = float_word((float)fmod(nshvc_seconds(), 600.0));
+    words[15] = float_word((float)(ex / OCEAN_CELL));
+    words[16] = float_word((float)(ez / OCEAN_CELL));
+    words[17] = float_word((float)(dh / OCEAN_CELL));
+    words[18] = float_word((float)OCEAN_WAVE);
     slot = fx_draw_tweening() * 2 + (p & 1);
     if (!ocean_image[slot].id)
-        ocean_image[slot] = nshvc_image_create(16, 1, NSHVC_IMAGE_RGBA);
+        ocean_image[slot] = nshvc_image_create(OCEAN_IMAGE_W, 1, NSHVC_IMAGE_RGBA);
     if (!ocean_shader.id)
         ocean_shader = nshvc_shader_load("ocean");
     nshvc_image_write(ocean_image[slot], words);
-    fx_draw_water(v, nc, ocean_image[slot], ocean_shader, in);
+    fx_draw_surface(c, nc, ocean_image[slot], ocean_shader, in, (float)ox, (float)oy);
 }
 
 void fx_ground_draw(void)
