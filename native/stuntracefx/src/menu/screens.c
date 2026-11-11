@@ -1197,6 +1197,16 @@ static void launch_race(int course)
 {
     int i;
 
+    /* the sound memory as the logo and the title leave it before any race
+       (the race's load adds its own to it): without them a race's sound
+       effects read memory nothing wrote, all zeros, which the driver's
+       reader skips for ever */
+    sound_upload_begin();
+    menu_sounds_upload(MENU_SOUNDS_LOGO);
+    sound_upload_end();
+    sound_upload_begin();
+    menu_sounds_upload(MENU_SOUNDS_TITLE);
+    sound_upload_end();
     g.menu_mode = (uint16_t)(course >= 0x0C && course <= 0x0F ? 1 : course >= 0x10 && course <= 0x13 ? 2 : 0);
     g.hud_mode = (uint8_t)g.menu_mode;
     g.course_menu_seen = 1;
