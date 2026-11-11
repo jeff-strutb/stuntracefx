@@ -116,6 +116,36 @@ uint8_t fx_draw_ink(uint8_t c)
 {
     return ink(c);
 }
+
+/* The palette as an image of one row, texel k being entry k. A vertex's
+   colour is a colour (engine 6.0), no longer a palette entry, so a shape in
+   one entry is drawn as that entry's texel of this image: through the
+   palette as the picture has it on each row, as the textures' texels are
+   (two players' halves change entries at their line). */
+static nshvc_image entries;
+
+static uint32_t entry_image(void)
+{
+    if (!entries.id) {
+        uint8_t t[256];
+        int k;
+
+        for (k = 0; k < 256; k++)
+            t[k] = (uint8_t)k;
+        entries = nshvc_image_create(256, 1, NSHVC_IMAGE_INDEXED);
+        if (entries.id)
+            nshvc_image_write(entries, t);
+    }
+    return entries.id;
+}
+
+/* a vertex in entry e: its texel's middle, the same at every vertex, so
+   the whole shape reads that one texel */
+static void at_entry(nshvc_vertex *v, uint8_t e)
+{
+    v->u = (float)e + 0.5f;
+    v->v = 0.5f;
+}
 static uint64_t composed_key[2];
 static nshvc_draw_list screen_list;
 static int composed_picture = -1, composed_split = -1;
@@ -896,8 +926,8 @@ void fx_flat_row(uint16_t x, uint16_t y, uint16_t n)
     v[4] = v[2];
     v[5].x = x; v[5].y = (float)(y + 1);
     for (i = 0; i < 6; i++)
-        v[i].colour = colour;
-    emit(v, 6, 0, 0);
+        at_entry(&v[i], colour);
+    emit(v, 6, entry_image(), 0);
 }
 
 /* A sprite smaller than its texture: size x size pixels, the texel at
@@ -1446,9 +1476,9 @@ void fx_draw_flat_entry(const FxCorner *c, uint32_t n, uint8_t colour)
         for (i = 0; i < k; i++) {
             v[i].x = c[done + i].x;
             v[i].y = c[done + i].y;
-            v[i].colour = colour;
+            at_entry(&v[i], colour);
         }
-        emit(v, k, 0, 0);
+        emit(v, k, entry_image(), 0);
         done += k;
     }
 }
@@ -1665,6 +1695,8 @@ static void shape_draw(const FxShape *sh)
         colour = ink(colour);
         if ((!target.id && !recording) || !colour)
             return;
+        if (!tinted)
+            image = entry_image();      /* the palette's entry; a tint is a colour */
     }
     memset(v, 0, sizeof v);
     while (done < sh->count) {
@@ -1675,7 +1707,9 @@ static void shape_draw(const FxShape *sh)
             v[i].y = c[done + i].y;
             v[i].u = (float)(c[done + i].u + u_off);
             v[i].v = (float)(c[done + i].v + v_off);
-            v[i].colour = tinted ? tinted : colour;
+            v[i].colour = tinted;
+            if (!m->textured && !tinted)
+                at_entry(&v[i], colour);
         }
         emit(v, n, image, sh->line);
         done += n;
@@ -1692,7 +1726,9 @@ static void shape_draw(const FxShape *sh)
                 v[i].y = u[done + i].y;
                 v[i].u = (float)(u[done + i].u + u_off);
                 v[i].v = (float)(u[done + i].v + v_off);
-                v[i].colour = tinted ? tinted : colour;
+                v[i].colour = tinted;
+                if (!m->textured && !tinted)
+                    at_entry(&v[i], colour);
             }
             emit(v, n, image, 0);
         }

@@ -74,13 +74,12 @@
 #define TINT 0xFF0A0E1Au                /* a navy laid over the picture */
 #define TINT_ALPHA 0.55f
 #define FILL 0.94f                      /* of the safe area the panel may take, each way */
-/* The blur behind the panel: a Gaussian of 3 of the picture's pixels, the
-   earlier pause screen's (three box blurs of 10 points come to a Gaussian of
-   11.25 points, about 3 of the picture's 224 lines in an 800-point window),
-   drawn at twice the picture's pixels each way (a draw list is composed at
-   the window's pixels by nearest, so the steps are finer than one shows). */
+/* The blur behind the panel: a Gaussian of 3 of the picture's pixels. The
+   picture is the window's pixels since engine 6.0 (it was the screen's), so
+   this is 3 of the window's pixels, far less than the earlier pause screen's
+   (three box blurs of 10 points come to a Gaussian of 11.25 points, about 3
+   of the original's 224 lines in an 800-point window). */
 #define BLUR_SIGMA 3.0f
-#define BLUR_SCALE 2
 
 /* The overlays, the game's only ones: the tint, the panel, the tags, the
    item chosen, the option with its value, the hint, the corner button, in
@@ -756,17 +755,18 @@ int pause_draw(void)
 
     if (!p.open || !p.shot_ok)
         return 0;
-    /* the screen the picture was: its size (this game draws neither hires
-       nor interlace, so the picture's pixels are the screen's), its own
-       brightness already in it */
+    /* the window the picture was read at (engine 6.0: the window's pixels,
+       borders and all): a screen of its size filling the window, a pixel a
+       pixel, the picture's own brightness already in it */
     memset(&s, 0, sizeof s);
     s.width = p.shot_w;
     s.height = p.shot_h;
     s.brightness = 15;
+    s.aspect = NSHVC_ASPECT_FILL;
     nshvc_screen_set(&s);
     nshvc_mode_set(1, 0, 0);
-    lw = (uint32_t)p.shot_w * BLUR_SCALE;
-    lh = (uint32_t)p.shot_h * BLUR_SCALE;
+    lw = (uint32_t)p.shot_w;
+    lh = (uint32_t)p.shot_h;
     nshvc_draw_list_clear(p.list, lw, lh);
     memset(&m, 0, sizeof m);
     m.shader = p.blur;

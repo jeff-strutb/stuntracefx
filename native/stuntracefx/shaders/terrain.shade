@@ -14,18 +14,18 @@
                     the light (three floats), +11 the bias, +12 the count
                     (an outward normal n's shade is light . n + bias);
      from the grid's word (header 17)  the heights, nx a row, floats. */
-const int W = 256;
+const int IMAGE_W = 256;
 const int CELL_AT = 32;
 const int STRIP = 1056;
 
 uint word_at(int i) {
-    uvec4 b = uvec4(nshvc_image(ivec2(i % W, i / W)) * 255.0 + 0.5);
+    uvec4 b = uvec4(nshvc_image(ivec2(i % IMAGE_W, i / IMAGE_W)) * 255.0 + 0.5);
     return b.a << 24 | b.r << 16 | b.g << 8 | b.b;
 }
 
 float header(int i) { return uintBitsToFloat(word_at(i)); }
 
-vec3 colour_at(int i) { return nshvc_image(ivec2(i % W, i / W)).rgb; }
+vec3 colour_at(int i) { return nshvc_image(ivec2(i % IMAGE_W, i / IMAGE_W)).rgb; }
 
 /* the grid: its corner, cell, size and first word */
 struct Grid { float x0, z0, cell; int nx, nz, at; };
@@ -72,7 +72,7 @@ vec4 shade(vec2 uv) {
     float tu = p.x / header(26), tv = p.z / header(27);
     int cu = clamp(int(tu - 64.0 * floor(tu / 64.0)), 0, 63), cv = clamp(int(tv - 16.0 * floor(tv / 16.0)), 0, 15);
     int cw = CELL_AT + cv * 64 + cu;
-    float mark = nshvc_image(ivec2(cw % W, cw / W)).a;
+    float mark = nshvc_image(ivec2(cw % IMAGE_W, cw / IMAGE_W)).a;
     float texel_px = 128.0 * header(26) / hi / header(28);
     vec3 colour = band * light;
     float rock_at = header(11);

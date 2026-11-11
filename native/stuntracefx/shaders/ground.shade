@@ -16,19 +16,19 @@
    the band's colour on the row, the ripples over it in the colour of the
    first strip row as deep as the pixel, going to their mean cover where an
    output pixel spans more than a texel. */
-const int W = 160;
+const int IMAGE_W = 160;
 const int STRIP = 17 * 160;
 const int RIPPLES = STRIP + 2048;
 const int DEPTHS = RIPPLES + 80;
 
 uint word_at(int i) {
-    uvec4 b = uvec4(nshvc_image(ivec2(i % W, i / W)) * 255.0 + 0.5);
+    uvec4 b = uvec4(nshvc_image(ivec2(i % IMAGE_W, i / IMAGE_W)) * 255.0 + 0.5);
     return b.a << 24 | b.r << 16 | b.g << 8 | b.b;
 }
 
 float header(int i) { return uintBitsToFloat(word_at(i)); }
 
-vec3 colour_at(int i) { return nshvc_image(ivec2(i % W, i / W)).rgb; }
+vec3 colour_at(int i) { return nshvc_image(ivec2(i % IMAGE_W, i / IMAGE_W)).rgb; }
 
 vec4 shade(vec2 uv) {
     float den = nshvc_input(6) * uv.x + nshvc_input(7) * uv.y + 1.0;
