@@ -80,6 +80,7 @@ static FxFrameProgramResult frame_program(uint16_t draw_list_end)
         return (FxFrameProgramResult){up_ == 0 ? 0 : up_ - 0};
     }
     fx_far_parked(stack);               /* the near list again with parked tyres among it (fx_far.c) */
+    fx_far_objects_end();               /* what is drawn after the objects has no object's depth */
     *stack = 0x0240;
     fx_cmode(0);
     weather_record = fx_ldw(0x247A);

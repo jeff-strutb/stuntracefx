@@ -7,10 +7,12 @@
 
 #include <stdint.h>
 
-/* A corner of a shape: its place on the picture in pixels, unrounded, and
-   its texel. */
+/* A corner of a shape: its place on the picture in pixels, unrounded, its
+   texel, and one over its depth in view space at the world's scale (0:
+   none, the 2D's). One over the depth is linear across the screen, so it is
+   interpolated as the place is; the draw lists take their depths from it. */
 typedef struct {
-    float x, y, u, v;
+    float x, y, u, v, iz;
 } FxCorner;
 
 /* A face's material as FxModelMaterial chose it: a flat face's colour
@@ -42,15 +44,24 @@ typedef struct {
     /* while the water cuts the picture (fx_face_cut): the face's part past
        the water from the eye, drawn before it (count 0: none) */
     uint32_t under_first, under_count;
-    /* the depth it is drawn at (a far object's while the land hides them,
-       fx_far_z), 0 the 3D's own */
-    float z;
+    /* how many faces of its model it lies on (a stripe painted on a road:
+       1), each drawn a little nearer the eye than the one under it (a
+       polygon offset), so the later stays in front where they share a
+       plane */
+    uint8_t decal;
 } FxShape;
 
 /* A face: begun, its points given (fx_face_vertex, fx_rt.h), then ended
    with its material, which makes its shape (none when a point is not
    known, or it is wholly off the view). */
 void fx_face_begin(int textured);
+/* The model walk shows a face that looks away from the eye too (both sides
+   of every polygon are drawn); this says the next face does, so that a lit
+   face is shaded as seen from its back. */
+void fx_face_back(int back);
+/* An object's drawing begins (fx_far_record): its faces' planes for the
+   polygon offset start again. */
+void fx_face_object(void);
 void fx_face_end(const FxMaterial *material);
 /* The shapes made since they were last drawn, in order; whether there is
    room for another face's (else they are drawn first, as the chip drew its

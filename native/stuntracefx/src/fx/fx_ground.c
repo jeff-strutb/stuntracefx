@@ -944,7 +944,7 @@ static void land_draw(int kind, const double eye[3], const double m[9], int p)
         in[0] = (float)(n[0] / (128.0 * d));
         in[1] = (float)(n[1] / (128.0 * d));
         in[2] = (float)((n[2] - (n[0] * vcx + n[1] * vcy) / 128.0) / d);
-        fx_draw_surface(c, nc, land_image[slot], land_shader, in, 0, 0);
+        fx_draw_surface(c, nc, land_image[slot], land_shader, in, 0, 0, 0.999f);  /* the earlier land: under all */
     }
 }
 
@@ -977,13 +977,11 @@ static void land_draw(int kind, const double eye[3], const double m[9], int p)
    (grid.light_k), so the land takes the shades the course's own faces take
    facing the same way.
 
-   Depths: the 3D is drawn at depth 0, in the order the frame program gives;
-   the land lies past it all (fx_draw_land), so it covers none of the
-   course's shapes whatever the order. The plane is at PLANE_Z, past the
-   mountains; a mountain face at 0.998 (1 - LAND_NEAR / its depth) at each
-   corner, from the face's own plane, which is exact across the face (one
-   over the depth is linear across the screen), so the mountains hide each
-   other as they stand. Triangles: the plane's quad (2, at most 6 once kept
+   Depths: the 3D is drawn at its true depths (fx_draw.c, "depth"); a
+   mountain face at its own (fx_draw_depth of one over its depth at each
+   corner, from the face's own plane, exact across the face), so mountains
+   and the course hide one another as they stand. The plane is at PLANE_Z,
+   past everything: the ground at the horizon, under all. Triangles: the plane's quad (2, at most 6 once kept
    to the view) and MOUNTAINS x SIDES faces (50), those facing away left
    out. No image and no shader: the GPU fills each in its colour. */
 
@@ -991,8 +989,6 @@ enum { MOUNTAINS = 10, SIDES = 5, LAND_VERTICES = 3 * (6 + MOUNTAINS * (SIDES + 
 #define SHADE_ROWS 0xA1C5       /* bank 3: the lit faces' shade rows by class, two bytes each, the nearest tier's */
 #define ONE_PALETTE 0x8800      /* bank $1F: one player's palette */
 #define PLANE_Z 0.999f
-#define FACE_Z 0.998
-#define LAND_NEAR 256.0
 #define EYE_CLEAR 64.0
 #define GAP 0.3
 
@@ -1219,12 +1215,11 @@ static void land_face(const double (*pts)[3], int n, const double nw[3], int cls
     colour = face_colour(cls, nview, nw, 0);
     for (j = 0; j < nc; j++, (*nv)++) {
         double inv = (nview[0] * (c[j].x - vcx) / 128.0 + nview[1] * (c[j].y - vcy) / 128.0 + nview[2]) / d;
-        double z = FACE_Z * (1.0 - LAND_NEAR * inv);
 
         memset(&v[*nv], 0, sizeof v[*nv]);
         v[*nv].x = c[j].x;
         v[*nv].y = c[j].y;
-        v[*nv].z = (float)(z < 0 ? 0 : z > FACE_Z ? FACE_Z : z);
+        v[*nv].z = fx_draw_depth(inv);
         v[*nv].colour = colour;
     }
 }
@@ -1237,13 +1232,6 @@ static void normal_of(const double *a, const double *b, const double *c, double 
     n[0] = e1[1] * e2[2] - e1[2] * e2[1];
     n[1] = e1[2] * e2[0] - e1[0] * e2[2];
     n[2] = e1[0] * e2[1] - e1[1] * e2[0];
-}
-
-float fx_ground_depth_z(double depth)
-{
-    double z = depth > LAND_NEAR ? FACE_Z * (1.0 - LAND_NEAR / depth) : 0;
-
-    return (float)(z < 1e-6 ? 1e-6 : z > FACE_Z ? FACE_Z : z);
 }
 
 /* ---- the land filling a course's empty space (Jeff, 2026-11-11) ----
@@ -1259,9 +1247,7 @@ float fx_ground_depth_z(double depth)
    with FILL_CLEAR at 1.5 it is flat at the course's level there: the rock
    never stands over the course. Each triangle with a raised corner is a
    face, shaded as the mesas are; those all at the level are the plane's.
-   The far objects are drawn at depths of their own while it is drawn
-   (fx_far_occlude), so it hides those behind it; the near objects, at the
-   3D's own depth 0, are never hidden by it. */
+   At its true depth, like all the 3D, it hides what stands behind it. */
 
 enum { FILL_STEP = 4, FILL_MOST = GRID_MOST / FILL_STEP + 2, FILL_VERTICES = 3 * 2 * FILL_MOST * FILL_MOST * 2 };
 #define FILL_CLEAR 1.5
@@ -1425,7 +1411,6 @@ static void land_polygons(unsigned course, int cls, const double eye[3], const d
             fill_make(course);
         fill_faces(course, cls, plane_y, eye, m, fv, &nf, FILL_VERTICES);
         fx_draw_land(fv, nf);
-        fx_far_occlude(1);
     }
 }
 
@@ -1468,16 +1453,63 @@ static void land_polygons(unsigned course, int cls, const double eye[3], const d
 #define OCEAN_WAVE 0.08
 #define SEABED_BELOW 512.0
 #define SEABED_DARK 0.55
-#define OCEAN_IMAGE_W 24        /* ocean.shade's image: 11 colours, then 8 floats */
+enum { OCEAN_HOLES = 8, OCEAN_HOLE_CORNERS = 16, OCEAN_HOLES_AT = 24, OCEAN_HOLE_WORDS = 1 + 2 * OCEAN_HOLE_CORNERS };
+#define OCEAN_IMAGE_W 320       /* ocean.shade's image: 11 colours, 8 floats, then the holes (fx_ground_water_holes) */
 
 static nshvc_image ocean_image[4];
+static uint32_t ocean_words[4][OCEAN_IMAGE_W];  /* each slot's image as written */
+static double ocean_origin[4][2];               /* the screen place its uv count from */
+static int ocean_slot = -1;                     /* the slot this picture's water is in; -1 none */
+
+/* The picture's holes in the water (fx_face_holes): written into its image
+   after the 3D, for ocean.shade to leave out, at most OCEAN_HOLES of at most
+   OCEAN_HOLE_CORNERS corners (a hole with more keeps every few, still convex
+   and inside it), each turned so its inside is left of its edges, its
+   places less the water's origin. The water is at its true depth, so where
+   a track piece goes below it (the glass tube's mouth) what lies past it
+   shows through these, by depth. */
+void fx_ground_water_holes(const FxHole *holes, int n)
+{
+    uint32_t *w;
+    int h, k, kept = 0;
+
+    if (ocean_slot < 0)
+        return;
+    w = ocean_words[ocean_slot];
+    for (h = 0; h < n && kept < OCEAN_HOLES; h++) {
+        uint32_t *at = w + OCEAN_HOLES_AT + 1 + kept * OCEAN_HOLE_WORDS;
+        int step = (holes[h].n + OCEAN_HOLE_CORNERS - 1) / OCEAN_HOLE_CORNERS, m = 0, idx[OCEAN_HOLE_CORNERS];
+        double area = 0;
+
+        for (k = 0; k < holes[h].n && m < OCEAN_HOLE_CORNERS; k += step)
+            idx[m++] = k;
+        if (m < 3)
+            continue;
+        for (k = 0; k < m; k++) {
+            int k1 = (k + 1) % m;
+
+            area += (double)holes[h].x[idx[k]] * holes[h].y[idx[k1]] - (double)holes[h].x[idx[k1]] * holes[h].y[idx[k]];
+        }
+        at[0] = float_word((float)m);
+        for (k = 0; k < m; k++) {
+            int j = area >= 0 ? idx[k] : idx[m - 1 - k];
+
+            at[1 + 2 * k] = float_word((float)(holes[h].x[j] - ocean_origin[ocean_slot][0]));
+            at[2 + 2 * k] = float_word((float)(holes[h].y[j] - ocean_origin[ocean_slot][1]));
+        }
+        kept++;
+    }
+    w[OCEAN_HOLES_AT] = float_word((float)kept);
+    nshvc_image_write(ocean_image[ocean_slot], w);
+    ocean_slot = -1;
+}
 static nshvc_shader ocean_shader;
 
 static void ocean_draw(int cls, int under, const double eye[3], const double m[9], double water_y, int p)
 {
     static nshvc_vertex bed[24];
     static FxCorner c[64];
-    uint32_t words[OCEAN_IMAGE_W] = { 0 }, nb = 0, nc, j, deep;
+    uint32_t *words, nb = 0, nc, j, deep;
     double dh = water_y - eye[1], reach, q[4][3], up[3], light[3], ex, ez, bed_y, ox = 0, oy = 0;
     double vcx = (int16_t)ram_word(0x0034), vcy = (int16_t)ram_word(0x0036), ra[3], rb[3], rc[3], c1;
     float in[8], sx, sy, scale;
@@ -1540,6 +1572,11 @@ static void ocean_draw(int cls, int under, const double eye[3], const double m[9
        normal), then the floats: the light by the level's scale in the
        world's axes (world axis k's view components are m[3k..3k+2]), the
        time, the eye's place and height in cells, the waves' height */
+    slot = fx_draw_tweening() * 2 + (p & 1);
+    words = ocean_words[slot];
+    memset(words, 0, sizeof ocean_words[slot]);
+    ocean_origin[slot][0] = ox;
+    ocean_origin[slot][1] = oy;
     for (i = 0; i < 10; i++)
         words[i] = row_colour(cls, 6 + i);
     for (k = 0; k < 3; k++)
@@ -1555,13 +1592,13 @@ static void ocean_draw(int cls, int under, const double eye[3], const double m[9
     words[16] = float_word((float)(ez / OCEAN_CELL));
     words[17] = float_word((float)(dh / OCEAN_CELL));
     words[18] = float_word((float)OCEAN_WAVE);
-    slot = fx_draw_tweening() * 2 + (p & 1);
     if (!ocean_image[slot].id)
         ocean_image[slot] = nshvc_image_create(OCEAN_IMAGE_W, 1, NSHVC_IMAGE_RGBA);
     if (!ocean_shader.id)
         ocean_shader = nshvc_shader_load("ocean");
     nshvc_image_write(ocean_image[slot], words);
-    fx_draw_surface(c, nc, ocean_image[slot], ocean_shader, in, (float)ox, (float)oy);
+    ocean_slot = slot;                  /* its holes written after the 3D */
+    fx_draw_surface(c, nc, ocean_image[slot], ocean_shader, in, (float)ox, (float)oy, -1);     /* at its true depth */
 }
 
 void fx_ground_draw(void)
@@ -1581,7 +1618,7 @@ void fx_ground_draw(void)
     /* in the sealed tunnel (bit 3 of $0DA5) the earlier water left the
        original's underwater backdrop to show; the ocean is drawn there too,
        seen from below, over that backdrop (Jeff, 2026-11-11) */
-    fx_far_occlude(0);                  /* the far objects at the 3D's own depth unless the land hides them */
+    ocean_slot = -1;                    /* no water's holes but this picture's */
     if (kind == SURF_NONE || (kind == SURF_AQUA && (g.picture_effects & 0x08) && !surface[course].cls))
         return;
     for (i = 0; i < 3; i++)
@@ -1710,7 +1747,7 @@ void fx_ground_draw(void)
     if (!shader.id)
         shader = nshvc_shader_load("ground");
     nshvc_image_write(image[slot], words);
-    fx_draw_surface(corners, n, image[slot], shader, in, (float)ox, (float)oy);
+    fx_draw_surface(corners, n, image[slot], shader, in, (float)ox, (float)oy, -1);
     if (kind == SURF_AQUA) {            /* its water cuts the picture: the plane in view space, row 1 . v = dh */
         double plane[3] = { m[3], m[4], m[5] };
 

@@ -253,10 +253,62 @@ static Tint chosen = { -1, 0, 0, 0 };
 
 static struct {
     int open, textured, whole, n;
+    int back;                           /* it looks away from the eye (fx_face_back) */
     View view;
     Tint tint;
     Corner3 c[MOST];
 } face;
+
+static int back_next;
+
+void fx_face_back(int back) { back_next = back; }
+
+/* The planes of the object's faces so far (view space, at the object's
+   scale), each with how many faces it lies on, for the polygon offset. */
+enum { PLANES = 96 };
+static struct {
+    double n[3], d;
+    uint8_t decal;
+} planes[PLANES];
+static int nplanes;
+
+void fx_face_object(void) { nplanes = 0; }
+
+/* How many earlier faces of the object a face lies on: its plane against
+   theirs (the same way, the same distance give or take a little); its
+   plane kept for the faces after it. */
+static uint8_t decal_of(const Corner3 *c, int n)
+{
+    double nv[3] = { 0, 0, 0 }, len, d;
+    int i, level = 0;
+
+    for (i = 0; i < n; i++) {
+        const Corner3 *a = &c[i], *b = &c[(i + 1) % n];
+
+        nv[0] += (a->y - b->y) * (a->z + b->z);
+        nv[1] += (a->z - b->z) * (a->x + b->x);
+        nv[2] += (a->x - b->x) * (a->y + b->y);
+    }
+    len = sqrt(nv[0] * nv[0] + nv[1] * nv[1] + nv[2] * nv[2]);
+    if (len <= 0)
+        return 0;
+    for (i = 0; i < 3; i++)
+        nv[i] /= len;
+    d = nv[0] * c[0].x + nv[1] * c[0].y + nv[2] * c[0].z;
+    for (i = 0; i < nplanes; i++)
+        if (nv[0] * planes[i].n[0] + nv[1] * planes[i].n[1] + nv[2] * planes[i].n[2] > 0.9999
+            && fabs(d - planes[i].d) <= 0.002 * fabs(d) + 1.0 && planes[i].decal + 1 > level)
+            level = planes[i].decal + 1;
+    if (level > 15)
+        level = 15;
+    if (nplanes < PLANES) {
+        memcpy(planes[nplanes].n, nv, sizeof nv);
+        planes[nplanes].d = d;
+        planes[nplanes].decal = (uint8_t)level;
+        nplanes++;
+    }
+    return (uint8_t)level;
+}
 
 static FxShape shapes[SHAPES];
 static int nshapes;
@@ -293,6 +345,8 @@ void fx_face_begin(int textured)
     face.textured = textured != 0;
     face.tint = chosen;
     chosen.kind = -1;
+    face.back = back_next;
+    back_next = 0;
     face.whole = 1;
     face.n = 0;
     face.view = view_now();
@@ -377,7 +431,7 @@ static int clip_depth(const Corner3 *in, int n, Corner3 *out, double at, int kee
 }
 
 typedef struct {
-    double x, y, u, v;
+    double x, y, u, v, iz;              /* iz: one over the depth, linear across the screen */
 } Corner2;
 
 /* The part of the projected polygon on one side of a line x = at (axis 0)
@@ -400,6 +454,7 @@ static int clip_side(const Corner2 *in, int n, Corner2 *out, int axis, double at
             out[m].y = a->y + (b->y - a->y) * t;
             out[m].u = a->u + (b->u - a->u) * t;
             out[m].v = a->v + (b->v - a->v) * t;
+            out[m].iz = a->iz + (b->iz - a->iz) * t;
             if (axis)
                 out[m].y = at;
             else
@@ -418,6 +473,7 @@ static void project(const Corner3 *in, int n, Corner2 *out, const View *v)
         place(v, in[i].x, in[i].y, in[i].z, &out[i].x, &out[i].y);
         out[i].u = in[i].u;
         out[i].v = in[i].v;
+        out[i].iz = 1.0 / in[i].z;
     }
 }
 
@@ -448,6 +504,7 @@ static int fan(const Corner3 *in, int n, const View *v)
             c->y = (float)t[j]->y;
             c->u = (float)t[j]->u;
             c->v = (float)t[j]->v;
+            c->iz = (float)ldexp(t[j]->iz, -fx_far_shift());   /* a far object's points are halved */
         }
     }
     return 1;
@@ -504,6 +561,7 @@ uint32_t fx_face_triangles_d(const double (*p)[3], int n, FxCorner *out, uint32_
             out[k].x = (float)t[j]->x;
             out[k].y = (float)t[j]->y;
             out[k].u = out[k].v = 0;
+            out[k].iz = (float)ldexp(t[j]->iz, -fx_far_shift());
             k++;
         }
     }
@@ -559,14 +617,20 @@ static int line(const Corner3 *in, const View *v)
     }
     if (ncorners + 2 > CORNERS)
         return 0;
-    corners[ncorners].x = (float)(x[0] + dx * t0);
-    corners[ncorners].y = (float)(y[0] + dy * t0);
-    corners[ncorners].u = corners[ncorners].v = 0;
-    ncorners++;
-    corners[ncorners].x = (float)(x[0] + dx * t1);
-    corners[ncorners].y = (float)(y[0] + dy * t1);
-    corners[ncorners].u = corners[ncorners].v = 0;
-    ncorners++;
+    {
+        double iz0 = ldexp(1.0 / p[0].z, -fx_far_shift()), iz1 = ldexp(1.0 / p[1].z, -fx_far_shift());
+
+        corners[ncorners].x = (float)(x[0] + dx * t0);
+        corners[ncorners].y = (float)(y[0] + dy * t0);
+        corners[ncorners].u = corners[ncorners].v = 0;
+        corners[ncorners].iz = (float)(iz0 + (iz1 - iz0) * t0);
+        ncorners++;
+        corners[ncorners].x = (float)(x[0] + dx * t1);
+        corners[ncorners].y = (float)(y[0] + dy * t1);
+        corners[ncorners].u = corners[ncorners].v = 0;
+        corners[ncorners].iz = (float)(iz0 + (iz1 - iz0) * t1);
+        ncorners++;
+    }
     return 1;
 }
 
@@ -854,7 +918,18 @@ static void commit(const FxMaterial *m)
     s->tint_index = face.tint.index;
     s->light = face.tint.light;
     s->under_first = s->under_count = 0;
-    s->z = fx_far_z();
+    s->decal = 0;
+    if (face.back && !face.textured && face.tint.kind == 1) {
+        /* a lit face seen from its back: shaded as the chip shades a face
+           turned the other way, toward the eye (its light the other sign) */
+        double level = floor(-face.tint.light);
+
+        level = level < 6 ? 6 : level > 15 ? 15 : level;
+        s->material.colour = fx_rom_read(3, (uint16_t)(face.tint.index + (int)level - 6));
+        s->light = -face.tint.light;
+    }
+    if (face.n >= 3)
+        s->decal = decal_of(face.c, face.n);
     if (s->line) {
         ok = line(face.c, &face.view);
     } else if (cut.on) {

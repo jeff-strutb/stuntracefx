@@ -132,6 +132,9 @@ void fx_sprite_place(uint16_t x, uint16_t y, uint16_t depth, uint16_t size, uint
 /* The frame program's drawing is the picture's 3D (0); what is drawn after
    it, the HUD's (1). */
 void fx_draw_part(int hud);
+/* The 3D is being drawn at its true depths (fx_draw.c, "depth"): from its
+   frame program's start to the HUD's; both sides of its faces then. */
+int fx_draw_depth_on(void);
 /* In a picture between steps (fx/fx_tween.c), the 256ths of the angle
    bytes of the object whose draw record is at `record`: chosen as
    FxObjectsDraw takes the record, read as the model's matrix is made (0

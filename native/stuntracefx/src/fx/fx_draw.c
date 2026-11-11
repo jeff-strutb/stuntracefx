@@ -13,6 +13,7 @@
 #include "fx/fx.h"
 #include "fx/fx_draw.h"
 #include "fx/fx_far.h"
+#include "fx/fx_ground.h"
 #include "fx/fx_face.h"
 #include "system/state.h"
 #include "system/perf.h"
@@ -388,17 +389,50 @@ static int held;                /* nothing is drawn (the ground's survey) */
 
 void fx_draw_hold(int on) { held = on; }
 
-/* The depth of what is emitted (fx_far.c's fx_far_occlude): a queued face
-   its own (shape_draw sets it while it draws one), anything else the far
-   object drawing now's; 0 none, the 3D's own depth 0 in order. Only a
-   vertex at depth 0 takes it (the land's carry their own). */
-static int in_shape;
-static float shape_z;
+/* ---- depth (Jeff, 2026-11-11: the 3D drawn to modern standards, its
+   polygons from both sides, what is in front decided by depth) ----
+
+   Every 3D polygon is drawn at its true depth: each corner's one over its
+   view-space depth (FxCorner iz, linear across the screen, so exact across
+   a face) as the list's z, 0 nearest: z = 0.998 (1 - DEPTH_NEAR iz), kept
+   to (0, 0.998]; nearer than DEPTH_NEAR all at the nearest, in their order.
+   The list's depth test keeps the nearer (of equal, the later), so faces
+   hide one another as they stand, whichever is drawn first. A face lying
+   on an earlier face of its model (FxShape decal) is drawn DECAL_STEP of
+   its depth nearer for each it lies on (a polygon offset), so a stripe on a
+   road stays on it. What an object draws that has no depth of its own (a
+   sprite, a plotted row) is at its place's (fx_far_iz); the 2D (the HUD,
+   the pause screen) at 0, in front of all. A list has about a sixteenth of
+   the depth buffer (the engine's), about twenty bits for this z: depths a
+   thousandth apart are told apart out to some 30,000. */
+#define DEPTH_NEAR 32.0
+#define DECAL_STEP 0.002
+#define DEPTH_FAR 0.998
+
+float fx_draw_depth(double iz)
+{
+    double z;
+
+    if (iz <= 0)
+        return 0;
+    z = DEPTH_FAR * (1.0 - DEPTH_NEAR * iz);
+    return (float)(z < 1e-6 ? 1e-6 : z > DEPTH_FAR ? DEPTH_FAR : z);
+}
+
+static int in_shape;                    /* shape_draw: the vertices carry their own depths */
+static int shape_decal;
+
+static float corner_z(const FxCorner *c)
+{
+    return drawing_3d ? fx_draw_depth(c->iz * (1.0 + DECAL_STEP * shape_decal)) : 0.0f;
+}
 
 static float emit_z(void)
 {
-    return in_shape ? shape_z : fx_far_z();
+    return in_shape || !drawing_3d ? 0.0f : fx_draw_depth(fx_far_iz());
 }
+
+int fx_draw_depth_on(void) { return drawing_3d; }
 
 static void emit_with(const nshvc_vertex *v, uint32_t count, uint32_t image, int lines, uint32_t shader, const float *in)
 {
@@ -1340,6 +1374,7 @@ static int clip_to_hole(const nshvc_vertex *in, int n, nshvc_vertex *out, const 
                 b[k] = *p;
                 b[k].x = (float)(p->x + (q->x - p->x) * t);
                 b[k].y = (float)(p->y + (q->y - p->y) * t);
+                b[k].z = (float)(p->z + (q->z - p->z) * t);     /* the list's z is linear across the screen */
                 b[k].u = (float)(p->u + (q->u - p->u) * t);
                 b[k].v = (float)(p->v + (q->v - p->v) * t);
                 k++;
@@ -1363,10 +1398,11 @@ static void under_splice(Recording *r)
     uint32_t ncv = 0, ncs = 0, cap_cv = 0, cap_cs = 0, i, k, n = 0, base, cbase, from, to;
     int nh, h;
 
+    holes = fx_face_holes(&nh);
+    fx_ground_water_holes(holes, nh);   /* the water leaves them out: what lies past it shows by depth */
     if (!r->nus) {
         return;
     }
-    holes = fx_face_holes(&nh);
     /* the parts past the water clipped to each hole: triangle by triangle */
     for (i = 0; i < r->nus; i++) {
         const Shape *sh = &r->us[i];
@@ -1456,7 +1492,8 @@ static void under_splice(Recording *r)
 /* The ground's surface (fx_ground.c): triangles drawn by `shader` over
    `image` with its inputs, each vertex's u, v its place on the screen less
    (ox, oy). */
-void fx_draw_surface(const FxCorner *c, uint32_t n, nshvc_image image, nshvc_shader shader, const float in[8], float ox, float oy)
+void fx_draw_surface(const FxCorner *c, uint32_t n, nshvc_image image, nshvc_shader shader, const float in[8], float ox, float oy,
+                     float z)
 {
     nshvc_vertex v[48];
     uint32_t done = 0, i;
@@ -1473,6 +1510,7 @@ void fx_draw_surface(const FxCorner *c, uint32_t n, nshvc_image image, nshvc_sha
             v[i].y = c[done + i].y;
             v[i].u = c[done + i].x - ox;
             v[i].v = c[done + i].y - oy;
+            v[i].z = z < 0 ? fx_draw_depth(c[done + i].iz) : z;
             v[i].colour = 0xFF000000u;
         }
         if (recording && recording->water_from < 0)
@@ -1510,6 +1548,7 @@ void fx_draw_flat_entry(const FxCorner *c, uint32_t n, uint8_t colour)
         for (i = 0; i < k; i++) {
             v[i].x = c[done + i].x;
             v[i].y = c[done + i].y;
+            v[i].z = fx_draw_depth(c[done + i].iz);
             at_entry(&v[i], colour);
         }
         emit(v, k, entry_image(), 0);
@@ -1739,6 +1778,7 @@ static void shape_draw_body(const FxShape *sh)
         for (i = 0; i < n; i++) {
             v[i].x = c[done + i].x;
             v[i].y = c[done + i].y;
+            v[i].z = corner_z(&c[done + i]);
             v[i].u = (float)(c[done + i].u + u_off);
             v[i].v = (float)(c[done + i].v + v_off);
             v[i].colour = tinted;
@@ -1758,6 +1798,7 @@ static void shape_draw_body(const FxShape *sh)
             for (i = 0; i < n; i++) {
                 v[i].x = u[done + i].x;
                 v[i].y = u[done + i].y;
+                v[i].z = corner_z(&u[done + i]);
                 v[i].u = (float)(u[done + i].u + u_off);
                 v[i].v = (float)(u[done + i].v + v_off);
                 v[i].colour = tinted;
@@ -1770,11 +1811,11 @@ static void shape_draw_body(const FxShape *sh)
     }
 }
 
-/* a queued face at its own depth (FxShape z) */
+/* a queued face at its corners' depths, offset by its decal level */
 static void shape_draw(const FxShape *sh)
 {
     in_shape = 1;
-    shape_z = sh->z;
+    shape_decal = sh->decal;
     shape_draw_body(sh);
     in_shape = 0;
 }
