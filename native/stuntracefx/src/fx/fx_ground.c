@@ -1463,6 +1463,11 @@ void fx_ground_draw(void)
         ground_survey(course, eye, m);  /* the course's shapes, once a course */
         range.course = -1;
     }
+    /* land: none in a tunnel (bit 3 of $0DA5, which the tunnel's gates set
+       and clear: the original turns the backdrop's colours black there, so
+       its openings show black, not the land outside; Jeff, 2026-11-11) */
+    if (IS_LAND(kind) && (g.picture_effects & 0x08))
+        return;
     if (IS_LAND(kind)) {                /* land: polygons, or the terrain over the view */
         if (surface[course].cls)
             land_polygons(course, surface[course].cls, eye, m);
