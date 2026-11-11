@@ -31,6 +31,7 @@
 #include "fx/fx.h"
 #include "fx/fx_draw.h"
 #include "fx/fx_face.h"
+#include "fx/fx_ground.h"
 #include "fx/fx_far.h"
 
 enum {
@@ -263,24 +264,74 @@ static int back_next;
 
 void fx_face_back(int back) { back_next = back; }
 
-/* The planes of the object's faces so far (view space, at the object's
-   scale), each with how many faces it lies on, for the polygon offset. */
-enum { PLANES = 96 };
+/* The object's faces so far (view space, at the object's scale), each
+   with its plane, its outline in that plane and its decal level, for the
+   polygon offset. A face's outline is its corners with the axis its
+   normal is most along dropped (its first PLANE_POINTS; more, its box
+   alone). */
+enum { PLANES = 96, PLANE_POINTS = 16 };
 static struct {
     double n[3], d;
     uint8_t decal;
+    int np;                             /* its outline's corners; 0: its box alone */
+    double p[PLANE_POINTS][2], lo[2], hi[2];
 } planes[PLANES];
 static int nplanes;
 
 void fx_face_object(void) { nplanes = 0; }
 
-/* How many earlier faces of the object a face lies on: its plane against
-   theirs (the same way, the same distance give or take a little); its
-   plane kept for the faces after it. */
+/* Whether two outlines in one plane overlap (more than touch): their
+   boxes, then for convex outlines no edge of either separating them. */
+static int outlines_overlap(int a, const double (*pb)[2], int nb, const double *lo, const double *hi)
+{
+    const double (*pa)[2] = (const double (*)[2])planes[a].p;
+    int na = planes[a].np, side, i, k;
+
+    for (k = 0; k < 2; k++) {
+        double tol = 1e-4 * (planes[a].hi[k] - planes[a].lo[k] + hi[k] - lo[k]);
+
+        if (planes[a].hi[k] <= lo[k] + tol || hi[k] <= planes[a].lo[k] + tol)
+            return 0;
+    }
+    if (!na || !nb)
+        return 1;
+    for (side = 0; side < 2; side++) {
+        const double (*e)[2] = side ? pb : pa;
+        int ne = side ? nb : na;
+
+        for (i = 0; i < ne; i++) {
+            double ax = -(e[(i + 1) % ne][1] - e[i][1]), ay = e[(i + 1) % ne][0] - e[i][0];
+            double a0 = 1e300, a1 = -1e300, b0 = 1e300, b1 = -1e300, t, tol;
+
+            if (ax == 0 && ay == 0)
+                continue;
+            for (k = 0; k < na; k++) {
+                t = ax * pa[k][0] + ay * pa[k][1];
+                a0 = t < a0 ? t : a0;
+                a1 = t > a1 ? t : a1;
+            }
+            for (k = 0; k < nb; k++) {
+                t = ax * pb[k][0] + ay * pb[k][1];
+                b0 = t < b0 ? t : b0;
+                b1 = t > b1 ? t : b1;
+            }
+            tol = 1e-4 * (a1 - a0 + b1 - b0);
+            if (a1 <= b0 + tol || b1 <= a0 + tol)
+                return 0;
+        }
+    }
+    return 1;
+}
+
+/* How many earlier faces of the object a face lies over: those on its
+   plane (facing the same way, at the same distance give or take a little)
+   whose outlines overlap its own, one more than the highest of their
+   levels; its plane and outline kept for the faces after it. Faces that
+   only meet it at an edge (a wall cut into triangles) leave it at 0. */
 static uint8_t decal_of(const Corner3 *c, int n)
 {
-    double nv[3] = { 0, 0, 0 }, len, d;
-    int i, level = 0;
+    double nv[3] = { 0, 0, 0 }, len, d, p[PLANE_POINTS][2], lo[2] = { 1e300, 1e300 }, hi[2] = { -1e300, -1e300 };
+    int i, k, level = 0, drop, np;
 
     for (i = 0; i < n; i++) {
         const Corner3 *a = &c[i], *b = &c[(i + 1) % n];
@@ -295,9 +346,24 @@ static uint8_t decal_of(const Corner3 *c, int n)
     for (i = 0; i < 3; i++)
         nv[i] /= len;
     d = nv[0] * c[0].x + nv[1] * c[0].y + nv[2] * c[0].z;
+    drop = fabs(nv[0]) >= fabs(nv[1]) && fabs(nv[0]) >= fabs(nv[2]) ? 0 : fabs(nv[1]) >= fabs(nv[2]) ? 1 : 2;
+    np = n <= PLANE_POINTS ? n : 0;
+    for (i = 0; i < n; i++) {
+        double q[3] = { c[i].x, c[i].y, c[i].z }, u = q[drop == 0 ? 1 : 0], v = q[drop == 2 ? 1 : 2];
+
+        if (i < np) {
+            p[i][0] = u;
+            p[i][1] = v;
+        }
+        lo[0] = u < lo[0] ? u : lo[0];
+        hi[0] = u > hi[0] ? u : hi[0];
+        lo[1] = v < lo[1] ? v : lo[1];
+        hi[1] = v > hi[1] ? v : hi[1];
+    }
     for (i = 0; i < nplanes; i++)
         if (nv[0] * planes[i].n[0] + nv[1] * planes[i].n[1] + nv[2] * planes[i].n[2] > 0.9999
-            && fabs(d - planes[i].d) <= 0.002 * fabs(d) + 1.0 && planes[i].decal + 1 > level)
+            && fabs(d - planes[i].d) <= 0.002 * fabs(d) + 1.0 && planes[i].decal + 1 > level
+            && outlines_overlap(i, (const double (*)[2])p, np, lo, hi))
             level = planes[i].decal + 1;
     if (level > 15)
         level = 15;
@@ -305,6 +371,12 @@ static uint8_t decal_of(const Corner3 *c, int n)
         memcpy(planes[nplanes].n, nv, sizeof nv);
         planes[nplanes].d = d;
         planes[nplanes].decal = (uint8_t)level;
+        planes[nplanes].np = np;
+        memcpy(planes[nplanes].p, p, sizeof p);
+        for (k = 0; k < 2; k++) {
+            planes[nplanes].lo[k] = lo[k];
+            planes[nplanes].hi[k] = hi[k];
+        }
         nplanes++;
     }
     return (uint8_t)level;
@@ -888,6 +960,45 @@ static int polygon_corners(const Corner3 *in, int n0, int textured)
     return ok;
 }
 
+/* A flat face seen from its back (fx_face_back) shaded by its own shape,
+   by the side the eye sees: its normal (Newell's, turned toward the eye),
+   the light as the chip lights a face (fx_ground_light). A lit face takes
+   its shade row's colour at that level, as the chip colours a lit face
+   turned that way; its material's light is not used, as a face's material
+   may light it by another face's normal (a two-sided part's two faces share
+   one). A face painted in the course's own rock (fx_ground_rock_back) takes
+   the rock's shade for a face turned that way, as the land's rock is
+   shaded; any other keeps its colour. */
+static void back_shade(FxShape *s)
+{
+    double n[3] = { 0, 0, 0 }, light;
+    int i, c;
+
+    for (i = 0; i < face.n; i++) {
+        const Corner3 *a = &face.c[i], *b = &face.c[(i + 1) % face.n];
+
+        n[0] += (a->y - b->y) * (a->z + b->z);
+        n[1] += (a->z - b->z) * (a->x + b->x);
+        n[2] += (a->x - b->x) * (a->y + b->y);
+    }
+    if (n[0] * face.c[0].x + n[1] * face.c[0].y + n[2] * face.c[0].z > 0)
+        for (i = 0; i < 3; i++)
+            n[i] = -n[i];
+    if (face.tint.kind == 1) {
+        double level;
+
+        light = fx_ground_light(n);
+        level = floor(light);
+        level = level < 6 ? 6 : level > 15 ? 15 : level;
+        s->material.colour = fx_rom_read(3, (uint16_t)(face.tint.index + (int)level - 6));
+        s->light = (float)light;
+        return;
+    }
+    c = fx_ground_rock_back(s->material.colour, n);
+    if (c >= 0)
+        s->material.colour = (uint8_t)c;
+}
+
 /* The face noted made into a shape with its material. A face not wholly
    known (a point not projected with this model's table) makes none. */
 static void commit(const FxMaterial *m)
@@ -919,15 +1030,9 @@ static void commit(const FxMaterial *m)
     s->light = face.tint.light;
     s->under_first = s->under_count = 0;
     s->decal = 0;
-    if (face.back && !face.textured && face.tint.kind == 1) {
-        /* a lit face seen from its back: shaded as the chip shades a face
-           turned the other way, toward the eye (its light the other sign) */
-        double level = floor(-face.tint.light);
-
-        level = level < 6 ? 6 : level > 15 ? 15 : level;
-        s->material.colour = fx_rom_read(3, (uint16_t)(face.tint.index + (int)level - 6));
-        s->light = -face.tint.light;
-    }
+    s->back = face.back != 0;
+    if (face.back && !face.textured && face.n >= 3)
+        back_shade(s);
     if (face.n >= 3)
         s->decal = decal_of(face.c, face.n);
     if (s->line) {

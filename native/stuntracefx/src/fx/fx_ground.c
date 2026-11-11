@@ -1112,6 +1112,29 @@ static uint32_t land_colour(int cls, const double n[3])
     return row_colour(cls, chip_level(n));
 }
 
+double fx_ground_light(const double n[3])
+{
+    double len = sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+    double k = grid.course == (int)g.course ? grid.light_k : LIGHT_K;
+
+    return len > 0 ? k * (n[1] * LIGHT_Y + n[2] * LIGHT_Z) / len : 0;
+}
+
+int fx_ground_rock_back(uint8_t colour, const double n[3])
+{
+    unsigned course = g.course;
+    int i, k;
+
+    if (course >= 0x20 || surface[course].cls != CLS_ROCK || grid.course != (int)course || grid.shades < 2)
+        return -1;
+    for (i = 0; i < grid.shades && grid.shade[i] != colour; i++)
+        ;
+    if (i == grid.shades)
+        return -1;
+    k = (int)floor((chip_level(n) - 6) / 9.0 * (grid.shades - 1) + 0.5);
+    return grid.shade[k < 0 ? 0 : k >= grid.shades ? grid.shades - 1 : k];
+}
+
 /* a world point to view space (world axis k turns to row k of m) */
 static void to_view(const double w[3], const double eye[3], const double m[9], double v[3])
 {

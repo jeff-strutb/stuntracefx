@@ -398,13 +398,18 @@ void fx_draw_hold(int on) { held = on; }
    to (0, 0.998]; nearer than DEPTH_NEAR all at the nearest, in their order.
    The list's depth test keeps the nearer (of equal, the later), so faces
    hide one another as they stand, whichever is drawn first. A face lying
-   on an earlier face of its model (FxShape decal) is drawn DECAL_STEP of
-   its depth nearer for each it lies on (a polygon offset), so a stripe on a
-   road stays on it. What an object draws that has no depth of its own (a
-   sprite, a plotted row) is at its place's (fx_far_iz); the 2D (the HUD,
-   the pause screen) at 0, in front of all. A list has about a sixteenth of
-   the depth buffer (the engine's), about twenty bits for this z: depths a
-   thousandth apart are told apart out to some 30,000. */
+   over an earlier face of its model (FxShape decal) is drawn DECAL_STEP of
+   its depth nearer for each level (a polygon offset), so a stripe on a road
+   stays on it. A face seen from its back (FxShape back) is drawn DECAL_STEP
+   further than its depth, and a step further again for each level it lies
+   over, so whatever faces the eye in its place is in front of it (a
+   two-sided part's other face, which the model gives the same corners) and
+   from behind a stripe is under the face it lies on, as it is. What an
+   object draws that has no depth of its own (a sprite, a plotted row) is
+   at its place's (fx_far_iz); the 2D (the HUD, the pause screen) at 0, in
+   front of all. A list has about a sixteenth of the depth buffer (the
+   engine's), about twenty bits for this z: depths a thousandth apart are
+   told apart out to some 30,000. */
 #define DEPTH_NEAR 32.0
 #define DECAL_STEP 0.002
 #define DEPTH_FAR 0.998
@@ -420,11 +425,13 @@ float fx_draw_depth(double iz)
 }
 
 static int in_shape;                    /* shape_draw: the vertices carry their own depths */
-static int shape_decal;
+static int shape_decal, shape_back;
 
 static float corner_z(const FxCorner *c)
 {
-    return drawing_3d ? fx_draw_depth(c->iz * (1.0 + DECAL_STEP * shape_decal)) : 0.0f;
+    double k = shape_back ? 1.0 - DECAL_STEP * (1 + shape_decal) : 1.0 + DECAL_STEP * shape_decal;
+
+    return drawing_3d ? fx_draw_depth(c->iz * k) : 0.0f;
 }
 
 static float emit_z(void)
@@ -1816,8 +1823,10 @@ static void shape_draw(const FxShape *sh)
 {
     in_shape = 1;
     shape_decal = sh->decal;
+    shape_back = sh->back;
     shape_draw_body(sh);
     in_shape = 0;
+    shape_back = 0;
 }
 
 FxDrawListResult FxDrawList(uint16_t caller_list_end, uint16_t caller_write_ptr, uint16_t *stack, uint16_t rom_at)

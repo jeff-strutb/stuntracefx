@@ -44,11 +44,15 @@ typedef struct {
     /* while the water cuts the picture (fx_face_cut): the face's part past
        the water from the eye, drawn before it (count 0: none) */
     uint32_t under_first, under_count;
-    /* how many faces of its model it lies on (a stripe painted on a road:
-       1), each drawn a little nearer the eye than the one under it (a
+    /* how many faces of its model it lies over (a stripe painted on a
+       road: 1), each drawn a little nearer the eye than the one under it (a
        polygon offset), so the later stays in front where they share a
-       plane */
+       plane; of a face seen from its back (back), each a little further,
+       as the face under it hides it from that side */
     uint8_t decal;
+    /* it is seen from its back (fx_face_back): drawn behind whatever faces
+       the eye in the same place (a two-sided part's other face) */
+    uint8_t back;
 } FxShape;
 
 /* A face: begun, its points given (fx_face_vertex, fx_rt.h), then ended
