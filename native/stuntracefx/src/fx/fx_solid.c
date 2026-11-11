@@ -48,6 +48,7 @@
 #include "fx/fx_draw.h"
 #include "fx/fx_face.h"
 #include "fx/fx_far.h"
+#include "fx/fx_seat.h"
 #include "object/object.h"
 
 #define PI_F 3.14159265f
@@ -275,6 +276,7 @@ void fx_solid_begin(void)
     pos[0] = (int16_t)word(0x0026);
     pos[1] = (int16_t)word(0x0028);
     pos[2] = (int16_t)word(0x002A);
+    fx_seat_solid(pos);                 /* a car's tyre stood on the road, its other parts moved with it */
     /* the sprite's size (01:B100, B128): a negative own size alone, else
        the shape's twice and the own shifted by $0032; 0 as 1 */
     own = (int16_t)word(FX_MODEL_CE);
@@ -294,6 +296,25 @@ void fx_solid_begin(void)
         turn();
     }
     armed = object;
+}
+
+float fx_solid_wheel_radius(uint16_t shape, const uint8_t *record)
+{
+    int32_t own = (int8_t)record[0x1C], size;
+    float r = 0;
+    int i, k;
+
+    for (i = 0; i < N(solids); i++)
+        if (solids[i].shape == shape && solids[i].axis == 0 && solids[i].rings)
+            break;
+    if (i == N(solids))
+        return 0;
+    for (k = 0; k < solids[i].nrings; k++)
+        r = solids[i].rings[k].r > r ? solids[i].rings[k].r : r;
+    size = own < 0 ? -own
+                   : 2 * (fx_rom_read(0, (uint16_t)(shape + 0x10)) | fx_rom_read(0, (uint16_t)(shape + 0x11)) << 8)
+                         + (own << (fx_rom_read(0, (uint16_t)(shape + 7)) & 15));
+    return r * (float)(size ? size : 1) / (float)solids[i].texels;
 }
 
 int fx_solid_hiding(void)

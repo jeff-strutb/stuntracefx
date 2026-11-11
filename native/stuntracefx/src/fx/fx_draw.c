@@ -14,6 +14,7 @@
 #include "fx/fx_draw.h"
 #include "fx/fx_far.h"
 #include "fx/fx_ground.h"
+#include "fx/fx_seat.h"
 #include "fx/fx_face.h"
 #include "system/state.h"
 #include "system/perf.h"
@@ -186,6 +187,7 @@ int fx_draw_tweening(void) { return tweening != 0; }
 void fx_draw_begin(int picture)
 {
     picture &= 1;
+    fx_seat_picture(picture);
     picture_now = picture;
     drawing_3d = 0;                     /* its view is known at its frame program's start */
     target.id = 0;
@@ -362,6 +364,8 @@ void fx_draw_part(int hud)
         under_splice(recording);
         recording->hud_from = recording->ns;
     }
+    if (hud)
+        fx_seat_object(0, 0);           /* no object's: the cars' seats are over */
     if (hud) {                          /* the HUD's drawing is not cut by the water */
         side_under = 0;
         fx_face_cut(0, NULL, 0);
@@ -388,6 +392,7 @@ void fx_draw_set_origin(int x, int y)
 static int held;                /* nothing is drawn (the ground's survey) */
 
 void fx_draw_hold(int on) { held = on; }
+int fx_draw_holding(void) { return held; }
 
 /* ---- depth (Jeff, 2026-11-11: the 3D drawn to modern standards, its
    polygons from both sides, what is in front decided by depth) ----

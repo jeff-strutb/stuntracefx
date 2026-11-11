@@ -32,6 +32,7 @@
 #include "fx/fx_draw.h"
 #include "fx/fx_face.h"
 #include "fx/fx_ground.h"
+#include "fx/fx_seat.h"
 #include "fx/fx_far.h"
 
 enum {
@@ -1009,6 +1010,22 @@ static void commit(const FxMaterial *m)
 
     if (!face.whole || face.n < 2 || nshapes == SHAPES)
         return;
+    {                                   /* a car seated on the road (fx_seat.c), or a surface for the cars */
+        double sc[MOST][3];
+        int i;
+
+        for (i = 0; i < face.n; i++) {
+            sc[i][0] = face.c[i].x;
+            sc[i][1] = face.c[i].y;
+            sc[i][2] = face.c[i].z;
+        }
+        fx_seat_face(sc, face.n);
+        for (i = 0; i < face.n; i++) {
+            face.c[i].x = sc[i][0];
+            face.c[i].y = sc[i][1];
+            face.c[i].z = sc[i][2];
+        }
+    }
     if (survey_face && face.n >= 3) {
         double c[MOST][3];
         int i;
@@ -1092,10 +1109,14 @@ void fx_sprite_place(uint16_t x, uint16_t y, uint16_t depth, uint16_t size, uint
     View v = view_now();
     double d = depth ? depth : 1, half = (screen_size >> 1) + (screen_size & 1);
 
+    double at[3] = { (int16_t)x, (int16_t)y, d };
+
+    fx_seat_sprite(at);                 /* a car's moved with it, one under the road onto it (fx_seat.c) */
+    d = at[2] > 1 ? at[2] : 1;
     sprite.set = screen_size != 0;
-    sprite.past = fx_face_past_water((int16_t)x, (int16_t)y, d);
-    sprite.cx = v.cx + FOCAL * (int16_t)x / d;
-    sprite.cy = v.cy + FOCAL * (int16_t)y / d;
+    sprite.past = fx_face_past_water(at[0], at[1], d);
+    sprite.cx = v.cx + FOCAL * at[0] / d;
+    sprite.cy = v.cy + FOCAL * at[1] / d;
     sprite.k = size ? (FOCAL * size / d) / screen_size : 1.0;
     sprite.bx = centre_x;
     sprite.by = centre_y;

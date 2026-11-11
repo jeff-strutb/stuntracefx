@@ -148,5 +148,10 @@ void fx_solid_object(uint16_t shape, uint16_t record);
 void fx_solid_begin(void);
 void fx_solid_colour(uint8_t colr, uint8_t por);
 void fx_solid_end(void);
+/* The tread's radius a car's tyre is drawn with as a solid (a solid turned
+   about its axle across), by its shape and its draw record (its own size
+   +$1C, the shape's sprite size and shift), the same as FxObjectSprite's
+   size makes it; 0 for any other shape (fx/fx_seat.c). */
+float fx_solid_wheel_radius(uint16_t shape, const uint8_t *record);
 
 #endif

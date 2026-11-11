@@ -37,6 +37,7 @@
 #include "fx/fx_draw.h"
 #include "fx/fx_face.h"
 #include "fx/fx_far.h"
+#include "fx/fx_seat.h"
 
 enum { SLOTS = 0x31, SLOT_SIZE = 0x1E, SLOT_FIRST = 0x0AAA };
 
@@ -302,11 +303,16 @@ void fx_far_record(uint16_t record)
        sprite, a plotted row) */
     z = ldexp((int16_t)ram_word((uint16_t)(record + 0x14)), shift_now);
     iz_now = z > 0 ? 1.0 / z : 0;
+    fx_seat_object(record, shift_now);  /* a car's seat on the road, or a surface for them */
 }
 
 double fx_far_iz(void) { return iz_now; }
 
-void fx_far_objects_end(void) { iz_now = 0; }
+void fx_far_objects_end(void)
+{
+    iz_now = 0;
+    fx_seat_object(0, 0);
+}
 
 int fx_far_shift(void) { return shift_now; }
 uint16_t fx_far_depth(uint16_t depth) { return shift_now ? depth_now : depth; }

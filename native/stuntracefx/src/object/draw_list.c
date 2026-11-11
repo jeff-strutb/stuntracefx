@@ -34,6 +34,8 @@ static uint8_t frame_byte(uint8_t v)
 
 /* the objects given a near record this list, by slot */
 static uint8_t near_drawn[OBJECT_COUNT];
+/* each near record's object, by its slot */
+static uint16_t record_slot[64];
 
 /*
  * A car's child on its record (a tyre: ObjectChildStep, $08:BB2E) is drawn
@@ -229,6 +231,8 @@ static uint8_t *draw_record(Object *o, uint8_t *r, int far)
         }
     }
     near_drawn[obj_slot(o)] = 1;
+    if (g.frame_record_count < 64)
+        record_slot[g.frame_record_count] = (uint16_t)obj_slot(o);
     objects.record_gaze[g.frame_record_count] = ObjectGazeBetween(o, g.draw_side ? 1 : 0, object_gaze(o, g.draw_side ? 1 : 0));
     g.frame_record_count++;
     return r + RECORD_SIZE;
@@ -319,6 +323,48 @@ static void far_records(void)
         put16(&fx_ram[FX_FAR_BANK + FX_FAR_VIEW], 2 * cell, g.view_pos[cell]);
 }
 
+/* Each near record's car (draw_record_car): a car is an object a tyre (a
+   child on its record, child_car) follows, numbered in the list's order
+   (its body need not be drawn: a wrecked car's body is its pieces); its
+   tyres are TYRE, its own record BODY, and any other object that follows
+   it (a shadow, the 4WD's eyes, a wreck's pieces) CHILD. */
+static void cars_of_records(void)
+{
+    unsigned n = g.frame_record_count < 64 ? g.frame_record_count : 64, k, c, ncars = 0;
+    unsigned car_slot[64];
+
+    memset(objects.record_car, 0, sizeof objects.record_car);
+    memset(objects.record_part, 0, sizeof objects.record_part);
+    for (k = 0; k < n; k++) {
+        const Object *car = child_car(&objects.object[record_slot[k]]);
+
+        if (!car)
+            continue;
+        for (c = 0; c < ncars && car_slot[c] != obj_slot(car); c++)
+            ;
+        if (c == ncars)
+            car_slot[ncars++] = obj_slot(car);
+        objects.record_part[k] = DRAW_PART_TYRE;
+        objects.record_car[k] = (uint8_t)(c + 1);
+    }
+    for (k = 0; k < n; k++) {
+        const Object *o = &objects.object[record_slot[k]];
+
+        if (objects.record_part[k])
+            continue;
+        for (c = 0; c < ncars; c++) {
+            if (record_slot[k] == car_slot[c])
+                objects.record_part[k] = DRAW_PART_BODY;
+            else if (o->parent && obj_slot(obj_at(o->parent)) == car_slot[c])
+                objects.record_part[k] = DRAW_PART_CHILD;
+            else
+                continue;
+            objects.record_car[k] = (uint8_t)(c + 1);
+            break;
+        }
+    }
+}
+
 /*
  * @routine 7E:EF50 ObjectDrawListBuild
  * WHAT IT DOES: Builds the list of objects to draw: for each trigger, walks
@@ -342,7 +388,17 @@ void ObjectDrawListBuild(void)
             ref = o->bucket_next;
         }
     }
+    cars_of_records();
     far_records();
+}
+
+int draw_record_car(int record, int *part)
+{
+    *part = DRAW_PART_NONE;
+    if (record < 0 || record >= 64 || !objects.record_car[record])
+        return -1;
+    *part = objects.record_part[record];
+    return objects.record_car[record] - 1;
 }
 
 uint16_t draw_record_gaze(int record)
