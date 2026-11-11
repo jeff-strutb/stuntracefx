@@ -29,7 +29,6 @@
  * fx_far_original gives the near record it holds (none for a far one or a
  * tyre), for the eyes' gaze and the angles between steps.
  */
-#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -55,16 +54,9 @@ static uint16_t slot_depth[SLOTS];
 static uint16_t slot_original[SLOTS];   /* the near record a slot holds in a pass; 0 none */
 static double slot_near[SLOTS];         /* a far slot's nearest depth */
 static uint8_t slot_far[SLOTS];         /* the slot holds a far object (not a near one or a tyre) */
-static int drawing, shift_now, occlude, far_now, near_on;
+static int drawing, shift_now, occlude, far_now;
 static uint16_t depth_now;
 static double near_now;
-/* While the land hides objects, the near objects (and the near list again
-   with its parked tyres) are drawn at depths of their own too: each its
-   nearest point's (its place's depth less its shape's radius), never
-   deeper than the one drawn before's (chain), starting no deeper than the
-   far objects' (chain_far), so that of the 3D's own objects the later
-   drawn is never hidden by the earlier: only the land hides them. */
-static double chain, chain_far = 1e30;
 static uint8_t kept[0x10000];
 
 /* words of the chip's RAM (the second 64 KB, the first) and of ROM bank 0,
@@ -106,8 +98,10 @@ void fx_far_pass(uint16_t *stack)
     FxState state = fxs;
 
     nparked = 0;
-    if (!count)
+    if (!count) {
+        occlude = 0;
         return;
+    }
     if (count > FX_FAR_MAX)
         count = FX_FAR_MAX;
     fx_ram[FX_FAR_BANK + FX_FAR_COUNT] = fx_ram[FX_FAR_BANK + FX_FAR_COUNT + 1] = 0;
@@ -160,8 +154,10 @@ void fx_far_pass(uint16_t *stack)
             f->near = (double)(v[2] - radius);
         }
     }
-    if (!n)
+    if (!n) {
+        occlude = 0;
         return;
+    }
     qsort(far, n, sizeof far[0], farther_first);
     /* the depths never deeper than the one drawn before's, so that of two far
        objects the later drawn is never hidden by the earlier: their order
@@ -195,13 +191,12 @@ void fx_far_pass(uint16_t *stack)
         *stack = 0x0240;
         fx_stw(FX_MODEL_1B4, 0);
         (void)FxObjectsDraw(0, stack);
-        fx_ground_object_end();
     }
     fx_draw_flush();
     drawing = 0;
     shift_now = 0;
     far_now = 0;
-    chain_far = far[n - 1].near;        /* the near objects' depths start no deeper than the far ones' */
+    occlude = 0;
     memcpy(fx_ram, kept, sizeof kept);
     fxs = state;
 }
@@ -237,7 +232,6 @@ void fx_far_parked(uint16_t *stack)
 
     if (!nparked)
         return;
-    chain = chain_far;
     qsort(parked, nparked, sizeof parked[0], farther_first);
     memset(used, 0, nparked);
     for (slot = ram_word(GSU_DRAW_LIST); slot && near < SLOTS; slot = ram_word(slot)) {
@@ -286,7 +280,6 @@ void fx_far_parked(uint16_t *stack)
             *stack = 0x0240;
             fx_stw(FX_MODEL_1B4, 0);
             (void)FxObjectsDraw(0, stack);
-            fx_ground_object_end();
         }
     }
     fx_draw_flush();
@@ -309,38 +302,13 @@ uint16_t fx_far_original(uint16_t record)
     return k < SLOTS ? slot_original[k] : 0;
 }
 
-static void fx_far_record_state(uint16_t record);
-
 void fx_far_record(uint16_t record)
-{
-    fx_ground_object_end();             /* the object before's tunnel rock, at its own depth */
-    fx_far_record_state(record);
-    fx_ground_object_begin(record, shift_now);
-}
-
-/* a near object's depth (its place in view space, halved `shift` times,
-   less its shape's radius), on the chain */
-static void near_depth(uint16_t record, int shift)
-{
-    uint16_t shape = ram_word((uint16_t)(record + 0x08));
-    double z = ldexp((int16_t)ram_word((uint16_t)(record + 0x14)), shift), r = shape ? (int16_t)rom_word((uint16_t)(shape + 0x10)) : 0;
-
-    if (z - r < chain)
-        chain = z - r;
-    near_now = chain;
-    near_on = 1;
-}
-
-static void fx_far_record_state(uint16_t record)
 {
     unsigned k;
 
-    near_on = 0;
     if (!drawing) {
         shift_now = 0;
         far_now = 0;
-        if (occlude)
-            near_depth(record, 0);
         return;
     }
     k = (uint16_t)(record - SLOT_FIRST) / SLOT_SIZE % SLOTS;
@@ -348,29 +316,13 @@ static void fx_far_record_state(uint16_t record)
     depth_now = slot_depth[k];
     near_now = slot_near[k];
     far_now = slot_far[k];
-    if (!far_now && occlude)            /* the near list again: a near object or a parked tyre */
-        near_depth(record, shift_now);
 }
 
-void fx_far_occlude(int on)
-{
-    occlude = on;
-    near_on = 0;
-    chain = chain_far = 1e30;
-}
-
-void fx_far_near_begin(void)
-{
-    chain = chain_far;
-}
+void fx_far_occlude(int on) { occlude = on; }
 
 float fx_far_z(void)
 {
-    if (!occlude)
-        return 0.0f;
-    if (drawing && far_now)
-        return fx_ground_depth_z(near_now);
-    return near_on ? fx_ground_depth_z(near_now) : 0.0f;
+    return drawing && occlude && far_now ? fx_ground_depth_z(near_now) : 0.0f;
 }
 
 int fx_far_shift(void) { return shift_now; }

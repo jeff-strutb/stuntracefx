@@ -94,8 +94,6 @@ void fx_draw_surface(const FxCorner *c, uint32_t n, nshvc_image image, nshvc_sha
    (0, 1): past every other shape of the 3D, drawn at depth 0, so they
    cover none of them). */
 void fx_draw_land(const nshvc_vertex *v, uint32_t n);
-/* The 3D's faces queued so far drawn now, in order. */
-void fx_draw_queued(void);
 int fx_draw_picture_now(void);
 int fx_draw_tweening(void);
 /* The palette entry a face's colour byte is shown in at the screen's depth
