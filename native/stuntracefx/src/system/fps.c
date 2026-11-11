@@ -1,9 +1,10 @@
 /*
- * fps.c: the pictures drawn a second, shown at the window's top left while
+ * fps.c: the pictures drawn a second, shown at the window's top right while
  * the game is worked on (Jeff, 2026-11-11: an FPS counter on screen, the
  * framerate unlocked, to see how the courses run while testing).
  *
- * Counted in draw: every picture the engine asks the game for, over each
+ * At the top right, clear of the pause screen's corner button at the top
+ * left. Counted in draw: every picture the engine asks the game for, over each
  * half second of real time, shown as a whole number. The game draws a
  * picture each time the display shows one (the 2D and the 3D between
  * updates), not tied to the 60 a second its updates run at, so this is the
@@ -165,8 +166,12 @@ void fps_draw(void)
             v /= 10;
         } while (v && n < DIGITS);
     }
-    /* the digits, most significant first, then a space and the word */
-    x = (float)(int)(d.safe_left + 2.0f * (float)dot);
+    /* the digits, most significant first, then a space and the word, their
+       right edge 2 dots inside the safe area's: each digit 6 dots on from
+       the one before (its picture 7 wide, the edges overlapping), the space
+       3, the word's picture after */
+    x = (float)(int)((float)d.width - d.safe_right - 2.0f * (float)dot
+                     - (float)((n * 6 + 1 + 3) * dot + sizes[dot].w[GLYPHS]));
     y = (float)(int)(d.safe_top + 2.0f * (float)dot);
     for (i = 0; i < DIGITS; i++) {
         uint32_t id = (uint32_t)(FIRST_OVERLAY + 1 + i);

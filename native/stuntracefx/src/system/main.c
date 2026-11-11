@@ -48,7 +48,7 @@ static void draw(float between)
         fps_hide();
     } else {
         controls_draw();                /* the touch screen's controls, over everything */
-        fps_draw();                     /* the pictures drawn a second, at the top left */
+        fps_draw();                     /* the pictures drawn a second, at the top right */
     }
     if (pause_draw())
         return;                         /* the pause screen's picture: the last one, blurred */

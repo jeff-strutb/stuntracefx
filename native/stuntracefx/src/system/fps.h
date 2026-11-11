@@ -5,7 +5,7 @@
 #define STUNTRACEFX_FPS_H
 
 /* In draw, each picture: counted, and the count shown at the window's top
-   left (SRFX_FPS=0 in the environment: not shown). */
+   right (SRFX_FPS=0 in the environment: not shown). */
 void fps_draw(void);
 /* In draw, in its place: not shown (the pause screen's blur is being made
    from the pictures). */
