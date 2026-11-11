@@ -22,6 +22,10 @@ int pause_holding(void);
    none; 0 when the game draws its own (not paused, or no blur here). */
 int pause_draw(void);
 
+/* Whether the pause screen is making its blur (the three pictures after it
+   opens): no overlay may show, the touch screen's controls included. */
+int pause_capturing(void);
+
 /* The game's own updates: nshvc_updates() less those the pause screen held.
    The clock for whatever the game times by updates (the race's pictures
    between steps), so that a pause stops it. */

@@ -1,22 +1,23 @@
-/* pause_blur.shade: the picture behind the pause screen: the last picture
-   before the pause (the material's image), blurred by a Gaussian of
-   nshvc_input(0) of its pixels, taken over 2.5 of them either way, at most
-   12 pixels. uv is a point in the image's pixels; each pixel weighs by its
-   centre's distance from it, so the blur is smooth at any size it is drawn. */
+/* pause_blur.shade: one axis of the blur behind the pause screen (pause.c):
+   the material's image (a picture read back) blurred by a Gaussian of
+   nshvc_input(0) of its pixels along the axis nshvc_input(1) (0 across, 1
+   down), taken over 2.5 of them either way, at most 128 pixels. uv is a
+   point in the image's pixels; each pixel weighs by its centre's distance
+   from it along the axis. The two axes one after the other are the
+   Gaussian both ways. */
 vec4 shade(vec2 uv) {
     float s = max(nshvc_input(0), 0.5);
-    int r = min(int(ceil(2.5 * s)), 12);
+    ivec2 axis = nshvc_input(1) > 0.5 ? ivec2(0, 1) : ivec2(1, 0);
+    int r = min(int(ceil(2.5 * s)), 128);
     ivec2 c = ivec2(floor(uv));
     vec3 sum = vec3(0.0);
     float total = 0.0;
-    for (int dy = -r; dy <= r; dy++) {
-        for (int dx = -r; dx <= r; dx++) {
-            ivec2 p = c + ivec2(dx, dy);
-            vec2 d = vec2(p) + 0.5 - uv;
-            float w = exp(-dot(d, d) / (2.0 * s * s));
-            sum += nshvc_image(p).rgb * w;
-            total += w;
-        }
+    for (int k = -r; k <= r; k++) {
+        ivec2 p = c + axis * k;
+        float d = dot(vec2(p) + 0.5 - uv, vec2(axis));
+        float w = exp(-d * d / (2.0 * s * s));
+        sum += nshvc_image(p).rgb * w;
+        total += w;
     }
     return vec4(sum / total, 1.0);
 }

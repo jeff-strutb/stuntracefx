@@ -26,9 +26,10 @@ changed for the game: a vertex's colour is 0xAARRGGBB, no longer a palette entry
 the palette row by row as the textures are (`fx_draw.c`); every vertex is zeroed, so `z` and `w` are 0 and the lists draw
 in their order as before; the shaders' prelude now declares a block `W`, so the shaders' row width is `IMAGE_W`;
 `nshvc_picture_read` gives the window's pixels with the overlays, so the pause screen is the window's size filling it,
-a pixel a pixel. Open: the pause blur is 3 of the window's pixels, far weaker than the 11.25-point Gaussian it was
-meant to be (that at the window's pixels would cost a kernel of thousands of reads a pixel each picture); and the touch
-controls and the corner button, being overlays, are now in the picture blurred behind the panel.
+a pixel a pixel. The pause blur matches the earlier one (Jeff, 2026-11-11: "Match the old blur"): a Gaussian of 3 of the
+screen's pixels, made once as the screen opens in three pictures with no overlays (the game's own, blurred across, blurred
+down), each read back, the last kept and drawn as it is; the touch controls and the corner button are no longer in it.
+Compiled on every host; not run.
 
 Not done (2026-11-09, evening): perspective textures, the hills, weather and particles between steps; section 8 in the Super FX code (a rewrite, under way) and the chip-RAM reads that wait on it; a won championship's closing screen not reached (four races won by input); the controllers' rebinding not run with a controller; Windows and Linux not run (other machines, Jeff's permission); the picture, sound and touch on iOS and Android not looked at (3-minute runs from logs only); the final section 8 audit and stage 11. The game plays headless from boot through the menus, races and battles to the results and back, as the Enhanced game (decisions 4 and 5): full window at any shape, high-resolution 3D drawn between steps, solids, unlimited view distance, the game's own pause screen. New C outside `src/fx`: about 39,900 lines; `src/fx`: 44,300 (the Super FX logic from the generator and its drawing on the GPU).
 

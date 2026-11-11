@@ -649,3 +649,11 @@ void controls_draw(void)
     pause_place(&x, &y);
     place(O_PAUSE, x, y, pt, 1, 0, 0.75f, 1);
 }
+
+void controls_hide(void)
+{
+    int i;
+
+    for (i = 0; i < O_COUNT; i++)
+        place(i, 0, 0, 0, 0, 0, 0, 0);
+}

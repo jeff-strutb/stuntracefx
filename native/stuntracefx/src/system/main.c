@@ -42,7 +42,10 @@ static void update(const nshvc_input *input)
 
 static void draw(float between)
 {
-    controls_draw();                    /* the touch screen's controls, over everything */
+    if (pause_capturing())
+        controls_hide();                /* nothing over the pictures the pause's blur is made from */
+    else
+        controls_draw();                /* the touch screen's controls, over everything */
     if (pause_draw())
         return;                         /* the pause screen's picture: the last one, blurred */
     if (pause_holding())

@@ -74,12 +74,17 @@
 #define TINT 0xFF0A0E1Au                /* a navy laid over the picture */
 #define TINT_ALPHA 0.55f
 #define FILL 0.94f                      /* of the safe area the panel may take, each way */
-/* The blur behind the panel: a Gaussian of 3 of the picture's pixels. The
-   picture is the window's pixels since engine 6.0 (it was the screen's), so
-   this is 3 of the window's pixels, far less than the earlier pause screen's
-   (three box blurs of 10 points come to a Gaussian of 11.25 points, about 3
-   of the original's 224 lines in an 800-point window). */
+/* The blur behind the panel: a Gaussian of 3 of the screen's pixels, the
+   earlier pause screen's (three box blurs of 10 points come to a Gaussian of
+   11.25 points, about 3 of the original's 224 lines in an 800-point window).
+   The picture read back is the window's pixels (engine 6.0), so it is made
+   once as the screen opens, on the GPU, in three pictures with no overlays:
+   the game's own picture as it stood (CLEAN), that read back and blurred
+   across (ACROSS), that read back and blurred down (DOWN); that read back is
+   kept (KEEP) and drawn as it is behind the panel from then on. A Gaussian
+   across then down is the Gaussian both ways. */
 #define BLUR_SIGMA 3.0f
+enum { BLUR_DONE, BLUR_CLEAN, BLUR_ACROSS, BLUR_DOWN, BLUR_KEEP };
 
 /* The overlays, the game's only ones: the tint, the panel, the tags, the
    item chosen, the option with its value, the hint, the corner button, in
@@ -134,10 +139,11 @@ static struct {
     int32_t touch_id[10];
     int touches;
 
-    /* the blur: the last picture before the pause as an image, its size
-       (0: none read), the shader (tried once) and the list it is drawn in */
+    /* the blur: the picture read back as an image, its size (0: none read),
+       whether it is the finished blur, the stage making it (BLUR_*), the
+       shader (tried once) and the list it is drawn in */
     nshvc_image shot;
-    int shot_w, shot_h, shot_ok;
+    int shot_w, shot_h, shot_ok, stage;
     nshvc_shader blur;
     int blur_tried;
     nshvc_draw_list list;
@@ -555,7 +561,7 @@ static void corner_show(void)
     float b[4], c[6], want;
     int i;
 
-    if (!corner_box(b) || controls_source() == CONTROLS_TOUCH) {
+    if (!corner_box(b) || controls_source() == CONTROLS_TOUCH || pause_capturing()) {
         nshvc_image none = { 0 };
 
         nshvc_overlay_set(O_BUTTON, none, NULL, 0);
@@ -605,8 +611,8 @@ static void show(void)
     float h = (float)d.height - d.safe_top - d.safe_bottom, scale, ox, oy, x, y, bw, bh, c[6];
     int i;
 
-    if (w <= 0 || h <= 0) {
-        overlays_off();
+    if (w <= 0 || h <= 0 || pause_capturing()) {
+        overlays_off();                 /* nothing over the pictures the blur is made from */
         return;
     }
     scale = fminf(w * FILL / PAUSE_PW, h * FILL / PAUSE_PH);
@@ -713,18 +719,21 @@ static int blur_packed(void)
     return 0;
 }
 
-/* The last finished picture, read back once from the renderer into an image
-   for the blur (the read waits for the GPU: once, as the screen opens); none
-   where the renderer keeps no picture or the shader is not in the game's
-   package (the tint alone then, over the game's own). */
-static void shot_take(void)
+/* The blur's sizes, from the picture's: the window's pixels a line of the
+   original takes (its 256 x 224 at 4:3 fitted in the window, as the
+   screen is), and the Gaussian along each axis in the picture's pixels, a
+   screen pixel being 7/6 as wide as it is high (the console's shape). */
+static float blur_sigma(int axis)
 {
-    const uint32_t *px;
-    int w = 0, h = 0;
+    float line = fminf((float)p.shot_h, (float)p.shot_w * 0.75f) / 224.0f;
 
-    p.shot_ok = 0;
-    if (!(px = nshvc_picture_read(&w, &h)) || w <= 0 || h <= 0)
-        return;
+    return BLUR_SIGMA * line * (axis == 0 ? 7.0f / 6.0f : 1.0f);
+}
+
+/* The shader and its list, tried once; 0 where the shader is not in the
+   game's package (the tint alone then, over the game's own). */
+static int blur_ready(void)
+{
     if (!p.blur_tried) {
         p.blur_tried = 1;
         if (blur_packed())
@@ -732,32 +741,40 @@ static void shot_take(void)
         if (p.blur.id)
             p.list = nshvc_draw_list_create();
     }
-    if (!p.blur.id || !p.list.id)
-        return;
+    return p.blur.id && p.list.id;
+}
+
+/* The last finished picture, read back from the renderer into the image (the
+   read waits for the GPU); 0 where the renderer keeps no picture. */
+static int shot_take(void)
+{
+    const uint32_t *px;
+    int w = 0, h = 0;
+
+    if (!(px = nshvc_picture_read(&w, &h)) || w <= 0 || h <= 0)
+        return 0;
     if (!p.shot.id || w != p.shot_w || h != p.shot_h) {
         p.shot = nshvc_image_create((uint32_t)w, (uint32_t)h, NSHVC_IMAGE_RGBA);
         p.shot_w = w;
         p.shot_h = h;
     }
     if (!p.shot.id)
-        return;
+        return 0;
     nshvc_image_write(p.shot, px);      /* 0xFFRRGGBB: the image's 0xAARRGGBB, whole */
-    p.shot_ok = 1;
+    return 1;
 }
 
-int pause_draw(void)
+/* The image over the whole window, a pixel a pixel: blurred along axis 0
+   (across) or 1 (down), or as it is (-1). The picture was read at the
+   window's pixels (engine 6.0), borders and all, so the screen is the
+   window's size filling it, the picture's own brightness already in it. */
+static void shot_draw(int axis)
 {
     nshvc_screen s;
     nshvc_layer l;
     nshvc_material m;
     nshvc_rect r;
-    uint32_t lw, lh;
 
-    if (!p.open || !p.shot_ok)
-        return 0;
-    /* the window the picture was read at (engine 6.0: the window's pixels,
-       borders and all): a screen of its size filling the window, a pixel a
-       pixel, the picture's own brightness already in it */
     memset(&s, 0, sizeof s);
     s.width = p.shot_w;
     s.height = p.shot_h;
@@ -765,27 +782,71 @@ int pause_draw(void)
     s.aspect = NSHVC_ASPECT_FILL;
     nshvc_screen_set(&s);
     nshvc_mode_set(1, 0, 0);
-    lw = (uint32_t)p.shot_w;
-    lh = (uint32_t)p.shot_h;
-    nshvc_draw_list_clear(p.list, lw, lh);
+    nshvc_draw_list_clear(p.list, (uint32_t)p.shot_w, (uint32_t)p.shot_h);
     memset(&m, 0, sizeof m);
-    m.shader = p.blur;
-    m.inputs[0] = BLUR_SIGMA;
+    if (axis >= 0) {
+        m.shader = p.blur;
+        m.inputs[0] = blur_sigma(axis);
+        m.inputs[1] = (float)axis;
+    }
     r.x0 = 0;
     r.y0 = 0;
-    r.x1 = (float)lw;
-    r.y1 = (float)lh;
+    r.x1 = (float)p.shot_w;
+    r.y1 = (float)p.shot_h;
     nshvc_draw_image(p.list, p.shot, &r, &m);
     memset(&l, 0, sizeof l);
     l.enabled_main = 1;
     l.draw_list = p.list;
     nshvc_layer_set(0, &l);
+}
+
+/* No blur: the tint and the panel over the game's own picture. */
+static void blur_give_up(void)
+{
+    p.stage = BLUR_DONE;
+    p.shot_ok = 0;
+    show();
+}
+
+int pause_draw(void)
+{
+    if (!p.open)
+        return 0;
+    switch (p.stage) {
+    case BLUR_CLEAN:                    /* the game's own picture, nothing over it */
+        p.stage = BLUR_ACROSS;
+        return 0;
+    case BLUR_ACROSS:                   /* that, blurred across */
+    case BLUR_DOWN:                     /* that, blurred down */
+        if (!blur_ready() || !shot_take()) {
+            blur_give_up();
+            return 0;
+        }
+        shot_draw(p.stage == BLUR_ACROSS ? 0 : 1);
+        p.stage++;
+        return 1;
+    case BLUR_KEEP:                     /* that, kept: the picture behind the panel */
+        if (!shot_take()) {
+            blur_give_up();
+            return 0;
+        }
+        p.stage = BLUR_DONE;
+        p.shot_ok = 1;
+        show();                         /* the panel, from this picture on */
+        break;
+    }
+    if (!p.shot_ok)
+        return 0;
+    shot_draw(-1);
     return 1;
 }
 
+int pause_capturing(void) { return p.open && p.stage != BLUR_DONE; }
+
 static void screen_open(void)
 {
-    shot_take();
+    p.stage = BLUR_CLEAN;
+    p.shot_ok = 0;
     p.open = 1;
     p.chosen = PAUSE_RESUME;
     p.asking = -1;
@@ -796,6 +857,7 @@ static void screen_open(void)
 static void screen_close(const uint16_t pad[2])
 {
     p.open = 0;
+    p.stage = BLUR_DONE;
     p.asking = -1;
     p.swallow[0] = pad[0];
     p.swallow[1] = pad[1];

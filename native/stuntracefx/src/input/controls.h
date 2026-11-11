@@ -24,6 +24,9 @@ void controls_driving(void);
 /* In draw: the touch screen's controls laid over the picture, once a finger
    has been on it. */
 void controls_draw(void);
+/* In draw, in its place: none of them shown (the pause screen's blur is
+   being made from the pictures). */
+void controls_hide(void);
 
 /* The device player 1 last used. */
 enum { CONTROLS_KEYBOARD, CONTROLS_CONTROLLER, CONTROLS_TOUCH };
