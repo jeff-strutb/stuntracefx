@@ -11,6 +11,7 @@
 #include "input/controls.h"
 #include "nshvc/nshvc.h"
 #include "pause/pause.h"
+#include "system/fps.h"
 #include "system/game.h"
 #include "video/between.h"
 #include "video/picture.h"
@@ -42,10 +43,13 @@ static void update(const nshvc_input *input)
 
 static void draw(float between)
 {
-    if (pause_capturing())
+    if (pause_capturing()) {
         controls_hide();                /* nothing over the pictures the pause's blur is made from */
-    else
+        fps_hide();
+    } else {
         controls_draw();                /* the touch screen's controls, over everything */
+        fps_draw();                     /* the pictures drawn a second, at the top left */
+    }
     if (pause_draw())
         return;                         /* the pause screen's picture: the last one, blurred */
     if (pause_holding())
