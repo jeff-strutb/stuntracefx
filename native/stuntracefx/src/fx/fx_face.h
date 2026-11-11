@@ -56,6 +56,9 @@ void fx_face_end(const FxMaterial *material);
    room for another face's (else they are drawn first, as the chip drew its
    queue when it was nearly full). */
 uint32_t fx_face_count(void);
+/* The shapes made so far, ever: what a stretch of drawing made is the
+   difference (fx_ground.c: a wall that showed no face). */
+uint32_t fx_face_made(void);
 const FxShape *fx_face_at(uint32_t i);
 int fx_face_full(void);
 const FxCorner *fx_face_corners(void);

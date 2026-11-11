@@ -337,6 +337,10 @@ void fx_face_reset(void)
 
 uint32_t fx_face_count(void) { return (uint32_t)nshapes; }
 
+static uint32_t made;                   /* shapes made ever (fx_face_made) */
+
+uint32_t fx_face_made(void) { return made; }
+
 const FxShape *fx_face_at(uint32_t i) { return &shapes[i]; }
 
 int fx_face_full(void)
@@ -883,6 +887,7 @@ static void commit(const FxMaterial *m)
             return;
         }
         nshapes++;
+        made++;
         return;
     } else {
         ok = polygon_corners(face.c, face.n, face.textured);
@@ -894,6 +899,7 @@ static void commit(const FxMaterial *m)
     s->first = first;
     s->count = ncorners - first;
     nshapes++;
+    made++;
 }
 
 /* ---- scaled sprites ---- */
