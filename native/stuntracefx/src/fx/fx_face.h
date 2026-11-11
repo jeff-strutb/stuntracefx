@@ -56,9 +56,6 @@ void fx_face_end(const FxMaterial *material);
    room for another face's (else they are drawn first, as the chip drew its
    queue when it was nearly full). */
 uint32_t fx_face_count(void);
-/* The shapes made so far, ever: what a stretch of drawing made is the
-   difference (fx_ground.c: a wall that showed no face). */
-uint32_t fx_face_made(void);
 const FxShape *fx_face_at(uint32_t i);
 int fx_face_full(void);
 const FxCorner *fx_face_corners(void);
@@ -110,6 +107,9 @@ typedef void (*FxSurveyPoint)(double x, double y, double z, void *context);
 typedef void (*FxSurveyFace)(const double (*corner)[3], int n, uint8_t colour, int textured, int lit, float light,
                              void *context);
 void fx_face_survey(FxSurveyPoint point, FxSurveyFace face, void *context);
+/* While on, every face of a model is shown, those looking away from the
+   eye too (the survey's second look at a record, fx_ground.c). */
+void fx_face_survey_all(int on);
 
 /* The view's rectangle in the picture's pixels: left, right (past its last
    column), top, bottom (past its last row). */

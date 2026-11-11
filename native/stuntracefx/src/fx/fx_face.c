@@ -90,7 +90,22 @@ void fx_face_point(uint16_t record, uint16_t x, uint16_t y, uint16_t z)
     point[i].made = projection;
 }
 
+static int survey_all;                  /* every face shown (fx_face_survey_all) */
+
+void fx_face_survey_all(int on) { survey_all = on; }
+
+static uint8_t facing_of(uint16_t a, uint16_t b, uint16_t c, uint8_t chip);
+
+/* bit 7: the face looks at the eye (its points' winding, Newell's normal,
+   toward it); while the survey takes every face, every one */
 uint8_t fx_face_facing(uint16_t a, uint16_t b, uint16_t c, uint8_t chip)
+{
+    uint8_t r = facing_of(a, b, c, chip);
+
+    return survey_all ? (uint8_t)(r | 0x80) : r;
+}
+
+static uint8_t facing_of(uint16_t a, uint16_t b, uint16_t c, uint8_t chip)
 {
     uint16_t at[3] = { a, b, c };
     unsigned i[3], k;
@@ -336,10 +351,6 @@ void fx_face_reset(void)
 }
 
 uint32_t fx_face_count(void) { return (uint32_t)nshapes; }
-
-static uint32_t made;                   /* shapes made ever (fx_face_made) */
-
-uint32_t fx_face_made(void) { return made; }
 
 const FxShape *fx_face_at(uint32_t i) { return &shapes[i]; }
 
@@ -887,7 +898,6 @@ static void commit(const FxMaterial *m)
             return;
         }
         nshapes++;
-        made++;
         return;
     } else {
         ok = polygon_corners(face.c, face.n, face.textured);
@@ -899,7 +909,6 @@ static void commit(const FxMaterial *m)
     s->first = first;
     s->count = ncorners - first;
     nshapes++;
-    made++;
 }
 
 /* ---- scaled sprites ---- */
