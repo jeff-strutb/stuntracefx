@@ -16,7 +16,8 @@
    of the shade row. Where a cell is smaller than about a pixel the facets
    give way to the flat sea's colour, as there they could only flicker.
    Partly see-through: the more steeply the eye looks down on the water the
-   more of what lies under it shows; toward the horizon it is whole.
+   more of what lies under it shows; toward the horizon it is whole. Seen
+   from below (the eye under the water) it is whole.
 
    The image (RGBA, a word a texel): texels 0-9 the shade row's colours at
    levels 6-15, 10 the flat sea's colour; from 11 floats: k (3, the light by
@@ -94,6 +95,6 @@ vec4 shade(vec2 xy) {
     float dh = abs(header(6));
     vec2 d = uv - vec2(header(4), header(5));
     float steep = dh / sqrt(dh * dh + dot(d, d));
-    float alpha = mix(ALPHA_NEAR, 1.0, pow(1.0 - steep, 4.0));
+    float alpha = header(6) < 0.0 ? 1.0 : mix(ALPHA_NEAR, 1.0, pow(1.0 - steep, 4.0));
     return vec4(colour, max(alpha, fade));
 }

@@ -54,7 +54,7 @@
  * piece crosses the water the water has a hole the size of the piece's
  * crossing, and what lies past the water shows through it (the road going
  * down inside its tunnel). In the sealed tunnel (bit 3 of $0DA5) there is
- * no water.
+ * no water (the earlier water's; the ocean, below, is drawn there too).
  */
 #include <math.h>
 #include <stdio.h>
@@ -101,39 +101,41 @@ enum { SURF_NONE, SURF_GRASS, SURF_ROCK, SURF_CEMENT, SURF_SNOW, SURF_ICE, SURF_
    end (a road piece reaches 640 below the road), measured from the
    course's shapes, so the road stands in it and nothing of the road hangs
    above it. Land with a shade class (cls, a class of the chip's lit faces'
-   shade rows) is drawn as polygons in that class's shades (the land as
+   shade rows; for water `under` the class seen from below, the eye under
+   the water) is drawn as polygons in that class's shades (the land as
    polygons, below); the rest as before, until each course is done (Jeff,
    2026-11-11: track by track, Easy Ride first). */
 static const struct {
     uint8_t kind;
     int16_t y;
     uint8_t cls;
+    uint8_t under;          /* water seen from below: its shade class (0: cls's) */
 } surface[0x20] = {
-    [0x00] = { SURF_GRASS, 0, 10 },     /* Easy Ride: class 10, the chip's grass green (82,131,0 to 148,197,57) */
-    [0x01] = { SURF_AQUA, -1280, 12 },  /* Aqua Tunnel: under the road, over the glass tube, where its
+    [0x00] = { SURF_GRASS, 0, 10, 0 },  /* Easy Ride: class 10, the chip's grass green (82,131,0 to 148,197,57) */
+    [0x01] = { SURF_AQUA, -1280, 12, 9 }, /* Aqua Tunnel: under the road, over the glass tube, where its
                                            road's pieces end (the road -1920, the pieces 640 below) */
-    [0x02] = { SURF_ROCK, 0, 0 },       /* the canyon */
-    [0x03] = { SURF_CEMENT, 0, 0 },     /* the night city, the airport */
-    [0x04] = { SURF_GRASS, 0, 0 },      /* the foggy forest */
-    [0x05] = { SURF_GRASS, 0, 0 },      /* Sea Breeze: its band green beside the road, the sea's teal only
+    [0x02] = { SURF_ROCK, 0, 0, 0 },    /* the canyon */
+    [0x03] = { SURF_CEMENT, 0, 0, 0 },  /* the night city, the airport */
+    [0x04] = { SURF_GRASS, 0, 0, 0 },   /* the foggy forest */
+    [0x05] = { SURF_GRASS, 0, 0, 0 },   /* Sea Breeze: its band green beside the road, the sea's teal only
                                            toward the horizon, which the land takes by distance */
-    [0x06] = { SURF_SNOW, 0, 0 },       /* White Land */
-    [0x07] = { SURF_CEMENT, 0, 0 },     /* the sunset city */
-    [0x08] = { SURF_GRASS, 0, 0 },      /* Lake Side: as Sea Breeze */
-    [0x09] = { SURF_ROCK, 0, 0 },       /* the wild-west desert: red rock, its band green */
-    [0x0A] = { SURF_NONE, 0, 0 },       /* Sky Ramp */
-    [0x0B] = { SURF_WATER, -3840, 0 },  /* the night harbour: where its lowest road's (-4480) pieces end */
-    [0x0C] = { SURF_DIRT, 0, 0 },       /* the stunt arenas: dirt, grass, ice, water */
-    [0x0D] = { SURF_GRASS, 0, 0 },
-    [0x0E] = { SURF_ICE, 0, 0 },
-    [0x0F] = { SURF_WATER, 0, 0 },      /* its floor */
-    [0x10] = { SURF_GRASS, 0, 0 },      /* the battle arenas: the countryside */
-    [0x11] = { SURF_ROCK, 0, 0 },       /* the red-rock desert, its band the canyon's tan */
-    [0x12] = { SURF_GRASS, 0, 0 },      /* the beach: its band Sea Breeze's */
-    [0x13] = { SURF_WATER, 0, 0 },      /* the night city: its band the night harbour's, at its floor */
-    [0x14] = { SURF_GRASS, 0, 0 },      /* the countryside courses */
-    [0x15] = { SURF_GRASS, 0, 0 },
-    [0x16] = { SURF_GRASS, 0, 0 },
+    [0x06] = { SURF_SNOW, 0, 0, 0 },    /* White Land */
+    [0x07] = { SURF_CEMENT, 0, 0, 0 },  /* the sunset city */
+    [0x08] = { SURF_GRASS, 0, 0, 0 },   /* Lake Side: as Sea Breeze */
+    [0x09] = { SURF_ROCK, 0, 0, 0 },    /* the wild-west desert: red rock, its band green */
+    [0x0A] = { SURF_NONE, 0, 0, 0 },    /* Sky Ramp */
+    [0x0B] = { SURF_WATER, -3840, 0, 0 }, /* the night harbour: where its lowest road's (-4480) pieces end */
+    [0x0C] = { SURF_DIRT, 0, 0, 0 },    /* the stunt arenas: dirt, grass, ice, water */
+    [0x0D] = { SURF_GRASS, 0, 0, 0 },
+    [0x0E] = { SURF_ICE, 0, 0, 0 },
+    [0x0F] = { SURF_WATER, 0, 0, 0 },   /* its floor */
+    [0x10] = { SURF_GRASS, 0, 0, 0 },   /* the battle arenas: the countryside */
+    [0x11] = { SURF_ROCK, 0, 0, 0 },    /* the red-rock desert, its band the canyon's tan */
+    [0x12] = { SURF_GRASS, 0, 0, 0 },   /* the beach: its band Sea Breeze's */
+    [0x13] = { SURF_WATER, 0, 0, 0 },   /* the night city: its band the night harbour's, at its floor */
+    [0x14] = { SURF_GRASS, 0, 0, 0 },   /* the countryside courses */
+    [0x15] = { SURF_GRASS, 0, 0, 0 },
+    [0x16] = { SURF_GRASS, 0, 0, 0 },
 };
 
 /* the land's marks: the size of a texel on the ground, and each kind's
@@ -1222,6 +1224,10 @@ static void land_polygons(unsigned course, int cls, const double eye[3], const d
    eye's place taken modulo OCEAN_PERIOD cells, the lattice's pattern, so
    the numbers stay small), its other numbers in its image.
 
+   From below (the eye under the water: the glass tube) it is whole, and it
+   is drawn in the sealed tunnel too, so that the original's underwater
+   backdrop shows nowhere: the water overhead, the sea bed below.
+
    Under it a sea bed, so that nothing of the backdrop shows through the
    water: a plane SEABED_BELOW under the lowest place the course's shapes
    meet the ground (or the water), opaque, in the class's darkest colour
@@ -1239,7 +1245,7 @@ static void land_polygons(unsigned course, int cls, const double eye[3], const d
 static nshvc_image ocean_image[4];
 static nshvc_shader ocean_shader;
 
-static void ocean_draw(int cls, const double eye[3], const double m[9], double water_y, int p)
+static void ocean_draw(int cls, int under, const double eye[3], const double m[9], double water_y, int p)
 {
     static nshvc_vertex bed[24];
     static FxCorner c[64];
@@ -1249,6 +1255,11 @@ static void ocean_draw(int cls, const double eye[3], const double m[9], double w
     float in[8], sx, sy, scale;
     int i, k, slot;
 
+    /* seen from below (the glass tube), the water and the bed in the class
+       of the underwater view (Aqua Tunnel's blue, as the original's
+       underwater backdrop is, Jeff's picture of 2026-11-11) */
+    if (dh < 0 && under)
+        cls = under;
     /* the sea bed */
     bed_y = (grid.nx ? fmax(grid.deepest, water_y) : water_y) + SEABED_BELOW;
     deep = row_colour(cls, 6);
@@ -1339,7 +1350,10 @@ void fx_ground_draw(void)
     uint16_t colours[16];
     int aqua, at_x, at_y;
 
-    if (kind == SURF_NONE || (kind == SURF_AQUA && (g.picture_effects & 0x08)))
+    /* in the sealed tunnel (bit 3 of $0DA5) the earlier water left the
+       original's underwater backdrop to show; the ocean is drawn there too,
+       seen from below, over that backdrop (Jeff, 2026-11-11) */
+    if (kind == SURF_NONE || (kind == SURF_AQUA && (g.picture_effects & 0x08) && !surface[course].cls))
         return;
     for (i = 0; i < 3; i++)
         eye[i] = (int16_t)ram_word(FX_FAR_BANK + FX_FAR_VIEW + 2 * i);
@@ -1360,7 +1374,7 @@ void fx_ground_draw(void)
     if (dh == 0 || (dh < 0 && kind != SURF_AQUA))
         return;
     if (surface[course].cls) {          /* the ocean; Aqua Tunnel's cuts the picture as below */
-        ocean_draw(surface[course].cls, eye, m, surface[course].y, p);
+        ocean_draw(surface[course].cls, surface[course].under, eye, m, surface[course].y, p);
         if (kind == SURF_AQUA) {
             double plane[3] = { m[3], m[4], m[5] };
 
