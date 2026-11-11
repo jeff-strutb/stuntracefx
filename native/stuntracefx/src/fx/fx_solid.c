@@ -403,8 +403,10 @@ static void cap(const Solid *s, float a, const Disc *d, int nd, int n)
             place(s, a, 2 * PI_F * i / m, d[k].r, p[i]);
         if (!k && !(cap_seen = face_seen((const float (*)[3])p, m, nv)))
             return;
+        fx_draw_layer(k);               /* each ring over the one before, in its plane */
         emit((const float (*)[3])p, m, (uint8_t)(hi | d[k].nib));
     }
+    fx_draw_layer(0);
 }
 
 /* an eye's face's marks on its face plane at a, in order */
@@ -417,6 +419,7 @@ static void eye_marks(const Solid *s, float a, const Mark *mk, int nm, int n)
     for (k = 0; k < nm; k++) {
         const Mark *m = &mk[k];
 
+        fx_draw_layer(1 + k);           /* each mark over the face and the marks before it */
         if (m->t0 == m->t1) {           /* a disc */
             int sides = m->r1 < 1.5f ? 12 : n;
 
@@ -451,6 +454,7 @@ static void eye_marks(const Solid *s, float a, const Mark *mk, int nm, int n)
             }
         }
     }
+    fx_draw_layer(0);
 }
 
 static void draw(const Solid *s)

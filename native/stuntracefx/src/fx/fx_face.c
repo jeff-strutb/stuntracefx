@@ -273,15 +273,17 @@ void fx_face_back(int back) { back_next = back; }
    face's outline is its corners with the axis its normal is most along
    dropped (its first PLANE_POINTS; more, its box alone). */
 enum { PLANES = 4096, PLANE_POINTS = 8, BUCKETS = 4096, DECAL_MOST = 63 };
-#define NORMAL_CELL 0.02
-#define PLANE_NEAR 3.0                  /* two faces' planes this near (along the normal) are one */
+#define NORMAL_CELL 0.1                 /* the normals' cells: a neighbour's are within ~6 degrees */
+#define SAME_WAY 0.995                  /* two faces this near in direction (~6 degrees) can share a plane */
+#define PLANE_NEAR 3.0                  /* a face's corners this near another's plane (and 0.2% of its distance) lie on it */
 #define DECAL_PLANE 4.0                 /* a decal level moves a face's plane this far toward the eye (fx_draw.c) */
 static struct {
     double n[3], d;
     uint32_t look;
-    int cell[3], np, next;
+    int cell[3], np, next, nq;
     uint8_t decal;
     double p[PLANE_POINTS][2], lo[2], hi[2];
+    double q[PLANE_POINTS][3];          /* its corners (its first PLANE_POINTS) */
 } planes[PLANES];
 static int nplanes, bucket[BUCKETS];
 
@@ -351,12 +353,39 @@ static int outlines_overlap(int a, const double (*pb)[2], int nb, const double *
     return 1;
 }
 
+/* Whether a face (corners q, plane nv . x = d) and earlier face i share a
+   plane: its corners all lie within PLANE_NEAR (and 0.2% of the plane's
+   distance from the eye) of face i's plane, or face i's corners of its
+   own. Corners, not the planes' distances, are compared: two faces a
+   quarter degree apart (the chip's rounding of a small face's points) far
+   off have distances hundreds apart while lying on one another. */
+static int lies_on(int i, const double (*q)[3], int n, const double *nv, double d)
+{
+    double tol = PLANE_NEAR + 0.002 * fabs(planes[i].d), worst = 0, e;
+    int k;
+
+    for (k = 0; k < n; k++) {
+        e = fabs(planes[i].n[0] * q[k][0] + planes[i].n[1] * q[k][1] + planes[i].n[2] * q[k][2] - planes[i].d);
+        worst = e > worst ? e : worst;
+    }
+    if (worst <= tol)
+        return 1;
+    tol = PLANE_NEAR + 0.002 * fabs(d);
+    worst = 0;
+    for (k = 0; k < planes[i].nq; k++) {
+        e = fabs(nv[0] * planes[i].q[k][0] + nv[1] * planes[i].q[k][1] + nv[2] * planes[i].q[k][2] - d);
+        worst = e > worst ? e : worst;
+    }
+    return worst <= tol;
+}
+
 /* A face's decal level: one more than the highest of the earlier faces of
    the picture it lies over and looks unlike (look), else 0: those on its
-   plane (facing the same way, their planes within PLANE_NEAR of each other
-   or 0.2% of their distance, as neighbouring track pieces' faces made from
-   different points are: a dump of Sunset Valley's tunnel showed them 0.4 to
-   3 apart) whose outlines overlap its own. A face only meeting another at
+   plane (facing the same way within SAME_WAY, its corners on the other's
+   plane or the other's on its own, lies_on, as neighbouring track pieces'
+   faces made from different points are: a dump of Sunset Valley's tunnel
+   showed them 0.4 to 3 apart, small faces turned up to a few degrees)
+   whose outlines overlap its own. A face only meeting another at
    an edge (a wall cut into triangles), or lying over one that looks the
    same (where either may show), adds none. Its plane, outline and look are
    kept for the faces after it (not while the hold is on: the ground's
@@ -411,8 +440,8 @@ static uint8_t decal_of(const Corner3 *c, int n, uint32_t look, double *dist)
                 for (i = bucket[bucket_of(at)]; i >= 0; i = planes[i].next)
                     if (planes[i].cell[0] == at[0] && planes[i].cell[1] == at[1] && planes[i].cell[2] == at[2]
                         && planes[i].look != look && planes[i].decal + 1 > level
-                        && nv[0] * planes[i].n[0] + nv[1] * planes[i].n[1] + nv[2] * planes[i].n[2] > 0.9999
-                        && fabs(d - planes[i].d) <= 0.002 * fabs(d) + PLANE_NEAR
+                        && nv[0] * planes[i].n[0] + nv[1] * planes[i].n[1] + nv[2] * planes[i].n[2] > SAME_WAY
+                        && lies_on(i, (const double (*)[3])q, n, nv, d)
                         && outlines_overlap(i, (const double (*)[2])p, np, lo, hi))
                         level = planes[i].decal + 1;
             }
@@ -428,6 +457,8 @@ static uint8_t decal_of(const Corner3 *c, int n, uint32_t look, double *dist)
         planes[nplanes].decal = (uint8_t)level;
         planes[nplanes].np = np;
         memcpy(planes[nplanes].p, p, sizeof p);
+        planes[nplanes].nq = n < PLANE_POINTS ? n : PLANE_POINTS;
+        memcpy(planes[nplanes].q, q, sizeof planes[nplanes].q);
         for (k = 0; k < 2; k++) {
             planes[nplanes].lo[k] = lo[k];
             planes[nplanes].hi[k] = hi[k];

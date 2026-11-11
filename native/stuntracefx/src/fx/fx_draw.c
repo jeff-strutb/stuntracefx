@@ -1554,6 +1554,21 @@ void fx_draw_land(const nshvc_vertex *v, uint32_t n)
     emit(v, n, 0, 0);
 }
 
+/* A solid's layer (fx_solid.c): a disc or a mark drawn over its face, in
+   that plane, is drawn its layer of DECAL_Z steps nearer, so the later
+   stays in front (its points are the face's, so only the buffer's rounding
+   is to beat). */
+static int solid_layer;
+
+void fx_draw_layer(int layer) { solid_layer = layer; }
+
+static float layered(float z)
+{
+    double l = z - solid_layer * DECAL_Z;
+
+    return solid_layer && z > 0 ? (float)(l < 1e-6 ? 1e-6 : l) : z;
+}
+
 /* The same in the palette's entry e as it is, of the whole palette. */
 void fx_draw_flat_entry(const FxCorner *c, uint32_t n, uint8_t colour)
 {
@@ -1570,7 +1585,7 @@ void fx_draw_flat_entry(const FxCorner *c, uint32_t n, uint8_t colour)
         for (i = 0; i < k; i++) {
             v[i].x = c[done + i].x;
             v[i].y = c[done + i].y;
-            v[i].z = fx_draw_depth(c[done + i].iz);
+            v[i].z = layered(fx_draw_depth(c[done + i].iz));
             at_entry(&v[i], colour);
         }
         emit(v, k, entry_image(), 0);

@@ -115,6 +115,9 @@ void fx_draw_side(int past);
    the course's shapes). */
 void fx_draw_hold(int on);
 int fx_draw_holding(void);          /* the hold is on */
+/* The layer of a solid's flat faces drawn from now on (fx_solid.c): each
+   drawn that many steps nearer than its depth, over what it lies on. */
+void fx_draw_layer(int layer);
 int fx_solid_hiding(void);
 /* The list drawn into, by size in pixels (the checks). */
 void fx_draw_set_target(nshvc_draw_list list, uint32_t width, uint32_t height);
