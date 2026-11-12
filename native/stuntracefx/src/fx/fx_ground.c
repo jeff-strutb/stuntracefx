@@ -94,6 +94,7 @@ enum { SURF_NONE, SURF_GRASS, SURF_ROCK, SURF_CEMENT, SURF_SNOW, SURF_ICE, SURF_
 
 #define IS_LAND(k) ((k) >= SURF_GRASS && (k) <= SURF_DIRT)
 #define CLS_ROCK 0xFF           /* the surface table's class for the course's own rock (the survey's fit): mesas */
+#define CLS_BAND 0xFE           /* the ocean's shades the band's own sea's (band_shade): Sea Breeze */
 
 /* Each course's surface (g.course, $0E3D), from pictures of every course
    (2026-11-09): its kind, and for water the height of its level (world y
@@ -133,8 +134,11 @@ static const struct {
                                            the class's top levels in its palette blended 15 of 32 toward
                                            the fog, which the palette carries, so the land is fogged as
                                            they are), and a forest of its own trees round it */
-    [0x05] = { SURF_GRASS, 0, 0, 0, 0, 0 },   /* Sea Breeze: its band green beside the road, the sea's teal only
-                                           toward the horizon, which the land takes by distance */
+    [0x05] = { SURF_WATER, -1292, CLS_BAND, 0, 0, 0 }, /* Sea Breeze, the coast: a sea, Aqua Tunnel's ocean in the
+                                           band's own sea's shades (the band's ground half: teal at the
+                                           horizon to sea-green under the eye, the course's sand and road
+                                           standing in it), at the level its shapes stand on (the survey's,
+                                           -1292) */
     [0x06] = { SURF_SNOW, 0, 0, 0, 0, 0 },    /* White Land */
     [0x07] = { SURF_CEMENT, 0, 0, 0, 0, 0 },  /* the sunset city */
     [0x08] = { SURF_GRASS, 0, 0, 0, 0, 0 },   /* Lake Side: as Sea Breeze */
@@ -2083,6 +2087,35 @@ static void land_polygons(unsigned course, int cls, const double eye[3], const d
 static nshvc_image ocean_image[4];
 static nshvc_shader ocean_shader;
 
+/* The band's own sea (CLS_BAND): the band's ground half (its lists'
+   places 256 to 511, the horizon's first, as the screen shows them with
+   the weather and the fog: sky_colour_at), its colours each once, from
+   the darkest (under the eye) to the lightest (at the horizon), and of
+   those the lighter half, the sea as the original shows it beside the
+   road (Sea Breeze: 57,198,140 to 140,239,231; the darker half lies under
+   the road near the eye); a lit face's level 6-15 takes the one as far
+   along them (6 the darkest), so the ocean's facets are shaded in the
+   sea's own colours as a class's would be, a level face seen from the
+   race's camera (level 9 or 10) in the band's turquoise. */
+static uint32_t band_shade(int level)
+{
+    uint16_t seen[256];
+    int n = 0, at, k;
+
+    for (at = 511; at >= 256; at--) {   /* under the eye first: the darkest */
+        uint16_t c = sky_colour_at(at);
+
+        for (k = 0; k < n && seen[k] != c; k++)
+            ;
+        if (k == n)
+            seen[n++] = c;
+    }
+    if (!n)
+        return 0xFF000000u;
+    k = n / 2 + (int)lround((level < 6 ? 0 : level > 15 ? 9 : level - 6) / 9.0 * (n - 1 - n / 2));
+    return rgb_of(seen[k]);
+}
+
 static void ocean_draw(int cls, int under, const double eye[3], const double m[9], double water_y, int p)
 {
     static nshvc_vertex bed[24];
@@ -2100,7 +2133,7 @@ static void ocean_draw(int cls, int under, const double eye[3], const double m[9
         cls = under;
     /* the sea bed */
     bed_y = (grid.nx ? fmax(grid.deepest, water_y) : water_y) + SEABED_BELOW;
-    deep = row_colour(cls, 6);
+    deep = cls == CLS_BAND ? band_shade(6) : row_colour(cls, 6);
     deep = 0xFF000000u | (uint32_t)((deep >> 16 & 255) * SEABED_DARK) << 16 | (uint32_t)((deep >> 8 & 255) * SEABED_DARK) << 8
            | (uint32_t)((deep & 255) * SEABED_DARK);
     plane_vertices(bed_y, deep, PLANE_Z, eye, m, bed, &nb, sizeof bed / sizeof bed[0]);
@@ -2151,10 +2184,10 @@ static void ocean_draw(int cls, int under, const double eye[3], const double m[9
        world's axes (world axis k's view components are m[3k..3k+2]), the
        time, the eye's place and height in cells, the waves' height */
     for (i = 0; i < 10; i++)
-        words[i] = row_colour(cls, 6 + i);
+        words[i] = cls == CLS_BAND ? band_shade(6 + i) : row_colour(cls, 6 + i);
     for (k = 0; k < 3; k++)
         up[k] = -m[3 + k];
-    words[10] = land_colour(cls, up);
+    words[10] = cls == CLS_BAND ? band_shade(chip_level(up)) : land_colour(cls, up);
     for (k = 0; k < 3; k++)
         light[k] = grid.light_k * (m[3 * k + 1] * LIGHT_Y + m[3 * k + 2] * LIGHT_Z);
     words[11] = float_word((float)light[0]);
