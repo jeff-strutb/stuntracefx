@@ -148,15 +148,21 @@ void fx_solid_colour(uint8_t colr, uint8_t por);
 void fx_solid_end(void);
 /* The land's forest (fx_ground.c): copies of the course's own tree, once
    the race has drawn one, trunk and canopy together (one player's
-   pictures). Its size in the world: the canopy's half width, the height
-   from the trunk's foot to the canopy's top, the trunk's half width. A
-   picture's forest: its view (the picture's pixels, the land's depths),
-   each tree by its trunk's foot in the world and its size (k times the
-   course's tree's), then drawn as instanced meshes, a mesh for each part
-   at each detail level. */
+   pictures). Its shape in the world (FxForestShape). A picture's forest:
+   its view (the picture's pixels, the land's depths) and the view's
+   rectangle in them, each tree by its trunk's foot in the world and its
+   size (k times the course's tree's), then drawn as instanced meshes, a
+   mesh for each part at each detail level. */
+typedef struct {
+    float half;                 /* the canopy's half width */
+    float height;               /* from the trunk's foot to the canopy's top */
+    float trunk_half;           /* the trunk's half width */
+    float canopy_rise;          /* the canopy's middle over the trunk's foot */
+    float canopy_half_height;   /* the canopy's half height */
+} FxForestShape;
 int fx_solid_forest_ready(void);
-void fx_solid_forest_size(float *half, float *height, float *trunk_half);
-void fx_solid_forest_begin(const nshvc_view *view);
+void fx_solid_forest_shape(FxForestShape *shape);
+void fx_solid_forest_begin(const nshvc_view *view, float left, float right, float top, float bottom);
 void fx_solid_forest_add(const double foot[3], float k);
 void fx_solid_forest_end(void);
 

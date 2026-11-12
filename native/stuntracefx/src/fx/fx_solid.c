@@ -1022,13 +1022,24 @@ static float trunk_rise(void)
     return (pt->bottom + 1 - tree_solid(1)->texels / 2.0f) * forest.scale[1];
 }
 
-void fx_solid_forest_size(float *half, float *height, float *trunk_half)
+/* the canopy's middle (its painting's rows') from its painting's middle,
+   down, world units */
+static float canopy_mid(void)
+{
+    const Paint *pc = &paints[forest.paint[2]];
+
+    return ((pc->top + pc->bottom + 1) / 2.0f - tree_solid(2)->texels / 2.0f) * forest.scale[2];
+}
+
+void fx_solid_forest_shape(FxForestShape *shape)
 {
     const Paint *pt = &paints[forest.paint[1]], *pc = &paints[forest.paint[2]];
 
-    *half = paint_half(pc) * forest.scale[2];
-    *height = trunk_rise() - forest.off[1] + (tree_solid(2)->texels / 2.0f - pc->top) * forest.scale[2];
-    *trunk_half = paint_half(pt) * forest.scale[1];
+    shape->half = paint_half(pc) * forest.scale[2];
+    shape->height = trunk_rise() - forest.off[1] + (tree_solid(2)->texels / 2.0f - pc->top) * forest.scale[2];
+    shape->trunk_half = paint_half(pt) * forest.scale[1];
+    shape->canopy_rise = trunk_rise() - forest.off[1] - canopy_mid();
+    shape->canopy_half_height = (pc->bottom + 1 - pc->top) / 2.0f * forest.scale[2];
 }
 
 /* ---- the forest's meshes ----
@@ -1042,17 +1053,62 @@ void fx_solid_forest_size(float *half, float *height, float *trunk_half)
    triangles, the rings at most a painting's rows by the level's step, two
    ends more. A picture's trees are gathered by part and level
    (fx_solid_forest_add) and each level used is written and drawn once
-   (fx_solid_forest_end). */
+   (fx_solid_forest_end).
+
+   Its cost on the GPU is its triangles and the pixels they cover, so a
+   land tree is no finer than it shows (Jeff, 2026-11-12, on the forest at
+   the course trees' detail: "framerate is pretty heavily hit ... heavily
+   optimize"): the course trees' detail keeps a part's outline within half
+   an output pixel of round and its rings 1.5 pixels apart, which made a
+   far tree's triangles a pixel or two each, about a million of them a
+   picture; a land tree's level keeps its outline within FOREST_FLAT_PX and
+   its rings FOREST_RING_PX apart (forest_detail), a part under
+   FOREST_LEAST_PX across its half width is left out (a far tree's trunk
+   first), a part whose sphere is wholly outside the view's rectangle or
+   behind the eye is left out, and each level's instances are drawn
+   nearest first, the canopies before the trunks, so the GPU's depth test
+   throws away what lies behind them before shading it. */
+#define FOREST_FLAT_PX 2.0f
+#define FOREST_RING_PX 6.0f
+#define FOREST_LEAST_PX 0.6f
 #define FOREST_TREES 4096
 #define FOREST_SLOTS 5
 static struct {
     nshvc_mesh mesh;
     uint32_t room;
 } forest_mesh[FOREST_SLOTS][2][4][4];
-static nshvc_instance forest_inst[2][4][4][FOREST_TREES];
+typedef struct {
+    float z;                            /* its depth, for the order */
+    nshvc_instance in;
+} ForestInstance;
+static ForestInstance forest_inst[2][4][4][FOREST_TREES];
+static nshvc_instance forest_sorted[FOREST_TREES];
 static uint32_t forest_n[2][4][4];
 static nshvc_view forest_view;
+static float forest_plane[4][3];        /* the view's sides in view space, inward, unit */
 static int forest_on;
+
+/* the level a land tree's part takes at px output pixels a painting
+   texel: its outline within FOREST_FLAT_PX of round, its rings at least
+   FOREST_RING_PX apart */
+static void forest_detail(const Solid *s, const Paint *pp, float px, int *sl, int *rl)
+{
+    float pr = paint_half(pp) * px;
+    int full = s->tree == 1 ? 10 : 44, step = s->tree == 1 ? 2 : 3;
+    int n = pr > FOREST_FLAT_PX ? (int)ceilf(PI_F / acosf(1 - FOREST_FLAT_PX / pr)) : 5;
+
+    for (*sl = 3; *sl > 0 && (full >> *sl < 5 ? 5 : full >> *sl) < n; (*sl)--)
+        ;
+    for (*rl = 0; *rl < 3 && step * (1 << *rl) * px < FOREST_RING_PX; (*rl)++)
+        ;
+}
+
+static int instance_nearer(const void *a, const void *b)
+{
+    float x = ((const ForestInstance *)a)->z, y = ((const ForestInstance *)b)->z;
+
+    return x < y ? -1 : x > y;
+}
 
 static uint32_t level_room(const Solid *s, int sl, int rl)
 {
@@ -1156,9 +1212,21 @@ static uint32_t mesh_faces(const Solid *s, const Paint *pt, const TreeLevel *L, 
     return n;
 }
 
-void fx_solid_forest_begin(const nshvc_view *v)
+void fx_solid_forest_begin(const nshvc_view *v, float left, float right, float top, float bottom)
 {
+    /* x = cx + f X / Z within [left, right]: f X - (left - cx) Z >= 0 and
+       -f X + (right - cx) Z >= 0; y likewise */
+    float p[4][3] = { { v->f, 0, -(left - v->cx) }, { -v->f, 0, right - v->cx },
+                      { 0, v->f, -(top - v->cy) }, { 0, -v->f, bottom - v->cy } };
+    int i, j;
+
     forest_view = *v;
+    for (i = 0; i < 4; i++) {
+        float l = sqrtf(p[i][0] * p[i][0] + p[i][1] * p[i][1] + p[i][2] * p[i][2]);
+
+        for (j = 0; j < 3; j++)
+            forest_plane[i][j] = l > 0 ? p[i][j] / l : 0;
+    }
     memset(forest_n, 0, sizeof forest_n);
     forest_on = fx_solid_forest_ready() && fx_draw_mesh_slot() >= 0;
 }
@@ -1182,24 +1250,43 @@ void fx_solid_forest_add(const double foot[3], float k)
     for (part = 1; part <= 2; part++) {
         const Solid *s = tree_solid(part);
         const Paint *pp = &paints[forest.paint[part]];
-        float size = forest.scale[part] * k, z, px;
-        int sl, rl;
+        float size = forest.scale[part] * k, px, r, c[3], d[3];
+        int sl, rl, out = 0;
         uint32_t *n;
+        ForestInstance *fi;
 
-        z = (float)(rot[6] * (place[part][0] - forest_view.eye[0]) + rot[7] * (place[part][1] - forest_view.eye[1])
-                    + rot[8] * (place[part][2] - forest_view.eye[2]));
-        if (z < -size * s->texels)      /* wholly behind the eye */
+        for (j = 0; j < 3; j++)
+            d[j] = (float)(place[part][j] - forest_view.eye[j]);
+        for (j = 0; j < 3; j++)
+            c[j] = rot[3 * j] * d[0] + rot[3 * j + 1] * d[1] + rot[3 * j + 2] * d[2];
+        /* its sphere about its painting's middle: to its widest half and its
+           farthest row, its points moved out a little (jag 1.09, rise 0.8 of
+           a texel) */
+        {
+            float t = s->texels / 2.0f, up = fabsf(pp->top - t), down = fabsf(pp->bottom + 1 - t), h = paint_half(pp);
+            float far = up > down ? up : down;
+
+            r = size * (1.1f * sqrtf(h * h + far * far) + 1);
+        }
+        if (c[2] < forest_view.near - r)        /* wholly behind the eye */
             continue;
-        px = z > 0 ? size * focal / z : 1e9f;
-        tree_detail(s, pp, px, &sl, &rl);
+        for (j = 0; j < 4 && !out; j++)         /* wholly outside the view */
+            out = forest_plane[j][0] * c[0] + forest_plane[j][1] * c[1] + forest_plane[j][2] * c[2] < -r;
+        if (out)
+            continue;
+        px = c[2] > r ? size * focal / c[2] : 1e9f;
+        if (paint_half(pp) * px < FOREST_LEAST_PX)
+            continue;
+        forest_detail(s, pp, px, &sl, &rl);
         n = &forest_n[part - 1][sl][rl];
         if (*n >= FOREST_TREES)
             continue;
-        forest_inst[part - 1][sl][rl][*n].x = (float)place[part][0];
-        forest_inst[part - 1][sl][rl][*n].y = (float)place[part][1];
-        forest_inst[part - 1][sl][rl][*n].z = (float)place[part][2];
-        forest_inst[part - 1][sl][rl][*n].size = size;
-        (*n)++;
+        fi = &forest_inst[part - 1][sl][rl][(*n)++];
+        fi->z = c[2];
+        fi->in.x = (float)place[part][0];
+        fi->in.y = (float)place[part][1];
+        fi->in.z = (float)place[part][2];
+        fi->in.size = size;
     }
 }
 
@@ -1210,7 +1297,7 @@ void fx_solid_forest_end(void)
 
     if (!forest_on || slot < 0 || slot >= FOREST_SLOTS)
         return;
-    for (part = 1; part <= 2; part++) {
+    for (part = 2; part >= 1; part--) {         /* the canopies first: they hide the trunks */
         const Solid *s = tree_solid(part);
         Paint *pp = &paints[forest.paint[part]];
 
@@ -1218,7 +1305,7 @@ void fx_solid_forest_end(void)
             continue;
         for (sl = 0; sl < 4; sl++)
             for (rl = 0; rl < 4; rl++) {
-                uint32_t count = forest_n[part - 1][sl][rl], nv;
+                uint32_t count = forest_n[part - 1][sl][rl], nv, i;
                 TreeLevel *L;
 
                 if (!count || !(L = tree_level(s, pp, forest.paint[part], sl, rl)))
@@ -1233,7 +1320,10 @@ void fx_solid_forest_end(void)
                 if (nv > forest_mesh[slot][part - 1][sl][rl].room)
                     continue;
                 nshvc_mesh_write(forest_mesh[slot][part - 1][sl][rl].mesh, v, nv);
-                fx_draw_mesh(forest_mesh[slot][part - 1][sl][rl].mesh, &forest_view, forest_inst[part - 1][sl][rl], count);
+                qsort(forest_inst[part - 1][sl][rl], count, sizeof forest_inst[0][0][0][0], instance_nearer);
+                for (i = 0; i < count; i++)
+                    forest_sorted[i] = forest_inst[part - 1][sl][rl][i].in;
+                fx_draw_mesh(forest_mesh[slot][part - 1][sl][rl].mesh, &forest_view, forest_sorted, count);
             }
     }
 }

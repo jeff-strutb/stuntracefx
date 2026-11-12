@@ -1614,7 +1614,8 @@ static struct {
         int first, n;
         double mid[3], r;
     } block[FOREST_MOST];
-} forest = { -1, 0, 0, 0, { { 0 } }, { { 0, 0, { 0 }, 0 } } };
+    FxForestShape shape;                /* the course's tree's, at its own size */
+} forest = { -1, 0, 0, 0, { { 0 } }, { { 0, 0, { 0 }, 0 } }, { 0, 0, 0, 0, 0 } };
 
 typedef struct {
     float x, z, d;
@@ -1688,7 +1689,8 @@ static void forest_make(unsigned course)
 
     forest.course = (int)course;
     forest.n = forest.blocks = 0;
-    fx_solid_forest_size(&half, &height, &trunk_half);
+    fx_solid_forest_shape(&forest.shape);
+    half = forest.shape.half, height = forest.shape.height, trunk_half = forest.shape.trunk_half;
     if (half <= 0 || height <= 0)
         return;
     forest.step = 2 * half;
@@ -1764,9 +1766,154 @@ static void forest_make(unsigned course)
             forest.n, forest.blocks, forest.step, 2.0 * half, (double)height);
 }
 
-static void forest_draw(unsigned course, const double eye[3], const double m[9])
+/* ---- the trees the mountains hide ----
+
+   A tree wholly behind a mountain from the eye is not handed to the GPU
+   (Jeff, 2026-11-12: "heavily optimize"). A mountain is convex (a pyramid
+   on the plane: its SIDES faces and its base), so a point is hidden by it
+   when the segment from the eye to the point passes inside it: inside all
+   its faces' planes at some place between the two (a point inside it, a
+   foot sunk in its slope, is hidden too). A tree is hidden when every one
+   of FOREST_SAMPLES points of its outline as the eye sees it is: its
+   canopy's outline (an ellipse of its half width across the view and its
+   half height up it, eight points, 1.1 times out for its points' jag),
+   its top, and its trunk's foot either side; a mountain is tried for a
+   point only where the point lies in the box its corners make on the
+   view (all in front of the eye) and past its nearest corner. */
+#define FOREST_SAMPLES 11
+
+static struct {
+    int ok, boxed;
+    double n[SIDES + 1][3], c[SIDES + 1];       /* its faces' planes, outward: n . x <= c inside */
+    double lo[2], hi[2], nearest;               /* its corners' X / Z and Y / Z on the view, its nearest Z */
+} hill[MOUNTAINS];
+
+static void hills_make(const double eye[3], const double m[9], double plane_y)
+{
+    int i, k, j;
+
+    for (i = 0; i < MOUNTAINS; i++) {
+        double corner[SIDES + 1][3], mid[3] = { 0, 0, 0 };
+
+        hill[i].ok = !range.mesas && range.course == forest.course;
+        if (!hill[i].ok)
+            continue;
+        memcpy(corner[SIDES], range.peak[i], sizeof corner[SIDES]);
+        for (k = 0; k < SIDES; k++) {
+            corner[k][0] = range.base[i][k][0], corner[k][1] = plane_y, corner[k][2] = range.base[i][k][1];
+            for (j = 0; j < 3; j++)
+                mid[j] += corner[k][j] / SIDES;
+        }
+        mid[1] = (plane_y + range.peak[i][1]) / 2;
+        for (k = 0; k < SIDES; k++) {
+            const double *a = corner[SIDES], *b = corner[k], *c = corner[(k + 1) % SIDES];
+            double *n = hill[i].n[k], f[3];
+
+            normal_of(a, b, c, n);
+            for (j = 0; j < 3; j++)
+                f[j] = (a[j] + b[j] + c[j]) / 3 - mid[j];
+            if (n[0] * f[0] + n[1] * f[1] + n[2] * f[2] < 0)
+                for (j = 0; j < 3; j++)
+                    n[j] = -n[j];
+            hill[i].c[k] = n[0] * a[0] + n[1] * a[1] + n[2] * a[2];
+        }
+        hill[i].n[SIDES][0] = 0, hill[i].n[SIDES][1] = 1, hill[i].n[SIDES][2] = 0;     /* its base, facing down */
+        hill[i].c[SIDES] = plane_y;
+        hill[i].boxed = 1;
+        hill[i].nearest = 1e30;
+        hill[i].lo[0] = hill[i].lo[1] = 1e30;
+        hill[i].hi[0] = hill[i].hi[1] = -1e30;
+        for (k = 0; k <= SIDES; k++) {
+            double v[3];
+
+            to_view(corner[k], eye, m, v);
+            if (v[2] <= 1) {
+                hill[i].boxed = 0;
+                break;
+            }
+            for (j = 0; j < 2; j++) {
+                if (v[j] / v[2] < hill[i].lo[j])
+                    hill[i].lo[j] = v[j] / v[2];
+                if (v[j] / v[2] > hill[i].hi[j])
+                    hill[i].hi[j] = v[j] / v[2];
+            }
+            if (v[2] < hill[i].nearest)
+                hill[i].nearest = v[2];
+        }
+    }
+}
+
+/* whether mountain i hides world point p from the eye */
+static int hill_hides(int i, const double eye[3], const double p[3])
+{
+    double d[3] = { p[0] - eye[0], p[1] - eye[1], p[2] - eye[2] }, t_in = 0, t_out = 1;
+    int f;
+
+    for (f = 0; f <= SIDES; f++) {
+        const double *n = hill[i].n[f];
+        double num = hill[i].c[f] - (n[0] * eye[0] + n[1] * eye[1] + n[2] * eye[2]), den = n[0] * d[0] + n[1] * d[1] + n[2] * d[2];
+
+        if (fabs(den) < 1e-12) {
+            if (num < 0)
+                return 0;
+            continue;
+        }
+        if (den > 0) {
+            if (num / den < t_out)
+                t_out = num / den;
+        } else if (num / den > t_in) {
+            t_in = num / den;
+        }
+        if (t_in >= t_out)
+            return 0;
+    }
+    return 1;
+}
+
+/* whether the mountains hide the tree whose foot is at world point foot, k
+   times the course's tree's size */
+static int forest_hidden(const double eye[3], const double m[9], const double foot[3], double k)
+{
+    const FxForestShape *sh = &forest.shape;
+    double p[FOREST_SAMPLES][3], c[3];
+    int s, i, j;
+
+    for (j = 0; j < 3; j++)             /* the canopy's middle; the view's across (row 0) and down (row 1) in the world */
+        c[j] = foot[j] - (j == 1 ? sh->canopy_rise * k : 0);
+    for (s = 0; s < 8; s++) {
+        double a = 6.283185307179586 * s / 8, x = 1.1 * sh->half * k * cos(a), y = 1.1 * sh->canopy_half_height * k * sin(a);
+
+        for (j = 0; j < 3; j++)
+            p[s][j] = c[j] + x * m[3 * j] + y * m[3 * j + 1];
+    }
+    for (j = 0; j < 3; j++) {
+        p[8][j] = foot[j] - (j == 1 ? sh->height * k : 0);
+        p[9][j] = foot[j] - sh->trunk_half * k * m[3 * j];
+        p[10][j] = foot[j] + sh->trunk_half * k * m[3 * j];
+    }
+    for (s = 0; s < FOREST_SAMPLES; s++) {
+        double v[3];
+        int hidden = 0;
+
+        to_view(p[s], eye, m, v);
+        for (i = 0; i < MOUNTAINS && !hidden; i++) {
+            if (!hill[i].ok)
+                continue;
+            if (hill[i].boxed && (v[2] <= hill[i].nearest || v[0] / v[2] < hill[i].lo[0] || v[0] / v[2] > hill[i].hi[0]
+                                  || v[1] / v[2] < hill[i].lo[1] || v[1] / v[2] > hill[i].hi[1]))
+                continue;
+            hidden = hill_hides(i, eye, p[s]);
+        }
+        if (!hidden)
+            return 0;
+    }
+    return 1;
+}
+
+static void forest_draw(unsigned course, const double eye[3], const double m[9], double plane_y)
 {
     nshvc_view view;
+    float left, right, top, bottom;
     int b, i, k;
 
     if (forest.course != (int)course)
@@ -1787,7 +1934,9 @@ static void forest_draw(unsigned course, const double eye[3], const double m[9])
     view.depth_a = (float)FACE_Z;
     view.depth_b = (float)(FACE_Z * LAND_NEAR);
     view.depth_max = (float)FACE_Z;
-    fx_solid_forest_begin(&view);
+    fx_face_view_rect(&left, &right, &top, &bottom);
+    fx_solid_forest_begin(&view, left, right, top, bottom);
+    hills_make(eye, m, plane_y);
     for (b = 0; b < forest.blocks; b++) {
         double v[3], r = forest.block[b].r;
 
@@ -1797,7 +1946,8 @@ static void forest_draw(unsigned course, const double eye[3], const double m[9])
         for (i = forest.block[b].first; i < forest.block[b].first + forest.block[b].n; i++) {
             double foot[3] = { forest.site[i][0], forest.site[i][1], forest.site[i][2] };
 
-            fx_solid_forest_add(foot, forest.site[i][3]);
+            if (!forest_hidden(eye, m, foot, forest.site[i][3]))
+                fx_solid_forest_add(foot, forest.site[i][3]);
         }
     }
     fx_solid_forest_end();
@@ -1868,7 +2018,7 @@ static void land_polygons(unsigned course, int cls, const double eye[3], const d
     /* the course's own trees round it (one player's pictures, once the
        race has drawn one of its trees) */
     if (surface[course].forest && !surface[course].flat && !mesas && fx_draw_full_colour() && fx_solid_forest_ready())
-        forest_draw(course, eye, m);
+        forest_draw(course, eye, m, plane_y);
     /* the canyon's empty space filled with rock, which hides the far
        objects behind it */
     if (mesas) {
