@@ -123,21 +123,22 @@ static const struct {
     uint8_t flat;           /* land: the plane alone, no mountains */
     uint8_t forest;         /* land: a forest of the course's own trees round it */
     uint8_t first;          /* water: the class's level its sea's darkest shade takes (0: 6, the whole row) */
+    uint8_t roll;           /* land: rolling faceted ground round the course (rolling ground, below) */
 } surface[0x20] = {
-    [0x00] = { SURF_GRASS, 0, 10, 0, 0, 0, 0 },  /* Easy Ride: class 10, the chip's grass green (82,131,0 to 148,197,57) */
-    [0x01] = { SURF_AQUA, -1280, 12, 9, 0, 0, 0 }, /* Aqua Tunnel: under the road, over the glass tube, where its
+    [0x00] = { SURF_GRASS, 0, 10, 0, 0, 0, 0, 0 },  /* Easy Ride: class 10, the chip's grass green (82,131,0 to 148,197,57) */
+    [0x01] = { SURF_AQUA, -1280, 12, 9, 0, 0, 0, 0 }, /* Aqua Tunnel: under the road, over the glass tube, where its
                                            road's pieces end (the road -1920, the pieces 640 below) */
-    [0x02] = { SURF_ROCK, 0, CLS_ROCK, 0, 0, 0, 0 }, /* Sunset Valley, the canyon: mesas in its own rock's shades */
-    [0x03] = { SURF_CEMENT, 0, 21, 0, 1, 0, 0 }, /* Night Owl, the night city, the airport: flat, class 21, the
+    [0x02] = { SURF_ROCK, 0, CLS_ROCK, 0, 0, 0, 0, 0 }, /* Sunset Valley, the canyon: mesas in its own rock's shades */
+    [0x03] = { SURF_CEMENT, 0, 21, 0, 1, 0, 0, 0 }, /* Night Owl, the night city, the airport: flat, class 21, the
                                            greys its own road is shaded in (its colours 63-56: 49,49,41
                                            to 107,107,99 by its palette; the road ahead 66,66,57 and
                                            74,74,66, levels 9 and 10, the band's under the eye) */
-    [0x04] = { SURF_GRASS, 0, 10, 0, 0, 1, 0 },  /* King's Forest, the foggy forest: Easy Ride's land, class 10,
+    [0x04] = { SURF_GRASS, 0, 10, 0, 0, 1, 0, 0 },  /* King's Forest, the foggy forest: Easy Ride's land, class 10,
                                            its own hills' grass (their faces 173,206,132 and 189,214,140:
                                            the class's top levels in its palette blended 15 of 32 toward
                                            the fog, which the palette carries, so the land is fogged as
                                            they are), and a forest of its own trees round it */
-    [0x05] = { SURF_WATER, -48, 9, 0, 0, 0, 11 }, /* Sea Breeze, the coast: a sea, Aqua Tunnel's ocean, at the level
+    [0x05] = { SURF_WATER, -48, 9, 0, 0, 0, 11, 0 }, /* Sea Breeze, the coast: a sea, Aqua Tunnel's ocean, at the level
                                            and in the colours of the water the road crosses (Jeff,
                                            2026-11-12: the sea to match it, and at its level, where it had
                                            gone from sight as the road went down to it): the crossing is
@@ -145,35 +146,37 @@ static const struct {
                                            at its middle), its texture ($13:$C040, colour $50, the high
                                            nibble held) drawing entries $58-$5B, class 9's four lightest
                                            (8,140,239 to 90,222,255): the class's levels 11-15 */
-    [0x06] = { SURF_SNOW, 0, CLS_WHITE, 0, 0, 0, 0 }, /* White Land, the snowfield: Easy Ride's land in class 0, the
+    [0x06] = { SURF_SNOW, 0, CLS_WHITE, 0, 0, 0, 0, 0 }, /* White Land, the snowfield: Easy Ride's land in class 0, the
                                            whites its own snow banks are in (214,231,231 to 255,255,255;
                                            its road class 21's icy greys), its fog over it as the
                                            palette carries it (amount_step's 10 of 32 for it) */
-    [0x07] = { SURF_CEMENT, 0, 17, 0, 1, 0, 0 }, /* Night Cruise, the sunset city: flat (its skyline on the backdrop),
-                                           class 17, the khaki its ground beyond the road is in (140,140,90
-                                           and 115,115,66, the class's levels 8-9 in its palette; its road
-                                           class 21's mauves), the weather's blend to night as the palette
-                                           carries it */
-    [0x08] = { SURF_WATER, WATER_DEEPEST, CLS_BAND, 0, 0, 0, 0 }, /* Lake Side: a lake, Aqua Tunnel's ocean in
+    [0x07] = { SURF_CEMENT, 0, CLS_BAND, 0, 1, 0, 0, 1 }, /* Night Cruise, the sunset city: no mountains (its skyline
+                                           on the backdrop), rolling faceted ground (Jeff, 2026-11-12: the flat
+                                           plane looked "like a solid... taupe something"), in the band's own
+                                           ground (dark brown at the horizon, 57,41,41, to black: its ground as
+                                           the original shows it; the khaki below was its verges', which are
+                                           the course's own faces, shaded by distance: fx_ground_verge),
+                                           the weather's blend to night as the band carries it */
+    [0x08] = { SURF_WATER, WATER_DEEPEST, CLS_BAND, 0, 0, 0, 0, 0 }, /* Lake Side: a lake, Aqua Tunnel's ocean in
                                            the band's own lake's colours (its ground half Sea Breeze's,
                                            teal to sea-green, the lake light teal by the road); its road
                                            crosses no water (none of its faces is a level textured one, a
                                            dump of 2026-11-12), so the lake is at the lowest place its
                                            shapes meet the ground, where the road never goes under it */
-    [0x09] = { SURF_ROCK, 0, 0, 0, 0, 0, 0 },    /* the wild-west desert: red rock, its band green */
-    [0x0A] = { SURF_NONE, 0, 0, 0, 0, 0, 0 },    /* Sky Ramp */
-    [0x0B] = { SURF_WATER, -3840, 0, 0, 0, 0, 0 }, /* the night harbour: where its lowest road's (-4480) pieces end */
-    [0x0C] = { SURF_DIRT, 0, 0, 0, 0, 0, 0 },    /* the stunt arenas: dirt, grass, ice, water */
-    [0x0D] = { SURF_GRASS, 0, 0, 0, 0, 0, 0 },
-    [0x0E] = { SURF_ICE, 0, 0, 0, 0, 0, 0 },
-    [0x0F] = { SURF_WATER, 0, 0, 0, 0, 0, 0 },   /* its floor */
-    [0x10] = { SURF_GRASS, 0, 0, 0, 0, 0, 0 },   /* the battle arenas: the countryside */
-    [0x11] = { SURF_ROCK, 0, 0, 0, 0, 0, 0 },    /* the red-rock desert, its band the canyon's tan */
-    [0x12] = { SURF_GRASS, 0, 0, 0, 0, 0, 0 },   /* the beach: its band Sea Breeze's */
-    [0x13] = { SURF_WATER, 0, 0, 0, 0, 0, 0 },   /* the night city: its band the night harbour's, at its floor */
-    [0x14] = { SURF_GRASS, 0, 0, 0, 0, 0, 0 },   /* the countryside courses */
-    [0x15] = { SURF_GRASS, 0, 0, 0, 0, 0, 0 },
-    [0x16] = { SURF_GRASS, 0, 0, 0, 0, 0, 0 },
+    [0x09] = { SURF_ROCK, 0, 0, 0, 0, 0, 0, 0 },    /* the wild-west desert: red rock, its band green */
+    [0x0A] = { SURF_NONE, 0, 0, 0, 0, 0, 0, 0 },    /* Sky Ramp */
+    [0x0B] = { SURF_WATER, -3840, 0, 0, 0, 0, 0, 0 }, /* the night harbour: where its lowest road's (-4480) pieces end */
+    [0x0C] = { SURF_DIRT, 0, 0, 0, 0, 0, 0, 0 },    /* the stunt arenas: dirt, grass, ice, water */
+    [0x0D] = { SURF_GRASS, 0, 0, 0, 0, 0, 0, 0 },
+    [0x0E] = { SURF_ICE, 0, 0, 0, 0, 0, 0, 0 },
+    [0x0F] = { SURF_WATER, 0, 0, 0, 0, 0, 0, 0 },   /* its floor */
+    [0x10] = { SURF_GRASS, 0, 0, 0, 0, 0, 0, 0 },   /* the battle arenas: the countryside */
+    [0x11] = { SURF_ROCK, 0, 0, 0, 0, 0, 0, 0 },    /* the red-rock desert, its band the canyon's tan */
+    [0x12] = { SURF_GRASS, 0, 0, 0, 0, 0, 0, 0 },   /* the beach: its band Sea Breeze's */
+    [0x13] = { SURF_WATER, 0, 0, 0, 0, 0, 0, 0 },   /* the night city: its band the night harbour's, at its floor */
+    [0x14] = { SURF_GRASS, 0, 0, 0, 0, 0, 0, 0 },   /* the countryside courses */
+    [0x15] = { SURF_GRASS, 0, 0, 0, 0, 0, 0, 0 },
+    [0x16] = { SURF_GRASS, 0, 0, 0, 0, 0, 0, 0 },
 };
 
 /* the land's marks: the size of a texel on the ground, and each kind's
@@ -1223,12 +1226,18 @@ static void range_make(unsigned course, int mesas)
 /* the colour of a face of class cls whose outward normal is n in view
    space, as the chip shades a lit face */
 /* class cls's colour at light level `level` (6-15) */
+static uint32_t band_shade(int level);
+
 static uint32_t row_colour(int cls, int level)
 {
     int k = cls == CLS_WHITE ? 0 : cls;
-    uint16_t row = (uint16_t)(fx_rom_read(3, (uint16_t)(SHADE_ROWS + 2 * k)) | fx_rom_read(3, (uint16_t)(SHADE_ROWS + 2 * k + 1)) << 8);
-    uint8_t c = fx_rom_read(3, (uint16_t)(row + level - 6));
-    uint16_t bgr;
+    uint16_t row, bgr;
+    uint8_t c;
+
+    if (cls == CLS_BAND)                /* the band's own (Lake Side's lake, Night Cruise's ground) */
+        return band_shade(level);
+    row = (uint16_t)(fx_rom_read(3, (uint16_t)(SHADE_ROWS + 2 * k)) | fx_rom_read(3, (uint16_t)(SHADE_ROWS + 2 * k + 1)) << 8);
+    c = fx_rom_read(3, (uint16_t)(row + level - 6));
 
     if (fx_draw_full_colour())
         bgr = pic.palette[c];
@@ -1976,6 +1985,155 @@ static void forest_draw(unsigned course, const double eye[3], const double m[9],
     fx_solid_forest_end();
 }
 
+/* ---- rolling ground ----
+
+   Jeff (2026-11-12, on Night Cruise's flat land, "like a solid... taupe
+   something"; he chose rolling faceted ground): the ground round the
+   course in low faceted swells and hollows, each facet in the class's
+   shade for the way it faces, so the ground has shading and depth, low
+   under the skyline on the backdrop. A facet's colour moves a step of the
+   class's row for every two of the chip's light levels, about 8 degrees
+   of turn toward or from the light (14 levels a radian from the race's
+   camera), so the facets are steep enough to differ by a step: each
+   point of a lattice ROLL_STEP a step, over the footprint and ROLL_REACH
+   past it, a height of its own (a hash, 0 to 1; ROLL_NOISE steps a noise
+   cell), up to 14 degrees from its neighbour's, times
+   - within the footprint, a hollow of at most ROLL_DIP under the ground's
+     level, none within ROLL_NEAR of the survey's cells where a course
+     shape meets the ground, growing over the next ROLL_NEAR: the land is
+     drawn behind all the course's shapes, so it must never rise in front
+     of one, and ground under the level they stand on cannot; and no
+     shape's foot stands over a hollow;
+   - past it, a swell of at most ROLL_SWELL, growing from ROLL_CLEAR past
+     the footprint over ROLL_RISE (no steeper than 1 in 28 against the
+     distance from the footprint, so from the course a swell stands at
+     most a few pixels over the horizon, under the skyline's foot; and
+     none can stand between the eye, in the footprint's box, and the
+     course), easing back to the level over the lattice's last ROLL_FALL,
+     where the plane goes on to the horizon.
+   Each lattice triangle with a corner off the level is a land face, as
+   the mountains' at the land's depths; a level one is left to the plane. */
+enum { ROLL_MOST = 96, ROLL_VERTICES = 3 * 4096 };
+#define ROLL_STEP 1600.0
+#define ROLL_REACH 12000.0
+#define ROLL_NOISE 1.0
+#define ROLL_DIP 400.0
+#define ROLL_NEAR 2.0
+#define ROLL_SWELL 280.0
+#define ROLL_CLEAR 1500.0
+#define ROLL_RISE 8000.0
+#define ROLL_FALL 4000.0
+
+static struct {
+    int course, nx, nz;
+    double x0, z0, step;
+    float y[ROLL_MOST * ROLL_MOST];     /* each point's height (y is down) */
+} roll = { -1, 0, 0, 0, 0, 0, { 0 } };
+
+static double ease(double t)
+{
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    return t * t * (3 - 2 * t);
+}
+
+/* the rolling ground's noise at lattice place (i, j): smooth, 0 to 1 */
+static double roll_noise(unsigned course, double i, double j)
+{
+    double gi = floor(i / ROLL_NOISE), gj = floor(j / ROLL_NOISE), fi = ease(i / ROLL_NOISE - gi), fj = ease(j / ROLL_NOISE - gj);
+    unsigned ui = (unsigned)(int)gi + 0x8000u, uj = (unsigned)(int)gj + 0x8000u;
+    double a = hash01(course, 7000 + ui, uj), b = hash01(course, 7000 + ui + 1, uj);
+    double c = hash01(course, 7000 + ui, uj + 1), d = hash01(course, 7000 + ui + 1, uj + 1);
+
+    return (a + (b - a) * fi) + ((c + (d - c) * fi) - (a + (b - a) * fi)) * fj;
+}
+
+static void roll_make(unsigned course)
+{
+    double w = grid.xmax - grid.xmin + 2 * ROLL_REACH, h = grid.zmax - grid.zmin + 2 * ROLL_REACH;
+    int i, j, reach = (int)ceil(2 * ROLL_NEAR) + 1;
+
+    roll.course = (int)course;
+    roll.step = ROLL_STEP;
+    while (w / roll.step + 2 > ROLL_MOST || h / roll.step + 2 > ROLL_MOST)
+        roll.step *= 1.25;
+    roll.x0 = grid.xmin - ROLL_REACH;
+    roll.z0 = grid.zmin - ROLL_REACH;
+    roll.nx = (int)ceil(w / roll.step) + 1;
+    roll.nz = (int)ceil(h / roll.step) + 1;
+    for (j = 0; j < roll.nz; j++)
+        for (i = 0; i < roll.nx; i++) {
+            double px = roll.x0 + i * roll.step, pz = roll.z0 + j * roll.step, n = roll_noise(course, i, j);
+            double out = footprint_distance(px, pz), y = grid.level;
+
+            if (out <= 0) {             /* a hollow, away from where the course meets the ground */
+                int cx = (int)floor((px - grid.x0) / grid.cell), cz = (int)floor((pz - grid.z0) / grid.cell), x, z;
+                double best = reach;
+
+                for (z = cz - reach; z <= cz + reach; z++)
+                    for (x = cx - reach; x <= cx + reach; x++) {
+                        double dx, dz, d;
+
+                        if (x < 0 || z < 0 || x >= grid.nx || z >= grid.nz || !grid_known[z * grid.nx + x])
+                            continue;
+                        dx = x - (px - grid.x0) / grid.cell + 0.5;
+                        dz = z - (pz - grid.z0) / grid.cell + 0.5;
+                        d = sqrt(dx * dx + dz * dz);
+                        if (d < best)
+                            best = d;
+                    }
+                y += ROLL_DIP * n * ease((best - ROLL_NEAR) / ROLL_NEAR);
+            } else {                    /* a swell, easing back to the level at the lattice's edge */
+                double edge = fmin(fmin(px - roll.x0, roll.x0 + (roll.nx - 1) * roll.step - px),
+                                   fmin(pz - roll.z0, roll.z0 + (roll.nz - 1) * roll.step - pz));
+
+                y -= ROLL_SWELL * n * ease((out - ROLL_CLEAR) / ROLL_RISE) * ease(edge / ROLL_FALL);
+            }
+            roll.y[j * roll.nx + i] = (float)y;
+        }
+}
+
+static void roll_draw(unsigned course, int cls, const double eye[3], const double m[9])
+{
+    static nshvc_vertex v[ROLL_VERTICES];
+    static const int split[2][2][3] = { { { 0, 1, 2 }, { 0, 2, 3 } }, { { 0, 1, 3 }, { 1, 2, 3 } } };
+    uint32_t nv = 0;
+    int i, j, t, k;
+
+    if (roll.course != (int)course)
+        roll_make(course);
+    for (j = 0; j + 1 < roll.nz; j++)
+        for (i = 0; i + 1 < roll.nx; i++) {
+            int at[4] = { j * roll.nx + i, j * roll.nx + i + 1, (j + 1) * roll.nx + i + 1, (j + 1) * roll.nx + i };
+            int diag = hash01(course, 8000 + (unsigned)i, (unsigned)j) < 0.5;
+            double c[4][3];
+
+            for (k = 0; k < 4; k++) {
+                c[k][0] = roll.x0 + (i + (k == 1 || k == 2)) * roll.step;
+                c[k][1] = roll.y[at[k]];
+                c[k][2] = roll.z0 + (j + (k >= 2)) * roll.step;
+            }
+            for (t = 0; t < 2; t++) {
+                const int *sp = split[diag][t];
+                double tri[3][3], n[3];
+
+                if (c[sp[0]][1] == grid.level && c[sp[1]][1] == grid.level && c[sp[2]][1] == grid.level)
+                    continue;
+                for (k = 0; k < 3; k++)
+                    memcpy(tri[k], c[sp[k]], sizeof tri[k]);
+                normal_of(tri[0], tri[1], tri[2], n);
+                if (n[1] > 0)                   /* outward: up (y is down) */
+                    for (k = 0; k < 3; k++)
+                        n[k] = -n[k];
+                if (nv + 64 > ROLL_VERTICES) {
+                    fx_draw_land(v, nv);
+                    nv = 0;
+                }
+                land_face((const double (*)[3])tri, 3, n, cls, eye, m, v, &nv, ROLL_VERTICES);
+            }
+        }
+    fx_draw_land(v, nv);
+}
+
 static void land_polygons(unsigned course, int cls, const double eye[3], const double m[9])
 {
     static nshvc_vertex v[LAND_VERTICES];
@@ -2038,6 +2196,9 @@ static void land_polygons(unsigned course, int cls, const double eye[3], const d
             land_face((const double (*)[3])range.top[i], SIDES, up_world, cls, eye, m, v, &nv, LAND_VERTICES);
     }
     fx_draw_land(v, nv);
+    /* rolling ground round the course */
+    if (surface[course].roll && grid.nx)
+        roll_draw(course, cls, eye, m);
     /* the course's own trees round it (one player's pictures, once the
        race has drawn one of its trees) */
     if (surface[course].forest && !surface[course].flat && !mesas && fx_draw_full_colour() && fx_solid_forest_ready())
@@ -2133,6 +2294,42 @@ static uint32_t band_shade(int level)
         return 0xFF000000u;
     k = 2 * n / 3 + (int)lround((level < 6 ? 0 : level > 15 ? 9 : level - 6) / 9.0 * (n - 1 - 2 * n / 3));
     return rgb_of(seen[k]);
+}
+
+/* ---- the course's ground faces shaded by distance ----
+
+   Jeff (2026-11-12, Night Cruise: its land "like a solid... taupe
+   something"; shown that the flat khaki by the road is the course's own
+   verges, he chose to shade them): Night Cruise's verges and pads are its
+   own flat faces in class 17's khaki (palette entries 139-143), one colour
+   a face to the horizon, where the original's ground (its band) goes from
+   black under the eye to a dark brown at the horizon. Such a face is drawn
+   with each corner's colour its own toward the band's on that corner's
+   screen row, by the corner's depth: its own nearer than VERGE_NEAR, the
+   band's from VERGE_FAR (eased between), so a verge darkens into the night
+   ground toward the horizon as the ground itself does. */
+#define VERGE_NEAR 4000.0
+#define VERGE_FAR 40000.0
+
+int fx_ground_verge(uint8_t entry)
+{
+    return g.course == 0x07 && entry >= 139 && entry <= 143;
+}
+
+uint32_t fx_ground_verge_colour(uint8_t entry, double depth, float row, int panel)
+{
+    uint32_t own = rgb_of(pic.palette[entry]), band = rgb_of(race_ground_colour(panel, row)), out = 0xFF000000u;
+    double t = (depth - VERGE_NEAR) / (VERGE_FAR - VERGE_NEAR);
+    int k;
+
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    t = t * t * (3 - 2 * t);
+    for (k = 0; k < 24; k += 8) {
+        double a = own >> k & 255, b = band >> k & 255;
+
+        out |= (uint32_t)lround(a + (b - a) * t) << k;
+    }
+    return out;
 }
 
 /* A sea's shade at light level `level` (6-15): class cls's, its levels
@@ -2270,6 +2467,7 @@ void fx_ground_draw(void)
         range.course = -1;
         fill.course = -1;
         forest.course = -1;
+        roll.course = -1;
     }
     /* land: none in a tunnel (bit 3 of $0DA5, which the tunnel's gates set
        and clear: the original turns the backdrop's colours black there, so

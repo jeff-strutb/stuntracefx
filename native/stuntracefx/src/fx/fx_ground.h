@@ -15,5 +15,11 @@ float fx_ground_depth_z(double depth);
    of each list of objects. */
 void fx_ground_object_begin(uint16_t record, int shift);
 void fx_ground_object_end(void);
+/* A course's ground faces (Night Cruise's khaki verges): whether a flat
+   face of palette entry `entry` is one, and its colour at a corner `depth`
+   from the eye on screen row `row` of picture `panel` (fx_draw.c draws such
+   faces in their corners' colours). */
+int fx_ground_verge(uint8_t entry);
+uint32_t fx_ground_verge_colour(uint8_t entry, double depth, float row, int panel);
 
 #endif

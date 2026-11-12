@@ -14,6 +14,7 @@
 #include "fx/fx_draw.h"
 #include "fx/fx_far.h"
 #include "fx/fx_face.h"
+#include "fx/fx_ground.h"
 #include "system/state.h"
 #include "system/perf.h"
 #include "video/picture.h"
@@ -1818,7 +1819,9 @@ static void shape_draw_body(const FxShape *sh)
     nshvc_vertex v[48];
     uint32_t image = 0, done = 0, i, tinted = 0;
     uint8_t colour;
-    double u_off = 0, v_off = 0;
+    double u_off = 0, v_off = 0, vcx = (int16_t)rd(0x0034), vcy = (int16_t)rd(0x0036);
+    float row_at = (float)(recording ? recording->oy : offset_y);
+    int verge = 0;
 
     if (m->textured) {
         uint8_t bank = m->bank;
@@ -1841,7 +1844,10 @@ static void shape_draw_body(const FxShape *sh)
         colour = ink(colour);
         if ((!target.id && !recording) || !colour)
             return;
-        if (!tinted)
+        /* a course's ground face (Night Cruise's verges), shaded by its
+           corners' depths toward the band (fx_ground_verge) */
+        verge = !tinted && !sh->line && sh->plane[3] != 0 && fx_draw_full_colour() && fx_ground_verge(colour);
+        if (!tinted && !verge)
             image = entry_image();      /* the palette's entry; a tint is a colour */
     }
     memset(v, 0, sizeof v);
@@ -1854,8 +1860,14 @@ static void shape_draw_body(const FxShape *sh)
             v[i].u = (float)(c[done + i].u + u_off);
             v[i].v = (float)(c[done + i].v + v_off);
             v[i].colour = tinted;
-            if (!m->textured && !tinted)
+            if (verge) {
+                double inv = (sh->plane[0] * (v[i].x - vcx) / 128.0 + sh->plane[1] * (v[i].y - vcy) / 128.0 + sh->plane[2])
+                             / sh->plane[3];
+
+                v[i].colour = fx_ground_verge_colour(colour, inv > 1e-9 ? 1.0 / inv : 1e9, v[i].y + row_at, picture_now);
+            } else if (!m->textured && !tinted) {
                 at_entry(&v[i], colour);
+            }
         }
         emit(v, n, image, sh->line);
         done += n;

@@ -855,6 +855,15 @@ static void commit(const FxMaterial *m)
     s->light = face.tint.light;
     s->under_first = s->under_count = 0;
     s->z = fx_far_z();
+    s->plane[0] = s->plane[1] = s->plane[2] = s->plane[3] = 0;
+    if (face.n >= 3) {                  /* its plane, from its first three corners */
+        double a[3] = { face.c[1].x - face.c[0].x, face.c[1].y - face.c[0].y, face.c[1].z - face.c[0].z };
+        double b[3] = { face.c[2].x - face.c[0].x, face.c[2].y - face.c[0].y, face.c[2].z - face.c[0].z };
+        double n[3] = { a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0] };
+
+        s->plane[0] = (float)n[0], s->plane[1] = (float)n[1], s->plane[2] = (float)n[2];
+        s->plane[3] = (float)((n[0] * face.c[0].x + n[1] * face.c[0].y + n[2] * face.c[0].z) * (1 << fx_far_shift()));
+    }
     if (s->line) {
         ok = line(face.c, &face.view);
     } else if (cut.on) {

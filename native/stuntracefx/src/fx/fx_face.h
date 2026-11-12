@@ -45,6 +45,10 @@ typedef struct {
     /* the depth it is drawn at (a far object's while the land hides them,
        fx_far_z), 0 the 3D's own */
     float z;
+    /* its plane in view space, n . p = d, a far object's halved place
+       taken back to its own, so that one over a corner's depth is n .
+       ((x - cx) / 128, (y - cy) / 128, 1) / d (d 0: none, a line) */
+    float plane[4];
 } FxShape;
 
 /* A face: begun, its points given (fx_face_vertex, fx_rt.h), then ended
