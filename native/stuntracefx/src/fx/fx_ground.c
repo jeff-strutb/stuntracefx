@@ -147,7 +147,11 @@ static const struct {
                                            whites its own snow banks are in (214,231,231 to 255,255,255;
                                            its road class 21's icy greys), its fog over it as the
                                            palette carries it (amount_step's 10 of 32 for it) */
-    [0x07] = { SURF_CEMENT, 0, 0, 0, 0, 0, 0 },  /* the sunset city */
+    [0x07] = { SURF_CEMENT, 0, 17, 0, 1, 0, 0 }, /* Night Cruise, the sunset city: flat (its skyline on the backdrop),
+                                           class 17, the khaki its ground beyond the road is in (140,140,90
+                                           and 115,115,66, the class's levels 8-9 in its palette; its road
+                                           class 21's mauves), the weather's blend to night as the palette
+                                           carries it */
     [0x08] = { SURF_GRASS, 0, 0, 0, 0, 0, 0 },   /* Lake Side: as Sea Breeze */
     [0x09] = { SURF_ROCK, 0, 0, 0, 0, 0, 0 },    /* the wild-west desert: red rock, its band green */
     [0x0A] = { SURF_NONE, 0, 0, 0, 0, 0, 0 },    /* Sky Ramp */
