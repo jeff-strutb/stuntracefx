@@ -95,6 +95,8 @@ enum { SURF_NONE, SURF_GRASS, SURF_ROCK, SURF_CEMENT, SURF_SNOW, SURF_ICE, SURF_
 #define IS_LAND(k) ((k) >= SURF_GRASS && (k) <= SURF_DIRT)
 #define CLS_ROCK 0xFF           /* the surface table's class for the course's own rock (the survey's fit): mesas */
 #define CLS_WHITE 0xFD          /* class 0, the chip's snow whites (the table's 0 is no class) */
+#define CLS_BAND 0xFC           /* a sea in the band's own sea's colours (band_shade): Lake Side */
+#define WATER_DEEPEST 32767     /* water at the lowest place the course's shapes meet the ground (the survey's) */
 
 /* Each course's surface (g.course, $0E3D), from pictures of every course
    (2026-11-09): its kind, and for water the height of its level (world y
@@ -152,7 +154,12 @@ static const struct {
                                            and 115,115,66, the class's levels 8-9 in its palette; its road
                                            class 21's mauves), the weather's blend to night as the palette
                                            carries it */
-    [0x08] = { SURF_GRASS, 0, 0, 0, 0, 0, 0 },   /* Lake Side: as Sea Breeze */
+    [0x08] = { SURF_WATER, WATER_DEEPEST, CLS_BAND, 0, 0, 0, 0 }, /* Lake Side: a lake, Aqua Tunnel's ocean in
+                                           the band's own lake's colours (its ground half Sea Breeze's,
+                                           teal to sea-green, the lake light teal by the road); its road
+                                           crosses no water (none of its faces is a level textured one, a
+                                           dump of 2026-11-12), so the lake is at the lowest place its
+                                           shapes meet the ground, where the road never goes under it */
     [0x09] = { SURF_ROCK, 0, 0, 0, 0, 0, 0 },    /* the wild-west desert: red rock, its band green */
     [0x0A] = { SURF_NONE, 0, 0, 0, 0, 0, 0 },    /* Sky Ramp */
     [0x0B] = { SURF_WATER, -3840, 0, 0, 0, 0, 0 }, /* the night harbour: where its lowest road's (-4480) pieces end */
@@ -2099,12 +2106,43 @@ static void land_polygons(unsigned course, int cls, const double eye[3], const d
 static nshvc_image ocean_image[4];
 static nshvc_shader ocean_shader;
 
+/* The band's own sea (CLS_BAND): the band's ground half (its lists'
+   places 256 to 511, the horizon's first, as the screen shows them with
+   the weather and the fog: sky_colour_at), its colours each once, from the
+   darkest (under the eye) to the lightest (at the horizon), and of those
+   the lightest third, the water as the original shows it beside the road
+   (Lake Side's lake light cyan, 95,255,227 in its pictures: it lies out
+   toward the horizon's rows; the rest lies under the road near the eye);
+   a lit face's level 6-15 takes the one as far along them (6 the
+   darkest), so a level face seen from the race's camera (level 9 or 10)
+   is the band's light teal (Lake Side's 74,239,198 to 90,247,214). */
+static uint32_t band_shade(int level)
+{
+    uint16_t seen[256];
+    int n = 0, at, k;
+
+    for (at = 511; at >= 256; at--) {   /* under the eye first: the darkest */
+        uint16_t c = sky_colour_at(at);
+
+        for (k = 0; k < n && seen[k] != c; k++)
+            ;
+        if (k == n)
+            seen[n++] = c;
+    }
+    if (!n)
+        return 0xFF000000u;
+    k = 2 * n / 3 + (int)lround((level < 6 ? 0 : level > 15 ? 9 : level - 6) / 9.0 * (n - 1 - 2 * n / 3));
+    return rgb_of(seen[k]);
+}
+
 /* A sea's shade at light level `level` (6-15): class cls's, its levels
    from `first` (0: 6) to 15 spread over 6-15, so a sea drawn in a class's
    lighter shades alone (Sea Breeze's, its crossing's colours) is lit as
    the whole row would be. */
 static uint32_t sea_shade(int cls, int first, int level)
 {
+    if (cls == CLS_BAND)
+        return band_shade(level);
     if (first > 6)
         level = first + (int)lround((level < 6 ? 0 : level > 15 ? 9 : level - 6) * (15 - first) / 9.0);
     return row_colour(cls, level);
@@ -2205,7 +2243,7 @@ void fx_ground_draw(void)
 {
     unsigned course = g.course;
     int kind = course < 0x20 ? surface[course].kind : SURF_NONE, p = fx_draw_picture_now(), slot, i, k;
-    double m[9], eye[3], dh, cx, cy, top, bottom, a[3], b[3], c[3], c1, ox = 0, oy = 0, scale, reach;
+    double m[9], eye[3], dh, water_y, cx, cy, top, bottom, a[3], b[3], c[3], c1, ox = 0, oy = 0, scale, reach;
     double q[4][3];
     static FxCorner corners[64];
     uint32_t n;
@@ -2245,11 +2283,12 @@ void fx_ground_draw(void)
             land_draw(kind, eye, m, p);
         return;
     }
-    dh = surface[course].y - eye[1];            /* world y is down: > 0, the surface below the eye */
+    water_y = surface[course].y == WATER_DEEPEST ? (grid.nx ? grid.deepest : 0) : surface[course].y;
+    dh = water_y - eye[1];                      /* world y is down: > 0, the surface below the eye */
     if (dh == 0 || (dh < 0 && kind != SURF_AQUA))
         return;
     if (surface[course].cls) {          /* the ocean; Aqua Tunnel's cuts the picture as below */
-        ocean_draw(surface[course].cls, surface[course].under, surface[course].first, eye, m, surface[course].y, p);
+        ocean_draw(surface[course].cls, surface[course].under, surface[course].first, eye, m, water_y, p);
         if (kind == SURF_AQUA) {
             double plane[3] = { m[3], m[4], m[5] };
 
