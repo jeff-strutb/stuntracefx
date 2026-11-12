@@ -148,9 +148,6 @@ typedef struct {
                                            $8C or the slot was made or freed since */
     uint16_t record_gaze[64];           /* per draw record, as g.frame_records: its object's gaze for
                                            the side drawn (draw_record_gaze) */
-    uint8_t record_car[64];             /* per draw record: the car it is of, numbered from 1 in the list; 0
-                                           none (draw_record_car) */
-    uint8_t record_part[64];            /* and which part of it: DRAW_PART_* */
 } ObjectTable;
 
 extern ObjectTable objects;
@@ -506,11 +503,6 @@ void ObjectDrawListBuild(void);
    byte is still the one that read gave; 0 otherwise. Indexed as
    ObjectDrawListBuild writes g.frame_records; rebuilt with them. */
 uint16_t draw_record_gaze(int record);
-/* A draw record's car (fx/fx_seat.c seats the cars on the road): its number
-   in the list (0 up), or -1 when the record is of no car; *part one of
-   these. */
-enum { DRAW_PART_NONE, DRAW_PART_BODY, DRAW_PART_TYRE, DRAW_PART_CHILD };
-int draw_record_car(int record, int *part);
 /* after an object's handler ran (ObjectTurn): a car's child's seat on its
    car learnt, or that it was placed at its car's centre (draw_list.c) */
 void ObjectChildPlaced(const Object *o);

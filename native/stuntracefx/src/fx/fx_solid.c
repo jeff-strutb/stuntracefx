@@ -48,7 +48,6 @@
 #include "fx/fx_draw.h"
 #include "fx/fx_face.h"
 #include "fx/fx_far.h"
-#include "fx/fx_seat.h"
 #include "object/object.h"
 
 #define PI_F 3.14159265f
@@ -276,7 +275,6 @@ void fx_solid_begin(void)
     pos[0] = (int16_t)word(0x0026);
     pos[1] = (int16_t)word(0x0028);
     pos[2] = (int16_t)word(0x002A);
-    fx_seat_solid(pos);                 /* a car's tyre stood on the road, its other parts moved with it */
     /* the sprite's size (01:B100, B128): a negative own size alone, else
        the shape's twice and the own shifted by $0032; 0 as 1 */
     own = (int16_t)word(FX_MODEL_CE);
@@ -296,25 +294,6 @@ void fx_solid_begin(void)
         turn();
     }
     armed = object;
-}
-
-float fx_solid_wheel_radius(uint16_t shape, const uint8_t *record)
-{
-    int32_t own = (int8_t)record[0x1C], size;
-    float r = 0;
-    int i, k;
-
-    for (i = 0; i < N(solids); i++)
-        if (solids[i].shape == shape && solids[i].axis == 0 && solids[i].rings)
-            break;
-    if (i == N(solids))
-        return 0;
-    for (k = 0; k < solids[i].nrings; k++)
-        r = solids[i].rings[k].r > r ? solids[i].rings[k].r : r;
-    size = own < 0 ? -own
-                   : 2 * (fx_rom_read(0, (uint16_t)(shape + 0x10)) | fx_rom_read(0, (uint16_t)(shape + 0x11)) << 8)
-                         + (own << (fx_rom_read(0, (uint16_t)(shape + 7)) & 15));
-    return r * (float)(size ? size : 1) / (float)solids[i].texels;
 }
 
 int fx_solid_hiding(void)
@@ -403,10 +382,8 @@ static void cap(const Solid *s, float a, const Disc *d, int nd, int n)
             place(s, a, 2 * PI_F * i / m, d[k].r, p[i]);
         if (!k && !(cap_seen = face_seen((const float (*)[3])p, m, nv)))
             return;
-        fx_draw_layer(k);               /* each ring over the one before, in its plane */
         emit((const float (*)[3])p, m, (uint8_t)(hi | d[k].nib));
     }
-    fx_draw_layer(0);
 }
 
 /* an eye's face's marks on its face plane at a, in order */
@@ -419,7 +396,6 @@ static void eye_marks(const Solid *s, float a, const Mark *mk, int nm, int n)
     for (k = 0; k < nm; k++) {
         const Mark *m = &mk[k];
 
-        fx_draw_layer(1 + k);           /* each mark over the face and the marks before it */
         if (m->t0 == m->t1) {           /* a disc */
             int sides = m->r1 < 1.5f ? 12 : n;
 
@@ -454,7 +430,6 @@ static void eye_marks(const Solid *s, float a, const Mark *mk, int nm, int n)
             }
         }
     }
-    fx_draw_layer(0);
 }
 
 static void draw(const Solid *s)

@@ -1488,12 +1488,6 @@ static void two_images_build(void)
     two_images_stale = 0;
 }
 
-/* The list's depth of the quads and rectangles drawn now: 0 in front; the
-   two players' backdrops, drawn into the 3D's list before it, at the far
-   end, behind the 3D, which is drawn at its true depths (fx/fx_draw.c,
-   "depth"). */
-static float list_depth;
-
 /* A rectangle of the screen from texels (u0, v0), a texel a screen pixel,
    in the list's own pixels (fx_draw_list_scale: the list may be at the
    output's resolution). The corners take the texels' edges, as
@@ -1522,7 +1516,6 @@ static void image_quad(nshvc_draw_list list, nshvc_image image, int x0, int y0, 
     v[3] = v[0];
     v[4] = v[2];
     v[5].x = l; v[5].y = b; v[5].u = ul; v[5].v = vb; v[5].colour = 1;
-    v[0].z = v[1].z = v[2].z = v[3].z = v[4].z = v[5].z = list_depth;
     nshvc_draw_tris(list, v, 6, &m);
 }
 
@@ -1579,10 +1572,8 @@ static void colour_rect(nshvc_draw_list list, int x0, int y0, int x1, int y1, ui
     v[3] = v[0];
     v[4] = v[2];
     v[5].x = (float)x0 * sx; v[5].y = (float)y1 * sy;
-    for (x0 = 0; x0 < 6; x0++) {
+    for (x0 = 0; x0 < 6; x0++)
         v[x0].colour = colour;
-        v[x0].z = list_depth;
-    }
     nshvc_draw_tris(list, v, 6, NULL);
 }
 
@@ -1696,7 +1687,6 @@ static void two_full_backdrop(nshvc_draw_list list)
     const ScreenShape *sh = screen_shape();
     int p;
 
-    list_depth = 0.9999f;               /* behind the 3D and its ground */
     /* the seam between the players black, as the original's blank lines between its halves */
     colour_rect(list, 0, 0, sh->width, sh->height, 0xFF000000u);
     for (p = 0; p < 2; p++) {
@@ -1723,7 +1713,6 @@ static void two_full_backdrop(nshvc_draw_list list)
             image_wrap(list, backdrop_clear, 512, x, y, w, h,
                        x - rcx + centre_x[p] + sx, y - rcy + centre_y[p] + 1 + sy);
     }
-    list_depth = 0;
 }
 
 /* A rectangle of texels (u0, v0, uw x vh) over a rectangle of the screen

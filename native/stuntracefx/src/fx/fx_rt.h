@@ -132,10 +132,6 @@ void fx_sprite_place(uint16_t x, uint16_t y, uint16_t depth, uint16_t size, uint
 /* The frame program's drawing is the picture's 3D (0); what is drawn after
    it, the HUD's (1). */
 void fx_draw_part(int hud);
-/* The 3D is being drawn at its true depths (fx_draw.c, "depth"): from its
-   frame program's start to the HUD's; both sides of its faces then. */
-int fx_draw_depth_on(void);
-int fx_draw_both_sides(void);         /* faces turned away drawn too (fx_draw.c) */
 /* In a picture between steps (fx/fx_tween.c), the 256ths of the angle
    bytes of the object whose draw record is at `record`: chosen as
    FxObjectsDraw takes the record, read as the model's matrix is made (0
@@ -149,10 +145,5 @@ void fx_solid_object(uint16_t shape, uint16_t record);
 void fx_solid_begin(void);
 void fx_solid_colour(uint8_t colr, uint8_t por);
 void fx_solid_end(void);
-/* The tread's radius a car's tyre is drawn with as a solid (a solid turned
-   about its axle across), by its shape and its draw record (its own size
-   +$1C, the shape's sprite size and shift), the same as FxObjectSprite's
-   size makes it; 0 for any other shape (fx/fx_seat.c). */
-float fx_solid_wheel_radius(uint16_t shape, const uint8_t *record);
 
 #endif

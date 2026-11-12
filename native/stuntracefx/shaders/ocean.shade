@@ -24,15 +24,10 @@
    the level's scale, in the world's axes, y down), the time in seconds
    (within 600, whole periods of both waves), the eye's place in cells (2),
    the eye's height over the water in cells (below 0 under it), the waves'
-   height in cells; from 24 the holes (fx_ground_water_holes): their count,
-   then each its corner count and its corners (x, y, screen places less the
-   origin, the inside left of each edge), 33 words a hole. A pixel inside a
-   hole is left out: there a track piece goes below the water (the glass
-   tube's mouth), and what lies past it shows by depth. */
+   height in cells. */
 const int N = 64;                   /* the lattice's pattern repeats every N cells (fx_ground.c's OCEAN_PERIOD) */
 const float ALPHA_NEAR = 0.6;       /* how much the water covers seen straight down */
 const int H = 11;                   /* the floats' first texel */
-const int HOLES = 24, HOLE_WORDS = 33;
 
 uint word_at(int i) {
     uvec4 b = uvec4(nshvc_image(ivec2(i, 0)) * 255.0 + 0.5);
@@ -40,27 +35,6 @@ uint word_at(int i) {
 }
 
 float header(int i) { return uintBitsToFloat(word_at(H + i)); }
-
-float word_float(int i) { return uintBitsToFloat(word_at(i)); }
-
-bool in_hole(vec2 p) {
-    int holes = int(word_float(HOLES));
-    for (int h = 0; h < holes; h++) {
-        int at = HOLES + 1 + h * HOLE_WORDS, n = int(word_float(at));
-        bool inside = n >= 3;
-        for (int k = 0; k < n && inside; k++) {
-            int k1 = k + 1 == n ? 0 : k + 1;
-            vec2 a = vec2(word_float(at + 1 + 2 * k), word_float(at + 2 + 2 * k));
-            vec2 b = vec2(word_float(at + 1 + 2 * k1), word_float(at + 2 + 2 * k1));
-            vec2 e = b - a, d = p - a;
-            if (e.x * d.y - e.y * d.x < 0.0)
-                inside = false;
-        }
-        if (inside)
-            return true;
-    }
-    return false;
-}
 
 uint hash(ivec2 p, uint salt) {
     uvec2 q = uvec2(p & (N - 1));
@@ -82,7 +56,7 @@ float height(ivec2 p, float t, float a) {
 
 vec4 shade(vec2 xy) {
     float den = nshvc_input(6) * xy.x + nshvc_input(7) * xy.y + 1.0;
-    if (den <= 0.0 || in_hole(xy))
+    if (den <= 0.0)
         return vec4(0.0);
     vec2 uv = vec2(nshvc_input(0) * xy.x + nshvc_input(1) * xy.y + nshvc_input(2),
                    nshvc_input(3) * xy.x + nshvc_input(4) * xy.y + nshvc_input(5)) / den;

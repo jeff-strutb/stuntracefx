@@ -2674,21 +2674,10 @@ FxModelFacesResult FxModelFaces(uint16_t divisor_made, uint16_t list_write_ptr, 
         fx_r14((uint16_t)(rom_at + 2));
         flag_index = fx_getb();
         fx_r14((uint16_t)(rom_at + 3));
-        /* a face that looks away from the eye is drawn too, its back shaded
-           as facing the eye (fx_face_back): the 3D's polygons are seen from
-           both sides at their true depths (fx/fx_draw.c, "depth"; Jeff,
-           2026-11-11), so a tunnel's or a canyon's one-sided walls show from
-           outside; the chip passed it by, as it is still passed while the
-           eye is in a sealed tunnel (fx_draw_both_sides) */
         if (face_cmd != 2 && !(fx_ldb((uint16_t)(flag_index + 0x07C6)) & 0x80)) {
-            if (!fx_draw_both_sides()) {
-                rom_at = (uint16_t)(rom_at + 7 + face_cmd);     /* faces away: passed */
-                fx_r14(rom_at);
-                continue;
-            }
-            fx_face_back(1);
-        } else {
-            fx_face_back(0);
+            rom_at = (uint16_t)(rom_at + 7 + face_cmd);     /* faces away: passed */
+            fx_r14(rom_at);
+            continue;
         }
         fx_stw(FX_POINT_COUNT, face_cmd);
         if (fx_face_full()) {

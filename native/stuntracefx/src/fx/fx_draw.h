@@ -87,18 +87,15 @@ int fx_draw_full_colour(void);
 int fx_draw_two_players(void);
 /* The ground's surface (fx/fx_ground.c): triangles over `image` drawn by
    `shader` with its eight inputs, each vertex's u, v its screen place less
-   (ox, oy), at depth z (below 0: each corner's own); and the picture being
-   drawn (0, or 1 for two players' second). */
-void fx_draw_surface(const FxCorner *c, uint32_t n, nshvc_image image, nshvc_shader shader, const float in[8], float ox, float oy,
-                     float z);
-/* A 3D depth as the list's z: one over the view-space depth to (0, 0.998],
-   0 nearest; 0 for none (fx_draw.c, "depth"). */
-float fx_draw_depth(double iz);
+   (ox, oy); and the picture being drawn (0, or 1 for two players' second). */
+void fx_draw_surface(const FxCorner *c, uint32_t n, nshvc_image image, nshvc_shader shader, const float in[8], float ox, float oy);
 /* The land's polygons (fx/fx_ground.c): triangles of n vertices, x and y
    in the picture's pixels, each vertex's colour and depth its own (z in
    (0, 1): past every other shape of the 3D, drawn at depth 0, so they
    cover none of them). */
 void fx_draw_land(const nshvc_vertex *v, uint32_t n);
+/* The 3D's faces queued so far drawn now, in order. */
+void fx_draw_queued(void);
 int fx_draw_picture_now(void);
 int fx_draw_tweening(void);
 /* The palette entry a face's colour byte is shown in at the screen's depth
@@ -114,10 +111,6 @@ void fx_draw_side(int past);
 /* While on, nothing the frame program does is drawn (the ground's survey of
    the course's shapes). */
 void fx_draw_hold(int on);
-int fx_draw_holding(void);          /* the hold is on */
-/* The layer of a solid's flat faces drawn from now on (fx_solid.c): each
-   drawn that many steps nearer than its depth, over what it lies on. */
-void fx_draw_layer(int layer);
 int fx_solid_hiding(void);
 /* The list drawn into, by size in pixels (the checks). */
 void fx_draw_set_target(nshvc_draw_list list, uint32_t width, uint32_t height);

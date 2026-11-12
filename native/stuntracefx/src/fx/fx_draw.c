@@ -13,8 +13,6 @@
 #include "fx/fx.h"
 #include "fx/fx_draw.h"
 #include "fx/fx_far.h"
-#include "fx/fx_ground.h"
-#include "fx/fx_seat.h"
 #include "fx/fx_face.h"
 #include "system/state.h"
 #include "system/perf.h"
@@ -187,8 +185,6 @@ int fx_draw_tweening(void) { return tweening != 0; }
 void fx_draw_begin(int picture)
 {
     picture &= 1;
-    fx_seat_picture(picture);
-    fx_face_picture();
     picture_now = picture;
     drawing_3d = 0;                     /* its view is known at its frame program's start */
     target.id = 0;
@@ -365,8 +361,6 @@ void fx_draw_part(int hud)
         under_splice(recording);
         recording->hud_from = recording->ns;
     }
-    if (hud)
-        fx_seat_object(0, 0);           /* no object's: the cars' seats are over */
     if (hud) {                          /* the HUD's drawing is not cut by the water */
         side_under = 0;
         fx_face_cut(0, NULL, 0);
@@ -393,76 +387,18 @@ void fx_draw_set_origin(int x, int y)
 static int held;                /* nothing is drawn (the ground's survey) */
 
 void fx_draw_hold(int on) { held = on; }
-int fx_draw_holding(void) { return held; }
 
-/* ---- depth (Jeff, 2026-11-11: the 3D drawn to modern standards, its
-   polygons from both sides, what is in front decided by depth) ----
-
-   Every 3D polygon is drawn at its true depth: each corner's one over its
-   view-space depth (FxCorner iz, linear across the screen, so exact across
-   a face) as the list's z, 0 nearest: z = 0.998 (1 - DEPTH_NEAR iz), kept
-   to (0, 0.998]; nearer than DEPTH_NEAR all at the nearest, in their order.
-   The list's depth test keeps the nearer (of equal, the later), so faces
-   hide one another as they stand, whichever is drawn first. A face lying
-   over an earlier face of the picture that looks unlike it (FxShape decal:
-   a stripe on its road, a lamp on a tunnel's ceiling, a track piece's face
-   over its neighbour's, the chip's rounding leaving them up to 3 apart) is
-   drawn its level of steps nearer, each moving its plane DECAL_PLANE (4)
-   toward the eye (its iz times 1 + decal_k) and its z DECAL_Z less (a
-   polygon offset: the plane's move beats the pieces' gaps whatever angle
-   the face is seen at, the z the buffer's rounding), so the later stays in
-   front where they share a plane, as the original's order drew it. A face
-   seen from its back (FxShape back) is drawn one step and its level further,
-   so whatever faces the eye in its place is in front of it (a two-sided
-   part's other face, which the model gives the same corners) and from
-   behind a stripe is under the face it lies on, as it is. What an
-   object draws that has no depth of its own (a sprite, a plotted row) is
-   at its place's (fx_far_iz); the 2D (the HUD, the pause screen) at 0, in
-   front of all. A list has about a sixteenth of the depth buffer (the
-   engine's), about twenty bits for this z: depths a thousandth apart are
-   told apart out to some 30,000. */
-#define DEPTH_NEAR 32.0
-#define DECAL_Z 4e-6                    /* a decal step's depth past its plane's move: four of the buffer's steps */
-#define DEPTH_FAR 0.998
-
-float fx_draw_depth(double iz)
-{
-    double z;
-
-    if (iz <= 0)
-        return 0;
-    z = DEPTH_FAR * (1.0 - DEPTH_NEAR * iz);
-    return (float)(z < 1e-6 ? 1e-6 : z > DEPTH_FAR ? DEPTH_FAR : z);
-}
-
-static int in_shape;                    /* shape_draw: the vertices carry their own depths */
-static int shape_decal, shape_back;
-static float shape_decal_k;
-
-static float corner_z(const FxCorner *c)
-{
-    double steps = shape_back ? -(1.0 + shape_decal) : shape_decal, k = 1.0 + steps * shape_decal_k, z;
-
-    if (!drawing_3d)
-        return 0.0f;
-    z = fx_draw_depth(c->iz * (k > 0.5 ? k : 0.5)) - steps * DECAL_Z;
-    return (float)(z < 1e-6 ? 1e-6 : z > DEPTH_FAR ? DEPTH_FAR : z);
-}
+/* The depth of what is emitted (fx_far.c's fx_far_occlude): a queued face
+   its own (shape_draw sets it while it draws one), anything else the far
+   object drawing now's; 0 none, the 3D's own depth 0 in order. Only a
+   vertex at depth 0 takes it (the land's carry their own). */
+static int in_shape;
+static float shape_z;
 
 static float emit_z(void)
 {
-    return in_shape || !drawing_3d ? 0.0f : fx_draw_depth(fx_far_iz());
+    return in_shape ? shape_z : fx_far_z();
 }
-
-int fx_draw_depth_on(void) { return drawing_3d; }
-
-/* Faces drawn from both sides: while the 3D has its depths, except while the
-   eye is in a sealed tunnel (bit 3 of $0DA5, which the tunnel's gates set
-   and clear, its backdrop black): there, as the original, a face turned
-   away is left out. A tunnel's way out is a hill's face one-sided toward
-   the outside with its mouth painted on it (Sunset Valley's E3BC); from
-   inside, its back would stand across the way out. */
-int fx_draw_both_sides(void) { return drawing_3d && !(g.picture_effects & 0x08); }
 
 static void emit_with(const nshvc_vertex *v, uint32_t count, uint32_t image, int lines, uint32_t shader, const float *in)
 {
@@ -1404,7 +1340,6 @@ static int clip_to_hole(const nshvc_vertex *in, int n, nshvc_vertex *out, const 
                 b[k] = *p;
                 b[k].x = (float)(p->x + (q->x - p->x) * t);
                 b[k].y = (float)(p->y + (q->y - p->y) * t);
-                b[k].z = (float)(p->z + (q->z - p->z) * t);     /* the list's z is linear across the screen */
                 b[k].u = (float)(p->u + (q->u - p->u) * t);
                 b[k].v = (float)(p->v + (q->v - p->v) * t);
                 k++;
@@ -1428,11 +1363,10 @@ static void under_splice(Recording *r)
     uint32_t ncv = 0, ncs = 0, cap_cv = 0, cap_cs = 0, i, k, n = 0, base, cbase, from, to;
     int nh, h;
 
-    holes = fx_face_holes(&nh);
-    fx_ground_water_holes(holes, nh);   /* the water leaves them out: what lies past it shows by depth */
     if (!r->nus) {
         return;
     }
+    holes = fx_face_holes(&nh);
     /* the parts past the water clipped to each hole: triangle by triangle */
     for (i = 0; i < r->nus; i++) {
         const Shape *sh = &r->us[i];
@@ -1522,8 +1456,7 @@ static void under_splice(Recording *r)
 /* The ground's surface (fx_ground.c): triangles drawn by `shader` over
    `image` with its inputs, each vertex's u, v its place on the screen less
    (ox, oy). */
-void fx_draw_surface(const FxCorner *c, uint32_t n, nshvc_image image, nshvc_shader shader, const float in[8], float ox, float oy,
-                     float z)
+void fx_draw_surface(const FxCorner *c, uint32_t n, nshvc_image image, nshvc_shader shader, const float in[8], float ox, float oy)
 {
     nshvc_vertex v[48];
     uint32_t done = 0, i;
@@ -1540,7 +1473,6 @@ void fx_draw_surface(const FxCorner *c, uint32_t n, nshvc_image image, nshvc_sha
             v[i].y = c[done + i].y;
             v[i].u = c[done + i].x - ox;
             v[i].v = c[done + i].y - oy;
-            v[i].z = z < 0 ? fx_draw_depth(c[done + i].iz) : z;
             v[i].colour = 0xFF000000u;
         }
         if (recording && recording->water_from < 0)
@@ -1562,21 +1494,6 @@ void fx_draw_land(const nshvc_vertex *v, uint32_t n)
     emit(v, n, 0, 0);
 }
 
-/* A solid's layer (fx_solid.c): a disc or a mark drawn over its face, in
-   that plane, is drawn its layer of DECAL_Z steps nearer, so the later
-   stays in front (its points are the face's, so only the buffer's rounding
-   is to beat). */
-static int solid_layer;
-
-void fx_draw_layer(int layer) { solid_layer = layer; }
-
-static float layered(float z)
-{
-    double l = z - solid_layer * DECAL_Z;
-
-    return solid_layer && z > 0 ? (float)(l < 1e-6 ? 1e-6 : l) : z;
-}
-
 /* The same in the palette's entry e as it is, of the whole palette. */
 void fx_draw_flat_entry(const FxCorner *c, uint32_t n, uint8_t colour)
 {
@@ -1593,7 +1510,6 @@ void fx_draw_flat_entry(const FxCorner *c, uint32_t n, uint8_t colour)
         for (i = 0; i < k; i++) {
             v[i].x = c[done + i].x;
             v[i].y = c[done + i].y;
-            v[i].z = layered(fx_draw_depth(c[done + i].iz));
             at_entry(&v[i], colour);
         }
         emit(v, k, entry_image(), 0);
@@ -1823,7 +1739,6 @@ static void shape_draw_body(const FxShape *sh)
         for (i = 0; i < n; i++) {
             v[i].x = c[done + i].x;
             v[i].y = c[done + i].y;
-            v[i].z = corner_z(&c[done + i]);
             v[i].u = (float)(c[done + i].u + u_off);
             v[i].v = (float)(c[done + i].v + v_off);
             v[i].colour = tinted;
@@ -1843,7 +1758,6 @@ static void shape_draw_body(const FxShape *sh)
             for (i = 0; i < n; i++) {
                 v[i].x = u[done + i].x;
                 v[i].y = u[done + i].y;
-                v[i].z = corner_z(&u[done + i]);
                 v[i].u = (float)(u[done + i].u + u_off);
                 v[i].v = (float)(u[done + i].v + v_off);
                 v[i].colour = tinted;
@@ -1856,16 +1770,29 @@ static void shape_draw_body(const FxShape *sh)
     }
 }
 
-/* a queued face at its corners' depths, offset by its decal level */
+/* a queued face at its own depth (FxShape z) */
 static void shape_draw(const FxShape *sh)
 {
     in_shape = 1;
-    shape_decal = sh->decal;
-    shape_decal_k = sh->decal_k;
-    shape_back = sh->back;
+    shape_z = sh->z;
     shape_draw_body(sh);
     in_shape = 0;
-    shape_back = 0;
+}
+
+/* The faces queued so far drawn now, as FxDrawList draws them, the chip's
+   state as it was (fx_ground.c: a tunnel piece's faces before its rock). */
+void fx_draw_queued(void)
+{
+    FxState keep = fxs;
+    uint32_t i, n = fx_face_count();
+
+    if (!n)
+        return;
+    blocks_flush();
+    for (i = 0; i < n; i++)
+        shape_draw(fx_face_at(i));
+    fx_face_reset();
+    fxs = keep;
 }
 
 FxDrawListResult FxDrawList(uint16_t caller_list_end, uint16_t caller_write_ptr, uint16_t *stack, uint16_t rom_at)

@@ -334,34 +334,17 @@ static struct {
 static float survey_point[SURVEY_POINTS][3];
 static int survey_points;
 
-/* The record being surveyed, at its second look (every face, those looking
-   away from the eye too: fx_face_survey_all): its faces' area by the way
-   their Newell normals point most (+x, -x, +y, -y, +z, -z; y is down) and
-   the area times their middles' place along that axis; and each record's
-   shape, place, box and those sums, to find the pieces the rock encloses
-   (the rock behind the canyon's walls, below). */
-enum { DIRS = 6 };
-static double rec_area[DIRS], rec_pos[DIRS];
-static int second_look;
+/* The record being surveyed: its faces' area by the way their Newell
+   normals point (down, up, across x, across z); and each record's shape,
+   place, box and those areas, to find the course's tunnel pieces (the
+   tunnels' rock, below). */
+static double rec_area[4];
 enum { CANDIDATES = 0x31 + FX_FAR_MAX };
 static struct {
     uint16_t shape;
-    double at[3], lo[3], hi[3], area[DIRS], pos[DIRS];
+    double at[3], lo[3], hi[3], area[4];
 } cand[CANDIDATES];
-static int ncand;
-
-/* The course's faces that lie near level (their normal at least LEVEL_FACE
-   up or down), each in the world with its Newell normal as the survey's
-   second look drew it (outward or inward: rock_survey.facing says, after),
-   for the banks below. */
-#define LEVEL_FACE 0.6
-enum { LEVEL_TOP = 1, LEVEL_ROOF = 2 };
-enum { LEVEL_FACES = 8192, LEVEL_CORNERS = 8 };
-static struct {
-    float p[LEVEL_CORNERS][3], n[3];
-    uint8_t count, kind;                /* LEVEL_TOP, LEVEL_ROOF (banks_make) */
-} level_face[LEVEL_FACES];
-static int nlevel;
+static int ncand, surveying;
 
 static void survey_sink(double x, double y, double z, void *context)
 {
@@ -399,30 +382,13 @@ static void survey_face(const double (*c)[3], int n, uint8_t colour, int texture
     area = 0.5 * len;
     for (i = 0; i < 3; i++)
         u[i] = nv[i] / len;
-    if (second_look) {                  /* the record's faces by direction, their middles' places in the world */
-        const double *at = (const double *)context;
-        int axis = fabs(u[0]) >= fabs(u[1]) && fabs(u[0]) >= fabs(u[2]) ? 0 : fabs(u[1]) >= fabs(u[2]) ? 1 : 2, d = 2 * axis + (u[axis] < 0);
-        double mid = 0;
-
-        for (i = 0; i < n; i++)
-            mid += c[i][axis];
-        mid = mid / n + at[axis] - (axis == 2 ? SURVEY_AHEAD : 0);
-        rec_area[d] += area;
-        rec_pos[d] += area * mid;
-        if (fabs(u[1]) >= LEVEL_FACE && n <= LEVEL_CORNERS && nlevel < LEVEL_FACES) {
-            for (i = 0; i < n; i++) {
-                level_face[nlevel].p[i][0] = (float)(c[i][0] + at[0]);
-                level_face[nlevel].p[i][1] = (float)(c[i][1] + at[1]);
-                level_face[nlevel].p[i][2] = (float)(c[i][2] + at[2] - SURVEY_AHEAD);
-            }
-            for (i = 0; i < 3; i++)
-                level_face[nlevel].n[i] = (float)u[i];
-            level_face[nlevel].count = (uint8_t)n;
-            nlevel++;
-        }
-        return;
-    }
     rock_survey.facing += u[2];
+    if (u[1] > 0.7)
+        rec_area[0] += area;
+    else if (u[1] < -0.7)
+        rec_area[1] += area;
+    else
+        rec_area[fabs(u[0]) >= fabs(u[2]) ? 2 : 3] += area;
     if (lit) {
         double x = u[1] * LIGHT_Y + u[2] * LIGHT_Z;
 
@@ -555,9 +521,13 @@ static void rock_shades(void)
     grid.bias = x[3];
 }
 
-/* the record alone in the first slot, SURVEY_AHEAD ahead of the eye */
-static void survey_slot(const uint8_t *record)
+/* one record (30 bytes) in the first slot, its place in the world `at` */
+static void survey_record(const uint8_t *record, double at[3], uint16_t *stack)
 {
+    uint8_t flags = record[0x07];
+
+    if (flags & 0x8C)                   /* placed in view space, an effect, a sprite */
+        return;
     memcpy(&fx_ram[0x0AAA], record, 0x1E);
     fx_ram[0x0AAA] = fx_ram[0x0AAB] = 0;
     fx_ram[0x0AAA + 0x12] = fx_ram[0x0AAA + 0x13] = 0;
@@ -566,36 +536,15 @@ static void survey_slot(const uint8_t *record)
     fx_ram[0x0AAA + 0x15] = (uint8_t)(SURVEY_AHEAD >> 8);
     fx_ram[GSU_DRAW_LIST] = 0xAA;
     fx_ram[GSU_DRAW_LIST + 1] = 0x0A;
-}
-
-/* one record (30 bytes) in the first slot, its place in the world `at` */
-static void survey_record(const uint8_t *record, double at[3], uint16_t *stack)
-{
-    uint8_t flags = record[0x07];
-
-    if (flags & 0x8C)                   /* placed in view space, an effect, a sprite */
-        return;
-    survey_slot(record);
     {
         int from = survey_points, i, kept_n = from;
         float lowest = -1e9f;
 
+        memset(rec_area, 0, sizeof rec_area);
         fx_face_survey(survey_sink, survey_face, at);
         *stack = 0x0240;
         (void)FxObjectsDraw(0, stack);
         fx_face_survey(NULL, NULL, NULL);
-        /* the second look: every face, by direction */
-        memset(rec_area, 0, sizeof rec_area);
-        memset(rec_pos, 0, sizeof rec_pos);
-        survey_slot(record);
-        second_look = 1;
-        fx_face_survey_all(1);
-        fx_face_survey(NULL, survey_face, at);
-        *stack = 0x0240;
-        (void)FxObjectsDraw(0, stack);
-        fx_face_survey(NULL, NULL, NULL);
-        fx_face_survey_all(0);
-        second_look = 0;
         if (survey_points > from && ncand < CANDIDATES) {
             int q;
 
@@ -611,7 +560,6 @@ static void survey_record(const uint8_t *record, double at[3], uint16_t *stack)
                     cand[ncand].hi[q] = fmax(cand[ncand].hi[q], survey_point[i][q]);
                 }
             memcpy(cand[ncand].area, rec_area, sizeof rec_area);
-            memcpy(cand[ncand].pos, rec_pos, sizeof rec_pos);
             ncand++;
         }
         /* where the shape meets the ground: its lowest part (world y is
@@ -627,476 +575,67 @@ static void survey_record(const uint8_t *record, double at[3], uint16_t *stack)
 }
 
 
-/* ---- the rock behind the canyon's walls ----
-
-   Jeff, 2026-11-11: "the canyon and tunnel still appear to be floating ...
-   there isn't enough terrain rock around". A canyon's walls are slabs of
-   rock that look into the canyon: seen from outside they stand on the
-   ground with nothing behind them. So behind each wall's open back the
-   land's rock slopes from the wall's top out to the ground a third of its
-   height away, closed at its ends (enclosed_faces: the land's, drawn with
-   the mesas at true depth, only the faces that look at the eye, shaded as
-   the mesas are). The tunnels and the raised road are closed in by the
-   banks (below, "the banks").
-
-   Found by the survey's records (Sunset Valley's, dumped 2026-11-11): a
-   wall piece is at least WALL_HIGH high with at least WALL_SIDEWAYS of its
-   area sideways, and along each level axis a side of its box has an open
-   back where its faces look inward from it (the faces facing +x lie on the
-   low x half, facing in), or where all its faces look one way (a slab):
-   the canyon on the start straight is pieces 3,840 across holding both its
-   walls ($D9C8, $DA00, $D9AC), the slabs by the far road face one way
-   ($F30C, $F328, $F344, $E2DC); a closed rock ($E42C) faces out on every
-   side and has none. */
-#define WALL_HIGH 2000.0
-#define WALL_SIDEWAYS 0.7
-enum { WALLS = 256, ENCLOSED_VERTICES = 196608 };
-
-static struct {
-    int course, nw;
-    struct {
-        double lo[3], hi[3];
-        int backs;                      /* its open backs, bits: 1 low x, 2 high x, 4 low z, 8 high z */
-    } w[WALLS];
-} enclosed = { -1, 0, { { { 0 }, { 0 }, 0 } } };
-
-static void enclosed_find(unsigned course)
-{
-    int i, k;
-
-    enclosed.course = (int)course;
-    enclosed.nw = 0;
-    for (i = 0; i < ncand; i++) {
-        double h = cand[i].hi[1] - cand[i].lo[1];
-        double ar[DIRS], ps[DIRS], side, all;
-        int backs = 0;
-
-        /* Newell's normals look outward where the visible faces' did */
-        for (k = 0; k < DIRS; k++) {
-            int from = rock_survey.facing < 0 ? k : k ^ 1;
-
-            ar[k] = cand[i].area[from];
-            ps[k] = cand[i].pos[from];
-        }
-        side = ar[0] + ar[1] + ar[4] + ar[5];
-        all = side + ar[2] + ar[3];
-        if (h >= WALL_HIGH && all > 0 && side >= WALL_SIDEWAYS * all) {
-            for (k = 0; k < 2; k++) {
-                int plus = 4 * k, minus = 4 * k + 1, axis = 2 * k;
-                double c = (cand[i].lo[axis] + cand[i].hi[axis]) / 2;
-
-                if (ar[plus] >= 0.15 * side && (ps[plus] / ar[plus] < c || ar[minus] < 0.1 * ar[plus]))
-                    backs |= 1 << (2 * k);              /* +axis faces looking in from the low side: its back the low side */
-                if (ar[minus] >= 0.15 * side && (ps[minus] / ar[minus] > c || ar[plus] < 0.1 * ar[minus]))
-                    backs |= 2 << (2 * k);
-            }
-            if (backs && enclosed.nw < WALLS) {
-                memcpy(enclosed.w[enclosed.nw].lo, cand[i].lo, sizeof cand[i].lo);
-                memcpy(enclosed.w[enclosed.nw].hi, cand[i].hi, sizeof cand[i].hi);
-                enclosed.w[enclosed.nw].backs = backs;
-                enclosed.nw++;
-            }
-            continue;
-        }
-    }
-}
-
-/* ---- the banks: the land rising to the course where it stands over it ----
-
-   Jeff, 2026-11-11: the canyon and the tunnel floating ("yes,
-   embankments"). Much of Sunset Valley's road stands well above the land
-   (its second tunnel's floor 2,400 over it), on nothing; drawn from both
-   sides, its edges and its underside showed. The course's faces that lie
-   near level (their normal at least LEVEL_FACE up or down) are sorted by
-   where they lie, as the models' windings do not say which side is seen:
-   a top has no such face over it within ROOF_CLEAR (a road, not a deck's
-   underside), a roof a top under it ROOF_CLEAR to ROOF_DEPTH below. So the
-   land rises to the road: from each edge of a top that stands more than
-   BANK_MIN above the land (grid.level) a bank of rock slopes down and out
-   to the land, out a third of its height (BANK_SLOPE); an edge gets one
-   only where no road goes on past it (no top BANK_OUT beyond it, at its
-   height within BANK_RISE, at any of three places along it), so between
-   two faces or two pieces, and where a road goes on, there is none; each
-   end of a bank goes out the way the banks meeting there go on average
-   (skirts_to_banks), so a curve's faces' banks and a road end's corners
-   meet with no gap. And a tunnel is closed in rock: over each roof a face
-   of rock ROOF_TOP above it, and from its edges, where no roof goes on
-   past them and the tunnel's floor does not go on out (its mouth: the top
-   under the roof just inside the edge found again MOUTH_OUT beyond it at
-   its level, past where a tunnel's floor reaches out under its walls), a
-   bank to the land the same way, so its sides and its roof are rock from
-   outside, its curves and its mouths' pieces too, and its mouths stay
-   open. The banks are the land's (drawn with the mesas, at true depth,
-   only the faces that look at the eye, shaded as the mesas are). */
-#define BANK_MIN 64.0
-#define BANK_OUT 48.0
-#define MOUTH_OUT 512.0
-#define BANK_RISE 192.0
-#define BANK_SLOPE 3.0
-#define ROOF_TOP 256.0
-#define ROOF_DEPTH 2500.0
-#define ROOF_CLEAR 400.0
-enum { BANKS = 24576, BANK_CELL = 1024, BANK_GRID = 64, BANK_IN_CELLS = 65536 };
-static struct {
-    float p[4][3], n[3];                /* its corners and its outward normal, in the world */
-    uint8_t count;
-} bank[BANKS];
-static int nbank, bank_course = -1;
-static int cell_first[BANK_GRID * BANK_GRID + 1], cell_face[BANK_IN_CELLS];
-
-static int bank_cell(double v)
-{
-    int c = (int)floor((v + BANK_GRID * BANK_CELL / 2.0) / BANK_CELL);
-
-    return c < 0 ? 0 : c >= BANK_GRID ? BANK_GRID - 1 : c;
-}
-
-/* a level face's height at (x, z) in its plane (y down), and whether (x, z)
-   lies in it across the ground */
-static int level_face_at(int f, double x, double z, double *y)
-{
-    const float (*p)[3] = (const float (*)[3])level_face[f].p;
-    const float *nv = level_face[f].n;
-    int k, inside = 0, cnt = level_face[f].count;
-
-    if (fabs(nv[1]) < 1e-6)
-        return 0;
-    for (k = 0; k < cnt; k++) {
-        const float *a = p[k], *b = p[(k + 1) % cnt];
-
-        if ((a[2] > z) != (b[2] > z) && x < a[0] + (z - a[2]) * (b[0] - a[0]) / (b[2] - a[2]))
-            inside = !inside;
-    }
-    if (!inside)
-        return 0;
-    *y = p[0][1] - (nv[0] * (x - p[0][0]) + nv[2] * (z - p[0][2])) / nv[1];
-    return 1;
-}
-
-/* a level face of kind `kinds` (0: any) at (x, z) with its height in
-   [ylo, yhi] (y down) */
-static int level_at(int kinds, double x, double z, double ylo, double yhi)
-{
-    int c = bank_cell(z) * BANK_GRID + bank_cell(x), i;
-    double y;
-
-    for (i = cell_first[c]; i < cell_first[c + 1]; i++) {
-        int f = cell_face[i];
-
-        if ((!kinds || (level_face[f].kind & kinds)) && level_face_at(f, x, z, &y) && y >= ylo && y <= yhi)
-            return 1;
-    }
-    return 0;
-}
-
-/* the highest level face of kind `kinds` at (x, z) with its height in
-   [ylo, yhi]: 1 and its height, else 0 */
-static int level_top(int kinds, double x, double z, double ylo, double yhi, double *top)
-{
-    int c = bank_cell(z) * BANK_GRID + bank_cell(x), i, found = 0;
-    double y;
-
-    for (i = cell_first[c]; i < cell_first[c + 1]; i++) {
-        int f = cell_face[i];
-
-        if ((!kinds || (level_face[f].kind & kinds)) && level_face_at(f, x, z, &y) && y >= ylo && y <= yhi
-            && (!found || y < *top)) {
-            *top = y;
-            found = 1;
-        }
-    }
-    return found;
-}
-
-static void bank_add(const double (*p)[3], int n, const double *out)
-{
-    double nv[3], e1[3], e2[3], len;
-    int k;
-
-    if (nbank == BANKS || n < 3 || n > 4)
-        return;
-    for (k = 0; k < 3; k++) {
-        e1[k] = p[1][k] - p[0][k];
-        e2[k] = p[n - 1][k] - p[0][k];
-    }
-    nv[0] = e1[1] * e2[2] - e1[2] * e2[1];
-    nv[1] = e1[2] * e2[0] - e1[0] * e2[2];
-    nv[2] = e1[0] * e2[1] - e1[1] * e2[0];
-    len = sqrt(nv[0] * nv[0] + nv[1] * nv[1] + nv[2] * nv[2]);
-    if (len <= 0)
-        return;
-    if (nv[0] * out[0] + nv[1] * out[1] + nv[2] * out[2] < 0)
-        len = -len;
-    for (k = 0; k < 3; k++)
-        bank[nbank].n[k] = (float)(nv[k] / len);
-    for (k = 0; k < n; k++) {
-        bank[nbank].p[k][0] = (float)p[k][0];
-        bank[nbank].p[k][1] = (float)p[k][1];
-        bank[nbank].p[k][2] = (float)p[k][2];
-    }
-    bank[nbank].count = (uint8_t)n;
-    nbank++;
-}
-
-/* the edges that get banks (banks_of), then made into banks together
-   (skirts_to_banks) */
-enum { SKIRTS = 16384, SKIRT_HASH = 65536 };
-#define SKIRT_JOIN 32.0
-static struct {
-    double a[3], b[3], out[2];
-    int v[2];
-} skirt[SKIRTS];
-static int nskirt;
-static struct {
-    int32_t key[3];
-    double out[2];
-    uint8_t used;
-} vertex[SKIRT_HASH];
-
-/* the banks of face f's edges, its corners `top` (a road's own, or a roof's
-   raised), down to the land; `roof`: a roof's (its mouths left open) */
-static void banks_of(int f, const double (*top)[3], int roof)
-{
-    int cnt = level_face[f].count, k;
-    double mid[3] = { 0, 0, 0 }, spread[LEVEL_CORNERS];
-
-    for (k = 0; k < cnt; k++) {
-        mid[0] += top[k][0] / cnt;
-        mid[2] += top[k][2] / cnt;
-        spread[k] = (grid.level - top[k][1]) / BANK_SLOPE;     /* y is down: how high over the land, a third */
-    }
-    for (k = 0; k < cnt; k++) {
-        const double *a = top[k], *b = top[(k + 1) % cnt];
-        double ex = b[0] - a[0], ez = b[2] - a[2], len = sqrt(ex * ex + ez * ez), ox, oz;
-        int t, on = 0;
-
-        if (len < 1 || (spread[k] * BANK_SLOPE <= BANK_MIN && spread[(k + 1) % cnt] * BANK_SLOPE <= BANK_MIN))
-            continue;
-        ox = ez / len;
-        oz = -ex / len;
-        if (ox * ((a[0] + b[0]) / 2 - mid[0]) + oz * ((a[2] + b[2]) / 2 - mid[2]) < 0) {
-            ox = -ox;
-            oz = -oz;
-        }
-        for (t = 1; t <= 3 && !on; t++) {          /* does a road (or the roof) go on past it */
-            double x = a[0] + ex * t / 4 + ox * BANK_OUT, z = a[2] + ez * t / 4 + oz * BANK_OUT;
-            double y = a[1] + (b[1] - a[1]) * t / 4;
-
-            if (roof) {                         /* y the rock's top: the roof ROOF_TOP under it */
-                double floor_y;
-
-                on = level_at(LEVEL_ROOF, x, z, y + ROOF_TOP - BANK_RISE, y + ROOF_TOP + BANK_RISE);
-                /* its mouth: the tunnel's own floor (the road under the roof
-                   just inside the edge) going on out past it at its level */
-                if (!on && level_top(LEVEL_TOP, a[0] + ex * t / 4 - ox * BANK_OUT, a[2] + ez * t / 4 - oz * BANK_OUT,
-                                     y + ROOF_TOP + ROOF_CLEAR, y + ROOF_TOP + ROOF_DEPTH, &floor_y))
-                    on = level_at(LEVEL_TOP, a[0] + ex * t / 4 + ox * MOUTH_OUT, a[2] + ez * t / 4 + oz * MOUTH_OUT,
-                                  floor_y - BANK_RISE, floor_y + BANK_RISE);
-            } else
-                on = level_at(LEVEL_TOP, x, z, y - BANK_RISE, y + BANK_RISE);
-        }
-        if (on || nskirt == SKIRTS)
-            continue;
-        memcpy(skirt[nskirt].a, a, sizeof skirt[nskirt].a);
-        memcpy(skirt[nskirt].b, b, sizeof skirt[nskirt].b);
-        skirt[nskirt].out[0] = ox;
-        skirt[nskirt].out[1] = oz;
-        nskirt++;
-    }
-}
-
-/* the vertex a skirt's end starts from: its place, rounded to SKIRT_JOIN */
-static int skirt_vertex(const double *p)
-{
-    int32_t key[3];
-    unsigned h;
-    int k, i;
-
-    for (k = 0; k < 3; k++)
-        key[k] = (int32_t)floor(p[k] / SKIRT_JOIN + 0.5);
-    h = ((unsigned)key[0] * 73856093u ^ (unsigned)key[1] * 19349663u ^ (unsigned)key[2] * 83492791u) & (SKIRT_HASH - 1);
-    for (i = 0; i < SKIRT_HASH; i++, h = (h + 1) & (SKIRT_HASH - 1)) {
-        if (!vertex[h].used) {
-            vertex[h].used = 1;
-            memcpy(vertex[h].key, key, sizeof key);
-            vertex[h].out[0] = vertex[h].out[1] = 0;
-            return (int)h;
-        }
-        if (!memcmp(vertex[h].key, key, sizeof key))
-            return (int)h;
-    }
-    return -1;
-}
-
-/* the banks from the skirts' edges: each end of each goes out the way the
-   skirts meeting there (of any face) go on average, so the banks of a
-   curve's faces, or of a road's two sides at its end, meet with no gap */
-static void skirts_to_banks(void)
-{
-    int i, e, k;
-
-    memset(vertex, 0, sizeof vertex);
-    for (i = 0; i < nskirt; i++)
-        for (e = 0; e < 2; e++) {
-            int v = skirt_vertex(e ? skirt[i].b : skirt[i].a);
-
-            skirt[i].v[e] = v;
-            if (v >= 0) {
-                vertex[v].out[0] += skirt[i].out[0];
-                vertex[v].out[1] += skirt[i].out[1];
-            }
-        }
-    for (i = 0; i < nskirt; i++) {
-        double q[4][3], out[3] = { skirt[i].out[0], 0, skirt[i].out[1] };
-
-        for (e = 0; e < 2; e++) {
-            const double *t = e ? skirt[i].b : skirt[i].a;
-            double spread = (grid.level - t[1]) / BANK_SLOPE, ox = skirt[i].out[0], oz = skirt[i].out[1];
-            int v = skirt[i].v[e];
-
-            if (v >= 0) {
-                double len = sqrt(vertex[v].out[0] * vertex[v].out[0] + vertex[v].out[1] * vertex[v].out[1]);
-
-                if (len > 0.2) {
-                    ox = vertex[v].out[0] / len;
-                    oz = vertex[v].out[1] / len;
-                }
-            }
-            if (spread < 0)
-                spread = 0;
-            memcpy(q[e], t, sizeof q[e]);
-            q[3 - e][0] = t[0] + ox * spread;
-            q[3 - e][1] = fmax(t[1], grid.level);
-            q[3 - e][2] = t[2] + oz * spread;
-        }
-        (void)k;
-        bank_add((const double (*)[3])q, 4, out);
-    }
-}
-
-static void banks_make(unsigned course)
-{
-    static int count[BANK_GRID * BANK_GRID];
-    int f, k, cx, cz;
-
-    bank_course = (int)course;
-    nbank = 0;
-    nskirt = 0;
-    /* each level face outward (rock_survey.facing: Newell's normals point
-       outward when the faces the survey's eye saw had them toward it), and
-       into the cells its box covers */
-    memset(count, 0, sizeof count);
-    for (f = 0; f < nlevel; f++) {
-        int x0, x1, z0, z1;
-        float lo[2] = { 1e30f, 1e30f }, hi[2] = { -1e30f, -1e30f };
-
-        level_face[f].kind = 0;
-        for (k = 0; k < level_face[f].count; k++) {
-            lo[0] = fminf(lo[0], level_face[f].p[k][0]);
-            hi[0] = fmaxf(hi[0], level_face[f].p[k][0]);
-            lo[1] = fminf(lo[1], level_face[f].p[k][2]);
-            hi[1] = fmaxf(hi[1], level_face[f].p[k][2]);
-        }
-        x0 = bank_cell(lo[0]), x1 = bank_cell(hi[0]), z0 = bank_cell(lo[1]), z1 = bank_cell(hi[1]);
-        for (cz = z0; cz <= z1; cz++)
-            for (cx = x0; cx <= x1; cx++)
-                count[cz * BANK_GRID + cx]++;
-    }
-    cell_first[0] = 0;
-    for (k = 0; k < BANK_GRID * BANK_GRID; k++)
-        cell_first[k + 1] = cell_first[k] + count[k];
-    if (cell_first[BANK_GRID * BANK_GRID] > BANK_IN_CELLS)
-        return;                                     /* too many: no banks */
-    memset(count, 0, sizeof count);
-    for (f = 0; f < nlevel; f++) {
-        int x0, x1, z0, z1;
-        float lo[2] = { 1e30f, 1e30f }, hi[2] = { -1e30f, -1e30f };
-
-        for (k = 0; k < level_face[f].count; k++) {
-            lo[0] = fminf(lo[0], level_face[f].p[k][0]);
-            hi[0] = fmaxf(hi[0], level_face[f].p[k][0]);
-            lo[1] = fminf(lo[1], level_face[f].p[k][2]);
-            hi[1] = fmaxf(hi[1], level_face[f].p[k][2]);
-        }
-        x0 = bank_cell(lo[0]), x1 = bank_cell(hi[0]), z0 = bank_cell(lo[1]), z1 = bank_cell(hi[1]);
-        for (cz = z0; cz <= z1; cz++)
-            for (cx = x0; cx <= x1; cx++) {
-                int c = cz * BANK_GRID + cx;
-
-                cell_face[cell_first[c] + count[c]++] = f;
-            }
-    }
-    /* the faces' kinds by where they lie (the models' windings do not say
-       which side is seen): a top, nothing over it within ROOF_CLEAR (a
-       road, the open side of a deck, not its underside); a roof, a top
-       under it ROOF_CLEAR to ROOF_DEPTH below */
-    for (f = 0; f < nlevel; f++) {
-        double mid[3] = { 0, 0, 0 };
-        int cnt = level_face[f].count;
-
-        for (k = 0; k < cnt; k++)
-            for (cx = 0; cx < 3; cx++)
-                mid[cx] += level_face[f].p[k][cx] / cnt;
-        if (!level_at(0, mid[0], mid[2], mid[1] - ROOF_CLEAR, mid[1] - 1))
-            level_face[f].kind = LEVEL_TOP;
-    }
-    for (f = 0; f < nlevel; f++) {
-        double mid[3] = { 0, 0, 0 };
-        int cnt = level_face[f].count;
-
-        for (k = 0; k < cnt; k++)
-            for (cx = 0; cx < 3; cx++)
-                mid[cx] += level_face[f].p[k][cx] / cnt;
-        if (level_at(LEVEL_TOP, mid[0], mid[2], mid[1] + ROOF_CLEAR, mid[1] + ROOF_DEPTH))
-            level_face[f].kind |= LEVEL_ROOF;
-    }
-    for (f = 0; f < nlevel; f++) {
-        double top[LEVEL_CORNERS][3], mid[3] = { 0, 0, 0 };
-        int cnt = level_face[f].count;
-
-        for (k = 0; k < cnt; k++) {
-            top[k][0] = level_face[f].p[k][0];
-            top[k][1] = level_face[f].p[k][1];
-            top[k][2] = level_face[f].p[k][2];
-            mid[0] += top[k][0] / cnt;
-            mid[1] += top[k][1] / cnt;
-            mid[2] += top[k][2] / cnt;
-        }
-        if (!(level_face[f].kind & LEVEL_ROOF)) {   /* a road: its banks where it stands over the land */
-            if (level_face[f].kind & LEVEL_TOP)
-                banks_of(f, (const double (*)[3])top, 0);
-            continue;
-        }
-        for (k = 0; k < cnt; k++)
-            top[k][1] -= ROOF_TOP;
-        {
-            double up[3] = { 0, -1, 0 };
-
-            if (cnt <= 4)
-                bank_add((const double (*)[3])top, cnt, up);
-            else {                                  /* as a fan */
-                int j;
-
-                for (j = 1; j + 1 < cnt; j++) {
-                    double tri[3][3];
-
-                    memcpy(tri[0], top[0], sizeof tri[0]);
-                    memcpy(tri[1], top[j], sizeof tri[1]);
-                    memcpy(tri[2], top[j + 1], sizeof tri[2]);
-                    bank_add((const double (*)[3])tri, 3, up);
-                }
-            }
-        }
-        banks_of(f, (const double (*)[3])top, 1);
-    }
-    skirts_to_banks();
-}
-
 static int float_order(const void *a, const void *b)
 {
     float x = *(const float *)a, y = *(const float *)b;
 
     return (x > y) - (x < y);
+}
+
+/* ---- the tunnels' rock (Jeff, 2026-11-11: "give it rocky sides") ----
+
+   A tunnel piece's model is its inside only (roof, walls, lights): seen
+   from the side, across open ground, its inside showed. Found by the
+   survey's records (Sunset Valley's, dumped 2026-11-11: seven of shape
+   $E384, 3,840 x 3,903 and 960 high, a roof's area (16.6 million) and two
+   walls' (6.6), nothing facing up; one $E480 the same with its lights): a
+   piece no more than TUNNEL_HIGH high, at least TUNNEL_WIDE across both
+   ways, the area facing down (outward) at least half its box's ground and
+   the area facing sideways at least a quarter of that. Its open ends are
+   where no walls face: across x when its walls face x. Each gets a shell
+   of rock: walls from the ground (the plane, or its floor where that is
+   lower) widening out by a third of their height, SHELL_THICK outside its
+   walls, and a ridged roof SHELL_THICK above its ceiling, open at both
+   ends; drawn right after the piece's own faces in the 3D's order (at its
+   depth: 0, or a far object's), and only the faces that look at the eye,
+   so from outside the tunnel is rock with its mouths in it and from inside
+   nothing changes. Shaded as the mesas are. What the 3D draws after the
+   piece (a car inside it nearer the eye than it) still shows over its
+   rock. */
+
+#define TUNNEL_HIGH 2000.0
+#define TUNNEL_WIDE 2000.0
+#define SHELL_THICK 256.0
+enum { TUNNELS = 64, SHELL_VERTICES = 3 * 8 * 7 };
+
+static struct {
+    int course, n;
+    struct {
+        uint16_t shape;
+        double at[3], lo[3], hi[3];
+        int along;                      /* the world axis its open ends lie along: 0 x, 2 z */
+    } t[TUNNELS];
+} tunnels = { -1, 0, { { 0, { 0 }, { 0 }, { 0 }, 0 } } };
+
+static void tunnels_find(unsigned course)
+{
+    int i;
+
+    tunnels.course = (int)course;
+    tunnels.n = 0;
+    for (i = 0; i < ncand && tunnels.n < TUNNELS; i++) {
+        double w = cand[i].hi[0] - cand[i].lo[0], h = cand[i].hi[1] - cand[i].lo[1], d = cand[i].hi[2] - cand[i].lo[2];
+        double roof = rock_survey.facing < 0 ? cand[i].area[0] : cand[i].area[1], side = cand[i].area[2] + cand[i].area[3];
+
+        if (h > TUNNEL_HIGH || w < TUNNEL_WIDE || d < TUNNEL_WIDE || roof < 0.5 * w * d || side < 0.25 * roof)
+            continue;
+        tunnels.t[tunnels.n].shape = cand[i].shape;
+        memcpy(tunnels.t[tunnels.n].at, cand[i].at, sizeof cand[i].at);
+        memcpy(tunnels.t[tunnels.n].lo, cand[i].lo, sizeof cand[i].lo);
+        memcpy(tunnels.t[tunnels.n].hi, cand[i].hi, sizeof cand[i].hi);
+        tunnels.t[tunnels.n].along = cand[i].area[2] >= cand[i].area[3] ? 2 : 0;
+        tunnels.n++;
+    }
 }
 
 static void ground_survey(unsigned course, const double eye[3], const double m[9])
@@ -1114,7 +653,7 @@ static void ground_survey(unsigned course, const double eye[3], const double m[9
 
     survey_points = 0;
     ncand = 0;
-    nlevel = 0;
+    surveying = 1;
     memset(&rock_survey, 0, sizeof rock_survey);
     memcpy(kept, fx_ram, sizeof kept);
     fx_draw_hold(1);
@@ -1145,10 +684,11 @@ static void ground_survey(unsigned course, const double eye[3], const double m[9
         survey_record(r, at, &stack_top);
     }
     fx_draw_hold(0);
+    surveying = 0;
     memcpy(fx_ram, kept, sizeof kept);
     fxs = state;
     rock_shades();
-    enclosed_find(course);
+    tunnels_find(course);
     for (i = 0; i < (unsigned)survey_points; i++) {
         xmin = fmin(xmin, survey_point[i][0]);
         xmax = fmax(xmax, survey_point[i][0]);
@@ -1243,12 +783,10 @@ static void ground_survey(unsigned course, const double eye[3], const double m[9
     qsort(next, (size_t)(grid.nx * grid.nz), sizeof(float), float_order);
     grid.level = next[grid.nx * grid.nz / 2];
     memcpy(grid_known, known, sizeof grid_known);
-    banks_make(course);
     fprintf(stderr, "ground: course %u, level %.0f, footprint x %.0f to %.0f, z %.0f to %.0f, lit level %.2f a unit of"
-            " facing (%s), %d rock shades, %d canyon walls, %d banks of %d level faces\n", course, grid.level, grid.xmin,
-            grid.xmax, grid.zmin, grid.zmax, grid.light_k,
-            grid.light_k == LIGHT_K ? "no lit faces: the chip's own scale" : "fitted from the course's lit faces", grid.shades,
-            enclosed.nw, nbank, nlevel);
+            " facing (%s), %d rock shades, %d tunnel pieces\n", course, grid.level, grid.xmin, grid.xmax, grid.zmin, grid.zmax,
+            grid.light_k, grid.light_k == LIGHT_K ? "no lit faces: the chip's own scale" : "fitted from the course's lit faces",
+            grid.shades, tunnels.n);
 }
 
 /* ---- the land drawn: a few planes, terrain.shade colouring them ----
@@ -1503,7 +1041,7 @@ static void land_draw(int kind, const double eye[3], const double m[9], int p)
         in[0] = (float)(n[0] / (128.0 * d));
         in[1] = (float)(n[1] / (128.0 * d));
         in[2] = (float)((n[2] - (n[0] * vcx + n[1] * vcy) / 128.0) / d);
-        fx_draw_surface(c, nc, land_image[slot], land_shader, in, 0, 0, 0.999f);  /* the earlier land: under all */
+        fx_draw_surface(c, nc, land_image[slot], land_shader, in, 0, 0);
     }
 }
 
@@ -1536,11 +1074,13 @@ static void land_draw(int kind, const double eye[3], const double m[9], int p)
    (grid.light_k), so the land takes the shades the course's own faces take
    facing the same way.
 
-   Depths: the 3D is drawn at its true depths (fx_draw.c, "depth"); a
-   mountain face at its own (fx_draw_depth of one over its depth at each
-   corner, from the face's own plane, exact across the face), so mountains
-   and the course hide one another as they stand. The plane is at PLANE_Z,
-   past everything: the ground at the horizon, under all. Triangles: the plane's quad (2, at most 6 once kept
+   Depths: the 3D is drawn at depth 0, in the order the frame program gives;
+   the land lies past it all (fx_draw_land), so it covers none of the
+   course's shapes whatever the order. The plane is at PLANE_Z, past the
+   mountains; a mountain face at 0.998 (1 - LAND_NEAR / its depth) at each
+   corner, from the face's own plane, which is exact across the face (one
+   over the depth is linear across the screen), so the mountains hide each
+   other as they stand. Triangles: the plane's quad (2, at most 6 once kept
    to the view) and MOUNTAINS x SIDES faces (50), those facing away left
    out. No image and no shader: the GPU fills each in its colour. */
 
@@ -1548,6 +1088,8 @@ enum { MOUNTAINS = 10, SIDES = 5, LAND_VERTICES = 3 * (6 + MOUNTAINS * (SIDES + 
 #define SHADE_ROWS 0xA1C5       /* bank 3: the lit faces' shade rows by class, two bytes each, the nearest tier's */
 #define ONE_PALETTE 0x8800      /* bank $1F: one player's palette */
 #define PLANE_Z 0.999f
+#define FACE_Z 0.998
+#define LAND_NEAR 256.0
 #define EYE_CLEAR 64.0
 #define GAP 0.3
 
@@ -1671,29 +1213,6 @@ static uint32_t land_colour(int cls, const double n[3])
     return row_colour(cls, chip_level(n));
 }
 
-double fx_ground_light(const double n[3])
-{
-    double len = sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
-    double k = grid.course == (int)g.course ? grid.light_k : LIGHT_K;
-
-    return len > 0 ? k * (n[1] * LIGHT_Y + n[2] * LIGHT_Z) / len : 0;
-}
-
-int fx_ground_rock_back(uint8_t colour, const double n[3])
-{
-    unsigned course = g.course;
-    int i, k;
-
-    if (course >= 0x20 || surface[course].cls != CLS_ROCK || grid.course != (int)course || grid.shades < 2)
-        return -1;
-    for (i = 0; i < grid.shades && grid.shade[i] != colour; i++)
-        ;
-    if (i == grid.shades)
-        return -1;
-    k = (int)floor((chip_level(n) - 6) / 9.0 * (grid.shades - 1) + 0.5);
-    return grid.shade[k < 0 ? 0 : k >= grid.shades ? grid.shades - 1 : k];
-}
-
 /* a world point to view space (world axis k turns to row k of m) */
 static void to_view(const double w[3], const double eye[3], const double m[9], double v[3])
 {
@@ -1771,6 +1290,8 @@ static uint32_t face_colour(int cls, const double nv[3], const double nw[3], int
    and its outward normal nw: left out when it faces away from the eye;
    else turned to the view, kept to it, each corner at its depth (from the
    face's own plane), into v from *nv. */
+static int face_at_zero;                /* land_face's vertices at depth 0 (the tunnels' rock, in the 3D's order) */
+
 static void land_face(const double (*pts)[3], int n, const double nw[3], int cls, const double eye[3], const double m[9],
                       nshvc_vertex *v, uint32_t *nv, uint32_t room)
 {
@@ -1797,11 +1318,12 @@ static void land_face(const double (*pts)[3], int n, const double nw[3], int cls
     colour = face_colour(cls, nview, nw, 0);
     for (j = 0; j < nc; j++, (*nv)++) {
         double inv = (nview[0] * (c[j].x - vcx) / 128.0 + nview[1] * (c[j].y - vcy) / 128.0 + nview[2]) / d;
+        double z = FACE_Z * (1.0 - LAND_NEAR * inv);
 
         memset(&v[*nv], 0, sizeof v[*nv]);
         v[*nv].x = c[j].x;
         v[*nv].y = c[j].y;
-        v[*nv].z = fx_draw_depth(inv);
+        v[*nv].z = face_at_zero ? 0.0f : (float)(z < 0 ? 0 : z > FACE_Z ? FACE_Z : z);
         v[*nv].colour = colour;
     }
 }
@@ -1814,6 +1336,13 @@ static void normal_of(const double *a, const double *b, const double *c, double 
     n[0] = e1[1] * e2[2] - e1[2] * e2[1];
     n[1] = e1[2] * e2[0] - e1[0] * e2[2];
     n[2] = e1[0] * e2[1] - e1[1] * e2[0];
+}
+
+float fx_ground_depth_z(double depth)
+{
+    double z = depth > LAND_NEAR ? FACE_Z * (1.0 - LAND_NEAR / depth) : 0;
+
+    return (float)(z < 1e-6 ? 1e-6 : z > FACE_Z ? FACE_Z : z);
 }
 
 /* ---- the land filling a course's empty space (Jeff, 2026-11-11) ----
@@ -1829,7 +1358,9 @@ static void normal_of(const double *a, const double *b, const double *c, double 
    with FILL_CLEAR at 1.5 it is flat at the course's level there: the rock
    never stands over the course. Each triangle with a raised corner is a
    face, shaded as the mesas are; those all at the level are the plane's.
-   At its true depth, like all the 3D, it hides what stands behind it. */
+   The far objects are drawn at depths of their own while it is drawn
+   (fx_far_occlude), so it hides those behind it; the near objects, at the
+   3D's own depth 0, are never hidden by it. */
 
 enum { FILL_STEP = 4, FILL_MOST = GRID_MOST / FILL_STEP + 2, FILL_VERTICES = 3 * 2 * FILL_MOST * FILL_MOST * 2 };
 #define FILL_CLEAR 1.5
@@ -1921,66 +1452,101 @@ static void fill_faces(unsigned course, int cls, double plane_y, const double ey
         }
 }
 
-/* The rock behind the canyon's walls (above, "the rock behind the canyon's
-   walls") and the banks ("the banks"), their faces that look at the eye,
-   into v from *nv; the ground under the walls' rock at plane_y (or a
-   piece's foot, where that is lower). */
-static void enclosed_faces(int cls, double plane_y, const double eye[3], const double m[9], nshvc_vertex *v, uint32_t *nv,
-                           uint32_t room)
+/* The view the tunnels' rock is drawn in this picture (land_polygons sets
+   it; off where the course has none), and the tunnel piece being drawn. */
+static struct {
+    int on, cls;
+    double eye[3], m[9], plane_y;
+} shell_view;
+static int shell_pending = -1;
+
+void fx_ground_object_begin(uint16_t record, int shift)
 {
-    int i, j, k, bit;
+    uint16_t shape;
+    double v[3], at[3];
+    int i, k;
 
-    for (i = 0; i < enclosed.nw; i++) {             /* each wall's open backs: a slope of rock */
-        const double *lo = enclosed.w[i].lo, *hi = enclosed.w[i].hi;
-        double top = lo[1], base = fmax(hi[1], plane_y), spread = (base - top) / 3;
+    shell_pending = -1;
+    if (!shell_view.on || surveying || tunnels.course != (int)g.course)
+        return;
+    shape = (uint16_t)(fx_ram[(uint16_t)(record + 0x08)] | fx_ram[(uint16_t)(record + 0x09)] << 8);
+    for (i = 0; i < tunnels.n; i++)
+        if (tunnels.t[i].shape == shape)
+            break;
+    if (i == tunnels.n)
+        return;
+    /* its place in the world: its place in view space (halved `shift`
+       times for a far one) turned back by the view's rows */
+    v[0] = ldexp((int16_t)(fx_ram[(uint16_t)(record + 0x12)] | fx_ram[(uint16_t)(record + 0x13)] << 8), shift);
+    v[1] = ldexp((int16_t)(fx_ram[(uint16_t)(record + 0x10)] | fx_ram[(uint16_t)(record + 0x11)] << 8), shift);
+    v[2] = ldexp((int16_t)(fx_ram[(uint16_t)(record + 0x14)] | fx_ram[(uint16_t)(record + 0x15)] << 8), shift);
+    for (k = 0; k < 3; k++)
+        at[k] = shell_view.eye[k] + shell_view.m[3 * k] * v[0] + shell_view.m[3 * k + 1] * v[1] + shell_view.m[3 * k + 2] * v[2];
+    for (; i < tunnels.n; i++) {
+        double dx = at[0] - tunnels.t[i].at[0], dz = at[2] - tunnels.t[i].at[2];
 
-        if (base <= top)
-            continue;
-        for (bit = 0; bit < 4; bit++) {
-            int a = bit < 2 ? 0 : 2, b = 2 - a, high = bit & 1;
-            double c = high ? hi[a] : lo[a], out = high ? c + spread : c - spread, sgn = high ? 1 : -1;
-            double quad[4][3], tri[2][3][3], n[3];
+        if (tunnels.t[i].shape == shape && dx * dx + dz * dz < 512.0 * 512.0 * (1 << (2 * shift)))
+            break;
+    }
+    if (i < tunnels.n)
+        shell_pending = i;
+}
 
-            if (!(enclosed.w[i].backs & (1 << bit)))
-                continue;
-            for (k = 0; k < 4; k++) {
-                quad[k][b] = k == 1 || k == 2 ? hi[b] : lo[b];
-                quad[k][1] = k < 2 ? top : base;
-                quad[k][a] = k < 2 ? c : out;
-            }
-            normal_of(quad[0], quad[1], quad[3], n);
-            if (n[a] * sgn < 0)                     /* outward: past the box's side */
-                for (j = 0; j < 3; j++)
-                    n[j] = -n[j];
-            land_face((const double (*)[3])quad, 4, n, cls, eye, m, v, nv, room);
-            for (k = 0; k < 2; k++) {               /* its ends */
-                double e = k ? hi[b] : lo[b];
+void fx_ground_object_end(void)
+{
+    static nshvc_vertex sv[SHELL_VERTICES];
+    uint32_t ns = 0;
+    double p0, p1, cp, half, a0, a1, top, base, ridge, spread, mid_y;
+    double prof[5][2];
+    int i = shell_pending, s, p, a, k;
 
-                tri[k][0][b] = tri[k][1][b] = tri[k][2][b] = e;
-                tri[k][0][1] = top;
-                tri[k][0][a] = c;
-                tri[k][1][1] = base;
-                tri[k][1][a] = out;
-                tri[k][2][1] = base;
-                tri[k][2][a] = c;
-                normal_of(tri[k][0], tri[k][1], tri[k][2], n);
-                if (n[b] * (k ? 1 : -1) < 0)
-                    for (j = 0; j < 3; j++)
-                        n[j] = -n[j];
-                land_face((const double (*)[3])tri[k], 3, n, cls, eye, m, v, nv, room);
-            }
+    if (i < 0)
+        return;
+    shell_pending = -1;
+    fx_draw_queued();                   /* the piece's own faces first */
+    a = tunnels.t[i].along;
+    p = 2 - a;
+    p0 = tunnels.t[i].lo[p];
+    p1 = tunnels.t[i].hi[p];
+    cp = (p0 + p1) / 2;
+    half = (p1 - p0) / 2;
+    a0 = tunnels.t[i].lo[a];
+    a1 = tunnels.t[i].hi[a];
+    top = tunnels.t[i].lo[1] - SHELL_THICK;                     /* y is down */
+    base = fmax(tunnels.t[i].hi[1], shell_view.plane_y);
+    ridge = top - 0.3 * half;
+    spread = (base - top) / 3;
+    mid_y = (tunnels.t[i].lo[1] + tunnels.t[i].hi[1]) / 2;
+    /* its cross-section across the tunnel: ground, wall top, ridge, wall
+       top, ground */
+    prof[0][0] = cp - half - SHELL_THICK - spread;
+    prof[0][1] = base;
+    prof[1][0] = cp - half - SHELL_THICK;
+    prof[1][1] = top;
+    prof[2][0] = cp;
+    prof[2][1] = ridge;
+    prof[3][0] = cp + half + SHELL_THICK;
+    prof[3][1] = top;
+    prof[4][0] = cp + half + SHELL_THICK + spread;
+    prof[4][1] = base;
+    face_at_zero = 1;
+    for (s = 0; s < 4; s++) {
+        double quad[4][3], n[3], mp = (prof[s][0] + prof[s + 1][0]) / 2 - cp, my = (prof[s][1] + prof[s + 1][1]) / 2 - mid_y;
+        static const int end[4] = { 0, 0, 1, 1 }, edge[4] = { 0, 1, 1, 0 };
+
+        for (k = 0; k < 4; k++) {
+            quad[k][p] = prof[s + edge[k]][0];
+            quad[k][1] = prof[s + edge[k]][1];
+            quad[k][a] = end[k] ? a1 : a0;
         }
+        normal_of(quad[0], quad[1], quad[2], n);
+        if (n[p] * mp + n[1] * my < 0)      /* outward: away from the tunnel's middle */
+            for (k = 0; k < 3; k++)
+                n[k] = -n[k];
+        land_face((const double (*)[3])quad, 4, n, shell_view.cls, shell_view.eye, shell_view.m, sv, &ns, SHELL_VERTICES);
     }
-    for (i = 0; i < nbank; i++) {                   /* the banks and the tunnels' rock */
-        double q[4][3], nw[3];
-
-        for (k = 0; k < bank[i].count; k++)
-            for (j = 0; j < 3; j++)
-                q[k][j] = bank[i].p[k][j];
-        for (j = 0; j < 3; j++)
-            nw[j] = bank[i].n[j];
-        land_face((const double (*)[3])q, bank[i].count, nw, cls, eye, m, v, nv, room);
-    }
+    face_at_zero = 0;
+    fx_draw_land(sv, ns);
 }
 
 static void land_polygons(unsigned course, int cls, const double eye[3], const double m[9])
@@ -2051,18 +1617,17 @@ static void land_polygons(unsigned course, int cls, const double eye[3], const d
         static nshvc_vertex fv[FILL_VERTICES];
         uint32_t nf = 0;
 
+        shell_view.on = 1;
+        shell_view.cls = cls;
+        shell_view.plane_y = plane_y;
+        memcpy(shell_view.eye, eye, sizeof shell_view.eye);
+        memcpy(shell_view.m, m, sizeof shell_view.m);
+
         if (fill.course != (int)course)
             fill_make(course);
         fill_faces(course, cls, plane_y, eye, m, fv, &nf, FILL_VERTICES);
         fx_draw_land(fv, nf);
-    }
-    /* the rock behind the canyon's walls, and the banks */
-    if (mesas && enclosed.course == (int)course) {
-        static nshvc_vertex ev[ENCLOSED_VERTICES];
-        uint32_t ne = 0;
-
-        enclosed_faces(cls, plane_y, eye, m, ev, &ne, ENCLOSED_VERTICES);
-        fx_draw_land(ev, ne);
+        fx_far_occlude(1);
     }
 }
 
@@ -2105,63 +1670,16 @@ static void land_polygons(unsigned course, int cls, const double eye[3], const d
 #define OCEAN_WAVE 0.08
 #define SEABED_BELOW 512.0
 #define SEABED_DARK 0.55
-enum { OCEAN_HOLES = 8, OCEAN_HOLE_CORNERS = 16, OCEAN_HOLES_AT = 24, OCEAN_HOLE_WORDS = 1 + 2 * OCEAN_HOLE_CORNERS };
-#define OCEAN_IMAGE_W 320       /* ocean.shade's image: 11 colours, 8 floats, then the holes (fx_ground_water_holes) */
+#define OCEAN_IMAGE_W 24        /* ocean.shade's image: 11 colours, then 8 floats */
 
 static nshvc_image ocean_image[4];
-static uint32_t ocean_words[4][OCEAN_IMAGE_W];  /* each slot's image as written */
-static double ocean_origin[4][2];               /* the screen place its uv count from */
-static int ocean_slot = -1;                     /* the slot this picture's water is in; -1 none */
-
-/* The picture's holes in the water (fx_face_holes): written into its image
-   after the 3D, for ocean.shade to leave out, at most OCEAN_HOLES of at most
-   OCEAN_HOLE_CORNERS corners (a hole with more keeps every few, still convex
-   and inside it), each turned so its inside is left of its edges, its
-   places less the water's origin. The water is at its true depth, so where
-   a track piece goes below it (the glass tube's mouth) what lies past it
-   shows through these, by depth. */
-void fx_ground_water_holes(const FxHole *holes, int n)
-{
-    uint32_t *w;
-    int h, k, kept = 0;
-
-    if (ocean_slot < 0)
-        return;
-    w = ocean_words[ocean_slot];
-    for (h = 0; h < n && kept < OCEAN_HOLES; h++) {
-        uint32_t *at = w + OCEAN_HOLES_AT + 1 + kept * OCEAN_HOLE_WORDS;
-        int step = (holes[h].n + OCEAN_HOLE_CORNERS - 1) / OCEAN_HOLE_CORNERS, m = 0, idx[OCEAN_HOLE_CORNERS];
-        double area = 0;
-
-        for (k = 0; k < holes[h].n && m < OCEAN_HOLE_CORNERS; k += step)
-            idx[m++] = k;
-        if (m < 3)
-            continue;
-        for (k = 0; k < m; k++) {
-            int k1 = (k + 1) % m;
-
-            area += (double)holes[h].x[idx[k]] * holes[h].y[idx[k1]] - (double)holes[h].x[idx[k1]] * holes[h].y[idx[k]];
-        }
-        at[0] = float_word((float)m);
-        for (k = 0; k < m; k++) {
-            int j = area >= 0 ? idx[k] : idx[m - 1 - k];
-
-            at[1 + 2 * k] = float_word((float)(holes[h].x[j] - ocean_origin[ocean_slot][0]));
-            at[2 + 2 * k] = float_word((float)(holes[h].y[j] - ocean_origin[ocean_slot][1]));
-        }
-        kept++;
-    }
-    w[OCEAN_HOLES_AT] = float_word((float)kept);
-    nshvc_image_write(ocean_image[ocean_slot], w);
-    ocean_slot = -1;
-}
 static nshvc_shader ocean_shader;
 
 static void ocean_draw(int cls, int under, const double eye[3], const double m[9], double water_y, int p)
 {
     static nshvc_vertex bed[24];
     static FxCorner c[64];
-    uint32_t *words, nb = 0, nc, j, deep;
+    uint32_t words[OCEAN_IMAGE_W] = { 0 }, nb = 0, nc, j, deep;
     double dh = water_y - eye[1], reach, q[4][3], up[3], light[3], ex, ez, bed_y, ox = 0, oy = 0;
     double vcx = (int16_t)ram_word(0x0034), vcy = (int16_t)ram_word(0x0036), ra[3], rb[3], rc[3], c1;
     float in[8], sx, sy, scale;
@@ -2224,11 +1742,6 @@ static void ocean_draw(int cls, int under, const double eye[3], const double m[9
        normal), then the floats: the light by the level's scale in the
        world's axes (world axis k's view components are m[3k..3k+2]), the
        time, the eye's place and height in cells, the waves' height */
-    slot = fx_draw_tweening() * 2 + (p & 1);
-    words = ocean_words[slot];
-    memset(words, 0, sizeof ocean_words[slot]);
-    ocean_origin[slot][0] = ox;
-    ocean_origin[slot][1] = oy;
     for (i = 0; i < 10; i++)
         words[i] = row_colour(cls, 6 + i);
     for (k = 0; k < 3; k++)
@@ -2244,13 +1757,13 @@ static void ocean_draw(int cls, int under, const double eye[3], const double m[9
     words[16] = float_word((float)(ez / OCEAN_CELL));
     words[17] = float_word((float)(dh / OCEAN_CELL));
     words[18] = float_word((float)OCEAN_WAVE);
+    slot = fx_draw_tweening() * 2 + (p & 1);
     if (!ocean_image[slot].id)
         ocean_image[slot] = nshvc_image_create(OCEAN_IMAGE_W, 1, NSHVC_IMAGE_RGBA);
     if (!ocean_shader.id)
         ocean_shader = nshvc_shader_load("ocean");
     nshvc_image_write(ocean_image[slot], words);
-    ocean_slot = slot;                  /* its holes written after the 3D */
-    fx_draw_surface(c, nc, ocean_image[slot], ocean_shader, in, (float)ox, (float)oy, -1);     /* at its true depth */
+    fx_draw_surface(c, nc, ocean_image[slot], ocean_shader, in, (float)ox, (float)oy);
 }
 
 void fx_ground_draw(void)
@@ -2270,7 +1783,9 @@ void fx_ground_draw(void)
     /* in the sealed tunnel (bit 3 of $0DA5) the earlier water left the
        original's underwater backdrop to show; the ocean is drawn there too,
        seen from below, over that backdrop (Jeff, 2026-11-11) */
-    ocean_slot = -1;                    /* no water's holes but this picture's */
+    fx_far_occlude(0);                  /* the far objects at the 3D's own depth unless the land hides them */
+    shell_view.on = 0;                  /* the tunnels' rock only where the land sets it */
+    shell_pending = -1;
     if (kind == SURF_NONE || (kind == SURF_AQUA && (g.picture_effects & 0x08) && !surface[course].cls))
         return;
     for (i = 0; i < 3; i++)
@@ -2399,7 +1914,7 @@ void fx_ground_draw(void)
     if (!shader.id)
         shader = nshvc_shader_load("ground");
     nshvc_image_write(image[slot], words);
-    fx_draw_surface(corners, n, image[slot], shader, in, (float)ox, (float)oy, -1);
+    fx_draw_surface(corners, n, image[slot], shader, in, (float)ox, (float)oy);
     if (kind == SURF_AQUA) {            /* its water cuts the picture: the plane in view space, row 1 . v = dh */
         double plane[3] = { m[3], m[4], m[5] };
 

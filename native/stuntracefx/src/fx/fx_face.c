@@ -31,8 +31,6 @@
 #include "fx/fx.h"
 #include "fx/fx_draw.h"
 #include "fx/fx_face.h"
-#include "fx/fx_ground.h"
-#include "fx/fx_seat.h"
 #include "fx/fx_far.h"
 
 enum {
@@ -92,22 +90,7 @@ void fx_face_point(uint16_t record, uint16_t x, uint16_t y, uint16_t z)
     point[i].made = projection;
 }
 
-static int survey_all;                  /* every face shown (fx_face_survey_all) */
-
-void fx_face_survey_all(int on) { survey_all = on; }
-
-static uint8_t facing_of(uint16_t a, uint16_t b, uint16_t c, uint8_t chip);
-
-/* bit 7: the face looks at the eye (its points' winding, Newell's normal,
-   toward it); while the survey takes every face, every one */
 uint8_t fx_face_facing(uint16_t a, uint16_t b, uint16_t c, uint8_t chip)
-{
-    uint8_t r = facing_of(a, b, c, chip);
-
-    return survey_all ? (uint8_t)(r | 0x80) : r;
-}
-
-static uint8_t facing_of(uint16_t a, uint16_t b, uint16_t c, uint8_t chip)
 {
     uint16_t at[3] = { a, b, c };
     unsigned i[3], k;
@@ -270,220 +253,10 @@ static Tint chosen = { -1, 0, 0, 0 };
 
 static struct {
     int open, textured, whole, n;
-    int back;                           /* it looks away from the eye (fx_face_back) */
     View view;
     Tint tint;
     Corner3 c[MOST];
 } face;
-
-static int back_next;
-
-void fx_face_back(int back) { back_next = back; }
-
-/* The picture's faces so far, for the polygon offset (fx/fx_draw.c,
-   "depth"): each with its plane in view space at full size (a far
-   object's points scaled back by its halvings), its outline in that plane,
-   how it looks and its decal level. They are found by their normals: a
-   hash of the normal's cell (NORMAL_CELL a side) over BUCKETS lists. A
-   face's outline is its corners with the axis its normal is most along
-   dropped (its first PLANE_POINTS; more, its box alone). */
-enum { PLANES = 4096, PLANE_POINTS = 8, BUCKETS = 4096, DECAL_MOST = 63 };
-#define NORMAL_CELL 0.1                 /* the normals' cells: a neighbour's are within ~6 degrees */
-#define SAME_WAY 0.995                  /* two faces this near in direction (~6 degrees) can share a plane */
-#define PLANE_NEAR 3.0                  /* a face's corners this near another's plane (and 0.2% of its distance) lie on it */
-#define DECAL_PLANE 4.0                 /* a decal level moves a face's plane this far toward the eye (fx_draw.c) */
-static struct {
-    double n[3], d;
-    uint32_t look;
-    int cell[3], np, next, nq;
-    uint8_t decal;
-    double p[PLANE_POINTS][2], lo[2], hi[2];
-    double q[PLANE_POINTS][3];          /* its corners (its first PLANE_POINTS) */
-} planes[PLANES];
-static int nplanes, bucket[BUCKETS];
-
-/* How a face looks, for the polygon offset: two faces that look alike may
-   show either where they overlap. A textured face looks like no other. */
-static uint32_t look_of(const FxShape *s, int textured)
-{
-    static uint32_t textures;
-
-    if (textured)
-        return 0x80000000u | (textures++ & 0x7FFFFFFFu);
-    return (uint32_t)(s->tint + 1) << 24 | (uint32_t)(s->tier & 3) << 22 | (uint32_t)s->material.colour << 8
-           | (s->tint == 1 ? (uint32_t)(int)floor(s->light) & 0xFF : s->tint == 2 ? (uint32_t)(s->tint_index & 0xFF) : 0);
-}
-
-void fx_face_picture(void)
-{
-    nplanes = 0;
-    memset(bucket, 0xFF, sizeof bucket);        /* none: -1 */
-}
-
-static unsigned bucket_of(const int *cell)
-{
-    return ((unsigned)cell[0] * 73856093u ^ (unsigned)cell[1] * 19349663u ^ (unsigned)cell[2] * 83492791u) & (BUCKETS - 1);
-}
-
-/* Whether two outlines in one plane overlap (more than touch): their
-   boxes, then for convex outlines no edge of either separating them. */
-static int outlines_overlap(int a, const double (*pb)[2], int nb, const double *lo, const double *hi)
-{
-    const double (*pa)[2] = (const double (*)[2])planes[a].p;
-    int na = planes[a].np, side, i, k;
-
-    for (k = 0; k < 2; k++) {
-        double tol = 1e-4 * (planes[a].hi[k] - planes[a].lo[k] + hi[k] - lo[k]);
-
-        if (planes[a].hi[k] <= lo[k] + tol || hi[k] <= planes[a].lo[k] + tol)
-            return 0;
-    }
-    if (!na || !nb)
-        return 1;
-    for (side = 0; side < 2; side++) {
-        const double (*e)[2] = side ? pb : pa;
-        int ne = side ? nb : na;
-
-        for (i = 0; i < ne; i++) {
-            double ax = -(e[(i + 1) % ne][1] - e[i][1]), ay = e[(i + 1) % ne][0] - e[i][0];
-            double a0 = 1e300, a1 = -1e300, b0 = 1e300, b1 = -1e300, t, tol;
-
-            if (ax == 0 && ay == 0)
-                continue;
-            for (k = 0; k < na; k++) {
-                t = ax * pa[k][0] + ay * pa[k][1];
-                a0 = t < a0 ? t : a0;
-                a1 = t > a1 ? t : a1;
-            }
-            for (k = 0; k < nb; k++) {
-                t = ax * pb[k][0] + ay * pb[k][1];
-                b0 = t < b0 ? t : b0;
-                b1 = t > b1 ? t : b1;
-            }
-            tol = 1e-4 * (a1 - a0 + b1 - b0);
-            if (a1 <= b0 + tol || b1 <= a0 + tol)
-                return 0;
-        }
-    }
-    return 1;
-}
-
-/* Whether a face (corners q, plane nv . x = d) and earlier face i share a
-   plane: its corners all lie within PLANE_NEAR (and 0.2% of the plane's
-   distance from the eye) of face i's plane, or face i's corners of its
-   own. Corners, not the planes' distances, are compared: two faces a
-   quarter degree apart (the chip's rounding of a small face's points) far
-   off have distances hundreds apart while lying on one another. */
-static int lies_on(int i, const double (*q)[3], int n, const double *nv, double d)
-{
-    double tol = PLANE_NEAR + 0.002 * fabs(planes[i].d), worst = 0, e;
-    int k;
-
-    for (k = 0; k < n; k++) {
-        e = fabs(planes[i].n[0] * q[k][0] + planes[i].n[1] * q[k][1] + planes[i].n[2] * q[k][2] - planes[i].d);
-        worst = e > worst ? e : worst;
-    }
-    if (worst <= tol)
-        return 1;
-    tol = PLANE_NEAR + 0.002 * fabs(d);
-    worst = 0;
-    for (k = 0; k < planes[i].nq; k++) {
-        e = fabs(nv[0] * planes[i].q[k][0] + nv[1] * planes[i].q[k][1] + nv[2] * planes[i].q[k][2] - d);
-        worst = e > worst ? e : worst;
-    }
-    return worst <= tol;
-}
-
-/* A face's decal level: one more than the highest of the earlier faces of
-   the picture it lies over and looks unlike (look), else 0: those on its
-   plane (facing the same way within SAME_WAY, its corners on the other's
-   plane or the other's on its own, lies_on, as neighbouring track pieces'
-   faces made from different points are: a dump of Sunset Valley's tunnel
-   showed them 0.4 to 3 apart, small faces turned up to a few degrees)
-   whose outlines overlap its own. A face only meeting another at
-   an edge (a wall cut into triangles), or lying over one that looks the
-   same (where either may show), adds none. Its plane, outline and look are
-   kept for the faces after it (not while the hold is on: the ground's
-   survey is not of the picture). *dist: its plane's distance from the eye. */
-static uint8_t decal_of(const Corner3 *c, int n, uint32_t look, double *dist)
-{
-    double nv[3] = { 0, 0, 0 }, q[MOST][3], len, d, p[PLANE_POINTS][2], lo[2] = { 1e300, 1e300 }, hi[2] = { -1e300, -1e300 };
-    int i, k, level = 0, drop, np, cell[3], dc[3];
-    double scale = ldexp(1.0, fx_far_shift());
-
-    *dist = 0;
-    for (i = 0; i < n; i++) {
-        q[i][0] = c[i].x * scale;
-        q[i][1] = c[i].y * scale;
-        q[i][2] = c[i].z * scale;
-    }
-    for (i = 0; i < n; i++) {
-        const double *a = q[i], *b = q[(i + 1) % n];
-
-        nv[0] += (a[1] - b[1]) * (a[2] + b[2]);
-        nv[1] += (a[2] - b[2]) * (a[0] + b[0]);
-        nv[2] += (a[0] - b[0]) * (a[1] + b[1]);
-    }
-    len = sqrt(nv[0] * nv[0] + nv[1] * nv[1] + nv[2] * nv[2]);
-    if (len <= 0)
-        return 0;
-    for (i = 0; i < 3; i++) {
-        nv[i] /= len;
-        cell[i] = (int)floor((nv[i] + 1.0) / NORMAL_CELL);
-    }
-    d = nv[0] * q[0][0] + nv[1] * q[0][1] + nv[2] * q[0][2];
-    *dist = fabs(d);
-    drop = fabs(nv[0]) >= fabs(nv[1]) && fabs(nv[0]) >= fabs(nv[2]) ? 0 : fabs(nv[1]) >= fabs(nv[2]) ? 1 : 2;
-    np = n <= PLANE_POINTS ? n : 0;
-    for (i = 0; i < n; i++) {
-        double u = q[i][drop == 0 ? 1 : 0], v = q[i][drop == 2 ? 1 : 2];
-
-        if (i < np) {
-            p[i][0] = u;
-            p[i][1] = v;
-        }
-        lo[0] = u < lo[0] ? u : lo[0];
-        hi[0] = u > hi[0] ? u : hi[0];
-        lo[1] = v < lo[1] ? v : lo[1];
-        hi[1] = v > hi[1] ? v : hi[1];
-    }
-    for (dc[0] = -1; dc[0] <= 1; dc[0]++)
-        for (dc[1] = -1; dc[1] <= 1; dc[1]++)
-            for (dc[2] = -1; dc[2] <= 1; dc[2]++) {
-                int at[3] = { cell[0] + dc[0], cell[1] + dc[1], cell[2] + dc[2] };
-
-                for (i = bucket[bucket_of(at)]; i >= 0; i = planes[i].next)
-                    if (planes[i].cell[0] == at[0] && planes[i].cell[1] == at[1] && planes[i].cell[2] == at[2]
-                        && planes[i].look != look && planes[i].decal + 1 > level
-                        && nv[0] * planes[i].n[0] + nv[1] * planes[i].n[1] + nv[2] * planes[i].n[2] > SAME_WAY
-                        && lies_on(i, (const double (*)[3])q, n, nv, d)
-                        && outlines_overlap(i, (const double (*)[2])p, np, lo, hi))
-                        level = planes[i].decal + 1;
-            }
-    if (level > DECAL_MOST)
-        level = DECAL_MOST;
-    if (nplanes < PLANES && !fx_draw_holding()) {
-        unsigned b = bucket_of(cell);
-
-        memcpy(planes[nplanes].n, nv, sizeof nv);
-        memcpy(planes[nplanes].cell, cell, sizeof cell);
-        planes[nplanes].d = d;
-        planes[nplanes].look = look;
-        planes[nplanes].decal = (uint8_t)level;
-        planes[nplanes].np = np;
-        memcpy(planes[nplanes].p, p, sizeof p);
-        planes[nplanes].nq = n < PLANE_POINTS ? n : PLANE_POINTS;
-        memcpy(planes[nplanes].q, q, sizeof planes[nplanes].q);
-        for (k = 0; k < 2; k++) {
-            planes[nplanes].lo[k] = lo[k];
-            planes[nplanes].hi[k] = hi[k];
-        }
-        planes[nplanes].next = bucket[b];
-        bucket[b] = nplanes;
-        nplanes++;
-    }
-    return (uint8_t)level;
-}
 
 static FxShape shapes[SHAPES];
 static int nshapes;
@@ -520,8 +293,6 @@ void fx_face_begin(int textured)
     face.textured = textured != 0;
     face.tint = chosen;
     chosen.kind = -1;
-    face.back = back_next;
-    back_next = 0;
     face.whole = 1;
     face.n = 0;
     face.view = view_now();
@@ -606,7 +377,7 @@ static int clip_depth(const Corner3 *in, int n, Corner3 *out, double at, int kee
 }
 
 typedef struct {
-    double x, y, u, v, iz;              /* iz: one over the depth, linear across the screen */
+    double x, y, u, v;
 } Corner2;
 
 /* The part of the projected polygon on one side of a line x = at (axis 0)
@@ -629,7 +400,6 @@ static int clip_side(const Corner2 *in, int n, Corner2 *out, int axis, double at
             out[m].y = a->y + (b->y - a->y) * t;
             out[m].u = a->u + (b->u - a->u) * t;
             out[m].v = a->v + (b->v - a->v) * t;
-            out[m].iz = a->iz + (b->iz - a->iz) * t;
             if (axis)
                 out[m].y = at;
             else
@@ -648,7 +418,6 @@ static void project(const Corner3 *in, int n, Corner2 *out, const View *v)
         place(v, in[i].x, in[i].y, in[i].z, &out[i].x, &out[i].y);
         out[i].u = in[i].u;
         out[i].v = in[i].v;
-        out[i].iz = 1.0 / in[i].z;
     }
 }
 
@@ -679,7 +448,6 @@ static int fan(const Corner3 *in, int n, const View *v)
             c->y = (float)t[j]->y;
             c->u = (float)t[j]->u;
             c->v = (float)t[j]->v;
-            c->iz = (float)ldexp(t[j]->iz, -fx_far_shift());   /* a far object's points are halved */
         }
     }
     return 1;
@@ -736,7 +504,6 @@ uint32_t fx_face_triangles_d(const double (*p)[3], int n, FxCorner *out, uint32_
             out[k].x = (float)t[j]->x;
             out[k].y = (float)t[j]->y;
             out[k].u = out[k].v = 0;
-            out[k].iz = (float)ldexp(t[j]->iz, -fx_far_shift());
             k++;
         }
     }
@@ -792,20 +559,14 @@ static int line(const Corner3 *in, const View *v)
     }
     if (ncorners + 2 > CORNERS)
         return 0;
-    {
-        double iz0 = ldexp(1.0 / p[0].z, -fx_far_shift()), iz1 = ldexp(1.0 / p[1].z, -fx_far_shift());
-
-        corners[ncorners].x = (float)(x[0] + dx * t0);
-        corners[ncorners].y = (float)(y[0] + dy * t0);
-        corners[ncorners].u = corners[ncorners].v = 0;
-        corners[ncorners].iz = (float)(iz0 + (iz1 - iz0) * t0);
-        ncorners++;
-        corners[ncorners].x = (float)(x[0] + dx * t1);
-        corners[ncorners].y = (float)(y[0] + dy * t1);
-        corners[ncorners].u = corners[ncorners].v = 0;
-        corners[ncorners].iz = (float)(iz0 + (iz1 - iz0) * t1);
-        ncorners++;
-    }
+    corners[ncorners].x = (float)(x[0] + dx * t0);
+    corners[ncorners].y = (float)(y[0] + dy * t0);
+    corners[ncorners].u = corners[ncorners].v = 0;
+    ncorners++;
+    corners[ncorners].x = (float)(x[0] + dx * t1);
+    corners[ncorners].y = (float)(y[0] + dy * t1);
+    corners[ncorners].u = corners[ncorners].v = 0;
+    ncorners++;
     return 1;
 }
 
@@ -1063,66 +824,6 @@ static int polygon_corners(const Corner3 *in, int n0, int textured)
     return ok;
 }
 
-/* A flat face seen from its back (fx_face_back) shaded by its own shape,
-   by the side the eye sees: its normal (Newell's, turned toward the eye),
-   the light as the chip lights a face (fx_ground_light). A lit face takes
-   its shade row's colour at that level, as the chip colours a lit face
-   turned that way; its material's light is not used, as a face's material
-   may light it by another face's normal (a two-sided part's two faces share
-   one). A face painted in the course's own rock (fx_ground_rock_back) takes
-   the rock's shade for a face turned that way, as the land's rock is
-   shaded, a distance table's colour by its index (a far canyon wall is the
-   rock's colours darkened, 44 to 47 for 93 to 97); any other keeps its
-   colour. */
-static void back_shade(FxShape *s)
-{
-    double n[3] = { 0, 0, 0 }, light;
-    int i, c;
-
-    for (i = 0; i < face.n; i++) {
-        const Corner3 *a = &face.c[i], *b = &face.c[(i + 1) % face.n];
-
-        n[0] += (a->y - b->y) * (a->z + b->z);
-        n[1] += (a->z - b->z) * (a->x + b->x);
-        n[2] += (a->x - b->x) * (a->y + b->y);
-    }
-    if (n[0] * face.c[0].x + n[1] * face.c[0].y + n[2] * face.c[0].z > 0)
-        for (i = 0; i < 3; i++)
-            n[i] = -n[i];
-    if (face.tint.kind == 1) {
-        double level;
-
-        light = fx_ground_light(n);
-        level = floor(light);
-        level = level < 6 ? 6 : level > 15 ? 15 : level;
-        s->material.colour = fx_rom_read(3, (uint16_t)(face.tint.index + (int)level - 6));
-        s->light = (float)light;
-        return;
-    }
-    if (face.tint.kind == 2) {
-        /* a colour from the distance table: its own index's colour at the
-           nearest tier (the table at $004E, as the survey saw the course's
-           rock), and the shade chosen drawn at the face's tier (the table
-           at $0052) by the index whose nearest colour it is */
-        uint16_t near_at = word(0x004E);
-        int i;
-
-        c = fx_ground_rock_back(fx_rom_read(3, (uint16_t)(near_at + (s->tint_index & 0xFF))), n);
-        if (c < 0)
-            return;
-        for (i = 0; i < 256 && fx_rom_read(3, (uint16_t)(near_at + i)) != c; i++)
-            ;
-        if (i == 256)
-            return;
-        s->tint_index = (uint16_t)i;
-        s->material.colour = fx_rom_read(3, (uint16_t)(word(0x0052) + i));
-        return;
-    }
-    c = fx_ground_rock_back(s->material.colour, n);
-    if (c >= 0)
-        s->material.colour = (uint8_t)c;
-}
-
 /* The face noted made into a shape with its material. A face not wholly
    known (a point not projected with this model's table) makes none. */
 static void commit(const FxMaterial *m)
@@ -1133,22 +834,6 @@ static void commit(const FxMaterial *m)
 
     if (!face.whole || face.n < 2 || nshapes == SHAPES)
         return;
-    {                                   /* a car seated on the road (fx_seat.c), or a surface for the cars */
-        double sc[MOST][3];
-        int i;
-
-        for (i = 0; i < face.n; i++) {
-            sc[i][0] = face.c[i].x;
-            sc[i][1] = face.c[i].y;
-            sc[i][2] = face.c[i].z;
-        }
-        fx_seat_face(sc, face.n);
-        for (i = 0; i < face.n; i++) {
-            face.c[i].x = sc[i][0];
-            face.c[i].y = sc[i][1];
-            face.c[i].z = sc[i][2];
-        }
-    }
     if (survey_face && face.n >= 3) {
         double c[MOST][3];
         int i;
@@ -1169,17 +854,7 @@ static void commit(const FxMaterial *m)
     s->tint_index = face.tint.index;
     s->light = face.tint.light;
     s->under_first = s->under_count = 0;
-    s->decal = 0;
-    s->decal_k = 0;
-    s->back = face.back != 0;
-    if (face.back && !face.textured && face.n >= 3)
-        back_shade(s);
-    if (face.n >= 3) {
-        double dist = 0;
-
-        s->decal = decal_of(face.c, face.n, look_of(s, face.textured), &dist);
-        s->decal_k = (float)(dist > 2 * DECAL_PLANE ? DECAL_PLANE / dist : 0.5);
-    }
+    s->z = fx_far_z();
     if (s->line) {
         ok = line(face.c, &face.view);
     } else if (cut.on) {
@@ -1237,14 +912,10 @@ void fx_sprite_place(uint16_t x, uint16_t y, uint16_t depth, uint16_t size, uint
     View v = view_now();
     double d = depth ? depth : 1, half = (screen_size >> 1) + (screen_size & 1);
 
-    double at[3] = { (int16_t)x, (int16_t)y, d };
-
-    fx_seat_sprite(at);                 /* a car's moved with it, one under the road onto it (fx_seat.c) */
-    d = at[2] > 1 ? at[2] : 1;
     sprite.set = screen_size != 0;
-    sprite.past = fx_face_past_water(at[0], at[1], d);
-    sprite.cx = v.cx + FOCAL * at[0] / d;
-    sprite.cy = v.cy + FOCAL * at[1] / d;
+    sprite.past = fx_face_past_water((int16_t)x, (int16_t)y, d);
+    sprite.cx = v.cx + FOCAL * (int16_t)x / d;
+    sprite.cy = v.cy + FOCAL * (int16_t)y / d;
     sprite.k = size ? (FOCAL * size / d) / screen_size : 1.0;
     sprite.bx = centre_x;
     sprite.by = centre_y;
