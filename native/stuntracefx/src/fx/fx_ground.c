@@ -61,6 +61,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "data/video_tables.h"
 #include "fx/fx.h"
 #include "fx/fx_draw.h"
 #include "fx/fx_face.h"
@@ -105,38 +106,44 @@ enum { SURF_NONE, SURF_GRASS, SURF_ROCK, SURF_CEMENT, SURF_SNOW, SURF_ICE, SURF_
    shade rows; for water `under` the class seen from below, the eye under
    the water) is drawn as polygons in that class's shades (the land as
    polygons, below); the rest as before, until each course is done (Jeff,
-   2026-11-11: track by track, Easy Ride first). */
+   2026-11-11: track by track, Easy Ride first). A flat course's land is
+   the plane alone, with no ring of mountains round it: a city, whose
+   skyline is on its backdrop at the horizon, which mountains would hide. */
 static const struct {
     uint8_t kind;
     int16_t y;
     uint8_t cls;
     uint8_t under;          /* water seen from below: its shade class (0: cls's) */
+    uint8_t flat;           /* land: the plane alone, no mountains */
 } surface[0x20] = {
-    [0x00] = { SURF_GRASS, 0, 10, 0 },  /* Easy Ride: class 10, the chip's grass green (82,131,0 to 148,197,57) */
-    [0x01] = { SURF_AQUA, -1280, 12, 9 }, /* Aqua Tunnel: under the road, over the glass tube, where its
+    [0x00] = { SURF_GRASS, 0, 10, 0, 0 },  /* Easy Ride: class 10, the chip's grass green (82,131,0 to 148,197,57) */
+    [0x01] = { SURF_AQUA, -1280, 12, 9, 0 }, /* Aqua Tunnel: under the road, over the glass tube, where its
                                            road's pieces end (the road -1920, the pieces 640 below) */
-    [0x02] = { SURF_ROCK, 0, CLS_ROCK, 0 }, /* Sunset Valley, the canyon: mesas in its own rock's shades */
-    [0x03] = { SURF_CEMENT, 0, 0, 0 },  /* the night city, the airport */
-    [0x04] = { SURF_GRASS, 0, 0, 0 },   /* the foggy forest */
-    [0x05] = { SURF_GRASS, 0, 0, 0 },   /* Sea Breeze: its band green beside the road, the sea's teal only
+    [0x02] = { SURF_ROCK, 0, CLS_ROCK, 0, 0 }, /* Sunset Valley, the canyon: mesas in its own rock's shades */
+    [0x03] = { SURF_CEMENT, 0, 21, 0, 1 }, /* Night Owl, the night city, the airport: flat, class 21, the
+                                           greys its own road is shaded in (its colours 63-56: 49,49,41
+                                           to 107,107,99 by its palette; the road ahead 66,66,57 and
+                                           74,74,66, levels 9 and 10, the band's under the eye) */
+    [0x04] = { SURF_GRASS, 0, 0, 0, 0 },   /* the foggy forest */
+    [0x05] = { SURF_GRASS, 0, 0, 0, 0 },   /* Sea Breeze: its band green beside the road, the sea's teal only
                                            toward the horizon, which the land takes by distance */
-    [0x06] = { SURF_SNOW, 0, 0, 0 },    /* White Land */
-    [0x07] = { SURF_CEMENT, 0, 0, 0 },  /* the sunset city */
-    [0x08] = { SURF_GRASS, 0, 0, 0 },   /* Lake Side: as Sea Breeze */
-    [0x09] = { SURF_ROCK, 0, 0, 0 },    /* the wild-west desert: red rock, its band green */
-    [0x0A] = { SURF_NONE, 0, 0, 0 },    /* Sky Ramp */
-    [0x0B] = { SURF_WATER, -3840, 0, 0 }, /* the night harbour: where its lowest road's (-4480) pieces end */
-    [0x0C] = { SURF_DIRT, 0, 0, 0 },    /* the stunt arenas: dirt, grass, ice, water */
-    [0x0D] = { SURF_GRASS, 0, 0, 0 },
-    [0x0E] = { SURF_ICE, 0, 0, 0 },
-    [0x0F] = { SURF_WATER, 0, 0, 0 },   /* its floor */
-    [0x10] = { SURF_GRASS, 0, 0, 0 },   /* the battle arenas: the countryside */
-    [0x11] = { SURF_ROCK, 0, 0, 0 },    /* the red-rock desert, its band the canyon's tan */
-    [0x12] = { SURF_GRASS, 0, 0, 0 },   /* the beach: its band Sea Breeze's */
-    [0x13] = { SURF_WATER, 0, 0, 0 },   /* the night city: its band the night harbour's, at its floor */
-    [0x14] = { SURF_GRASS, 0, 0, 0 },   /* the countryside courses */
-    [0x15] = { SURF_GRASS, 0, 0, 0 },
-    [0x16] = { SURF_GRASS, 0, 0, 0 },
+    [0x06] = { SURF_SNOW, 0, 0, 0, 0 },    /* White Land */
+    [0x07] = { SURF_CEMENT, 0, 0, 0, 0 },  /* the sunset city */
+    [0x08] = { SURF_GRASS, 0, 0, 0, 0 },   /* Lake Side: as Sea Breeze */
+    [0x09] = { SURF_ROCK, 0, 0, 0, 0 },    /* the wild-west desert: red rock, its band green */
+    [0x0A] = { SURF_NONE, 0, 0, 0, 0 },    /* Sky Ramp */
+    [0x0B] = { SURF_WATER, -3840, 0, 0, 0 }, /* the night harbour: where its lowest road's (-4480) pieces end */
+    [0x0C] = { SURF_DIRT, 0, 0, 0, 0 },    /* the stunt arenas: dirt, grass, ice, water */
+    [0x0D] = { SURF_GRASS, 0, 0, 0, 0 },
+    [0x0E] = { SURF_ICE, 0, 0, 0, 0 },
+    [0x0F] = { SURF_WATER, 0, 0, 0, 0 },   /* its floor */
+    [0x10] = { SURF_GRASS, 0, 0, 0, 0 },   /* the battle arenas: the countryside */
+    [0x11] = { SURF_ROCK, 0, 0, 0, 0 },    /* the red-rock desert, its band the canyon's tan */
+    [0x12] = { SURF_GRASS, 0, 0, 0, 0 },   /* the beach: its band Sea Breeze's */
+    [0x13] = { SURF_WATER, 0, 0, 0, 0 },   /* the night city: its band the night harbour's, at its floor */
+    [0x14] = { SURF_GRASS, 0, 0, 0, 0 },   /* the countryside courses */
+    [0x15] = { SURF_GRASS, 0, 0, 0, 0 },
+    [0x16] = { SURF_GRASS, 0, 0, 0, 0 },
 };
 
 /* the land's marks: the size of a texel on the ground, and each kind's
@@ -1057,8 +1064,9 @@ static void land_draw(int kind, const double eye[3], const double m[9], int p)
    pixel in every direction, so nothing of the backdrop shows below the
    horizon. It is never above the eye: where the eye is lower than
    EYE_CLEAR over the level (a tunnel), it lies EYE_CLEAR under the eye, so
-   it is never seen from below. Round the course stands a ring of MOUNTAINS
-   pyramids of SIDES faces, made once a course from the survey's footprint
+   it is never seen from below. Round the course, unless it is flat (the
+   table's flat: Night Owl), stands a ring of MOUNTAINS pyramids of SIDES
+   faces, made once a course from the survey's footprint
    (their places, sizes and shapes from a hash of the course and their
    number; their size in proportion to the footprint's), each base wholly
    GAP of the footprint's half size outside it, so no mountain can stand
@@ -1069,7 +1077,9 @@ static void land_draw(int kind, const double eye[3], const double m[9], int p)
    view space), floored and kept to 6-15; its colour the byte at that level
    in the class's shade row, the nearest tier's (bank 3, SHADE_ROWS); and
    that byte's colour in the palette (two players' pictures, whose palette
-   is in 16-colour rows: one player's, ONE_PALETTE). The level's scale and
+   is in 16-colour rows: the course's own colour, course_day_colour, as one
+   player's picture has it; the fixed palette at $1F:8800 is only some
+   courses' own, Night Owl's matching it in 48 of its 240 colours). The level's scale and
    sign come from the survey's fit of the course's own lit faces
    (grid.light_k), so the land takes the shades the course's own faces take
    facing the same way.
@@ -1086,7 +1096,6 @@ static void land_draw(int kind, const double eye[3], const double m[9], int p)
 
 enum { MOUNTAINS = 10, SIDES = 5, LAND_VERTICES = 3 * (6 + MOUNTAINS * (SIDES + 1) * 7) };    /* each face kept to the view in at most 7 */
 #define SHADE_ROWS 0xA1C5       /* bank 3: the lit faces' shade rows by class, two bytes each, the nearest tier's */
-#define ONE_PALETTE 0x8800      /* bank $1F: one player's palette */
 #define PLANE_Z 0.999f
 #define FACE_Z 0.998
 #define LAND_NEAR 256.0
@@ -1193,7 +1202,7 @@ static uint32_t row_colour(int cls, int level)
     if (fx_draw_full_colour())
         bgr = pic.palette[c];
     else
-        bgr = (uint16_t)(fx_rom_read(0x1F, (uint16_t)(ONE_PALETTE + 2 * c)) | fx_rom_read(0x1F, (uint16_t)(ONE_PALETTE + 2 * c + 1)) << 8);
+        bgr = course_day_colour(g.course, c);
     return rgb_of(bgr);
 }
 
@@ -1559,15 +1568,15 @@ static void land_polygons(unsigned course, int cls, const double eye[3], const d
 
     if (!grid.nx)
         return;
-    if (range.course != (int)course || range.mesas != mesas)
+    if (!surface[course].flat && (range.course != (int)course || range.mesas != mesas))
         range_make(course, mesas);
     /* the plane, its colour up its normal */
     for (k = 0; k < 3; k++)
         up[k] = -m[3 + k];
     plane_vertices(plane_y, face_colour(cls, up, up_world, 1), PLANE_Z, eye, m, v, &nv, LAND_VERTICES);
     /* the mountains' or mesas' faces that look toward the eye, their bases
-       on the plane */
-    for (i = 0; i < MOUNTAINS; i++) {
+       on the plane (none on a flat course) */
+    for (i = 0; i < (surface[course].flat ? 0 : MOUNTAINS); i++) {
         double mid[3] = { 0, plane_y, 0 };
 
         for (k = 0; k < SIDES; k++) {
