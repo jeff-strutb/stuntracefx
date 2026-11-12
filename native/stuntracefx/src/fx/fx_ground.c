@@ -90,9 +90,9 @@
 #define LIGHT_K (-127.0 * 127.0 / 1024.0)
 #define HORIZON_GAP 0.01        /* the polygon's far edge this far from the horizon, in output pixels */
 
-enum { SURF_NONE, SURF_GRASS, SURF_ROCK, SURF_CEMENT, SURF_SNOW, SURF_ICE, SURF_DIRT, SURF_WATER, SURF_AQUA };
+enum { SURF_NONE, SURF_GRASS, SURF_ROCK, SURF_CEMENT, SURF_SNOW, SURF_ICE, SURF_DIRT, SURF_WATER, SURF_AQUA, SURF_CLOUD };
 
-#define IS_LAND(k) ((k) >= SURF_GRASS && (k) <= SURF_DIRT)
+#define IS_LAND(k) (((k) >= SURF_GRASS && (k) <= SURF_DIRT) || (k) == SURF_CLOUD)
 #define CLS_ROCK 0xFF           /* the surface table's class for the course's own rock (the survey's fit): mesas */
 #define CLS_WHITE 0xFD          /* class 0, the chip's snow whites (the table's 0 is no class) */
 #define CLS_BAND 0xFC           /* a sea in the band's own sea's colours (band_shade): Lake Side */
@@ -101,8 +101,9 @@ enum { SURF_NONE, SURF_GRASS, SURF_ROCK, SURF_CEMENT, SURF_SNOW, SURF_ICE, SURF_
 /* Each course's surface (g.course, $0E3D), from pictures of every course
    (2026-11-09): its kind, and for water the height of its level (world y
    is down). Land takes its heights from the course's own shapes (the
-   survey below). None: Sky Ramp (its band is sky all the way down, the
-   track meant to float) and the checkered test arenas. The airport is the
+   survey below). None: the checkered test arenas. Sky Ramp (its band is
+   sky all the way down, the track meant to float) has a sea of clouds
+   under it (the clouds, below). The airport is the
    night city (Jeff). Water is at the height where its lowest road's pieces
    end (a road piece reaches 640 below the road), measured from the
    course's shapes, so the road stands in it and nothing of the road hangs
@@ -170,7 +171,10 @@ static const struct {
                                            the rock filling its empty space, rock round its tunnels) in its
                                            own rock's run (its walls 90,49,0 to 41,8,0; the survey's 5
                                            shades) */
-    [0x0A] = { SURF_NONE, 0, 0, 0, 0, 0, 0, 0 },    /* Sky Ramp */
+    [0x0A] = { SURF_CLOUD, 0, CLS_WHITE, 0, 1, 0, 0, 0 }, /* Sky Ramp, the track in the sky: a sea of clouds under it (Jeff,
+                                           2026-11-12), flat, in class 0, the whites of its own white
+                                           shapes (its start's gate and pillars, d5e6e6 to ffffff by its
+                                           palette), cloud banks on it (the clouds, below) */
     [0x0B] = { SURF_WATER, -3840, 0, 0, 0, 0, 0, 0 }, /* the night harbour: where its lowest road's (-4480) pieces end */
     [0x0C] = { SURF_DIRT, 0, 0, 0, 0, 0, 0, 0 },    /* the stunt arenas: dirt, grass, ice, water */
     [0x0D] = { SURF_GRASS, 0, 0, 0, 0, 0, 0, 0 },
@@ -190,7 +194,7 @@ static const struct {
    lighter) */
 #define LAND_TEXEL 32.0
 static const float land_ink[] = { [SURF_GRASS] = 0.8f, [SURF_ROCK] = 0.7f, [SURF_CEMENT] = 0.84f,
-                                  [SURF_SNOW] = 1.12f, [SURF_ICE] = 1.1f, [SURF_DIRT] = 0.78f };
+                                  [SURF_SNOW] = 1.12f, [SURF_ICE] = 1.1f, [SURF_DIRT] = 0.78f, [SURF_CLOUD] = 1.12f };
 
 /* Aqua Tunnel's strip rows' depths from the view, as the original shows the
    underwater backdrop on its most level frame (rows 51-60 over lines 1 to
@@ -2243,10 +2247,219 @@ static void city_draw(unsigned course, const double eye[3], const double m[9])
     }
 }
 
+/* ---- the clouds ----
+
+   Jeff (2026-11-12, Sky Ramp: "Sea of clouds"): the track floats in the
+   sky, its band sky all the way down. Under it a sea of clouds: the land's
+   plane CLOUD_BELOW under the lowest place the course's shapes reach (the
+   survey's deepest), out to the horizon, in the class's level face's
+   colour, and on it cloud banks, each a few domes (puffs) of CLOUD_SEGS
+   sides and CLOUD_RINGS rings, flat at the base on the plane, from
+   CLOUD_KINDS shapes; a bank to a cell of CLOUD_CELL (CLOUD_EMPTY of the
+   cells none), set off in it by up to a third of a cell, 0.6 to 1 of
+   CLOUD_BASE, out to CLOUD_REACH past the footprint. A bank's top stays
+   under the course's lowest place (its shapes at most 0.31 of their size
+   high, CLOUD_BASE 0.31 = 2,790, less than CLOUD_BELOW less CLOUD_TOP_GAP),
+   so with the eye above that place no line from it to the course passes
+   through a bank: the land is drawn behind the course's shapes, and a bank
+   standing in front of one would be wrong, so banks may lie under the
+   course as well as round it. A face's colour is the chip's for a lit face
+   of the class facing as it does in the view (the light is fixed in view
+   space, so the same for every bank: one colour a face, the mesh written
+   again when one changes; a mesh set for each picture being made,
+   fx_draw_mesh_slot, so a picture shown keeps the colours written for
+   it). Each shape an instanced mesh (nshvc 6.2), each bank one instance
+   of it, drawn at the land's depths nearest first, a bank whose sphere is
+   outside the view left out. Triangles: a puff CLOUD_SEGS (2 CLOUD_RINGS -
+   1) = 40, a bank 3-5 puffs, 120-200. */
+enum { CLOUD_KINDS = 6, CLOUD_MOST = 2048, CLOUD_PUFFS = 5, CLOUD_SEGS = 8, CLOUD_RINGS = 3, CLOUD_SLOTS = 5,
+       CLOUD_TRIS = CLOUD_PUFFS * CLOUD_SEGS * (2 * CLOUD_RINGS - 1) };
+#define CLOUD_BELOW 4096.0
+#define CLOUD_TOP_GAP 1024.0
+#define CLOUD_BASE 9000.0
+#define CLOUD_CELL 9000.0
+#define CLOUD_REACH 120000.0
+#define CLOUD_EMPTY 0.2
+
+static struct {
+    int made;                       /* the shapes made */
+    uint32_t tris[CLOUD_KINDS];
+    float tri[CLOUD_KINDS][CLOUD_TRIS][3][3];   /* in its size, its base's middle at the origin, y down */
+    double normal[CLOUD_KINDS][CLOUD_TRIS][3];  /* outward, the world's axes */
+    int course, n;
+    struct {
+        float x, z, size;
+        uint8_t kind;
+    } b[CLOUD_MOST];
+    nshvc_mesh mesh[CLOUD_SLOTS][CLOUD_KINDS];
+    uint32_t colour[CLOUD_SLOTS][CLOUD_KINDS][CLOUD_TRIS];
+} clouds = { 0, { 0 }, { { { { 0 } } } }, { { { 0 } } }, -1, 0, { { 0, 0, 0, 0 } }, { { { 0 } } }, { { { 0 } } } };
+
+/* shape k: its puffs, the first in the middle (0.32-0.38 across its
+   radius, 0.7-0.8 its radius high), the rest round it (0.15-0.3 out, 0.18-
+   0.3, 0.55-0.8 high); each a dome of rings at 0, 30 and 60 degrees up
+   and its top */
+static void clouds_shapes(void)
+{
+    const double turn = 6.283185307179586;
+    int k, i, r, s, t;
+
+    for (k = 0; k < CLOUD_KINDS; k++) {
+        int puffs = 3 + (int)(hash01(0x40 + (unsigned)k, 9500, 0) * 3);
+        uint32_t n = 0;
+
+        for (i = 0; i < puffs && i < CLOUD_PUFFS; i++) {
+            double a = turn * hash01(0x40 + (unsigned)k, 9510 + (unsigned)i, 1);
+            double out = i ? 0.15 + 0.15 * hash01(0x40 + (unsigned)k, 9510 + (unsigned)i, 2) : 0;
+            double rad = i ? 0.18 + 0.12 * hash01(0x40 + (unsigned)k, 9510 + (unsigned)i, 3) : 0.32 + 0.06 * hash01(0x40 + (unsigned)k, 9510, 3);
+            double high = i ? 0.55 + 0.25 * hash01(0x40 + (unsigned)k, 9510 + (unsigned)i, 4) : 0.7 + 0.1 * hash01(0x40 + (unsigned)k, 9510, 4);
+            double spin = turn * hash01(0x40 + (unsigned)k, 9510 + (unsigned)i, 5);
+            double mid[3] = { cos(a) * out, 0, sin(a) * out }, ring[CLOUD_RINGS][CLOUD_SEGS][3], top[3];
+
+            for (r = 0; r < CLOUD_RINGS; r++)
+                for (s = 0; s < CLOUD_SEGS; s++) {
+                    double up = turn / 4 * r / CLOUD_RINGS, round = spin + turn * s / CLOUD_SEGS;
+
+                    ring[r][s][0] = mid[0] + rad * cos(up) * cos(round);
+                    ring[r][s][1] = -rad * high * sin(up);
+                    ring[r][s][2] = mid[2] + rad * cos(up) * sin(round);
+                }
+            top[0] = mid[0], top[1] = -rad * high, top[2] = mid[2];
+            for (r = 0; r < CLOUD_RINGS; r++)
+                for (s = 0; s < CLOUD_SEGS; s++) {
+                    int s1 = (s + 1) % CLOUD_SEGS, faces = r + 1 < CLOUD_RINGS ? 2 : 1, f;
+
+                    for (f = 0; f < faces; f++) {
+                        const double *p[3];
+                        double nv[3], c[3], len;
+
+                        if (r + 1 == CLOUD_RINGS)
+                            p[0] = ring[r][s], p[1] = ring[r][s1], p[2] = top;
+                        else if (!f)
+                            p[0] = ring[r][s], p[1] = ring[r][s1], p[2] = ring[r + 1][s1];
+                        else
+                            p[0] = ring[r][s], p[1] = ring[r + 1][s1], p[2] = ring[r + 1][s];
+                        normal_of(p[0], p[1], p[2], nv);
+                        for (t = 0; t < 3; t++)
+                            c[t] = (p[0][t] + p[1][t] + p[2][t]) / 3 - mid[t];
+                        if (nv[0] * c[0] + nv[1] * c[1] + nv[2] * c[2] < 0)    /* outward: away from the puff's middle */
+                            for (t = 0; t < 3; t++)
+                                nv[t] = -nv[t];
+                        len = sqrt(nv[0] * nv[0] + nv[1] * nv[1] + nv[2] * nv[2]);
+                        if (len <= 0)
+                            continue;
+                        for (t = 0; t < 3; t++) {
+                            clouds.normal[k][n][t] = nv[t] / len;
+                            clouds.tri[k][n][t][0] = (float)p[t][0];
+                            clouds.tri[k][n][t][1] = (float)p[t][1];
+                            clouds.tri[k][n][t][2] = (float)p[t][2];
+                        }
+                        n++;
+                    }
+                }
+        }
+        clouds.tris[k] = n;
+    }
+    clouds.made = 1;
+}
+
+static void clouds_make(unsigned course)
+{
+    double x0 = grid.xmin - CLOUD_REACH, z0 = grid.zmin - CLOUD_REACH;
+    int nx = (int)((grid.xmax - grid.xmin + 2 * CLOUD_REACH) / CLOUD_CELL) + 1;
+    int nz = (int)((grid.zmax - grid.zmin + 2 * CLOUD_REACH) / CLOUD_CELL) + 1;
+    int i, j;
+
+    clouds.course = (int)course;
+    clouds.n = 0;
+    for (j = 0; j < nz; j++)
+        for (i = 0; i < nx && clouds.n < CLOUD_MOST; i++) {
+            double x = x0 + (i + 0.5 + 0.67 * (hash01(course, 9600 + (unsigned)i, (unsigned)j) - 0.5)) * CLOUD_CELL;
+            double z = z0 + (j + 0.5 + 0.67 * (hash01(course, 9700 + (unsigned)i, (unsigned)j) - 0.5)) * CLOUD_CELL;
+            int kind = (int)(hash01(course, 9800 + (unsigned)i, (unsigned)j) * CLOUD_KINDS);
+
+            if (hash01(course, 9900 + (unsigned)i, (unsigned)j) < CLOUD_EMPTY || footprint_distance(x, z) > CLOUD_REACH)
+                continue;
+            clouds.b[clouds.n].x = (float)x;
+            clouds.b[clouds.n].z = (float)z;
+            clouds.b[clouds.n].size = (float)(CLOUD_BASE * (0.6 + 0.4 * hash01(course, 9950 + (unsigned)i, (unsigned)j)));
+            clouds.b[clouds.n].kind = (uint8_t)(kind < CLOUD_KINDS ? kind : CLOUD_KINDS - 1);
+            clouds.n++;
+        }
+}
+
+static void clouds_draw(unsigned course, int cls, double deck, const double eye[3], const double m[9])
+{
+    static nshvc_mesh_vertex v[3 * CLOUD_TRIS];
+    static CityInstance in[CLOUD_KINDS][CLOUD_MOST];   /* the city's: a bank's depth and instance */
+    static nshvc_instance sorted[CLOUD_MOST];
+    uint32_t count[CLOUD_KINDS] = { 0 }, i, t;
+    int slot = fx_draw_mesh_slot(), k, b, c;
+    nshvc_view view;
+    float side[4][3];
+
+    if (slot < 0 || slot >= CLOUD_SLOTS)
+        return;
+    if (!clouds.made)
+        clouds_shapes();
+    if (clouds.course != (int)course)
+        clouds_make(course);
+    for (k = 0; k < CLOUD_KINDS; k++) {         /* each face's colour as it faces in the view now */
+        int changed = !clouds.mesh[slot][k].id;
+        uint32_t n = 0;
+
+        for (t = 0; t < clouds.tris[k]; t++) {
+            const double *nw = clouds.normal[k][t];
+            double nview[3];
+            uint32_t colour;
+
+            for (c = 0; c < 3; c++)
+                nview[c] = nw[0] * m[c] + nw[1] * m[3 + c] + nw[2] * m[6 + c];
+            colour = face_colour(cls, nview, nw, 0);
+            changed |= colour != clouds.colour[slot][k][t];
+            clouds.colour[slot][k][t] = colour;
+        }
+        if (!changed || !clouds.tris[k])
+            continue;
+        for (t = 0; t < clouds.tris[k]; t++)
+            for (c = 0; c < 3; c++, n++) {
+                v[n].x = clouds.tri[k][t][c][0], v[n].y = clouds.tri[k][t][c][1], v[n].z = clouds.tri[k][t][c][2];
+                v[n].u = v[n].v = 0;
+                v[n].colour = clouds.colour[slot][k][t];
+            }
+        if (!clouds.mesh[slot][k].id)
+            clouds.mesh[slot][k] = nshvc_mesh_create(3 * CLOUD_TRIS);
+        if (clouds.mesh[slot][k].id)
+            nshvc_mesh_write(clouds.mesh[slot][k], v, n);
+    }
+    land_view(eye, m, &view, side);
+    for (b = 0; b < clouds.n; b++) {
+        double s = clouds.b[b].size, ctr[3] = { clouds.b[b].x, deck - 0.15 * s, clouds.b[b].z }, vv[3];
+        int kind = clouds.b[b].kind;
+
+        if (!land_sphere_seen(eye, m, (const float (*)[3])side, ctr, 0.65 * s, vv))
+            continue;
+        in[kind][count[kind]].z = (float)vv[2];
+        in[kind][count[kind]].in.x = clouds.b[b].x, in[kind][count[kind]].in.y = (float)deck, in[kind][count[kind]].in.z = clouds.b[b].z;
+        in[kind][count[kind]].in.size = (float)s;
+        count[kind]++;
+    }
+    for (k = 0; k < CLOUD_KINDS; k++) {
+        if (!count[k] || !clouds.mesh[slot][k].id || !clouds.tris[k])
+            continue;
+        qsort(in[k], count[k], sizeof in[k][0], city_nearer);
+        for (i = 0; i < count[k]; i++)
+            sorted[i] = in[k][i].in;
+        fx_draw_mesh(clouds.mesh[slot][k], &view, sorted, count[k]);
+    }
+}
+
 static void land_polygons(unsigned course, int cls, const double eye[3], const double m[9])
 {
     static nshvc_vertex v[LAND_VERTICES];
-    double plane_y = fmax(grid.level, eye[1] + EYE_CLEAR), up[3];
+    int clouded = surface[course].kind == SURF_CLOUD;
+    /* the plane at the course's level, or a sea of clouds' under its lowest place */
+    double deck = grid.deepest + CLOUD_BELOW, plane_y = fmax(clouded ? deck : grid.level, eye[1] + EYE_CLEAR), up[3];
     static const double up_world[3] = { 0, -1, 0 };
     uint32_t nv = 0, j;
     int i, k, mesas = cls == CLS_ROCK;
@@ -2309,6 +2522,9 @@ static void land_polygons(unsigned course, int cls, const double eye[3], const d
     /* a city round the course */
     if (surface[course].city && grid.nx)
         city_draw(course, eye, m);
+    /* cloud banks on a sea of clouds */
+    if (clouded)
+        clouds_draw(course, cls, deck, eye, m);
     /* the course's own trees round it (one player's pictures, once the
        race has drawn one of its trees) */
     if (surface[course].forest && !surface[course].flat && !mesas && fx_draw_full_colour() && fx_solid_forest_ready())
