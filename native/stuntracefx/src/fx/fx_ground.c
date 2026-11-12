@@ -94,6 +94,7 @@ enum { SURF_NONE, SURF_GRASS, SURF_ROCK, SURF_CEMENT, SURF_SNOW, SURF_ICE, SURF_
 
 #define IS_LAND(k) ((k) >= SURF_GRASS && (k) <= SURF_DIRT)
 #define CLS_ROCK 0xFF           /* the surface table's class for the course's own rock (the survey's fit): mesas */
+#define CLS_WHITE 0xFD          /* class 0, the chip's snow whites (the table's 0 is no class) */
 
 /* Each course's surface (g.course, $0E3D), from pictures of every course
    (2026-11-09): its kind, and for water the height of its level (world y
@@ -142,7 +143,10 @@ static const struct {
                                            at its middle), its texture ($13:$C040, colour $50, the high
                                            nibble held) drawing entries $58-$5B, class 9's four lightest
                                            (8,140,239 to 90,222,255): the class's levels 11-15 */
-    [0x06] = { SURF_SNOW, 0, 0, 0, 0, 0, 0 },    /* White Land */
+    [0x06] = { SURF_SNOW, 0, CLS_WHITE, 0, 0, 0, 0 }, /* White Land, the snowfield: Easy Ride's land in class 0, the
+                                           whites its own snow banks are in (214,231,231 to 255,255,255;
+                                           its road class 21's icy greys), its fog over it as the
+                                           palette carries it (amount_step's 10 of 32 for it) */
     [0x07] = { SURF_CEMENT, 0, 0, 0, 0, 0, 0 },  /* the sunset city */
     [0x08] = { SURF_GRASS, 0, 0, 0, 0, 0, 0 },   /* Lake Side: as Sea Breeze */
     [0x09] = { SURF_ROCK, 0, 0, 0, 0, 0, 0 },    /* the wild-west desert: red rock, its band green */
@@ -1210,7 +1214,8 @@ static void range_make(unsigned course, int mesas)
 /* class cls's colour at light level `level` (6-15) */
 static uint32_t row_colour(int cls, int level)
 {
-    uint16_t row = (uint16_t)(fx_rom_read(3, (uint16_t)(SHADE_ROWS + 2 * cls)) | fx_rom_read(3, (uint16_t)(SHADE_ROWS + 2 * cls + 1)) << 8);
+    int k = cls == CLS_WHITE ? 0 : cls;
+    uint16_t row = (uint16_t)(fx_rom_read(3, (uint16_t)(SHADE_ROWS + 2 * k)) | fx_rom_read(3, (uint16_t)(SHADE_ROWS + 2 * k + 1)) << 8);
     uint8_t c = fx_rom_read(3, (uint16_t)(row + level - 6));
     uint16_t bgr;
 
