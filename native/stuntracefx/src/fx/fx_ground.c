@@ -124,7 +124,11 @@ static const struct {
                                            greys its own road is shaded in (its colours 63-56: 49,49,41
                                            to 107,107,99 by its palette; the road ahead 66,66,57 and
                                            74,74,66, levels 9 and 10, the band's under the eye) */
-    [0x04] = { SURF_GRASS, 0, 0, 0, 0 },   /* the foggy forest */
+    [0x04] = { SURF_GRASS, 0, 10, 0, 0 },  /* King's Forest, the foggy forest: Easy Ride's land, class 10,
+                                           its own hills' grass (their faces 173,206,132 and 189,214,140:
+                                           the class's top levels in its palette blended 15 of 32 toward
+                                           the fog, which the palette carries, so the land is fogged as
+                                           they are) */
     [0x05] = { SURF_GRASS, 0, 0, 0, 0 },   /* Sea Breeze: its band green beside the road, the sea's teal only
                                            toward the horizon, which the land takes by distance */
     [0x06] = { SURF_SNOW, 0, 0, 0, 0 },    /* White Land */
