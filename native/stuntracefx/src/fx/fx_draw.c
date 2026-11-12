@@ -697,7 +697,7 @@ static void compose_recording(const Recording *r, uint32_t from, uint32_t to, in
     static nshvc_vertex *scaled;
     static uint32_t cap;
     static float dx[PIECES], dy[PIECES];
-    uint32_t i, k;
+    uint32_t i, j, k;
     nshvc_material m;
 
     if (r->nv > cap) {
@@ -726,25 +726,43 @@ static void compose_recording(const Recording *r, uint32_t from, uint32_t to, in
             scaled[k].y = (scaled[k].y + oy) * screen_sy;
         }
     }
+    /* Each run of shapes drawn the same way (image, shader and its inputs,
+       lines or triangles) whose vertices follow one another is one draw
+       call (Jeff, 2026-11-12, the race in the 40s: a picture was 3,700 to
+       6,500 calls of about four vertices each, a face of a model a call,
+       and the engine's render thread took 6 to 9 ms a picture on them at
+       3024 x 1964, a microsecond or so a call). Within a call the later
+       triangle is drawn over the earlier at equal depths, as a later call
+       is, so the picture is the same. */
     memset(&m, 0, sizeof m);
-    for (i = from; i < to; i++) {
+    for (i = from; i < to; i = j) {
         const Shape *sh = &r->s[i];
+        uint32_t count = sh->count;
 
+        j = i + 1;
         if (sh->mesh) {
             const MeshDraw *d = &r->md[sh->draw];
 
             mesh_scaled(screen_list, sh->mesh, &d->view, r->mi + d->first, d->count, screen_sx, screen_sy, 0, 0);
             continue;
         }
+        for (; j < to; j++) {
+            const Shape *next = &r->s[j];
+
+            if (next->mesh || next->first != sh->first + count || next->image != sh->image || next->lines != sh->lines
+                || next->shader != sh->shader || (sh->shader && memcmp(next->in, sh->in, sizeof sh->in)))
+                break;
+            count += next->count;
+        }
         m.image.id = sh->image;
         m.shader.id = sh->shader;
         if (sh->shader)
             memcpy(m.inputs, sh->in, sizeof m.inputs);
         if (sh->lines)
-            nshvc_draw_lines(screen_list, scaled + sh->first, sh->count, sh->image ? &m : NULL);
+            nshvc_draw_lines(screen_list, scaled + sh->first, count, sh->image ? &m : NULL);
         else
-            nshvc_draw_tris(screen_list, scaled + sh->first, sh->count, sh->image ? &m : NULL);
-        perf_draw_call(sh->count);
+            nshvc_draw_tris(screen_list, scaled + sh->first, count, sh->image ? &m : NULL);
+        perf_draw_call(count);
     }
 }
 
