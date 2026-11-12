@@ -96,6 +96,7 @@ enum { SURF_NONE, SURF_GRASS, SURF_ROCK, SURF_CEMENT, SURF_SNOW, SURF_ICE, SURF_
 #define CLS_ROCK 0xFF           /* the surface table's class for the course's own rock (the survey's fit): mesas */
 #define CLS_WHITE 0xFD          /* class 0, the chip's snow whites (the table's 0 is no class) */
 #define CLS_BAND 0xFC           /* a sea in the band's own sea's colours (band_shade): Lake Side */
+#define CLS_BAND_WHOLE 0xFB     /* a sea in all of them: Harbor City's night harbour */
 #define WATER_DEEPEST 32767     /* water at the lowest place the course's shapes meet the ground (the survey's) */
 
 /* Each course's surface (g.course, $0E3D), from pictures of every course
@@ -175,7 +176,15 @@ static const struct {
                                            2026-11-12), flat, in class 0, the whites of its own white
                                            shapes (its start's gate and pillars, d5e6e6 to ffffff by its
                                            palette), cloud banks on it (the clouds, below) */
-    [0x0B] = { SURF_WATER, -3840, 0, 0, 0, 0, 0, 0 }, /* the night harbour: where its lowest road's (-4480) pieces end */
+    [0x0B] = { SURF_WATER, -3840, CLS_BAND_WHOLE, 0, 0, 0, 0, 0 }, /* Harbor City, the night harbour (Jeff,
+                                           2026-11-12: "now harbor city"): Aqua Tunnel's ocean where its
+                                           lowest road's (-4480) pieces end, in all of the band's own
+                                           water's colours: its band under the horizon is the harbour,
+                                           292929 at the horizon to 292962 under the eye, and the water
+                                           beside its raised roads is 292929 to 29295a in a headless
+                                           picture of 2026-11-12 (the lightest third, Lake Side's, would
+                                           be the horizon's greys alone); the city is its backdrop's
+                                           skyline across the water */
     [0x0C] = { SURF_DIRT, 0, 0, 0, 0, 0, 0, 0 },    /* the stunt arenas: dirt, grass, ice, water */
     [0x0D] = { SURF_GRASS, 0, 0, 0, 0, 0, 0, 0 },
     [0x0E] = { SURF_ICE, 0, 0, 0, 0, 0, 0, 0 },
@@ -1236,7 +1245,7 @@ static void range_make(unsigned course, int mesas)
 /* the colour of a face of class cls whose outward normal is n in view
    space, as the chip shades a lit face */
 /* class cls's colour at light level `level` (6-15) */
-static uint32_t band_shade(int level);
+static uint32_t band_shade(int level, int whole);
 
 static uint32_t row_colour(int cls, int level)
 {
@@ -1244,8 +1253,8 @@ static uint32_t row_colour(int cls, int level)
     uint16_t row, bgr;
     uint8_t c;
 
-    if (cls == CLS_BAND)                /* the band's own (Lake Side's lake, Night Cruise's ground) */
-        return band_shade(level);
+    if (cls == CLS_BAND || cls == CLS_BAND_WHOLE)       /* the band's own (Lake Side's lake, Harbor City's harbour) */
+        return band_shade(level, cls == CLS_BAND_WHOLE);
     row = (uint16_t)(fx_rom_read(3, (uint16_t)(SHADE_ROWS + 2 * k)) | fx_rom_read(3, (uint16_t)(SHADE_ROWS + 2 * k + 1)) << 8);
     c = fx_rom_read(3, (uint16_t)(row + level - 6));
 
@@ -2602,13 +2611,18 @@ static nshvc_shader ocean_shader;
    toward the horizon's rows; the rest lies under the road near the eye);
    a lit face's level 6-15 takes the one as far along them (6 the
    darkest), so a level face seen from the race's camera (level 9 or 10)
-   is the band's light teal (Lake Side's 74,239,198 to 90,247,214). */
-static uint32_t band_shade(int level)
+   is the band's light teal (Lake Side's 74,239,198 to 90,247,214). With
+   whole (CLS_BAND_WHOLE), all of them: Harbor City's water beside its
+   raised roads is all but the band's last colour (its band runs the other
+   way, grey at the horizon to navy under the eye; a level face takes
+   about a third of the way from the eye's end, 29294a to 292952, the
+   water's colour by the road). */
+static uint32_t band_shade(int level, int whole)
 {
     uint16_t seen[256];
-    int n = 0, at, k;
+    int n = 0, at, k, from;
 
-    for (at = 511; at >= 256; at--) {   /* under the eye first: the darkest */
+    for (at = 511; at >= 256; at--) {   /* under the eye first */
         uint16_t c = sky_colour_at(at);
 
         for (k = 0; k < n && seen[k] != c; k++)
@@ -2618,7 +2632,8 @@ static uint32_t band_shade(int level)
     }
     if (!n)
         return 0xFF000000u;
-    k = 2 * n / 3 + (int)lround((level < 6 ? 0 : level > 15 ? 9 : level - 6) / 9.0 * (n - 1 - 2 * n / 3));
+    from = whole ? 0 : 2 * n / 3;
+    k = from + (int)lround((level < 6 ? 0 : level > 15 ? 9 : level - 6) / 9.0 * (n - 1 - from));
     return rgb_of(seen[k]);
 }
 
@@ -2665,8 +2680,8 @@ uint32_t fx_ground_verge_colour(uint8_t entry, double depth, float row, int pane
    the whole row would be. */
 static uint32_t sea_shade(int cls, int first, int level)
 {
-    if (cls == CLS_BAND)
-        return band_shade(level);
+    if (cls == CLS_BAND || cls == CLS_BAND_WHOLE)
+        return band_shade(level, cls == CLS_BAND_WHOLE);
     if (first > 6)
         level = first + (int)lround((level < 6 ? 0 : level > 15 ? 9 : level - 6) * (15 - first) / 9.0);
     return row_colour(cls, level);
