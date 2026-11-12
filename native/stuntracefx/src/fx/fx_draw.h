@@ -94,6 +94,17 @@ void fx_draw_surface(const FxCorner *c, uint32_t n, nshvc_image image, nshvc_sha
    (0, 1): past every other shape of the 3D, drawn at depth 0, so they
    cover none of them). */
 void fx_draw_land(const nshvc_vertex *v, uint32_t n);
+/* An instanced mesh (nshvc 6.2) in the picture being drawn: its view in
+   the picture's pixels (cx, cy the view's centre, f its 128 a unit, the
+   picture's pixels square), drawn into the list, or kept among the
+   picture's shapes and drawn in their order, the view scaled to the list's
+   pixels as the shapes' vertices are; the instances copied. Which
+   picture's shapes are being made (fx_draw_mesh_slot): 0 and 1 the
+   pictures, 2 and 3 those between steps, 4 a list drawn into directly, -1
+   none; a mesh drawn in one keeps what was written to it until that
+   picture is made again. */
+void fx_draw_mesh(nshvc_mesh m, const nshvc_view *view, const nshvc_instance *instances, uint32_t count);
+int fx_draw_mesh_slot(void);
 /* The 3D's faces queued so far drawn now, in order. */
 void fx_draw_queued(void);
 int fx_draw_picture_now(void);

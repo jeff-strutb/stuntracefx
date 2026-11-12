@@ -51,6 +51,7 @@
 #include "fx/fx_rt.h"
 #include "object/object.h"
 #include "system/state.h"
+#include "video/picture.h"
 
 #define PI_F 3.14159265f
 #define SEGMENTS_MAX 60
@@ -166,22 +167,12 @@ static float output_focal(void)
     return 128.0f * (sx > sy ? sx : sy);
 }
 
-/* where a face goes instead of the picture: the land's forest
-   (fx_solid_forest_tree), else none */
-static FxSolidSink sink;
-static void *sink_context;
-
 /* a face of n view-space points in colour c, into the picture */
 static void emit(const float (*p)[3], int n, uint8_t c)
 {
     static FxCorner corners[3 * (SEGMENTS_MAX + 8)];
-    uint32_t k;
+    uint32_t k = fx_face_triangles(p, n, corners, N(corners));
 
-    if (sink) {
-        sink(p, n, c, sink_context);
-        return;
-    }
-    k = fx_face_triangles(p, n, corners, N(corners));
     if (!k)
         return;
     if (fx_face_cutting()) {            /* past the water from the eye, or not: by the face's middle */
@@ -734,8 +725,7 @@ static void tree_body(const float *y, int nr, int sides, float (*m)[TREE_SIDES_M
             ;
         faces[i].c = pt->colour[k];
     }
-    if (!sink)                          /* drawn in order, farthest first; the land's, by their depths */
-        qsort(faces, (size_t)nf, sizeof faces[0], face_cmp);
+    qsort(faces, (size_t)nf, sizeof faces[0], face_cmp);
     for (i = 0; i < nf; i++)
         emit((const float (*)[3])faces[i].p, faces[i].n, (uint8_t)(hi | faces[i].c));
 }
@@ -838,15 +828,27 @@ static float paint_half(const Paint *pp)
     return h;
 }
 
-static int forest_drawing;              /* the land's forest: its detail by the picture's pixels, not the output's */
+/* the detail a part asks at px output pixels a painting texel: its sides
+   level sl and its rings level rl (tree_level) */
+static void tree_detail(const Solid *s, const Paint *pp, float px, int *sl, int *rl)
+{
+    float pr = paint_half(pp) * px;
+    int full = s->tree == 1 ? 10 : 44, step = s->tree == 1 ? 2 : 3;
+    int n = pr > 0.5f ? (int)ceilf(PI_F / acosf(1 - 0.5f / pr)) : 5;
+
+    for (*sl = 3; *sl > 0 && (full >> *sl < 5 ? 5 : full >> *sl) < n; (*sl)--)
+        ;
+    for (*rl = 0; *rl < 3 && step * (1 << *rl) * px < 1.5f; (*rl)++)
+        ;
+}
 
 /* the tree's part s in its painting pp at pos, scale and view, at the
-   detail its size on the output asks (the land's forest's, the picture's) */
+   detail its size on the output asks */
 static void tree_draw(const Solid *s, Paint *pp)
 {
     TreeLevel *L;
-    float px, rmax = paint_half(pp);
-    int sl, rl, paint = (int)(pp - paints), full = s->tree == 1 ? 10 : 44, step = s->tree == 1 ? 2 : 3;
+    float px;
+    int sl, rl, paint = (int)(pp - paints);
 
     if (!pp->ready) {                   /* its colours' lights, once, at the full detail: the part from the front, far off */
         float kp[3], kv[3][3], ks = scale;
@@ -866,16 +868,8 @@ static void tree_draw(const Solid *s, Paint *pp)
         pp->ready = 1;
     }
     /* its detail: output pixels a painting texel, at its depth */
-    px = pos[2] > 0 ? scale * (forest_drawing ? 128.0f : output_focal()) / pos[2] : 1e9f;
-    {
-        float pr = rmax * px;
-        int n = pr > 0.5f ? (int)ceilf(PI_F / acosf(1 - 0.5f / pr)) : 5;
-
-        for (sl = 3; sl > 0 && (full >> sl < 5 ? 5 : full >> sl) < n; sl--)
-            ;
-    }
-    for (rl = 0; rl < 3 && step * (1 << rl) * px < 1.5f; rl++)
-        ;
+    px = pos[2] > 0 ? scale * output_focal() / pos[2] : 1e9f;
+    tree_detail(s, pp, px, &sl, &rl);
     if (!(L = tree_level(s, pp, paint, sl, rl)))
         return;
     tree_body(L->y, L->nr, L->sides, L->m, L->r, s->tree == 2, pp);
@@ -892,21 +886,16 @@ static void tree_draw(const Solid *s, Paint *pp)
    upright, the nearest such) gives the land's tree: the two paintings and
    their colours' row, each part's size (world units a painting texel) and
    where the canopy's middle is from the trunk's in the world. A land tree
-   is that, k times the size, drawn as the course's are (tree_draw) with
-   its faces handed to the land (fx_ground.c), which draws them at the
-   land's depths. Its detail is by its size on the picture (256 pixels
-   across), not the output, so the forest costs the same in any window:
-   one whose canopy is under FOREST_FULL_PX of the picture's pixels across
-   its half width is its canopy's outline alone, a hexagon facing the eye
-   in three faces each in the painting's colour for the way it faces (as
-   tree_body colours a face), one face under FOREST_ONE_PX, none under
-   FOREST_LEAST_PX. A far tree's parts (their places halved for the far
-   list, fx_far.c) pair as a near one's, their places and sizes doubled
-   back, unless its size was its own, not halved with its place. */
+   is that, k times the size, at the detail a course tree of that size
+   there would be drawn at (tree_detail): its model at that level (the
+   course's own, tree_level) is an instanced mesh (nshvc 6.2), made once a
+   level, its faces' colours set for the picture's view as tree_body sets
+   a face's (its normal in view space against the painting's light), and
+   every tree at that level one instance of it, placed and sized on the
+   GPU (fx_solid_forest_end). A far tree's parts (their places halved for
+   the far list, fx_far.c) pair as a near one's, their places and sizes
+   doubled back, unless its size was its own, not halved with its place. */
 #define FOREST_SEEN 16
-#define FOREST_FULL_PX 12.0f
-#define FOREST_ONE_PX 2.0f
-#define FOREST_LEAST_PX 0.25f
 static struct {
     int ready, course;
     int paint[3];                       /* by part (1 the trunk, 2 the canopy): its painting in paints[] */
@@ -1042,83 +1031,211 @@ void fx_solid_forest_size(float *half, float *height, float *trunk_half)
     *trunk_half = paint_half(pt) * forest.scale[1];
 }
 
-/* the canopy's outline facing the eye at pos and scale: a hexagon, in
-   three faces by the way each faces, or one */
-static void forest_outline(const Paint *pc, int faces)
+/* ---- the forest's meshes ----
+
+   Each part's (1 the trunk, 2 the canopy) model at each detail level (its
+   sides level and rings level, tree_level's), in its painting's texels
+   about its middle along the world's axes (x and z across, y down, as
+   tree_point places it), is a mesh: one for each picture being made
+   (fx_draw_mesh_slot), so a picture shown keeps the colours written for its
+   own view. A mesh's room is its level's most: (rings - 1) x sides x 2
+   triangles, the rings at most a painting's rows by the level's step, two
+   ends more. A picture's trees are gathered by part and level
+   (fx_solid_forest_add) and each level used is written and drawn once
+   (fx_solid_forest_end). */
+#define FOREST_TREES 4096
+#define FOREST_SLOTS 5
+static struct {
+    nshvc_mesh mesh;
+    uint32_t room;
+} forest_mesh[FOREST_SLOTS][2][4][4];
+static nshvc_instance forest_inst[2][4][4][FOREST_TREES];
+static uint32_t forest_n[2][4][4];
+static nshvc_view forest_view;
+static int forest_on;
+
+static uint32_t level_room(const Solid *s, int sl, int rl)
 {
-    const float T = (float)tree_solid(2)->texels;
-    float rx = paint_half(pc) * scale, ry = (pc->bottom + 1 - pc->top) / 2.0f * scale;
-    float mid = ((pc->top + pc->bottom + 1) / 2.0f - T / 2) * scale, c[3], ring[6][3];
-    int i, j, f;
+    int full = s->tree == 1 ? 10 : 44, sides = full >> sl, step = (s->tree == 1 ? 2 : 3) << rl;
+    int rings = PAINT_ROWS / step + 3;
 
-    for (j = 0; j < 3; j++)
-        c[j] = pos[j] + mid * view[1][j];
-    for (i = 0; i < 6; i++) {
-        float t = PI_F / 3 * i;
+    if (sides < 5)
+        sides = 5;
+    if (rings > RINGS_MAX)
+        rings = RINGS_MAX;
+    return (uint32_t)(rings - 1) * (uint32_t)sides * 6u;
+}
 
-        ring[i][0] = c[0] + rx * cosf(t);
-        ring[i][1] = c[1] + ry * sinf(t);
-        ring[i][2] = c[2];
+/* a face of m (3 or 4) model points, outward away from the upright at down
+   ay: its colour the painting's for its normal in view space against the
+   painting's light (as keep_face and tree_body), its triangles into out */
+static uint32_t mesh_face(nshvc_mesh_vertex *out, uint32_t n, const float *const *q, int m, float ay, const Paint *pt,
+                          const float rot[9], uint8_t colour_hi)
+{
+    float u[3], v[3], nm[3], nv[3], c[3] = { 0, 0, 0 }, d, l, lit;
+    uint32_t argb;
+    uint16_t bgr;
+    int i, j, k, t;
+    static const int tri[2][3] = { { 0, 1, 2 }, { 0, 2, 3 } };
+
+    for (j = 0; j < 3; j++) {
+        u[j] = q[1][j] - q[0][j];
+        v[j] = q[m - 1][j] - q[0][j];
+        for (i = 0; i < m; i++)
+            c[j] += q[i][j] / m;
     }
-    for (f = 0; f < faces; f++) {
-        float q[6][3], n[3], lit;
-        int m, kk;
+    nm[0] = u[1] * v[2] - u[2] * v[1];
+    nm[1] = u[2] * v[0] - u[0] * v[2];
+    nm[2] = u[0] * v[1] - u[1] * v[0];
+    d = nm[0] * c[0] + nm[1] * (c[1] - ay) + nm[2] * c[2];
+    if (d < 0)                          /* outward: away from the upright */
+        for (j = 0; j < 3; j++)
+            nm[j] = -nm[j];
+    for (j = 0; j < 3; j++)
+        nv[j] = rot[3 * j] * nm[0] + rot[3 * j + 1] * nm[1] + rot[3 * j + 2] * nm[2];
+    l = sqrtf(nv[0] * nv[0] + nv[1] * nv[1] + nv[2] * nv[2]);
+    lit = l ? (nv[0] * pt->light[0] + nv[1] * pt->light[1] + nv[2] * pt->light[2]) / l : -1;
+    for (k = pt->ncolours - 1; k > 0 && lit < pt->from[k]; k--)
+        ;
+    bgr = pic.palette[(uint8_t)(colour_hi | pt->colour[k])];
+    {
+        unsigned r = bgr & 31, gg = bgr >> 5 & 31, b = bgr >> 10 & 31;
 
-        if (faces == 1) {
-            memcpy(q, ring, sizeof q);
-            m = 6;
-            n[0] = 0, n[1] = 0, n[2] = -1;
-        } else {
-            float t = PI_F / 3 * (2 * f + 1);
+        argb = 0xFF000000u | (r << 3 | r >> 2) << 16 | (gg << 3 | gg >> 2) << 8 | (b << 3 | b >> 2);
+    }
+    for (t = 0; t < (m == 4 ? 2 : 1); t++)
+        for (i = 0; i < 3; i++) {
+            const float *p = q[tri[t][i]];
 
-            memcpy(q[0], c, sizeof q[0]);
-            memcpy(q[1], ring[2 * f], sizeof q[1]);
-            memcpy(q[2], ring[2 * f + 1], sizeof q[2]);
-            memcpy(q[3], ring[(2 * f + 2) % 6], sizeof q[3]);
-            m = 4;
-            n[0] = cosf(t) * 0.7071f, n[1] = sinf(t) * 0.7071f, n[2] = -0.7071f;
+            out[n].x = p[0], out[n].y = p[1], out[n].z = p[2];
+            out[n].u = out[n].v = 0;
+            out[n].colour = argb;
+            n++;
         }
-        lit = n[0] * pc->light[0] + n[1] * pc->light[1] + n[2] * pc->light[2];
-        for (kk = pc->ncolours - 1; kk > 0 && lit < pc->from[kk]; kk--)
-            ;
-        emit((const float (*)[3])q, m, (uint8_t)(hi | pc->colour[kk]));
+    return n;
+}
+
+/* the level's model's faces, as tree_body makes them, into out */
+static uint32_t mesh_faces(const Solid *s, const Paint *pt, const TreeLevel *L, const float rot[9], uint8_t colour_hi,
+                           nshvc_mesh_vertex *out)
+{
+    int k, i, stagger = s->tree == 2;
+    uint32_t n = 0;
+
+    for (k = 0; k + 1 < L->nr; k++) {
+        float o0 = stagger && (k & 1) ? 0.5f : 0, o1 = stagger && ((k + 1) & 1) ? 0.5f : 0, ay = (L->y[k] + L->y[k + 1]) / 2;
+
+        for (i = 0; i < L->sides; i++) {
+            const float *a0 = L->m[k][i], *a1 = L->m[k][i + 1], *b0 = L->m[k + 1][i], *b1 = L->m[k + 1][i + 1];
+
+            if (!L->r[k]) {             /* a closed end: triangles to its point */
+                const float *q[3] = { a0, b1, b0 };
+
+                n = mesh_face(out, n, q, 3, ay, pt, rot, colour_hi);
+            } else if (!L->r[k + 1]) {
+                const float *q[3] = { a0, a1, b0 };
+
+                n = mesh_face(out, n, q, 3, ay, pt, rot, colour_hi);
+            } else if (o0 == o1) {      /* a band of four-sided faces */
+                const float *q[4] = { a0, a1, b1, b0 };
+
+                n = mesh_face(out, n, q, 4, ay, pt, rot, colour_hi);
+            } else if (o1 > o0) {       /* the next ring's point beside this edge: b0 */
+                const float *q[3] = { a0, a1, b0 }, *r2[3] = { b0, a1, b1 };
+
+                n = mesh_face(out, n, q, 3, ay, pt, rot, colour_hi);
+                n = mesh_face(out, n, r2, 3, ay, pt, rot, colour_hi);
+            } else {                    /* this ring turned: the next ring's b1 beside this edge */
+                const float *q[3] = { a0, a1, b1 }, *r2[3] = { a0, b1, b0 };
+
+                n = mesh_face(out, n, q, 3, ay, pt, rot, colour_hi);
+                n = mesh_face(out, n, r2, 3, ay, pt, rot, colour_hi);
+            }
+        }
+    }
+    return n;
+}
+
+void fx_solid_forest_begin(const nshvc_view *v)
+{
+    forest_view = *v;
+    memset(forest_n, 0, sizeof forest_n);
+    forest_on = fx_solid_forest_ready() && fx_draw_mesh_slot() >= 0;
+}
+
+/* a tree, its trunk's foot at the world point foot, k times the course's
+   tree's size: each part one instance of the level its size at its depth
+   asks */
+void fx_solid_forest_add(const double foot[3], float k)
+{
+    const float *rot = forest_view.rot;
+    double place[3][3];
+    float rise = trunk_rise() * k, focal = output_focal();
+    int part, j;
+
+    if (!forest_on)
+        return;
+    for (j = 0; j < 3; j++) {
+        place[1][j] = foot[j] - (j == 1 ? rise : 0);    /* the trunk's middle, over its foot (y is down) */
+        place[2][j] = place[1][j] + k * forest.off[j];  /* the canopy's middle from it */
+    }
+    for (part = 1; part <= 2; part++) {
+        const Solid *s = tree_solid(part);
+        const Paint *pp = &paints[forest.paint[part]];
+        float size = forest.scale[part] * k, z, px;
+        int sl, rl;
+        uint32_t *n;
+
+        z = (float)(rot[6] * (place[part][0] - forest_view.eye[0]) + rot[7] * (place[part][1] - forest_view.eye[1])
+                    + rot[8] * (place[part][2] - forest_view.eye[2]));
+        if (z < -size * s->texels)      /* wholly behind the eye */
+            continue;
+        px = z > 0 ? size * focal / z : 1e9f;
+        tree_detail(s, pp, px, &sl, &rl);
+        n = &forest_n[part - 1][sl][rl];
+        if (*n >= FOREST_TREES)
+            continue;
+        forest_inst[part - 1][sl][rl][*n].x = (float)place[part][0];
+        forest_inst[part - 1][sl][rl][*n].y = (float)place[part][1];
+        forest_inst[part - 1][sl][rl][*n].z = (float)place[part][2];
+        forest_inst[part - 1][sl][rl][*n].size = size;
+        (*n)++;
     }
 }
 
-void fx_solid_forest_tree(const float foot[3], float k, const double m[9], FxSolidSink to, void *context)
+void fx_solid_forest_end(void)
 {
-    Paint *pt = &paints[forest.paint[1]], *pc = &paints[forest.paint[2]];
-    float kp[3], kv[3][3], ks = scale, tc[3], cc[3], rise, half, pr;
-    uint8_t kh = hi;
-    int i, j;
+    static nshvc_mesh_vertex v[(RINGS_MAX - 1) * TREE_SIDES_MAX * 6];
+    int slot = fx_draw_mesh_slot(), part, sl, rl;
 
-    memcpy(kp, pos, sizeof kp), memcpy(kv, view, sizeof kv);
-    for (i = 0; i < 3; i++)
-        for (j = 0; j < 3; j++)
-            view[i][j] = (float)m[3 * i + j];
-    rise = trunk_rise() * k;
-    for (j = 0; j < 3; j++) {
-        tc[j] = foot[j] - rise * view[1][j];
-        cc[j] = tc[j] + k * (forest.off[0] * view[0][j] + forest.off[1] * view[1][j] + forest.off[2] * view[2][j]);
+    if (!forest_on || slot < 0 || slot >= FOREST_SLOTS)
+        return;
+    for (part = 1; part <= 2; part++) {
+        const Solid *s = tree_solid(part);
+        Paint *pp = &paints[forest.paint[part]];
+
+        if (!pp->ready)
+            continue;
+        for (sl = 0; sl < 4; sl++)
+            for (rl = 0; rl < 4; rl++) {
+                uint32_t count = forest_n[part - 1][sl][rl], nv;
+                TreeLevel *L;
+
+                if (!count || !(L = tree_level(s, pp, forest.paint[part], sl, rl)))
+                    continue;
+                if (!forest_mesh[slot][part - 1][sl][rl].mesh.id) {
+                    forest_mesh[slot][part - 1][sl][rl].room = level_room(s, sl, rl);
+                    forest_mesh[slot][part - 1][sl][rl].mesh = nshvc_mesh_create(forest_mesh[slot][part - 1][sl][rl].room);
+                    if (!forest_mesh[slot][part - 1][sl][rl].mesh.id)
+                        continue;
+                }
+                nv = mesh_faces(s, pp, L, forest_view.rot, forest.hi[part], v);
+                if (nv > forest_mesh[slot][part - 1][sl][rl].room)
+                    continue;
+                nshvc_mesh_write(forest_mesh[slot][part - 1][sl][rl].mesh, v, nv);
+                fx_draw_mesh(forest_mesh[slot][part - 1][sl][rl].mesh, &forest_view, forest_inst[part - 1][sl][rl], count);
+            }
     }
-    half = paint_half(pc) * forest.scale[2] * k;
-    pr = cc[2] > 0 ? half * 128.0f / cc[2] : 1e9f;
-    if (cc[2] + 2 * half > 0 && pr >= FOREST_LEAST_PX) {
-        sink = to, sink_context = context;
-        forest_drawing = 1;
-        if (pr >= FOREST_FULL_PX) {
-            memcpy(pos, tc, sizeof pos), scale = forest.scale[1] * k, hi = forest.hi[1];
-            tree_draw(tree_solid(1), pt);
-            memcpy(pos, cc, sizeof pos), scale = forest.scale[2] * k, hi = forest.hi[2];
-            tree_draw(tree_solid(2), pc);
-        } else {
-            memcpy(pos, cc, sizeof pos), scale = forest.scale[2] * k, hi = forest.hi[2];
-            forest_outline(pc, pr >= FOREST_ONE_PX ? 3 : 1);
-        }
-        sink = NULL, sink_context = NULL;
-        forest_drawing = 0;
-    }
-    memcpy(pos, kp, sizeof kp), memcpy(view, kv, sizeof kv), scale = ks, hi = kh;
 }
 
 /* FxObjectSprite returned: the solid drawn in the sprite's place in the

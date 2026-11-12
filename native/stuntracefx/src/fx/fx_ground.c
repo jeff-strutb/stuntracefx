@@ -1589,15 +1589,17 @@ void fx_ground_object_end(void)
    over it, the highest) sunk by its trunk's half width, so none stands on
    a slope with its foot in the air.
 
-   Drawn after the plane and the mountains, at the land's depths (each
-   face's corners from its own plane, as the mountains'), so the mountains
-   hide the trees behind them and the trees the plane; in FOREST_BLOCK x
+   Drawn after the plane and the mountains as instanced meshes (nshvc
+   6.2, fx_solid_forest_*), every tree the course's 3D tree at the detail
+   its size asks, placed and projected on the GPU at the land's depths
+   (land_face's mapping, exact per pixel), so the mountains hide the trees
+   behind them and the trees the plane; in FOREST_BLOCK x
    FOREST_BLOCK lattice blocks, a block left out whole where its sphere is
    behind the eye or past FOREST_WIDE of the view's sides. One player's
    pictures only (two players' keep the course's trees as sprites, and so
    the land none). */
 
-enum { FOREST_MOST = 3000, FOREST_BLOCK = 8, FOREST_VERTICES = 3 * 4096 };
+enum { FOREST_MOST = 3000, FOREST_BLOCK = 8 };
 #define FOREST_CLEAR 1024.0
 #define FOREST_JITTER 0.3
 #define FOREST_GROVE 6.0
@@ -1762,56 +1764,30 @@ static void forest_make(unsigned course)
             forest.n, forest.blocks, forest.step, 2.0 * half, (double)height);
 }
 
-static nshvc_vertex forest_v[FOREST_VERTICES];
-static uint32_t forest_nv;
-
-/* a face of a tree, n view-space points in palette entry c: at the land's
-   depths, from its own plane, as land_face's */
-static void forest_face(const float (*p)[3], int n, uint8_t c, void *context)
-{
-    static FxCorner corner[64];
-    double vp[8][3], nview[3], d;
-    double vcx = (int16_t)ram_word(0x0034), vcy = (int16_t)ram_word(0x0036);
-    uint32_t nc, j, colour;
-    int k;
-
-    (void)context;
-    if (n < 3 || n > 8)
-        return;
-    for (k = 0; k < n; k++)
-        for (j = 0; j < 3; j++)
-            vp[k][j] = p[k][j];
-    normal_of(vp[0], vp[1], vp[2], nview);
-    d = nview[0] * vp[0][0] + nview[1] * vp[0][1] + nview[2] * vp[0][2];
-    if (fabs(d) < 1e-9)
-        return;
-    nc = fx_face_triangles_d((const double (*)[3])vp, n, corner, sizeof corner / sizeof corner[0]);
-    if (!nc)
-        return;
-    if (forest_nv + nc > FOREST_VERTICES) {
-        fx_draw_land(forest_v, forest_nv);
-        forest_nv = 0;
-    }
-    colour = rgb_of(pic.palette[c]);
-    for (j = 0; j < nc; j++, forest_nv++) {
-        double inv = (nview[0] * (corner[j].x - vcx) / 128.0 + nview[1] * (corner[j].y - vcy) / 128.0 + nview[2]) / d;
-        double z = FACE_Z * (1.0 - LAND_NEAR * inv);
-
-        memset(&forest_v[forest_nv], 0, sizeof forest_v[forest_nv]);
-        forest_v[forest_nv].x = corner[j].x;
-        forest_v[forest_nv].y = corner[j].y;
-        forest_v[forest_nv].z = (float)(z < 0 ? 0 : z > FACE_Z ? FACE_Z : z);
-        forest_v[forest_nv].colour = colour;
-    }
-}
-
 static void forest_draw(unsigned course, const double eye[3], const double m[9])
 {
-    int b, i;
+    nshvc_view view;
+    int b, i, k;
 
     if (forest.course != (int)course)
         forest_make(course);
-    forest_nv = 0;
+    /* the picture's view: world to view (world axis i is the view's row i
+       of m), its centre and 128 a unit in the picture's pixels, the land's
+       depths (land_face's: z = FACE_Z (1 - LAND_NEAR / Z)) */
+    memset(&view, 0, sizeof view);
+    for (i = 0; i < 3; i++) {
+        view.eye[i] = (float)eye[i];
+        for (k = 0; k < 3; k++)
+            view.rot[3 * k + i] = (float)m[3 * i + k];
+    }
+    view.f = 128;
+    view.cx = (int16_t)ram_word(0x0034);
+    view.cy = (int16_t)ram_word(0x0036);
+    view.near = 1;
+    view.depth_a = (float)FACE_Z;
+    view.depth_b = (float)(FACE_Z * LAND_NEAR);
+    view.depth_max = (float)FACE_Z;
+    fx_solid_forest_begin(&view);
     for (b = 0; b < forest.blocks; b++) {
         double v[3], r = forest.block[b].r;
 
@@ -1819,16 +1795,12 @@ static void forest_draw(unsigned course, const double eye[3], const double m[9])
         if (v[2] < -r || fabs(v[0]) > v[2] * FOREST_WIDE + r || fabs(v[1]) > v[2] * FOREST_WIDE + r)
             continue;
         for (i = forest.block[b].first; i < forest.block[b].first + forest.block[b].n; i++) {
-            double w[3] = { forest.site[i][0], forest.site[i][1], forest.site[i][2] }, f[3];
-            float foot[3];
+            double foot[3] = { forest.site[i][0], forest.site[i][1], forest.site[i][2] };
 
-            to_view(w, eye, m, f);
-            foot[0] = (float)f[0], foot[1] = (float)f[1], foot[2] = (float)f[2];
-            fx_solid_forest_tree(foot, forest.site[i][3], m, forest_face, NULL);
+            fx_solid_forest_add(foot, forest.site[i][3]);
         }
     }
-    fx_draw_land(forest_v, forest_nv);
-    forest_nv = 0;
+    fx_solid_forest_end();
 }
 
 static void land_polygons(unsigned course, int cls, const double eye[3], const double m[9])

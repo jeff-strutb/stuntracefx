@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include "data/cart.h"
+#include "nshvc/nshvc.h"
 
 extern uint8_t fx_ram[0x20000];
 
@@ -146,17 +147,17 @@ void fx_solid_begin(void);
 void fx_solid_colour(uint8_t colr, uint8_t por);
 void fx_solid_end(void);
 /* The land's forest (fx_ground.c): copies of the course's own tree, once
-   the race has drawn one near, trunk and canopy together (one player's
+   the race has drawn one, trunk and canopy together (one player's
    pictures). Its size in the world: the canopy's half width, the height
    from the trunk's foot to the canopy's top, the trunk's half width. A
-   copy k times its size, its trunk's foot at the view-space point foot
-   (the view's matrix m, world axis i its row i), its seen faces given to
-   `to` as view-space points in a palette entry instead of the picture;
-   at the detail its size on the output asks, a far one its canopy's
-   outline alone. */
-typedef void (*FxSolidSink)(const float (*p)[3], int n, uint8_t colour, void *context);
+   picture's forest: its view (the picture's pixels, the land's depths),
+   each tree by its trunk's foot in the world and its size (k times the
+   course's tree's), then drawn as instanced meshes, a mesh for each part
+   at each detail level. */
 int fx_solid_forest_ready(void);
 void fx_solid_forest_size(float *half, float *height, float *trunk_half);
-void fx_solid_forest_tree(const float foot[3], float k, const double m[9], FxSolidSink to, void *context);
+void fx_solid_forest_begin(const nshvc_view *view);
+void fx_solid_forest_add(const double foot[3], float k);
+void fx_solid_forest_end(void);
 
 #endif

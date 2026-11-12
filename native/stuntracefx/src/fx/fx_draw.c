@@ -33,7 +33,15 @@ typedef struct {
     uint8_t lines;
     uint32_t shader;            /* 0: none; else the shader and its inputs (the ground's) */
     float in[8];
+    uint32_t mesh, draw;        /* an instanced mesh (no vertices), and its draw in the recording's meshes; mesh 0 none */
 } Shape;
+
+/* an instanced mesh's draw: its view in the recording's pixels (cx, cy with
+   the picture's place on the screen), its instances in the recording's */
+typedef struct {
+    nshvc_view view;
+    uint32_t first, count;
+} MeshDraw;
 
 typedef struct {
     nshvc_vertex *v;
@@ -53,6 +61,10 @@ typedef struct {
     Shape *us;
     uint32_t nuv, nus, cap_uv, cap_us;
     int32_t water_from, water_to;
+    /* its instanced meshes' draws and their instances */
+    MeshDraw *md;
+    nshvc_instance *mi;
+    uint32_t nmd, nmi, cap_md, cap_mi;
 } Recording;
 
 static nshvc_draw_list target;  /* a list drawn into directly (the checks) */
@@ -487,6 +499,7 @@ static void emit_with(const nshvc_vertex *v, uint32_t count, uint32_t image, int
     r->s[r->ns].image = image;
     r->s[r->ns].lines = (uint8_t)lines;
     r->s[r->ns].shader = shader;
+    r->s[r->ns].mesh = r->s[r->ns].draw = 0;
     if (shader)
         memcpy(r->s[r->ns].in, in, sizeof r->s[r->ns].in);
     r->ns++;
@@ -602,6 +615,80 @@ static void hud_pieces(const Recording *r, uint32_t from, uint32_t to, int playe
     }
 }
 
+/* An instanced mesh into list d, its view in the picture's pixels moved by
+   (ox, oy) and scaled by (sx, sy) to the list's: x = (cx + ox + 128 X / Z)
+   sx, its f the y scale's, the x scale's share of it in the rotation's
+   first row (the picture's pixels shown 7:6 wide), which moves only X. */
+static void mesh_scaled(nshvc_draw_list d, uint32_t mesh, const nshvc_view *pv, const nshvc_instance *in, uint32_t count,
+                        float sx, float sy, float ox, float oy)
+{
+    nshvc_view v = *pv;
+    nshvc_material m;
+    nshvc_mesh me;
+    int k;
+
+    if (!count)
+        return;
+    v.cx = (pv->cx + ox) * sx;
+    v.cy = (pv->cy + oy) * sy;
+    v.f = pv->f * sy;
+    for (k = 0; k < 3; k++)
+        v.rot[k] = pv->rot[k] * sx / sy;
+    memset(&m, 0, sizeof m);
+    me.id = mesh;
+    nshvc_draw_mesh(d, me, &v, in, count, &m);
+    perf_draw_call(count);
+}
+
+int fx_draw_mesh_slot(void)
+{
+    if (recording)
+        return recording >= between && recording < between + 2 ? 2 + (int)(recording - between) : (int)(recording - recordings);
+    return target.id ? 4 : -1;
+}
+
+void fx_draw_mesh(nshvc_mesh mesh, const nshvc_view *view, const nshvc_instance *instances, uint32_t count)
+{
+    Recording *r = recording;
+
+    if (held || !mesh.id || !count || (!target.id && !r))
+        return;
+    blocks_flush();
+    if (!r) {
+        mesh_scaled(target, mesh.id, view, instances, count, target_sx, target_sy, (float)offset_x, (float)offset_y);
+        return;
+    }
+    if (r->nmi + count > r->cap_mi) {
+        r->cap_mi = r->cap_mi ? r->cap_mi * 2 : 4096;
+        while (r->nmi + count > r->cap_mi)
+            r->cap_mi *= 2;
+        r->mi = realloc(r->mi, r->cap_mi * sizeof *r->mi);
+    }
+    if (r->nmd == r->cap_md) {
+        r->cap_md = r->cap_md ? r->cap_md * 2 : 64;
+        r->md = realloc(r->md, r->cap_md * sizeof *r->md);
+    }
+    if (r->ns == r->cap_s) {
+        r->cap_s = r->cap_s ? r->cap_s * 2 : 1024;
+        r->s = realloc(r->s, r->cap_s * sizeof *r->s);
+    }
+    if (!r->mi || !r->md || !r->s)
+        abort();
+    r->md[r->nmd].view = *view;
+    r->md[r->nmd].view.cx += (float)offset_x;
+    r->md[r->nmd].view.cy += (float)offset_y;
+    r->md[r->nmd].first = r->nmi;
+    r->md[r->nmd].count = count;
+    memcpy(r->mi + r->nmi, instances, count * sizeof *instances);
+    r->nmi += count;
+    memset(&r->s[r->ns], 0, sizeof r->s[r->ns]);
+    r->s[r->ns].first = r->nv;
+    r->s[r->ns].mesh = mesh.id;
+    r->s[r->ns].draw = r->nmd++;
+    r->ns++;
+    r->gen++;
+}
+
 /* Shapes [from, to) of a recording into the screen's list, scaled to its
    pixels; anchored: as the full window's HUD pieces, player -1 the one
    player's, else that of two. */
@@ -643,6 +730,12 @@ static void compose_recording(const Recording *r, uint32_t from, uint32_t to, in
     for (i = from; i < to; i++) {
         const Shape *sh = &r->s[i];
 
+        if (sh->mesh) {
+            const MeshDraw *d = &r->md[sh->draw];
+
+            mesh_scaled(screen_list, sh->mesh, &d->view, r->mi + d->first, d->count, screen_sx, screen_sy, 0, 0);
+            continue;
+        }
         m.image.id = sh->image;
         m.shader.id = sh->shader;
         if (sh->shader)
@@ -759,6 +852,7 @@ void fx_op_clear(void)
 {
     if (recording) {
         recording->nv = recording->ns = 0;
+        recording->nmd = recording->nmi = 0;
         recording->hud_from = 0;
         recording->gen++;
     } else if (target.id) {
