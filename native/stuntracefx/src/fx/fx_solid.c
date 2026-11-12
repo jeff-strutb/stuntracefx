@@ -5,7 +5,8 @@
  * view, drawn by FxObjectSprite with the picture picked for the angle they
  * are seen at: every car's tyres (shape $A1C8), the bonus course truck's
  * wheels ($A1E4), the 4WD's eyes ($A190) and the trees' trunks and
- * canopies ($A104, $A120). Each is drawn in its place as a solid instead:
+ * canopies ($A104, $A120; Night Cruise's bushes $A0E8). Each is drawn in
+ * its place as a solid instead:
  *
  *   tyres, wheels   a shape turned about its axle (a profile of rings, the
  *                   ends capped and ringed), at the object's place in view
@@ -26,7 +27,12 @@
  *                   down (the same for every tree), so its facets take the
  *                   light each its own way; each face's colour one of its
  *                   painting's by how far it faces the light the painting
- *                   is lit from.
+ *                   is lit from; Night Cruise's bushes ($A0E8) a canopy
+ *                   alone, to the ground (Jeff, 2026-11-12: every course's
+ *                   2D trees our 3D trees; a census of the sprites every
+ *                   course leaves flat and of the objects its records
+ *                   place found no other tree: $A104/$A120 on Easy Ride
+ *                   and King's Forest, $A0E8 on Night Cruise).
  *
  * The sprite's code runs as ever (its state, its clipping, its colour);
  * only its quads are left out (fx_solid_hiding). The solid's faces are
@@ -143,6 +149,7 @@ static const Solid solids[] = {
     { 0xA190, 16, 2, lamp_rings, N(lamp_rings), lamp_lens, lamp_back, N(lamp_lens), N(lamp_back), 0 },
     { 0xA104, 32, 1, NULL, 0, NULL, NULL, 0, 0, 1 },
     { 0xA120, 64, 1, NULL, 0, NULL, NULL, 0, 0, 2 },
+    { 0xA0E8, 64, 1, NULL, 0, NULL, NULL, 0, 0, 2 },     /* Night Cruise's bush: a canopy to the ground, no trunk */
 };
 
 static const Solid *object, *armed;
