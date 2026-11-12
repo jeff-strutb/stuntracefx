@@ -94,7 +94,6 @@ enum { SURF_NONE, SURF_GRASS, SURF_ROCK, SURF_CEMENT, SURF_SNOW, SURF_ICE, SURF_
 
 #define IS_LAND(k) ((k) >= SURF_GRASS && (k) <= SURF_DIRT)
 #define CLS_ROCK 0xFF           /* the surface table's class for the course's own rock (the survey's fit): mesas */
-#define CLS_BAND 0xFE           /* the ocean's shades the band's own sea's (band_shade): Sea Breeze */
 
 /* Each course's surface (g.course, $0E3D), from pictures of every course
    (2026-11-09): its kind, and for water the height of its level (world y
@@ -120,42 +119,46 @@ static const struct {
     uint8_t under;          /* water seen from below: its shade class (0: cls's) */
     uint8_t flat;           /* land: the plane alone, no mountains */
     uint8_t forest;         /* land: a forest of the course's own trees round it */
+    uint8_t first;          /* water: the class's level its sea's darkest shade takes (0: 6, the whole row) */
 } surface[0x20] = {
-    [0x00] = { SURF_GRASS, 0, 10, 0, 0, 0 },  /* Easy Ride: class 10, the chip's grass green (82,131,0 to 148,197,57) */
-    [0x01] = { SURF_AQUA, -1280, 12, 9, 0, 0 }, /* Aqua Tunnel: under the road, over the glass tube, where its
+    [0x00] = { SURF_GRASS, 0, 10, 0, 0, 0, 0 },  /* Easy Ride: class 10, the chip's grass green (82,131,0 to 148,197,57) */
+    [0x01] = { SURF_AQUA, -1280, 12, 9, 0, 0, 0 }, /* Aqua Tunnel: under the road, over the glass tube, where its
                                            road's pieces end (the road -1920, the pieces 640 below) */
-    [0x02] = { SURF_ROCK, 0, CLS_ROCK, 0, 0, 0 }, /* Sunset Valley, the canyon: mesas in its own rock's shades */
-    [0x03] = { SURF_CEMENT, 0, 21, 0, 1, 0 }, /* Night Owl, the night city, the airport: flat, class 21, the
+    [0x02] = { SURF_ROCK, 0, CLS_ROCK, 0, 0, 0, 0 }, /* Sunset Valley, the canyon: mesas in its own rock's shades */
+    [0x03] = { SURF_CEMENT, 0, 21, 0, 1, 0, 0 }, /* Night Owl, the night city, the airport: flat, class 21, the
                                            greys its own road is shaded in (its colours 63-56: 49,49,41
                                            to 107,107,99 by its palette; the road ahead 66,66,57 and
                                            74,74,66, levels 9 and 10, the band's under the eye) */
-    [0x04] = { SURF_GRASS, 0, 10, 0, 0, 1 },  /* King's Forest, the foggy forest: Easy Ride's land, class 10,
+    [0x04] = { SURF_GRASS, 0, 10, 0, 0, 1, 0 },  /* King's Forest, the foggy forest: Easy Ride's land, class 10,
                                            its own hills' grass (their faces 173,206,132 and 189,214,140:
                                            the class's top levels in its palette blended 15 of 32 toward
                                            the fog, which the palette carries, so the land is fogged as
                                            they are), and a forest of its own trees round it */
-    [0x05] = { SURF_WATER, -1292, CLS_BAND, 0, 0, 0 }, /* Sea Breeze, the coast: a sea, Aqua Tunnel's ocean in the
-                                           band's own sea's shades (the band's ground half: teal at the
-                                           horizon to sea-green under the eye, the course's sand and road
-                                           standing in it), at the level its shapes stand on (the survey's,
-                                           -1292) */
-    [0x06] = { SURF_SNOW, 0, 0, 0, 0, 0 },    /* White Land */
-    [0x07] = { SURF_CEMENT, 0, 0, 0, 0, 0 },  /* the sunset city */
-    [0x08] = { SURF_GRASS, 0, 0, 0, 0, 0 },   /* Lake Side: as Sea Breeze */
-    [0x09] = { SURF_ROCK, 0, 0, 0, 0, 0 },    /* the wild-west desert: red rock, its band green */
-    [0x0A] = { SURF_NONE, 0, 0, 0, 0, 0 },    /* Sky Ramp */
-    [0x0B] = { SURF_WATER, -3840, 0, 0, 0, 0 }, /* the night harbour: where its lowest road's (-4480) pieces end */
-    [0x0C] = { SURF_DIRT, 0, 0, 0, 0, 0 },    /* the stunt arenas: dirt, grass, ice, water */
-    [0x0D] = { SURF_GRASS, 0, 0, 0, 0, 0 },
-    [0x0E] = { SURF_ICE, 0, 0, 0, 0, 0 },
-    [0x0F] = { SURF_WATER, 0, 0, 0, 0, 0 },   /* its floor */
-    [0x10] = { SURF_GRASS, 0, 0, 0, 0, 0 },   /* the battle arenas: the countryside */
-    [0x11] = { SURF_ROCK, 0, 0, 0, 0, 0 },    /* the red-rock desert, its band the canyon's tan */
-    [0x12] = { SURF_GRASS, 0, 0, 0, 0, 0 },   /* the beach: its band Sea Breeze's */
-    [0x13] = { SURF_WATER, 0, 0, 0, 0, 0 },   /* the night city: its band the night harbour's, at its floor */
-    [0x14] = { SURF_GRASS, 0, 0, 0, 0, 0 },   /* the countryside courses */
-    [0x15] = { SURF_GRASS, 0, 0, 0, 0, 0 },
-    [0x16] = { SURF_GRASS, 0, 0, 0, 0, 0 },
+    [0x05] = { SURF_WATER, -48, 9, 0, 0, 0, 11 }, /* Sea Breeze, the coast: a sea, Aqua Tunnel's ocean, at the level
+                                           and in the colours of the water the road crosses (Jeff,
+                                           2026-11-12: the sea to match it, and at its level, where it had
+                                           gone from sight as the road went down to it): the crossing is
+                                           shape $E5B4 (three of it), its face level at y -96 to 0 (the sea
+                                           at its middle), its texture ($13:$C040, colour $50, the high
+                                           nibble held) drawing entries $58-$5B, class 9's four lightest
+                                           (8,140,239 to 90,222,255): the class's levels 11-15 */
+    [0x06] = { SURF_SNOW, 0, 0, 0, 0, 0, 0 },    /* White Land */
+    [0x07] = { SURF_CEMENT, 0, 0, 0, 0, 0, 0 },  /* the sunset city */
+    [0x08] = { SURF_GRASS, 0, 0, 0, 0, 0, 0 },   /* Lake Side: as Sea Breeze */
+    [0x09] = { SURF_ROCK, 0, 0, 0, 0, 0, 0 },    /* the wild-west desert: red rock, its band green */
+    [0x0A] = { SURF_NONE, 0, 0, 0, 0, 0, 0 },    /* Sky Ramp */
+    [0x0B] = { SURF_WATER, -3840, 0, 0, 0, 0, 0 }, /* the night harbour: where its lowest road's (-4480) pieces end */
+    [0x0C] = { SURF_DIRT, 0, 0, 0, 0, 0, 0 },    /* the stunt arenas: dirt, grass, ice, water */
+    [0x0D] = { SURF_GRASS, 0, 0, 0, 0, 0, 0 },
+    [0x0E] = { SURF_ICE, 0, 0, 0, 0, 0, 0 },
+    [0x0F] = { SURF_WATER, 0, 0, 0, 0, 0, 0 },   /* its floor */
+    [0x10] = { SURF_GRASS, 0, 0, 0, 0, 0, 0 },   /* the battle arenas: the countryside */
+    [0x11] = { SURF_ROCK, 0, 0, 0, 0, 0, 0 },    /* the red-rock desert, its band the canyon's tan */
+    [0x12] = { SURF_GRASS, 0, 0, 0, 0, 0, 0 },   /* the beach: its band Sea Breeze's */
+    [0x13] = { SURF_WATER, 0, 0, 0, 0, 0, 0 },   /* the night city: its band the night harbour's, at its floor */
+    [0x14] = { SURF_GRASS, 0, 0, 0, 0, 0, 0 },   /* the countryside courses */
+    [0x15] = { SURF_GRASS, 0, 0, 0, 0, 0, 0 },
+    [0x16] = { SURF_GRASS, 0, 0, 0, 0, 0, 0 },
 };
 
 /* the land's marks: the size of a texel on the ground, and each kind's
@@ -2087,36 +2090,18 @@ static void land_polygons(unsigned course, int cls, const double eye[3], const d
 static nshvc_image ocean_image[4];
 static nshvc_shader ocean_shader;
 
-/* The band's own sea (CLS_BAND): the band's ground half (its lists'
-   places 256 to 511, the horizon's first, as the screen shows them with
-   the weather and the fog: sky_colour_at), its colours each once, from
-   the darkest (under the eye) to the lightest (at the horizon), and of
-   those the lighter half, the sea as the original shows it beside the
-   road (Sea Breeze: 57,198,140 to 140,239,231; the darker half lies under
-   the road near the eye); a lit face's level 6-15 takes the one as far
-   along them (6 the darkest), so the ocean's facets are shaded in the
-   sea's own colours as a class's would be, a level face seen from the
-   race's camera (level 9 or 10) in the band's turquoise. */
-static uint32_t band_shade(int level)
+/* A sea's shade at light level `level` (6-15): class cls's, its levels
+   from `first` (0: 6) to 15 spread over 6-15, so a sea drawn in a class's
+   lighter shades alone (Sea Breeze's, its crossing's colours) is lit as
+   the whole row would be. */
+static uint32_t sea_shade(int cls, int first, int level)
 {
-    uint16_t seen[256];
-    int n = 0, at, k;
-
-    for (at = 511; at >= 256; at--) {   /* under the eye first: the darkest */
-        uint16_t c = sky_colour_at(at);
-
-        for (k = 0; k < n && seen[k] != c; k++)
-            ;
-        if (k == n)
-            seen[n++] = c;
-    }
-    if (!n)
-        return 0xFF000000u;
-    k = n / 2 + (int)lround((level < 6 ? 0 : level > 15 ? 9 : level - 6) / 9.0 * (n - 1 - n / 2));
-    return rgb_of(seen[k]);
+    if (first > 6)
+        level = first + (int)lround((level < 6 ? 0 : level > 15 ? 9 : level - 6) * (15 - first) / 9.0);
+    return row_colour(cls, level);
 }
 
-static void ocean_draw(int cls, int under, const double eye[3], const double m[9], double water_y, int p)
+static void ocean_draw(int cls, int under, int first, const double eye[3], const double m[9], double water_y, int p)
 {
     static nshvc_vertex bed[24];
     static FxCorner c[64];
@@ -2133,7 +2118,7 @@ static void ocean_draw(int cls, int under, const double eye[3], const double m[9
         cls = under;
     /* the sea bed */
     bed_y = (grid.nx ? fmax(grid.deepest, water_y) : water_y) + SEABED_BELOW;
-    deep = cls == CLS_BAND ? band_shade(6) : row_colour(cls, 6);
+    deep = sea_shade(cls, first, 6);
     deep = 0xFF000000u | (uint32_t)((deep >> 16 & 255) * SEABED_DARK) << 16 | (uint32_t)((deep >> 8 & 255) * SEABED_DARK) << 8
            | (uint32_t)((deep & 255) * SEABED_DARK);
     plane_vertices(bed_y, deep, PLANE_Z, eye, m, bed, &nb, sizeof bed / sizeof bed[0]);
@@ -2184,10 +2169,10 @@ static void ocean_draw(int cls, int under, const double eye[3], const double m[9
        world's axes (world axis k's view components are m[3k..3k+2]), the
        time, the eye's place and height in cells, the waves' height */
     for (i = 0; i < 10; i++)
-        words[i] = cls == CLS_BAND ? band_shade(6 + i) : row_colour(cls, 6 + i);
+        words[i] = sea_shade(cls, first, 6 + i);
     for (k = 0; k < 3; k++)
         up[k] = -m[3 + k];
-    words[10] = cls == CLS_BAND ? band_shade(chip_level(up)) : land_colour(cls, up);
+    words[10] = sea_shade(cls, first, chip_level(up));
     for (k = 0; k < 3; k++)
         light[k] = grid.light_k * (m[3 * k + 1] * LIGHT_Y + m[3 * k + 2] * LIGHT_Z);
     words[11] = float_word((float)light[0]);
@@ -2255,7 +2240,7 @@ void fx_ground_draw(void)
     if (dh == 0 || (dh < 0 && kind != SURF_AQUA))
         return;
     if (surface[course].cls) {          /* the ocean; Aqua Tunnel's cuts the picture as below */
-        ocean_draw(surface[course].cls, surface[course].under, eye, m, surface[course].y, p);
+        ocean_draw(surface[course].cls, surface[course].under, surface[course].first, eye, m, surface[course].y, p);
         if (kind == SURF_AQUA) {
             double plane[3] = { m[3], m[4], m[5] };
 
