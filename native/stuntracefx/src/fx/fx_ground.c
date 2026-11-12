@@ -150,14 +150,16 @@ static const struct {
                                            whites its own snow banks are in (214,231,231 to 255,255,255;
                                            its road class 21's icy greys), its fog over it as the
                                            palette carries it (amount_step's 10 of 32 for it) */
-    [0x07] = { SURF_CEMENT, 0, CLS_BAND, 0, 1, 0, 0, 1 }, /* Night Cruise, the sunset city: no mountains (its skyline
-                                           on the backdrop), a city round it as the backdrop's skyline is
-                                           (Jeff, 2026-11-12: "It should read as a city scape. Look at the
-                                           skymap for the track"), on the band's own
-                                           ground (dark brown at the horizon, 57,41,41, to black: its ground as
-                                           the original shows it; the khaki below was its verges', which are
-                                           the course's own faces, shaded by distance: fx_ground_verge),
-                                           the weather's blend to night as the band carries it */
+    [0x07] = { SURF_CEMENT, 0, 21, 0, 1, 0, 0, 1 }, /* Night Cruise, the sunset city: a race track in the middle of
+                                           a city (Jeff, 2026-11-12: "flat pavement terrain like you've done on
+                                           some other tracks. like it's a race track in the middle of the
+                                           city"): flat (no mountains before its skyline), pavement in class
+                                           21, its road's own mauve greys (Night Owl's land in its road's
+                                           class), a city round it as the backdrop's skyline is ("It should
+                                           read as a city scape. Look at the skymap"); its khaki verges, the
+                                           course's own faces, shaded toward the pavement by distance
+                                           (fx_ground_verge), the weather's blend to night as the palette
+                                           carries it */
     [0x08] = { SURF_WATER, WATER_DEEPEST, CLS_BAND, 0, 0, 0, 0, 0 }, /* Lake Side: a lake, Aqua Tunnel's ocean in
                                            the band's own lake's colours (its ground half Sea Breeze's,
                                            teal to sea-green, the lake light teal by the road); its road
@@ -1341,6 +1343,7 @@ static uint32_t face_colour(int cls, const double nv[3], const double nw[3], int
    else turned to the view, kept to it, each corner at its depth (from the
    face's own plane), into v from *nv. */
 static int face_at_zero;                /* land_face's vertices at depth 0 (the tunnels' rock, in the 3D's order) */
+static uint32_t ground_now;             /* the land's plane's colour this picture (0: none yet) */
 
 static void land_face(const double (*pts)[3], int n, const double nw[3], int cls, const double eye[3], const double m[9],
                       nshvc_vertex *v, uint32_t *nv, uint32_t room)
@@ -2252,7 +2255,8 @@ static void land_polygons(unsigned course, int cls, const double eye[3], const d
     /* the plane, its colour up its normal */
     for (k = 0; k < 3; k++)
         up[k] = -m[3 + k];
-    plane_vertices(plane_y, face_colour(cls, up, up_world, 1), PLANE_Z, eye, m, v, &nv, LAND_VERTICES);
+    ground_now = face_colour(cls, up, up_world, 1);
+    plane_vertices(plane_y, ground_now, PLANE_Z, eye, m, v, &nv, LAND_VERTICES);
     /* the mountains' or mesas' faces that look toward the eye, their bases
        on the plane (none on a flat course) */
     for (i = 0; i < (surface[course].flat ? 0 : MOUNTAINS); i++) {
@@ -2405,12 +2409,12 @@ static uint32_t band_shade(int level)
    something"; shown that the flat khaki by the road is the course's own
    verges, he chose to shade them): Night Cruise's verges and pads are its
    own flat faces in class 17's khaki (palette entries 139-143), one colour
-   a face to the horizon, where the original's ground (its band) goes from
-   black under the eye to a dark brown at the horizon. Such a face is drawn
-   with each corner's colour its own toward the band's on that corner's
-   screen row, by the corner's depth: its own nearer than VERGE_NEAR, the
-   band's from VERGE_FAR (eased between), so a verge darkens into the night
-   ground toward the horizon as the ground itself does. */
+   a face to the horizon. Such a face is drawn with each corner's colour
+   its own toward the ground's by the corner's depth (the land's plane's
+   colour this picture, Night Cruise's pavement; before any, the band's on
+   that corner's screen row): its own nearer than VERGE_NEAR, the ground's
+   from VERGE_FAR (eased between), so a verge goes into the ground toward
+   the horizon. */
 #define VERGE_NEAR 4000.0
 #define VERGE_FAR 40000.0
 
@@ -2421,7 +2425,8 @@ int fx_ground_verge(uint8_t entry)
 
 uint32_t fx_ground_verge_colour(uint8_t entry, double depth, float row, int panel)
 {
-    uint32_t own = rgb_of(pic.palette[entry]), band = rgb_of(race_ground_colour(panel, row)), out = 0xFF000000u;
+    uint32_t own = rgb_of(pic.palette[entry]), out = 0xFF000000u;
+    uint32_t band = ground_now ? ground_now : rgb_of(race_ground_colour(panel, row));
     double t = (depth - VERGE_NEAR) / (VERGE_FAR - VERGE_NEAR);
     int k;
 
