@@ -10,6 +10,7 @@
 #include "fx/fx.h"
 #include "fx/fx_far.h"
 #include "fx/fx_ground.h"
+#include "fx/fx_weather.h"
 #include "nshvc/nshvc.h"
 #include "system/perf.h"
 #include "video/video.h"
@@ -2368,6 +2369,7 @@ uint16_t FxWeatherDraw(uint16_t weather, uint16_t drops, uint16_t plot_y, uint16
         }
     }
     fx_spill(stack);
+    fx_weather_begin(weather);          /* the drops drawn at the window's pixels and across the view (fx_weather.c) */
     effect_seed = fx_ldw(0x01D0);
     count = drops;
     if (drops != 0) {
@@ -2533,6 +2535,8 @@ uint16_t FxWeatherDraw(uint16_t weather, uint16_t drops, uint16_t plot_y, uint16
                                         recip_low_byte = fx_getb();
                                         fx_r14((uint16_t)(recip_table_addr + 1));
                                         recip_scale = (uint16_t)((recip_low_byte & 0xFF) | fx_getb() << 8);
+                                        /* the drop drawn from where its move began to where it ended */
+                                        fx_weather_drop((int16_t)drop_x, (int16_t)drop_y, drop_z, (int16_t)drop_x_clamped, (int16_t)drop_y_clamped, drop_z_moved);
                                         screen_x_prod = (uint32_t)((int32_t)(int16_t)drop_x_clamped * (int16_t)recip_scale);
                                         view_center_x = fx_ldw(0x0034);
                                         screen_x = (uint16_t)(view_center_x + (uint16_t)((uint16_t)(screen_x_prod >> 16) << 1 | (int)(screen_x_prod >> 15 & 1)));
@@ -2700,6 +2704,7 @@ uint16_t FxWeatherDraw(uint16_t weather, uint16_t drops, uint16_t plot_y, uint16
         }
     } else {
     }
+    fx_weather_end();
     fx_stw(0x01D0, effect_seed);
     fx_unspill(stack);
     return plot_y;

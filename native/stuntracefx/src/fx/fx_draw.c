@@ -15,6 +15,7 @@
 #include "fx/fx_far.h"
 #include "fx/fx_face.h"
 #include "fx/fx_ground.h"
+#include "fx/fx_weather.h"
 #include "system/state.h"
 #include "system/perf.h"
 #include "video/picture.h"
@@ -1393,7 +1394,14 @@ void fx_noise_row(uint16_t x, uint16_t y, uint16_t n, uint16_t seed)
 void fx_row_open(uint8_t kind, uint16_t x, uint16_t y, uint16_t tu, uint16_t du, uint16_t tv, uint16_t base, uint16_t dv) {}
 void fx_row_close(uint16_t x) {}
 
-void fx_plot(uint8_t x, uint8_t y) { fx_flat_row(x, y, 1); }
+/* A pixel; the weather's drops draw nothing here, fx_weather.c drawing
+   them at the window's pixels. */
+void fx_plot(uint8_t x, uint8_t y)
+{
+    if (fx_weather_drawing())
+        return;
+    fx_flat_row(x, y, 1);
+}
 
 /* Whether the picture is of eight bits a pixel (the whole palette): a
    solid's colours are the 8-bit palette's (two players' 4-bit pictures,
