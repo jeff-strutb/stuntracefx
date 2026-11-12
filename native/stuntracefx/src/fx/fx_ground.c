@@ -67,6 +67,7 @@
 #include "fx/fx_face.h"
 #include "fx/fx_far.h"
 #include "fx/fx_ground.h"
+#include "fx/fx_rt.h"
 #include "system/state.h"
 #include "video/picture.h"
 #include "video/video.h"
@@ -108,46 +109,49 @@ enum { SURF_NONE, SURF_GRASS, SURF_ROCK, SURF_CEMENT, SURF_SNOW, SURF_ICE, SURF_
    polygons, below); the rest as before, until each course is done (Jeff,
    2026-11-11: track by track, Easy Ride first). A flat course's land is
    the plane alone, with no ring of mountains round it: a city, whose
-   skyline is on its backdrop at the horizon, which mountains would hide. */
+   skyline is on its backdrop at the horizon, which mountains would hide.
+   A forest course's land has the course's own trees standing round it
+   (the forest, below). */
 static const struct {
     uint8_t kind;
     int16_t y;
     uint8_t cls;
     uint8_t under;          /* water seen from below: its shade class (0: cls's) */
     uint8_t flat;           /* land: the plane alone, no mountains */
+    uint8_t forest;         /* land: a forest of the course's own trees round it */
 } surface[0x20] = {
-    [0x00] = { SURF_GRASS, 0, 10, 0, 0 },  /* Easy Ride: class 10, the chip's grass green (82,131,0 to 148,197,57) */
-    [0x01] = { SURF_AQUA, -1280, 12, 9, 0 }, /* Aqua Tunnel: under the road, over the glass tube, where its
+    [0x00] = { SURF_GRASS, 0, 10, 0, 0, 0 },  /* Easy Ride: class 10, the chip's grass green (82,131,0 to 148,197,57) */
+    [0x01] = { SURF_AQUA, -1280, 12, 9, 0, 0 }, /* Aqua Tunnel: under the road, over the glass tube, where its
                                            road's pieces end (the road -1920, the pieces 640 below) */
-    [0x02] = { SURF_ROCK, 0, CLS_ROCK, 0, 0 }, /* Sunset Valley, the canyon: mesas in its own rock's shades */
-    [0x03] = { SURF_CEMENT, 0, 21, 0, 1 }, /* Night Owl, the night city, the airport: flat, class 21, the
+    [0x02] = { SURF_ROCK, 0, CLS_ROCK, 0, 0, 0 }, /* Sunset Valley, the canyon: mesas in its own rock's shades */
+    [0x03] = { SURF_CEMENT, 0, 21, 0, 1, 0 }, /* Night Owl, the night city, the airport: flat, class 21, the
                                            greys its own road is shaded in (its colours 63-56: 49,49,41
                                            to 107,107,99 by its palette; the road ahead 66,66,57 and
                                            74,74,66, levels 9 and 10, the band's under the eye) */
-    [0x04] = { SURF_GRASS, 0, 10, 0, 0 },  /* King's Forest, the foggy forest: Easy Ride's land, class 10,
+    [0x04] = { SURF_GRASS, 0, 10, 0, 0, 1 },  /* King's Forest, the foggy forest: Easy Ride's land, class 10,
                                            its own hills' grass (their faces 173,206,132 and 189,214,140:
                                            the class's top levels in its palette blended 15 of 32 toward
                                            the fog, which the palette carries, so the land is fogged as
-                                           they are) */
-    [0x05] = { SURF_GRASS, 0, 0, 0, 0 },   /* Sea Breeze: its band green beside the road, the sea's teal only
+                                           they are), and a forest of its own trees round it */
+    [0x05] = { SURF_GRASS, 0, 0, 0, 0, 0 },   /* Sea Breeze: its band green beside the road, the sea's teal only
                                            toward the horizon, which the land takes by distance */
-    [0x06] = { SURF_SNOW, 0, 0, 0, 0 },    /* White Land */
-    [0x07] = { SURF_CEMENT, 0, 0, 0, 0 },  /* the sunset city */
-    [0x08] = { SURF_GRASS, 0, 0, 0, 0 },   /* Lake Side: as Sea Breeze */
-    [0x09] = { SURF_ROCK, 0, 0, 0, 0 },    /* the wild-west desert: red rock, its band green */
-    [0x0A] = { SURF_NONE, 0, 0, 0, 0 },    /* Sky Ramp */
-    [0x0B] = { SURF_WATER, -3840, 0, 0, 0 }, /* the night harbour: where its lowest road's (-4480) pieces end */
-    [0x0C] = { SURF_DIRT, 0, 0, 0, 0 },    /* the stunt arenas: dirt, grass, ice, water */
-    [0x0D] = { SURF_GRASS, 0, 0, 0, 0 },
-    [0x0E] = { SURF_ICE, 0, 0, 0, 0 },
-    [0x0F] = { SURF_WATER, 0, 0, 0, 0 },   /* its floor */
-    [0x10] = { SURF_GRASS, 0, 0, 0, 0 },   /* the battle arenas: the countryside */
-    [0x11] = { SURF_ROCK, 0, 0, 0, 0 },    /* the red-rock desert, its band the canyon's tan */
-    [0x12] = { SURF_GRASS, 0, 0, 0, 0 },   /* the beach: its band Sea Breeze's */
-    [0x13] = { SURF_WATER, 0, 0, 0, 0 },   /* the night city: its band the night harbour's, at its floor */
-    [0x14] = { SURF_GRASS, 0, 0, 0, 0 },   /* the countryside courses */
-    [0x15] = { SURF_GRASS, 0, 0, 0, 0 },
-    [0x16] = { SURF_GRASS, 0, 0, 0, 0 },
+    [0x06] = { SURF_SNOW, 0, 0, 0, 0, 0 },    /* White Land */
+    [0x07] = { SURF_CEMENT, 0, 0, 0, 0, 0 },  /* the sunset city */
+    [0x08] = { SURF_GRASS, 0, 0, 0, 0, 0 },   /* Lake Side: as Sea Breeze */
+    [0x09] = { SURF_ROCK, 0, 0, 0, 0, 0 },    /* the wild-west desert: red rock, its band green */
+    [0x0A] = { SURF_NONE, 0, 0, 0, 0, 0 },    /* Sky Ramp */
+    [0x0B] = { SURF_WATER, -3840, 0, 0, 0, 0 }, /* the night harbour: where its lowest road's (-4480) pieces end */
+    [0x0C] = { SURF_DIRT, 0, 0, 0, 0, 0 },    /* the stunt arenas: dirt, grass, ice, water */
+    [0x0D] = { SURF_GRASS, 0, 0, 0, 0, 0 },
+    [0x0E] = { SURF_ICE, 0, 0, 0, 0, 0 },
+    [0x0F] = { SURF_WATER, 0, 0, 0, 0, 0 },   /* its floor */
+    [0x10] = { SURF_GRASS, 0, 0, 0, 0, 0 },   /* the battle arenas: the countryside */
+    [0x11] = { SURF_ROCK, 0, 0, 0, 0, 0 },    /* the red-rock desert, its band the canyon's tan */
+    [0x12] = { SURF_GRASS, 0, 0, 0, 0, 0 },   /* the beach: its band Sea Breeze's */
+    [0x13] = { SURF_WATER, 0, 0, 0, 0, 0 },   /* the night city: its band the night harbour's, at its floor */
+    [0x14] = { SURF_GRASS, 0, 0, 0, 0, 0 },   /* the countryside courses */
+    [0x15] = { SURF_GRASS, 0, 0, 0, 0, 0 },
+    [0x16] = { SURF_GRASS, 0, 0, 0, 0, 0 },
 };
 
 /* the land's marks: the size of a texel on the ground, and each kind's
@@ -1562,6 +1566,271 @@ void fx_ground_object_end(void)
     fx_draw_land(sv, ns);
 }
 
+/* ---- the forest: the course's own trees round it ----
+
+   Jeff (2026-11-12, King's Forest): "It says 'forest' so you should place
+   a ton of the trees around the terrain too." The trees are the course's
+   own, copied (fx_solid_forest_tree): none until the race has drawn one
+   of its trees near, trunk and canopy together.
+
+   They stand only outside the course's footprint, their feet at least
+   FOREST_CLEAR beyond it past their canopies' half width: the land is
+   drawn behind all the course's shapes, so a tree between the eye and one
+   of them would have it drawn over it; the footprint is a box and the eye
+   is in it (the camera trails the car by far less than FOREST_CLEAR), and
+   no line from a point in a box to another leaves it, so none stands
+   between them. On a lattice a canopy's width a step, each place moved
+   by up to FOREST_JITTER of a step (a hash of the course and the place),
+   left out where the groves' noise (value noise on a lattice of
+   FOREST_GROVE steps) is under FOREST_OPEN, a clearing; of those the
+   FOREST_MOST nearest the footprint are kept, so the forest is a belt as
+   deep as that many trees make it; each 0.85 to 1.2 the course's tree's
+   size, its foot on the ground (the plane's level, or a mountain's face
+   over it, the highest) sunk by its trunk's half width, so none stands on
+   a slope with its foot in the air.
+
+   Drawn after the plane and the mountains, at the land's depths (each
+   face's corners from its own plane, as the mountains'), so the mountains
+   hide the trees behind them and the trees the plane; in FOREST_BLOCK x
+   FOREST_BLOCK lattice blocks, a block left out whole where its sphere is
+   behind the eye or past FOREST_WIDE of the view's sides. One player's
+   pictures only (two players' keep the course's trees as sprites, and so
+   the land none). */
+
+enum { FOREST_MOST = 3000, FOREST_BLOCK = 8, FOREST_VERTICES = 3 * 4096 };
+#define FOREST_CLEAR 1024.0
+#define FOREST_JITTER 0.3
+#define FOREST_GROVE 6.0
+#define FOREST_OPEN 0.3
+#define FOREST_WIDE 3.0
+
+static struct {
+    int course, n, blocks;
+    double step;
+    float site[FOREST_MOST][4];         /* each tree's foot (x, y, z) and size */
+    struct {
+        int first, n;
+        double mid[3], r;
+    } block[FOREST_MOST];
+} forest = { -1, 0, 0, 0, { { 0 } }, { { 0, 0, { 0 }, 0 } } };
+
+typedef struct {
+    float x, z, d;
+    int bx, bz;
+} ForestPlace;
+
+static int forest_place_near(const void *a, const void *b)
+{
+    float x = ((const ForestPlace *)a)->d, y = ((const ForestPlace *)b)->d;
+
+    return x < y ? -1 : x > y;
+}
+
+static int forest_place_block(const void *a, const void *b)
+{
+    const ForestPlace *p = a, *q = b;
+
+    return p->bz != q->bz ? (p->bz < q->bz ? -1 : 1) : p->bx != q->bx ? (p->bx < q->bx ? -1 : 1) : 0;
+}
+
+/* the groves' noise at lattice place (i, j): smooth, 0 to 1 */
+static double forest_noise(unsigned course, double i, double j)
+{
+    double gi = floor(i / FOREST_GROVE), gj = floor(j / FOREST_GROVE), fi = i / FOREST_GROVE - gi, fj = j / FOREST_GROVE - gj;
+    double a, b, c, d;
+    unsigned ui = (unsigned)(int)gi + 0x8000u, uj = (unsigned)(int)gj + 0x8000u;
+
+    fi = fi * fi * (3 - 2 * fi);
+    fj = fj * fj * (3 - 2 * fj);
+    a = hash01(course, 3000 + ui, uj);
+    b = hash01(course, 3000 + ui + 1, uj);
+    c = hash01(course, 3000 + ui, uj + 1);
+    d = hash01(course, 3000 + ui + 1, uj + 1);
+    return (a + (b - a) * fi) + ((c + (d - c) * fi) - (a + (b - a) * fi)) * fj;
+}
+
+/* the ground's height at (x, z): the highest mountain face over it, else
+   the plane's level (y is down) */
+static double forest_ground(double x, double z)
+{
+    double y = grid.level;
+    int i, k;
+
+    if (range.mesas)
+        return y;
+    for (i = 0; i < MOUNTAINS; i++)
+        for (k = 0; k < SIDES; k++) {
+            const double *p = range.peak[i], *b0 = range.base[i][k], *b1 = range.base[i][(k + 1) % SIDES];
+            double v0x = b0[0] - p[0], v0z = b0[1] - p[2], v1x = b1[0] - p[0], v1z = b1[1] - p[2];
+            double qx = x - p[0], qz = z - p[2], det = v0x * v1z - v1x * v0z, a, b, h;
+
+            if (fabs(det) < 1e-9)
+                continue;
+            a = (qx * v1z - v1x * qz) / det;
+            b = (v0x * qz - qx * v0z) / det;
+            if (a < 0 || b < 0 || a + b > 1)
+                continue;
+            h = p[1] + (a + b) * (grid.level - p[1]);
+            if (h < y)
+                y = h;
+        }
+    return y;
+}
+
+static void forest_make(unsigned course)
+{
+    float half, height, trunk_half;
+    double clear, area, perimeter, depth, x0, z0;
+    int nx, nz, i, j, n = 0, b;
+    ForestPlace *place;
+
+    forest.course = (int)course;
+    forest.n = forest.blocks = 0;
+    fx_solid_forest_size(&half, &height, &trunk_half);
+    if (half <= 0 || height <= 0)
+        return;
+    forest.step = 2 * half;
+    clear = FOREST_CLEAR + 1.2 * half;
+    /* the belt the kept trees fill: FOREST_MOST of them, a step's square
+       each, 1 - FOREST_OPEN of them kept; its depth past the clearing, and
+       the lattice out half as far again */
+    perimeter = 2 * ((grid.xmax - grid.xmin) + (grid.zmax - grid.zmin));
+    area = FOREST_MOST * forest.step * forest.step / (1 - FOREST_OPEN);
+    depth = (-perimeter + sqrt(perimeter * perimeter + 4 * 3.141592653589793 * area)) / (2 * 3.141592653589793);
+    depth = clear + 1.5 * depth + forest.step;
+    while ((grid.xmax - grid.xmin + 2 * depth) / forest.step * (grid.zmax - grid.zmin + 2 * depth) / forest.step > 2e6)
+        forest.step *= 1.25;            /* a lattice of at most two million places */
+    x0 = grid.xmin - depth;
+    z0 = grid.zmin - depth;
+    nx = (int)((grid.xmax - grid.xmin + 2 * depth) / forest.step) + 1;
+    nz = (int)((grid.zmax - grid.zmin + 2 * depth) / forest.step) + 1;
+    if (!(place = malloc(sizeof *place * (size_t)nx * (size_t)nz)))
+        return;
+    for (j = 0; j < nz; j++)
+        for (i = 0; i < nx; i++) {
+            unsigned ui = (unsigned)i, uj = (unsigned)j;
+            double x = x0 + (i + FOREST_JITTER * 2 * (hash01(course, 4000 + ui, uj) - 0.5)) * forest.step;
+            double z = z0 + (j + FOREST_JITTER * 2 * (hash01(course, 5000 + ui, uj) - 0.5)) * forest.step;
+            double d = footprint_distance(x, z);
+
+            if (d < clear || forest_noise(course, i, j) < FOREST_OPEN)
+                continue;
+            place[n].x = (float)x, place[n].z = (float)z, place[n].d = (float)d;
+            place[n].bx = i / FOREST_BLOCK, place[n].bz = j / FOREST_BLOCK;
+            n++;
+        }
+    qsort(place, (size_t)n, sizeof *place, forest_place_near);
+    if (n > FOREST_MOST)
+        n = FOREST_MOST;
+    qsort(place, (size_t)n, sizeof *place, forest_place_block);
+    for (i = 0; i < n; i++) {
+        double k = 0.85 + 0.35 * hash01(course, 6000 + (unsigned)(place[i].x / forest.step + 0x8000), (unsigned)(place[i].z / forest.step + 0x8000));
+
+        forest.site[i][0] = place[i].x;
+        forest.site[i][1] = (float)(forest_ground(place[i].x, place[i].z) + trunk_half * k);
+        forest.site[i][2] = place[i].z;
+        forest.site[i][3] = (float)k;
+        if (!i || place[i].bx != place[i - 1].bx || place[i].bz != place[i - 1].bz) {
+            forest.block[forest.blocks].first = i;
+            forest.block[forest.blocks].n = 0;
+            forest.blocks++;
+        }
+        forest.block[forest.blocks - 1].n++;
+    }
+    forest.n = n;
+    free(place);
+    for (b = 0; b < forest.blocks; b++) {       /* each block's sphere, its trees whole */
+        double *mid = forest.block[b].mid, r = 0;
+        int first = forest.block[b].first, count = forest.block[b].n;
+
+        mid[0] = mid[1] = mid[2] = 0;
+        for (i = first; i < first + count; i++) {
+            mid[0] += forest.site[i][0] / count;
+            mid[1] += (forest.site[i][1] - height * forest.site[i][3] / 2) / count;
+            mid[2] += forest.site[i][2] / count;
+        }
+        for (i = first; i < first + count; i++) {
+            double dx = forest.site[i][0] - mid[0], dy = forest.site[i][1] - mid[1], dz = forest.site[i][2] - mid[2];
+            double e = sqrt(dx * dx + dy * dy + dz * dz) + (height + half) * forest.site[i][3];
+
+            if (e > r)
+                r = e;
+        }
+        forest.block[b].r = r;
+    }
+    fprintf(stderr, "forest: course %u, %d trees in %d blocks, a step %.0f (the course's tree %.0f across, %.0f high)\n", course,
+            forest.n, forest.blocks, forest.step, 2.0 * half, (double)height);
+}
+
+static nshvc_vertex forest_v[FOREST_VERTICES];
+static uint32_t forest_nv;
+
+/* a face of a tree, n view-space points in palette entry c: at the land's
+   depths, from its own plane, as land_face's */
+static void forest_face(const float (*p)[3], int n, uint8_t c, void *context)
+{
+    static FxCorner corner[64];
+    double vp[8][3], nview[3], d;
+    double vcx = (int16_t)ram_word(0x0034), vcy = (int16_t)ram_word(0x0036);
+    uint32_t nc, j, colour;
+    int k;
+
+    (void)context;
+    if (n < 3 || n > 8)
+        return;
+    for (k = 0; k < n; k++)
+        for (j = 0; j < 3; j++)
+            vp[k][j] = p[k][j];
+    normal_of(vp[0], vp[1], vp[2], nview);
+    d = nview[0] * vp[0][0] + nview[1] * vp[0][1] + nview[2] * vp[0][2];
+    if (fabs(d) < 1e-9)
+        return;
+    nc = fx_face_triangles_d((const double (*)[3])vp, n, corner, sizeof corner / sizeof corner[0]);
+    if (!nc)
+        return;
+    if (forest_nv + nc > FOREST_VERTICES) {
+        fx_draw_land(forest_v, forest_nv);
+        forest_nv = 0;
+    }
+    colour = rgb_of(pic.palette[c]);
+    for (j = 0; j < nc; j++, forest_nv++) {
+        double inv = (nview[0] * (corner[j].x - vcx) / 128.0 + nview[1] * (corner[j].y - vcy) / 128.0 + nview[2]) / d;
+        double z = FACE_Z * (1.0 - LAND_NEAR * inv);
+
+        memset(&forest_v[forest_nv], 0, sizeof forest_v[forest_nv]);
+        forest_v[forest_nv].x = corner[j].x;
+        forest_v[forest_nv].y = corner[j].y;
+        forest_v[forest_nv].z = (float)(z < 0 ? 0 : z > FACE_Z ? FACE_Z : z);
+        forest_v[forest_nv].colour = colour;
+    }
+}
+
+static void forest_draw(unsigned course, const double eye[3], const double m[9])
+{
+    int b, i;
+
+    if (forest.course != (int)course)
+        forest_make(course);
+    forest_nv = 0;
+    for (b = 0; b < forest.blocks; b++) {
+        double v[3], r = forest.block[b].r;
+
+        to_view(forest.block[b].mid, eye, m, v);
+        if (v[2] < -r || fabs(v[0]) > v[2] * FOREST_WIDE + r || fabs(v[1]) > v[2] * FOREST_WIDE + r)
+            continue;
+        for (i = forest.block[b].first; i < forest.block[b].first + forest.block[b].n; i++) {
+            double w[3] = { forest.site[i][0], forest.site[i][1], forest.site[i][2] }, f[3];
+            float foot[3];
+
+            to_view(w, eye, m, f);
+            foot[0] = (float)f[0], foot[1] = (float)f[1], foot[2] = (float)f[2];
+            fx_solid_forest_tree(foot, forest.site[i][3], m, forest_face, NULL);
+        }
+    }
+    fx_draw_land(forest_v, forest_nv);
+    forest_nv = 0;
+}
+
 static void land_polygons(unsigned course, int cls, const double eye[3], const double m[9])
 {
     static nshvc_vertex v[LAND_VERTICES];
@@ -1624,6 +1893,10 @@ static void land_polygons(unsigned course, int cls, const double eye[3], const d
             land_face((const double (*)[3])range.top[i], SIDES, up_world, cls, eye, m, v, &nv, LAND_VERTICES);
     }
     fx_draw_land(v, nv);
+    /* the course's own trees round it (one player's pictures, once the
+       race has drawn one of its trees) */
+    if (surface[course].forest && !surface[course].flat && !mesas && fx_draw_full_colour() && fx_solid_forest_ready())
+        forest_draw(course, eye, m);
     /* the canyon's empty space filled with rock, which hides the far
        objects behind it */
     if (mesas) {
@@ -1809,6 +2082,7 @@ void fx_ground_draw(void)
         ground_survey(course, eye, m);  /* the course's shapes, once a course */
         range.course = -1;
         fill.course = -1;
+        forest.course = -1;
     }
     /* land: none in a tunnel (bit 3 of $0DA5, which the tunnel's gates set
        and clear: the original turns the backdrop's colours black there, so
