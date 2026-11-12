@@ -123,7 +123,7 @@ static const struct {
     uint8_t flat;           /* land: the plane alone, no mountains */
     uint8_t forest;         /* land: a forest of the course's own trees round it */
     uint8_t first;          /* water: the class's level its sea's darkest shade takes (0: 6, the whole row) */
-    uint8_t roll;           /* land: rolling faceted ground round the course (rolling ground, below) */
+    uint8_t city;           /* land: a city round the course (the city, below) */
 } surface[0x20] = {
     [0x00] = { SURF_GRASS, 0, 10, 0, 0, 0, 0, 0 },  /* Easy Ride: class 10, the chip's grass green (82,131,0 to 148,197,57) */
     [0x01] = { SURF_AQUA, -1280, 12, 9, 0, 0, 0, 0 }, /* Aqua Tunnel: under the road, over the glass tube, where its
@@ -151,8 +151,9 @@ static const struct {
                                            its road class 21's icy greys), its fog over it as the
                                            palette carries it (amount_step's 10 of 32 for it) */
     [0x07] = { SURF_CEMENT, 0, CLS_BAND, 0, 1, 0, 0, 1 }, /* Night Cruise, the sunset city: no mountains (its skyline
-                                           on the backdrop), rolling faceted ground (Jeff, 2026-11-12: the flat
-                                           plane looked "like a solid... taupe something"), in the band's own
+                                           on the backdrop), a city round it as the backdrop's skyline is
+                                           (Jeff, 2026-11-12: "It should read as a city scape. Look at the
+                                           skymap for the track"), on the band's own
                                            ground (dark brown at the horizon, 57,41,41, to black: its ground as
                                            the original shows it; the khaki below was its verges', which are
                                            the course's own faces, shaded by distance: fx_ground_verge),
@@ -1985,153 +1986,255 @@ static void forest_draw(unsigned course, const double eye[3], const double m[9],
     fx_solid_forest_end();
 }
 
-/* ---- rolling ground ----
+/* ---- the land's view for instanced meshes ----
 
-   Jeff (2026-11-12, on Night Cruise's flat land, "like a solid... taupe
-   something"; he chose rolling faceted ground): the ground round the
-   course in low faceted swells and hollows, each facet in the class's
-   shade for the way it faces, so the ground has shading and depth, low
-   under the skyline on the backdrop. A facet's colour moves a step of the
-   class's row for every two of the chip's light levels, about 8 degrees
-   of turn toward or from the light (14 levels a radian from the race's
-   camera), so the facets are steep enough to differ by a step: each
-   point of a lattice ROLL_STEP a step, over the footprint and ROLL_REACH
-   past it, a height of its own (a hash, 0 to 1; ROLL_NOISE steps a noise
-   cell), up to 14 degrees from its neighbour's, times
-   - within the footprint, a hollow of at most ROLL_DIP under the ground's
-     level, none within ROLL_NEAR of the survey's cells where a course
-     shape meets the ground, growing over the next ROLL_NEAR: the land is
-     drawn behind all the course's shapes, so it must never rise in front
-     of one, and ground under the level they stand on cannot; and no
-     shape's foot stands over a hollow;
-   - past it, a swell of at most ROLL_SWELL, growing from ROLL_CLEAR past
-     the footprint over ROLL_RISE (no steeper than 1 in 28 against the
-     distance from the footprint, so from the course a swell stands at
-     most a few pixels over the horizon, under the skyline's foot; and
-     none can stand between the eye, in the footprint's box, and the
-     course), easing back to the level over the lattice's last ROLL_FALL,
-     where the plane goes on to the horizon.
-   Each lattice triangle with a corner off the level is a land face, as
-   the mountains' at the land's depths; a level one is left to the plane. */
-enum { ROLL_MOST = 96, ROLL_VERTICES = 3 * 4096 };
-#define ROLL_STEP 1600.0
-#define ROLL_REACH 12000.0
-#define ROLL_NOISE 1.0
-#define ROLL_DIP 400.0
-#define ROLL_NEAR 2.0
-#define ROLL_SWELL 280.0
-#define ROLL_CLEAR 1500.0
-#define ROLL_RISE 8000.0
-#define ROLL_FALL 4000.0
+   The picture's view as nshvc 6.2's meshes take it: world to view (world
+   axis i is the view's row i of m), its centre and 128 a unit in the
+   picture's pixels, the land's depths (land_face's: z = FACE_Z (1 -
+   LAND_NEAR / Z)); and the view's sides in view space, inward, unit, for
+   culling a sphere (land_sphere_seen). */
+static void land_view(const double eye[3], const double m[9], nshvc_view *view, float side[4][3])
+{
+    float left, right, top, bottom;
+    int i, k;
+
+    memset(view, 0, sizeof *view);
+    for (i = 0; i < 3; i++) {
+        view->eye[i] = (float)eye[i];
+        for (k = 0; k < 3; k++)
+            view->rot[3 * k + i] = (float)m[3 * i + k];
+    }
+    view->f = 128;
+    view->cx = (int16_t)ram_word(0x0034);
+    view->cy = (int16_t)ram_word(0x0036);
+    view->near = 1;
+    view->depth_a = (float)FACE_Z;
+    view->depth_b = (float)(FACE_Z * LAND_NEAR);
+    view->depth_max = (float)FACE_Z;
+    fx_face_view_rect(&left, &right, &top, &bottom);
+    {
+        float p[4][3] = { { 128, 0, -(left - view->cx) }, { -128, 0, right - view->cx },
+                          { 0, 128, -(top - view->cy) }, { 0, -128, bottom - view->cy } };
+
+        for (i = 0; i < 4; i++) {
+            float l = sqrtf(p[i][0] * p[i][0] + p[i][1] * p[i][1] + p[i][2] * p[i][2]);
+
+            for (k = 0; k < 3; k++)
+                side[i][k] = l > 0 ? p[i][k] / l : 0;
+        }
+    }
+}
+
+/* whether a sphere (world centre c, radius r) may be seen: its view-space
+   centre into v */
+static int land_sphere_seen(const double eye[3], const double m[9], const float side[4][3], const double c[3], double r,
+                            double v[3])
+{
+    int i;
+
+    to_view(c, eye, m, v);
+    if (v[2] < 1 - r)
+        return 0;
+    for (i = 0; i < 4; i++)
+        if (side[i][0] * v[0] + side[i][1] * v[1] + side[i][2] * v[2] < -r)
+            return 0;
+    return 1;
+}
+
+/* ---- the city ----
+
+   Jeff (2026-11-12, Night Cruise: its ground "should read as a city
+   scape. Look at the skymap for the track"): its backdrop's skyline is
+   towers of near black and dark brown with grids of lit windows, in its
+   backdrop's colours 5-10 (5-8 the walls, 080000 to 211010; 9 290800; 10
+   the windows, 7b5a21 by day and bd9c63 in its night set, so they light up
+   as the course goes to night). The land round the course is a city of
+   such buildings in those same colours, read from the palette as the
+   screen shows it (with the weather), on a street grid: a lot each
+   CITY_LOT, a building on it from CITY_KINDS shapes (walls and a roof, a
+   grid of windows on each wall, some lit), most low or middling, a few
+   towers, CITY_EMPTY of the lots left open, each lot wholly CITY_CLEAR or
+   more past the footprint (the land is drawn behind all the course's
+   shapes, so nothing of it may stand between the eye, in the footprint's
+   box, and the course: no line from a point in a box to another leaves
+   it) and none past CITY_REACH. Each shape is an instanced mesh (nshvc
+   6.2), written again only when its colours change, each building one
+   instance of it, its size its lot's 0.8 to 1 (a size is uniform, so the
+   shapes give the proportions), drawn at the land's depths nearest first,
+   a building whose sphere is outside the view left out. A wall's colour
+   by the way it faces (the world's: +x 8, +z 7, -x 6, -z 5), the roof 9,
+   a lit window 10, set 0.004 of the building out from its wall. */
+enum { CITY_KINDS = 12, CITY_MOST = 2048 };
+#define CITY_LOT 3200.0
+#define CITY_BASE 2400.0            /* a building's size at most: its shape's 1 */
+#define CITY_CLEAR 2500.0
+#define CITY_REACH 26000.0
+#define CITY_EMPTY 0.12
+#define CITY_LIT 0.55
+static const struct {
+    float w, d, h;                  /* across x, across z, up: in its size */
+} city_shape[CITY_KINDS] = {
+    { 1.0f, 1.0f, 0.5f }, { 0.9f, 0.7f, 0.8f }, { 0.7f, 0.9f, 1.0f }, { 1.0f, 0.6f, 1.2f },
+    { 0.8f, 0.8f, 1.5f }, { 0.8f, 0.5f, 0.7f }, { 1.0f, 0.8f, 1.0f }, { 0.6f, 0.6f, 2.0f },
+    { 0.9f, 0.9f, 1.8f }, { 0.7f, 0.7f, 2.6f }, { 0.5f, 0.5f, 3.2f }, { 0.6f, 0.8f, 4.0f },
+};
 
 static struct {
-    int course, nx, nz;
-    double x0, z0, step;
-    float y[ROLL_MOST * ROLL_MOST];     /* each point's height (y is down) */
-} roll = { -1, 0, 0, 0, 0, 0, { 0 } };
+    int course, n;
+    struct {
+        float at[3], size;
+        uint8_t kind;
+    } b[CITY_MOST];
+    nshvc_mesh mesh[CITY_KINDS];
+    uint32_t vertices[CITY_KINDS];
+    uint32_t colour[6];             /* the colours its meshes were written in: walls +x, +z, -x, -z, roof, windows */
+} city = { -1, 0, { { { 0 }, 0, 0 } }, { { 0 } }, { 0 }, { 0 } };
 
-static double ease(double t)
+static void city_make(unsigned course)
 {
-    t = t < 0 ? 0 : t > 1 ? 1 : t;
-    return t * t * (3 - 2 * t);
-}
+    double x0 = grid.xmin - CITY_REACH, z0 = grid.zmin - CITY_REACH;
+    int nx = (int)((grid.xmax - grid.xmin + 2 * CITY_REACH) / CITY_LOT), nz = (int)((grid.zmax - grid.zmin + 2 * CITY_REACH) / CITY_LOT);
+    int i, j;
 
-/* the rolling ground's noise at lattice place (i, j): smooth, 0 to 1 */
-static double roll_noise(unsigned course, double i, double j)
-{
-    double gi = floor(i / ROLL_NOISE), gj = floor(j / ROLL_NOISE), fi = ease(i / ROLL_NOISE - gi), fj = ease(j / ROLL_NOISE - gj);
-    unsigned ui = (unsigned)(int)gi + 0x8000u, uj = (unsigned)(int)gj + 0x8000u;
-    double a = hash01(course, 7000 + ui, uj), b = hash01(course, 7000 + ui + 1, uj);
-    double c = hash01(course, 7000 + ui, uj + 1), d = hash01(course, 7000 + ui + 1, uj + 1);
+    city.course = (int)course;
+    city.n = 0;
+    for (j = 0; j < nz; j++)
+        for (i = 0; i < nx && city.n < CITY_MOST; i++) {
+            double cx = x0 + (i + 0.5) * CITY_LOT, cz = z0 + (j + 0.5) * CITY_LOT, u = hash01(course, 9000 + (unsigned)i, (unsigned)j);
+            double d = footprint_distance(cx, cz);
+            int kind;
 
-    return (a + (b - a) * fi) + ((c + (d - c) * fi) - (a + (b - a) * fi)) * fj;
-}
-
-static void roll_make(unsigned course)
-{
-    double w = grid.xmax - grid.xmin + 2 * ROLL_REACH, h = grid.zmax - grid.zmin + 2 * ROLL_REACH;
-    int i, j, reach = (int)ceil(2 * ROLL_NEAR) + 1;
-
-    roll.course = (int)course;
-    roll.step = ROLL_STEP;
-    while (w / roll.step + 2 > ROLL_MOST || h / roll.step + 2 > ROLL_MOST)
-        roll.step *= 1.25;
-    roll.x0 = grid.xmin - ROLL_REACH;
-    roll.z0 = grid.zmin - ROLL_REACH;
-    roll.nx = (int)ceil(w / roll.step) + 1;
-    roll.nz = (int)ceil(h / roll.step) + 1;
-    for (j = 0; j < roll.nz; j++)
-        for (i = 0; i < roll.nx; i++) {
-            double px = roll.x0 + i * roll.step, pz = roll.z0 + j * roll.step, n = roll_noise(course, i, j);
-            double out = footprint_distance(px, pz), y = grid.level;
-
-            if (out <= 0) {             /* a hollow, away from where the course meets the ground */
-                int cx = (int)floor((px - grid.x0) / grid.cell), cz = (int)floor((pz - grid.z0) / grid.cell), x, z;
-                double best = reach;
-
-                for (z = cz - reach; z <= cz + reach; z++)
-                    for (x = cx - reach; x <= cx + reach; x++) {
-                        double dx, dz, d;
-
-                        if (x < 0 || z < 0 || x >= grid.nx || z >= grid.nz || !grid_known[z * grid.nx + x])
-                            continue;
-                        dx = x - (px - grid.x0) / grid.cell + 0.5;
-                        dz = z - (pz - grid.z0) / grid.cell + 0.5;
-                        d = sqrt(dx * dx + dz * dz);
-                        if (d < best)
-                            best = d;
-                    }
-                y += ROLL_DIP * n * ease((best - ROLL_NEAR) / ROLL_NEAR);
-            } else {                    /* a swell, easing back to the level at the lattice's edge */
-                double edge = fmin(fmin(px - roll.x0, roll.x0 + (roll.nx - 1) * roll.step - px),
-                                   fmin(pz - roll.z0, roll.z0 + (roll.nz - 1) * roll.step - pz));
-
-                y -= ROLL_SWELL * n * ease((out - ROLL_CLEAR) / ROLL_RISE) * ease(edge / ROLL_FALL);
-            }
-            roll.y[j * roll.nx + i] = (float)y;
+            if (d < CITY_CLEAR + CITY_LOT * 0.71 || d > CITY_REACH || u < CITY_EMPTY)
+                continue;
+            u = hash01(course, 9100 + (unsigned)i, (unsigned)j);       /* most low or middling, a few towers */
+            kind = u < 0.7 ? (int)(u / 0.7 * 7) : u < 0.93 ? 7 + (int)((u - 0.7) / 0.23 * 2) : 9 + (int)((u - 0.93) / 0.07 * 3);
+            if (kind >= CITY_KINDS)
+                kind = CITY_KINDS - 1;
+            city.b[city.n].at[0] = (float)cx;
+            city.b[city.n].at[1] = (float)grid.level;
+            city.b[city.n].at[2] = (float)cz;
+            city.b[city.n].size = (float)(CITY_BASE * (0.8 + 0.2 * hash01(course, 9200 + (unsigned)i, (unsigned)j)));
+            city.b[city.n].kind = (uint8_t)kind;
+            city.n++;
         }
 }
 
-static void roll_draw(unsigned course, int cls, const double eye[3], const double m[9])
+/* a quad of a building's mesh (corners in order round it) into v */
+static uint32_t city_quad(nshvc_mesh_vertex *v, uint32_t n, const float (*q)[3], uint32_t colour)
 {
-    static nshvc_vertex v[ROLL_VERTICES];
-    static const int split[2][2][3] = { { { 0, 1, 2 }, { 0, 2, 3 } }, { { 0, 1, 3 }, { 1, 2, 3 } } };
-    uint32_t nv = 0;
-    int i, j, t, k;
+    static const int tri[6] = { 0, 1, 2, 0, 2, 3 };
+    int i;
 
-    if (roll.course != (int)course)
-        roll_make(course);
-    for (j = 0; j + 1 < roll.nz; j++)
-        for (i = 0; i + 1 < roll.nx; i++) {
-            int at[4] = { j * roll.nx + i, j * roll.nx + i + 1, (j + 1) * roll.nx + i + 1, (j + 1) * roll.nx + i };
-            int diag = hash01(course, 8000 + (unsigned)i, (unsigned)j) < 0.5;
-            double c[4][3];
+    for (i = 0; i < 6; i++) {
+        v[n].x = q[tri[i]][0], v[n].y = q[tri[i]][1], v[n].z = q[tri[i]][2];
+        v[n].u = v[n].v = 0;
+        v[n].colour = colour;
+        n++;
+    }
+    return n;
+}
 
-            for (k = 0; k < 4; k++) {
-                c[k][0] = roll.x0 + (i + (k == 1 || k == 2)) * roll.step;
-                c[k][1] = roll.y[at[k]];
-                c[k][2] = roll.z0 + (j + (k >= 2)) * roll.step;
+/* shape k's mesh, its base's middle at the origin (y is down), in colours c */
+static uint32_t city_mesh(int k, const uint32_t c[6], nshvc_mesh_vertex *v)
+{
+    float w = city_shape[k].w / 2, d = city_shape[k].d / 2, h = city_shape[k].h, out = 0.004f;
+    uint32_t n = 0;
+    int side;
+
+    for (side = 0; side < 4; side++) {
+        /* the wall: +x, +z, -x, -z; along it (ax, az) from one end to the
+           other (an x wall across z, a z wall across x), its normal (nx, nz) */
+        float span = side & 1 ? 2 * w : 2 * d, nx = side == 0 ? 1.0f : side == 2 ? -1.0f : 0, nz = side == 1 ? 1.0f : side == 3 ? -1.0f : 0;
+        float ox = nx * w + (side & 1 ? -w : 0), oz = nz * d + (side & 1 ? 0 : -d);
+        float ax = side & 1 ? 1.0f : 0, az = side & 1 ? 0 : 1.0f;
+        float q[4][3] = { { ox, 0, oz }, { ox + ax * span, 0, oz + az * span }, { ox + ax * span, -h, oz + az * span }, { ox, -h, oz } };
+        int cols = (int)fmaxf(1, roundf(span / 0.14f)), rows = (int)fmaxf(1, roundf(h / 0.16f)), r, col;
+
+        n = city_quad(v, n, (const float (*)[3])q, c[side]);
+        for (r = 0; r < rows; r++)
+            for (col = 0; col < cols; col++) {
+                float s0 = (col + 0.3f) / cols * span, s1 = (col + 0.7f) / cols * span;
+                float y0 = -(r + 0.3f) / rows * h, y1 = -(r + 0.7f) / rows * h;
+                float wq[4][3] = { { ox + ax * s0 + nx * out, y0, oz + az * s0 + nz * out },
+                                   { ox + ax * s1 + nx * out, y0, oz + az * s1 + nz * out },
+                                   { ox + ax * s1 + nx * out, y1, oz + az * s1 + nz * out },
+                                   { ox + ax * s0 + nx * out, y1, oz + az * s0 + nz * out } };
+
+                if (hash01((unsigned)k, 9300 + (unsigned)(side * 64 + col), (unsigned)r) < CITY_LIT)
+                    n = city_quad(v, n, (const float (*)[3])wq, c[5]);
             }
-            for (t = 0; t < 2; t++) {
-                const int *sp = split[diag][t];
-                double tri[3][3], n[3];
+    }
+    {
+        float roof[4][3] = { { -w, -h, -d }, { w, -h, -d }, { w, -h, d }, { -w, -h, d } };
 
-                if (c[sp[0]][1] == grid.level && c[sp[1]][1] == grid.level && c[sp[2]][1] == grid.level)
-                    continue;
-                for (k = 0; k < 3; k++)
-                    memcpy(tri[k], c[sp[k]], sizeof tri[k]);
-                normal_of(tri[0], tri[1], tri[2], n);
-                if (n[1] > 0)                   /* outward: up (y is down) */
-                    for (k = 0; k < 3; k++)
-                        n[k] = -n[k];
-                if (nv + 64 > ROLL_VERTICES) {
-                    fx_draw_land(v, nv);
-                    nv = 0;
-                }
-                land_face((const double (*)[3])tri, 3, n, cls, eye, m, v, &nv, ROLL_VERTICES);
-            }
+        n = city_quad(v, n, (const float (*)[3])roof, c[4]);
+    }
+    return n;
+}
+
+typedef struct {
+    float z;
+    nshvc_instance in;
+} CityInstance;
+
+static int city_nearer(const void *a, const void *b)
+{
+    float x = ((const CityInstance *)a)->z, y = ((const CityInstance *)b)->z;
+
+    return x < y ? -1 : x > y;
+}
+
+static void city_draw(unsigned course, const double eye[3], const double m[9])
+{
+    static const uint8_t entry[6] = { 8, 7, 6, 5, 9, 10 };
+    static nshvc_mesh_vertex v[6 * 2048];
+    static CityInstance in[CITY_KINDS][CITY_MOST];
+    static nshvc_instance sorted[CITY_MOST];
+    uint32_t colour[6], count[CITY_KINDS] = { 0 }, k, i;
+    nshvc_view view;
+    float side[4][3];
+    int b, changed = 0;
+
+    if (city.course != (int)course)
+        city_make(course);
+    for (k = 0; k < 6; k++) {               /* the backdrop's colours as the screen shows them */
+        colour[k] = rgb_of(fx_draw_full_colour() ? pic.palette[entry[k]] : course_day_colour(g.course, entry[k]));
+        changed |= colour[k] != city.colour[k];
+    }
+    for (k = 0; k < CITY_KINDS; k++)
+        changed |= !city.mesh[k].id;
+    if (changed) {                          /* the meshes in the colours now (each made the first time at its size) */
+        memcpy(city.colour, colour, sizeof colour);
+        for (k = 0; k < CITY_KINDS; k++) {
+            city.vertices[k] = city_mesh((int)k, colour, v);
+            if (!city.mesh[k].id)
+                city.mesh[k] = nshvc_mesh_create(city.vertices[k]);
+            if (city.mesh[k].id)
+                nshvc_mesh_write(city.mesh[k], v, city.vertices[k]);
         }
-    fx_draw_land(v, nv);
+    }
+    land_view(eye, m, &view, side);
+    for (b = 0; b < city.n; b++) {
+        const float *at = city.b[b].at;
+        int kind = city.b[b].kind;
+        double s = city.b[b].size, h = city_shape[kind].h * s, w = city_shape[kind].w * s, d = city_shape[kind].d * s;
+        double c[3] = { at[0], at[1] - h / 2, at[2] }, vv[3], r = 0.5 * sqrt(w * w + d * d + h * h);
+
+        if (!land_sphere_seen(eye, m, (const float (*)[3])side, c, r, vv))
+            continue;
+        in[kind][count[kind]].z = (float)vv[2];
+        in[kind][count[kind]].in.x = at[0], in[kind][count[kind]].in.y = at[1], in[kind][count[kind]].in.z = at[2];
+        in[kind][count[kind]].in.size = (float)s;
+        count[kind]++;
+    }
+    for (k = 0; k < CITY_KINDS; k++) {
+        if (!count[k] || !city.mesh[k].id || !city.vertices[k])
+            continue;
+        qsort(in[k], count[k], sizeof in[k][0], city_nearer);
+        for (i = 0; i < count[k]; i++)
+            sorted[i] = in[k][i].in;
+        fx_draw_mesh(city.mesh[k], &view, sorted, count[k]);
+    }
 }
 
 static void land_polygons(unsigned course, int cls, const double eye[3], const double m[9])
@@ -2196,9 +2299,9 @@ static void land_polygons(unsigned course, int cls, const double eye[3], const d
             land_face((const double (*)[3])range.top[i], SIDES, up_world, cls, eye, m, v, &nv, LAND_VERTICES);
     }
     fx_draw_land(v, nv);
-    /* rolling ground round the course */
-    if (surface[course].roll && grid.nx)
-        roll_draw(course, cls, eye, m);
+    /* a city round the course */
+    if (surface[course].city && grid.nx)
+        city_draw(course, eye, m);
     /* the course's own trees round it (one player's pictures, once the
        race has drawn one of its trees) */
     if (surface[course].forest && !surface[course].flat && !mesas && fx_draw_full_colour() && fx_solid_forest_ready())
@@ -2467,7 +2570,7 @@ void fx_ground_draw(void)
         range.course = -1;
         fill.course = -1;
         forest.course = -1;
-        roll.course = -1;
+        city.course = -1;
     }
     /* land: none in a tunnel (bit 3 of $0DA5, which the tunnel's gates set
        and clear: the original turns the backdrop's colours black there, so
