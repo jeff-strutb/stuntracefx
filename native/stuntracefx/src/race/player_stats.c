@@ -6,7 +6,10 @@
  * Not converted, nothing reaches them: RaceXPressPlayer1 and 2 (the test
  * before them loads 0 after its BIT), PlayerOnePhaseReturn.
  */
+#include <math.h>
+
 #include "audio/sound.h"
+#include "data/cart.h"
 #include "data/race_tables.h"
 #include "hud/hud.h"
 #include "object/object.h"
@@ -47,6 +50,84 @@ void SpeedSampleAdd(uint16_t speed, int player)
     }
     g.speed_total[player] = sum;
     g.speed_count[player]++;
+}
+
+/*
+ * How far a player's car has gone in the race, in laps: the laps it has
+ * done (+$7A) and its share of the lap it is on, by the course's segment
+ * table (the chip's, fx_course.c: its bank the byte at $70:1094, its
+ * address the word at $70:1092; a count, then 8-byte entries of x, y, z
+ * and a word, segment 1 first and the last followed by the first). The
+ * lap runs from segment 1 round to it again; its length the sum of the
+ * straight lines from each segment to the next, and the car is the way
+ * along the line from the segment it was last counted through (+$86) to
+ * the next that its place lies, projected onto it. A segment is counted
+ * once the car is nearer it than the one before, before reaching it, so
+ * while the car's place lies short of the counted segment it is along
+ * the line before (on segment 1, the lap before: the lap is counted with
+ * it), and the share goes on smoothly through every segment and the line.
+ * 0 with no course table or car.
+ */
+#define RACE_SEGMENTS 1024
+
+static double along(const int16_t *sx, const int16_t *sz, int from, int to, double x, double z)
+{
+    double dx = sx[to] - sx[from], dz = sz[to] - sz[from], l2 = dx * dx + dz * dz;
+
+    return l2 > 0 ? ((x - sx[from]) * dx + (z - sz[from]) * dz) / l2 : 0;
+}
+
+double PlayerRaceProgress(int player)
+{
+    static uint16_t made_table;
+    static uint8_t made_bank;
+    static int n;
+    static int16_t sx[RACE_SEGMENTS + 1], sz[RACE_SEGMENTS + 1];
+    static double start[RACE_SEGMENTS + 2], length[RACE_SEGMENTS + 1], lap;
+    uint16_t rec = fx16(player ? FXIN_PLAYER2_RECORD : FXIN_PLAYER1_RECORD), table = fx16(0x1092), laps;
+    uint8_t bank = (uint8_t)fx16(0x1094);
+    double x, z, t, d;
+    int k, i;
+
+    if (!rec || !table)
+        return 0;
+    if (table != made_table || bank != made_bank) {
+        made_table = table, made_bank = bank;
+        n = cart16(bank, table);
+        if (n > RACE_SEGMENTS)
+            n = RACE_SEGMENTS;
+        for (i = 1; i <= n; i++) {
+            sx[i] = (int16_t)cart16(bank, (uint16_t)(table + 2 + (i - 1) * 8));
+            sz[i] = (int16_t)cart16(bank, (uint16_t)(table + 2 + (i - 1) * 8 + 4));
+        }
+        start[1] = 0;
+        for (i = 1; i <= n; i++) {
+            int next = i == n ? 1 : i + 1;
+            double dx = sx[next] - sx[i], dz = sz[next] - sz[i];
+
+            length[i] = sqrt(dx * dx + dz * dz);
+            start[i + 1] = start[i] + length[i];
+        }
+        lap = n ? start[n + 1] : 0;
+    }
+    laps = rec_get(rec, FXREC_LAPS);
+    k = rec_get(rec, FXREC_COUNTED);
+    if (n < 2 || lap <= 0 || k < 1 || k > n)
+        return laps;
+    x = (int16_t)rec_get(rec, FXREC_POS_X);
+    z = (int16_t)rec_get(rec, FXREC_POS_Z);
+    t = along(sx, sz, k, k == n ? 1 : k + 1, x, z);
+    if (t >= 0) {
+        d = start[k] + (t > 1 ? 1 : t) * length[k];
+    } else {
+        int before = k == 1 ? n : k - 1;
+
+        t = along(sx, sz, before, k, x, z);
+        d = start[before] + (t < 0 ? 0 : t > 1 ? 1 : t) * length[before];
+        if (k == 1)
+            d -= lap;
+    }
+    return laps + d / lap;
 }
 
 /*

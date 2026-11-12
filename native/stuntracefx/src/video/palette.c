@@ -5,10 +5,12 @@
  * 0 to $2F and $B0 to $BF, the three "kept" ones $E1 to $E3, and each player's
  * flash at $E4 on.
  */
+#include <math.h>
 #include <string.h>
 
 #include "audio/sound.h"
 #include "data/video_tables.h"
+#include "race/race.h"
 #include "system/game.h"
 #include "system/state.h"
 #include "video/picture.h"
@@ -348,11 +350,50 @@ void CoursePaletteCycle(void)
 
 /* ---- the race's colour work each frame ---- */
 
+/* King's Forest's fog (Jeff, 2026-11-12): the original keeps it at its
+   amount, 15 of 31 toward white, and its backdrop's colours at their
+   misty set, until a gate a way into lap 2 (ObjectSlideGateStep) takes
+   the white off at once and turns the backdrop to its clear set (its
+   other set, by the weather) over some seconds. Instead the fog goes
+   smoothly with the race, whole at the start of lap 1 and gone at the
+   start of lap 3: with the share f of it left (1 less the furthest the
+   player's car has gone, in laps, halved; PlayerRaceProgress), the white
+   is f of FOG_KING (target 0x7FFF, as the HUD sets it) and the weather
+   1 - f of 32 (its last, the clear set whole), the two at once. Each is a
+   whole step of the palette's blend, a 32nd at most of a colour's way,
+   so each part of each colour moves a level of its 31 at a time. Set each
+   frame here, before the colours are made from them (HudColourStep), so
+   the gates' slide and fade, which still run, change nothing. One
+   player's race (two players' colours are made elsewhere: as before). */
+#define FOG_KING 0x0F
+static double fog_furthest;
+
+static void fog_by_laps(void)
+{
+    double p = PlayerRaceProgress(0), f;
+
+    if (p > fog_furthest)
+        fog_furthest = p;
+    f = 1 - fog_furthest / 2;
+    f = f < 0 ? 0 : f > 1 ? 1 : f;
+    palettes.target = 0x7FFF;
+    palettes.amount = (uint16_t)lround(FOG_KING * f);
+    palettes.weather = (uint16_t)lround(32 * (1 - f));
+}
+
 /* The fog's amount toward the target, moved by the request. */
 static void amount_step(void)
 {
     uint16_t r = palettes.blend_request;
 
+    if (g.course == 4 && !g.split_screen) {
+        if (r)
+            fog_furthest = 0;           /* the race's start: the fog settling to its amount, below */
+        else {
+            fog_by_laps();
+            return;
+        }
+    }
     if (!r)
         return;
     if (r & 0x8000) {
@@ -363,7 +404,7 @@ static void amount_step(void)
         return;
     }
     if (g.course == 6 || g.course == 4) {
-        uint16_t least = g.course == 6 ? 0x0A : 0x0F, a = (uint16_t)(palettes.amount - 3);
+        uint16_t least = g.course == 6 ? 0x0A : FOG_KING, a = (uint16_t)(palettes.amount - 3);
 
         if (a >= least) {
             palettes.amount = a;

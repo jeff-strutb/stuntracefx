@@ -187,6 +187,8 @@ void TryUsed(void);             /* 07:EE11: a try used at a race's end */
 /* player_stats.c */
 void SpeedSampleAdd(uint16_t speed, int player);
 void PlayerStatsFromRecord(uint16_t rec, int player);
+/* how far a player's car has gone in the race, in laps (player_stats.c) */
+double PlayerRaceProgress(int player);
 void PlayerStatsAndPaletteAnimate(void);
 void RaceSoundsPlayer1(void);
 void RaceSoundsPlayer2(void);
