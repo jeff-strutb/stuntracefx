@@ -166,7 +166,10 @@ static const struct {
                                            crosses no water (none of its faces is a level textured one, a
                                            dump of 2026-11-12), so the lake is at the lowest place its
                                            shapes meet the ground, where the road never goes under it */
-    [0x09] = { SURF_ROCK, 0, 0, 0, 0, 0, 0, 0 },    /* the wild-west desert: red rock, its band green */
+    [0x09] = { SURF_ROCK, 0, CLS_ROCK, 0, 0, 0, 0, 0 }, /* Big Ravine, the wild-west canyon: Sunset Valley's land (mesas,
+                                           the rock filling its empty space, rock round its tunnels) in its
+                                           own rock's run (its walls 90,49,0 to 41,8,0; the survey's 5
+                                           shades) */
     [0x0A] = { SURF_NONE, 0, 0, 0, 0, 0, 0, 0 },    /* Sky Ramp */
     [0x0B] = { SURF_WATER, -3840, 0, 0, 0, 0, 0, 0 }, /* the night harbour: where its lowest road's (-4480) pieces end */
     [0x0C] = { SURF_DIRT, 0, 0, 0, 0, 0, 0, 0 },    /* the stunt arenas: dirt, grass, ice, water */
