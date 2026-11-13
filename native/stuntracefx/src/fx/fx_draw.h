@@ -141,6 +141,22 @@ void fx_draw_layer(int layer);
    frame program calls it once the solid 3D is drawn, before the weather
    and the effects, which are drawn over it where they are nearer. */
 void fx_draw_water(void);
+/* Seen through (fx_draw.c, "seen through": Jeff, 2026-11-13): while the
+   view has a focus (the player's car, race/overhead.c), what is drawn from
+   now on is a piece known by `key` (0: none, as the cars): what of it hides
+   the car is seen through about it once the world is drawn. */
+void fx_draw_piece(uint32_t key);
+/* A mesh's instances (fx_draw_mesh), each a piece of its own, known by its
+   place and `kind`: its sphere `lift` of its size over its place, `radius`
+   of its size round; one that hides the player's car drawn on its own,
+   seen through about it. */
+void fx_draw_mesh_seen(nshvc_mesh mesh, const nshvc_view *view, const nshvc_instance *in, uint32_t count, float lift,
+                       float radius, uint32_t kind);
+/* the pieces' kinds and keys that are not objects (an object's key is its
+   slot + 1): the land's (fx_ground.c), its meshes' kinds (below $80) */
+enum { FX_PIECE_KIND_FOREST = 0x10, FX_PIECE_KIND_CITY = 0x20, FX_PIECE_KIND_CLOUD = 0x40 };
+#define FX_PIECE_MOUNTAINS 0x40000001u
+#define FX_PIECE_FILL 0x40000002u
 /* The ground under view-space point p (docs/stuntracefx/native/DEPTH.md, 5):
    of the faces this picture has drawn that are not a car's and face up or
    down (up the world's up in view space), the topmost that the line from

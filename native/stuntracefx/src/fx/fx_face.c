@@ -163,6 +163,14 @@ void fx_face_object(uint16_t record)
                                       fx_far_shift()) : 0;     /* its view-space Z, as fx_ground.c reads a record's */
     seat_now.car = 0;
     seat_now.tyre = 0;
+    {
+        /* a piece that may be seen through about the player's car, known by
+           its object (fx_draw.c); no car's */
+        int tyre;
+        uint16_t object = record ? fx_far_object(record) : 0;
+
+        fx_draw_piece(object && !(record ? fx_far_car(record, &tyre) : 0) ? object : 0);
+    }
     if (!fx_far_exact_place(record, rel, &in_view) || !view_of(object_now.view))
         return;
     for (j = 0; j < 3; j++) {

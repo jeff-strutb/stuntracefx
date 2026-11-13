@@ -2296,7 +2296,11 @@ static void city_draw(unsigned course, const double eye[3], const double m[9])
         qsort(in[k], count[k], sizeof in[k][0], city_nearer);
         for (i = 0; i < count[k]; i++)
             sorted[i] = in[k][i].in;
-        fx_draw_mesh(city.mesh[k], &view, sorted, count[k]);
+        /* each building seen through about the player's car where it hides
+           it: its sphere half its height up, as land_sphere_seen's */
+        fx_draw_mesh_seen(city.mesh[k], &view, sorted, count[k], city_shape[k].h / 2,
+                          0.5f * sqrtf(city_shape[k].w * city_shape[k].w + city_shape[k].d * city_shape[k].d
+                                       + city_shape[k].h * city_shape[k].h), FX_PIECE_KIND_CITY + k);
     }
 }
 
@@ -2508,7 +2512,9 @@ static void clouds_draw(unsigned course, int cls, double deck, const double eye[
         qsort(in[k], count[k], sizeof in[k][0], city_nearer);
         for (i = 0; i < count[k]; i++)
             sorted[i] = in[k][i].in;
-        fx_draw_mesh(clouds.mesh[slot][k], &view, sorted, count[k]);
+        /* each bank seen through about the player's car where it hides it:
+           its sphere as land_sphere_seen's */
+        fx_draw_mesh_seen(clouds.mesh[slot][k], &view, sorted, count[k], 0.15f, 0.65f, FX_PIECE_KIND_CLOUD + k);
     }
 }
 
@@ -2532,7 +2538,10 @@ static void land_polygons(unsigned course, int cls, const double eye[3], const d
     ground_now = face_colour(cls, up, up_world, 1);
     fx_draw_depth_class(FX_DEPTH_GROUND);       /* the ground: behind all the 3D (fx_ground_draw) */
     plane_vertices(plane_y, ground_now, eye, m, v, &nv, LAND_VERTICES);
+    fx_draw_land(v, nv);
+    nv = 0;
     fx_draw_depth_class(FX_DEPTH_COURSE);
+    fx_draw_piece(FX_PIECE_MOUNTAINS);             /* seen through about the player's car where they hide it (fx_draw.c) */
     /* the mountains' or mesas' faces that look toward the eye, their bases
        on the plane (none on a flat course) */
     for (i = 0; i < (surface[course].flat ? 0 : MOUNTAINS); i++) {
@@ -2579,6 +2588,7 @@ static void land_polygons(unsigned course, int cls, const double eye[3], const d
             land_face((const double (*)[3])range.top[i], SIDES, up_world, cls, eye, m, v, &nv, LAND_VERTICES);
     }
     fx_draw_land(v, nv);
+    fx_draw_piece(0);
     /* a city round the course */
     if (surface[course].city && grid.nx)
         city_draw(course, eye, m);
@@ -2604,7 +2614,9 @@ static void land_polygons(unsigned course, int cls, const double eye[3], const d
         if (fill.course != (int)course)
             fill_make(course);
         fill_faces(course, cls, plane_y, eye, m, fv, &nf, FILL_VERTICES);
+        fx_draw_piece(FX_PIECE_FILL);
         fx_draw_land(fv, nf);
+        fx_draw_piece(0);
     }
 }
 

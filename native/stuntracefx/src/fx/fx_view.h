@@ -32,6 +32,11 @@ typedef struct {
        the game's places wrap at (g's view place is its low 16 bits, which
        a near record's place from it, in 16 bits, needs no more of) */
     int32_t eye[3];
+    /* the player's car's place in view space (race/overhead.c: the view's
+       centre on it, `focus` along the axis), for the pieces seen through
+       about it (fx_draw.c, "seen through"); focus_on 0: none */
+    int focus_on;
+    double focus[3];
 } FxView;
 
 void fx_view_set(const FxView *v);
@@ -46,5 +51,7 @@ void fx_view_light_vector(double l[3]);
 uint16_t fx_view_depth(uint16_t depth);
 /* while a view is set: 1 and its place in the world, whole; else 0 */
 int fx_view_eye(int32_t eye[3]);
+/* while a view with a focus is set: 1 and the focus in view space; else 0 */
+int fx_view_focus(double p[3]);
 
 #endif

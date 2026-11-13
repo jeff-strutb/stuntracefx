@@ -41,7 +41,17 @@ typedef struct {
     uint8_t layer;              /* faces on one plane: how many layers in front of the first (DEPTH.md, 3) */
     uint8_t back;               /* a face seen from behind: behind a face facing the eye at the same depth */
     uint8_t keep;               /* see-through (the water): tested against the depth, not written */
+    uint16_t piece;             /* the piece it is of (its recording's pieces, + 1; 0 none): seen through */
+    uint8_t fade;               /* drawn seen through about the player's car, at this fade (of 255); 0 not */
+    float fade_z;               /* then its depth, for the order (the farthest first) */
 } Shape;
+
+/* A piece of the world that may hide the player's car (seen through, below) */
+typedef struct {
+    uint32_t key;               /* what it is known by from picture to picture */
+    uint32_t first;             /* its first shape */
+    float fade;                 /* 0 whole to 1 as seen through as it goes */
+} Piece;
 
 /* an instanced mesh's draw: its view in the recording's pixels (cx, cy with
    the picture's place on the screen), its instances in the recording's */
@@ -69,6 +79,11 @@ typedef struct {
     MeshDraw *md;
     nshvc_instance *mi;
     uint32_t nmd, nmi, cap_md, cap_mi;
+    /* its pieces (seen through, below), the one open (+ 1; 0 none), and the
+       player's car's place and the radius about it in its pixels */
+    Piece *pc;
+    uint32_t npc, cap_pc, piece_open;
+    float see_x, see_y, see_r;
 } Recording;
 
 static nshvc_draw_list target;  /* a list drawn into directly (the checks) */
@@ -106,6 +121,11 @@ static int depth_class = FX_DEPTH_COURSE;   /* the depths of what is emitted now
 static void layers_reset(void);
 static void depth_state(nshvc_draw_list list, int layer, int back, int keep, int cull);
 static void water_last(Recording *r);
+static void piece_close(Recording *r);
+static void see_split(Recording *r);
+static void see_picture(void);
+static int see_on(void);
+static nshvc_shader fade_shader;    /* shaders/fade.shade (seen through), once loaded */
 static int water_placed;        /* this picture's water is after its solid 3D (fx_draw_water) */
 static int world_done;          /* the 3D's world is drawn (fx_draw_world_end): its text follows */
 static int held_by_view;        /* the object drawn now is placed in the view's space (fx_draw_held_by_view) */
@@ -407,8 +427,11 @@ void fx_draw_part(int hud)
         layers_reset();                 /* a picture's own faces on one plane */
     if (recording && !hud)
         horizon_of_view(recording);
-    if (recording && !hud)
+    if (recording && !hud) {
         water_placed = 0;
+        recording->npc = recording->piece_open = 0;
+        see_picture();
+    }
     if (recording && hud) {
         fx_draw_water();                /* where the frame program has not (fx_draw_water) */
         recording->hud_from = recording->ns;
@@ -420,6 +443,10 @@ void fx_draw_part(int hud)
 void fx_draw_world_end(void)
 {
     blocks_flush();                     /* a block gathered in the world is the world's */
+    if (recording) {
+        piece_close(recording);
+        see_split(recording);           /* what hides the player's car, seen through about it, last */
+    }
     world_done = 1;
 }
 
@@ -551,6 +578,9 @@ static void emit_with(const nshvc_vertex *v, uint32_t count, uint32_t image, int
     r->s[r->ns].layer = layer_now;
     r->s[r->ns].back = back_now;
     r->s[r->ns].keep = (uint8_t)(depth_class == FX_DEPTH_WATER);
+    r->s[r->ns].piece = (uint16_t)r->piece_open;
+    r->s[r->ns].fade = 0;
+    r->s[r->ns].fade_z = 0;
     if (shader)
         memcpy(r->s[r->ns].in, in, sizeof r->s[r->ns].in);
     r->ns++;
@@ -672,7 +702,7 @@ static void hud_pieces(const Recording *r, uint32_t from, uint32_t to, int playe
    magnified `zoom` times about (zx, zy) in the picture's pixels first (a
    recording's world, Recording.zoom). */
 static void mesh_scaled(nshvc_draw_list d, uint32_t mesh, const nshvc_view *pv, const nshvc_instance *in, uint32_t count,
-                        float sx, float sy, float ox, float oy, float zoom, float zx, float zy)
+                        float sx, float sy, float ox, float oy, float zoom, float zx, float zy, const nshvc_material *seen)
 {
     nshvc_view v = *pv;
     nshvc_material m;
@@ -687,6 +717,8 @@ static void mesh_scaled(nshvc_draw_list d, uint32_t mesh, const nshvc_view *pv, 
     for (k = 0; k < 3; k++)
         v.rot[k] = pv->rot[k] * sx / sy;
     memset(&m, 0, sizeof m);
+    if (seen)
+        m = *seen;
     me.id = mesh;
     nshvc_draw_mesh(d, me, &v, in, count, &m);
     perf_draw_call(count);
@@ -699,6 +731,8 @@ int fx_draw_mesh_slot(void)
     return target.id ? 4 : -1;
 }
 
+static float mesh_fade, mesh_fade_z;    /* the next mesh's fade (fx_draw_mesh_seen) */
+
 void fx_draw_mesh(nshvc_mesh mesh, const nshvc_view *view, const nshvc_instance *instances, uint32_t count)
 {
     Recording *r = recording;
@@ -708,7 +742,7 @@ void fx_draw_mesh(nshvc_mesh mesh, const nshvc_view *view, const nshvc_instance 
     blocks_flush();
     if (!r) {
         depth_state(target, 0, 0, 0, 1);
-        mesh_scaled(target, mesh.id, view, instances, count, target_sx, target_sy, (float)offset_x, (float)offset_y, 1, 0, 0);
+        mesh_scaled(target, mesh.id, view, instances, count, target_sx, target_sy, (float)offset_x, (float)offset_y, 1, 0, 0, NULL);
         return;
     }
     if (r->nmi + count > r->cap_mi) {
@@ -739,6 +773,11 @@ void fx_draw_mesh(nshvc_mesh mesh, const nshvc_view *view, const nshvc_instance 
     r->s[r->ns].mesh = mesh.id;
     r->s[r->ns].draw = r->nmd++;
     r->s[r->ns].world = in_world();
+    if (mesh_fade > 0) {                /* an instance seen through (fx_draw_mesh_seen) */
+        r->s[r->ns].fade = (uint8_t)(mesh_fade * 254.0f + 1.0f);
+        r->s[r->ns].keep = 1;
+        r->s[r->ns].fade_z = mesh_fade_z;
+    }
     r->ns++;
     r->gen++;
 }
@@ -787,6 +826,8 @@ static void depth_list(nshvc_draw_list list)
    player's, else that of two. The world's shapes of a recording drawn from
    a zoomed view (Recording.zoom) are magnified about the view's centre
    first: the same picture as a focal length of 128 zoom. */
+static void see_material(const Recording *r, const Shape *sh, nshvc_material *m);
+
 static void compose_recording(const Recording *r, uint32_t from, uint32_t to, int anchored, int player)
 {
     static nshvc_vertex *scaled;
@@ -833,18 +874,20 @@ static void compose_recording(const Recording *r, uint32_t from, uint32_t to, in
        3024 x 1964, a microsecond or so a call). Within a call the later
        triangle is drawn over the earlier at equal depths, as a later call
        is, so the picture is the same. */
-    memset(&m, 0, sizeof m);
     for (i = from; i < to; i = j) {
         const Shape *sh = &r->s[i];
         uint32_t count = sh->count;
 
+        memset(&m, 0, sizeof m);
         j = i + 1;
         depth_state(screen_list, sh->layer, sh->back, sh->keep, sh->mesh != 0);
+        if (sh->fade)
+            see_material(r, sh, &m);
         if (sh->mesh) {
             const MeshDraw *d = &r->md[sh->draw];
 
             mesh_scaled(screen_list, sh->mesh, &d->view, r->mi + d->first, d->count, screen_sx, screen_sy, 0, 0,
-                        sh->world && r->zoom > 0 ? r->zoom : 1.0f, r->zoom_x, r->zoom_y);
+                        sh->world && r->zoom > 0 ? r->zoom : 1.0f, r->zoom_x, r->zoom_y, sh->fade ? &m : NULL);
             continue;
         }
         for (; j < to; j++) {
@@ -852,18 +895,20 @@ static void compose_recording(const Recording *r, uint32_t from, uint32_t to, in
 
             if (next->mesh || next->first != sh->first + count || next->image != sh->image || next->lines != sh->lines
                 || next->shader != sh->shader || (sh->shader && memcmp(next->in, sh->in, sizeof sh->in))
-                || next->layer != sh->layer || next->back != sh->back || next->keep != sh->keep)
+                || next->layer != sh->layer || next->back != sh->back || next->keep != sh->keep || next->fade != sh->fade)
                 break;
             count += next->count;
         }
-        m.image.id = sh->image;
-        m.shader.id = sh->shader;
-        if (sh->shader)
-            memcpy(m.inputs, sh->in, sizeof m.inputs);
+        if (!sh->fade) {
+            m.image.id = sh->image;
+            m.shader.id = sh->shader;
+            if (sh->shader)
+                memcpy(m.inputs, sh->in, sizeof m.inputs);
+        }
         if (sh->lines)
-            nshvc_draw_lines(screen_list, scaled + sh->first, count, sh->image ? &m : NULL);
+            nshvc_draw_lines(screen_list, scaled + sh->first, count, sh->image || m.shader.id ? &m : NULL);
         else
-            nshvc_draw_tris(screen_list, scaled + sh->first, count, sh->image ? &m : NULL);
+            nshvc_draw_tris(screen_list, scaled + sh->first, count, sh->image || m.shader.id ? &m : NULL);
         perf_draw_call(count);
     }
 }
@@ -978,6 +1023,7 @@ void fx_op_clear(void)
         recording->nmd = recording->nmi = 0;
         recording->hud_from = 0;
         recording->gen++;
+        recording->npc = recording->piece_open = 0;
     } else if (target.id) {
         nshvc_draw_list_clear(target, target_w, target_h);
         nshvc_draw_rule(target, NSHVC_FILL_SMOOTH);
@@ -1708,6 +1754,7 @@ void fx_draw_water(void)
 {
     if (!recording || water_placed)
         return;
+    piece_close(recording);
     water_last(recording);
     water_placed = 1;
 }
@@ -1780,6 +1827,480 @@ static void water_last(Recording *r)
     r->gen++;
     free(water);
     free(add);
+}
+
+/* ---- seen through: what hides the player's car ----
+
+   Jeff, 2026-11-13, on the overhead view: "make track/terrain entities that
+   are 'above' the car - such as going under a bridge or in a tunnel - semi
+   transparent while under them so you can still see the car", and "the
+   fade should be like a sufficiently/playably sized 'radius' around the
+   player car so the entire entity doesn't go transparent just where that
+   radius is, with the radius smoothly fading back to opaque at the edges".
+
+   While a view has a focus (the player's car: race/overhead.c) and the
+   game's fade shader is in, what the frame program draws is in pieces
+   (fx_draw_piece): each object one (fx_face.c, by its object; the cars
+   none), the land's mountains one and its fill one (fx_ground.c), each
+   instance of the land's trees, buildings and clouds one
+   (fx_draw_mesh_seen). A piece hides the car when the line from the eye
+   to one of SEE_POINTS points on the car (the middle of its body; the
+   middle of its roof and four points SEE_SIDE round it, across the screen
+   and along the ground) passes through one of its triangles SEE_MARGIN or
+   more short of the point: on the screen, the point inside the triangle,
+   the triangle's depth there (z, linear across it) nearer than the
+   point's. A piece's fade rises from 0 to 1 over SEE_TIME while it hides
+   the car and falls back while it does not, kept by what it is known by
+   (its object; the land's by what it is and where it stands), so nothing
+   comes or goes at once.
+
+   Once the world is drawn (fx_draw_world_end), each triangle of a piece
+   with a fade is cut at the level plane SEE_ABOVE over the car's place
+   (along the world's up), in view space from its corners' depths (each
+   corner's place on the screen at its depth; what a corner carries is
+   linear along an edge in space): the part under it is drawn where it was,
+   the part over it after the rest of the world, farthest first, tested
+   against the depth and not written (the car and all that lies behind the
+   piece are drawn by then and show through it), through fade.shade: its
+   own colour, as much of it shown as SEE_LEAST mixed toward whole by its
+   fade within SEE_INNER of SEE_RADIUS (at the car's depth) of the car on
+   the screen, rising smoothly to whole at SEE_RADIUS. A road or floor under
+   the car stays whole, and of what hides it only what lies near it on the
+   screen is seen through. */
+
+enum { SEE_POINTS = 6, SEE_KEYS = 8192 };
+#define SEE_RADIUS 1200.0       /* about four of the car's lengths */
+#define SEE_INNER 0.6f
+#define SEE_LEAST 0.25f
+#define SEE_ABOVE 48.0
+#define SEE_TIME 0.25
+#define SEE_MARGIN 8.0
+#define SEE_BODY 70.0           /* the car's body's middle over its place */
+#define SEE_ROOF 130.0          /* its roof's (the measured cars: 130 over the tyres' middles) */
+#define SEE_SIDE 120.0          /* round the roof's middle: within the body (about 290 long) */
+
+static struct {
+    int ready, on;
+    double up[3], level;                /* the world's up in view space; the plane: up . p = level */
+    double cx, cy;                      /* the view's centre in the recording's pixels */
+    double px[SEE_POINTS], py[SEE_POINTS], pz[SEE_POINTS];  /* the points on the screen; z a face must pass */
+    double p[SEE_POINTS][3];            /* in view space */
+} see;
+static double see_now;                  /* the picture's time (nshvc_seconds) */
+static struct {
+    uint32_t key;
+    float fade;
+    double t;
+} see_mem[SEE_KEYS];
+
+/* a new picture's 3D: the car's points made when first wanted */
+static void see_picture(void)
+{
+    see.ready = 0;
+    see.on = 0;
+    see_now = nshvc_seconds();
+}
+
+static int see_on(void)
+{
+    static int loaded;
+    double f[3], fg[3], len, m[9];
+    Recording *r = recording;
+    int i, k;
+
+    if (see.ready)
+        return see.on;
+    see.ready = 1;
+    see.on = 0;
+    if (!r || !drawing_3d || !fx_view_focus(f) || f[2] <= SEE_RADIUS)
+        return 0;
+    if (!loaded) {
+        fade_shader = nshvc_shader_load("fade");
+        loaded = 1;
+    }
+    if (!fade_shader.id)
+        return 0;
+    /* the view's turn (FX $00E4: row k world axis k in view space): world
+       y is down, so the world's up is minus row 1 */
+    for (i = 0; i < 9; i++)
+        m[i] = (int16_t)(fx_ram[0x00E4 + 2 * i] | fx_ram[0x00E5 + 2 * i] << 8) / 32768.0;
+    for (k = 0; k < 3; k++)
+        see.up[k] = -m[3 + k];
+    len = sqrt(see.up[0] * see.up[0] + see.up[1] * see.up[1] + see.up[2] * see.up[2]);
+    if (len <= 0)
+        return 0;
+    for (k = 0; k < 3; k++)
+        see.up[k] /= len;
+    /* along the ground away from the eye: the view's axis less its up */
+    for (k = 0; k < 3; k++)
+        fg[k] = (k == 2) - see.up[2] * see.up[k];
+    len = sqrt(fg[0] * fg[0] + fg[1] * fg[1] + fg[2] * fg[2]);
+    for (k = 0; k < 3; k++)
+        fg[k] = len > 0 ? fg[k] / len : 0;
+    see.cx = (int16_t)(fx_ram[0x0034] | fx_ram[0x0035] << 8) + r->ox;
+    see.cy = (int16_t)(fx_ram[0x0036] | fx_ram[0x0037] << 8) + r->oy;
+    for (i = 0; i < SEE_POINTS; i++) {
+        /* 0 the body's middle, 1 the roof's, 2-5 round it */
+        double h = i ? SEE_ROOF : SEE_BODY, a = i == 2 ? SEE_SIDE : i == 3 ? -SEE_SIDE : 0;
+        double b = i == 4 ? SEE_SIDE : i == 5 ? -SEE_SIDE : 0;
+
+        for (k = 0; k < 3; k++)
+            see.p[i][k] = f[k] + h * see.up[k] + a * (k == 0) + b * fg[k];
+        if (see.p[i][2] <= SEE_MARGIN + 1.0)
+            return 0;
+        see.px[i] = see.cx + 128.0 * see.p[i][0] / see.p[i][2];
+        see.py[i] = see.cy + 128.0 * see.p[i][1] / see.p[i][2];
+        see.pz[i] = DEPTH_NEAR / (see.p[i][2] - SEE_MARGIN);
+    }
+    see.level = see.up[0] * f[0] + see.up[1] * f[1] + see.up[2] * f[2] + SEE_ABOVE;
+    r->see_x = (float)(see.cx + 128.0 * f[0] / f[2]);
+    r->see_y = (float)(see.cy + 128.0 * f[1] / f[2]);
+    r->see_r = (float)(128.0 * SEE_RADIUS / f[2]);
+    see.on = 1;
+    return 1;
+}
+
+/* a piece's fade now, from whether it hides the car */
+static float see_fade(uint32_t key, int hides)
+{
+    uint32_t h = (key * 2654435761u) >> 19, i, k, at = SEE_KEYS;
+    double oldest = 1e300, dt;
+
+    for (i = 0; i < 16; i++) {
+        k = (h + i) % SEE_KEYS;
+        if (see_mem[k].key == key || !see_mem[k].key) {
+            at = k;
+            break;
+        }
+        if (see_mem[k].t < oldest) {
+            oldest = see_mem[k].t;
+            at = k;
+        }
+    }
+    if (see_mem[at].key != key || see_now - see_mem[at].t > 1.0) {
+        see_mem[at].key = key;          /* new, or not seen for a second: from whole */
+        see_mem[at].fade = 0;
+        see_mem[at].t = see_now;
+    }
+    dt = see_now - see_mem[at].t;
+    dt = dt < 0 ? 0 : dt > 0.1 ? 0.1 : dt;
+    see_mem[at].fade += (float)((hides ? dt : -dt) / SEE_TIME);
+    see_mem[at].fade = see_mem[at].fade < 0 ? 0 : see_mem[at].fade > 1 ? 1 : see_mem[at].fade;
+    see_mem[at].t = see_now;
+    return see_mem[at].fade;
+}
+
+/* whether a triangle on the screen (x, y, z) hides one of the car's points */
+static int tri_hides(const nshvc_vertex *a, const nshvc_vertex *b, const nshvc_vertex *c)
+{
+    double area = (b->x - a->x) * (c->y - a->y) - (b->y - a->y) * (c->x - a->x);
+    int i;
+
+    if (area == 0)
+        return 0;
+    for (i = 0; i < SEE_POINTS; i++) {
+        double x = see.px[i], y = see.py[i];
+        double wa = ((b->x - x) * (c->y - y) - (b->y - y) * (c->x - x)) / area;
+        double wb = ((c->x - x) * (a->y - y) - (c->y - y) * (a->x - x)) / area;
+        double wc = 1.0 - wa - wb;
+
+        if (wa < 0 || wb < 0 || wc < 0)
+            continue;
+        if (wa * a->z + wb * b->z + wc * c->z > see.pz[i])
+            return 1;
+    }
+    return 0;
+}
+
+/* whether the shapes [from, to) hide the car */
+static int shapes_hide(const Recording *r, uint32_t from, uint32_t to)
+{
+    uint32_t i, t;
+
+    for (i = from; i < to; i++) {
+        const Shape *sh = &r->s[i];
+
+        if (sh->mesh || sh->lines || sh->keep || sh->shader || !sh->world)
+            continue;
+        for (t = 0; t + 2 < sh->count; t += 3)
+            if (tri_hides(&r->v[sh->first + t], &r->v[sh->first + t + 1], &r->v[sh->first + t + 2]))
+                return 1;
+    }
+    return 0;
+}
+
+static void piece_close(Recording *r)
+{
+    Piece *p;
+
+    if (!r->piece_open)
+        return;
+    p = &r->pc[r->piece_open - 1];
+    p->fade = see_fade(p->key, shapes_hide(r, p->first, r->ns));
+    r->piece_open = 0;
+}
+
+void fx_draw_piece(uint32_t key)
+{
+    Recording *r = recording;
+
+    if (!r)
+        return;
+    piece_close(r);
+    if (!key || !see_on())
+        return;
+    if (r->npc == r->cap_pc) {
+        r->cap_pc = r->cap_pc ? r->cap_pc * 2 : 256;
+        r->pc = realloc(r->pc, r->cap_pc * sizeof *r->pc);
+        if (!r->pc)
+            abort();
+    }
+    r->pc[r->npc].key = key;
+    r->pc[r->npc].first = r->ns;
+    r->pc[r->npc].fade = 0;
+    r->npc++;
+    r->piece_open = r->npc;
+}
+
+void fx_draw_mesh_seen(nshvc_mesh mesh, const nshvc_view *view, const nshvc_instance *in, uint32_t count, float lift,
+                       float radius, uint32_t kind)
+{
+    static nshvc_instance *whole;
+    static uint32_t cap;
+    uint32_t i, n = 0;
+    int j, k;
+
+    if (!see_on()) {
+        fx_draw_mesh(mesh, view, in, count);
+        return;
+    }
+    whole = grown(whole, &cap, count, sizeof *whole);
+    for (i = 0; i < count; i++) {
+        /* its sphere in view space: its place `lift` of its size up the
+           world (y is down), `radius` of its size round */
+        double w[3] = { in[i].x, in[i].y - lift * in[i].size, in[i].z }, c[3], rr = radius * in[i].size;
+        uint32_t key = 0x80000000u | (kind & 0x7F) << 24
+                       | (((uint32_t)lround(in[i].x) * 73856093u ^ (uint32_t)lround(in[i].z) * 19349663u) & 0xFFFFFFu);
+        int hides = 0;
+        float fade;
+
+        for (k = 0; k < 3; k++)
+            c[k] = view->rot[3 * k] * (w[0] - view->eye[0]) + view->rot[3 * k + 1] * (w[1] - view->eye[1])
+                   + view->rot[3 * k + 2] * (w[2] - view->eye[2]);
+        for (j = 0; j < SEE_POINTS && !hides; j++) {
+            /* the line t p from the eye (t 0) to point j (t 1) meets the
+               sphere from t0 - h to t0 + h, t0 its nearest to the middle */
+            const double *p = see.p[j];
+            double len = sqrt(p[0] * p[0] + p[1] * p[1] + p[2] * p[2]);
+            double t0 = (c[0] * p[0] + c[1] * p[1] + c[2] * p[2]) / (len * len), d2 = 0;
+
+            for (k = 0; k < 3; k++)
+                d2 += (c[k] - t0 * p[k]) * (c[k] - t0 * p[k]);
+            if (d2 <= rr * rr) {
+                double h = sqrt(rr * rr - d2) / len;
+
+                hides = t0 + h > 0 && t0 - h < 1.0 - SEE_MARGIN / len;
+            }
+        }
+        fade = see_fade(key, hides);
+        if (fade <= 0) {
+            whole[n++] = in[i];
+            continue;
+        }
+        mesh_fade = fade;
+        mesh_fade_z = c[2] > 1 ? (float)(DEPTH_NEAR / c[2]) : 1.0f;
+        fx_draw_mesh(mesh, view, &in[i], 1);
+        mesh_fade = 0;
+    }
+    if (n)
+        fx_draw_mesh(mesh, view, whole, n);
+}
+
+/* a triangle cut at the plane over the car: its corners in view space
+   from their places on the screen and depths */
+static void corner_at(const nshvc_vertex *v, double p[3])
+{
+    double Z = DEPTH_NEAR / v->z;
+
+    p[0] = (v->x - see.cx) * Z / 128.0;
+    p[1] = (v->y - see.cy) * Z / 128.0;
+    p[2] = Z;
+}
+
+static nshvc_vertex corner_between(const nshvc_vertex *a, const nshvc_vertex *b, const double pa[3], const double pb[3], double s)
+{
+    nshvc_vertex v = *a;
+    double p[3];
+    int k;
+
+    for (k = 0; k < 3; k++)
+        p[k] = pa[k] + (pb[k] - pa[k]) * s;
+    v.x = (float)(see.cx + 128.0 * p[0] / p[2]);
+    v.y = (float)(see.cy + 128.0 * p[1] / p[2]);
+    v.z = (float)(DEPTH_NEAR / p[2]);
+    v.w = (float)(a->w + (b->w - a->w) * s);
+    v.u = (float)(a->u + (b->u - a->u) * s);
+    v.v = (float)(a->v + (b->v - a->v) * s);
+    if (a->colour != b->colour) {
+        uint32_t c = 0;
+
+        for (k = 0; k < 32; k += 8) {
+            double ca = a->colour >> k & 255, cb = b->colour >> k & 255;
+
+            c |= (uint32_t)lround(ca + (cb - ca) * s) << k;
+        }
+        v.colour = c;
+    }
+    return v;
+}
+
+/* triangle t's parts under (side 0) and over (side 1) the plane, fanned
+   into out[side] (at most 2 triangles each) */
+static void cut_at_level(const nshvc_vertex *t, nshvc_vertex out[2][6], int n[2])
+{
+    double p[3][3], h[3];
+    nshvc_vertex poly[2][4];
+    int m[2] = { 0, 0 }, i, k, side;
+
+    for (i = 0; i < 3; i++) {
+        corner_at(&t[i], p[i]);
+        h[i] = see.up[0] * p[i][0] + see.up[1] * p[i][1] + see.up[2] * p[i][2] - see.level;
+    }
+    for (i = 0; i < 3; i++) {
+        int j = (i + 1) % 3, si = h[i] > 0, sj = h[j] > 0;
+
+        poly[si][m[si]++] = t[i];
+        if (si != sj) {
+            nshvc_vertex v = corner_between(&t[i], &t[j], p[i], p[j], h[i] / (h[i] - h[j]));
+
+            poly[0][m[0]++] = v;
+            poly[1][m[1]++] = v;
+        }
+    }
+    for (side = 0; side < 2; side++) {
+        n[side] = 0;
+        for (k = 1; k + 1 < m[side]; k++) {
+            out[side][n[side]++] = poly[side][0];
+            out[side][n[side]++] = poly[side][k];
+            out[side][n[side]++] = poly[side][k + 1];
+        }
+    }
+}
+
+static int fade_order(const void *a, const void *b)
+{
+    float x = ((const Shape *)a)->fade_z, y = ((const Shape *)b)->fade_z;
+
+    return x < y ? -1 : x > y;
+}
+
+/* The pieces with a fade cut at the plane over the car, the parts over it
+   last, farthest first; and the instances seen through after them all */
+static void see_split(Recording *r)
+{
+    static Shape *out, *faded;
+    static nshvc_vertex *add;
+    static uint32_t cap_out, cap_faded, cap_add;
+    uint32_t i, t, nout = 0, nfaded = 0, nadd = 0, any = 0;
+
+    for (i = 0; i < r->npc; i++)
+        any |= r->pc[i].fade > 0;
+    for (i = 0; i < r->ns; i++)
+        any |= r->s[i].fade != 0;
+    if (!any || !see.on)
+        return;
+    out = grown(out, &cap_out, r->ns * 2 + 16, sizeof *out);
+    faded = grown(faded, &cap_faded, r->ns * 2 + 16, sizeof *faded);
+    for (i = 0; i < r->ns; i++) {
+        const Shape *sh = &r->s[i];
+        float fade = sh->piece && sh->piece <= r->npc ? r->pc[sh->piece - 1].fade : 0;
+        Shape under, over;
+        double zsum = 0;
+        uint32_t zn = 0;
+
+        if (sh->fade) {                 /* an instance seen through */
+            faded[nfaded++] = *sh;
+            continue;
+        }
+        if (fade <= 0 || sh->mesh || sh->lines || sh->keep || sh->shader || !sh->world || sh->count < 3) {
+            out[nout++] = *sh;
+            continue;
+        }
+        under = over = *sh;
+        add = grown(add, &cap_add, nadd + sh->count * 4, sizeof *add);
+        under.first = nadd;
+        under.count = 0;
+        for (t = 0; t + 2 < sh->count; t += 3) {
+            nshvc_vertex part[2][6];
+            int n[2], k;
+
+            cut_at_level(&r->v[sh->first + t], part, n);
+            for (k = 0; k < n[0]; k++)
+                add[nadd++] = part[0][k];
+            under.count += (uint32_t)n[0];
+        }
+        over.first = nadd;
+        over.count = 0;
+        for (t = 0; t + 2 < sh->count; t += 3) {
+            nshvc_vertex part[2][6];
+            int n[2], k;
+
+            cut_at_level(&r->v[sh->first + t], part, n);
+            for (k = 0; k < n[1]; k++) {
+                add[nadd++] = part[1][k];
+                zsum += part[1][k].z;
+                zn++;
+            }
+            over.count += (uint32_t)n[1];
+        }
+        if (under.count) {
+            under.first |= 0x80000000u;  /* in `add` until it is in the recording's */
+            out[nout++] = under;
+        }
+        if (over.count) {
+            over.first |= 0x80000000u;
+            over.keep = 1;
+            over.fade = (uint8_t)(fade * 254.0f + 1.0f);
+            over.fade_z = (float)(zsum / zn);
+            faded[nfaded++] = over;
+        }
+    }
+    if (!nfaded)
+        return;
+    qsort(faded, nfaded, sizeof *faded, fade_order);
+    /* the vertices made, after the recording's own */
+    r->v = grown(r->v, &r->cap_v, r->nv + nadd, sizeof *r->v);
+    memcpy(r->v + r->nv, add, nadd * sizeof *add);
+    r->s = grown(r->s, &r->cap_s, nout + nfaded, sizeof *r->s);
+    for (i = 0; i < nout + nfaded; i++) {
+        Shape sh = i < nout ? out[i] : faded[i - nout];
+
+        if (sh.first & 0x80000000u)
+            sh.first = (sh.first & 0x7FFFFFFFu) + r->nv;
+        r->s[i] = sh;
+    }
+    r->nv += nadd;
+    r->ns = nout + nfaded;
+    r->gen++;
+}
+
+/* a shape seen through: fade.shade's inputs, the car's place and the
+   radius in the list's pixels (as compose_recording scales the world) */
+static void see_material(const Recording *r, const Shape *sh, nshvc_material *m)
+{
+    float zoom = sh->world && r->zoom > 0 ? r->zoom : 1.0f;
+    float x = r->zoom_x + (r->see_x - r->zoom_x) * zoom, y = r->zoom_y + (r->see_y - r->zoom_y) * zoom;
+    float fade = (sh->fade - 1) / 254.0f;
+
+    memset(m, 0, sizeof *m);
+    m->image.id = sh->image;
+    m->shader = fade_shader;
+    m->inputs[0] = x * screen_sx;
+    m->inputs[1] = y * screen_sy;
+    m->inputs[2] = r->see_r * zoom * screen_sx;
+    m->inputs[3] = r->see_r * zoom * screen_sy;
+    m->inputs[4] = SEE_INNER;
+    m->inputs[5] = 1.0f - fade * (1.0f - SEE_LEAST);
 }
 
 /* The ground's surface (fx_ground.c): triangles drawn by `shader` over

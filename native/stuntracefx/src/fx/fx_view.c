@@ -60,3 +60,14 @@ int fx_view_eye(int32_t eye[3])
         eye[k] = view.eye[k];
     return 1;
 }
+
+int fx_view_focus(double p[3])
+{
+    int k;
+
+    if (!on || !view.focus_on)
+        return 0;
+    for (k = 0; k < 3; k++)
+        p[k] = view.focus[k];
+    return 1;
+}

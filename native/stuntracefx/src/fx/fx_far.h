@@ -63,5 +63,8 @@ int fx_far_exact_place(uint16_t record, double rel[3], int *in_view);
    the slot `record` holds belongs to, 0 none; *tyre whether it is one of
    its tyres. */
 uint16_t fx_far_car(uint16_t record, int *tyre);
+/* While the pass draws: the object (draw_record_object) the slot `record`
+   holds, 0 none. */
+uint16_t fx_far_object(uint16_t record);
 
 #endif

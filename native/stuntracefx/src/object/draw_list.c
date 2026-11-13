@@ -54,6 +54,7 @@ static uint8_t near_drawn[OBJECT_COUNT];
 static uint8_t has_tyres[OBJECT_COUNT];
 static uint16_t record_car[2][FX_FAR_MAX];
 static uint8_t record_tyre[2][FX_FAR_MAX];
+static uint16_t record_object[2][FX_FAR_MAX];   /* each record's object: its slot + 1 */
 
 static const Object *child_car(const Object *o);
 
@@ -90,6 +91,12 @@ static void record_car_note(int far, unsigned n, const Object *o)
         return;
     record_car[far][n] = car_of(o);
     record_tyre[far][n] = child_car(o) != NULL;
+    record_object[far][n] = (uint16_t)(obj_slot(o) + 1);
+}
+
+uint16_t draw_record_object(int far, unsigned n)
+{
+    return n < FX_FAR_MAX ? record_object[far != 0][n] : 0;
 }
 
 uint16_t draw_record_car(int far, unsigned n, int *tyre)

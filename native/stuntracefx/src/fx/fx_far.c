@@ -52,6 +52,7 @@ static uint16_t slot_original[SLOTS];   /* the near record a slot holds in a pas
 static uint16_t slot_rec[SLOTS];        /* the far record a slot holds in a pass (its address in the second 64 KB); 0 none */
 static uint16_t slot_car[SLOTS];        /* the car a slot's record belongs to in the merged pass (draw_record_car); 0 none */
 static uint8_t slot_tyre[SLOTS];        /* and whether it is one of its tyres */
+static uint16_t slot_object[SLOTS];     /* and its object (draw_record_object); 0 none */
 
 static int drawing, shift_now;
 static uint16_t depth_now;
@@ -179,8 +180,9 @@ typedef struct {
     int16_t place[3];
     uint8_t shift;
     uint16_t depth;
-    uint16_t car;               /* with the depth test: its car (draw_record_car), 0 none */
+    uint16_t car;               /* its car (draw_record_car), 0 none */
     uint8_t tyre;
+    uint16_t object;            /* its object (draw_record_object), 0 none */
     int64_t car_key;            /* its car's farthest part's key, the cars' order */
 } Merged;
 
@@ -231,6 +233,7 @@ static void merged_pass(uint16_t *stack)
 
             e[n].car = draw_record_car(0, (uint16_t)(slot - SLOT_FIRST) / SLOT_SIZE, &tyre);
             e[n].tyre = (uint8_t)tyre;
+            e[n].object = draw_record_object(0, (uint16_t)(slot - SLOT_FIRST) / SLOT_SIZE);
         }
         e[n].far = 0;
         e[n].at = (unsigned)(uint16_t)(slot - SLOT_FIRST) / SLOT_SIZE;
@@ -247,6 +250,7 @@ static void merged_pass(uint16_t *stack)
         e[n].key = parked[j].key;
         e[n].car = draw_record_car(1, (uint16_t)(parked[j].rec - FX_FAR_RECORDS) / FX_FAR_SIZE, &tyre);
         e[n].tyre = (uint8_t)tyre;
+        e[n].object = draw_record_object(1, (uint16_t)(parked[j].rec - FX_FAR_RECORDS) / FX_FAR_SIZE);
         e[n].far = 1;
         e[n].at = j;
         e[n].seq = n;
@@ -275,6 +279,7 @@ static void merged_pass(uint16_t *stack)
         for (k = 0; k < in; k++) {
             slot_car[k] = e[b + k].car;
             slot_tyre[k] = e[b + k].tyre;
+            slot_object[k] = e[b + k].object;
             if (e[b + k].far) {
                 far_slot(k, &parked[e[b + k].at], k + 1 == in);
                 continue;
@@ -341,6 +346,16 @@ static void fx_far_record_state(uint16_t record)
     k = (uint16_t)(record - SLOT_FIRST) / SLOT_SIZE % SLOTS;
     shift_now = slot_shift[k];
     depth_now = slot_depth[k];
+}
+
+uint16_t fx_far_object(uint16_t record)
+{
+    unsigned k;
+
+    if (!drawing || (uint16_t)(record - SLOT_FIRST) % SLOT_SIZE)
+        return 0;
+    k = (uint16_t)(record - SLOT_FIRST) / SLOT_SIZE;
+    return k < SLOTS ? slot_object[k] : 0;
 }
 
 uint16_t fx_far_car(uint16_t record, int *tyre)

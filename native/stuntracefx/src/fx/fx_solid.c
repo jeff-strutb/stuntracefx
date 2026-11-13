@@ -1269,6 +1269,17 @@ void fx_solid_forest_begin(const nshvc_view *v, float left, float right, float t
 /* a tree, its trunk's foot at the world point foot, k times the course's
    tree's size: each part one instance of the level its size at its depth
    asks */
+/* a forest part's sphere's radius by its size: about its painting's
+   middle, to its widest half and its farthest row, its points moved out a
+   little (jag 1.09, rise 0.8 of a texel) */
+static float part_radius(const Solid *s, const Paint *pp)
+{
+    float t = s->texels / 2.0f, up = fabsf(pp->top - t), down = fabsf(pp->bottom + 1 - t), h = paint_half(pp);
+    float far = up > down ? up : down;
+
+    return 1.1f * sqrtf(h * h + far * far) + 1;
+}
+
 void fx_solid_forest_add(const double foot[3], float k)
 {
     const float *rot = forest_view.rot;
@@ -1294,15 +1305,7 @@ void fx_solid_forest_add(const double foot[3], float k)
             d[j] = (float)(place[part][j] - forest_view.eye[j]);
         for (j = 0; j < 3; j++)
             c[j] = rot[3 * j] * d[0] + rot[3 * j + 1] * d[1] + rot[3 * j + 2] * d[2];
-        /* its sphere about its painting's middle: to its widest half and its
-           farthest row, its points moved out a little (jag 1.09, rise 0.8 of
-           a texel) */
-        {
-            float t = s->texels / 2.0f, up = fabsf(pp->top - t), down = fabsf(pp->bottom + 1 - t), h = paint_half(pp);
-            float far = up > down ? up : down;
-
-            r = size * (1.1f * sqrtf(h * h + far * far) + 1);
-        }
+        r = size * part_radius(s, pp);      /* its sphere about its painting's middle */
         if (c[2] < forest_view.near - r)        /* wholly behind the eye */
             continue;
         for (j = 0; j < 4 && !out; j++)         /* wholly outside the view */
@@ -1358,7 +1361,10 @@ void fx_solid_forest_end(void)
                 qsort(forest_inst[part - 1][sl][rl], count, sizeof forest_inst[0][0][0][0], instance_nearer);
                 for (i = 0; i < count; i++)
                     forest_sorted[i] = forest_inst[part - 1][sl][rl][i].in;
-                fx_draw_mesh(forest_mesh[slot][part - 1][sl][rl].mesh, &forest_view, forest_sorted, count);
+                /* each part seen through about the player's car where it hides
+                   it: its sphere as fx_solid_forest_add's, about its middle */
+                fx_draw_mesh_seen(forest_mesh[slot][part - 1][sl][rl].mesh, &forest_view, forest_sorted, count, 0,
+                                  part_radius(s, pp), FX_PIECE_KIND_FOREST + (uint32_t)part);
             }
     }
 }

@@ -509,6 +509,10 @@ uint16_t draw_record_gaze(int record);
    in the chip's second 64 KB). For seating the cars on the road
    (docs/stuntracefx/native/DEPTH.md, 5). */
 uint16_t draw_record_car(int far, unsigned n, int *tyre);
+/* A draw record's object (its slot + 1; 0 none), numbered as draw_record_car
+   takes them: what a piece seen through is known by from one picture to the
+   next (fx_draw.c). */
+uint16_t draw_record_object(int far, unsigned n);
 /* after an object's handler ran (ObjectTurn): a car's child's seat on its
    car learnt, or that it was placed at its car's centre (draw_list.c) */
 void ObjectChildPlaced(const Object *o);

@@ -4,7 +4,9 @@
  * changes"; chosen with SRFX_CAMERA=overhead in the environment). On the
  * first look, from 60 degrees down and 5,000 away: "too top down and too
  * close. No sense of the track ahead or behind ... more of an isometric
- * angle, kind of like RC Pro Am but better".
+ * angle, kind of like RC Pro Am but better". On the isometric angle
+ * (2026-11-13): "make the perspective angled down more so the player can
+ * see what's coming up ahead better".
  *
  * Only the pictures change. The game's camera still runs as before and
  * everything that reads it (the trigger lists, the objects' activation,
@@ -12,19 +14,21 @@
  * the game's in a picture's part between steps (RaceViewForPicture, whose
  * state fx_tween puts back after the picture), never in a step.
  *
- * The view: the isometric one. It looks down at the isometric angle
- * (OVERHEAD_PITCH, atan(1 / sqrt 2), 35.26 degrees) and across the course's
+ * The view looks down at OVERHEAD_PITCH, 45 degrees (the isometric angle,
+ * 35.26, before), and across the course's
  * grid at 45 degrees (the heading the player's car starts the race in, to
  * the nearest quarter turn, less an eighth turn: the course's straights lie
  * on the screen's diagonals and the car first drives up and to the right),
  * fixed for the whole race, its centre on the player's car from
  * OVERHEAD_DISTANCE away, through a lens OVERHEAD_ZOOM times as long as
  * the chip's (the 3D magnified about the view's centre, fx/fx_view.h).
- * At a 16:9 window the screen spans 19.8 degrees top to bottom, so the
- * ground it shows runs from 26.7 to 46.6 degrees below level: about 10,200
- * of the world's units deep (5,600 past the car, 4,600 before it) and
- * 10,600 across at the car, a thing at the screen's top about 1.6 times
- * smaller than one at its bottom; the car (about 290 across) a
+ * At a 16:9 window the screen spans 19.8 degrees top to bottom, the view's
+ * centre 8.6 of them under its top, so the ground it shows runs from 36.4
+ * to 56.3 degrees below level: about 8,300 of the world's units deep
+ * (4,300 past the car, 4,000 before it; at the isometric angle 5,600 and
+ * 4,600) and 10,600 across at the car, a thing at the screen's top about
+ * 1.4 times smaller than one at its bottom (1.6 before), and the hills
+ * stand in front of less of the course; the car (about 290 across) a
  * thirty-fifth of the screen's width.
  *
  * The distance takes the view past what the game's 16-bit places hold: the
@@ -57,7 +61,7 @@
 #include "system/state.h"
 #include "video/video.h"
 
-#define OVERHEAD_PITCH (-35.2643897)    /* degrees, down from level: the isometric angle */
+#define OVERHEAD_PITCH (-45.0)          /* degrees, down from level */
 #define OVERHEAD_ACROSS 0x2000          /* the view's heading less the course's square one: an eighth turn */
 #define OVERHEAD_DISTANCE 17000.0       /* from the eye to the car, along the view's axis */
 #define OVERHEAD_ZOOM 5.0f
@@ -168,5 +172,10 @@ void race_overhead_view(void)
     v.light[1] = word_of(ly * cos(p) + lz * sin(p));
     v.light[2] = word_of(lz * cos(p) - ly * sin(p));
     v.depth_scale = (float)(OVERHEAD_GAME_DISTANCE / OVERHEAD_DISTANCE);
+    /* the car on the view's axis, OVERHEAD_DISTANCE out (the eye's place
+       whole, so within a unit of it): what hides it is seen through about
+       it (fx_draw.c) */
+    v.focus_on = 1;
+    v.focus[2] = OVERHEAD_DISTANCE;
     fx_view_set(&v);
 }
