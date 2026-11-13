@@ -50,8 +50,6 @@ uint16_t fx_view_depth(uint16_t depth)
     return (uint16_t)lroundf((float)depth * view.depth_scale);
 }
 
-int fx_view_merge(void) { return on && view.merge; }
-
 int fx_view_eye(int32_t eye[3])
 {
     int k;

@@ -186,20 +186,10 @@ static void emit(const float (*p)[3], int n, uint8_t c)
 
     if (!k)
         return;
-    if (fx_face_cutting()) {            /* past the water from the eye, or not: by the face's middle */
-        float m[3] = { 0, 0, 0 };
-        int i, j;
-
-        for (i = 0; i < n; i++)
-            for (j = 0; j < 3; j++)
-                m[j] += p[i][j] / n;
-        fx_draw_side(fx_face_past_water(m[0], m[1], m[2]));
-    }
     if (tyre_row)
         fx_draw_flat_entry(corners, k, (uint8_t)(0xE0 | (c & 0x0F)));  /* a tyre's: row 14 */
     else
         fx_draw_flat(corners, k, c);
-    fx_draw_side(0);
 }
 
 /* FxObjectsDraw's object: its shape (the draw record's model) and its draw

@@ -31,9 +31,9 @@ enum {
     FX_FAR_MAX = 1024
 };
 
-/* The frame program's far objects, after the screen is cleared and before
-   the near list (render/frame.c). */
-void fx_far_pass(uint16_t *stack);
+/* The frame program's far objects in view, after the screen is cleared
+   (render/frame.c): turned to the view, kept for fx_far_parked. */
+void fx_far_pass(void);
 /* FxObjectsDraw's record as it takes it: a far one's halvings and depth
    for the drawing that follows. */
 void fx_far_record(uint16_t record);
@@ -44,10 +44,8 @@ void fx_far_record(uint16_t record);
 int fx_far_shift(void);
 uint16_t fx_far_depth(uint16_t depth);
 int fx_far_drawing(void);
-/* After the near list is drawn (render/frame.c): it again with the parked
-   tyres among its objects by depth, when there are any. Under a view that
-   merges (fx_view_merge) the near list is drawn only here, with every far
-   object among it by depth as well. */
+/* The frame program's objects (render/frame.c): the near list with every
+   far object and parked tyre among it, in one order by depth. */
 void fx_far_parked(uint16_t *stack);
 /* While a pass draws: the near record a slot holds (its $0AAA address), 0
    for a far record or a tyre; `record` as it is outside a pass. */
@@ -56,26 +54,14 @@ uint16_t fx_far_original(uint16_t record);
    corners made exactly (fx_face.c): a far slot's from its far record (32
    bits, never halved), a near one's from the main CPU's draw record it was
    uploaded from (g.frame_records, the slot's index, its model the slot's),
-   while a pass draws or the frame program draws its near list
-   (fx_far_near_list); *in_view 1 when the record is placed in view space
+   while the pass draws (fx_far_parked); *in_view 1 when the record is
+   placed in view space
    (its flags' bit 7: then `rel` is that place). 0 when not known (an
    object drawn outside the race's lists: the ground's survey, a menu's). */
 int fx_far_exact_place(uint16_t record, double rel[3], int *in_view);
-void fx_far_near_list(int on);
-/* Whether the frame program draws every object in one order (merged_pass):
-   a view other than the game's, or the depth-tested 3D. */
-int fx_far_merges(void);
-/* While the merged pass draws with the depth test: the car (draw_record_car)
+/* While the pass draws: the car (draw_record_car)
    the slot `record` holds belongs to, 0 none; *tyre whether it is one of
    its tyres. */
 uint16_t fx_far_car(uint16_t record, int *tyre);
-/* Far objects hidden by the land (fx_ground.c, where it fills a course's
-   empty space): while on, each far object is drawn at a depth of its own,
-   its nearest point's, that the land in front of it hides it at; off, as
-   the 3D always is, at depth 0 in the frame program's order. Set each
-   picture before the far pass, off after it. While a far object draws: its
-   depth for the draw list (fx_ground_depth_z), 0 for none. */
-void fx_far_occlude(int on);
-float fx_far_z(void);
 
 #endif

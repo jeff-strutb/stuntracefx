@@ -120,16 +120,14 @@ void fx_draw_mesh(nshvc_mesh m, const nshvc_view *view, const nshvc_instance *in
 int fx_draw_mesh_slot(void);
 /* The 3D's faces queued so far drawn now, in order. */
 void fx_draw_queued(void);
-/* Whether the 3D is drawn with its depths (docs/stuntracefx/native/DEPTH.md):
-   faces seen from behind drawn (fx_face_backs), each vertex at its true
-   depth in the list's own depth, the cars seated, the water after the solid
-   3D. On. */
-int fx_draw_depth(void);
 /* What the vertices emitted from now on are, for their depths with the depth
-   test (DEPTH.md, 2 and 6): the course (z = near / Z), the land (that scaled
-   down, all of it farther than all of the course), or see-through water (the
-   course's depths, tested and not written). */
-enum { FX_DEPTH_COURSE, FX_DEPTH_LAND, FX_DEPTH_WATER };
+   test (DEPTH.md, 2 and 6): the 3D's world at its true depth, z = near / Z
+   (the course, its objects, the land's mountains, trees, buildings and
+   clouds); the ground (the plane at the course's level, a course's floor),
+   which stands in for the original's ground band under the horizon, in a
+   range of its own farther than all of the 3D; or see-through water (true
+   depths, tested and not written). */
+enum { FX_DEPTH_COURSE, FX_DEPTH_GROUND, FX_DEPTH_WATER };
 void fx_draw_depth_class(int c);
 /* A vertex's z with the depth test, from its 1 / Z (FxCorner.iz), in the
    class emitted now; 0 for none. */
@@ -157,10 +155,6 @@ int fx_draw_tweening(void);
    (x, y). */
 uint8_t fx_draw_ink(uint8_t c);
 void fx_draw_offset(int *x, int *y);
-/* What is drawn from now on lies past the water from the eye (1) or not
-   (0), while the water cuts the picture (fx_face_cut): fx_solid.c's solids
-   say so by their places. */
-void fx_draw_side(int past);
 /* While on, nothing the frame program does is drawn (the ground's survey of
    the course's shapes). */
 void fx_draw_hold(int on);

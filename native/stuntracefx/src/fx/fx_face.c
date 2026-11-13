@@ -174,12 +174,10 @@ void fx_face_object(uint16_t record)
     object_now.known = 1;
     seat_now.car = 0;
     seat_now.tyre = 0;
-    if (fx_draw_depth()) {
-        seat_now.car = fx_far_car(record, &seat_now.tyre);
-        if (seat_now.car && !seat_now.tyre && seated.car == seat_now.car && seated.n)
-            for (j = 0; j < 3; j++)
-                object_now.place[j] += seated.sum[j] / seated.n;
-    }
+    seat_now.car = fx_far_car(record, &seat_now.tyre);
+    if (seat_now.car && !seat_now.tyre && seated.car == seat_now.car && seated.n)
+        for (j = 0; j < 3; j++)
+            object_now.place[j] += seated.sum[j] / seated.n;
 }
 
 /* ---- the cars seated on the road (docs/stuntracefx/native/DEPTH.md, 5) ----
@@ -595,8 +593,6 @@ static uint32_t corner_key(const Corner3 *c)
     return h;
 }
 
-int fx_face_backs(void) { return fx_draw_depth(); }
-
 void fx_face_begin_back(int textured)
 {
     fx_face_begin(textured);
@@ -625,8 +621,7 @@ void fx_face_end(const FxMaterial *material)
     if (!face.open)
         return;
     face.open = 0;
-    if (fx_face_backs())
-        walked_note();
+    walked_note();
     if (face.back) {                    /* held until its model's walk is done */
         int k;
 
@@ -1027,23 +1022,17 @@ static int line(const Corner3 *in, const View *v)
     return 1;
 }
 
-/* ---- the water's cut (fx_ground.c: Aqua Tunnel) ----
+/* ---- the water's holes (fx_ground.c: Aqua Tunnel's, Harbor City's) ----
 
-   While a picture's water cuts the picture (fx_face_cut), each face is cut
-   by its plane n . v = d in view space: the part on the far side of it from
-   the eye is kept apart (FxShape under_*) and drawn before the water, the
-   rest after it. Where a model crosses the plane (a track piece going below
-   the water), the region its faces' crossings enclose on the plane is a hole
-   in the water: what lies past the water is drawn again inside the hole,
-   after the water (fx_draw.c).
+   While a picture's water is on (fx_face_cut), its plane n . v = d in view
+   space: where a model crosses the plane (a track piece going below the
+   water), the region its faces' crossings enclose on the plane is a hole in
+   the water, where the water is not drawn (fx_draw.c fx_draw_water).
 
    A far object (fx_far.c) is drawn with its view-space points halved
-   fx_far_shift() times, its projection the same, unless its corners are
-   made exactly, whole (corner_shift): its points are tested against the
-   plane at their scale (cut_d), and its crossings kept at full size for
-   its hole. Tested at full size, a far piece under the water
-   (Aqua Tunnel's glass tube) counted as above it and was drawn after the
-   water, over it (Jeff's picture, 2026-11-11). */
+   fx_far_shift() times unless its corners are made exactly, whole
+   (corner_shift): its points are tested against the plane at their scale
+   (cut_d), and its crossings kept at full size for its hole. */
 
 static struct {
     int on;
@@ -1070,23 +1059,10 @@ void fx_face_cut(int on, const double n[3], double d)
     hole_model = 0;
 }
 
-int fx_face_cutting(void) { return cut.on; }
-
 /* the plane's distance from the eye at the scale of the points being drawn */
 static double cut_d(void)
 {
     return ldexp(cut.d, -corner_shift());
-}
-
-/* a view-space point's side of the water: 1 past it from the eye */
-int fx_face_past_water(double x, double y, double z)
-{
-    double s;
-
-    if (!cut.on)
-        return 0;
-    s = cut.n[0] * x + cut.n[1] * y + cut.n[2] * z - cut_d();
-    return cut.d > 0 ? s > 0 : s < 0;
 }
 
 static double side_of(const Corner3 *c)
@@ -1094,32 +1070,6 @@ static double side_of(const Corner3 *c)
     double s = cut.n[0] * c->x + cut.n[1] * c->y + cut.n[2] * c->z - cut_d();
 
     return cut.d > 0 ? s : -s;          /* > 0: past the water */
-}
-
-/* the part of a polygon on one side of the water: past it (past) or not */
-static int clip_water(const Corner3 *in, int n, Corner3 *out, int past)
-{
-    int i, m = 0;
-
-    for (i = 0; i < n; i++) {
-        const Corner3 *a = &in[i], *b = &in[(i + 1) % n];
-        double sa = side_of(a), sb = side_of(b);
-        int ain = past ? sa >= 0 : sa <= 0, bin = past ? sb >= 0 : sb <= 0;
-
-        if (ain)
-            out[m++] = *a;
-        if (ain != bin) {
-            double t = sa / (sa - sb);
-
-            out[m].x = a->x + (b->x - a->x) * t;
-            out[m].y = a->y + (b->y - a->y) * t;
-            out[m].z = a->z + (b->z - a->z) * t;
-            out[m].u = a->u + (b->u - a->u) * t;
-            out[m].v = a->v + (b->v - a->v) * t;
-            m++;
-        }
-    }
-    return m;
 }
 
 /* The points where a face's edges cross the water, kept for its model's
@@ -1341,7 +1291,6 @@ static void commit(const FxMaterial *m)
     s->light = face.tint.light;
     if (seat_now.car && !seat_now.tyre && object_now.known && face.n >= 3)
         lay_on_ground();
-    s->under_first = s->under_count = 0;
     s->back = (uint8_t)face.back;
     s->car_part = seat_now.car != 0;
     s->ncorner3 = 0;
@@ -1355,7 +1304,6 @@ static void commit(const FxMaterial *m)
         }
         s->ncorner3 = (uint8_t)face.n;
     }
-    s->z = fx_far_z();
     s->plane[0] = s->plane[1] = s->plane[2] = s->plane[3] = 0;
     if (face.n >= 3) {                  /* its plane, from its first three corners */
         double a[3] = { face.c[1].x - face.c[0].x, face.c[1].y - face.c[0].y, face.c[1].z - face.c[0].z };
@@ -1367,9 +1315,9 @@ static void commit(const FxMaterial *m)
     }
     if (s->line) {
         ok = line(face.c, &face.view);
-    } else if (cut.on && fx_draw_depth()) {
-        /* with the depth test the water is put in place by depth (fx_draw.c
-           water_last): the face whole, its crossings kept for the holes */
+    } else if (cut.on) {
+        /* the water is put in place by depth (fx_draw.c fx_draw_water):
+           the face whole, its crossings kept for the holes */
         if (hole_model != projection) {
             if (nhole_points)
                 hole_finish();
@@ -1377,33 +1325,6 @@ static void commit(const FxMaterial *m)
         }
         hole_points_of(face.c, face.n);
         ok = polygon_corners(face.c, face.n, face.textured);
-    } else if (cut.on) {
-        Corner3 near_part[WORK], past_part[WORK];
-        int nn, np;
-
-        if (hole_model != projection) {
-            if (nhole_points)
-                hole_finish();
-            hole_model = projection;
-        }
-        hole_points_of(face.c, face.n);
-        nn = clip_water(face.c, face.n, near_part, 0);
-        np = clip_water(face.c, face.n, past_part, 1);
-        if (nn >= 3)
-            ok = polygon_corners(near_part, nn, face.textured);
-        s->first = first;
-        s->count = ncorners - first;
-        if (ok && np >= 3) {
-            s->under_first = ncorners;
-            ok = polygon_corners(past_part, np, face.textured);
-            s->under_count = ncorners - s->under_first;
-        }
-        if (!ok) {
-            ncorners = first;
-            return;
-        }
-        nshapes++;
-        return;
     } else {
         ok = polygon_corners(face.c, face.n, face.textured);
     }
@@ -1419,7 +1340,7 @@ static void commit(const FxMaterial *m)
 /* ---- scaled sprites ---- */
 
 static struct {
-    int set, past, fixed;
+    int set, fixed;
     uint16_t left, top, bx, by;
     double cx, cy, k;
 } sprite;
@@ -1443,7 +1364,6 @@ void fx_sprite_place(uint16_t x, uint16_t y, uint16_t depth, uint16_t size, uint
     }
     sprite.set = screen_size != 0;
     sprite.fixed = size == 0;
-    sprite.past = fx_face_past_water(px, py, d);
     sprite.cx = v.cx + FOCAL * px / d;
     sprite.cy = v.cy + FOCAL * py / d;
     sprite.k = size ? (FOCAL * sz / d) / screen_size : 1.0;
@@ -1452,8 +1372,6 @@ void fx_sprite_place(uint16_t x, uint16_t y, uint16_t depth, uint16_t size, uint
     sprite.left = (uint16_t)(centre_x - half);
     sprite.top = (uint16_t)(centre_y - half);
 }
-
-int fx_sprite_past_water(void) { return sprite.set && sprite.past; }
 
 int fx_sprite_fixed(void) { return mapped_fixed; }
 

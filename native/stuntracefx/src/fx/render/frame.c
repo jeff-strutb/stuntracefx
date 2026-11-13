@@ -48,7 +48,6 @@ FxFrameProgramResult FxFrameProgram(uint16_t draw_list_end)
 
 static FxFrameProgramResult frame_program(uint16_t draw_list_end)
 {
-    int up_ = 0;                       /* levels a callee returned past us */
     uint16_t stack_top;
     uint16_t *stack = &stack_top;
     uint16_t weather;
@@ -60,6 +59,7 @@ static FxFrameProgramResult frame_program(uint16_t draw_list_end)
     uint16_t text_draw_result;
     uint16_t weather_record_ptr;
 
+    (void)draw_list_end;                /* the near list's end: the pass walks the list itself (fx_far.c) */
     word_1c4 = fx_ldw(GSU_WORD_1C4);
     if ((uint16_t)(word_1c4 & 0xFF) == 0) {
     } else {
@@ -73,22 +73,12 @@ static FxFrameProgramResult frame_program(uint16_t draw_list_end)
         nshvc_profile_end();
     }
     nshvc_profile_begin(perf_far);
-    fx_far_pass(stack);                 /* the objects past the near list's block, first (fx_far.c) */
+    fx_far_pass();                      /* the objects past the near list's block, in view (fx_far.c) */
     nshvc_profile_end();
     *stack = 0x0240;
     nshvc_profile_begin(perf_near);
-    if (!fx_far_merges()) {             /* a view that draws the far objects among the near ones draws them all in fx_far_parked */
-        fx_far_near_list(1);            /* its slots are the main CPU's records, for exact corners (fx_far.c) */
-        { FxObjectsDrawResult r_ = FxObjectsDraw(draw_list_end, stack); up_ = r_.up; };
-        fx_far_near_list(0);
-        fx_face_object(0);
-        fx_ground_object_end();         /* the last near object's tunnel rock (fx_ground.c) */
-    }
+    fx_far_parked(stack);               /* every object, near and far, in one order by depth (fx_far.c) */
     nshvc_profile_end();
-    if (up_) {                       /* it returned past us */
-        return (FxFrameProgramResult){up_ == 0 ? 0 : up_ - 0};
-    }
-    fx_far_parked(stack);               /* the near list again with parked tyres among it (fx_far.c) */
     fx_draw_held_by_view(0);
     fx_draw_water();                    /* with the depth test the see-through water after the solid 3D (fx_draw.c) */
     *stack = 0x0240;

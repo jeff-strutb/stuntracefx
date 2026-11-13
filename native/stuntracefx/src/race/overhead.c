@@ -168,6 +168,5 @@ void race_overhead_view(void)
     v.light[1] = word_of(ly * cos(p) + lz * sin(p));
     v.light[2] = word_of(lz * cos(p) - ly * sin(p));
     v.depth_scale = (float)(OVERHEAD_GAME_DISTANCE / OVERHEAD_DISTANCE);
-    v.merge = 1;
     fx_view_set(&v);
 }

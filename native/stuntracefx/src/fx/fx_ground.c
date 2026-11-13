@@ -21,7 +21,7 @@
  * is one convex polygon: the plane turned to the view
  * (the matrix at $00E4, the eye's place from the draw list), cut against the
  * near plane and the view's sides, out to where it meets the horizon within
- * a hundredth of a pixel (fx_face_triangles_d). The GPU works out each of
+ * a hundredth of a pixel (fx_face_triangles_whole). The GPU works out each of
  * its pixels with ground.shade: the vertices' u, v are their screen places
  * less an origin inside the polygon, and the shader's eight inputs are the
  * projective map from such a place to the plane's texels, so each pixel's
@@ -30,9 +30,10 @@
  * (the colour between the marks, as the console shows the band) and the
  * numbers the shader needs (fx_ground_image below).
  *
- * Drawn first, before the far and near objects, so everything the race
- * draws covers it: the track occludes the ground and a road below it is
- * never left out; not drawn while the eye is below it. Between its marks
+ * Drawn first, before the far and near objects; the ground in a range of
+ * depths of its own behind all of the 3D, so the track covers it and a road
+ * below it is never left out (docs/stuntracefx/native/DEPTH.md, 2); not
+ * drawn while the eye is below it. Between its marks
  * the band shows through, the console's own colours; marks, as the game has
  * no ground art: on land a tuft (a 3-wide V) in two of each three 8 x 4
  * spots, on water a glint (a 4-wide dash) in one of each two, a darker shade
@@ -1168,21 +1169,17 @@ static void land_draw(int kind, const double eye[3], const double m[9], int p)
    (grid.light_k), so the land takes the shades the course's own faces take
    facing the same way.
 
-   Depths: the 3D is drawn at depth 0, in the order the frame program gives;
-   the land lies past it all (fx_draw_land), so it covers none of the
-   course's shapes whatever the order. The plane is at PLANE_Z, past the
-   mountains; a mountain face at 0.998 (1 - LAND_NEAR / its depth) at each
-   corner, from the face's own plane, which is exact across the face (one
-   over the depth is linear across the screen), so the mountains hide each
-   other as they stand. Triangles: the plane's quad (2, at most 6 once kept
+   Depths (docs/stuntracefx/native/DEPTH.md, 2): the plane lies at the
+   median of where the course's shapes meet the ground, so much of the
+   course is below it: it is in the ground's depths, behind all of the 3D.
+   The mountains and mesas stand outside the course on it, at the world's
+   true depths (each corner's own 1 / Z), so they hide each other, and the
+   course where they stand in front of it, as they stand. Triangles: the plane's quad (2, at most 6 once kept
    to the view) and MOUNTAINS x SIDES faces (50), those facing away left
    out. No image and no shader: the GPU fills each in its colour. */
 
 enum { MOUNTAINS = 10, SIDES = 5, LAND_VERTICES = 3 * (6 + MOUNTAINS * (SIDES + 1) * 7) };    /* each face kept to the view in at most 7 */
 #define SHADE_ROWS 0xA1C5       /* bank 3: the lit faces' shade rows by class, two bytes each, the nearest tier's */
-#define PLANE_Z 0.999f
-#define FACE_Z 0.998
-#define LAND_NEAR 256.0
 #define EYE_CLEAR 64.0
 #define GAP 0.3
 
@@ -1325,11 +1322,12 @@ static void to_view(const double w[3], const double eye[3], const double m[9], d
         v[k] = d[0] * m[k] + d[1] * m[3 + k] + d[2] * m[6 + k];
 }
 
-/* A level plane at height y under the eye, in one colour at depth z (with
-   the depth test, its own, in the depths drawn now: fx_draw_depth_class): a quad
+/* A level plane at height y under the eye, in one colour, at its own
+   depths in those drawn now (fx_draw_depth_class: the ground's for the
+   land's plane, the world's for the sea bed): a quad
    about the eye, far enough out that its far edges lie HORIZON_GAP output
    pixels from the horizon, kept to the view; its vertices into v from *nv. */
-static void plane_vertices(double y, uint32_t colour, float z, const double eye[3], const double m[9], nshvc_vertex *v,
+static void plane_vertices(double y, uint32_t colour, const double eye[3], const double m[9], nshvc_vertex *v,
                            uint32_t *nv, uint32_t room)
 {
     static FxCorner c[64];
@@ -1353,7 +1351,7 @@ static void plane_vertices(double y, uint32_t colour, float z, const double eye[
         memset(&v[*nv], 0, sizeof v[*nv]);
         v[*nv].x = c[j].x;
         v[*nv].y = c[j].y;
-        v[*nv].z = fx_draw_depth() ? fx_draw_z(c[j].iz) : z;
+        v[*nv].z = fx_draw_z(c[j].iz);
         v[*nv].colour = colour;
     }
 }
@@ -1392,10 +1390,7 @@ static uint32_t face_colour(int cls, const double nv[3], const double nw[3], int
 /* One flat face of the land, its corners pts (world, in order round it)
    and its outward normal nw: left out when it faces away from the eye;
    else turned to the view, kept to it, each corner at its depth (from the
-   face's own plane; with the depth test its own 1 / Z in the depths drawn
-   now, fx_draw_depth_class: the land's, or the course's for the tunnels'
-   rock and the canyon's fill), into v from *nv. */
-static int face_at_zero;                /* land_face's vertices at depth 0 (the tunnels' rock, in the 3D's order) */
+   face's own 1 / Z, the world's true depth), into v from *nv. */
 static uint32_t ground_now;             /* the land's plane's colour this picture (0: none yet) */
 
 static void land_face(const double (*pts)[3], int n, const double nw[3], int cls, const double eye[3], const double m[9],
@@ -1403,7 +1398,6 @@ static void land_face(const double (*pts)[3], int n, const double nw[3], int cls
 {
     static FxCorner c[64];
     double vp[8][3], nview[3], d;
-    double vcx = (int16_t)ram_word(0x0034), vcy = (int16_t)ram_word(0x0036);
     uint32_t nc, j, colour;
     int k;
 
@@ -1413,8 +1407,7 @@ static void land_face(const double (*pts)[3], int n, const double nw[3], int cls
         to_view(pts[k], eye, m, vp[k]);
     for (k = 0; k < 3; k++)
         nview[k] = nw[0] * m[k] + nw[1] * m[3 + k] + nw[2] * m[6 + k];
-    /* the face's plane nview . V = d; one over the depth at screen (x, y)
-       is nview . ((x - cx) / 128, (y - cy) / 128, 1) / d */
+    /* the face's plane nview . V = d: none edge on through the eye */
     d = nview[0] * vp[0][0] + nview[1] * vp[0][1] + nview[2] * vp[0][2];
     if (fabs(d) < 1e-9)
         return;
@@ -1423,16 +1416,10 @@ static void land_face(const double (*pts)[3], int n, const double nw[3], int cls
         return;
     colour = face_colour(cls, nview, nw, 0);
     for (j = 0; j < nc; j++, (*nv)++) {
-        double inv = (nview[0] * (c[j].x - vcx) / 128.0 + nview[1] * (c[j].y - vcy) / 128.0 + nview[2]) / d;
-        double z = FACE_Z * (1.0 - LAND_NEAR * inv);
-
         memset(&v[*nv], 0, sizeof v[*nv]);
         v[*nv].x = c[j].x;
         v[*nv].y = c[j].y;
-        if (fx_draw_depth())
-            v[*nv].z = fx_draw_z(c[j].iz);
-        else
-            v[*nv].z = face_at_zero ? 0.0f : (float)(z < 0 ? 0 : z > FACE_Z ? FACE_Z : z);
+        v[*nv].z = fx_draw_z(c[j].iz);
         v[*nv].colour = colour;
     }
 }
@@ -1445,13 +1432,6 @@ static void normal_of(const double *a, const double *b, const double *c, double 
     n[0] = e1[1] * e2[2] - e1[2] * e2[1];
     n[1] = e1[2] * e2[0] - e1[0] * e2[2];
     n[2] = e1[0] * e2[1] - e1[1] * e2[0];
-}
-
-float fx_ground_depth_z(double depth)
-{
-    double z = depth > LAND_NEAR ? FACE_Z * (1.0 - LAND_NEAR / depth) : 0;
-
-    return (float)(z < 1e-6 ? 1e-6 : z > FACE_Z ? FACE_Z : z);
 }
 
 /* ---- the land filling a course's empty space (Jeff, 2026-11-11) ----
@@ -1467,9 +1447,7 @@ float fx_ground_depth_z(double depth)
    with FILL_CLEAR at 1.5 it is flat at the course's level there: the rock
    never stands over the course. Each triangle with a raised corner is a
    face, shaded as the mesas are; those all at the level are the plane's.
-   The far objects are drawn at depths of their own while it is drawn
-   (fx_far_occlude), so it hides those behind it; the near objects, at the
-   3D's own depth 0, are never hidden by it. */
+   At the world's true depths, it hides what lies behind it. */
 
 enum { FILL_STEP = 4, FILL_MOST = GRID_MOST / FILL_STEP + 2, FILL_VERTICES = 3 * 2 * FILL_MOST * FILL_MOST * 2 };
 #define FILL_CLEAR 1.5
@@ -1638,7 +1616,6 @@ void fx_ground_object_end(void)
     prof[3][1] = top;
     prof[4][0] = cp + half + SHELL_THICK + spread;
     prof[4][1] = base;
-    face_at_zero = 1;
     for (s = 0; s < 4; s++) {
         double quad[4][3], n[3], mp = (prof[s][0] + prof[s + 1][0]) / 2 - cp, my = (prof[s][1] + prof[s + 1][1]) / 2 - mid_y;
         static const int end[4] = { 0, 0, 1, 1 }, edge[4] = { 0, 1, 1, 0 };
@@ -1654,7 +1631,6 @@ void fx_ground_object_end(void)
                 n[k] = -n[k];
         land_face((const double (*)[3])quad, 4, n, shell_view.cls, shell_view.eye, shell_view.m, sv, &ns, SHELL_VERTICES);
     }
-    face_at_zero = 0;
     fx_draw_land(sv, ns);
 }
 
@@ -1666,12 +1642,10 @@ void fx_ground_object_end(void)
    of its trees near, trunk and canopy together.
 
    They stand only outside the course's footprint, their feet at least
-   FOREST_CLEAR beyond it past their canopies' half width: the land is
-   drawn behind all the course's shapes, so a tree between the eye and one
-   of them would have it drawn over it; the footprint is a box and the eye
-   is in it (the camera trails the car by far less than FOREST_CLEAR), and
-   no line from a point in a box to another leaves it, so none stands
-   between them. On a lattice a canopy's width a step, each place moved
+   FOREST_CLEAR beyond it past their canopies' half width, so none stands
+   on the course or, from the game's camera (in the footprint's box: it
+   trails the car by far less than FOREST_CLEAR, and no line from a point
+   in a box to another leaves it), between the eye and it. On a lattice a canopy's width a step, each place moved
    by up to FOREST_JITTER of a step (a hash of the course and the place),
    left out where the groves' noise (value noise on a lattice of
    FOREST_GROVE steps) is under FOREST_OPEN, a clearing; of those the
@@ -1683,9 +1657,9 @@ void fx_ground_object_end(void)
 
    Drawn after the plane and the mountains as instanced meshes (nshvc
    6.2, fx_solid_forest_*), every tree the course's 3D tree at the detail
-   its size asks, placed and projected on the GPU at the land's depths
-   (land_face's mapping, exact per pixel), so the mountains hide the trees
-   behind them and the trees the plane; in FOREST_BLOCK x
+   its size asks, placed and projected on the GPU at the world's true
+   depths (exact per pixel), so they and the mountains hide what stands
+   behind them, and the plane, in the ground's depths, lies behind them all; in FOREST_BLOCK x
    FOREST_BLOCK lattice blocks, a block left out whole where its sphere is
    behind the eye or past FOREST_WIDE of the view's sides. One player's
    pictures only (two players' keep the course's trees as sprites, and so
@@ -2002,20 +1976,13 @@ static int forest_hidden(const double eye[3], const double m[9], const double fo
     return 1;
 }
 
-/* A land mesh's view's depths: land_face's, z = FACE_Z (1 - LAND_NEAR / Z);
-   with the depth test the land's (fx_draw_z: z = k / Z, 1 nearest), no
-   nearer than the view's near. */
+/* A land mesh's view's depths: the world's true depths (fx_draw_z: z =
+   near / Z, 1 nearest), no nearer than the view's near. */
 static void view_depth(nshvc_view *view)
 {
-    if (fx_draw_depth()) {
-        view->depth_a = 0;
-        view->depth_b = -fx_draw_z(1.0);
-        view->depth_max = fx_draw_z(1.0 / view->near);
-        return;
-    }
-    view->depth_a = (float)FACE_Z;
-    view->depth_b = (float)(FACE_Z * LAND_NEAR);
-    view->depth_max = (float)FACE_Z;
+    view->depth_a = 0;
+    view->depth_b = -fx_draw_z(1.0);
+    view->depth_max = fx_draw_z(1.0 / view->near);
 }
 
 static void forest_draw(unsigned course, const double eye[3], const double m[9], double plane_y)
@@ -2027,8 +1994,8 @@ static void forest_draw(unsigned course, const double eye[3], const double m[9],
     if (forest.course != (int)course)
         forest_make(course);
     /* the picture's view: world to view (world axis i is the view's row i
-       of m), its centre and 128 a unit in the picture's pixels, the land's
-       depths (land_face's: z = FACE_Z (1 - LAND_NEAR / Z)) */
+       of m), its centre and 128 a unit in the picture's pixels, the
+       world's depths (view_depth) */
     memset(&view, 0, sizeof view);
     for (i = 0; i < 3; i++) {
         view.eye[i] = (float)eye[i];
@@ -2063,8 +2030,8 @@ static void forest_draw(unsigned course, const double eye[3], const double m[9],
 
    The picture's view as nshvc 6.2's meshes take it: world to view (world
    axis i is the view's row i of m), its centre and 128 a unit in the
-   picture's pixels, the land's depths (land_face's: z = FACE_Z (1 -
-   LAND_NEAR / Z)); and the view's sides in view space, inward, unit, for
+   picture's pixels, the world's depths (view_depth); and the view's sides
+   in view space, inward, unit, for
    culling a sphere (land_sphere_seen). */
 static void land_view(const double eye[3], const double m[9], nshvc_view *view, float side[4][3])
 {
@@ -2125,13 +2092,13 @@ static int land_sphere_seen(const double eye[3], const double m[9], const float 
    CITY_LOT, a building on it from CITY_KINDS shapes (walls and a roof, a
    grid of windows on each wall, some lit), most low or middling, a few
    towers, CITY_EMPTY of the lots left open, each lot wholly CITY_CLEAR or
-   more past the footprint (the land is drawn behind all the course's
-   shapes, so nothing of it may stand between the eye, in the footprint's
-   box, and the course: no line from a point in a box to another leaves
-   it) and none past CITY_REACH. Each shape is an instanced mesh (nshvc
+   more past the footprint (so nothing of it stands on the course or, from
+   the game's camera in the footprint's box, between the eye and it: no
+   line from a point in a box to another leaves it) and none past
+   CITY_REACH. Each shape is an instanced mesh (nshvc
    6.2), written again only when its colours change, each building one
    instance of it, its size its lot's 0.8 to 1 (a size is uniform, so the
-   shapes give the proportions), drawn at the land's depths nearest first,
+   shapes give the proportions), drawn at the world's depths nearest first,
    a building whose sphere is outside the view left out. A wall's colour
    by the way it faces (the world's: +x 8, +z 7, -x 6, -z 5), the roof 9,
    a lit window 10, set 0.004 of the building out from its wall. */
@@ -2347,15 +2314,14 @@ static void city_draw(unsigned course, const double eye[3], const double m[9])
    under the course's lowest place (its shapes at most 0.31 of their size
    high, CLOUD_BASE 0.31 = 2,790, less than CLOUD_BELOW less CLOUD_TOP_GAP),
    so with the eye above that place no line from it to the course passes
-   through a bank: the land is drawn behind the course's shapes, and a bank
-   standing in front of one would be wrong, so banks may lie under the
-   course as well as round it. A face's colour is the chip's for a lit face
+   through a bank, and banks may lie under the course as well as round
+   it. A face's colour is the chip's for a lit face
    of the class facing as it does in the view (the light is fixed in view
    space, so the same for every bank: one colour a face, the mesh written
    again when one changes; a mesh set for each picture being made,
    fx_draw_mesh_slot, so a picture shown keeps the colours written for
    it). Each shape an instanced mesh (nshvc 6.2), each bank one instance
-   of it, drawn at the land's depths nearest first, a bank whose sphere is
+   of it, drawn at the world's depths nearest first, a bank whose sphere is
    outside the view left out. Triangles: a puff CLOUD_SEGS (2 CLOUD_RINGS -
    1) = 40, a bank 3-5 puffs, 120-200. */
 enum { CLOUD_KINDS = 6, CLOUD_MOST = 2048, CLOUD_PUFFS = 5, CLOUD_SEGS = 8, CLOUD_RINGS = 3, CLOUD_SLOTS = 5,
@@ -2564,7 +2530,9 @@ static void land_polygons(unsigned course, int cls, const double eye[3], const d
     for (k = 0; k < 3; k++)
         up[k] = -m[3 + k];
     ground_now = face_colour(cls, up, up_world, 1);
-    plane_vertices(plane_y, ground_now, PLANE_Z, eye, m, v, &nv, LAND_VERTICES);
+    fx_draw_depth_class(FX_DEPTH_GROUND);       /* the ground: behind all the 3D (fx_ground_draw) */
+    plane_vertices(plane_y, ground_now, eye, m, v, &nv, LAND_VERTICES);
+    fx_draw_depth_class(FX_DEPTH_COURSE);
     /* the mountains' or mesas' faces that look toward the eye, their bases
        on the plane (none on a flat course) */
     for (i = 0; i < (surface[course].flat ? 0 : MOUNTAINS); i++) {
@@ -2635,11 +2603,8 @@ static void land_polygons(unsigned course, int cls, const double eye[3], const d
 
         if (fill.course != (int)course)
             fill_make(course);
-        fx_draw_depth_class(FX_DEPTH_COURSE);  /* with the depth test the course's own rock: it hides what lies behind it */
         fill_faces(course, cls, plane_y, eye, m, fv, &nf, FILL_VERTICES);
         fx_draw_land(fv, nf);
-        fx_draw_depth_class(FX_DEPTH_LAND);
-        fx_far_occlude(1);
     }
 }
 
@@ -2648,9 +2613,9 @@ static void land_polygons(unsigned course, int cls, const double eye[3], const d
    Jeff (2026-11-11): Aqua Tunnel an ocean with a polygonal water effect, a
    shader allowed, simple and clear, in the game's look. The water is one
    plane at the course's water level out to the horizon (as the land's), at
-   the 3D's depth 0 in the frame program's order, so its cut works as before
-   (fx_face_cut: what lies past it drawn first, the holes where the road goes
-   down). ocean.shade draws it as a lattice of OCEAN_CELL facets, each lattice
+   the world's true depths, drawn after the solid 3D, tested and not
+   written (fx_draw.c fx_draw_water), with holes where the road goes down
+   (fx_face_cut). ocean.shade draws it as a lattice of OCEAN_CELL facets, each lattice
    point rising and falling OCEAN_WAVE of a cell, each facet shaded as the
    chip shades a lit face in the course's water class (the image's texels
    0-9: the class's colours at levels 6-15, texel 10 the flat sea's), the
@@ -2658,8 +2623,7 @@ static void land_polygons(unsigned course, int cls, const double eye[3], const d
    partly see-through, the more the steeper the eye looks down, whole toward
    the horizon. It is drawn as the earlier water was (fx_draw_surface): its
    vertices' u and v their screen places less an origin inside it, and no
-   depth divisor, so its depth is exactly the 3D's and what is drawn after
-   it covers it (a divisor, for u and v in perspective, came back from the
+   depth divisor (a divisor, for u and v in perspective, came back from the
    GPU's divide a rounding off the 3D's depth and the water showed through
    the road in speckles, Jeff's picture of 2026-11-11); the shader's inputs
    are the projective map from a screen place to the water in cells (the
@@ -2673,7 +2637,8 @@ static void land_polygons(unsigned course, int cls, const double eye[3], const d
    Under it a sea bed, so that nothing of the backdrop shows through the
    water: a plane SEABED_BELOW under the lowest place the course's shapes
    meet the ground (or the water), opaque, in the class's darkest colour
-   darkened to SEABED_DARK, past every other shape (fx_draw_land's depths).
+   darkened to SEABED_DARK, at the world's true depths, under all of the
+   course.
    Triangles: the water's quad and the bed's, each kept to the view in at
    most 6. */
 
@@ -2816,7 +2781,7 @@ static void ocean_draw(int cls, int under, int first, const double eye[3], const
     deep = sea_shade(cls, first, 6);
     deep = 0xFF000000u | (uint32_t)((deep >> 16 & 255) * SEABED_DARK) << 16 | (uint32_t)((deep >> 8 & 255) * SEABED_DARK) << 8
            | (uint32_t)((deep & 255) * SEABED_DARK);
-    plane_vertices(bed_y, deep, PLANE_Z, eye, m, bed, &nb, sizeof bed / sizeof bed[0]);
+    plane_vertices(bed_y, deep, eye, m, bed, &nb, sizeof bed / sizeof bed[0]);
     fx_draw_land(bed, nb);
     /* the water's quad about the eye, out to HORIZON_GAP of the horizon
        (from above or below) */
@@ -2887,20 +2852,23 @@ static void ocean_draw(int cls, int under, int first, const double eye[3], const
     nshvc_image_write(ocean_image[slot], words);
     fx_draw_depth_class(FX_DEPTH_WATER);        /* with the depth test: drawn after the solid 3D (fx_draw.c) */
     fx_draw_surface(c, nc, ocean_image[slot], ocean_shader, in, (float)ox, (float)oy);
-    fx_draw_depth_class(FX_DEPTH_LAND);
+    fx_draw_depth_class(FX_DEPTH_COURSE);
 }
 
 static void ground_draw(void);
 
-/* With the depth test (docs/stuntracefx/native/DEPTH.md, 2) the land is in
-   depths of its own, all farther than the course (fx_draw_depth_class), so
-   it never covers the course's shapes, while its own parts hide each other
-   at their true depths; the canyon's fill and the tunnels' rock, the
-   course's own rock, at the course's; the ocean's water at the course's,
-   tested and not written, after the solid 3D. */
+/* With the depth test (docs/stuntracefx/native/DEPTH.md, 2) the land's
+   mountains, mesas, rock, trees, buildings, clouds and sea bed are at the
+   world's true depths, so they hide the course where they stand in front
+   of it (the overhead view's eye can be outside the course's footprint)
+   and it hides them. The ground (the plane at the course's level, the
+   median of where its shapes meet the ground, and a course's floor) stands
+   in for the original's ground band: much of the course lies below its
+   level, so it is in the ground's depths, behind all of the 3D. The
+   ocean's water at true depths, tested and not written, after the solid
+   3D. */
 void fx_ground_draw(void)
 {
-    fx_draw_depth_class(FX_DEPTH_LAND);
     ground_draw();
     fx_draw_depth_class(FX_DEPTH_COURSE);
 }
@@ -2922,7 +2890,6 @@ static void ground_draw(void)
     /* in the sealed tunnel (bit 3 of $0DA5) the earlier water left the
        original's underwater backdrop to show; the ocean is drawn there too,
        seen from below, over that backdrop (Jeff, 2026-11-11) */
-    fx_far_occlude(0);                  /* the far objects at the 3D's own depth unless the land hides them */
     shell_view.on = 0;                  /* the tunnels' rock only where the land sets it */
     shell_pending = -1;
     if (kind == SURF_NONE || (kind == SURF_AQUA && (g.picture_effects & 0x08) && !surface[course].cls))
@@ -2954,10 +2921,13 @@ static void ground_draw(void)
     if (IS_LAND(kind) && (g.picture_effects & 0x08))
         return;
     if (IS_LAND(kind)) {                /* land: polygons, or the terrain over the view */
-        if (surface[course].cls)
+        if (surface[course].cls) {
             land_polygons(course, surface[course].cls, eye, m);
-        else
+        } else {
+            fx_draw_depth_class(FX_DEPTH_GROUND);   /* the terrain over the view: a course's floor */
             land_draw(kind, eye, m, p);
+            fx_draw_depth_class(FX_DEPTH_COURSE);
+        }
         return;
     }
     water_y = surface[course].y == WATER_DEEPEST ? (grid.nx ? grid.deepest : 0) : surface[course].y;
@@ -3068,7 +3038,9 @@ static void ground_draw(void)
     if (!shader.id)
         shader = nshvc_shader_load("ground");
     nshvc_image_write(image[slot], words);
+    fx_draw_depth_class(FX_DEPTH_GROUND);       /* a course's floor (the stunt arenas'): the ground */
     fx_draw_surface(corners, n, image[slot], shader, in, (float)ox, (float)oy);
+    fx_draw_depth_class(FX_DEPTH_COURSE);
     if (kind == SURF_AQUA) {            /* its water cuts the picture: the plane in view space, row 1 . v = dh */
         double plane[3] = { m[3], m[4], m[5] };
 

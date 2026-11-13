@@ -68,15 +68,24 @@ rounding of the angles' sines, about 1e-9.
   8,000,000: 0.002 of a unit at the overhead's 17,000, and 0.0001 at 1,000
   in the chase view. Handed over the other way (0 nearest, z near 1) it
   could not: its step there is 6e-8, about 0.07 of a unit at 17,000.
-- The land (its plane, mountains, forests, cities, clouds, the sea bed) has
-  depths of its own: z = 1e-7 near / Z, so all of it lies farther than all
-  of the course (closer than 10,000,000 units) and the course always lies
-  over it. The land never covers road that dips below its plane, while its
-  own parts hide each other at their true depths, written as the course's
-  are. Its corners are whole units, so their 1 / Z is taken as it is,
-  whatever object was drawn before.
-- The course's own rock (the canyon's fill and the tunnels' rock) is at the
-  course's depths: it hides the far track behind it, as it did before.
+- The ground (the plane at the course's level, and a stunt arena's floor)
+  stands in for the original's ground band under the horizon. Its level is
+  the median of where the course's shapes meet the ground, so much of the
+  course lies below it. It has a range of depths of its own, z = 1e-7 near
+  / Z, the way a depth range per pass works: all of it lies farther than
+  anything of the 3D nearer than 10,000,000 units, so the course always
+  lies over it, and its depths are as fine relative to their size as the
+  course's.
+- Everything else of the land is at the world's true depths, with the
+  course: the mountains, mesas, the canyon's fill, the tunnels' rock, the
+  trees, buildings, clouds and the sea bed. They stand outside the course,
+  so they hide it only where they really stand in front of it, as from the
+  overhead view's eye outside the course. They hide each other as they
+  stand, and stand in front of the ground. Their corners are whole units,
+  so their 1 / Z is taken as it is, whatever object was drawn before.
+- Jeff approved "the land drawn first, tested but not written". It is
+  changed because, so drawn, the land's parts could not hide each other.
+  Only the ground needs to lie behind the course.
 - The HUD and text are drawn at z = 1, the nearest. The race's art drawn
   before the 3D (the bezel) is at 0, the farthest; the panels drawn over it
   in the full window are at 1.
@@ -159,7 +168,8 @@ the piece's crossings enclose on the water's plane is a hole: each water
 triangle is drawn less each hole, in convex pieces cut along the hole's
 edges. A crossing is worked out from its edge's ends in one order, so the
 pieces meet exactly. The old cut, which drew what lies past the water
-first and again inside each hole, is not used.
+first and again inside each hole, is gone, with every other piece drawn
+only without the depth test: one picture's 3D is drawn one way.
 
 ## What the engine adds (nativeshvc, for Jeff to approve)
 

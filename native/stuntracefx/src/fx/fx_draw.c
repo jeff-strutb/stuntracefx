@@ -65,13 +65,6 @@ typedef struct {
        view's centre where they were recorded (fx_view: a view other than
        the game's); 1 none */
     float zoom, zoom_x, zoom_y;
-    /* while the water cuts the picture (fx_face_cut): the parts past the
-       water from the eye, kept apart until the 3D is done, and where the
-       water's own shapes are */
-    nshvc_vertex *uv;
-    Shape *us;
-    uint32_t nuv, nus, cap_uv, cap_us;
-    int32_t water_from, water_to;
     /* its instanced meshes' draws and their instances */
     MeshDraw *md;
     nshvc_instance *mi;
@@ -93,13 +86,14 @@ static struct {
 } panels_now, panels_last;
 static void blocks_flush(void);
 /* The depth-tested 3D's depths (docs/stuntracefx/native/DEPTH.md, 2): the
-   list's depth its own, 1 nearest; the course's z = DEPTH_NEAR / Z (its
-   near plane, fx_face.c NEAR_Z: z at most 1); the land's the same times
-   LAND_SCALE, so the whole land lies farther than the farthest of the
-   course (Z under DEPTH_NEAR / LAND_SCALE) while its own parts hide each
-   other; the 2D 1, the nearest. */
+   list's depth its own, 1 nearest; the world's z = DEPTH_NEAR / Z (its
+   near plane, fx_face.c NEAR_Z: z at most 1); the ground's the same times
+   GROUND_SCALE, a range of its own (as a depth range per pass is): all of
+   it lies farther than anything of the world nearer than DEPTH_NEAR /
+   GROUND_SCALE (10,000,000), and a float's steps are as fine relative to
+   its depths as to the world's; the 2D 1, the nearest. */
 #define DEPTH_NEAR 1.0
-#define LAND_SCALE 1e-7
+#define GROUND_SCALE 1e-7
 enum { LAYER_MOST = 63 };       /* the most layers a face is drawn in front of (depth_state) */
 static struct {
     Recording *recording;
@@ -117,8 +111,6 @@ static int world_done;          /* the 3D's world is drawn (fx_draw_world_end): 
 static int held_by_view;        /* the object drawn now is placed in the view's space (fx_draw_held_by_view) */
 static int pinned;              /* a fixed-size sprite's quad, emitted where a zoomed view puts it (quad) */
 static int origin_x, origin_y;  /* where a screen other than the race's puts the picture; 0, 0: none */
-static int side_under;          /* what is drawn now lies past the water from the eye */
-static void under_splice(Recording *r);
 static int palette_row;         /* the 16 colours a 4-bit picture's tiles show it in */
 /* The list's pixels per screen pixel (target: the checks' list; screen: the
    layer's, which the frame art drawn into it scales by too). */
@@ -276,9 +268,6 @@ void fx_draw_begin(int picture)
     }
     recording->ox = offset_x;
     recording->oy = offset_y;
-    recording->nuv = recording->nus = 0;
-    recording->water_from = recording->water_to = -1;
-    side_under = 0;
     fx_face_cut(0, NULL, 0);
     recording->gen++;
 }
@@ -421,21 +410,11 @@ void fx_draw_part(int hud)
     if (recording && !hud)
         water_placed = 0;
     if (recording && hud) {
-        if (fx_draw_depth())
-            fx_draw_water();            /* where the frame program has not (fx_draw_water) */
-        else
-            under_splice(recording);
+        fx_draw_water();                /* where the frame program has not (fx_draw_water) */
         recording->hud_from = recording->ns;
     }
-    if (hud) {                          /* the HUD's drawing is not cut by the water */
-        side_under = 0;
+    if (hud)                            /* the water's holes are the 3D's */
         fx_face_cut(0, NULL, 0);
-    }
-}
-
-void fx_draw_side(int past)
-{
-    side_under = past != 0;
 }
 
 void fx_draw_world_end(void)
@@ -471,26 +450,18 @@ static int held;                /* nothing is drawn (the ground's survey) */
 
 void fx_draw_hold(int on) { held = on; }
 
-/* The depth of what is emitted (fx_far.c's fx_far_occlude): a queued face
-   its own (shape_draw sets it while it draws one), anything else the far
-   object drawing now's; 0 none, the 3D's own depth 0 in order. Only a
-   vertex at depth 0 takes it (the land's carry their own). */
-static int in_shape;
-static float shape_z;
+static int in_shape;             /* a queued face is being drawn (shape_draw) */
 
-/* a vertex's depth as emitted: z > 0 (without the depth test, the far
-   objects' and the land's) where it has none; -1 its own, or the default
-   where it has none; -2 the nearest */
+/* a vertex's depth as emitted: the 3D's world's its own, or where it has
+   none (0) its object's (depth_default); anything else (the 2D) 1, the
+   nearest */
 static float depth_default(void);
-static void depth_apply(nshvc_vertex *v, float z)
+static void depth_apply(nshvc_vertex *v, int world)
 {
-    if (z == -2.0f)
+    if (!world)
         v->z = 1.0f;
-    else if (z == -1.0f) {
-        if (v->z <= 0)
-            v->z = depth_default();
-    } else if (z > 0 && v->z == 0)
-        v->z = z;
+    else if (v->z <= 0)
+        v->z = depth_default();
 }
 
 void fx_draw_depth_class(int c) { depth_class = c; }
@@ -505,26 +476,16 @@ float fx_draw_z(double iz)
 {
     if (iz <= 0)
         return 0;
-    return (float)((depth_class == FX_DEPTH_LAND ? LAND_SCALE : 1.0) * DEPTH_NEAR * iz);
+    return (float)((depth_class == FX_DEPTH_GROUND ? GROUND_SCALE : 1.0) * DEPTH_NEAR * iz);
 }
 
-static float emit_z(void)
-{
-    return in_shape ? shape_z : fx_far_z();
-}
-
-/* With the depth test (docs/stuntracefx/native/DEPTH.md, 2): the depth of
-   a vertex emitted with none of its own (0): what is not the 3D's world (the
-   HUD, the text, a sign held before the eye) the nearest, 1; the world's
-   (a sprite, the chip's rows) its object's (fx_face_object_depth), else the
-   nearest. */
+/* The depth of a vertex of the 3D's world emitted with none of its own (a
+   sprite, the chip's rows; docs/stuntracefx/native/DEPTH.md, 2): its
+   object's (fx_face_object_depth), else the nearest. */
 static float depth_default(void)
 {
-    double d;
+    double d = fx_face_object_depth();
 
-    if (!in_world())
-        return 1.0f;
-    d = fx_face_object_depth();
     return d >= DEPTH_NEAR ? (float)(DEPTH_NEAR / d) : 1.0f;
 }
 
@@ -533,13 +494,10 @@ static void emit_with(const nshvc_vertex *v, uint32_t count, uint32_t image, int
     Recording *r = recording;
     nshvc_material m;
     uint32_t i;
-    float z;
+    int world = in_world();
 
     if (held)
         return;
-    z = fx_draw_depth() ? -1.0f : emit_z();     /* -1: each vertex's own, else depth_default's */
-    if (z < 0 && !in_world())
-        z = -2.0f;                              /* -2: the 2D's, the nearest throughout */
 
     if (!r) {
         nshvc_vertex scaled[48];
@@ -552,8 +510,7 @@ static void emit_with(const nshvc_vertex *v, uint32_t count, uint32_t image, int
         m.shader.id = shader;
         if (shader)
             memcpy(m.inputs, in, sizeof m.inputs);
-        if (fx_draw_depth())
-            depth_state(target, layer_now, back_now, depth_class == FX_DEPTH_WATER, 0);
+        depth_state(target, layer_now, back_now, depth_class == FX_DEPTH_WATER, 0);
         while (done < count) {
             uint32_t n = count - done > 48 ? 48 : count - done;
 
@@ -561,7 +518,7 @@ static void emit_with(const nshvc_vertex *v, uint32_t count, uint32_t image, int
                 scaled[i] = v[done + i];
                 scaled[i].x = (scaled[i].x + (float)offset_x) * target_sx;
                 scaled[i].y = (scaled[i].y + (float)offset_y) * target_sy;
-                depth_apply(&scaled[i], z);
+                depth_apply(&scaled[i], world);
             }
             if (lines)
                 nshvc_draw_lines(target, scaled, n, image ? &m : NULL);
@@ -570,38 +527,6 @@ static void emit_with(const nshvc_vertex *v, uint32_t count, uint32_t image, int
             perf_draw_call(n);
             done += n;
         }
-        return;
-    }
-    if (side_under && fx_face_cutting() && !fx_draw_depth()) {    /* the depth test puts the water in place itself */
-        if (r->nuv + count > r->cap_uv) {
-            r->cap_uv = r->cap_uv ? r->cap_uv * 2 : 4096;
-            while (r->nuv + count > r->cap_uv)
-                r->cap_uv *= 2;
-            r->uv = realloc(r->uv, r->cap_uv * sizeof *r->uv);
-        }
-        if (r->nus == r->cap_us) {
-            r->cap_us = r->cap_us ? r->cap_us * 2 : 1024;
-            r->us = realloc(r->us, r->cap_us * sizeof *r->us);
-        }
-        if (!r->uv || !r->us)
-            abort();
-        memset(&r->us[r->nus], 0, sizeof r->us[r->nus]);
-        r->us[r->nus].first = r->nuv;
-        r->us[r->nus].count = count;
-        r->us[r->nus].image = image;
-        r->us[r->nus].lines = (uint8_t)lines;
-        r->us[r->nus].world = in_world();
-        r->us[r->nus].layer = layer_now;
-        r->us[r->nus].back = back_now;
-        r->us[r->nus].keep = (uint8_t)(fx_draw_depth() && depth_class == FX_DEPTH_WATER);
-        r->nus++;
-        for (i = 0; i < count; i++) {
-            r->uv[r->nuv + i] = v[i];
-            r->uv[r->nuv + i].x += (float)offset_x;
-            r->uv[r->nuv + i].y += (float)offset_y;
-            depth_apply(&r->uv[r->nuv + i], z);
-        }
-        r->nuv += count;
         return;
     }
     if (r->nv + count > r->cap_v) {
@@ -622,10 +547,10 @@ static void emit_with(const nshvc_vertex *v, uint32_t count, uint32_t image, int
     r->s[r->ns].lines = (uint8_t)lines;
     r->s[r->ns].shader = shader;
     r->s[r->ns].mesh = r->s[r->ns].draw = 0;
-    r->s[r->ns].world = in_world();
+    r->s[r->ns].world = (uint8_t)world;
     r->s[r->ns].layer = layer_now;
     r->s[r->ns].back = back_now;
-    r->s[r->ns].keep = (uint8_t)(fx_draw_depth() && depth_class == FX_DEPTH_WATER);
+    r->s[r->ns].keep = (uint8_t)(depth_class == FX_DEPTH_WATER);
     if (shader)
         memcpy(r->s[r->ns].in, in, sizeof r->s[r->ns].in);
     r->ns++;
@@ -633,7 +558,7 @@ static void emit_with(const nshvc_vertex *v, uint32_t count, uint32_t image, int
         r->v[r->nv + i] = v[i];
         r->v[r->nv + i].x += (float)offset_x;
         r->v[r->nv + i].y += (float)offset_y;
-        depth_apply(&r->v[r->nv + i], z);
+        depth_apply(&r->v[r->nv + i], world);
     }
     r->nv += count;
     r->gen++;
@@ -782,8 +707,7 @@ void fx_draw_mesh(nshvc_mesh mesh, const nshvc_view *view, const nshvc_instance 
         return;
     blocks_flush();
     if (!r) {
-        if (fx_draw_depth())
-            depth_state(target, 0, 0, 0, 1);
+        depth_state(target, 0, 0, 0, 1);
         mesh_scaled(target, mesh.id, view, instances, count, target_sx, target_sy, (float)offset_x, (float)offset_y, 1, 0, 0);
         return;
     }
@@ -848,14 +772,12 @@ static void depth_state(nshvc_draw_list list, int layer, int back, int keep, int
     state_list = list.id;
 }
 
-/* A list the 3D is drawn into, just cleared (its state all zero): with the
-   depth test its depth its own, 1 nearest (DEPTH.md, 2). */
+/* A list the 3D is drawn into, just cleared (its state all zero): its depth
+   its own, 1 nearest (DEPTH.md, 2). */
 static void depth_list(nshvc_draw_list list)
 {
     if (state_list == list.id)
         state_list = 0;
-    if (!fx_draw_depth())
-        return;
     nshvc_draw_depth_own(list, 1);
     nshvc_draw_depth_order(list, NSHVC_DEPTH_NEAR_1);
 }
@@ -917,8 +839,7 @@ static void compose_recording(const Recording *r, uint32_t from, uint32_t to, in
         uint32_t count = sh->count;
 
         j = i + 1;
-        if (fx_draw_depth())
-            depth_state(screen_list, sh->layer, sh->back, sh->keep, sh->mesh != 0);
+        depth_state(screen_list, sh->layer, sh->back, sh->keep, sh->mesh != 0);
         if (sh->mesh) {
             const MeshDraw *d = &r->md[sh->draw];
 
@@ -1038,8 +959,7 @@ nshvc_draw_list fx_draw_picture(int picture)
         }
         /* the panels over the 3D in the full window, drawn as a list draws
            without a state (at the nearest depth: race_frame_art_draw_over) */
-        if (fx_draw_depth())
-            depth_state(screen_list, 0, 0, 0, 0);
+        depth_state(screen_list, 0, 0, 0, 0);
         if (!origin_x && !origin_y)
             race_frame_art_draw_over(screen_list);
         composed_picture = picture;
@@ -1283,14 +1203,12 @@ uint16_t fx_sprite_shrink(uint16_t size, uint16_t c8, uint16_t step, uint16_t le
     sprite_map.on = fx_sprite_map(left, top, &sprite_map.cx, &sprite_map.cy, &sprite_map.bx, &sprite_map.by, &sprite_map.k);
     sprite_map.fixed = sprite_map.on && fx_sprite_fixed();
     hide_quads = fx_solid_hiding();
-    side_under = fx_sprite_past_water();
     texels.on = 1;
     texels.across = c8;
     texels.down = (mask & 0x8000) ? c8 + 1 : c8;   /* a mirrored sprite's columns read a row on (the chip's) */
     r = sprite_shrink(size, c8, step, left, top, bank, base, mask);
     texels.on = 0;
     hide_quads = 0;
-    side_under = 0;
     sprite_map.on = 0;
     return r;
 }
@@ -1302,14 +1220,12 @@ uint16_t fx_sprite_magnify(uint16_t c8, uint16_t step, uint16_t left, uint16_t t
     sprite_map.on = fx_sprite_map(left, top, &sprite_map.cx, &sprite_map.cy, &sprite_map.bx, &sprite_map.by, &sprite_map.k);
     sprite_map.fixed = sprite_map.on && fx_sprite_fixed();
     hide_quads = fx_solid_hiding();
-    side_under = fx_sprite_past_water();
     texels.on = 1;
     texels.across = c8;
     texels.down = (mask & 0x8000) ? c8 + 1 : c8;   /* a mirrored sprite's columns read a row on (the chip's) */
     r = sprite_magnify(c8, step, left, top, bank, base, mask);
     texels.on = 0;
     hide_quads = 0;
-    side_under = 0;
     sprite_map.on = 0;
     return r;
 }
@@ -1622,13 +1538,9 @@ void fx_draw_flat(const FxCorner *c, uint32_t n, uint8_t colour)
     fx_draw_flat_entry(c, n, ink(colour));
 }
 
-/* ---- the water's cut: the parts past it spliced in ----
+/* ---- the water (docs/stuntracefx/native/DEPTH.md, 6) ---- */
 
-   At the end of a picture's 3D, the parts kept apart (past the water from
-   the eye) go before the water's shapes, and again after them clipped to
-   each hole in the water (fx_face_holes): there what lies past the water
-   shows, as inside a track piece that goes below it. */
-
+/* a hole's turn on the screen: 1 or -1 */
 static int hole_inside_sign(const FxHole *h)
 {
     double a = 0;
@@ -1639,49 +1551,7 @@ static int hole_inside_sign(const FxHole *h)
     return a > 0 ? 1 : -1;
 }
 
-/* a polygon of vertices clipped to a convex hole, offset by (ox, oy) */
-static int clip_to_hole(const nshvc_vertex *in, int n, nshvc_vertex *out, const FxHole *h, float ox, float oy)
-{
-    nshvc_vertex a[64], b[64];
-    int sign = hole_inside_sign(h), e, m = n, i;
-
-    if (n > 64)
-        return 0;
-    memcpy(a, in, sizeof(nshvc_vertex) * (size_t)n);
-    for (e = 0; e < h->n && m >= 3; e++) {
-        float x0 = h->x[e] + ox, y0 = h->y[e] + oy, x1 = h->x[(e + 1) % h->n] + ox, y1 = h->y[(e + 1) % h->n] + oy;
-        int k = 0;
-
-        for (i = 0; i < m && k < 62; i++) {
-            const nshvc_vertex *p = &a[i], *q = &a[(i + 1) % m];
-            double sp = sign * ((x1 - x0) * (p->y - y0) - (y1 - y0) * (p->x - x0));
-            double sq = sign * ((x1 - x0) * (q->y - y0) - (y1 - y0) * (q->x - x0));
-
-            if (sp >= 0)
-                b[k++] = *p;
-            if ((sp >= 0) != (sq >= 0)) {
-                double t = sp / (sp - sq);
-
-                b[k] = *p;
-                b[k].x = (float)(p->x + (q->x - p->x) * t);
-                b[k].y = (float)(p->y + (q->y - p->y) * t);
-                b[k].u = (float)(p->u + (q->u - p->u) * t);
-                b[k].v = (float)(p->v + (q->v - p->v) * t);
-                k++;
-            }
-        }
-        memcpy(a, b, sizeof(nshvc_vertex) * (size_t)k);
-        m = k;
-    }
-    if (m < 3)
-        return 0;
-    memcpy(out, a, sizeof(nshvc_vertex) * (size_t)m);
-    return m;
-}
-
-/* ---- the water with the depth test (docs/stuntracefx/native/DEPTH.md, 6) ----
-
-   The see-through water (FX_DEPTH_WATER: its shapes keep the depth) is
+/* The see-through water (FX_DEPTH_WATER: its shapes keep the depth) is
    drawn after the rest of the picture's 3D, at its own depths, tested and
    not written: what lies in front of it covers it, what lies past it shows
    through it, whatever the order the frame program drew them in. Where a
@@ -1702,25 +1572,25 @@ static double hole_side(const FxHole *h, int sign, int e, float ox, float oy, co
     return sign * ((x1 - x0) * (p->y - y0) - (y1 - y0) * (p->x - x0));
 }
 
-/* the convex polygon in[n]'s part inside hole edge e (inside) or outside
-   it, into out (room corners); its corners, 0 when it has none, -1 when
-   there is no room */
-static int hole_clip(const nshvc_vertex *in, int n, nshvc_vertex *out, int room, const FxHole *h, int sign, int e,
-                     float ox, float oy, int inside)
+/* the polygon in[n]'s part inside hole edge e (inside) or outside it,
+   into out (room for 2 n corners: each edge gives at most two); its
+   corners, 0 when fewer than 3 */
+static uint32_t hole_clip(const nshvc_vertex *in, uint32_t n, nshvc_vertex *out, const FxHole *h, int sign, int e,
+                          float ox, float oy, int inside)
 {
-    int i, m = 0;
+    uint32_t i, m = 0;
 
     for (i = 0; i < n; i++) {
         const nshvc_vertex *p = &in[i], *q = &in[(i + 1) % n];
         double sp = hole_side(h, sign, e, ox, oy, p), sq = hole_side(h, sign, e, ox, oy, q);
         int pin = inside ? sp >= 0 : sp <= 0, qin = inside ? sq >= 0 : sq <= 0;
 
-        if (m + 2 > room)
-            return -1;
         if (pin)
             out[m++] = *p;
         if (pin != qin && sp != sq) {
-            /* the crossing from the edge's ends in one order (by x, then y) */
+            /* the crossing from the edge's ends in one order (by x, then y);
+               the water's vertices have no divisor (w), so it is not one to
+               carry */
             const nshvc_vertex *a = p, *b = q;
             double sa = sp, sb = sq, t;
 
@@ -1739,61 +1609,104 @@ static int hole_clip(const nshvc_vertex *in, int n, nshvc_vertex *out, int room,
     return m >= 3 ? m : 0;
 }
 
+/* Pieces of water: their corners one after another, each piece's first
+   and count; grown as needed. */
+typedef struct {
+    nshvc_vertex *v;
+    uint32_t nv, cap_v;
+    uint32_t *first, *count;
+    uint32_t n, cap;
+} PieceSet;
+
+static PieceSet water_set[2];
+static nshvc_vertex *rest[2];           /* the part of a piece still to cut, and the next */
+static uint32_t rest_cap;
+
+static void *grown(void *p, uint32_t *cap, uint32_t need, size_t size)
+{
+    if (need <= *cap)
+        return p;
+    if (!*cap)
+        *cap = 64;
+    while (*cap < need)
+        *cap *= 2;
+    p = realloc(p, *cap * size);
+    if (!p)
+        abort();
+    return p;
+}
+
+/* where a piece of up to `corners` corners goes next in s */
+static nshvc_vertex *piece_room(PieceSet *s, uint32_t corners)
+{
+    uint32_t cap = s->cap;
+
+    s->v = grown(s->v, &s->cap_v, s->nv + corners, sizeof *s->v);
+    s->first = grown(s->first, &cap, s->n + 1, sizeof *s->first);
+    s->count = grown(s->count, &s->cap, s->n + 1, sizeof *s->count);
+    return s->v + s->nv;
+}
+
+/* the piece just written there kept, if it has corners */
+static void piece_keep(PieceSet *s, uint32_t n)
+{
+    if (n < 3)
+        return;
+    s->first[s->n] = s->nv;
+    s->count[s->n] = n;
+    s->n++;
+    s->nv += n;
+}
+
+static void rest_room(uint32_t n)
+{
+    uint32_t cap = rest_cap;
+
+    rest[0] = grown(rest[0], &cap, n, sizeof *rest[0]);
+    rest[1] = grown(rest[1], &rest_cap, n, sizeof *rest[1]);
+}
+
 /* A water triangle less every hole: each piece of what is left cut along
    each edge of the next hole in turn, the part outside the edge kept as a
    piece and the part inside cut on (what is inside every edge is the
-   hole's). A piece has at most its triangle's 3 corners and one more for
-   each cut, WATER_CORNERS room for the cuts of two holes of the most edges
-   (40); the pieces at most WATER_PIECES. Returns the pieces, in set `*out`
-   (0 or 1) of water_piece, or -1 when they would not fit. */
-enum { WATER_CORNERS = 3 + 2 * 40, WATER_PIECES = 256 };
-
-typedef struct {
-    int n;
-    nshvc_vertex v[WATER_CORNERS];
-} WaterPiece;
-
-static WaterPiece water_piece[2][WATER_PIECES];
-
-static int water_less_holes(const nshvc_vertex *tri, const FxHole *holes, int nh, float ox, float oy, int *out)
+   hole's). Returns which of water_set holds the pieces. */
+static int water_less_holes(const nshvc_vertex *tri, const FxHole *holes, int nh, float ox, float oy)
 {
-    int np = 1, cur = 0, h;
+    int cur = 0, h;
 
-    water_piece[0][0].n = 3;
-    memcpy(water_piece[0][0].v, tri, 3 * sizeof *tri);
-    for (h = 0; h < nh && np; h++) {
+    water_set[0].n = water_set[0].nv = 0;
+    memcpy(piece_room(&water_set[0], 3), tri, 3 * sizeof *tri);
+    piece_keep(&water_set[0], 3);
+    for (h = 0; h < nh && water_set[cur].n; h++) {
+        PieceSet *from = &water_set[cur], *to = &water_set[!cur];
         const FxHole *hole = &holes[h];
-        int sign = hole_inside_sign(hole), next = 0, p, e;
+        int sign = hole_inside_sign(hole), e;
+        uint32_t p;
 
-        for (p = 0; p < np; p++) {
-            WaterPiece rest = water_piece[cur][p], in;
+        to->n = to->nv = 0;
+        for (p = 0; p < from->n; p++) {
+            uint32_t n = from->count[p];
+            int r = 0;
 
-            for (e = 0; e < hole->n && rest.n; e++) {
-                int n;
+            rest_room(n);
+            memcpy(rest[0], from->v + from->first[p], n * sizeof *rest[0]);
+            for (e = 0; e < hole->n && n >= 3; e++) {
+                nshvc_vertex *out = piece_room(to, 2 * n);
 
-                if (next == WATER_PIECES)
-                    return -1;
-                n = hole_clip(rest.v, rest.n, water_piece[!cur][next].v, WATER_CORNERS, hole, sign, e, ox, oy, 0);
-                if (n < 0)
-                    return -1;
-                water_piece[!cur][next].n = n;
-                next += n > 0;
-                in = rest;
-                rest.n = hole_clip(in.v, in.n, rest.v, WATER_CORNERS, hole, sign, e, ox, oy, 1);
-                if (rest.n < 0)
-                    return -1;
+                piece_keep(to, hole_clip(rest[r], n, out, hole, sign, e, ox, oy, 0));
+                rest_room(2 * n);
+                n = hole_clip(rest[r], n, rest[!r], hole, sign, e, ox, oy, 1);
+                r = !r;
             }
         }
         cur = !cur;
-        np = next;
     }
-    *out = cur;
-    return np;
+    return cur;
 }
 
 void fx_draw_water(void)
 {
-    if (!recording || water_placed || !fx_draw_depth())
+    if (!recording || water_placed)
         return;
     water_last(recording);
     water_placed = 1;
@@ -1830,33 +1743,19 @@ static void water_last(Recording *r)
             continue;
         }
         for (t = 0; t + 2 < sh.count; t += 3) {
-            const nshvc_vertex *tri = &r->v[sh.first + t];
-            int set = 0, np = water_less_holes(tri, holes, nh, (float)r->ox, (float)r->oy, &set), p, j;
-            uint32_t need = 0;
+            const PieceSet *ps = &water_set[water_less_holes(&r->v[sh.first + t], holes, nh, (float)r->ox, (float)r->oy)];
+            uint32_t need = 0, p, j;
 
-            if (np < 0) {               /* more pieces or corners than there is room for: the triangle whole */
-                np = 1;
-                set = 0;
-                water_piece[0][0].n = 3;
-                memcpy(water_piece[0][0].v, tri, 3 * sizeof *tri);
-            }
-            for (p = 0; p < np; p++)
-                need += 3 * (uint32_t)(water_piece[set][p].n - 2);
-            if (nadd + need > cap_add) {
-                cap_add = cap_add ? cap_add * 2 : 1024;
-                while (nadd + need > cap_add)
-                    cap_add *= 2;
-                add = realloc(add, cap_add * sizeof *add);
-                if (!add)
-                    abort();
-            }
-            for (p = 0; p < np; p++) {
-                const WaterPiece *wp = &water_piece[set][p];
+            for (p = 0; p < ps->n; p++)
+                need += 3 * (ps->count[p] - 2);
+            add = grown(add, &cap_add, nadd + need, sizeof *add);
+            for (p = 0; p < ps->n; p++) {
+                const nshvc_vertex *c = ps->v + ps->first[p];
 
-                for (j = 1; j + 1 < wp->n; j++) {
-                    add[nadd++] = wp->v[0];
-                    add[nadd++] = wp->v[j];
-                    add[nadd++] = wp->v[j + 1];
+                for (j = 1; j + 1 < ps->count[p]; j++) {
+                    add[nadd++] = c[0];
+                    add[nadd++] = c[j];
+                    add[nadd++] = c[j + 1];
                 }
             }
         }
@@ -1883,105 +1782,6 @@ static void water_last(Recording *r)
     free(add);
 }
 
-static void under_splice(Recording *r)
-{
-    const FxHole *holes;
-    Shape *order;
-    nshvc_vertex *cv = NULL;
-    Shape *cs = NULL;
-    uint32_t ncv = 0, ncs = 0, cap_cv = 0, cap_cs = 0, i, k, n = 0, base, cbase, from, to;
-    int nh, h;
-
-    if (!r->nus) {
-        return;
-    }
-    holes = fx_face_holes(&nh);
-    /* the parts past the water clipped to each hole: triangle by triangle */
-    for (i = 0; i < r->nus; i++) {
-        const Shape *sh = &r->us[i];
-
-        if (sh->lines)
-            continue;
-        for (h = 0; h < nh; h++)
-            for (k = 0; k + 2 < sh->count; k += 3) {
-                nshvc_vertex poly[64];
-                int m = clip_to_hole(&r->uv[sh->first + k], 3, poly, &holes[h], (float)r->ox, (float)r->oy), j;
-
-                if (m < 3)
-                    continue;
-                if (ncv + 3 * (uint32_t)(m - 2) > cap_cv) {
-                    cap_cv = cap_cv ? cap_cv * 2 : 1024;
-                    while (ncv + 3 * (uint32_t)(m - 2) > cap_cv)
-                        cap_cv *= 2;
-                    cv = realloc(cv, cap_cv * sizeof *cv);
-                }
-                if (ncs == cap_cs) {
-                    cap_cs = cap_cs ? cap_cs * 2 : 256;
-                    cs = realloc(cs, cap_cs * sizeof *cs);
-                }
-                if (!cv || !cs)
-                    abort();
-                memset(&cs[ncs], 0, sizeof cs[ncs]);
-                cs[ncs].first = ncv;
-                cs[ncs].image = sh->image;
-                for (j = 1; j + 1 < m; j++) {
-                    cv[ncv++] = poly[0];
-                    cv[ncv++] = poly[j];
-                    cv[ncv++] = poly[j + 1];
-                }
-                cs[ncs].count = ncv - cs[ncs].first;
-                ncs++;
-            }
-    }
-    /* the vertices: the parts past the water and the clipped copies after
-       the recording's own */
-    if (r->nv + r->nuv + ncv > r->cap_v) {
-        r->cap_v = r->cap_v ? r->cap_v : 4096;
-        while (r->nv + r->nuv + ncv > r->cap_v)
-            r->cap_v *= 2;
-        r->v = realloc(r->v, r->cap_v * sizeof *r->v);
-    }
-    order = malloc((r->ns + r->nus + ncs + 1) * sizeof *order);
-    if (!r->v || !order)
-        abort();
-    base = r->nv;
-    memcpy(r->v + base, r->uv, r->nuv * sizeof *r->v);
-    cbase = base + r->nuv;
-    if (ncv)
-        memcpy(r->v + cbase, cv, ncv * sizeof *r->v);
-    r->nv = cbase + ncv;
-    from = r->water_from >= 0 ? (uint32_t)r->water_from : 0;
-    to = r->water_to >= 0 ? (uint32_t)r->water_to : from;
-    for (i = 0; i < from; i++)
-        order[n++] = r->s[i];
-    for (i = 0; i < r->nus; i++) {
-        order[n] = r->us[i];
-        order[n++].first += base;
-    }
-    for (i = from; i < to; i++)
-        order[n++] = r->s[i];
-    for (i = 0; i < ncs; i++) {
-        order[n] = cs[i];
-        order[n++].first += cbase;
-    }
-    for (i = to; i < r->ns; i++)
-        order[n++] = r->s[i];
-    if (n > r->cap_s) {
-        r->cap_s = n;
-        r->s = realloc(r->s, r->cap_s * sizeof *r->s);
-        if (!r->s)
-            abort();
-    }
-    memcpy(r->s, order, n * sizeof *order);
-    r->ns = n;
-    r->nus = r->nuv = 0;
-    r->water_from = r->water_to = -1;
-    r->gen++;
-    free(order);
-    free(cv);
-    free(cs);
-}
-
 /* The ground's surface (fx_ground.c): triangles drawn by `shader` over
    `image` with its inputs, each vertex's u, v its place on the screen less
    (ox, oy). */
@@ -2002,14 +1802,10 @@ void fx_draw_surface(const FxCorner *c, uint32_t n, nshvc_image image, nshvc_sha
             v[i].y = c[done + i].y;
             v[i].u = c[done + i].x - ox;
             v[i].v = c[done + i].y - oy;
-            v[i].z = fx_draw_depth() ? fx_draw_z(c[done + i].iz) : 0;
+            v[i].z = fx_draw_z(c[done + i].iz);
             v[i].colour = 0xFF000000u;
         }
-        if (recording && recording->water_from < 0)
-            recording->water_from = (int32_t)recording->ns;
         emit_with(v, k, image.id, 0, shader.id, in);
-        if (recording)
-            recording->water_to = (int32_t)recording->ns;
         done += k;
     }
 }
@@ -2040,7 +1836,7 @@ void fx_draw_flat_entry(const FxCorner *c, uint32_t n, uint8_t colour)
         for (i = 0; i < k; i++) {
             v[i].x = c[done + i].x;
             v[i].y = c[done + i].y;
-            v[i].z = fx_draw_depth() ? fx_draw_z(c[done + i].iz) : 0;
+            v[i].z = fx_draw_z(c[done + i].iz);
             at_entry(&v[i], colour);
         }
         emit(v, k, entry_image(), 0);
@@ -2277,7 +2073,7 @@ static void shape_draw_body(const FxShape *sh)
             v[i].y = c[done + i].y;
             v[i].u = (float)(c[done + i].u + u_off);
             v[i].v = (float)(c[done + i].v + v_off);
-            v[i].z = fx_draw_depth() ? fx_draw_z(c[done + i].iz) : 0;
+            v[i].z = fx_draw_z(c[done + i].iz);
             v[i].colour = tinted;
             if (verge) {
                 double inv = (sh->plane[0] * (v[i].x - vcx) / 128.0 + sh->plane[1] * (v[i].y - vcy) / 128.0 + sh->plane[2])
@@ -2290,27 +2086,6 @@ static void shape_draw_body(const FxShape *sh)
         }
         emit(v, n, image, sh->line);
         done += n;
-    }
-    if (sh->under_count) {              /* the part past the water from the eye */
-        const FxCorner *u = fx_face_corners() + sh->under_first;
-
-        side_under = 1;
-        for (done = 0; done < sh->under_count; done += 48) {
-            uint32_t n = sh->under_count - done > 48 ? 48 : sh->under_count - done;
-
-            for (i = 0; i < n; i++) {
-                v[i].x = u[done + i].x;
-                v[i].y = u[done + i].y;
-                v[i].u = (float)(u[done + i].u + u_off);
-                v[i].v = (float)(u[done + i].v + v_off);
-                v[i].z = fx_draw_depth() ? fx_draw_z(u[done + i].iz) : 0;
-                v[i].colour = tinted;
-                if (!m->textured && !tinted)
-                    at_entry(&v[i], colour);
-            }
-            emit(v, n, image, 0);
-        }
-        side_under = 0;
     }
 }
 
@@ -2533,20 +2308,16 @@ int fx_draw_ground(const double p[3], const double up[3], double n_out[3], doubl
     return found;
 }
 
-/* a queued face at its own depth (FxShape z), its layer and side */
+/* a queued face, its layer and side */
 static void shape_draw(const FxShape *sh)
 {
     in_shape = 1;
-    shape_z = sh->z;
-    layer_now = fx_draw_depth() ? layer_of(sh, fx_face_corners() + sh->first, sh->count) : 0;
+    layer_now = layer_of(sh, fx_face_corners() + sh->first, sh->count);
     back_now = sh->back;
     shape_draw_body(sh);
     layer_now = back_now = 0;
     in_shape = 0;
 }
-
-/* on: the list's own depth and the draw state are nativeshvc 6.3's */
-int fx_draw_depth(void) { return 1; }
 
 /* The faces queued so far drawn now, as FxDrawList draws them, the chip's
    state as it was (fx_ground.c: a tunnel piece's faces before its rock). */

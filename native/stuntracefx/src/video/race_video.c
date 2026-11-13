@@ -1489,7 +1489,7 @@ static void two_images_build(void)
 }
 
 /* The art drawn over the 3D (race_frame_art_draw_over) goes at the list's
-   nearest depth while the 3D is depth-tested (1 nearest: fx_draw_depth); the
+   nearest depth (its own depth, 1 nearest: fx_draw.c depth_list); the
    art drawn before the 3D at the farthest, 0, as all of it was before. */
 static int art_over;
 
@@ -1498,7 +1498,7 @@ static void art_depth(nshvc_vertex *v)
     int k;
 
     for (k = 0; k < 6; k++)
-        v[k].z = art_over && fx_draw_depth() ? 1.0f : 0.0f;
+        v[k].z = art_over ? 1.0f : 0.0f;
 }
 
 /* A rectangle of the screen from texels (u0, v0), a texel a screen pixel,

@@ -2696,11 +2696,6 @@ FxModelFacesResult FxModelFaces(uint16_t divisor_made, uint16_t list_write_ptr, 
         flag_index = fx_getb();
         fx_r14((uint16_t)(rom_at + 3));
         facing_away = face_cmd != 2 && !(fx_ldb((uint16_t)(flag_index + 0x07C6)) & 0x80);
-        if (facing_away && !fx_face_backs()) {
-            rom_at = (uint16_t)(rom_at + 7 + face_cmd);     /* faces away: passed */
-            fx_r14(rom_at);
-            continue;
-        }
         fx_stw(FX_POINT_COUNT, face_cmd);
         if (fx_face_full()) {
             FxDrawList(0, list_write_ptr, stack, (uint16_t)(rom_at + 3));

@@ -28,10 +28,6 @@ typedef struct {
        tier: the view's target at the game camera's distance from it, so
        what it shows has the detail and haze the game's view gives its car */
     float depth_scale;
-    /* the far objects drawn among the near ones by depth (fx_far.c), not
-       before them: in a view that is not the game's, the near list (the
-       cells ahead of the game's camera) is not what lies nearest */
-    int merge;
     /* the view's place in the world, whole: it may lie past the 16 bits
        the game's places wrap at (g's view place is its low 16 bits, which
        a near record's place from it, in 16 bits, needs no more of) */
@@ -48,7 +44,6 @@ uint16_t fx_view_light(int axis);
 void fx_view_light_vector(double l[3]);
 /* a depth for a model's detail and haze tier */
 uint16_t fx_view_depth(uint16_t depth);
-int fx_view_merge(void);
 /* while a view is set: 1 and its place in the world, whole; else 0 */
 int fx_view_eye(int32_t eye[3]);
 

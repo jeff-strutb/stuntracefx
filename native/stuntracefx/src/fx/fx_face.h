@@ -40,12 +40,6 @@ typedef struct {
     uint8_t tier;
     uint16_t tint_index;
     float light;
-    /* while the water cuts the picture (fx_face_cut): the face's part past
-       the water from the eye, drawn before it (count 0: none) */
-    uint32_t under_first, under_count;
-    /* the depth it is drawn at (a far object's while the land hides them,
-       fx_far_z), 0 the 3D's own */
-    float z;
     /* its plane in view space, n . p = d, a far object's halved place
        taken back to its own, so that one over a corner's depth is n .
        ((x - cx) / 128, (y - cy) / 128, 1) / d (d 0: none, a line) */
@@ -67,15 +61,13 @@ typedef struct {
    known, or it is wholly off the view). */
 void fx_face_begin(int textured);
 void fx_face_end(const FxMaterial *material);
-/* Faces seen from behind (docs/stuntracefx/native/DEPTH.md, 4), while the
-   3D is drawn with its depths (fx_draw_depth): FxModelFaces begins a face
-   facing away with fx_face_begin_back; it is held until its model's walk is
+/* Faces seen from behind (docs/stuntracefx/native/DEPTH.md, 4):
+   FxModelFaces begins a face facing away with fx_face_begin_back; it is held until its model's walk is
    done (fx_face_model_done, before the model's queue is drawn), then
    drawn, shaded as the chip shades it turned to the eye, unless the faces
    the walk reached close (every edge two faces' going opposite ways) or
    the face has a twin (the same corners the other way round): what faces
    the eye in its place hides it. */
-int fx_face_backs(void);
 void fx_face_begin_back(int textured);
 void fx_face_model_done(void);
 /* The shapes made since they were last drawn, in order; whether there is
@@ -111,19 +103,16 @@ uint32_t fx_face_triangles_d(const double (*p)[3], int n, FxCorner *out, uint32_
    fx_ground.c): each corner's iz their own 1 / Z. */
 uint32_t fx_face_triangles_whole(const double (*p)[3], int n, FxCorner *out, uint32_t room);
 
-/* The water's cut (fx_ground.c, Aqua Tunnel): on for a picture, its plane
-   n . v = d in view space (d > 0: the eye above it). A view-space point
-   past the water from the eye; whether the scaled sprite last placed is.
-   The holes: where a model crosses the plane, the region its crossings
-   enclose, in the picture's pixels (convex, at most 40 corners). */
+/* The water's holes (fx_ground.c: Aqua Tunnel's, Harbor City's): on for a
+   picture, the water's plane n . v = d in view space (d > 0: the eye above
+   it). The holes: where a model crosses the plane, the region its crossings
+   enclose, in the picture's pixels (convex, at most 40 corners), where the
+   water is not drawn (fx_draw.c fx_draw_water). */
 typedef struct {
     int n;
     float x[40], y[40];
 } FxHole;
 void fx_face_cut(int on, const double n[3], double d);
-int fx_face_cutting(void);
-int fx_face_past_water(double x, double y, double z);
-int fx_sprite_past_water(void);
 const FxHole *fx_face_holes(int *n);
 
 /* The ground's survey (fx_ground.c): while sinks are set, every model point

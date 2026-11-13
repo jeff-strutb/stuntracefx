@@ -13,8 +13,8 @@
 extern const char perf_tween_state[];   /* the state kept and the in-between state made, and put back */
 extern const char perf_frame[];         /* the race's 3D: the frame program, each panel */
 extern const char perf_ground[];        /* the ground and water (fx_ground.c), within it */
-extern const char perf_far[];           /* the objects past the near block (fx_far.c), within it */
-extern const char perf_near[];          /* the near objects, within it */
+extern const char perf_far[];           /* the objects past the near block turned to the view (fx_far.c), within it */
+extern const char perf_near[];          /* every object drawn (fx_far_parked), within it */
 extern const char perf_compose[];       /* the 3D's recordings into the screen's list */
 extern const char perf_video[];         /* the 2D: the screen, its layers and lists (the compose within it) */
 
