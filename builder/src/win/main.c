@@ -57,6 +57,8 @@ int rb_host_payload(const char *name, char *path, size_t n, char *err, size_t er
         *s = 0;
     if (!strcmp(name, "game"))
         swprintf(src + wcslen(src), MAX_PATH - wcslen(src), L"\\game\\stuntracefx.exe");
+    else if (!strcmp(name, "shaders"))
+        swprintf(src + wcslen(src), MAX_PATH - wcslen(src), L"\\game\\shaders");
     else
         src[0] = 0;
     if (!src[0] || GetFileAttributesW(src) == INVALID_FILE_ATTRIBUTES) {
@@ -103,9 +105,9 @@ static void page_intro(void)
     clear_page();
     text(L"Stunt Race FX Builder", 24, 20, 540, 32, s_title);
     text(L"Stunt Race FX Builder makes a native Windows build of Stunt Race FX (Super Nintendo, 1994) from your own "
-         L"copy of it: the decompilation's C, compiled for your PC.", 24, 60, 540, 40, s_font);
+         L"copy of it: the game as C, compiled for your PC.", 24, 60, 540, 40, s_font);
     text(L"Stunt Race FX", 24, 116, 540, 24, s_bold);
-    text(L"A Windows program (Windows 10 or later, 64-bit, with OpenGL 3.3), played with the keyboard or a game "
+    text(L"A Windows program (Windows 10 or later, 64-bit, with a Vulkan graphics driver), played with the keyboard or a game "
          L"controller. It needs your ROM of the cartridge, " RB_ROM_NAME L", once, to build.",
          44, 142, 520, 56, s_font);
     button(L"Continue", 464, BOTTOM, 100, ID_NEXT, 1);

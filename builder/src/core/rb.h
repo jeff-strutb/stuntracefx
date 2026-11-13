@@ -1,14 +1,13 @@
 /* rb.h: the release builder's core, shared by the macOS and Windows front ends.
  *
- * The builder turns the player's own copy of Stunt Race FX into a native
- * build of the game (ports/stuntracefx: the decompilation's C on
- * nativeshvc). The code ships inside the builder, built with none of the
- * cartridge's data in it (ASSETS_DATA=file); the data comes from the
- * player's ROM, checked by MD5: the No-Intro dump of Stunt Race FX (USA)
- * (Rev 1). The build carries the ROM's assets, the bytes the game reads
- * (ports/stuntracefx/assets.csv), as romdata.bin: an image of the ROM with
- * each asset at its offset and nothing where the ROM's code was. The result
- * needs no ROM once built. It is for the system the builder runs on
+ * The builder turns the player's own copy of Stunt Race FX into a build of
+ * the native game (native/stuntracefx on nativeshvc). The code ships inside
+ * the builder, built with none of the cartridge's data in it; the data comes
+ * from the player's ROM, checked by MD5: the No-Intro dump of Stunt Race FX
+ * (USA) (Rev 1). The build carries the bytes the game reads
+ * (native/stuntracefx/tools/assets.csv) as cart.dat: an image of the ROM
+ * with each range at its offset and nothing where the ROM's code was. The
+ * result needs no ROM once built. It is for the system the builder runs on
  * (Windows: Windows; macOS: the Mac, or the iPhone and iPad as an .ipa).
  *
  * Paths are UTF-8 everywhere. Every long call reports progress through an
@@ -74,15 +73,15 @@ void rb_output_path(const rb_job *job, char *out, size_t n);
 int rb_ios_signing(char *desc, size_t n);
 
 /* ---- the game's data (srfx.c) ---------------------------------------------------- */
-/* romdata.bin for a target from the ROM (RB_ROM_SIZE bytes, No-Intro's):
- * malloc'd, its size in *n; NULL with the reason in err. The iPhone's has the
- * title's PUSH START as TAP TO START (tools/assets.py ios_edits). */
-uint8_t *rb_romdata(const uint8_t *rom, int target, size_t *n, char *err, size_t errlen);
+/* cart.dat from the ROM (RB_ROM_SIZE bytes, No-Intro's), the same for every
+ * system: malloc'd, its size in *n; NULL with the reason in err. */
+uint8_t *rb_cart(const uint8_t *rom, size_t *n, char *err, size_t errlen);
 
 /* ---- supplied by each front end -------------------------------------------------- */
-/* where a piece shipped inside the builder is (a file, or the iPhone app's
- * folder): "game" (the game for this system), "icon" (the Mac app's
- * AppIcon.icns), "ios-app", "ios-sign"; 1 on success */
+/* where a piece shipped inside the builder is (a file, or a folder):
+ * "game" (the game for this system), "shaders" (its shaders' folder), "icon"
+ * (the Mac app's AppIcon.icns), "ios-app" (the iPhone app's folder, its
+ * shaders in it), "ios-sign"; 1 on success */
 int rb_host_payload(const char *name, char *path, size_t n, char *err, size_t errlen);
 
 /* ---- utilities the core shares (util.c, md5.c) ---------------------------------- */

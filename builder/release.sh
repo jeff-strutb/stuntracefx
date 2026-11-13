@@ -19,14 +19,14 @@ for a in "$@"; do
     [ "$a" = --no-build ] && BUILD=0
 done
 
-VERSION=${VERSION:-0.91}
+VERSION=${VERSION:-0.92}
 TAG=v$VERSION
 DIST=build/builder/dist
 MAC=$DIST/StuntRaceFXBuilder-$VERSION-macOS.zip
 WIN=$DIST/StuntRaceFXBuilder-$VERSION-Windows.zip
 
-if [ -n "$(git status --porcelain -- builder ports)" ]; then
-    echo "release: builder/ or ports/ has uncommitted changes; commit them first" >&2
+if [ -n "$(git status --porcelain -- builder native/stuntracefx)" ]; then
+    echo "release: builder/ or native/stuntracefx/ has uncommitted changes; commit them first" >&2
     exit 1
 fi
 git fetch -q origin
@@ -45,25 +45,23 @@ fi
 
 NOTES=$(mktemp)
 cat > $NOTES <<EOF
-Stunt Race FX Builder makes a native build of **Stunt Race FX** (Super Nintendo, 1994) from your own copy of the cartridge: the decompilation's C, compiled for your machine and running on nativeshvc, with the cartridge's Super FX as the game's own code. On a Mac it builds the game for the Mac, or for the iPhone and iPad; on Windows, for Windows.
+Stunt Race FX Builder makes a native build of **Stunt Race FX** (Super Nintendo, 1994) from your own copy of the cartridge: the game as C, compiled for your machine and running on nativeshvc, with everything drawn by the GPU. On a Mac it builds the game for the Mac, or for the iPhone and iPad; on Windows, for Windows.
 
 The game's data is copyrighted, so the builder does not include it: you provide your ROM, the builder checks it by MD5, takes the data the game reads from it (the ROM's code is not used: the C stands for it), and produces a game that runs on its own. The ROM is not needed once the build is done.
 
 ### Features
-- **The cartridge's game, native**: compiled from the decompilation's C for your machine. No emulator: the console's chips are nativeshvc's, and the cartridge's Super FX 3D chip is the game's own code.
-- **Two modes, switched with Tab** (a badge in the corner says which is on, and your choice is kept):
-  - **Original**: the game as it ran on the console, paced by the work of its chips, slowdown and all.
-  - **Enhanced**: independent of the machine's speed, as a modern game is. The race runs the cartridge's own physics step for step, and the 3D is drawn on every frame between its steps, so it moves at **60 frames a second**, in one-player and two-player races alike.
-- **Widescreen** (Enhanced, F2): a one-player race fills the window, whatever its shape, wide or tall, with more of the track and its scenery on either side; the speedometer, damage and rank panels stay framed in a 16:9 box in the middle.
-- **Sharp 3D at any size**: in Enhanced mode the 3D is drawn at your window's resolution, not stretched from the console's 256 by 224; on the Mac, iPhone and iPad the Super FX's polygons are drawn by the GPU with Metal.
-- **Touch controls** on the iPhone and iPad: a steering wheel under your right thumb (push past full lock for the hard turn), brake and boost pedals under your left, the gas held for you while you drive, a two-finger tap to pause; swipes and taps in the menus, and TAP TO START on the title.
-- **Game controllers** (and the keyboard) as the SNES pad, on every system.
+- **Native**: the game's own C for your machine, no emulator; its 3D is drawn by the GPU (Metal on the Mac, iPhone and iPad, Vulkan on Windows).
+- **Any window, any shape**: the race and the menus fill the window, wide or tall, and the 3D is drawn at the window's own resolution, sharp at any size.
+- **60 frames a second**: the race runs the cartridge's own physics step for step, and the 3D is drawn on every frame between its steps.
+- **The courses' ground as polygon scenery**: green polygon mountains, oceans of waves, snowfields, to the horizon; solid 3D tyres and trees, and no distance where the scenery is cut off.
+- **Its own pause screen** (Escape, Select + Start, or the corner button): remap the keyboard and a game controller, and turn Auto-Accelerate on or off.
+- **Touch controls** on the iPhone and iPad: a steering wheel under your right thumb, brake and boost pedals under your left, the gas held for you while you drive, a pause button; swipes and taps in the menus.
+- **Game controllers** and the keyboard, on every system.
 - **Records kept** as the cartridge's battery saved them, in your user folder, so a rebuild never loses them.
-- **Full screen** and any window size.
 
 ### Download
 - **macOS** (12 or later, Apple silicon and Intel; the game it builds needs the same): \`StuntRaceFXBuilder-$VERSION-macOS.zip\`. Unzip and open Stunt Race FX Builder. It is not notarized: if macOS refuses to open it, Control-click it and choose Open, or allow it in System Settings, Privacy & Security.
-- **Windows** (10 or later, 64-bit; the game it builds needs the same, and OpenGL 3.3): \`StuntRaceFXBuilder-$VERSION-Windows.zip\`. Unzip it and run \`StuntRaceFXBuilder.exe\` from the unzipped folder (the \`game\` folder beside it holds the game's code). It is not signed: if SmartScreen stops it, choose More info, then Run anyway.
+- **Windows** (10 or later, 64-bit; the game it builds needs the same, and a graphics driver with Vulkan): \`StuntRaceFXBuilder-$VERSION-Windows.zip\`. Unzip it and run \`StuntRaceFXBuilder.exe\` from the unzipped folder (the \`game\` folder beside it holds the game's code). It is not signed: if SmartScreen stops it, choose More info, then Run anyway.
 - Linux is not built yet.
 
 ### What it needs
@@ -75,16 +73,15 @@ The first release (Rev 0) and the European and Japanese cartridges are not suppo
 
 ### What it makes
 - Mac: \`Stunt Race FX.app\`.
-- iPhone and iPad (iOS 15 or later), from the Mac builder: \`Stunt Race FX.ipa\`, with the title's PUSH START reading TAP TO START. When your Mac has Xcode signing (a development certificate with a provisioning profile for it), the .ipa is signed with it, ready to install from Xcode (Devices and Simulators) or Apple Configurator. Otherwise the builder says so in red and the .ipa is unsigned, for you to sign and install with a tool such as AltStore or Sideloadly.
+- iPhone and iPad (iOS 15 or later), from the Mac builder: \`Stunt Race FX.ipa\`. When your Mac has Xcode signing (a development certificate with a provisioning profile for it), the .ipa is signed with it, ready to install from Xcode (Devices and Simulators) or Apple Configurator. Otherwise the builder says so in red and the .ipa is unsigned, for you to sign and install with a tool such as AltStore or Sideloadly.
 - Windows: a folder, \`Stunt Race FX\`, with \`Stunt Race FX.exe\` in it.
 
 ### Playing
-- **Original** mode is the cartridge's game as it ran. **Enhanced** mode adds a 60 frames a second option (Frame rate 60) and **Widescreen** (the race fills any window shape). Tab switches between them; F1 sets the frame rate, F2 Widescreen.
-- A keyboard or a game controller is the SNES pad. On the iPhone and iPad, touch drives it, or a game controller.
+- A keyboard or a game controller drives; on the iPhone and iPad, touch, or a game controller. The pause screen shows and changes what each key and button does.
 - Full screen: View, Enter Full Screen (Control-Command-F) on a Mac, Alt+Enter or F11 on Windows.
 - Records and settings live in your user folder (Application Support on macOS, the iPhone and the iPad, AppData on Windows), so rebuilding never touches them.
 
-Source: [builder/](https://github.com/jeff-strutb/stuntracefx/tree/$REV/builder), [ports/stuntracefx/](https://github.com/jeff-strutb/stuntracefx/tree/$REV/ports/stuntracefx), [src/stuntracefx/](https://github.com/jeff-strutb/stuntracefx/tree/$REV/src/stuntracefx).
+Source: [builder/](https://github.com/jeff-strutb/stuntracefx/tree/$REV/builder), [native/stuntracefx/](https://github.com/jeff-strutb/stuntracefx/tree/$REV/native/stuntracefx).
 EOF
 
 if [ $DRY = 1 ]; then

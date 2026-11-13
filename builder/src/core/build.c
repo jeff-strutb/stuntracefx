@@ -2,13 +2,15 @@
  *
  * Mac: an app bundle
  *   Stunt Race FX.app/Contents/MacOS/Stunt Race FX      the game
- *                    /Contents/Resources/romdata.bin   the cartridge's data (srfx.c)
+ *                    /Contents/Resources/cart.dat      the cartridge's data (srfx.c)
+ *                    /Contents/Resources/shaders/      its shaders
  *                    /Contents/Resources/AppIcon.icns  its icon
- * iPhone: Stunt Race FX.ipa, the app (Payload/Stunt Race FX.app) with
- *   romdata.bin inside, signed with the player's Xcode signing when this Mac
- *   has it (rb_ios_signing), else unsigned for the player to sign
+ * iPhone: Stunt Race FX.ipa, the app (Payload/Stunt Race FX.app, its shaders
+ *   and icon in it) with cart.dat inside, signed with the player's Xcode
+ *   signing when this Mac has it (rb_ios_signing), else unsigned for the
+ *   player to sign
  * Windows: a folder
- *   Stunt Race FX\Stunt Race FX.exe (its icon built in), romdata.bin
+ *   Stunt Race FX\Stunt Race FX.exe (its icon built in), shaders\, cart.dat
  *
  * The build is made in a hidden folder beside its destination and renamed
  * into place when complete; an earlier build is replaced only when it carries
@@ -271,12 +273,7 @@ static int payload(ctx *c, const char *name, const char *to, int tree)
     char src[2048];
     if (!rb_host_payload(name, src, sizeof src, c->err, c->errlen))
         return 0;
-#ifndef _WIN32
     if (tree ? !rb_copy_tree(src, to) : !rb_copy_file(src, to)) {
-#else
-    (void)tree;
-    if (!rb_copy_file(src, to)) {
-#endif
         rb_err(c->err, c->errlen, "cannot copy the builder's %s to %s", name, to);
         return 0;
     }
@@ -304,6 +301,9 @@ static int stage(ctx *c)
         if (!payload(c, "game", path, 0))
             return 0;
         rb_set_exec(path);
+        rb_join(path, sizeof path, c->res, "shaders");
+        if (!payload(c, "shaders", path, 1))
+            return 0;
         rb_join(path, sizeof path, c->res, "AppIcon.icns");
         return payload(c, "icon", path, 0);
     }
@@ -320,7 +320,10 @@ static int stage(ctx *c)
     if (!rb_mkdirs(c->root))
         goto nodir;
     rb_join(path, sizeof path, c->root, RB_PRODUCT ".exe");
-    return payload(c, "game", path, 0);
+    if (!payload(c, "game", path, 0))
+        return 0;
+    rb_join(path, sizeof path, c->root, "shaders");
+    return payload(c, "shaders", path, 1);
 nodir:
     rb_err(c->err, c->errlen, "cannot make folders in %s (is it writable?)", c->job->dest_dir);
     return 0;
@@ -343,14 +346,13 @@ static int data(ctx *c)
         free(rom);
         return 0;
     }
-    say(c, 0.3, c->job->target == RB_IOS ? "Taking the game's data from the ROM (TAP TO START for touch)"
-                                          : "Taking the game's data from the ROM");
-    img = rb_romdata(rom, c->job->target, &n, c->err, c->errlen);
+    say(c, 0.3, "Taking the game's data from the ROM");
+    img = rb_cart(rom, &n, c->err, c->errlen);
     free(rom);
     if (!img)
         return 0;
     say(c, 0.7, "Writing the game's data");
-    rb_join(path, sizeof path, c->res, "romdata.bin");
+    rb_join(path, sizeof path, c->res, "cart.dat");
     ok = rb_write_file(path, img, n);
     free(img);
     if (!ok)

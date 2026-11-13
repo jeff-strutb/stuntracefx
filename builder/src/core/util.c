@@ -152,6 +152,39 @@ int rb_rmtree(const char *path)
 }
 
 int rb_set_exec(const char *path) { (void)path; return 1; }
+
+int rb_copy_tree(const char *from, const char *to)
+{
+    char pat[2048], a[2048], b[2048];
+    WIN32_FIND_DATAW fd;
+    HANDLE h;
+    wchar_t *w;
+    int ok = 1;
+    DWORD at = attrs(from);
+    if (at == INVALID_FILE_ATTRIBUTES)
+        return 0;
+    if (!(at & FILE_ATTRIBUTE_DIRECTORY))
+        return rb_copy_file(from, to);
+    if (!rb_mkdirs(to))
+        return 0;
+    rb_join(pat, sizeof pat, from, "*");
+    w = wide(pat);
+    h = FindFirstFileW(w, &fd);
+    free(w);
+    if (h == INVALID_HANDLE_VALUE)
+        return 1;                               /* an empty folder */
+    do {
+        char name[1024];
+        if (!wcscmp(fd.cFileName, L".") || !wcscmp(fd.cFileName, L".."))
+            continue;
+        WideCharToMultiByte(CP_UTF8, 0, fd.cFileName, -1, name, sizeof name, NULL, NULL);
+        rb_join(a, sizeof a, from, name);
+        rb_join(b, sizeof b, to, name);
+        ok = rb_copy_tree(a, b);
+    } while (ok && FindNextFileW(h, &fd));
+    FindClose(h);
+    return ok;
+}
 #else
 FILE *rb_fopen(const char *path, const char *mode) { return fopen(path, mode); }
 int rb_seek(FILE *f, uint64_t off) { return fseeko(f, (off_t)off, SEEK_SET) == 0; }
