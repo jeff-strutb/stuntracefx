@@ -1935,20 +1935,13 @@ void race_frame_art_draw(nshvc_draw_list list)
         half_draw(list, 0, 0, 112);
         half_draw(list, 1, 112, 224);
     } else {
-        nshvc_rect to = { 0, 0, 256, 224 };
-        nshvc_material m;
-        float sx, sy;
-
         if (frame_image_stale)
             frame_image_build();
         if (race_full_window())
             return;                     /* no bezel: the 3D fills the screen, the boxes go over it */
-        fx_draw_list_scale(&sx, &sy);
-        to.x1 = 256.0f * sx;
-        to.y1 = 224.0f * sy;
-        memset(&m, 0, sizeof m);
-        m.image = race_video.frame_image;
-        nshvc_draw_image(list, race_video.frame_image, &to, &m);
+        /* as triangles at the farthest depth (art_depth), behind the 3D: an
+           image drawn in a list goes at its nearest (nativeshvc 47a4777) */
+        image_quad(list, race_video.frame_image, 0, 0, 256, 224, 0, 0);
     }
 }
 
