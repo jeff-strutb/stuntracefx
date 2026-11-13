@@ -503,6 +503,12 @@ void ObjectDrawListBuild(void);
    byte is still the one that read gave; 0 otherwise. Indexed as
    ObjectDrawListBuild writes g.frame_records; rebuilt with them. */
 uint16_t draw_record_gaze(int record);
+/* A draw record's car (its slot + 1; 0 none): the object with tyres its own
+   or its parents' chain reaches; *tyre whether the record is one of the
+   car's tyres. `far` 0 a near record (its number), 1 a far one (its number
+   in the chip's second 64 KB). For seating the cars on the road
+   (docs/stuntracefx/native/DEPTH.md, 5). */
+uint16_t draw_record_car(int far, unsigned n, int *tyre);
 /* after an object's handler ran (ObjectTurn): a car's child's seat on its
    car learnt, or that it was placed at its car's centre (draw_list.c) */
 void ObjectChildPlaced(const Object *o);

@@ -307,6 +307,13 @@ void fx_solid_begin(void)
     if (size_halved)                    /* a far object's, halved with its place (fx_far.c) */
         size >>= halving;
     scale = (float)(size ? size : 1) / object->texels;
+    if (exact_view && !object->tree && object->rings) {     /* a car's tyre seated on the road (fx_face.c) */
+        float rmax = 0;
+
+        for (i = 0; i < object->nrings; i++)
+            rmax = object->rings[i].r > rmax ? object->rings[i].r : rmax;
+        fx_face_seat_tyre(pos, rmax * scale);
+    }
     if (face) {
         /* turned by its gaze above */
     } else if (object->tree) {          /* upright in the world: the view's matrix alone */

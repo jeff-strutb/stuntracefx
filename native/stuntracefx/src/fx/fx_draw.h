@@ -124,6 +124,12 @@ void fx_draw_queued(void);
    faces seen from behind drawn (fx_face_backs), each vertex at its true
    depth. Off until the engine's depth settings are in. */
 int fx_draw_depth(void);
+/* The ground under view-space point p (docs/stuntracefx/native/DEPTH.md, 5):
+   of the faces this picture has drawn that are not a car's and face up or
+   down (up the world's up in view space), the topmost that the line from
+   p straight up and down meets no more than 100 over p; its plane n . x = d,
+   n facing up. 0 when none. */
+int fx_draw_ground(const double p[3], const double up[3], double n[3], double *d);
 int fx_draw_picture_now(void);
 int fx_draw_tweening(void);
 /* The palette entry a face's colour byte is shown in at the screen's depth

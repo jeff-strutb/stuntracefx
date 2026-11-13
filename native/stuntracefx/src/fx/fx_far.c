@@ -29,6 +29,7 @@
  * fx_far_original gives the near record it holds (none for a far one or a
  * tyre), for the eyes' gaze and the angles between steps.
  */
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -37,6 +38,7 @@
 #include "fx/fx_far.h"
 #include "fx/fx_ground.h"
 #include "fx/fx_view.h"
+#include "object/object.h"
 #include "system/state.h"
 
 enum { SLOTS = 0x31, SLOT_SIZE = 0x1E, SLOT_FIRST = 0x0AAA };
@@ -57,6 +59,14 @@ static uint16_t slot_original[SLOTS];   /* the near record a slot holds in a pas
 static double slot_near[SLOTS];         /* a far slot's nearest depth */
 static uint8_t slot_far[SLOTS];         /* the slot holds a far object (not a near one or a tyre) */
 static uint16_t slot_rec[SLOTS];        /* the far record a slot holds in a pass (its address in the second 64 KB); 0 none */
+static uint16_t slot_car[SLOTS];        /* the car a slot's record belongs to in the merged pass (draw_record_car); 0 none */
+static uint8_t slot_tyre[SLOTS];        /* and whether it is one of its tyres */
+
+/* Every object in one order by depth, in merged_pass: a view other than the
+   game's (fx_view_merge), and the depth-tested 3D in every view
+   (fx_draw_depth), where the order decides only the layers of faces on one
+   plane and the cars are drawn after the course (seated on it). */
+int fx_far_merges(void) { return fx_view_merge() || fx_draw_depth(); }
 static int near_list;                   /* the frame program draws its near list (fx_far_near_list) */
 static int drawing, shift_now, occlude, far_now;
 static uint16_t depth_now;
@@ -142,7 +152,7 @@ void fx_far_pass(uint16_t *stack)
         while ((big >> s) > 0x3FFF)
             s++;
         {
-            int tyre = fx_ram[FX_FAR_BANK + (uint16_t)(rec + FX_FAR_PARKED)] != 0, merge = fx_view_merge();
+            int tyre = fx_ram[FX_FAR_BANK + (uint16_t)(rec + FX_FAR_PARKED)] != 0, merge = fx_far_merges();
             /* a view other than the game's (fx_view_merge) draws every far
                object among the near ones (merged_pass) */
             Far *f = tyre || merge ? &parked[nparked++] : &far[n++];
@@ -195,6 +205,7 @@ void fx_far_pass(uint16_t *stack)
             slot_rec[k] = f->rec;
             slot_near[k] = f->near;
             slot_far[k] = 1;
+            slot_car[k] = 0;
         }
         ram_put(GSU_DRAW_LIST, SLOT_FIRST);
         *stack = 0x0240;
@@ -250,13 +261,25 @@ typedef struct {
     int16_t place[3];
     uint8_t shift;
     uint16_t depth;
+    uint16_t car;               /* with the depth test: its car (draw_record_car), 0 none */
+    uint8_t tyre;
+    int64_t car_key;            /* its car's farthest part's key, the cars' order */
 } Merged;
 
-/* farthest first; of equal keys the near list's first, in its order */
+/* farthest first; of equal keys the near list's first, in its order. With
+   the depth test the cars come after the course, each car's parts together
+   (the cars farthest first), its tyres first: the depth decides what is
+   seen, and a car is seated on the course's faces (fx_draw.c) */
 static int merged_order(const void *a, const void *b)
 {
     const Merged *x = a, *y = b;
 
+    if (!x->car != !y->car)
+        return x->car ? 1 : -1;
+    if (x->car && x->car != y->car)
+        return x->car_key != y->car_key ? (x->car_key < y->car_key ? 1 : -1) : (x->car < y->car ? -1 : 1);
+    if (x->car && x->tyre != y->tyre)
+        return x->tyre ? -1 : 1;
     if (x->key != y->key)
         return x->key < y->key ? 1 : -1;
     return x->seq < y->seq ? -1 : x->seq > y->seq;
@@ -285,6 +308,12 @@ static void merged_pass(uint16_t *stack)
         while ((big >> s) > 0x3FFF)
             s++;
         e[n].key = ((fx_ram[(uint16_t)(slot + 0x07)] & 0x80) ? (int64_t)(int16_t)own : (int64_t)own) + bias + v[2];
+        {
+            int tyre = 0;
+
+            e[n].car = fx_draw_depth() ? draw_record_car(0, (uint16_t)(slot - SLOT_FIRST) / SLOT_SIZE, &tyre) : 0;
+            e[n].tyre = (uint8_t)tyre;
+        }
         e[n].far = 0;
         e[n].at = (unsigned)(uint16_t)(slot - SLOT_FIRST) / SLOT_SIZE;
         for (k = 0; k < 3; k++)
@@ -295,11 +324,27 @@ static void merged_pass(uint16_t *stack)
         n++;
     }
     for (j = 0; j < nparked; j++) {
+        int tyre = 0;
+
         e[n].key = parked[j].key;
+        e[n].car = fx_draw_depth() ? draw_record_car(1, (uint16_t)(parked[j].rec - FX_FAR_RECORDS) / FX_FAR_SIZE, &tyre) : 0;
+        e[n].tyre = (uint8_t)tyre;
         e[n].far = 1;
         e[n].at = j;
         e[n].seq = n;
         n++;
+    }
+    {                                   /* each car's order: its farthest part's key */
+        static int64_t car_far[OBJECT_COUNT + 1];
+
+        for (i = 0; i < n; i++)
+            if (e[i].car && e[i].car <= OBJECT_COUNT)
+                car_far[e[i].car] = INT64_MIN;
+        for (i = 0; i < n; i++)
+            if (e[i].car && e[i].car <= OBJECT_COUNT && e[i].key > car_far[e[i].car])
+                car_far[e[i].car] = e[i].key;
+        for (i = 0; i < n; i++)
+            e[i].car_key = e[i].car && e[i].car <= OBJECT_COUNT ? car_far[e[i].car] : e[i].key;
     }
     qsort(e, n, sizeof e[0], merged_order);
     memcpy(kept, fx_ram, sizeof kept);
@@ -310,6 +355,8 @@ static void merged_pass(uint16_t *stack)
         unsigned in = n - b < SLOTS ? n - b : SLOTS;
 
         for (k = 0; k < in; k++) {
+            slot_car[k] = e[b + k].car;
+            slot_tyre[k] = e[b + k].tyre;
             if (e[b + k].far) {
                 far_slot(k, &parked[e[b + k].at], k + 1 == in);
                 continue;
@@ -351,7 +398,7 @@ void fx_far_parked(uint16_t *stack)
     unsigned n = 0, i, j, b, k, near = 0;
     uint16_t slot;
 
-    if (fx_view_merge()) {              /* a view other than the game's: its own order of every object */
+    if (fx_far_merges()) {              /* its own order of every object */
         merged_pass(stack);
         return;
     }
@@ -389,6 +436,7 @@ void fx_far_parked(uint16_t *stack)
             unsigned in = n - b < SLOTS ? n - b : SLOTS;
 
             for (k = 0; k < in; k++) {
+                slot_car[k] = 0;
                 if (order[b + k].tyre) {
                     far_slot(k, &parked[order[b + k].at], k + 1 == in);
                     continue;
@@ -401,6 +449,7 @@ void fx_far_parked(uint16_t *stack)
                 slot_far[k] = 0;
                 slot_rec[k] = 0;
                 slot_original[k] = (uint16_t)(SLOT_FIRST + order[b + k].at * SLOT_SIZE);
+                slot_car[k] = 0;
             }
             ram_put(GSU_DRAW_LIST, SLOT_FIRST);
             *stack = 0x0240;
@@ -462,6 +511,20 @@ float fx_far_z(void)
 }
 
 void fx_far_near_list(int on) { near_list = on != 0; }
+
+uint16_t fx_far_car(uint16_t record, int *tyre)
+{
+    unsigned k;
+
+    *tyre = 0;
+    if (!drawing || (uint16_t)(record - SLOT_FIRST) % SLOT_SIZE)
+        return 0;
+    k = (uint16_t)(record - SLOT_FIRST) / SLOT_SIZE;
+    if (k >= SLOTS)
+        return 0;
+    *tyre = slot_tyre[k];
+    return slot_car[k];
+}
 
 /* near record i's place as the main CPU wrote it (+$12, +$10, +$14, from
    the view in 16 bits), when the chip's slot `slot` was uploaded from it */

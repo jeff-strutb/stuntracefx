@@ -77,7 +77,7 @@ static FxFrameProgramResult frame_program(uint16_t draw_list_end)
     nshvc_profile_end();
     *stack = 0x0240;
     nshvc_profile_begin(perf_near);
-    if (!fx_view_merge()) {             /* a view that draws the far objects among the near ones draws them all in fx_far_parked */
+    if (!fx_far_merges()) {             /* a view that draws the far objects among the near ones draws them all in fx_far_parked */
         fx_far_near_list(1);            /* its slots are the main CPU's records, for exact corners (fx_far.c) */
         { FxObjectsDrawResult r_ = FxObjectsDraw(draw_list_end, stack); up_ = r_.up; };
         fx_far_near_list(0);

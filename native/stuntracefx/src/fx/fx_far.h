@@ -62,6 +62,13 @@ uint16_t fx_far_original(uint16_t record);
    object drawn outside the race's lists: the ground's survey, a menu's). */
 int fx_far_exact_place(uint16_t record, double rel[3], int *in_view);
 void fx_far_near_list(int on);
+/* Whether the frame program draws every object in one order (merged_pass):
+   a view other than the game's, or the depth-tested 3D. */
+int fx_far_merges(void);
+/* While the merged pass draws with the depth test: the car (draw_record_car)
+   the slot `record` holds belongs to, 0 none; *tyre whether it is one of
+   its tyres. */
+uint16_t fx_far_car(uint16_t record, int *tyre);
 /* Far objects hidden by the land (fx_ground.c, where it fills a course's
    empty space): while on, each far object is drawn at a depth of its own,
    its nearest point's, that the land in front of it hides it at; off, as

@@ -109,18 +109,31 @@ wound clockwise on the screen as their front.
 The chip's walk now takes faces facing away as well, holding each one until
 its model's walk is done; it still picks the walk's branches as before.
 
-### 5. Cars
+### 5. Cars, seated exactly (Jeff, 2026-11-12: "Option 2")
 
-Measure first: a scratch dump of one picture's tyres, bodies and shadows
-against the road faces under them. Then fix by what it shows.
+Measured with exact corners on Easy Ride, Sunset Valley and Aqua Tunnel, on
+the grid and at speed:
 
-The earlier measurement (2d4d4c3a) found tyre centres within 11 of the road,
-bodies from 16 under to 2 over, and shadows 25 to 65 under. That points to:
+- tyre middles from 7 under to 9 over the road (radius 40.25);
+- the body's lowest point 1 to 17 under it;
+- the shadow, two faces tilted with the car, 31 to 66 under it, which is
+  39 to 58 under the tyres' middles;
+- the body's one level face is its roof, 130 over them.
 
-- every car drawn one tyre radius (40.25) up along its own up axis;
-- its shadow laid on the road face under it, as a layer of that face.
+The original hid all of it by painting the cars after the road.
 
-There is no per-picture surface search, and no other objects are moved.
+With the depth test the cars are drawn after the course, each car's parts
+together with its tyres first, so every face of the course under them is
+known. A car is the object with tyres; an object belongs to the car its own
+or its parents' chain reaches (no model is named).
+
+- Each tyre is moved along the normal of the ground under its middle, to
+  its radius over it.
+- The car's other parts move by its tyres' mean move.
+- A face of the car whose corners all lie no more than 0.3 of a tyre's
+  radius over the ground under its middle (the shadow; never the body,
+  whose lowest corner ends 25 over) is laid on that ground. It then lies
+  in the road's plane, and the layers draw it over the road.
 
 ### 6. Sprites, particles and water (engine: depth write off)
 

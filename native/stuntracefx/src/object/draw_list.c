@@ -37,6 +37,67 @@ static uint8_t frame_byte(uint8_t v)
 static uint8_t near_drawn[OBJECT_COUNT];
 
 /*
+ * Each draw record's car, for seating the cars on the road in the
+ * depth-tested 3D (docs/stuntracefx/native/DEPTH.md, 5): the cars are the
+ * objects with tyres (a child on its record, child_car), and an object
+ * belongs to the car its own or its parents' chain reaches (its body, its
+ * eyes, its shadow, its tyres); 0 none, else the car's slot + 1. Kept per
+ * near record (by its number) and per far record (by its number), with
+ * whether the record is a tyre.
+ */
+static uint8_t has_tyres[OBJECT_COUNT];
+static uint16_t record_car[2][FX_FAR_MAX];
+static uint8_t record_tyre[2][FX_FAR_MAX];
+
+static const Object *child_car(const Object *o);
+
+static void cars_mark(void)
+{
+    ObjRef ref = objects.used_head;
+    unsigned n = 0;
+
+    memset(has_tyres, 0, sizeof has_tyres);
+    for (; ref && n < OBJECT_COUNT; ref = obj_at(ref)->next, n++) {
+        const Object *car = child_car(obj_at(ref));
+
+        if (car)
+            has_tyres[obj_slot(car)] = 1;
+    }
+}
+
+static uint16_t car_of(const Object *o)
+{
+    int up;
+
+    for (up = 0; up < 4 && o; up++) {
+        if (has_tyres[obj_slot(o)])
+            return (uint16_t)(obj_slot(o) + 1);
+        if (!o->parent)
+            return 0;
+        o = obj_at(o->parent);
+    }
+    return 0;
+}
+
+static void record_car_note(int far, unsigned n, const Object *o)
+{
+    if (n >= FX_FAR_MAX)
+        return;
+    record_car[far][n] = car_of(o);
+    record_tyre[far][n] = child_car(o) != NULL;
+}
+
+uint16_t draw_record_car(int far, unsigned n, int *tyre)
+{
+    if (n >= FX_FAR_MAX) {
+        *tyre = 0;
+        return 0;
+    }
+    *tyre = record_tyre[far != 0][n];
+    return record_car[far != 0][n];
+}
+
+/*
  * A car's child on its record (a tyre: ObjectChildStep, $08:BB2E) is drawn
  * on its seat on its car whenever the game's own place for it is not one:
  *
@@ -230,6 +291,7 @@ static uint8_t *draw_record(Object *o, uint8_t *r, int far)
         }
     }
     near_drawn[obj_slot(o)] = 1;
+    record_car_note(0, g.frame_record_count, o);
     objects.record_gaze[g.frame_record_count] = ObjectGazeBetween(o, g.draw_side ? 1 : 0, object_gaze(o, g.draw_side ? 1 : 0));
     g.frame_record_count++;
     return r + RECORD_SIZE;
@@ -316,6 +378,7 @@ static void far_records(void)
             if (!drawable(o, seated) || !model_word_in_cartridge(o->model))
                 continue;
             far_record(o, (uint16_t)(FX_FAR_RECORDS + n * FX_FAR_SIZE), seated ? place : NULL, turn);
+            record_car_note(1, n, o);
             n++;
         }
     }
@@ -335,6 +398,7 @@ void ObjectDrawListBuild(void)
     uint8_t *r = g.frame_records;
 
     memset(near_drawn, 0, sizeof near_drawn);
+    cars_mark();
     g.frame_record_count = 0;
     for (unsigned t = 0; g.trigger_list[t][0]; t++) {
         ObjRef ref = objects.bucket_head[(g.trigger_list[t][1] & 0x07FE) / 2];

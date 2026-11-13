@@ -57,6 +57,8 @@ typedef struct {
        (fx_draw.c) */
     uint8_t ncorner3;
     double corner3[8][3];
+    /* part of a car (fx_far_car): not the ground a car is seated on */
+    uint8_t car_part;
 } FxShape;
 
 /* A face: begun, its points given (fx_face_vertex, fx_rt.h), then ended
@@ -134,6 +136,11 @@ void fx_face_survey(FxSurveyPoint point, FxSurveyFace face, void *context);
    its place in view space and the view's turn (row k, world axis k in view
    space) when its place is known; else 0. */
 int fx_face_exact_object(double place[3], double view[3][3]);
+/* With the depth test, a car's tyre (a solid, fx_solid.c) of `radius`
+   whose middle is pos in view space: moved along the normal of the ground
+   under it to its radius over it, the move kept for its car's other parts.
+   1 when it was seated. */
+int fx_face_seat_tyre(float pos[3], double radius);
 
 /* The view's rectangle in the picture's pixels: left, right (past its last
    column), top, bottom (past its last row). */
