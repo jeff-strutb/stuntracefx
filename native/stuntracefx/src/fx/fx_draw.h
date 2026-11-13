@@ -31,6 +31,11 @@ void fx_draw_world_scale(float *sx, float *sy);
    the frame program draws after it is on the screen as drawn, not
    magnified with a zoomed view's world. */
 void fx_draw_world_end(void);
+/* Each object as FxObjectsDraw takes it (render/frame.c): whether it is
+   placed in the view's space (its draw record's flags bit 7: the rank sign
+   the race holds before its camera), which is drawn where the chip puts
+   it, not magnified with a zoomed view's world; 0 after the objects. */
+void fx_draw_held_by_view(int held);
 /* The words the chip's view takes (GsuParamsFromDp's g.view_*): the view
    over a rectangle of the screen, x, y, width, height in screen pixels, its
    horizon's centre at x + width / 2 across and centre_y down; focal length

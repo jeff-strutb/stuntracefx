@@ -2,6 +2,8 @@
  * fx_view.c: a picture drawn from another camera than the game's (see
  * fx_view.h).
  */
+#include <math.h>
+
 #include "fx/fx_view.h"
 
 static FxView view;
@@ -39,13 +41,24 @@ void fx_view_light_vector(double l[3])
         l[k] = (int16_t)fx_view_light(k) / 32768.0;
 }
 
-/* Only a depth in front of the view (below $8000) is moved: one behind it
+/* Only a depth in front of the view (below $8000) is scaled: one behind it
    keeps the chip's reading of it. */
 uint16_t fx_view_depth(uint16_t depth)
 {
-    if (!on || (depth & 0x8000))
+    if (!on || (depth & 0x8000) || view.depth_scale <= 0)
         return depth;
-    return depth > view.depth_less ? (uint16_t)(depth - view.depth_less) : 0;
+    return (uint16_t)lroundf((float)depth * view.depth_scale);
 }
 
 int fx_view_merge(void) { return on && view.merge; }
+
+int fx_view_eye(int32_t eye[3])
+{
+    int k;
+
+    if (!on)
+        return 0;
+    for (k = 0; k < 3; k++)
+        eye[k] = view.eye[k];
+    return 1;
+}

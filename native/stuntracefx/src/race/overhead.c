@@ -1,7 +1,10 @@
 /*
  * overhead.c: the race seen from above (Jeff, 2026-11-12: a camera like the
- * near-isometric top-down view of Mini Motor Racing, "just the camera angle
- * changes"; chosen with SRFX_CAMERA=overhead in the environment).
+ * near-isometric view of Mini Motor Racing, "just the camera angle
+ * changes"; chosen with SRFX_CAMERA=overhead in the environment). On the
+ * first look, from 60 degrees down and 5,000 away: "too top down and too
+ * close. No sense of the track ahead or behind ... more of an isometric
+ * angle, kind of like RC Pro Am but better".
  *
  * Only the pictures change. The game's camera still runs as before and
  * everything that reads it (the trigger lists, the objects' activation,
@@ -9,26 +12,35 @@
  * the game's in a picture's part between steps (RaceViewForPicture, whose
  * state fx_tween puts back after the picture), never in a step.
  *
- * The view: fixed in its heading for the whole race (the heading the
- * player's car starts the race in, to the nearest quarter turn, so the
- * course lies square on the screen and the car first drives up it),
- * looking down at OVERHEAD_PITCH, its centre on the player's car from
- * OVERHEAD_DISTANCE away, through a lens OVERHEAD_ZOOM times as long as the
- * chip's (the 3D magnified about the view's centre, fx/fx_view.h), which
- * keeps the perspective mild: at a 16:9 window the screen spans about 38
- * degrees top to bottom (the chip's own view 82), a thing at the screen's
- * bottom about 1.5 times the size of one at its top. The car is then about
- * a thirteenth of the screen's height across (its width, about 260, at
- * 128 * 2.5 / 5000 of a picture pixel a unit, 17 of the 224 rows).
+ * The view: the isometric one. It looks down at the isometric angle
+ * (OVERHEAD_PITCH, atan(1 / sqrt 2), 35.26 degrees) and across the course's
+ * grid at 45 degrees (the heading the player's car starts the race in, to
+ * the nearest quarter turn, less an eighth turn: the course's straights lie
+ * on the screen's diagonals and the car first drives up and to the right),
+ * fixed for the whole race, its centre on the player's car from
+ * OVERHEAD_DISTANCE away, through a lens OVERHEAD_ZOOM times as long as
+ * the chip's (the 3D magnified about the view's centre, fx/fx_view.h).
+ * At a 16:9 window the screen spans 19.8 degrees top to bottom, so the
+ * ground it shows runs from 26.7 to 46.6 degrees below level: about 10,200
+ * of the world's units deep (5,600 past the car, 4,600 before it) and
+ * 10,600 across at the car, a thing at the screen's top about 1.6 times
+ * smaller than one at its bottom; the car (about 290 across) a
+ * thirty-fifth of the screen's width.
+ *
+ * The distance takes the view past what the game's 16-bit places hold: the
+ * eye is kept whole (FxView.eye; g's view place is its low 16 bits, from
+ * which a near record's place, within 27,000 of it, is exact in 16 bits),
+ * and an object whose place from the eye passes 14 bits is drawn halved
+ * with its size, as the far objects are (fx_far.c): the same picture.
  *
  * What the game's view gave the picture besides its place is kept as the
  * game's: the chip's light is fixed in its view, so it is turned with the
  * pitch (a face takes the shade it takes in the game's level view of the
  * same heading: the road's tops the game's, not the brightest); a model's
- * detail and haze go by its depth less the overhead's extra distance (the
- * car's those of the game's camera, OVERHEAD_GAME_DISTANCE from it). And
- * the far objects are drawn among the near ones by depth, since the near
- * list is the cells ahead of the game's camera, not those nearest this one.
+ * detail and haze go by its depth scaled so the car's is the race camera's
+ * (OVERHEAD_GAME_DISTANCE from it); and the far objects are drawn among
+ * the near ones by depth, since the near list is the cells ahead of the
+ * game's camera, not those nearest this one.
  *
  * One player only: two players' halves and the course menu's race keep
  * the game's view.
@@ -45,9 +57,10 @@
 #include "system/state.h"
 #include "video/video.h"
 
-#define OVERHEAD_PITCH (-60.0)          /* degrees, down from level */
-#define OVERHEAD_DISTANCE 5000.0        /* from the eye to the car, along the view's axis */
-#define OVERHEAD_ZOOM 2.5f
+#define OVERHEAD_PITCH (-35.2643897)    /* degrees, down from level: the isometric angle */
+#define OVERHEAD_ACROSS 0x2000          /* the view's heading less the course's square one: an eighth turn */
+#define OVERHEAD_DISTANCE 17000.0       /* from the eye to the car, along the view's axis */
+#define OVERHEAD_ZOOM 5.0f
 /* the race camera's place from its car (CameraSnapToCar's 0, -$8C, -$1F4) */
 #define OVERHEAD_GAME_DISTANCE 519.0
 
@@ -120,8 +133,10 @@ void race_overhead_view(void)
     car = obj_at(g.player_car);
     if (!race_turn.known) {
         /* the race camera matches its car's heading (ObjectFaceTied, mode
-           bit 14: its turn eases to -(heading * 256)) */
-        race_turn.turn = (uint16_t)(((uint16_t)(0 - (uint16_t)(car->heading << 8)) + 0x2000) & 0xC000);
+           bit 14: its turn eases to -(heading * 256)); turned an eighth
+           turn back, the car's start ahead is up the screen's right
+           diagonal (the view's X right is world (cos t, -sin t) on x, z) */
+        race_turn.turn = (uint16_t)((((uint16_t)(0 - (uint16_t)(car->heading << 8)) + 0x2000) & 0xC000) - OVERHEAD_ACROSS);
         race_turn.known = 1;
     }
     pitch = (uint16_t)(int16_t)lround(OVERHEAD_PITCH / 360.0 * 65536.0);
@@ -134,9 +149,12 @@ void race_overhead_view(void)
     f[0] = sin(t) * cos(p);
     f[1] = -sin(p);
     f[2] = cos(t) * cos(p);
-    g.view_pos[0] = (uint16_t)(car->x - (int)lround(OVERHEAD_DISTANCE * f[0]));
-    g.view_pos[1] = (uint16_t)(car->y - (int)lround(OVERHEAD_DISTANCE * f[1]));
-    g.view_pos[2] = (uint16_t)(car->z - (int)lround(OVERHEAD_DISTANCE * f[2]));
+    memset(&v, 0, sizeof v);
+    v.eye[0] = (int16_t)car->x - (int32_t)lround(OVERHEAD_DISTANCE * f[0]);
+    v.eye[1] = (int16_t)car->y - (int32_t)lround(OVERHEAD_DISTANCE * f[1]);
+    v.eye[2] = (int16_t)car->z - (int32_t)lround(OVERHEAD_DISTANCE * f[2]);
+    for (k = 0; k < 3; k++)
+        g.view_pos[k] = (uint16_t)v.eye[k];
     g.view_angles[0] = pitch;
     g.view_angles[1] = race_turn.turn;
     g.view_angles[2] = 0;
@@ -145,13 +163,11 @@ void race_overhead_view(void)
        in this one (turned by the pitch about the view's X) */
     ly = FX_LIGHT_GAME_Y / 32768.0;
     lz = FX_LIGHT_GAME_Z / 32768.0;
-    memset(&v, 0, sizeof v);
     v.zoom = OVERHEAD_ZOOM;
     v.light[0] = 0;
     v.light[1] = word_of(ly * cos(p) + lz * sin(p));
     v.light[2] = word_of(lz * cos(p) - ly * sin(p));
-    k = (int)lround(OVERHEAD_DISTANCE - OVERHEAD_GAME_DISTANCE);
-    v.depth_less = (uint16_t)k;
+    v.depth_scale = (float)(OVERHEAD_GAME_DISTANCE / OVERHEAD_DISTANCE);
     v.merge = 1;
     fx_view_set(&v);
 }

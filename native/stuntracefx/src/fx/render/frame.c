@@ -86,6 +86,7 @@ static FxFrameProgramResult frame_program(uint16_t draw_list_end)
         return (FxFrameProgramResult){up_ == 0 ? 0 : up_ - 0};
     }
     fx_far_parked(stack);               /* the near list again with parked tyres among it (fx_far.c) */
+    fx_draw_held_by_view(0);
     *stack = 0x0240;
     fx_cmode(0);
     weather_record = fx_ldw(0x247A);
@@ -234,6 +235,7 @@ FxObjectsDrawResult FxObjectsDraw(uint16_t draw_list_end, uint16_t *stack)
             fx_far_record(object_ptr);
             flags_ptr = (uint16_t)(angle_y_ptr + 1);
             draw_flags = fx_ldb(flags_ptr);
+            fx_draw_held_by_view(draw_flags & 0x80);     /* placed in the view's space: not the world's (fx_draw.c) */
             model_field_ptr = (uint16_t)(flags_ptr + 1);
             model_header_ptr = fx_ldw(model_field_ptr);
             fx_solid_object(model_header_ptr, object_ptr);

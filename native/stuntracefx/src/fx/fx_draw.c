@@ -96,6 +96,7 @@ static struct {
 static int offset_x, offset_y;
 static int drawing_3d;          /* the recording's 3D is being drawn: from its frame program's start to the HUD's */
 static int world_done;          /* the 3D's world is drawn (fx_draw_world_end): its text follows */
+static int held_by_view;        /* the object drawn now is placed in the view's space (fx_draw_held_by_view) */
 static int origin_x, origin_y;  /* where a screen other than the race's puts the picture; 0, 0: none */
 static int side_under;          /* what is drawn now lies past the water from the eye */
 static void under_splice(Recording *r);
@@ -112,7 +113,7 @@ void fx_draw_list_scale(float *sx, float *sy)
 
 void fx_draw_world_scale(float *sx, float *sy)
 {
-    float z = recording && drawing_3d && !world_done && recording->zoom > 0 ? recording->zoom : 1.0f;
+    float z = recording && drawing_3d && !world_done && !held_by_view && recording->zoom > 0 ? recording->zoom : 1.0f;
 
     *sx = screen_sx * z;
     *sy = screen_sy * z;
@@ -392,6 +393,7 @@ void fx_draw_part(int hud)
 {
     drawing_3d = recording && !hud;
     world_done = 0;
+    held_by_view = 0;
     if (recording && !hud)
         horizon_of_view(recording);
     if (recording && hud) {
@@ -415,10 +417,15 @@ void fx_draw_world_end(void)
     world_done = 1;
 }
 
+void fx_draw_held_by_view(int held)
+{
+    held_by_view = held != 0;
+}
+
 /* what is emitted now is the 3D's world */
 static uint8_t in_world(void)
 {
-    return (uint8_t)(drawing_3d && !world_done);
+    return (uint8_t)(drawing_3d && !world_done && !held_by_view);
 }
 
 void fx_draw_set_origin(int x, int y)

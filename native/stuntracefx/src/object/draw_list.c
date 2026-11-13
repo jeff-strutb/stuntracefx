@@ -15,6 +15,7 @@
 
 #include "fx/fx_far.h"
 #include "fx/fx_rt.h"
+#include "fx/fx_view.h"
 #include "object/object.h"
 #include "system/state.h"
 
@@ -259,7 +260,7 @@ static void far_record(Object *o, uint16_t at, const uint16_t *place, const uint
 {
     uint8_t *r = &fx_ram[FX_FAR_BANK + at];
     uint16_t p[3] = {o->x, o->y, o->z};
-    int32_t d[3];
+    int32_t d[3], eye[3];
     unsigned k;
 
     draw_record(o, r, 1);
@@ -272,9 +273,14 @@ static void far_record(Object *o, uint16_t at, const uint16_t *place, const uint
         r[0x06] = turn[2];
         p[0] = place[0], p[1] = place[1], p[2] = place[2];
     }
-    d[0] = (int32_t)(int16_t)p[0] - (int16_t)g.view_pos[0];
-    d[1] = (int32_t)(int16_t)p[1] - (int16_t)g.view_pos[1] + ObjectLookDy(o);
-    d[2] = (int32_t)(int16_t)p[2] - (int16_t)g.view_pos[2];
+    /* from the view's place, whole when a picture's view keeps it so (one
+       past the 16 bits g's place wraps at: race/overhead.c) */
+    if (!fx_view_eye(eye))
+        for (k = 0; k < 3; k++)
+            eye[k] = (int16_t)g.view_pos[k];
+    d[0] = (int32_t)(int16_t)p[0] - eye[0];
+    d[1] = (int32_t)(int16_t)p[1] - eye[1] + ObjectLookDy(o);
+    d[2] = (int32_t)(int16_t)p[2] - eye[2];
     for (k = 0; k < 3; k++) {
         put16(r, FX_FAR_PLACE + 4 * k, (uint16_t)d[k]);
         put16(r, FX_FAR_PLACE + 4 * k + 2, (uint16_t)((uint32_t)d[k] >> 16));

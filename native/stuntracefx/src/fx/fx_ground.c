@@ -2859,8 +2859,16 @@ void fx_ground_draw(void)
     shell_pending = -1;
     if (kind == SURF_NONE || (kind == SURF_AQUA && (g.picture_effects & 0x08) && !surface[course].cls))
         return;
-    for (i = 0; i < 3; i++)
-        eye[i] = (int16_t)ram_word(FX_FAR_BANK + FX_FAR_VIEW + 2 * i);
+    {
+        int32_t whole[3];               /* a picture's view kept whole (fx_view.h), past 16 bits */
+
+        if (fx_view_eye(whole))
+            for (i = 0; i < 3; i++)
+                eye[i] = whole[i];
+        else
+            for (i = 0; i < 3; i++)
+                eye[i] = (int16_t)ram_word(FX_FAR_BANK + FX_FAR_VIEW + 2 * i);
+    }
     for (i = 0; i < 9; i++)
         m[i] = (int16_t)ram_word((uint32_t)(0x00E4 + 2 * i)) / 32768.0;
     if (surface[course].cls == CLS_BAND || surface[course].cls == CLS_BAND_WHOLE)
