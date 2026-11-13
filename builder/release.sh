@@ -2,7 +2,7 @@
 # builder/release.sh: build Stunt Race FX Builder for macOS and Windows and
 # publish both on the repository's GitHub Releases page as vVERSION.
 #
-# VERSION: 0.91 unless set. The release is tagged at HEAD as it is when this
+# VERSION: 0.92 unless set. The release is tagged at HEAD as it is when this
 # starts, which must already be on GitHub. Running it again at the same
 # version replaces the files of that release.
 #
