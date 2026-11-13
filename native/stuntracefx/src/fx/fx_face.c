@@ -110,6 +110,11 @@ static struct {
 
 static double turn_of(uint16_t word) { return (double)word * (2.0 * M_PI / 65536.0); }
 
+/* The scale the corners of what is drawn now are at: whole for an object
+   made exactly, else the chip's, halved fx_far_shift() times (a far
+   object's) */
+static int corner_shift(void) { return object_now.known ? 0 : fx_far_shift(); }
+
 /* FxMatrixFromAngles01's rows of the angles at $0020 (z), $0022 (x) and
    $0024 (y): row k is axis k's image */
 static void rows_of(double z, double x, double y, double m[3][3])
@@ -167,8 +172,12 @@ void fx_face_model(uint16_t flags)
 
     exact.made++;
     exact.on = 0;
-    if (!object_now.known || !view_of(e))
+    if (!object_now.known)
         return;
+    if (!view_of(e)) {                  /* not the view its place was made in: the chip's numbers throughout */
+        object_now.known = 0;
+        return;
+    }
     /* each angle byte a word negated, its fraction between steps with it */
     rows_of(turn_of((uint16_t)-(int)((word(0x0020) & 0xFF) << 8 | fx_angle_fraction(0))),
             turn_of((uint16_t)-(int)((word(0x0022) & 0xFF) << 8 | fx_angle_fraction(1))),
@@ -221,9 +230,11 @@ void fx_face_point(uint16_t record, uint16_t x, uint16_t y, uint16_t z)
         }
         return;
     }
-    point[i].x = (int16_t)x;
-    point[i].y = (int16_t)y;
-    point[i].z = (int16_t)z;
+    /* a point no point command gave (none known): the chip's, at the
+       corners' scale */
+    point[i].x = ldexp((int16_t)x, fx_far_shift() - corner_shift());
+    point[i].y = ldexp((int16_t)y, fx_far_shift() - corner_shift());
+    point[i].z = ldexp((int16_t)z, fx_far_shift() - corner_shift());
 }
 
 uint8_t fx_face_facing(uint16_t a, uint16_t b, uint16_t c, uint8_t chip)
@@ -717,9 +728,10 @@ static int line(const Corner3 *in, const View *v)
    after the water (fx_draw.c).
 
    A far object (fx_far.c) is drawn with its view-space points halved
-   fx_far_shift() times, its projection the same: its points are tested
-   against the plane at that scale (cut_d), and its crossings kept at full
-   size for its hole. Tested at full size, a far piece under the water
+   fx_far_shift() times, its projection the same, unless its corners are
+   made exactly, whole (corner_shift): its points are tested against the
+   plane at their scale (cut_d), and its crossings kept at full size for
+   its hole. Tested at full size, a far piece under the water
    (Aqua Tunnel's glass tube) counted as above it and was drawn after the
    water, over it (Jeff's picture, 2026-11-11). */
 
@@ -753,7 +765,7 @@ int fx_face_cutting(void) { return cut.on; }
 /* the plane's distance from the eye at the scale of the points being drawn */
 static double cut_d(void)
 {
-    return ldexp(cut.d, -fx_far_shift());
+    return ldexp(cut.d, -corner_shift());
 }
 
 /* a view-space point's side of the water: 1 past it from the eye */
@@ -804,7 +816,7 @@ static int clip_water(const Corner3 *in, int n, Corner3 *out, int past)
    hole, at full size (a far object's scaled back). */
 static void hole_points_of(const Corner3 *in, int n)
 {
-    int i, shift = fx_far_shift();
+    int i, shift = corner_shift();
 
     for (i = 0; i < n && nhole_points < HOLE_POINTS; i++) {
         const Corner3 *a = &in[i], *b = &in[(i + 1) % n];
@@ -998,7 +1010,7 @@ static void commit(const FxMaterial *m)
         double n[3] = { a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0] };
 
         s->plane[0] = (float)n[0], s->plane[1] = (float)n[1], s->plane[2] = (float)n[2];
-        s->plane[3] = (float)((n[0] * face.c[0].x + n[1] * face.c[0].y + n[2] * face.c[0].z) * (1 << fx_far_shift()));
+        s->plane[3] = (float)((n[0] * face.c[0].x + n[1] * face.c[0].y + n[2] * face.c[0].z) * (1 << corner_shift()));
     }
     if (s->line) {
         ok = line(face.c, &face.view);
