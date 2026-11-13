@@ -908,10 +908,11 @@ static void commit(const FxMaterial *m)
 /* ---- scaled sprites ---- */
 
 static struct {
-    int set, past;
+    int set, past, fixed;
     uint16_t left, top, bx, by;
     double cx, cy, k;
 } sprite;
+static int mapped_fixed;                /* the sprite fx_sprite_map last gave is of fixed size */
 
 /* FxObjectSprite's place: x, y and depth the object's view-space place,
    size the size it scaled by the depth (0 for a sprite of fixed size), the
@@ -922,6 +923,7 @@ void fx_sprite_place(uint16_t x, uint16_t y, uint16_t depth, uint16_t size, uint
     double d = depth ? depth : 1, half = (screen_size >> 1) + (screen_size & 1);
 
     sprite.set = screen_size != 0;
+    sprite.fixed = size == 0;
     sprite.past = fx_face_past_water((int16_t)x, (int16_t)y, d);
     sprite.cx = v.cx + FOCAL * (int16_t)x / d;
     sprite.cy = v.cy + FOCAL * (int16_t)y / d;
@@ -934,11 +936,14 @@ void fx_sprite_place(uint16_t x, uint16_t y, uint16_t depth, uint16_t size, uint
 
 int fx_sprite_past_water(void) { return sprite.set && sprite.past; }
 
+int fx_sprite_fixed(void) { return mapped_fixed; }
+
 int fx_sprite_map(uint16_t left, uint16_t top, float *cx, float *cy, float *bx, float *by, float *k)
 {
     if (!sprite.set || left != sprite.left || top != sprite.top)
         return 0;
     sprite.set = 0;
+    mapped_fixed = sprite.fixed;
     *cx = (float)sprite.cx;
     *cy = (float)sprite.cy;
     *bx = (int16_t)sprite.bx;

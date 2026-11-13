@@ -97,6 +97,7 @@ static int offset_x, offset_y;
 static int drawing_3d;          /* the recording's 3D is being drawn: from its frame program's start to the HUD's */
 static int world_done;          /* the 3D's world is drawn (fx_draw_world_end): its text follows */
 static int held_by_view;        /* the object drawn now is placed in the view's space (fx_draw_held_by_view) */
+static int pinned;              /* a fixed-size sprite's quad, emitted where a zoomed view puts it (quad) */
 static int origin_x, origin_y;  /* where a screen other than the race's puts the picture; 0, 0: none */
 static int side_under;          /* what is drawn now lies past the water from the eye */
 static void under_splice(Recording *r);
@@ -425,7 +426,7 @@ void fx_draw_held_by_view(int held)
 /* what is emitted now is the 3D's world */
 static uint8_t in_world(void)
 {
-    return (uint8_t)(drawing_3d && !world_done && !held_by_view);
+    return (uint8_t)(drawing_3d && !world_done && !held_by_view && !pinned);
 }
 
 void fx_draw_set_origin(int x, int y)
@@ -988,9 +989,13 @@ static nshvc_image texture(uint8_t bank, uint16_t base, uint16_t mask, uint8_t c
 static void blocks_flush(void);
 
 /* A scaled sprite's quads go to its place in floats (fx_face.c): the
-   chip's whole-pixel box moved and scaled onto it, kept to the view. */
+   chip's whole-pixel box moved and scaled onto it, kept to the view. A
+   sprite of fixed size (fx_sprite_fixed) in a zoomed view's world goes to
+   its place magnified about the view's centre at its own size, kept to the
+   view as magnified, and is not magnified again with the world: the same
+   pixels on the screen as in the game's view. */
 static struct {
-    int on;
+    int on, fixed;
     float cx, cy, bx, by, k;
 } sprite_map;
 
@@ -1065,20 +1070,33 @@ static void quad(nshvc_image image, int x0, int x1, int y0, int y1, double u0, d
         b = qb;
     }
     if (sprite_map.on) {
-        float vl, vr, vt_, vb_;
-        double nl, nr, nt, nb;
+        float vl, vr, vt_, vb_, zoom = recording && in_world() && recording->zoom > 0 ? recording->zoom : 1.0f;
+        double nl, nr, nt, nb, cx = sprite_map.cx, cy = sprite_map.cy;
 
         fx_face_view_rect(&vl, &vr, &vt_, &vb_);
-        nl = sprite_map.cx + (ql - sprite_map.bx) * sprite_map.k;
-        nr = sprite_map.cx + (qr - sprite_map.bx) * sprite_map.k;
-        nt = sprite_map.cy + (qt - sprite_map.by) * sprite_map.k;
-        nb = sprite_map.cy + (qb - sprite_map.by) * sprite_map.k;
+        if (sprite_map.fixed && zoom != 1.0f) {
+            double zx = (int16_t)(fx_ram[0x0034] | fx_ram[0x0035] << 8), zy = (int16_t)(fx_ram[0x0036] | fx_ram[0x0037] << 8);
+
+            cx = zx + (cx - zx) * zoom;
+            cy = zy + (cy - zy) * zoom;
+            vl = (float)(zx + (vl - zx) * zoom);
+            vr = (float)(zx + (vr - zx) * zoom);
+            vt_ = (float)(zy + (vt_ - zy) * zoom);
+            vb_ = (float)(zy + (vb_ - zy) * zoom);
+            pinned = 1;
+        }
+        nl = cx + (ql - sprite_map.bx) * sprite_map.k;
+        nr = cx + (qr - sprite_map.bx) * sprite_map.k;
+        nt = cy + (qt - sprite_map.by) * sprite_map.k;
+        nb = cy + (qb - sprite_map.by) * sprite_map.k;
         l = nl < vl ? vl : nl;
         r = nr > vr ? vr : nr;
         t = nt < vt_ ? vt_ : nt;
         b = nb > vb_ ? vb_ : nb;
-        if (r <= l || b <= t)
+        if (r <= l || b <= t) {
+            pinned = 0;
             return;
+        }
         {
             double u_l = ul + (ur - ul) * (l - nl) / (nr - nl), u_r = ul + (ur - ul) * (r - nl) / (nr - nl);
             double v_t = vt + (vb - vt) * (t - nt) / (nb - nt), v_b = vt + (vb - vt) * (b - nt) / (nb - nt);
@@ -1099,6 +1117,7 @@ static void quad(nshvc_image image, int x0, int x1, int y0, int y1, double u0, d
     v[4] = v[2];
     v[5].x = (float)l; v[5].y = (float)b; v[5].u = (float)ul; v[5].v = (float)vb; v[5].colour = 1;
     emit(v, 6, m.image.id, 0);
+    pinned = 0;
 }
 
 void fx_flat_row(uint16_t x, uint16_t y, uint16_t n)
@@ -1133,6 +1152,7 @@ uint16_t fx_sprite_shrink(uint16_t size, uint16_t c8, uint16_t step, uint16_t le
     uint16_t r;
 
     sprite_map.on = fx_sprite_map(left, top, &sprite_map.cx, &sprite_map.cy, &sprite_map.bx, &sprite_map.by, &sprite_map.k);
+    sprite_map.fixed = sprite_map.on && fx_sprite_fixed();
     hide_quads = fx_solid_hiding();
     side_under = fx_sprite_past_water();
     texels.on = 1;
@@ -1151,6 +1171,7 @@ uint16_t fx_sprite_magnify(uint16_t c8, uint16_t step, uint16_t left, uint16_t t
     uint16_t r;
 
     sprite_map.on = fx_sprite_map(left, top, &sprite_map.cx, &sprite_map.cy, &sprite_map.bx, &sprite_map.by, &sprite_map.k);
+    sprite_map.fixed = sprite_map.on && fx_sprite_fixed();
     hide_quads = fx_solid_hiding();
     side_under = fx_sprite_past_water();
     texels.on = 1;

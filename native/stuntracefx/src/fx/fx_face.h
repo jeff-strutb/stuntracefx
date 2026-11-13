@@ -121,5 +121,8 @@ void fx_face_view_rect(float *left, float *right, float *top, float *bottom);
    corner is at left, top) to it. Returns 0 when the box is not the one
    fx_sprite_place last saw. */
 int fx_sprite_map(uint16_t left, uint16_t top, float *cx, float *cy, float *bx, float *by, float *k);
+/* Whether the sprite fx_sprite_map last gave is of fixed size (its size
+   byte negative: the same pixels at any depth, as the rank sign's). */
+int fx_sprite_fixed(void);
 
 #endif
