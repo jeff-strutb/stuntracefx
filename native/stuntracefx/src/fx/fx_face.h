@@ -111,6 +111,10 @@ typedef void (*FxSurveyPoint)(double x, double y, double z, void *context);
 typedef void (*FxSurveyFace)(const double (*corner)[3], int n, uint8_t colour, int textured, int lit, float light,
                              void *context);
 void fx_face_survey(FxSurveyPoint point, FxSurveyFace face, void *context);
+/* The object FxObjectsDraw took last, made exactly (fx_face_object): 1 and
+   its place in view space and the view's turn (row k, world axis k in view
+   space) when its place is known; else 0. */
+int fx_face_exact_object(double place[3], double view[3][3]);
 
 /* The view's rectangle in the picture's pixels: left, right (past its last
    column), top, bottom (past its last row). */

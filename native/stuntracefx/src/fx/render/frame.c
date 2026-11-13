@@ -78,7 +78,10 @@ static FxFrameProgramResult frame_program(uint16_t draw_list_end)
     *stack = 0x0240;
     nshvc_profile_begin(perf_near);
     if (!fx_view_merge()) {             /* a view that draws the far objects among the near ones draws them all in fx_far_parked */
+        fx_far_near_list(1);            /* its slots are the main CPU's records, for exact corners (fx_far.c) */
         { FxObjectsDrawResult r_ = FxObjectsDraw(draw_list_end, stack); up_ = r_.up; };
+        fx_far_near_list(0);
+        fx_face_object(0);
         fx_ground_object_end();         /* the last near object's tunnel rock (fx_ground.c) */
     }
     nshvc_profile_end();
@@ -233,6 +236,7 @@ FxObjectsDrawResult FxObjectsDraw(uint16_t draw_list_end, uint16_t *stack)
             fx_stw(0x0024, angle_y_byte);
             fx_angle_record(object_ptr);
             fx_far_record(object_ptr);
+            fx_face_object(object_ptr);         /* its corners made exactly from its draw record (fx_face.c) */
             flags_ptr = (uint16_t)(angle_y_ptr + 1);
             draw_flags = fx_ldb(flags_ptr);
             fx_draw_held_by_view(draw_flags & 0x80);     /* placed in the view's space: not the world's (fx_draw.c) */
@@ -452,6 +456,7 @@ FxObjectsDrawResult FxObjectsDraw(uint16_t draw_list_end, uint16_t *stack)
                 }
             } else {
             }
+            fx_face_object(0);                  /* no object's: what follows draws from the chip's numbers */
             popped_object_ptr = fx_pull(stack);
             next_object_ptr = fx_ldw(popped_object_ptr);
             object_ptr = next_object_ptr;

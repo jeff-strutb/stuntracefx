@@ -37,6 +37,7 @@
 #include "fx/fx_far.h"
 #include "fx/fx_ground.h"
 #include "fx/fx_view.h"
+#include "system/state.h"
 
 enum { SLOTS = 0x31, SLOT_SIZE = 0x1E, SLOT_FIRST = 0x0AAA };
 
@@ -55,6 +56,8 @@ static uint16_t slot_depth[SLOTS];
 static uint16_t slot_original[SLOTS];   /* the near record a slot holds in a pass; 0 none */
 static double slot_near[SLOTS];         /* a far slot's nearest depth */
 static uint8_t slot_far[SLOTS];         /* the slot holds a far object (not a near one or a tyre) */
+static uint16_t slot_rec[SLOTS];        /* the far record a slot holds in a pass (its address in the second 64 KB); 0 none */
+static int near_list;                   /* the frame program draws its near list (fx_far_near_list) */
 static int drawing, shift_now, occlude, far_now;
 static uint16_t depth_now;
 static double near_now;
@@ -189,6 +192,7 @@ void fx_far_pass(uint16_t *stack)
             slot_shift[k] = f->shift;
             slot_depth[k] = f->depth;
             slot_original[k] = 0;
+            slot_rec[k] = f->rec;
             slot_near[k] = f->near;
             slot_far[k] = 1;
         }
@@ -222,6 +226,7 @@ static void far_slot(unsigned k, const Far *f, int last)
     slot_shift[k] = f->shift;
     slot_depth[k] = f->depth;
     slot_original[k] = 0;
+    slot_rec[k] = f->rec;
     slot_far[k] = 0;                    /* a tyre: among the near objects */
 }
 
@@ -318,6 +323,7 @@ static void merged_pass(uint16_t *stack)
             slot_shift[k] = e[b + k].shift;
             slot_depth[k] = e[b + k].depth;
             slot_far[k] = 0;
+            slot_rec[k] = 0;
             slot_original[k] = (uint16_t)(SLOT_FIRST + e[b + k].at * SLOT_SIZE);
         }
         ram_put(GSU_DRAW_LIST, SLOT_FIRST);
@@ -393,6 +399,7 @@ void fx_far_parked(uint16_t *stack)
                 slot_shift[k] = 0;
                 slot_depth[k] = 0;
                 slot_far[k] = 0;
+                slot_rec[k] = 0;
                 slot_original[k] = (uint16_t)(SLOT_FIRST + order[b + k].at * SLOT_SIZE);
             }
             ram_put(GSU_DRAW_LIST, SLOT_FIRST);
@@ -452,6 +459,46 @@ void fx_far_occlude(int on) { occlude = on; }
 float fx_far_z(void)
 {
     return drawing && occlude && far_now ? fx_ground_depth_z(near_now) : 0.0f;
+}
+
+void fx_far_near_list(int on) { near_list = on != 0; }
+
+/* near record i's place as the main CPU wrote it (+$12, +$10, +$14, from
+   the view in 16 bits), when the chip's slot `slot` was uploaded from it */
+static int near_place(unsigned i, uint16_t slot, double rel[3], int *in_view)
+{
+    const uint8_t *r = g.frame_records + 30u * i;
+
+    if (i >= g.frame_record_count || i >= 64 || (uint16_t)(r[0x08] | r[0x09] << 8) != ram_word((uint16_t)(slot + 0x08)))
+        return 0;
+    rel[0] = (int16_t)(uint16_t)(r[0x12] | r[0x13] << 8);
+    rel[1] = (int16_t)(uint16_t)(r[0x10] | r[0x11] << 8);
+    rel[2] = (int16_t)(uint16_t)(r[0x14] | r[0x15] << 8);
+    *in_view = (r[0x07] & 0x80) != 0;
+    return 1;
+}
+
+int fx_far_exact_place(uint16_t record, double rel[3], int *in_view)
+{
+    unsigned k;
+
+    *in_view = 0;
+    if ((uint16_t)(record - SLOT_FIRST) % SLOT_SIZE)
+        return 0;
+    k = (uint16_t)(record - SLOT_FIRST) / SLOT_SIZE;
+    if (k >= SLOTS)
+        return 0;
+    if (!drawing)
+        return near_list && near_place(k, record, rel, in_view);
+    if (slot_rec[k]) {
+        unsigned c;
+
+        for (c = 0; c < 3; c++)
+            rel[c] = (int32_t)(far_word((uint16_t)(slot_rec[k] + FX_FAR_PLACE + 4 * c))
+                               | (uint32_t)far_word((uint16_t)(slot_rec[k] + FX_FAR_PLACE + 4 * c + 2)) << 16);
+        return 1;
+    }
+    return slot_original[k] && near_place((uint16_t)(slot_original[k] - SLOT_FIRST) / SLOT_SIZE, record, rel, in_view);
 }
 
 int fx_far_shift(void) { return shift_now; }

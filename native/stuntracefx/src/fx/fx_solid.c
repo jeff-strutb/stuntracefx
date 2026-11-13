@@ -156,6 +156,10 @@ static const Solid *object, *armed;
 static const Mark *face;                /* an eye's face for its look */
 static int nface, record_index, cap_seen;
 static int coloured, two, tyre_row, size_halved;     /* size_halved: its size halved with its place (a far object's) */
+/* the object's place and the view's turn made exactly (fx_face_exact_object):
+   its place whole, never halved; else the chip's, halved `halving` times */
+static int exact_view, halving;
+static double exact_turn[3][3];
 static uint8_t hi, tex_bank, tex_nib;
 static uint16_t tex_base;
 static float pos[3], view[3][3], scale;
@@ -239,7 +243,7 @@ static void turn(void)
     }
     for (i = 0; i < 3; i++)
         for (j = 0; j < 3; j++)
-            e[i][j] = (int16_t)word((uint16_t)(0x00E4 + 6 * i + 2 * j)) / 32768.0f;
+            e[i][j] = exact_view ? (float)exact_turn[i][j] : (int16_t)word((uint16_t)(0x00E4 + 6 * i + 2 * j)) / 32768.0f;
     for (i = 0; i < 3; i++)
         for (j = 0; j < 3; j++)
             for (view[i][j] = 0, k = 0; k < 3; k++)
@@ -251,6 +255,7 @@ static void turn(void)
 void fx_solid_begin(void)
 {
     int32_t own, size;
+    int i;
 
     armed = NULL;
     coloured = 0;
@@ -285,13 +290,22 @@ void fx_solid_begin(void)
     pos[0] = (int16_t)word(0x0026);
     pos[1] = (int16_t)word(0x0028);
     pos[2] = (int16_t)word(0x002A);
+    {                                   /* the place made exactly, whole (fx_face.c) */
+        double place[3];
+
+        exact_view = fx_face_exact_object(place, exact_turn);
+        if (exact_view)
+            for (i = 0; i < 3; i++)
+                pos[i] = (float)place[i];
+    }
+    halving = exact_view ? 0 : fx_far_shift();
     /* the sprite's size (01:B100, B128): a negative own size alone, else
        the shape's twice and the own shifted by $0032; 0 as 1 */
     own = (int16_t)word(FX_MODEL_CE);
     size = own < 0 ? -own : 2 * word(FX_SPRITE_SIZE) + (own << (word(0x0032) & 15));
-    size_halved = own >= 0 && fx_far_shift();
+    size_halved = own >= 0 && halving;
     if (size_halved)                    /* a far object's, halved with its place (fx_far.c) */
-        size >>= fx_far_shift();
+        size >>= halving;
     scale = (float)(size ? size : 1) / object->texels;
     if (face) {
         /* turned by its gaze above */
@@ -300,7 +314,7 @@ void fx_solid_begin(void)
 
         for (i = 0; i < 3; i++)
             for (j = 0; j < 3; j++)
-                view[i][j] = (int16_t)word((uint16_t)(0x00E4 + 6 * i + 2 * j)) / 32768.0f;
+                view[i][j] = exact_view ? (float)exact_turn[i][j] : (int16_t)word((uint16_t)(0x00E4 + 6 * i + 2 * j)) / 32768.0f;
     } else {
         turn();
     }
@@ -944,9 +958,9 @@ static void forest_see(const Solid *s, Paint *pp)
         forest.course = g.course;
         forest.seen[1] = forest.seen[2] = 0;
     }
-    if (forest.ready || (fx_far_shift() && !size_halved))
+    if (forest.ready || (halving && !size_halved))
         return;
-    unshift = (float)(1 << fx_far_shift());
+    unshift = (float)(1 << halving);
     if (forest.frame != g.frame_count) {
         forest.frame = g.frame_count;
         forest.seen[1] = forest.seen[2] = 0;

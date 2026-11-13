@@ -226,6 +226,7 @@ FxModelDrawWithFlagsResult FxModelDrawWithFlags(uint16_t model_flags, uint16_t d
     uint16_t model_index_minus_one;
 
     fx_stw(FX_MODEL_FLAGS, model_flags);
+    fx_face_model(model_flags);         /* its turn made exactly from its angles (fx_face.c) */
     fx_spill(stack);
     fx_romb(3);
     fx_stw(FX_LIST_END, 0x08AA);
@@ -682,6 +683,7 @@ FxModelPointsFullResult FxModelPointsFull(uint16_t *stack, uint16_t rom_at)
         model_z = (uint16_t)((model_z_lo & 0xFF) | fx_getb() << 8);
         rom_at_2 = (uint16_t)(rom_ptr_z_hi + 1);
         fx_r14(rom_at_2);
+        fx_face_source(out_point_ptr, (int16_t)model_x, (int16_t)model_y, (int16_t)model_z);   /* exactly (fx_face.c) */
         prod_x_view0 = (uint32_t)((int32_t)(int16_t)model_x * (int16_t)view_matrix_0);
         prod_y_view3 = (uint32_t)((int32_t)(int16_t)model_y * (int16_t)view_matrix_3);
         prod_z_view6 = (uint32_t)((int32_t)(int16_t)model_z * (int16_t)view_matrix_6);
@@ -804,6 +806,8 @@ FxModelPointsScaledResult FxModelPointsScaled(uint16_t draw_list_end, uint16_t *
         point_z = (uint16_t)((point_z_low & 0xFF) | fx_getb() << 8);
         rom_at_2 = (uint16_t)(rom_ptr_z_high + 1);
         fx_r14(rom_at_2);
+        fx_face_source(out_ptr, (int16_t)point_x, (int16_t)point_y, (int16_t)point_z);   /* the point and its mirror exactly (fx_face.c) */
+        fx_face_source((uint16_t)(out_ptr + 6), -(int16_t)point_x, (int16_t)point_y, (int16_t)point_z);
         view_matrix_0 = fx_ldw(FX_VIEW_MATRIX_0);
         x_by_m0_prod = (uint32_t)((int32_t)(int16_t)point_x * (int16_t)view_matrix_0);
         x_by_m0_term = (uint16_t)((uint16_t)(x_by_m0_prod >> 16) << 1 | (int)(x_by_m0_prod >> 15 & 1));
@@ -956,6 +960,8 @@ FxModelPoints01Result FxModelPoints01(uint16_t *stack, uint16_t rom_at)
             point_z = fx_getb();
             rom_at_2 = (uint16_t)(rom_ptr_z + 1);
             fx_r14(rom_at_2);
+            fx_face_source(out_ptr, (int8_t)point_x * (int8_t)model_scale, (int8_t)point_y * (int8_t)model_scale,
+                           (int8_t)point_z * (int8_t)model_scale);   /* the point exactly (fx_face.c) */
             rotated_x_sum = (uint16_t)((uint16_t)((uint16_t)((int8_t)matrix_packed_3 * (int8_t)point_z) + (uint16_t)((int8_t)(uint16_t)(matrix_packed_1 >> 8) * (int8_t)point_y)) + (uint16_t)((int8_t)matrix_packed_0 * (int8_t)point_x));
             fx_stw(out_ptr, (uint16_t)((int8_t)(uint16_t)((uint16_t)(rotated_x_sum + rotated_x_sum) >> 8) * (int8_t)scale_with_matrix_byte));
             out_y_ptr = (uint16_t)(out_ptr + 2);
@@ -1006,6 +1012,7 @@ FxModelPoints01Result FxModelPoints01(uint16_t *stack, uint16_t rom_at)
             rom_at_3 = (uint16_t)(rom_ptr_z_view + 1);
             fx_r14(rom_at_3);
             scaled_z = (uint16_t)((int8_t)point_byte_z_view * (int8_t)model_scale_view);
+            fx_face_source(out_ptr_view, (int16_t)scaled_x, (int16_t)scaled_y, (int16_t)scaled_z);
             x_times_m0 = (uint32_t)((int32_t)(int16_t)scaled_x * (int16_t)view_matrix_0);
             y_times_m3 = (uint32_t)((int32_t)(int16_t)scaled_y * (int16_t)view_matrix_3);
             z_times_m6 = (uint32_t)((int32_t)(int16_t)scaled_z * (int16_t)view_matrix_6);
@@ -1163,6 +1170,13 @@ FxModelPointsMirroredResult FxModelPointsMirrored(uint16_t *stack, uint16_t rom_
             point_z_byte = fx_getb();
             rom_at_2 = (uint16_t)(next_point_ptr_packed_2 + 1);
             fx_r14(rom_at_2);
+            {                           /* the point and its mirror exactly (fx_face.c) */
+                int32_t sc = (int8_t)point_scale_packed;
+
+                fx_face_source(out_ptr_packed, (int8_t)point_x_byte * sc, (int8_t)point_y_byte * sc, (int8_t)point_z_byte * sc);
+                fx_face_source((uint16_t)(out_ptr_packed + 6), -(int8_t)point_x_byte * sc, (int8_t)point_y_byte * sc,
+                               (int8_t)point_z_byte * sc);
+            }
             yz_sum_a = (uint16_t)((uint16_t)((int8_t)matrix_packed_3 * (int8_t)point_z_byte) + (uint16_t)((int8_t)(uint16_t)(matrix_packed_1 >> 8) * (int8_t)point_y_byte));
             row_a_plus = (uint16_t)(yz_sum_a + x_times_m0);
             fx_stw(out_ptr_packed, (uint16_t)((int8_t)(uint16_t)((uint16_t)(row_a_plus + row_a_plus) >> 8) * (int8_t)scale_matrix_word));
@@ -1227,6 +1241,8 @@ FxModelPointsMirroredResult FxModelPointsMirrored(uint16_t *stack, uint16_t rom_
             rom_at_3 = (uint16_t)(next_point_ptr_2 + 1);
             fx_r14(rom_at_3);
             point_z_scaled = (uint16_t)((int8_t)point_z_raw * (int8_t)point_scale);
+            fx_face_source(out_ptr, (int16_t)point_x_scaled, (int16_t)point_y_scaled, (int16_t)point_z_scaled);
+            fx_face_source((uint16_t)(out_ptr + 6), -(int16_t)point_x_scaled, (int16_t)point_y_scaled, (int16_t)point_z_scaled);
             prod_x_m0 = (uint32_t)((int32_t)(int16_t)point_x_scaled * (int16_t)view_matrix_0);
             term_x_m0 = (uint16_t)((uint16_t)(prod_x_m0 >> 16) << 1 | (int)(prod_x_m0 >> 15 & 1));
             prod_y_m3 = (uint32_t)((int32_t)(int16_t)point_y_scaled * (int16_t)view_matrix_3);

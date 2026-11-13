@@ -52,6 +52,16 @@ void fx_far_parked(uint16_t *stack);
 /* While a pass draws: the near record a slot holds (its $0AAA address), 0
    for a far record or a tyre; `record` as it is outside a pass. */
 uint16_t fx_far_original(uint16_t record);
+/* An object's place from the eye in the world's axes, whole, for its
+   corners made exactly (fx_face.c): a far slot's from its far record (32
+   bits, never halved), a near one's from the main CPU's draw record it was
+   uploaded from (g.frame_records, the slot's index, its model the slot's),
+   while a pass draws or the frame program draws its near list
+   (fx_far_near_list); *in_view 1 when the record is placed in view space
+   (its flags' bit 7: then `rel` is that place). 0 when not known (an
+   object drawn outside the race's lists: the ground's survey, a menu's). */
+int fx_far_exact_place(uint16_t record, double rel[3], int *in_view);
+void fx_far_near_list(int on);
 /* Far objects hidden by the land (fx_ground.c, where it fills a course's
    empty space): while on, each far object is drawn at a depth of its own,
    its nearest point's, that the land in front of it hides it at; off, as

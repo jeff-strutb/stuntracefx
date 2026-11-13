@@ -115,6 +115,15 @@ void fx_draw_flush(void);
    projected record's address; a face's points with their texels (between
    fx_face_begin and fx_face_end, fx_face.h); a scaled sprite's place. */
 void fx_face_point(uint16_t record, uint16_t x, uint16_t y, uint16_t z);
+/* The corners made exactly (fx_face.c; docs/stuntracefx/native/DEPTH.md):
+   the object FxObjectsDraw takes (its draw record's address in the chip's
+   RAM); the model's turn once FxModelDraw has its angles and flags; each
+   model point as its point command reads it, at its place in the list from
+   $0340, in the model's own axes (its bytes times the model's scale, or its
+   words). */
+void fx_face_object(uint16_t record);
+void fx_face_model(uint16_t flags);
+void fx_face_source(uint16_t at, int32_t x, int32_t y, int32_t z);
 /* FxModelFacing's flag byte for the triangle of the projected records at
    a, b, c ($04E4 + 6i): bit 7, whether it faces away, from its points in
    view space in floats (the sign of A . (B x C), which is the chip's cross

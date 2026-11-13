@@ -73,6 +73,126 @@ void fx_face_survey(FxSurveyPoint point, FxSurveyFace face, void *context)
     survey_context = context;
 }
 
+/* ---- the corners made exactly (docs/stuntracefx/native/DEPTH.md, 1) ----
+
+   The chip turns a model's points in fixed point (command $04's, below
+   detail 3, by a matrix packed into bytes) and rounds each sum to a whole
+   unit, and halves a far object's place and turn besides, so faces on one
+   plane come out up to 3 apart. Each corner is made again here in double
+   from what the chip made it from: the point as its point command read it
+   (fx_face_source: its bytes times the model's scale, or its words), turned
+   by the object's turn (its angles with their fractions, the rows the
+   chip's FxMatrixFromAngles01 makes of them, transposed; flag $2000 takes
+   the world's up out after it, as the chip flattens a shadow) and the
+   view's (the same rows of the view's angles at $00DE), plus the object's
+   place from the eye in the world's axes (its draw record's, whole:
+   fx_far_exact_place) turned by the view. The view's turn is taken only
+   while the chip's own at $00E4 is it, within 8 of its 32768ths (its sine
+   table's interpolation and rounding): the ground's survey draws with its
+   own. An object whose place is not known keeps the chip's corners. */
+
+enum { VIEW_ANGLES = 0x00DE, VIEW_MATRIX = 0x00E4, POINTS_AT = 0x0340, VIEW_STEPS = 8 };
+
+static struct {
+    double place[3];            /* the object's place in view space */
+    int known;                  /* the object FxObjectsDraw took last has an exact place */
+    double view[3][3];          /* the view's turn: row k, world axis k in view space */
+} object_now;
+static struct {
+    int on;                     /* this model's corners are made exactly */
+    uint32_t made;              /* the model's count, which its sources carry */
+    double turn[3][3];          /* row i, model axis i in view space */
+} exact;
+static struct {
+    double v[3];
+    uint32_t made;
+} source[POINTS];
+
+static double turn_of(uint16_t word) { return (double)word * (2.0 * M_PI / 65536.0); }
+
+/* FxMatrixFromAngles01's rows of the angles at $0020 (z), $0022 (x) and
+   $0024 (y): row k is axis k's image */
+static void rows_of(double z, double x, double y, double m[3][3])
+{
+    double sz = sin(z), cz = cos(z), sx = sin(x), cx = cos(x), sy = sin(y), cy = cos(y);
+
+    m[0][0] = sx * sy * sz + cx * cy; m[0][1] = sx * cy * sz - cx * sy; m[0][2] = sx * cz;
+    m[1][0] = sy * cz;                m[1][1] = cy * cz;                m[1][2] = -sz;
+    m[2][0] = cx * sy * sz - sx * cy; m[2][1] = cx * cy * sz + sx * sy; m[2][2] = cx * cz;
+}
+
+/* the view's turn from its angles, when the chip's own at $00E4 is it */
+static int view_of(double e[3][3])
+{
+    int i, j;
+
+    rows_of(turn_of(word(VIEW_ANGLES)), turn_of(word((uint16_t)(VIEW_ANGLES + 2))), turn_of(word((uint16_t)(VIEW_ANGLES + 4))), e);
+    for (i = 0; i < 3; i++)
+        for (j = 0; j < 3; j++)
+            if (fabs(e[i][j] - (int16_t)word((uint16_t)(VIEW_MATRIX + 6 * i + 2 * j)) / 32768.0) > VIEW_STEPS / 32768.0)
+                return 0;
+    return 1;
+}
+
+void fx_face_object(uint16_t record)
+{
+    double rel[3];
+    int in_view = 0, j, k;
+
+    object_now.known = 0;
+    if (!fx_far_exact_place(record, rel, &in_view) || !view_of(object_now.view))
+        return;
+    for (j = 0; j < 3; j++) {
+        object_now.place[j] = in_view ? rel[j] : 0;
+        if (!in_view)
+            for (k = 0; k < 3; k++)
+                object_now.place[j] += rel[k] * object_now.view[k][j];
+    }
+    object_now.known = 1;
+}
+
+int fx_face_exact_object(double place[3], double view[3][3])
+{
+    if (!object_now.known)
+        return 0;
+    memcpy(place, object_now.place, sizeof object_now.place);
+    memcpy(view, object_now.view, sizeof object_now.view);
+    return 1;
+}
+
+void fx_face_model(uint16_t flags)
+{
+    double m[3][3], e[3][3];
+    int i, j, k;
+
+    exact.made++;
+    exact.on = 0;
+    if (!object_now.known || !view_of(e))
+        return;
+    /* each angle byte a word negated, its fraction between steps with it */
+    rows_of(turn_of((uint16_t)-(int)((word(0x0020) & 0xFF) << 8 | fx_angle_fraction(0))),
+            turn_of((uint16_t)-(int)((word(0x0022) & 0xFF) << 8 | fx_angle_fraction(1))),
+            turn_of((uint16_t)-(int)((word(0x0024) & 0xFF) << 8 | fx_angle_fraction(2))), m);
+    for (i = 0; i < 3; i++)
+        for (j = 0; j < 3; j++)
+            for (exact.turn[i][j] = 0, k = 0; k < 3; k++)
+                if (k != 1 || !(flags & 0x2000))
+                    exact.turn[i][j] += m[k][i] * e[k][j];
+    exact.on = 1;
+}
+
+void fx_face_source(uint16_t at, int32_t x, int32_t y, int32_t z)
+{
+    unsigned i = (uint16_t)(at - POINTS_AT) / 6u;
+
+    if ((uint16_t)(at - POINTS_AT) % 6u || i >= POINTS)
+        return;
+    source[i].v[0] = x;
+    source[i].v[1] = y;
+    source[i].v[2] = z;
+    source[i].made = exact.made;
+}
+
 void fx_face_point(uint16_t record, uint16_t x, uint16_t y, uint16_t z)
 {
     unsigned i = (uint16_t)(record - TABLE) / 6u;
@@ -84,10 +204,26 @@ void fx_face_point(uint16_t record, uint16_t x, uint16_t y, uint16_t z)
         return;
     if (i == 0)                         /* every projection starts at the first point */
         projection++;
+    point[i].made = projection;
+    if (exact.on && source[i].made == exact.made) {
+        const double *s = source[i].v;
+        int j;
+
+        for (j = 0; j < 3; j++) {
+            double v = object_now.place[j] + s[0] * exact.turn[0][j] + s[1] * exact.turn[1][j] + s[2] * exact.turn[2][j];
+
+            if (j == 0)
+                point[i].x = v;
+            else if (j == 1)
+                point[i].y = v;
+            else
+                point[i].z = v;
+        }
+        return;
+    }
     point[i].x = (int16_t)x;
     point[i].y = (int16_t)y;
     point[i].z = (int16_t)z;
-    point[i].made = projection;
 }
 
 uint8_t fx_face_facing(uint16_t a, uint16_t b, uint16_t c, uint8_t chip)
@@ -920,14 +1056,22 @@ static int mapped_fixed;                /* the sprite fx_sprite_map last gave is
 void fx_sprite_place(uint16_t x, uint16_t y, uint16_t depth, uint16_t size, uint16_t centre_x, uint16_t centre_y, uint16_t screen_size)
 {
     View v = view_now();
-    double d = depth ? depth : 1, half = (screen_size >> 1) + (screen_size & 1);
+    double d = depth ? depth : 1, half = (screen_size >> 1) + (screen_size & 1), px = (int16_t)x, py = (int16_t)y, sz = size;
 
+    /* the object's place made exactly, whole (fx_face_object): a far one's
+       size, halved with its place by the chip, whole with it */
+    if (object_now.known && object_now.place[2] > 0) {
+        px = object_now.place[0];
+        py = object_now.place[1];
+        d = object_now.place[2];
+        sz = (double)size * (1 << fx_far_shift());
+    }
     sprite.set = screen_size != 0;
     sprite.fixed = size == 0;
-    sprite.past = fx_face_past_water((int16_t)x, (int16_t)y, d);
-    sprite.cx = v.cx + FOCAL * (int16_t)x / d;
-    sprite.cy = v.cy + FOCAL * (int16_t)y / d;
-    sprite.k = size ? (FOCAL * size / d) / screen_size : 1.0;
+    sprite.past = fx_face_past_water(px, py, d);
+    sprite.cx = v.cx + FOCAL * px / d;
+    sprite.cy = v.cy + FOCAL * py / d;
+    sprite.k = size ? (FOCAL * sz / d) / screen_size : 1.0;
     sprite.bx = centre_x;
     sprite.by = centre_y;
     sprite.left = (uint16_t)(centre_x - half);
