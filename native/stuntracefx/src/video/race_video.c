@@ -1488,6 +1488,19 @@ static void two_images_build(void)
     two_images_stale = 0;
 }
 
+/* The art drawn over the 3D (race_frame_art_draw_over) goes at the list's
+   nearest depth while the 3D is depth-tested (1 nearest: fx_draw_depth); the
+   art drawn before the 3D at the farthest, 0, as all of it was before. */
+static int art_over;
+
+static void art_depth(nshvc_vertex *v)
+{
+    int k;
+
+    for (k = 0; k < 6; k++)
+        v[k].z = art_over && fx_draw_depth() ? 1.0f : 0.0f;
+}
+
 /* A rectangle of the screen from texels (u0, v0), a texel a screen pixel,
    in the list's own pixels (fx_draw_list_scale: the list may be at the
    output's resolution). The corners take the texels' edges, as
@@ -1516,6 +1529,7 @@ static void image_quad(nshvc_draw_list list, nshvc_image image, int x0, int y0, 
     v[3] = v[0];
     v[4] = v[2];
     v[5].x = l; v[5].y = b; v[5].u = ul; v[5].v = vb; v[5].colour = 1;
+    art_depth(v);
     nshvc_draw_tris(list, v, 6, &m);
 }
 
@@ -1574,6 +1588,7 @@ static void colour_rect(nshvc_draw_list list, int x0, int y0, int x1, int y1, ui
     v[5].x = (float)x0 * sx; v[5].y = (float)y1 * sy;
     for (x0 = 0; x0 < 6; x0++)
         v[x0].colour = colour;
+    art_depth(v);
     nshvc_draw_tris(list, v, 6, NULL);
 }
 
@@ -1748,6 +1763,7 @@ static void image_quad_scaled(nshvc_draw_list list, nshvc_image image, float x, 
     v[3] = v[0];
     v[4] = v[2];
     v[5].x = l; v[5].y = b; v[5].u = ul; v[5].v = vb; v[5].colour = 1;
+    art_depth(v);
     nshvc_draw_tris(list, v, 6, &m);
 }
 
@@ -1938,7 +1954,7 @@ void race_frame_art_draw(nshvc_draw_list list)
 
 /* What goes over the 3D in its list: in the full window, the panel row's
    boxes, each at the bottom by its own anchor. */
-void race_frame_art_draw_over(nshvc_draw_list list)
+static void art_over_draw(nshvc_draw_list list)
 {
     int k, down;
 
@@ -1961,6 +1977,13 @@ void race_frame_art_draw_over(nshvc_draw_list list)
         image_quad(list, boxes_image, x0 + screen_anchor_x(x0, panel_boxes.x1[k]), y0 + down,
                    panel_boxes.x1[k] - x0 + 1, panel_boxes.y1[k] - y0 + 1, x0, y0 - PANEL_TOP);
     }
+}
+
+void race_frame_art_draw_over(nshvc_draw_list list)
+{
+    art_over = 1;
+    art_over_draw(list);
+    art_over = 0;
 }
 
 /* The two-player list, composed again when a half's scroll or panel has moved

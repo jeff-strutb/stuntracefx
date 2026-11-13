@@ -122,8 +122,27 @@ int fx_draw_mesh_slot(void);
 void fx_draw_queued(void);
 /* Whether the 3D is drawn with its depths (docs/stuntracefx/native/DEPTH.md):
    faces seen from behind drawn (fx_face_backs), each vertex at its true
-   depth. Off until the engine's depth settings are in. */
+   depth in the list's own depth, the cars seated, the water after the solid
+   3D. On. */
 int fx_draw_depth(void);
+/* What the vertices emitted from now on are, for their depths with the depth
+   test (DEPTH.md, 2 and 6): the course (z = near / Z), the land (that scaled
+   down, all of it farther than all of the course), or see-through water (the
+   course's depths, tested and not written). */
+enum { FX_DEPTH_COURSE, FX_DEPTH_LAND, FX_DEPTH_WATER };
+void fx_draw_depth_class(int c);
+/* A vertex's z with the depth test, from its 1 / Z (FxCorner.iz), in the
+   class emitted now; 0 for none. */
+float fx_draw_z(double iz);
+/* The layer of what is emitted from now on outside the 3D's queued faces
+   (a solid's discs on one plane, each over the last: fx_solid.c), as the
+   faces' layers (DEPTH.md, 3); 0 again when done. */
+void fx_draw_layer(int layer);
+/* With the depth test, the see-through water drawn so far (FX_DEPTH_WATER)
+   put after what has been drawn since, less its holes (fx_face_holes): the
+   frame program calls it once the solid 3D is drawn, before the weather
+   and the effects, which are drawn over it where they are nearer. */
+void fx_draw_water(void);
 /* The ground under view-space point p (docs/stuntracefx/native/DEPTH.md, 5):
    of the faces this picture has drawn that are not a car's and face up or
    down (up the world's up in view space), the topmost that the line from

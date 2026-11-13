@@ -97,6 +97,7 @@ static struct {
     double place[3];            /* the object's place in view space */
     int known;                  /* the object FxObjectsDraw took last has an exact place */
     double view[3][3];          /* the view's turn: row k, world axis k in view space */
+    double chip_z;              /* its depth as the chip has it (its draw record's, whole): when not known */
 } object_now;
 static struct {
     int on;                     /* this model's corners are made exactly */
@@ -158,6 +159,8 @@ void fx_face_object(uint16_t record)
     int in_view = 0, j, k;
 
     object_now.known = 0;
+    object_now.chip_z = record ? ldexp((int16_t)(fx_ram[(uint16_t)(record + 0x14)] | fx_ram[(uint16_t)(record + 0x15)] << 8),
+                                      fx_far_shift()) : 0;     /* its view-space Z, as fx_ground.c reads a record's */
     seat_now.car = 0;
     seat_now.tyre = 0;
     if (!fx_far_exact_place(record, rel, &in_view) || !view_of(object_now.view))
@@ -232,6 +235,11 @@ int fx_face_seat_tyre(float pos[3], double radius)
     }
     seated.n++;
     return 1;
+}
+
+double fx_face_object_depth(void)
+{
+    return object_now.known ? object_now.place[2] : object_now.chip_z;
 }
 
 int fx_face_exact_object(double place[3], double view[3][3])
@@ -804,6 +812,7 @@ static int clip_depth(const Corner3 *in, int n, Corner3 *out, double at, int kee
 
 typedef struct {
     double x, y, u, v;
+    double iz;                  /* one over its depth, whole: linear across the screen */
 } Corner2;
 
 /* The part of the projected polygon on one side of a line x = at (axis 0)
@@ -826,6 +835,7 @@ static int clip_side(const Corner2 *in, int n, Corner2 *out, int axis, double at
             out[m].y = a->y + (b->y - a->y) * t;
             out[m].u = a->u + (b->u - a->u) * t;
             out[m].v = a->v + (b->v - a->v) * t;
+            out[m].iz = a->iz + (b->iz - a->iz) * t;
             if (axis)
                 out[m].y = at;
             else
@@ -836,7 +846,9 @@ static int clip_side(const Corner2 *in, int n, Corner2 *out, int axis, double at
     return m;
 }
 
-static void project(const Corner3 *in, int n, Corner2 *out, const View *v)
+/* shift: the halvings the points have had (corner_shift for a model's,
+   0 for the land's whole units), undone for each corner's true 1 / Z */
+static void project(const Corner3 *in, int n, Corner2 *out, const View *v, int shift)
 {
     int i;
 
@@ -844,6 +856,7 @@ static void project(const Corner3 *in, int n, Corner2 *out, const View *v)
         place(v, in[i].x, in[i].y, in[i].z, &out[i].x, &out[i].y);
         out[i].u = in[i].u;
         out[i].v = in[i].v;
+        out[i].iz = 1.0 / ldexp(in[i].z, shift);
     }
 }
 
@@ -854,7 +867,7 @@ static int fan(const Corner3 *in, int n, const View *v)
     Corner2 a[WORK], b[WORK];
     int i;
 
-    project(in, n, a, v);
+    project(in, n, a, v, corner_shift());
     n = clip_side(a, n, b, 0, v->left, 1);
     n = clip_side(b, n, a, 0, v->right, 0);
     n = clip_side(a, n, b, 1, v->top, 1);
@@ -874,6 +887,7 @@ static int fan(const Corner3 *in, int n, const View *v)
             c->y = (float)t[j]->y;
             c->u = (float)t[j]->u;
             c->v = (float)t[j]->v;
+            c->iz = (float)t[j]->iz;
         }
     }
     return 1;
@@ -896,7 +910,19 @@ uint32_t fx_face_triangles(const float (*p)[3], int n, FxCorner *out, uint32_t r
     return fx_face_triangles_d((const double (*)[3])q, n, out, room);
 }
 
+static uint32_t triangles_at(const double (*p)[3], int n, FxCorner *out, uint32_t room, int shift);
+
 uint32_t fx_face_triangles_d(const double (*p)[3], int n, FxCorner *out, uint32_t room)
+{
+    return triangles_at(p, n, out, room, corner_shift());
+}
+
+uint32_t fx_face_triangles_whole(const double (*p)[3], int n, FxCorner *out, uint32_t room)
+{
+    return triangles_at(p, n, out, room, 0);
+}
+
+static uint32_t triangles_at(const double (*p)[3], int n, FxCorner *out, uint32_t room, int shift)
 {
     Corner3 a[WORK], b[WORK];
     Corner2 c[WORK], d[WORK];
@@ -915,7 +941,7 @@ uint32_t fx_face_triangles_d(const double (*p)[3], int n, FxCorner *out, uint32_
     m = clip_depth(a, n, b, NEAR_Z, 1);
     if (m < 3)
         return 0;
-    project(b, m, c, &v);
+    project(b, m, c, &v, shift);
     m = clip_side(c, m, d, 0, v.left, 1);
     m = clip_side(d, m, c, 0, v.right, 0);
     m = clip_side(c, m, d, 1, v.top, 1);
@@ -930,6 +956,7 @@ uint32_t fx_face_triangles_d(const double (*p)[3], int n, FxCorner *out, uint32_
             out[k].x = (float)t[j]->x;
             out[k].y = (float)t[j]->y;
             out[k].u = out[k].v = 0;
+            out[k].iz = (float)t[j]->iz;
             k++;
         }
     }
@@ -941,7 +968,7 @@ uint32_t fx_face_triangles_d(const double (*p)[3], int n, FxCorner *out, uint32_
 static int line(const Corner3 *in, const View *v)
 {
     Corner3 p[2] = { in[0], in[1] };
-    double x[2], y[2], t0 = 0, t1 = 1, dx, dy;
+    double x[2], y[2], iz[2], t0 = 0, t1 = 1, dx, dy;
     int i;
 
     for (i = 0; i < 2; i++)
@@ -956,8 +983,10 @@ static int line(const Corner3 *in, const View *v)
             p[i].y += (o->y - p[i].y) * t;
             p[i].z = NEAR_Z;
         }
-    for (i = 0; i < 2; i++)
+    for (i = 0; i < 2; i++) {
         place(v, p[i].x, p[i].y, p[i].z, &x[i], &y[i]);
+        iz[i] = 1.0 / ldexp(p[i].z, corner_shift());
+    }
     dx = x[1] - x[0];
     dy = y[1] - y[0];
     {
@@ -988,10 +1017,12 @@ static int line(const Corner3 *in, const View *v)
     corners[ncorners].x = (float)(x[0] + dx * t0);
     corners[ncorners].y = (float)(y[0] + dy * t0);
     corners[ncorners].u = corners[ncorners].v = 0;
+    corners[ncorners].iz = (float)(iz[0] + (iz[1] - iz[0]) * t0);
     ncorners++;
     corners[ncorners].x = (float)(x[0] + dx * t1);
     corners[ncorners].y = (float)(y[0] + dy * t1);
     corners[ncorners].u = corners[ncorners].v = 0;
+    corners[ncorners].iz = (float)(iz[0] + (iz[1] - iz[0]) * t1);
     ncorners++;
     return 1;
 }
@@ -1336,6 +1367,16 @@ static void commit(const FxMaterial *m)
     }
     if (s->line) {
         ok = line(face.c, &face.view);
+    } else if (cut.on && fx_draw_depth()) {
+        /* with the depth test the water is put in place by depth (fx_draw.c
+           water_last): the face whole, its crossings kept for the holes */
+        if (hole_model != projection) {
+            if (nhole_points)
+                hole_finish();
+            hole_model = projection;
+        }
+        hole_points_of(face.c, face.n);
+        ok = polygon_corners(face.c, face.n, face.textured);
     } else if (cut.on) {
         Corner3 near_part[WORK], past_part[WORK];
         int nn, np;

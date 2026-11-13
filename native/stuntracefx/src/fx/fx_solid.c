@@ -400,7 +400,9 @@ static uint8_t shade(const Ring *g, const float *n)
     return up > 0.45f ? g->up : up < -0.45f ? g->down : g->across;
 }
 
-/* a cap at a, its rings over it outward in, when it faces the eye */
+/* a cap at a, its rings over it outward in, when it faces the eye; with
+   the depth test each disc one layer in front of the one under it, on the
+   same plane (fx_draw_layer) */
 static void cap(const Solid *s, float a, const Disc *d, int nd, int n)
 {
     static float p[SEGMENTS_MAX][3];
@@ -414,12 +416,16 @@ static void cap(const Solid *s, float a, const Disc *d, int nd, int n)
             place(s, a, 2 * PI_F * i / m, d[k].r, p[i]);
         if (!k && !(cap_seen = face_seen((const float (*)[3])p, m, nv)))
             return;
+        fx_draw_layer(k);
         emit((const float (*)[3])p, m, (uint8_t)(hi | d[k].nib));
     }
+    fx_draw_layer(0);
 }
 
-/* an eye's face's marks on its face plane at a, in order */
-static void eye_marks(const Solid *s, float a, const Mark *mk, int nm, int n)
+/* an eye's face's marks on its face plane at a, in order: with the depth
+   test each a layer in front of the last, the first in front of the cap's
+   `base` discs under them */
+static void eye_marks(const Solid *s, float a, const Mark *mk, int nm, int n, int base)
 {
     static float p[SEGMENTS_MAX][3];
     float q[4][3];
@@ -428,6 +434,7 @@ static void eye_marks(const Solid *s, float a, const Mark *mk, int nm, int n)
     for (k = 0; k < nm; k++) {
         const Mark *m = &mk[k];
 
+        fx_draw_layer(base + k);
         if (m->t0 == m->t1) {           /* a disc */
             int sides = m->r1 < 1.5f ? 12 : n;
 
@@ -462,6 +469,7 @@ static void eye_marks(const Solid *s, float a, const Mark *mk, int nm, int n)
             }
         }
     }
+    fx_draw_layer(0);
 }
 
 static void draw(const Solid *s)
@@ -499,7 +507,7 @@ static void draw(const Solid *s)
     }
     cap(s, s->rings[s->nrings - 1].a, s->front, s->nfront, n);
     if (face && cap_seen)
-        eye_marks(s, s->rings[s->nrings - 1].a, face, nface, n);
+        eye_marks(s, s->rings[s->nrings - 1].a, face, nface, n, s->nfront);
     cap(s, s->rings[0].a, s->back, s->nback, n);
 }
 
@@ -1187,15 +1195,24 @@ static uint32_t mesh_face(nshvc_mesh_vertex *out, uint32_t n, const float *const
 
         argb = 0xFF000000u | (r << 3 | r >> 2) << 16 | (gg << 3 | gg >> 2) << 8 | (b << 3 | b >> 2);
     }
-    for (t = 0; t < (m == 4 ? 2 : 1); t++)
+    for (t = 0; t < (m == 4 ? 2 : 1); t++) {
+        /* wound clockwise on the screen seen from outside, as the game's
+           instanced meshes are (fx_ground.c mesh_wound): (b - a) x (c - a)
+           against the outward normal, else its last two the other way */
+        const float *a = q[tri[t][0]], *b = q[tri[t][1]], *e = q[tri[t][2]];
+        float e1[3] = { b[0] - a[0], b[1] - a[1], b[2] - a[2] }, e2[3] = { e[0] - a[0], e[1] - a[1], e[2] - a[2] };
+        float tn[3] = { e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0] };
+        int flip = tn[0] * nm[0] + tn[1] * nm[1] + tn[2] * nm[2] > 0;
+
         for (i = 0; i < 3; i++) {
-            const float *p = q[tri[t][i]];
+            const float *p = q[tri[t][flip && i ? 3 - i : i]];
 
             out[n].x = p[0], out[n].y = p[1], out[n].z = p[2];
             out[n].u = out[n].v = 0;
             out[n].colour = argb;
             n++;
         }
+    }
     return n;
 }
 

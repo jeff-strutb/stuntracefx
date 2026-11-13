@@ -11,6 +11,7 @@
    its texel. */
 typedef struct {
     float x, y, u, v;
+    float iz;                   /* one over its view-space depth, whole (0: none, a 2D corner) */
 } FxCorner;
 
 /* A face's material as FxModelMaterial chose it: a flat face's colour
@@ -104,8 +105,11 @@ FxFaceCheck fx_face_check(void);
    projected and kept to the view: its triangles' corners in `out`; the
    count made, 0 when none (n at most 64). */
 uint32_t fx_face_triangles(const float (*p)[3], int n, FxCorner *out, uint32_t room);
-/* The same from points in doubles (the ground's plane, far across). */
+/* The same from points in doubles, in the scale of the object drawn now. */
 uint32_t fx_face_triangles_d(const double (*p)[3], int n, FxCorner *out, uint32_t room);
+/* The same for points in whole units whatever object is drawn (the land's,
+   fx_ground.c): each corner's iz their own 1 / Z. */
+uint32_t fx_face_triangles_whole(const double (*p)[3], int n, FxCorner *out, uint32_t room);
 
 /* The water's cut (fx_ground.c, Aqua Tunnel): on for a picture, its plane
    n . v = d in view space (d > 0: the eye above it). A view-space point
@@ -136,6 +140,10 @@ void fx_face_survey(FxSurveyPoint point, FxSurveyFace face, void *context);
    its place in view space and the view's turn (row k, world axis k in view
    space) when its place is known; else 0. */
 int fx_face_exact_object(double place[3], double view[3][3]);
+/* The object being drawn's depth in view space, whole: exact (with its
+   car's seat), else its draw record's as the chip made it; for what it
+   draws with no depth of its own (a sprite, the chip's rows); 0 for none. */
+double fx_face_object_depth(void);
 /* With the depth test, a car's tyre (a solid, fx_solid.c) of `radius`
    whose middle is pos in view space: moved along the normal of the ground
    under it to its radius over it, the move kept for its car's other parts.

@@ -1126,7 +1126,7 @@ static void land_draw(int kind, const double eye[3], const double m[9], int p)
         d = n[0] * v[0][0] + n[1] * v[0][1] + n[2] * v[0][2];
         if (fabs(d) < 1e-9)
             continue;                   /* edge on through the eye */
-        nc = fx_face_triangles_d(v, 3, c, sizeof c / sizeof c[0]);
+        nc = fx_face_triangles_whole(v, 3, c, sizeof c / sizeof c[0]);
         if (!nc)
             continue;
         in[0] = (float)(n[0] / (128.0 * d));
@@ -1325,7 +1325,8 @@ static void to_view(const double w[3], const double eye[3], const double m[9], d
         v[k] = d[0] * m[k] + d[1] * m[3 + k] + d[2] * m[6 + k];
 }
 
-/* A level plane at height y under the eye, in one colour at depth z: a quad
+/* A level plane at height y under the eye, in one colour at depth z (with
+   the depth test, its own, in the depths drawn now: fx_draw_depth_class): a quad
    about the eye, far enough out that its far edges lie HORIZON_GAP output
    pixels from the horizon, kept to the view; its vertices into v from *nv. */
 static void plane_vertices(double y, uint32_t colour, float z, const double eye[3], const double m[9], nshvc_vertex *v,
@@ -1347,12 +1348,12 @@ static void plane_vertices(double y, uint32_t colour, float z, const double eye[
 
         to_view(w, eye, m, q[i]);
     }
-    nc = fx_face_triangles_d((const double (*)[3])q, 4, c, sizeof c / sizeof c[0]);
+    nc = fx_face_triangles_whole((const double (*)[3])q, 4, c, sizeof c / sizeof c[0]);
     for (j = 0; j < nc && *nv < room; j++, (*nv)++) {
         memset(&v[*nv], 0, sizeof v[*nv]);
         v[*nv].x = c[j].x;
         v[*nv].y = c[j].y;
-        v[*nv].z = z;
+        v[*nv].z = fx_draw_depth() ? fx_draw_z(c[j].iz) : z;
         v[*nv].colour = colour;
     }
 }
@@ -1391,7 +1392,9 @@ static uint32_t face_colour(int cls, const double nv[3], const double nw[3], int
 /* One flat face of the land, its corners pts (world, in order round it)
    and its outward normal nw: left out when it faces away from the eye;
    else turned to the view, kept to it, each corner at its depth (from the
-   face's own plane), into v from *nv. */
+   face's own plane; with the depth test its own 1 / Z in the depths drawn
+   now, fx_draw_depth_class: the land's, or the course's for the tunnels'
+   rock and the canyon's fill), into v from *nv. */
 static int face_at_zero;                /* land_face's vertices at depth 0 (the tunnels' rock, in the 3D's order) */
 static uint32_t ground_now;             /* the land's plane's colour this picture (0: none yet) */
 
@@ -1415,7 +1418,7 @@ static void land_face(const double (*pts)[3], int n, const double nw[3], int cls
     d = nview[0] * vp[0][0] + nview[1] * vp[0][1] + nview[2] * vp[0][2];
     if (fabs(d) < 1e-9)
         return;
-    nc = fx_face_triangles_d((const double (*)[3])vp, n, c, sizeof c / sizeof c[0]);
+    nc = fx_face_triangles_whole((const double (*)[3])vp, n, c, sizeof c / sizeof c[0]);
     if (!nc || *nv + nc > room)
         return;
     colour = face_colour(cls, nview, nw, 0);
@@ -1426,7 +1429,10 @@ static void land_face(const double (*pts)[3], int n, const double nw[3], int cls
         memset(&v[*nv], 0, sizeof v[*nv]);
         v[*nv].x = c[j].x;
         v[*nv].y = c[j].y;
-        v[*nv].z = face_at_zero ? 0.0f : (float)(z < 0 ? 0 : z > FACE_Z ? FACE_Z : z);
+        if (fx_draw_depth())
+            v[*nv].z = fx_draw_z(c[j].iz);
+        else
+            v[*nv].z = face_at_zero ? 0.0f : (float)(z < 0 ? 0 : z > FACE_Z ? FACE_Z : z);
         v[*nv].colour = colour;
     }
 }
@@ -1996,6 +2002,22 @@ static int forest_hidden(const double eye[3], const double m[9], const double fo
     return 1;
 }
 
+/* A land mesh's view's depths: land_face's, z = FACE_Z (1 - LAND_NEAR / Z);
+   with the depth test the land's (fx_draw_z: z = k / Z, 1 nearest), no
+   nearer than the view's near. */
+static void view_depth(nshvc_view *view)
+{
+    if (fx_draw_depth()) {
+        view->depth_a = 0;
+        view->depth_b = -fx_draw_z(1.0);
+        view->depth_max = fx_draw_z(1.0 / view->near);
+        return;
+    }
+    view->depth_a = (float)FACE_Z;
+    view->depth_b = (float)(FACE_Z * LAND_NEAR);
+    view->depth_max = (float)FACE_Z;
+}
+
 static void forest_draw(unsigned course, const double eye[3], const double m[9], double plane_y)
 {
     nshvc_view view;
@@ -2017,9 +2039,7 @@ static void forest_draw(unsigned course, const double eye[3], const double m[9],
     view.cx = (int16_t)ram_word(0x0034);
     view.cy = (int16_t)ram_word(0x0036);
     view.near = 1;
-    view.depth_a = (float)FACE_Z;
-    view.depth_b = (float)(FACE_Z * LAND_NEAR);
-    view.depth_max = (float)FACE_Z;
+    view_depth(&view);
     fx_face_view_rect(&left, &right, &top, &bottom);
     fx_solid_forest_begin(&view, left, right, top, bottom);
     hills_make(eye, m, plane_y);
@@ -2061,9 +2081,7 @@ static void land_view(const double eye[3], const double m[9], nshvc_view *view, 
     view->cx = (int16_t)ram_word(0x0034);
     view->cy = (int16_t)ram_word(0x0036);
     view->near = 1;
-    view->depth_a = (float)FACE_Z;
-    view->depth_b = (float)(FACE_Z * LAND_NEAR);
-    view->depth_max = (float)FACE_Z;
+    view_depth(view);
     fx_face_view_rect(&left, &right, &top, &bottom);
     {
         float p[4][3] = { { 128, 0, -(left - view->cx) }, { -128, 0, right - view->cx },
@@ -2173,16 +2191,38 @@ static void city_make(unsigned course)
 }
 
 /* a quad of a building's mesh (corners in order round it) into v */
-static uint32_t city_quad(nshvc_mesh_vertex *v, uint32_t n, const float (*q)[3], uint32_t colour)
+/* Whether triangle a, b, c is wound as the game's instanced meshes are for
+   the GPU's cull mode (fx_draw.c: the back faces culled, a front face
+   clockwise on the screen, x right and y down, the engine's default): seen
+   from the side `out` faces, clockwise. View space is x right, y down, z
+   ahead, and a turn keeps it so, so a face is clockwise on the screen when
+   (b - a) x (c - a) points away from the eye: into the solid, against out. */
+static int mesh_wound(const float *a, const float *b, const float *c, const float out[3])
 {
-    static const int tri[6] = { 0, 1, 2, 0, 2, 3 };
-    int i;
+    float e1[3] = { b[0] - a[0], b[1] - a[1], b[2] - a[2] }, e2[3] = { c[0] - a[0], c[1] - a[1], c[2] - a[2] };
+    float n[3] = { e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0] };
 
-    for (i = 0; i < 6; i++) {
-        v[n].x = q[tri[i]][0], v[n].y = q[tri[i]][1], v[n].z = q[tri[i]][2];
-        v[n].u = v[n].v = 0;
-        v[n].colour = colour;
-        n++;
+    return n[0] * out[0] + n[1] * out[1] + n[2] * out[2] <= 0;
+}
+
+/* A quad of a building, facing out along `out`, as two triangles wound
+   clockwise on the screen seen from outside (mesh_wound) */
+static uint32_t city_quad(nshvc_mesh_vertex *v, uint32_t n, const float (*q)[3], uint32_t colour, const float out[3])
+{
+    static const int tri[2][3] = { { 0, 1, 2 }, { 0, 2, 3 } };
+    int t, i;
+
+    for (t = 0; t < 2; t++) {
+        int at[3] = { tri[t][0], tri[t][1], tri[t][2] };
+
+        if (!mesh_wound(q[at[0]], q[at[1]], q[at[2]], out))
+            at[1] = tri[t][2], at[2] = tri[t][1];
+        for (i = 0; i < 3; i++) {
+            v[n].x = q[at[i]][0], v[n].y = q[at[i]][1], v[n].z = q[at[i]][2];
+            v[n].u = v[n].v = 0;
+            v[n].colour = colour;
+            n++;
+        }
     }
     return n;
 }
@@ -2203,7 +2243,9 @@ static uint32_t city_mesh(int k, const uint32_t c[6], nshvc_mesh_vertex *v)
         float q[4][3] = { { ox, 0, oz }, { ox + ax * span, 0, oz + az * span }, { ox + ax * span, -h, oz + az * span }, { ox, -h, oz } };
         int cols = (int)fmaxf(1, roundf(span / 0.14f)), rows = (int)fmaxf(1, roundf(h / 0.16f)), r, col;
 
-        n = city_quad(v, n, (const float (*)[3])q, c[side]);
+        float facing[3] = { nx, 0, nz };
+
+        n = city_quad(v, n, (const float (*)[3])q, c[side], facing);
         for (r = 0; r < rows; r++)
             for (col = 0; col < cols; col++) {
                 float s0 = (col + 0.3f) / cols * span, s1 = (col + 0.7f) / cols * span;
@@ -2214,13 +2256,14 @@ static uint32_t city_mesh(int k, const uint32_t c[6], nshvc_mesh_vertex *v)
                                    { ox + ax * s0 + nx * out, y1, oz + az * s0 + nz * out } };
 
                 if (hash01((unsigned)k, 9300 + (unsigned)(side * 64 + col), (unsigned)r) < CITY_LIT)
-                    n = city_quad(v, n, (const float (*)[3])wq, c[5]);
+                    n = city_quad(v, n, (const float (*)[3])wq, c[5], facing);
             }
     }
     {
         float roof[4][3] = { { -w, -h, -d }, { w, -h, -d }, { w, -h, d }, { -w, -h, d } };
+        static const float up[3] = { 0, -1, 0 };
 
-        n = city_quad(v, n, (const float (*)[3])roof, c[4]);
+        n = city_quad(v, n, (const float (*)[3])roof, c[4], up);
     }
     return n;
 }
@@ -2385,9 +2428,15 @@ static void clouds_shapes(void)
                         normal_of(p[0], p[1], p[2], nv);
                         for (t = 0; t < 3; t++)
                             c[t] = (p[0][t] + p[1][t] + p[2][t]) / 3 - mid[t];
-                        if (nv[0] * c[0] + nv[1] * c[1] + nv[2] * c[2] < 0)    /* outward: away from the puff's middle */
+                        if (nv[0] * c[0] + nv[1] * c[1] + nv[2] * c[2] < 0) {  /* outward: away from the puff's middle */
                             for (t = 0; t < 3; t++)
                                 nv[t] = -nv[t];
+                        } else {                /* its corners the other way round: clockwise seen from outside (mesh_wound) */
+                            const double *swap = p[1];
+
+                            p[1] = p[2];
+                            p[2] = swap;
+                        }
                         len = sqrt(nv[0] * nv[0] + nv[1] * nv[1] + nv[2] * nv[2]);
                         if (len <= 0)
                             continue;
@@ -2586,8 +2635,10 @@ static void land_polygons(unsigned course, int cls, const double eye[3], const d
 
         if (fill.course != (int)course)
             fill_make(course);
+        fx_draw_depth_class(FX_DEPTH_COURSE);  /* with the depth test the course's own rock: it hides what lies behind it */
         fill_faces(course, cls, plane_y, eye, m, fv, &nf, FILL_VERTICES);
         fx_draw_land(fv, nf);
+        fx_draw_depth_class(FX_DEPTH_LAND);
         fx_far_occlude(1);
     }
 }
@@ -2777,7 +2828,7 @@ static void ocean_draw(int cls, int under, int first, const double eye[3], const
 
         to_view(w, eye, m, q[i]);
     }
-    nc = fx_face_triangles_d((const double (*)[3])q, 4, c, sizeof c / sizeof c[0]);
+    nc = fx_face_triangles_whole((const double (*)[3])q, 4, c, sizeof c / sizeof c[0]);
     if (!nc)
         return;
     for (j = 0; j < nc; j++) {
@@ -2834,10 +2885,27 @@ static void ocean_draw(int cls, int under, int first, const double eye[3], const
     if (!ocean_shader.id)
         ocean_shader = nshvc_shader_load("ocean");
     nshvc_image_write(ocean_image[slot], words);
+    fx_draw_depth_class(FX_DEPTH_WATER);        /* with the depth test: drawn after the solid 3D (fx_draw.c) */
     fx_draw_surface(c, nc, ocean_image[slot], ocean_shader, in, (float)ox, (float)oy);
+    fx_draw_depth_class(FX_DEPTH_LAND);
 }
 
+static void ground_draw(void);
+
+/* With the depth test (docs/stuntracefx/native/DEPTH.md, 2) the land is in
+   depths of its own, all farther than the course (fx_draw_depth_class), so
+   it never covers the course's shapes, while its own parts hide each other
+   at their true depths; the canyon's fill and the tunnels' rock, the
+   course's own rock, at the course's; the ocean's water at the course's,
+   tested and not written, after the solid 3D. */
 void fx_ground_draw(void)
+{
+    fx_draw_depth_class(FX_DEPTH_LAND);
+    ground_draw();
+    fx_draw_depth_class(FX_DEPTH_COURSE);
+}
+
+static void ground_draw(void)
 {
     unsigned course = g.course;
     int kind = course < 0x20 ? surface[course].kind : SURF_NONE, p = fx_draw_picture_now(), slot, i, k;
@@ -2923,7 +2991,7 @@ void fx_ground_draw(void)
         for (k = 0; k < 3; k++)
             q[i][k] = w[0] * m[k] + w[1] * m[3 + k] + w[2] * m[6 + k];
     }
-    n = fx_face_triangles_d((const double (*)[3])q, 4, corners, sizeof corners / sizeof corners[0]);
+    n = fx_face_triangles_whole((const double (*)[3])q, 4, corners, sizeof corners / sizeof corners[0]);
     if (!n)
         return;
     for (i = 0; i < (int)n; i++) {

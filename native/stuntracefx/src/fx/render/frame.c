@@ -90,6 +90,7 @@ static FxFrameProgramResult frame_program(uint16_t draw_list_end)
     }
     fx_far_parked(stack);               /* the near list again with parked tyres among it (fx_far.c) */
     fx_draw_held_by_view(0);
+    fx_draw_water();                    /* with the depth test the see-through water after the solid 3D (fx_draw.c) */
     *stack = 0x0240;
     fx_cmode(0);
     weather_record = fx_ldw(0x247A);

@@ -68,10 +68,18 @@ rounding of the angles' sines, about 1e-9.
   8,000,000: 0.002 of a unit at the overhead's 17,000, and 0.0001 at 1,000
   in the chase view. Handed over the other way (0 nearest, z near 1) it
   could not: its step there is 6e-8, about 0.07 of a unit at 17,000.
-- The land (its plane, mountains, forests, cities, clouds) is drawn first,
-  tested against the depth but not writing it. The course then always lies
-  over it, so the land never covers road that dips below its plane.
-- The HUD, text and effects are drawn after the 3D at z = 1, the nearest.
+- The land (its plane, mountains, forests, cities, clouds, the sea bed) has
+  depths of its own: z = 1e-7 near / Z, so all of it lies farther than all
+  of the course (closer than 10,000,000 units) and the course always lies
+  over it. The land never covers road that dips below its plane, while its
+  own parts hide each other at their true depths, written as the course's
+  are. Its corners are whole units, so their 1 / Z is taken as it is,
+  whatever object was drawn before.
+- The course's own rock (the canyon's fill and the tunnels' rock) is at the
+  course's depths: it hides the far track behind it, as it did before.
+- The HUD and text are drawn at z = 1, the nearest. The race's art drawn
+  before the 3D (the bezel) is at 0, the farthest; the panels drawn over it
+  in the full window are at 1.
 
 ### 3. The game's own layering for faces on one plane (engine: depth bias)
 
@@ -85,6 +93,8 @@ front of the highest earlier face it overlaps whose plane it shares (within
   depth (the first version's) is either too small or too large.
 - Faces that look alike, such as a road cut into triangles, share a layer.
 - There are no angle or distance tolerances.
+- A solid's discs on one plane (a tyre's side and its hub, an eye's marks)
+  are each drawn one layer in front of the one under it.
 
 ### 4. Back faces
 
@@ -92,8 +102,10 @@ Back faces are culled per surface, not left to depth. A model face's own
 corner order has no fixed winding (the chip decided facing from separate
 facing triangles), so for these faces the CPU decides: it already has each
 face's facing from the chip's facing triangle, now made from exact corners.
-The GPU's cull mode is used for the instanced meshes the game builds itself,
-wound clockwise on the screen as their front.
+The GPU's cull mode is used for the instanced meshes the game builds itself
+(the land's trees, buildings and clouds): their back faces culled, each
+triangle wound clockwise on the screen seen from outside (the engine's
+default front), worked out from its outward normal when the mesh is made.
 
 - **A closed model is drawn one-sided, its back faces culled.** A model is
   closed when every edge of its faces is shared by two faces going opposite
@@ -137,8 +149,17 @@ or its parents' chain reaches (no model is named).
 
 ### 6. Sprites, particles and water (engine: depth write off)
 
-Sprites and particles go at their place's depth. See-through water is drawn
-after the solid 3D, depth-tested but not written to the depth buffer.
+Sprites and particles go at their object's depth: its exact place, else
+the place in its draw record as the chip made it.
+
+See-through water is drawn after the solid 3D and before the weather and
+the effects, depth-tested but not written to the depth buffer. Where a
+track piece goes below it (Aqua Tunnel's and Harbor City's), the region
+the piece's crossings enclose on the water's plane is a hole: each water
+triangle is drawn less each hole, in convex pieces cut along the hole's
+edges. A crossing is worked out from its edge's ends in one order, so the
+pieces meet exactly. The old cut, which drew what lies past the water
+first and again inside each hole, is not used.
 
 ## What the engine adds (nativeshvc, for Jeff to approve)
 
