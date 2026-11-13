@@ -57,18 +57,22 @@ rounding of the angles' sines, about 1e-9.
 
 ### 2. Depth with full precision (engine: its own depth buffer)
 
-- Each corner carries its true depth (1/Z, with w = Z).
+- Each corner carries its true view-space depth as w = Z, through the near
+  plane's and the screen's clipping.
 - The 3D draw list gets a depth buffer of its own: 32-bit float, reversed
-  (near 1, far 0). It does not use the 1/16 slice of the frame's depth that
-  a draw list shares today. Reversed float depth keeps nearly the same
-  relative precision at every distance. One step is about Z / 8,000,000:
-  0.002 of a unit at the overhead's 17,000, and 0.0001 at 1,000 in the chase
-  view. No per-picture fitting is needed.
-- The land (its plane, mountains, forests, cities, clouds) keeps today's
-  rule: it is drawn behind the whole course, so it never covers road that
-  dips below its plane. Its own parts are depth-tested among themselves, at
-  their true depths.
-- The HUD, text and effects are drawn after the 3D, without depth.
+  inside. It does not use the 1/16 slice of the frame's depth that a draw
+  list shares today. The list declares its depth mapping once, and the GPU
+  works each triangle's depth out from w by it, as it already does for an
+  instanced mesh. A z handed over as a float near 1 could not carry the
+  precision: its step is 6e-8, about 0.07 of a unit at 17,000.
+- Worked out from w, one step is about Z / 8,000,000: 0.002 of a unit at
+  the overhead's 17,000, and 0.0001 at 1,000 in the chase view. No
+  per-picture fitting is needed. Tris and meshes in the list agree exactly.
+- The land (its plane, mountains, forests, cities, clouds) is drawn first,
+  tested against the depth but not writing it. The course then always lies
+  over it, so the land never covers road that dips below its plane.
+- The HUD, text and effects are drawn after the 3D at depth 0, their depth
+  given as now (the per-draw switch for depth from w is off for them).
 
 ### 3. The game's own layering for faces on one plane (engine: depth bias)
 
@@ -83,9 +87,14 @@ front of the highest earlier face it overlaps whose plane it shares (within
 - Faces that look alike, such as a road cut into triangles, share a layer.
 - There are no angle or distance tolerances.
 
-### 4. Back faces (engine: cull mode)
+### 4. Back faces
 
-Back faces are culled on the GPU per surface, not left to depth:
+Back faces are culled per surface, not left to depth. A model face's own
+corner order has no fixed winding (the chip decided facing from separate
+facing triangles), so for these faces the CPU decides: it already has each
+face's facing from the chip's facing triangle, now made from exact corners.
+The GPU's cull mode is used for the instanced meshes the game builds itself,
+wound clockwise on the screen as their front.
 
 - **A closed model is drawn one-sided, its back faces culled.** A model is
   closed when every edge of its faces is shared by two faces going opposite
@@ -98,9 +107,8 @@ Back faces are culled on the GPU per surface, not left to depth:
   them"), such as tunnels and canyon walls. A face seen from behind is
   shaded by its own normal turned to the eye, as the chip shades a lit face.
 
-The chip's walk then hands every face it reaches to the GPU, and the GPU
-decides facing. The chip's own facing test no longer drops faces; it still
-picks the walk's branches.
+The chip's walk now takes faces facing away as well, holding each one until
+its model's walk is done; it still picks the walk's branches as before.
 
 ### 5. Cars
 
@@ -124,14 +132,16 @@ after the solid 3D, depth-tested but not written to the depth buffer.
 
 Every one of these is a standard GPU state on Metal, Vulkan and D3D12. Each
 is a per-draw setting, so a list that sets none of them draws as it does
-today.
+today. The engine's renderer session designs the shape and puts it to Jeff;
+depth from w was its finding, after the first four were asked for.
 
 | Setting | Values | What it is for |
 |---|---|---|
-| Cull mode | None, back, front | Closed models one-sided, open ones two-sided |
+| Cull mode | None, back, front | The game's instanced meshes one-sided |
 | Depth bias | Constant plus slope-scaled, in the depth buffer's units | One layer for coplanar faces |
 | Depth write | On, off | See-through water and other transparent draws |
 | A list's own depth | 32-bit float, reversed, cleared each picture | Full precision for the 3D, in place of the shared 1/16 slice |
+| Depth from w | A list's depth mapping; per draw, on or off | Triangles' depth worked out on the GPU from their true Z |
 
 The list's own depth buffer is composited among the layers by its priority,
 as now. The engine's session designs the shape; the game writes against it
@@ -145,7 +155,7 @@ The game's side touches about 8 to 10 files, roughly 800 to 1,200 lines:
 |---|---|
 | fx_face.c | Exact corners; every face handed on, with its model's sidedness |
 | model.c | Object-space points recorded at the point commands |
-| fx_draw.c | Depth per vertex, layers as depth bias, cull mode per draw |
+| fx_draw.c | w = Z per vertex, layers as depth bias, the land and water without depth writes |
 | fx_solid.c | Exact places for solids |
 | fx_ground.c | The land at its true depth, cut out under the course |
 | frame.c | Sprites' depth |
