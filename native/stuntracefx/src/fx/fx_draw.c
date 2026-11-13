@@ -1870,10 +1870,15 @@ static void water_last(Recording *r)
    width, each quarter between that and whole; whole past it. A quarter is
    a whole number of a pixel's samples on every GPU (1 of 4, 2 of 8), so
    each step is exact. A road or floor under the car stays whole, and of
-   what hides it only what lies near it on the screen is seen through. */
+   what hides it only what lies near it on the screen is seen through. The
+   ocean's water, drawn by a shader of its own, is a piece known as
+   FX_PIECE_WATER that hides the car when its plane lies between the eye
+   and the car (fx_draw_see_plane, Jeff, 2026-11-13: "you aren't making
+   terrain like water transparent too when under them"): its shader steps
+   it the same way, never showing more than the water itself does. */
 
 enum { SEE_POINTS = 6, SEE_KEYS = 8192 };
-#define SEE_RADIUS 1200.0       /* about four of the car's lengths */
+#define SEE_RADIUS 2400.0       /* about eight of the car's lengths (Jeff, 2026-11-13, at 1,200: "the radius isn't large enough when under things") */
 #define SEE_INNER 0.6f
 #define SEE_LEAST 0.25f
 #define SEE_ABOVE 48.0
@@ -2118,6 +2123,30 @@ void fx_draw_mesh_seen(nshvc_mesh mesh, const nshvc_view *view, const nshvc_inst
     }
     if (n)
         fx_draw_mesh(mesh, view, whole, n);
+}
+
+int fx_draw_see_plane(const double n[3], double d, uint32_t key, float out[5])
+{
+    double f[3], len = sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+    float fade;
+    int hides = 0, i;
+
+    if (!recording || !see_on() || !fx_view_focus(f) || len <= 0)
+        return 0;
+    for (i = 0; i < SEE_POINTS && !hides; i++) {
+        /* the eye (0, the plane's -d side) and the point on its two sides,
+           the point SEE_MARGIN past it */
+        double s = n[0] * see.p[i][0] + n[1] * see.p[i][1] + n[2] * see.p[i][2] - d;
+
+        hides = d > 0 ? s > SEE_MARGIN * len : s < -SEE_MARGIN * len;
+    }
+    fade = see_fade(key, hides);
+    out[0] = (float)(see.cx - recording->ox + 128.0 * f[0] / f[2]);
+    out[1] = (float)(see.cy - recording->oy + 128.0 * f[1] / f[2]);
+    out[2] = (float)(128.0 * SEE_RADIUS / f[2]);
+    out[3] = SEE_INNER;
+    out[4] = 1.0f - fade * (1.0f - SEE_LEAST);
+    return 1;
 }
 
 /* a triangle cut at the plane over the car: its corners in view space

@@ -2659,7 +2659,7 @@ static void land_polygons(unsigned course, int cls, const double eye[3], const d
 #define OCEAN_WAVE 0.08
 #define SEABED_BELOW 512.0
 #define SEABED_DARK 0.55
-#define OCEAN_IMAGE_W 24        /* ocean.shade's image: 11 colours, then 8 floats */
+#define OCEAN_IMAGE_W 24        /* ocean.shade's image: 11 colours, then 13 floats */
 
 static nshvc_image ocean_image[4];
 static nshvc_shader ocean_shader;
@@ -2856,6 +2856,20 @@ static void ocean_draw(int cls, int under, int first, const double eye[3], const
     words[16] = float_word((float)(ez / OCEAN_CELL));
     words[17] = float_word((float)(dh / OCEAN_CELL));
     words[18] = float_word((float)OCEAN_WAVE);
+    /* seen through about the player's car while it is under the water
+       (fx_draw.c, "seen through"): the car's place less the water's origin,
+       the radius, its inner part, how much of the water shows within it */
+    {
+        double plane[3] = { m[3], m[4], m[5] };
+        float see[5] = { 0, 0, 1, 0, 1 };
+
+        if (fx_draw_see_plane(plane, dh, FX_PIECE_WATER, see)) {
+            see[0] -= (float)ox;
+            see[1] -= (float)oy;
+        }
+        for (k = 0; k < 5; k++)
+            words[19 + k] = float_word(see[k]);
+    }
     slot = fx_draw_tweening() * 2 + (p & 1);
     if (!ocean_image[slot].id)
         ocean_image[slot] = nshvc_image_create(OCEAN_IMAGE_W, 1, NSHVC_IMAGE_RGBA);

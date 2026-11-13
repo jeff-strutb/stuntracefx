@@ -152,11 +152,20 @@ void fx_draw_piece(uint32_t key);
    seen through about it. */
 void fx_draw_mesh_seen(nshvc_mesh mesh, const nshvc_view *view, const nshvc_instance *in, uint32_t count, float lift,
                        float radius, uint32_t kind);
+/* The see-through about the player's car for a plane drawn by a shader of
+   its own (the ocean, fx_ground.c), plane n . v = d in view space, known as
+   piece `key`: 0 when the see-through is off; else 1 and out: the car's
+   place in the projection's pixels (the view's centre as the chip's, no
+   offset), the radius in them, its inner part, and how much of the plane
+   shows within it (1 all of it), from whether the plane lies between the
+   eye and the car (fade.shade's numbers 2-5, its steps the same). */
+int fx_draw_see_plane(const double n[3], double d, uint32_t key, float out[5]);
 /* the pieces' kinds and keys that are not objects (an object's key is its
    slot + 1): the land's (fx_ground.c), its meshes' kinds (below $80) */
 enum { FX_PIECE_KIND_FOREST = 0x10, FX_PIECE_KIND_CITY = 0x20, FX_PIECE_KIND_CLOUD = 0x40 };
 #define FX_PIECE_MOUNTAINS 0x40000001u
 #define FX_PIECE_FILL 0x40000002u
+#define FX_PIECE_WATER 0x40000003u
 /* The ground under view-space point p (docs/stuntracefx/native/DEPTH.md, 5):
    of the faces this picture has drawn that are not a car's and face up or
    down (up the world's up in view space), the topmost that the line from
