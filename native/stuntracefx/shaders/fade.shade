@@ -1,0 +1,51 @@
+/* fade.shade: a piece of the world seen through about the player's car
+   (fx/fx_draw.c, "seen through"), in steps, as the rest of the game's art
+   is (Jeff, 2026-11-13: "it should be stepped since the rest of the game is
+   in that art style as well").
+
+   Its own colour as the engine's own list draws it: the material's texels
+   sharp (each texel whole, its edges shared between the pixels they cross
+   by how much of each they cover, the 2 x 2 texels about the edge mixed by
+   their alpha: an indexed image's through the palette, 0 see-through; the
+   vertices' colour without an image).
+
+   Shown in quarters. Within nshvc_input(4) of the radius about the car it
+   shows q, nshvc_input(5) to the nearest quarter (the piece's own fade: 1,
+   0.75, 0.5, 0.25 as it comes in); from there to the radius, in rings of
+   equal width, each quarter between q and whole (q 0.25: 0.5, then 0.75);
+   past the radius whole. A quarter is a whole number of a pixel's samples
+   on every GPU (the engine covers alpha x samples + 0.5 of them: 1 of 4,
+   2 of 8), so each step is exact.
+
+   Inputs: 0, 1 the car's place in the list's pixels (nshvc_pixel's frame);
+   2, 3 the radius across and down in them; 4 the inner part of the radius;
+   5 how much shows within it. uv is the material's texture coordinate. */
+vec4 shade(vec2 uv) {
+    vec2 span = max(fwidth(uv), vec2(1.0 / 256.0)), b = floor(uv + 0.5);
+    vec2 w = clamp((uv - b) / span + 0.5, 0.0, 1.0);
+    ivec2 k = ivec2(b);
+    vec4 acc = vec4(0.0), c;
+    vec2 d;
+    float r, inner, q, rings, shown;
+
+    for (int j = 0; j < 2; j++)
+        for (int i = 0; i < 2; i++) {
+            float wt = (i == 0 ? 1.0 - w.x : w.x) * (j == 0 ? 1.0 - w.y : w.y);
+            vec4 t = nshvc_image(k - 1 + ivec2(i, j));
+
+            acc += vec4(t.rgb * t.a, t.a) * wt;
+        }
+    c = acc.a > 0.0 ? vec4(acc.rgb / acc.a, acc.a) : vec4(0.0);
+
+    d = (nshvc_pixel() - vec2(nshvc_input(0), nshvc_input(1))) / vec2(nshvc_input(2), nshvc_input(3));
+    r = length(d);
+    inner = nshvc_input(4);
+    q = clamp(floor(nshvc_input(5) * 4.0 + 0.5) / 4.0, 0.25, 1.0);
+    rings = (1.0 - q) * 4.0 - 1.0;          /* the quarters between q and whole */
+    shown = 1.0;
+    if (r < inner)
+        shown = q;
+    else if (r < 1.0 && rings > 0.5)
+        shown = q + 0.25 * (1.0 + floor((r - inner) / (1.0 - inner) * rings));
+    return vec4(c.rgb, c.a * shown);
+}
