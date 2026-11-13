@@ -424,8 +424,10 @@ void fx_draw_part(int hud)
     drawing_3d = recording && !hud;
     world_done = 0;
     held_by_view = 0;
-    if (!hud)
+    if (!hud) {
         layers_reset();                 /* a picture's own faces on one plane */
+        fx_face_picture();              /* and its own seats for the cars */
+    }
     if (recording && !hud)
         horizon_of_view(recording);
     if (recording && !hud) {

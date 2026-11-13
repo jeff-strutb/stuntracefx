@@ -133,6 +133,9 @@ int fx_face_exact_object(double place[3], double view[3][3]);
    car's seat), else its draw record's as the chip made it; for what it
    draws with no depth of its own (a sprite, the chip's rows); 0 for none. */
 double fx_face_object_depth(void);
+/* A picture's 3D begins (fx_draw_part): the cars' seats its own, none
+   carried over from the picture before. */
+void fx_face_picture(void);
 /* With the depth test, a car's tyre (a solid, fx_solid.c) of `radius`
    whose middle is pos in view space: moved along the normal of the ground
    under it to its radius over it, the move kept for its car's other parts.

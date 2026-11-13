@@ -87,11 +87,20 @@ void fx_face_survey(FxSurveyPoint point, FxSurveyFace face, void *context)
    view's (the same rows of the view's angles at $00DE), plus the object's
    place from the eye in the world's axes (its draw record's, whole:
    fx_far_exact_place) turned by the view. The view's turn is taken only
-   while the chip's own at $00E4 is it, within 8 of its 32768ths (its sine
-   table's interpolation and rounding): the ground's survey draws with its
-   own. An object whose place is not known keeps the chip's corners. */
+   while the chip's own at $00E4 is it, within VIEW_STEPS of its 32768ths:
+   the ground's survey draws with its own (the identity, thousands off).
+   The chip's own is the same view with its arithmetic's error
+   (FxMatrixFromAngles01): each sine and cosine from a 256-step table
+   interpolated in a straight line, at most 2.5 of its 32768ths short of
+   the curve, and the table's rounding half more; an entry is two products
+   of up to three of them, each product rounded, so up to 19 off. VIEW_STEPS
+   was 8: a picture in 21 to 43 had an entry 8 to 10.8 off (the race in
+   both views, 2026-11-13: logged 4,877 pictures), its objects then all
+   drawn from the chip's rounded corners, the cars unseated and dropped a
+   tyre's radius into the road for that picture. An object whose place is
+   not known keeps the chip's corners. */
 
-enum { VIEW_ANGLES = 0x00DE, VIEW_MATRIX = 0x00E4, POINTS_AT = 0x0340, VIEW_STEPS = 8 };
+enum { VIEW_ANGLES = 0x00DE, VIEW_MATRIX = 0x00E4, POINTS_AT = 0x0340, VIEW_STEPS = 24 };
 
 static struct {
     double place[3];            /* the object's place in view space */
@@ -241,6 +250,13 @@ int fx_face_seat_tyre(float pos[3], double radius)
     }
     seated.n++;
     return 1;
+}
+
+void fx_face_picture(void)
+{
+    seated.car = 0;                     /* each picture's seat its own */
+    seated.n = 0;
+    seated.sum[0] = seated.sum[1] = seated.sum[2] = 0;
 }
 
 double fx_face_object_depth(void)
