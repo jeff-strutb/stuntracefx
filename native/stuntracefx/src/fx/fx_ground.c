@@ -96,7 +96,7 @@ enum { SURF_NONE, SURF_GRASS, SURF_ROCK, SURF_CEMENT, SURF_SNOW, SURF_ICE, SURF_
 #define CLS_ROCK 0xFF           /* the surface table's class for the course's own rock (the survey's fit): mesas */
 #define CLS_WHITE 0xFD          /* class 0, the chip's snow whites (the table's 0 is no class) */
 #define CLS_BAND 0xFC           /* a sea in the band's own sea's colours (band_shade): Lake Side */
-#define CLS_BAND_WHOLE 0xFB     /* a sea in all of them: Harbor City's night harbour */
+#define CLS_BAND_WHOLE 0xFB     /* land or a sea in all of them: the battle courses */
 #define WATER_DEEPEST 32767     /* water at the lowest place the course's shapes meet the ground (the survey's) */
 
 /* Each course's surface (g.course, $0E3D), from pictures of every course
@@ -187,15 +187,21 @@ static const struct {
                                            2026-11-12), flat, in class 0, the whites of its own white
                                            shapes (its start's gate and pillars, d5e6e6 to ffffff by its
                                            palette), cloud banks on it (the clouds, below) */
-    [0x0B] = { SURF_WATER, -3840, CLS_BAND_WHOLE, 0, 0, 0, 0, 0, 0 }, /* Harbor City, the night harbour (Jeff,
-                                           2026-11-12: "now harbor city"): Aqua Tunnel's ocean where its
-                                           lowest road's (-4480) pieces end, in all of the band's own
-                                           water's colours: its band under the horizon is the harbour,
-                                           292929 at the horizon to 292962 under the eye, and the water
-                                           beside its raised roads is 292929 to 29295a in a headless
-                                           picture of 2026-11-12 (the lightest third, Lake Side's, would
-                                           be the horizon's greys alone); the city is its backdrop's
-                                           skyline across the water */
+    [0x0B] = { SURF_WATER, -656, 9, 9, 0, 0, 11, 0, 0 }, /* Harbor City, the night harbour (Jeff,
+                                           2026-11-12: its blue channel "is clearly meant to be underwater",
+                                           "the water around it appears nonexistent"): its road dives
+                                           through a channel of water-textured faces (shapes $FA60 and
+                                           $FA7C: the road from y -672 at its ends to -161, walls to -640;
+                                           a dump of its textured faces), the texture Sea Breeze's crossing
+                                           has (entries $58-$5B, here 006ad5 to 001073, class 9's levels
+                                           11-15); the harbour is Aqua Tunnel's ocean at the walls' tops,
+                                           16 over them so they stay under it at a far piece's halved
+                                           precision and no hole opens over the channel, in those levels,
+                                           seen from below as well (under) and cutting the picture as
+                                           Aqua Tunnel's does, so the channel lies under the harbour's
+                                           water; at -3840, where it was, it lay over the channel and the
+                                           camera, going down to it, passed under the water, where a
+                                           sea is not drawn */
     [0x0C] = { SURF_DIRT, 0, 0, 0, 0, 0, 0, 0, 0 },    /* the stunt arenas: dirt, grass, ice, water */
     [0x0D] = { SURF_GRASS, 0, 0, 0, 0, 0, 0, 0, 0 },
     [0x0E] = { SURF_ICE, 0, 0, 0, 0, 0, 0, 0, 0 },
@@ -213,7 +219,8 @@ static const struct {
                                            Tunnel's ocean in those colours at the lowest place its shapes
                                            meet the ground, so the arena stands in it (Lake Side's) */
     [0x13] = { SURF_WATER, 0, CLS_BAND_WHOLE, 0, 0, 0, 0, 0, 0 }, /* the night city, Harbor City's sky and band:
-                                           Harbor City's water, at its floor as before */
+                                           Aqua Tunnel's ocean in its band's navies, at its floor as
+                                           before */
     [0x14] = { SURF_GRASS, 0, 10, 0, 0, 0, 0, 0, 0 }, /* the bonus courses (Speed Trax's truck runs, one a class):
                                            Easy Ride's palette, sky and backdrop, so Easy Ride's land,
                                            class 10 */
@@ -1276,7 +1283,7 @@ static uint32_t row_colour(int cls, int level)
     uint16_t row, bgr;
     uint8_t c;
 
-    if (cls == CLS_BAND || cls == CLS_BAND_WHOLE)       /* the band's own (Lake Side's lake, Harbor City's harbour) */
+    if (cls == CLS_BAND || cls == CLS_BAND_WHOLE)       /* the band's own (Lake Side's lake, the battle courses') */
         return band_shade(level, cls == CLS_BAND_WHOLE);
     row = (uint16_t)(fx_rom_read(3, (uint16_t)(SHADE_ROWS + 2 * k)) | fx_rom_read(3, (uint16_t)(SHADE_ROWS + 2 * k + 1)) << 8);
     c = fx_rom_read(3, (uint16_t)(row + level - 6));
@@ -2644,11 +2651,7 @@ static nshvc_shader ocean_shader;
    a lit face's level 6-15 takes the one as far along them (6 the
    darkest), so a level face seen from the race's camera (level 9 or 10)
    is the band's light teal (Lake Side's 74,239,198 to 90,247,214). With
-   whole (CLS_BAND_WHOLE), all of them: Harbor City's water beside its
-   raised roads is all but the band's last colour (its band runs the other
-   way, grey at the horizon to navy under the eye; a level face takes
-   about a third of the way from the eye's end, 29294a to 292952, the
-   water's colour by the road). */
+   whole (CLS_BAND_WHOLE), all of them (the battle courses). */
 #define BAND_FROM 7              /* rows under the horizon the band's ground half begins: 256 - 249 */
 
 static struct {
@@ -2878,11 +2881,13 @@ void fx_ground_draw(void)
     }
     water_y = surface[course].y == WATER_DEEPEST ? (grid.nx ? grid.deepest : 0) : surface[course].y;
     dh = water_y - eye[1];                      /* world y is down: > 0, the surface below the eye */
-    if (dh == 0 || (dh < 0 && kind != SURF_AQUA))
+    /* water seen from below too (Aqua Tunnel's, a sea with an under class:
+       Harbor City's) is drawn with the eye under it, and cuts the picture */
+    if (dh == 0 || (dh < 0 && kind != SURF_AQUA && !surface[course].under))
         return;
     if (surface[course].cls) {          /* the ocean; Aqua Tunnel's cuts the picture as below */
         ocean_draw(surface[course].cls, surface[course].under, surface[course].first, eye, m, water_y, p);
-        if (kind == SURF_AQUA) {
+        if (kind == SURF_AQUA || surface[course].under) {
             double plane[3] = { m[3], m[4], m[5] };
 
             fx_face_cut(1, plane, dh);
