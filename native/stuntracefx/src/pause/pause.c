@@ -43,6 +43,7 @@
 #include "input/controls.h"
 #include "pause/pause.h"
 #include "pause/pause_art.h"
+#include "race/race.h"
 #include "save/save.h"
 #include "system/game.h"
 
@@ -89,7 +90,7 @@ enum { BLUR_DONE, BLUR_CLEAN, BLUR_ACROSS, BLUR_DOWN, BLUR_KEEP };
 /* The overlays, the game's only ones: the tint, the panel, the tags, the
    item chosen, the option with its value, the hint, the corner button, in
    that order upward. */
-enum { O_TINT = 12, O_PANEL, O_TAGS, O_LIT = O_TAGS + PAUSE_CONTROLS, O_OPTION, O_HINT, O_BUTTON, O_END };
+enum { O_TINT = 12, O_PANEL, O_TAGS, O_LIT = O_TAGS + PAUSE_CONTROLS, O_OPTION, O_HINT, O_BUTTON, O_VIEW, O_END };
 _Static_assert(O_END <= NSHVC_OVERLAYS, "the pause screen's overlays fit the engine's");
 
 /* the buttons in the order the save keeps, and the game's own keys for
@@ -135,6 +136,10 @@ static struct {
     float btn_density;
     nshvc_image btn[2];
     int btn_w, btn_h;
+    /* the view button beside it: its two pictures (to the view behind the
+       car, to the view from above) at btn_density */
+    nshvc_image view[2];
+    int view_w, view_h;
     int pointer_down;
     int32_t touch_id[10];
     int touches;
@@ -527,6 +532,26 @@ static int corner_box(float box[4])
 }
 
 static int in_box(const float b[4], float x, float y) { return x >= b[0] && x < b[2] && y >= b[1] && y < b[3]; }
+
+/* the view button's box: the corner button's, moved right by it and a margin */
+static int view_box(float box[4])
+{
+    float w;
+
+    if (!corner_box(box))
+        return 0;
+    w = box[2] - box[0] + (box[2] - box[0]) * BUTTON_MARGIN / PAUSE_BUTTON;
+    box[0] += w;
+    box[2] += w;
+    return 1;
+}
+
+/* the view button shown: in a one-player race that fills the window, while
+   the game is not paused (race/overhead.c) */
+static int view_shown(void)
+{
+    return !p.open && (race_view_switchable() || race_view_moving());
+}
 #endif
 
 /* whether the pointer's button went down on the corner button this update
@@ -543,6 +568,10 @@ static int corner_pressed(const nshvc_input *in)
             controls_source() != CONTROLS_TOUCH)
             hit = 1;
     }
+    /* the view button: the race's view switched (race/overhead.c) */
+    if (view_box(b) && view_shown() && down && !p.pointer_down && in->pointer.inside && in_box(b, in->pointer.x, in->pointer.y)
+        && controls_source() != CONTROLS_TOUCH)
+        race_view_toggle();
     p.pointer_down = down;
     p.touches = n;
     for (i = 0; i < n; i++)
@@ -565,6 +594,7 @@ static void corner_show(void)
         nshvc_image none = { 0 };
 
         nshvc_overlay_set(O_BUTTON, none, NULL, 0);
+        nshvc_overlay_set(O_VIEW, none, NULL, 0);
         return;
     }
     want = ceilf((b[2] - b[0]) / PAUSE_BUTTON * 2) / 2;
@@ -576,6 +606,9 @@ static void corner_show(void)
 
             pause_draw_button(&m, i);
             p.btn[i] = image_of(&m, &p.btn_w, &p.btn_h);
+            m = pause_img_new(0, 0, PAUSE_BUTTON, PAUSE_BUTTON, want);
+            pause_draw_view_button(&m, i);
+            p.view[i] = image_of(&m, &p.view_w, &p.view_h);
         }
     }
     c[0] = b[0];
@@ -585,6 +618,20 @@ static void corner_show(void)
     c[4] = b[0];
     c[5] = b[1] + (float)p.btn_h / p.btn_density * (b[3] - b[1]) / PAUSE_BUTTON;
     nshvc_overlay_set(O_BUTTON, p.btn[p.open], c, 1);
+    /* the view button: what it switches to; dimmed while the view switches */
+    if (view_shown() && view_box(b)) {
+        c[0] = b[0];
+        c[1] = b[1];
+        c[2] = b[0] + (float)p.view_w / p.btn_density * (b[2] - b[0]) / PAUSE_BUTTON;
+        c[3] = b[1];
+        c[4] = b[0];
+        c[5] = b[1] + (float)p.view_h / p.btn_density * (b[3] - b[1]) / PAUSE_BUTTON;
+        nshvc_overlay_set(O_VIEW, p.view[!race_view_overhead()], c, race_view_moving() ? 0.5f : 1);
+    } else {
+        nshvc_image none = { 0 };
+
+        nshvc_overlay_set(O_VIEW, none, NULL, 0);
+    }
 #endif
 }
 
@@ -897,6 +944,8 @@ int pause_update(const nshvc_input *in, uint16_t pad[2])
 int pause_holding(void) { return p.open; }
 
 uint64_t pause_game_updates(void) { return nshvc_updates() - held; }
+
+void pause_hold_other(void) { held++; }
 
 static int pause_step(const nshvc_input *in, uint16_t pad[2])
 {

@@ -62,6 +62,8 @@ void save_commit(void);                 /* after any change */
 /* The game's options, kept beside the save (options.c). */
 int option_auto_accelerate(void);       /* 1 (the default): on a touch screen the gas is held while driving */
 void option_auto_accelerate_set(int on); /* saved at once */
+int option_overhead(void);              /* 1: the race seen from above (race/overhead.c); 0 (the default) behind the car */
+void option_overhead_set(int on);       /* saved at once */
 
 void SaveValidate(void);
 void SaveUnlocksCheck(void);

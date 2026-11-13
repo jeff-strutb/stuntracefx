@@ -31,4 +31,8 @@ int pause_capturing(void);
    between steps), so that a pause stops it. */
 uint64_t pause_game_updates(void);
 
+/* An update another hold took from the game (the race's view switch,
+   race/overhead.c): not one of the game's own updates either. */
+void pause_hold_other(void);
+
 #endif

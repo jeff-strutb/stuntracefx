@@ -17,6 +17,7 @@
 enum { CHEAT_WORD_PAST_RECORD = 0x0400 };
 #include "object/object.h"
 #include "data/fx_handlers.h"
+#include "race/race.h"
 #include "system/chip.h"
 #include "system/game.h"
 #include "system/state.h"
@@ -553,7 +554,11 @@ void CarControlsToRecord(Object *o, uint16_t held, uint16_t prev, int player)
         return;
     if (held & 0x2000) {
         RecordButtonSequence(rec, held);
-        if (!(prev & 0x2000)) {
+        /* Select pressed: the camera to its next point; not while the race
+           is seen from above, where the game's camera is not what is shown
+           (race/overhead.c; Jeff, 2026-11-13: "disable traditional cam
+           switch buttonw hile in isometric mode since it does nothing") */
+        if (!(prev & 0x2000) && !race_overhead_on()) {
             Object *linked = obj_at(o->link);
 
             linked->director.state |= DIRECTOR_CUE;

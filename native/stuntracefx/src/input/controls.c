@@ -31,7 +31,10 @@
  * Down); a tap is B and Start together (every menu's confirm); a tap with
  * two fingers is Y (back), or the pause while driving.
  * The pause button, two bars at the top centre, opens and shuts the pause
- * screen (Select and Start together).
+ * screen (Select and Start together). Beside it on its right, in a
+ * one-player race, the view button switches the race's view, behind the
+ * car or from above (race/overhead.c), its picture what it switches to: a
+ * cube seen from above, or a road going away.
  *
  * A point is the window's shorter side over 430 (the phone in landscape the
  * scheme was made on). Time is counted in updates, 1/60 s each. Nothing is
@@ -42,6 +45,9 @@
 #include <string.h>
 
 #include "input/controls.h"
+#include "pause/pause.h"
+#include "pause/pause_art.h"
+#include "race/race.h"
 #include "save/save.h"
 #include "system/game.h"
 
@@ -135,7 +141,7 @@ static uint16_t keyboard_pad(const nshvc_input *in)
 
 /* ---- the touch screen ---- */
 
-typedef enum { ROLE_NONE, ROLE_WHEEL, ROLE_BRAKE, ROLE_BOOST, ROLE_MENU, ROLE_PAUSE } Role;
+typedef enum { ROLE_NONE, ROLE_WHEEL, ROLE_BRAKE, ROLE_BOOST, ROLE_MENU, ROLE_PAUSE, ROLE_VIEW } Role;
 
 #define FINGERS 10
 static struct {
@@ -225,6 +231,31 @@ static int on_pause(float x, float y)
     return fabsf(x - cx) <= 28 * pt && fabsf(y - cy) <= 22 * pt;
 }
 
+/* the view button's centre, beside the pause button on its right */
+static void view_place(float *x, float *y)
+{
+    float w, h, pt, top;
+
+    window(&w, &h, &pt, &top);
+    pause_place(x, y);
+    *x += 56 * pt;
+}
+
+/* the view button shown: in a one-player race (race/overhead.c), not while
+   the pause screen holds the game */
+static int view_shown(void) { return !pause_holding() && (race_view_switchable() || race_view_moving()); }
+
+static int on_view(float x, float y)
+{
+    float w, h, pt, top, cx, cy;
+
+    if (!view_shown())
+        return 0;
+    window(&w, &h, &pt, &top);
+    view_place(&cx, &cy);
+    return fabsf(x - cx) <= 28 * pt && fabsf(y - cy) <= 22 * pt;
+}
+
 static Role role_at(float x, float y)
 {
     float w, h, pt, top;
@@ -232,6 +263,8 @@ static Role role_at(float x, float y)
     window(&w, &h, &pt, &top);
     if (on_pause(x, y))
         return ROLE_PAUSE;
+    if (on_view(x, y))
+        return ROLE_VIEW;
     if (driving) {
         if (x < w * k_brake_zone)
             return y < h * k_boost_above ? ROLE_BOOST : ROLE_BRAKE;
@@ -340,6 +373,10 @@ static void ended(int i)
     case ROLE_PAUSE:
         if (on_pause(x, y))
             press(PAD_SELECT | PAD_START);
+        break;
+    case ROLE_VIEW:
+        if (on_view(x, y))
+            race_view_toggle();         /* the race's view switched (race/overhead.c) */
         break;
     case ROLE_MENU:
         if (gesture_fingers != 1)
@@ -583,10 +620,46 @@ static Img pause_picture(void)
     return m;
 }
 
+/* the view button: what it switches to (to_overhead: a cube seen from
+   above; else a road going away), the corner button's glyphs
+   (pause/pause_art.c) in white with the pause button's shadow, 1.1 of
+   their points a point about the picture's middle */
+static Img view_picture(int to_overhead)
+{
+    Img m = img_new(56, 44);
+    int k;
+
+#define VX(px) (((px) - 28) / 1.1f + 20)
+#define VY(py) (((py) - 22) / 1.1f + 20)
+    if (to_overhead) {
+        static const float shade[3] = { 1, 0.72f, 0.5f };
+
+        SHAPE(&m, 0x000000,
+              0.6f * fmaxf(0, 1 - fmaxf(0, fminf(fminf(pause_poly_distance(VX(px), VY(py), pause_view_cube[0], 4),
+                                                       pause_poly_distance(VX(px), VY(py), pause_view_cube[1], 4)),
+                                                 pause_poly_distance(VX(px), VY(py), pause_view_cube[2], 4)) * 1.1f) / 3),
+              -1.0f);
+        for (k = 0; k < 3; k++)
+            SHAPE(&m, 0xFFFFFF, shade[k], (pause_poly_distance(VX(px), VY(py), pause_view_cube[k], 4) + 0.6f) * 1.1f);
+    } else {
+        SHAPE(&m, 0x000000,
+              0.6f * fmaxf(0, 1 - fmaxf(0, pause_poly_distance(VX(px), VY(py), pause_view_road, 4) * 1.1f) / 3), -1.0f);
+        SHAPE(&m, 0xFFFFFF, 1, pause_poly_distance(VX(px), VY(py), pause_view_road, 4) * 1.1f);
+        for (k = 0; k < 3; k++)
+            SHAPE(&m, 0x000000, 0.55f,
+                  (d_segment(VX(px), VY(py), pause_view_dash[k][0], pause_view_dash[k][1], pause_view_dash[k][2],
+                             pause_view_dash[k][3]) - pause_view_dash[k][4]) * 1.1f);
+    }
+#undef VX
+#undef VY
+    return m;
+}
+
 /* the overlays, the lowest ids (the pause screen's start at 12) */
-enum { O_WHEEL, O_BRAKE, O_BOOST, O_PAUSE, O_COUNT };
+enum { O_WHEEL, O_BRAKE, O_BOOST, O_PAUSE, O_VIEW, O_COUNT };
 static nshvc_image picture[O_COUNT];
 static float picture_w[O_COUNT], picture_h[O_COUNT];   /* in points */
+static nshvc_image view_pictures[2];    /* the view button's: to the view behind the car, to the one from above */
 
 static void pictures_make(void)
 {
@@ -597,6 +670,7 @@ static void pictures_make(void)
     m[O_BRAKE] = pedal_picture(84, 128, 0xE84A3C, "BRAKE");
     m[O_BOOST] = pedal_picture(84, 112, 0x4AA8F5, "BOOST");
     m[O_PAUSE] = pause_picture();
+    m[O_VIEW] = view_picture(1);
     for (i = 0; i < O_COUNT; i++) {
         picture[i] = nshvc_image_create((uint32_t)m[i].w, (uint32_t)m[i].h, NSHVC_IMAGE_RGBA);
         if (picture[i].id)
@@ -604,6 +678,15 @@ static void pictures_make(void)
         picture_w[i] = (float)m[i].w / DENSITY;
         picture_h[i] = (float)m[i].h / DENSITY;
         free(m[i].px);
+    }
+    view_pictures[1] = picture[O_VIEW];
+    {
+        Img v = view_picture(0);
+
+        view_pictures[0] = nshvc_image_create((uint32_t)v.w, (uint32_t)v.h, NSHVC_IMAGE_RGBA);
+        if (view_pictures[0].id)
+            nshvc_image_write(view_pictures[0], v.px);
+        free(v.px);
     }
 }
 
@@ -648,6 +731,9 @@ void controls_draw(void)
     place(O_BOOST, x, roundf(h * 0.27f), pt, boost ? 0.94f : 1, 0, boost ? 0.85f : 0.4f, driving);
     pause_place(&x, &y);
     place(O_PAUSE, x, y, pt, 1, 0, 0.75f, 1);
+    picture[O_VIEW] = view_pictures[!race_view_overhead()];    /* what it switches to */
+    view_place(&x, &y);
+    place(O_VIEW, x, y, pt, 1, 0, race_view_moving() ? 0.4f : 0.75f, view_shown());
 }
 
 void controls_hide(void)

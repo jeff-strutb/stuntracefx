@@ -371,6 +371,8 @@ static void picture_objects(void)
  * frame program (the text notice, the HUD's chip-drawn pieces). Returns 0
  * when the last step has no such panel.
  */
+int race_one_player(void) { return step_clock.kind == STEP_ONE_PLAYER; }
+
 int RaceViewForPicture(int panel)
 {
     switch (step_clock.kind) {

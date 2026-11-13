@@ -11,6 +11,7 @@
 #include "input/controls.h"
 #include "nshvc/nshvc.h"
 #include "pause/pause.h"
+#include "race/race.h"
 #include "system/fps.h"
 #include "system/game.h"
 #include "system/perf.h"
@@ -36,6 +37,10 @@ static void update_body(const nshvc_input *input)
     controls_read(input, pad);          /* the devices as the game's pads */
     if (!pause_update(input, pad))      /* the pause screen; 0 while it holds the game */
         return;
+    if (race_view_hold()) {             /* the race's view switching: the game held (race/overhead.c) */
+        pause_hold_other();
+        return;
+    }
     video_update_begin();               /* the update before's world kept, its art and maps written */
     input_read(pad);
     session_update();
@@ -60,6 +65,7 @@ static void draw_body(float between)
     }
     if (pause_draw())
         return;                         /* the pause screen's picture: the last one, blurred */
+    between = race_overhead_between(between);   /* while the view switches, the picture as it stood */
     if (pause_holding())
         between = 1.0f;                 /* the picture as the game's last update left it */
     video_between_begin(between);       /* the moving 2D between the last two updates (pic eased in place) */

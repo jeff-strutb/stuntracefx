@@ -60,6 +60,19 @@ void pause_draw_option(PauseImg *m, int on, int lit);
    own points: two bars, or a play triangle while the game is paused */
 #define PAUSE_BUTTON 40
 void pause_draw_button(PauseImg *m, int play);
+/* the view button beside it (race/overhead.c), the same plate and size:
+   what pressing it switches to, a cube seen from above (to_overhead) or a
+   road going away from behind the car */
+void pause_draw_view_button(PauseImg *m, int to_overhead);
+/* those two glyphs' shapes in PAUSE_BUTTON's points (x right, y down), for
+   the touch screen's button too (input/controls.c): the cube's three faces
+   (top, left, right, 4 corners each) and the road (4 corners) with its
+   three centre dashes (a segment and a half width each) */
+extern const float pause_view_cube[3][8];
+extern const float pause_view_road[8];
+extern const float pause_view_dash[3][5];
+/* the distance from (px, py) to the convex polygon xy of n corners, inside < 0 */
+float pause_poly_distance(float px, float py, const float *xy, int n);
 
 /* ---- the letters and the controller ---- */
 

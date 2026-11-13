@@ -37,17 +37,41 @@ float race_step_progress(float between);
 int RaceViewForPicture(int panel);
 void race_steps_end(void);
 
-/* The race seen from above (overhead.c), chosen with SRFX_CAMERA=overhead:
-   - race_overhead_on: chosen;
+/* Whether the race's steps are one player's (race_frame.c). */
+int race_one_player(void);
+
+/* The race seen from above (overhead.c), switched with the view button
+   beside the pause button (pause.c, input/controls.c), the player's choice
+   kept in the options; SRFX_CAMERA=overhead in the environment starts it so:
+   - race_overhead_on: the view from above shown, wholly or in part (while
+     the view switches), in a one-player race filling the window;
    - race_overhead_reset: a new screen's steps (the view's heading is taken
      again from the player's car at its first picture);
    - race_overhead_view: in a one-player picture's part between steps, after
      the game's view is set from its camera: the overhead view in its place
-     (g's view place and angles, the chip's window words, fx_view) when
-     chosen and the race fills the window; else nothing. */
+     (g's view place and angles, the chip's window words, fx_view), or one
+     between the two while the view switches; else nothing;
+   - race_view_switchable: the view button does something now (a one-player
+     race filling the window, not switching already); race_view_overhead:
+     the view it is (or is switching to) from above; race_view_toggle: the
+     button pressed: the view switches, over 2 seconds;
+   - race_view_hold: in each update, first: 1 while the view switches, the
+     game held (its logic stopped, its picture as it stood) that update;
+     race_view_moving: whether it is switching;
+   - race_overhead_between: in each draw, first: the draw's place between
+     the updates, for the switch's own smooth motion; it gives the place
+     the game's picture is drawn at: while the view switches, the one it
+     stood at when the switch began (the game held, its picture as it
+     stood), else the draw's own. */
 int race_overhead_on(void);
 void race_overhead_reset(void);
 void race_overhead_view(void);
+int race_view_switchable(void);
+int race_view_overhead(void);
+void race_view_toggle(void);
+int race_view_hold(void);
+int race_view_moving(void);
+float race_overhead_between(float between);
 
 /* The race the course menu shows behind it. RaceStart sets it up; each
    RaceFrameStep is one step of it, with no waiting inside. It draws the

@@ -53,6 +53,26 @@
  *
  * One player only: two players' halves and the course menu's race keep
  * the game's view.
+ *
+ * The switch (Jeff, 2026-11-13: "Add a button next to the pause button to
+ * switch between traditional behind car mode and isometric mode", "do a
+ * seamless visual transition (over 2s) between the two modes when
+ * switching, pausing the gameplay while it does", "disable traditional cam
+ * switch buttonw hile in isometric mode since it does nothing"). The view
+ * button (pause.c beside the corner button, input/controls.c beside the
+ * touch screen's) switches it in a one-player race; the player's choice is
+ * kept in the options (option_overhead), SRFX_CAMERA=overhead starting it
+ * from above. A switch holds the game SWITCH_UPDATES updates (2 seconds):
+ * its logic and its steps' clock stop as the pause screen stops them, and
+ * its picture is drawn as it stood, from a view moving between the two:
+ * the eye's place from the car, its distance by its logarithm and its
+ * direction along the great circle; the view's angles, each the shorter
+ * way round; the lens's magnification by its logarithm (the chip's window
+ * words with it); the light turned by that share of the pitch; and the
+ * models' detail scaled toward the overhead view's, all eased in and out
+ * (smoothstep). Each end is the view itself. While it is from above,
+ * Select's step through the game's own camera points (CameraPointFromTable)
+ * is not taken (object/gsu_record.c): it would change nothing seen.
  */
 #include <math.h>
 #include <stdlib.h>
@@ -62,6 +82,7 @@
 #include "fx/fx_view.h"
 #include "object/object.h"
 #include "race/race.h"
+#include "save/save.h"
 #include "system/chip.h"
 #include "system/state.h"
 #include "video/video.h"
@@ -74,21 +95,93 @@
 #define OVERHEAD_GAME_DISTANCE 519.0
 
 #define TURN (2.0 * M_PI / 65536.0)     /* radians an angle word */
+#define SWITCH_UPDATES 120              /* the switch: 2 seconds at the game's 60 updates a second */
 
-static int chosen = -1;
 static struct {
     int known;
     uint16_t turn;
 } race_turn;
 
+static struct {
+    int loaded;
+    int overhead;                       /* from above (or switching to it) */
+    int moving;                         /* switching */
+    unsigned count;                     /* the updates the switch has held */
+    float between;                      /* the draw's place between the updates */
+    float stood;                        /* the game's picture's, as it stood when the switch began */
+} view_switch;
+
+static void switch_load(void)
+{
+    const char *s;
+
+    if (view_switch.loaded)
+        return;
+    view_switch.loaded = 1;
+    s = getenv("SRFX_CAMERA");
+    view_switch.overhead = (s && !strcmp(s, "overhead")) || option_overhead();
+}
+
+/* the view now: 0 the game's, 1 from above, between while switching */
+static double switch_blend(void)
+{
+    double x;
+
+    switch_load();
+    if (!view_switch.moving)
+        return view_switch.overhead;
+    x = (view_switch.count + view_switch.between) / (double)SWITCH_UPDATES;
+    x = x < 0 ? 0 : x > 1 ? 1 : x;
+    x = x * x * (3 - 2 * x);            /* eased in and out */
+    return view_switch.overhead ? x : 1 - x;
+}
+
 int race_overhead_on(void)
 {
-    if (chosen < 0) {
-        const char *s = getenv("SRFX_CAMERA");
+    switch_load();
+    return (view_switch.overhead || view_switch.moving) && race_full_window() && !g.split_screen;
+}
 
-        chosen = s && !strcmp(s, "overhead");
-    }
-    return chosen;
+int race_view_switchable(void)
+{
+    switch_load();
+    return race_full_window() && !g.split_screen && race_one_player() && !view_switch.moving;
+}
+
+int race_view_overhead(void)
+{
+    switch_load();
+    return view_switch.overhead;
+}
+
+void race_view_toggle(void)
+{
+    if (!race_view_switchable())
+        return;
+    view_switch.overhead = !view_switch.overhead;
+    view_switch.moving = 1;
+    view_switch.count = 0;
+    view_switch.between = 0;
+    option_overhead_set(view_switch.overhead);
+}
+
+int race_view_hold(void)
+{
+    if (!view_switch.moving)
+        return 0;
+    if (++view_switch.count >= SWITCH_UPDATES)
+        view_switch.moving = 0;         /* this update the last held */
+    return 1;
+}
+
+int race_view_moving(void) { return view_switch.moving; }
+
+float race_overhead_between(float between)
+{
+    view_switch.between = between < 0 ? 0 : between > 1 ? 1 : between;
+    if (!view_switch.moving)
+        view_switch.stood = view_switch.between;
+    return view_switch.moving ? view_switch.stood : between;
 }
 
 void race_overhead_reset(void)
@@ -129,15 +222,70 @@ static int16_t word_of(double v)
     return (int16_t)(w > 32767 ? 32767 : w < -32768 ? -32768 : w);
 }
 
-void race_overhead_view(void)
+/* the view between the game's (just set, ViewFromRecord) and the one from
+   above, `b` of the way (0 < b < 1): see the switch, above */
+static void view_between(double b, const Object *car, const int32_t eye_o[3], uint16_t pitch_o, double p)
 {
-    const Object *car;
-    double t, p, f[3], ly, lz;
-    uint16_t pitch;
+    const int32_t at[3] = { (int16_t)car->x, (int16_t)car->y, (int16_t)car->z };
+    double oc[3], oo[3], lc = 0, lo = 0, dot = 0, w, omega, d[3], len, zoom, ly, lz, pb;
     FxView v;
     int k;
 
-    if (!race_overhead_on() || !race_full_window() || g.split_screen)
+    for (k = 0; k < 3; k++) {
+        oc[k] = (int16_t)(uint16_t)(g.view_pos[k] - (uint16_t)at[k]);   /* the game's eye from the car */
+        oo[k] = eye_o[k] - at[k];
+        lc += oc[k] * oc[k];
+        lo += oo[k] * oo[k];
+    }
+    lc = sqrt(lc);
+    lo = sqrt(lo);
+    if (lc < 1 || lo < 1)
+        return;
+    for (k = 0; k < 3; k++)
+        dot += oc[k] / lc * oo[k] / lo;
+    dot = dot > 1 ? 1 : dot < -1 ? -1 : dot;
+    omega = acos(dot);
+    /* along the great circle between the two directions (a straight blend
+       where they all but meet) */
+    for (k = 0; k < 3; k++)
+        d[k] = omega > 1e-6 ? (sin((1 - b) * omega) * oc[k] / lc + sin(b * omega) * oo[k] / lo) / sin(omega)
+                            : (1 - b) * oc[k] / lc + b * oo[k] / lo;
+    w = sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+    len = exp((1 - b) * log(lc) + b * log(lo));
+    memset(&v, 0, sizeof v);
+    for (k = 0; k < 3; k++) {
+        v.eye[k] = at[k] + (int32_t)lround(len * d[k] / w);
+        g.view_pos[k] = (uint16_t)v.eye[k];
+    }
+    /* each angle the shorter way round */
+    g.view_angles[0] = (uint16_t)(g.view_angles[0] + (int16_t)lround(b * (int16_t)(uint16_t)(pitch_o - g.view_angles[0])));
+    g.view_angles[1] = (uint16_t)(g.view_angles[1]
+                                  + (int16_t)lround(b * (int16_t)(uint16_t)(race_turn.turn - g.view_angles[1])));
+    g.view_angles[2] = (uint16_t)(int16_t)lround((1 - b) * (int16_t)g.view_angles[2]);
+    zoom = exp(b * log(OVERHEAD_ZOOM));
+    window_words((float)zoom);
+    /* the light turned by b of the pitch (the game's at 0, as from above at 1) */
+    pb = b * p;
+    ly = FX_LIGHT_GAME_Y / 32768.0;
+    lz = FX_LIGHT_GAME_Z / 32768.0;
+    v.zoom = (float)zoom;
+    v.light[0] = 0;
+    v.light[1] = word_of(ly * cos(pb) + lz * sin(pb));
+    v.light[2] = word_of(lz * cos(pb) - ly * sin(pb));
+    v.depth_scale = (float)((1 - b) + b * OVERHEAD_GAME_DISTANCE / len);
+    fx_view_set(&v);                    /* no focus: what hides the car is seen through only from above */
+}
+
+void race_overhead_view(void)
+{
+    const Object *car;
+    double t, p, f[3], ly, lz, b;
+    uint16_t pitch;
+    int32_t eye[3];
+    FxView v;
+    int k;
+
+    if (!race_full_window() || g.split_screen)
         return;
     car = obj_at(g.player_car);
     if (!race_turn.known) {
@@ -148,6 +296,9 @@ void race_overhead_view(void)
         race_turn.turn = (uint16_t)((((uint16_t)(0 - (uint16_t)(car->heading << 8)) + 0x2000) & 0xC000) - OVERHEAD_ACROSS);
         race_turn.known = 1;
     }
+    b = switch_blend();
+    if (b <= 0)
+        return;                         /* the game's own view */
     pitch = (uint16_t)(int16_t)lround(OVERHEAD_PITCH / 360.0 * 65536.0);
     /* the view's axis in the world, as the sort turns places (row k of the
        matrix FxMatrixFromAngles01 makes from pitch p, turn t and no roll is
@@ -158,12 +309,18 @@ void race_overhead_view(void)
     f[0] = sin(t) * cos(p);
     f[1] = -sin(p);
     f[2] = cos(t) * cos(p);
+    eye[0] = (int16_t)car->x - (int32_t)lround(OVERHEAD_DISTANCE * f[0]);
+    eye[1] = (int16_t)car->y - (int32_t)lround(OVERHEAD_DISTANCE * f[1]);
+    eye[2] = (int16_t)car->z - (int32_t)lround(OVERHEAD_DISTANCE * f[2]);
+    if (b < 1) {
+        view_between(b, car, eye, pitch, p);
+        return;
+    }
     memset(&v, 0, sizeof v);
-    v.eye[0] = (int16_t)car->x - (int32_t)lround(OVERHEAD_DISTANCE * f[0]);
-    v.eye[1] = (int16_t)car->y - (int32_t)lround(OVERHEAD_DISTANCE * f[1]);
-    v.eye[2] = (int16_t)car->z - (int32_t)lround(OVERHEAD_DISTANCE * f[2]);
-    for (k = 0; k < 3; k++)
+    for (k = 0; k < 3; k++) {
+        v.eye[k] = eye[k];
         g.view_pos[k] = (uint16_t)v.eye[k];
+    }
     g.view_angles[0] = pitch;
     g.view_angles[1] = race_turn.turn;
     g.view_angles[2] = 0;

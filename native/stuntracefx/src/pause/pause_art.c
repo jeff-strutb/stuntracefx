@@ -424,6 +424,60 @@ void pause_draw_button(PauseImg *m, int play)
     }
 }
 
+const float pause_view_cube[3][8] = {
+    { 20, 9, 29, 14.2f, 20, 19.4f, 11, 14.2f },         /* the top */
+    { 11, 14.2f, 20, 19.4f, 20, 30.2f, 11, 25 },        /* the left */
+    { 20, 19.4f, 29, 14.2f, 29, 25, 20, 30.2f },        /* the right */
+};
+const float pause_view_road[8] = { 9, 31, 31, 31, 22.5f, 10, 17.5f, 10 };
+const float pause_view_dash[3][5] = { { 20, 12, 20, 15, 0.6f }, { 20, 18, 20, 22, 0.8f }, { 20, 25, 20, 30, 1.0f } };
+
+float pause_poly_distance(float px, float py, const float *xy, int n)
+{
+    float area = 0, d = -1e30f;
+    int i;
+
+    for (i = 0; i < n; i++) {
+        int j = (i + 1) % n;
+
+        area += xy[2 * i] * xy[2 * j + 1] - xy[2 * j] * xy[2 * i + 1];
+    }
+    for (i = 0; i < n; i++) {
+        int j = (i + 1) % n;
+        float ex = xy[2 * j] - xy[2 * i], ey = xy[2 * j + 1] - xy[2 * i + 1], len = hypotf(ex, ey);
+        float s;
+
+        if (len <= 0)
+            continue;
+        s = ((px - xy[2 * i]) * ey - (py - xy[2 * i + 1]) * ex) / len;
+        s = area > 0 ? s : -s;
+        d = s > d ? s : d;
+    }
+    return d;
+}
+
+void pause_draw_view_button(PauseImg *m, int to_overhead)
+{
+    const float b = PAUSE_BUTTON;
+    int k;
+
+    rrect(m, 1, 1, b - 2, b - 2, 9, PLATE, 0.72f);
+    rrect_edge(m, 1.5f, 1.5f, b - 3, b - 3, 8.5f, 1.5f, GOLD, 1);
+    if (to_overhead) {
+        /* the cube: its faces lit from above, a seam of the plate between */
+        static const float shade[3] = { 1, 0.72f, 0.5f };
+
+        for (k = 0; k < 3; k++)
+            SHAPE(m, 8, 6, 32, 34, WHITE, shade[k], pause_poly_distance(px, py, pause_view_cube[k], 4) + 0.6f);
+    } else {
+        SHAPE(m, 6, 8, 34, 34, WHITE, 0.9f, pause_poly_distance(px, py, pause_view_road, 4));
+        for (k = 0; k < 3; k++)
+            SHAPE(m, 16, 9, 24, 32, PLATE, 1,
+                  d_segment(px, py, pause_view_dash[k][0], pause_view_dash[k][1], pause_view_dash[k][2],
+                            pause_view_dash[k][3]) - pause_view_dash[k][4]);
+    }
+}
+
 void pause_draw_hint(PauseImg *m, const char *line1, uint32_t colour1, const char *line2)
 {
     text_centre(m, line1, PAUSE_PW / 2.0f, 312, 2, colour1);
