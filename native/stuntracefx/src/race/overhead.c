@@ -6,7 +6,10 @@
  * close. No sense of the track ahead or behind ... more of an isometric
  * angle, kind of like RC Pro Am but better". On the isometric angle
  * (2026-11-13): "make the perspective angled down more so the player can
- * see what's coming up ahead better".
+ * see what's coming up ahead better", meaning down the track, toward what
+ * lies ahead; at 45 degrees: "You're still top down, not isometric angled
+ * down to see ahead on the track", and of a camera that turns with the car
+ * or stays fixed and shallower, "Stay fixed, shallower".
  *
  * Only the pictures change. The game's camera still runs as before and
  * everything that reads it (the trigger lists, the objects' activation,
@@ -14,8 +17,8 @@
  * the game's in a picture's part between steps (RaceViewForPicture, whose
  * state fx_tween puts back after the picture), never in a step.
  *
- * The view looks down at OVERHEAD_PITCH, 45 degrees (the isometric angle,
- * 35.26, before), and across the course's
+ * The view looks down at OVERHEAD_PITCH, 25 degrees (the isometric angle,
+ * 35.26, and 45 before), and across the course's
  * grid at 45 degrees (the heading the player's car starts the race in, to
  * the nearest quarter turn, less an eighth turn: the course's straights lie
  * on the screen's diagonals and the car first drives up and to the right),
@@ -23,13 +26,15 @@
  * OVERHEAD_DISTANCE away, through a lens OVERHEAD_ZOOM times as long as
  * the chip's (the 3D magnified about the view's centre, fx/fx_view.h).
  * At a 16:9 window the screen spans 19.8 degrees top to bottom, the view's
- * centre 8.6 of them under its top, so the ground it shows runs from 36.4
- * to 56.3 degrees below level: about 8,300 of the world's units deep
- * (4,300 past the car, 4,000 before it; at the isometric angle 5,600 and
- * 4,600) and 10,600 across at the car, a thing at the screen's top about
- * 1.4 times smaller than one at its bottom (1.6 before), and the hills
- * stand in front of less of the course; the car (about 290 across) a
- * thirty-fifth of the screen's width.
+ * centre 8.6 of them under its top, so the ground it shows runs from 16.4
+ * to 36.3 degrees below level: about 14,600 of the world's units deep
+ * (8,900 past the car, up the screen, and 5,600 before it; at the
+ * isometric angle 5,600 and 4,600, at 45 degrees 4,300 and 4,000) and
+ * 10,600 across at the car, a thing at the screen's top about 2.1 times
+ * smaller than one at its bottom (1.6 at the isometric angle); the car
+ * (about 290 across) a thirty-fifth of the screen's width. The course's
+ * straights lie on the screen's diagonals, so what lies ahead is up the
+ * screen while the car drives up it.
  *
  * The distance takes the view past what the game's 16-bit places hold: the
  * eye is kept whole (FxView.eye; g's view place is its low 16 bits, from
@@ -61,7 +66,7 @@
 #include "system/state.h"
 #include "video/video.h"
 
-#define OVERHEAD_PITCH (-45.0)          /* degrees, down from level */
+#define OVERHEAD_PITCH (-25.0)          /* degrees, down from level */
 #define OVERHEAD_ACROSS 0x2000          /* the view's heading less the course's square one: an eighth turn */
 #define OVERHEAD_DISTANCE 17000.0       /* from the eye to the car, along the view's axis */
 #define OVERHEAD_ZOOM 5.0f
