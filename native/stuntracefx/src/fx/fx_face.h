@@ -49,6 +49,14 @@ typedef struct {
        taken back to its own, so that one over a corner's depth is n .
        ((x - cx) / 128, (y - cy) / 128, 1) / d (d 0: none, a line) */
     float plane[4];
+    /* a face seen from behind (an open model's: fx_face_model_done), drawn
+       behind a face facing the eye at the same depth */
+    uint8_t back;
+    /* its corners in view space, whole and exact (at most 8; 0: not kept,
+       a solid's or the land's), for the layers of faces on one plane
+       (fx_draw.c) */
+    uint8_t ncorner3;
+    double corner3[8][3];
 } FxShape;
 
 /* A face: begun, its points given (fx_face_vertex, fx_rt.h), then ended
@@ -56,6 +64,17 @@ typedef struct {
    known, or it is wholly off the view). */
 void fx_face_begin(int textured);
 void fx_face_end(const FxMaterial *material);
+/* Faces seen from behind (docs/stuntracefx/native/DEPTH.md, 4), while the
+   3D is drawn with its depths (fx_draw_depth): FxModelFaces begins a face
+   facing away with fx_face_begin_back; it is held until its model's walk is
+   done (fx_face_model_done, before the model's queue is drawn), then
+   drawn, shaded as the chip shades it turned to the eye, unless the faces
+   the walk reached close (every edge two faces' going opposite ways) or
+   the face has a twin (the same corners the other way round): what faces
+   the eye in its place hides it. */
+int fx_face_backs(void);
+void fx_face_begin_back(int textured);
+void fx_face_model_done(void);
 /* The shapes made since they were last drawn, in order; whether there is
    room for another face's (else they are drawn first, as the chip drew its
    queue when it was nearly full). */

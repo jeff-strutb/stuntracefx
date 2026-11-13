@@ -502,6 +502,7 @@ FxModelDrawWithFlagsResult FxModelDrawWithFlags(uint16_t model_flags, uint16_t d
     } else if (up_) {                /* it returned past us */
         return (FxModelDrawWithFlagsResult){draw_list_end_out_2, up_ == 2 ? 0 : up_ - 2};
     }
+    fx_face_model_done();
     { FxDrawListResult r_ = FxDrawList(prev_end_y, draw_list_end_out_2, stack, rom_at_out); caller_write_ptr_out = r_.caller_write_ptr_out; };
     fx_unspill(stack);
     return (FxModelDrawWithFlagsResult){caller_write_ptr_out, 0};
@@ -2680,6 +2681,7 @@ uint16_t FxModelMaterial(uint16_t rom_at)
 FxModelFacesResult FxModelFaces(uint16_t divisor_made, uint16_t list_write_ptr, uint16_t *stack, uint16_t rom_at)
 {
     uint16_t face_cmd, rom_ptr_after_cmd, material_result, uv_at;
+    int facing_away;
     uint8_t flag_index, point_index, u, v;
     FxMaterial material;
     unsigned i;
@@ -2693,7 +2695,8 @@ FxModelFacesResult FxModelFaces(uint16_t divisor_made, uint16_t list_write_ptr, 
         fx_r14((uint16_t)(rom_at + 2));
         flag_index = fx_getb();
         fx_r14((uint16_t)(rom_at + 3));
-        if (face_cmd != 2 && !(fx_ldb((uint16_t)(flag_index + 0x07C6)) & 0x80)) {
+        facing_away = face_cmd != 2 && !(fx_ldb((uint16_t)(flag_index + 0x07C6)) & 0x80);
+        if (facing_away && !fx_face_backs()) {
             rom_at = (uint16_t)(rom_at + 7 + face_cmd);     /* faces away: passed */
             fx_r14(rom_at);
             continue;
@@ -2714,7 +2717,10 @@ FxModelFacesResult FxModelFaces(uint16_t divisor_made, uint16_t list_write_ptr, 
         } else {
             material.colour = (uint8_t)material_result;
         }
-        fx_face_begin(material.textured);
+        if (facing_away)                /* held for its model's closing (fx_face.c) */
+            fx_face_begin_back(material.textured);
+        else
+            fx_face_begin(material.textured);
         rom_at = (uint16_t)(rom_at + 7);
         fx_r14(rom_at);
         for (i = 0; i < face_cmd; i++) {
@@ -2882,6 +2888,7 @@ FxModelEndResult FxModelEnd(uint16_t draw_list_start, uint16_t draw_list_end, ui
     uint16_t caller_list_end_out;
     uint16_t caller_write_ptr_out;
 
+    fx_face_model_done();               /* its faces seen from behind, before its queue is drawn (fx_face.c) */
     { FxDrawListResult r_ = FxDrawList(draw_list_start, draw_list_end, stack, rom_at); caller_list_end_out = r_.caller_list_end_out; caller_write_ptr_out = r_.caller_write_ptr_out; rom_at_out_2 = r_.rom_at_out; };
     fx_unspill(stack);
     return (FxModelEndResult){caller_list_end_out, caller_write_ptr_out, rom_at_out_2, 1};

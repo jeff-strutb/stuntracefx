@@ -38,6 +38,8 @@ typedef struct {
     float in[8];
     uint32_t mesh, draw;        /* an instanced mesh (no vertices), and its draw in the recording's meshes; mesh 0 none */
     uint8_t world;              /* the 3D's world (its frame program's up to its text): magnified with the view's zoom */
+    uint8_t layer;              /* faces on one plane: how many layers in front of the first (DEPTH.md, 3) */
+    uint8_t back;               /* a face seen from behind: behind a face facing the eye at the same depth */
 } Shape;
 
 /* an instanced mesh's draw: its view in the recording's pixels (cx, cy with
@@ -95,6 +97,8 @@ static struct {
 } before_tween;
 static int offset_x, offset_y;
 static int drawing_3d;          /* the recording's 3D is being drawn: from its frame program's start to the HUD's */
+static uint8_t layer_now, back_now;     /* the layer and side of what is emitted now (shape_draw) */
+static void layers_reset(void);
 static int world_done;          /* the 3D's world is drawn (fx_draw_world_end): its text follows */
 static int held_by_view;        /* the object drawn now is placed in the view's space (fx_draw_held_by_view) */
 static int pinned;              /* a fixed-size sprite's quad, emitted where a zoomed view puts it (quad) */
@@ -395,6 +399,8 @@ void fx_draw_part(int hud)
     drawing_3d = recording && !hud;
     world_done = 0;
     held_by_view = 0;
+    if (!hud)
+        layers_reset();                 /* a picture's own faces on one plane */
     if (recording && !hud)
         horizon_of_view(recording);
     if (recording && hud) {
@@ -517,6 +523,8 @@ static void emit_with(const nshvc_vertex *v, uint32_t count, uint32_t image, int
         r->us[r->nus].image = image;
         r->us[r->nus].lines = (uint8_t)lines;
         r->us[r->nus].world = in_world();
+        r->us[r->nus].layer = layer_now;
+        r->us[r->nus].back = back_now;
         r->nus++;
         for (i = 0; i < count; i++) {
             r->uv[r->nuv + i] = v[i];
@@ -547,6 +555,8 @@ static void emit_with(const nshvc_vertex *v, uint32_t count, uint32_t image, int
     r->s[r->ns].shader = shader;
     r->s[r->ns].mesh = r->s[r->ns].draw = 0;
     r->s[r->ns].world = in_world();
+    r->s[r->ns].layer = layer_now;
+    r->s[r->ns].back = back_now;
     if (shader)
         memcpy(r->s[r->ns].in, in, sizeof r->s[r->ns].in);
     r->ns++;
@@ -1977,14 +1987,183 @@ static void shape_draw_body(const FxShape *sh)
     }
 }
 
-/* a queued face at its own depth (FxShape z) */
+/* ---- the layers of faces on one plane (docs/stuntracefx/native/DEPTH.md, 3) ----
+
+   The game drew a face over an earlier one in the same plane (a marking on
+   a road, a lamp on a wall) by drawing it later. With the depth test, such
+   a face is drawn one layer in front of the highest earlier face of the
+   picture that it lies on and overlaps on the screen; faces that look the
+   same share a layer, so a road cut into pieces does not climb. It lies on
+   an earlier face when they face the same way and each of its corners is
+   within LAYER_TOL (and LAYER_REL of its distance) of that face's plane:
+   the corners are exact (fx_face.c), so faces the game made on one plane
+   meet that to the double's rounding, and two real surfaces are always
+   farther apart. Overlap is their triangles' on the screen, with a
+   thousandth of a pixel's edge, so faces that only touch (a chequered
+   line's squares) do not climb either. */
+
+#define LAYER_TOL 0.01
+#define LAYER_REL 1e-7
+enum { LAYER_SHAPES = 8192, LAYER_TRIS = 65536, LAYER_BUCKETS = 4096, LAYER_MOST = 63 };
+
+static struct {
+    double n[3], d;             /* its plane: n . p = d, n of unit length */
+    double c[8][3];
+    int nc;
+    float box[4];               /* its outline's box on the screen: left, right, top, bottom */
+    uint32_t tri, ntri;         /* its triangles (a line: one, its two ends and the first again) */
+    uint32_t look;
+    uint8_t layer;
+    int32_t next;               /* the next in its bucket */
+} lay[LAYER_SHAPES];
+static float lay_tri[LAYER_TRIS][6];
+static int32_t lay_bucket[LAYER_BUCKETS];
+static uint32_t nlay, nlay_tri;
+
+static void layers_reset(void)
+{
+    nlay = nlay_tri = 0;
+    memset(lay_bucket, 0xFF, sizeof lay_bucket);
+}
+
+static int bucket_of(double d) { return (int)(((int64_t)floor(d) % LAYER_BUCKETS + LAYER_BUCKETS) % LAYER_BUCKETS); }
+
+/* whether two convex outlines of n and m points apart on the screen: a
+   separating axis among their edges' normals, with an edge of EPS */
+static int outlines_apart(const float *a, int n, const float *b, int m)
+{
+    const float eps = 1e-3f;
+    int pass, i, k;
+
+    for (pass = 0; pass < 2; pass++) {
+        const float *p = pass ? b : a;
+        int np = pass ? m : n;
+
+        for (i = 0; i < np; i++) {
+            float ex = p[2 * ((i + 1) % np)] - p[2 * i], ey = p[2 * ((i + 1) % np) + 1] - p[2 * i + 1];
+            float nx = -ey, ny = ex, amin = 1e30f, amax = -1e30f, bmin = 1e30f, bmax = -1e30f, len = sqrtf(nx * nx + ny * ny);
+
+            if (len < 1e-9f)
+                continue;
+            nx /= len, ny /= len;
+            for (k = 0; k < n; k++) {
+                float t = a[2 * k] * nx + a[2 * k + 1] * ny;
+
+                amin = t < amin ? t : amin, amax = t > amax ? t : amax;
+            }
+            for (k = 0; k < m; k++) {
+                float t = b[2 * k] * nx + b[2 * k + 1] * ny;
+
+                bmin = t < bmin ? t : bmin, bmax = t > bmax ? t : bmax;
+            }
+            if (amax <= bmin + eps || bmax <= amin + eps)
+                return 1;
+        }
+    }
+    return 0;
+}
+
+static uint32_t look_of(const FxShape *sh)
+{
+    const FxMaterial *m = &sh->material;
+
+    if (m->textured)
+        return 0x80000000u ^ (uint32_t)m->bank << 24 ^ (uint32_t)m->base << 8 ^ m->mask ^ (uint32_t)m->word * 2654435761u;
+    return (uint32_t)m->colour | (uint32_t)(uint8_t)sh->tint << 8 | (uint32_t)sh->tier << 16
+           | (uint32_t)((int)(sh->light * 4.0f) & 0x7F) << 20;
+}
+
+/* face sh's layer (its triangles at c, count of them), and it noted for
+   the faces after it */
+static uint8_t layer_of(const FxShape *sh, const FxCorner *c, uint32_t count)
+{
+    double n[3] = { 0, 0, 0 }, len, d = 0, tol;
+    uint32_t i, k, t, ntri;
+    int b, db;
+    uint8_t level = 0;
+    float box[4] = { 1e30f, -1e30f, 1e30f, -1e30f };
+
+    if (sh->ncorner3 < 2 || !count || nlay == LAYER_SHAPES)
+        return 0;
+    for (i = 0; i < sh->ncorner3; i++) {        /* Newell's normal */
+        const double *p = sh->corner3[i], *q = sh->corner3[(i + 1) % sh->ncorner3];
+
+        n[0] += (p[1] - q[1]) * (p[2] + q[2]);
+        n[1] += (p[2] - q[2]) * (p[0] + q[0]);
+        n[2] += (p[0] - q[0]) * (p[1] + q[1]);
+    }
+    len = sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+    if (len <= 0)
+        return 0;                       /* a line: no plane of its own */
+    for (k = 0; k < 3; k++)
+        n[k] /= len;
+    for (i = 0; i < sh->ncorner3; i++)
+        d += (n[0] * sh->corner3[i][0] + n[1] * sh->corner3[i][1] + n[2] * sh->corner3[i][2]) / sh->ncorner3;
+    tol = LAYER_TOL + LAYER_REL * fabs(d);
+    ntri = sh->line ? 1 : count / 3;
+    if (nlay_tri + ntri > LAYER_TRIS)
+        return 0;
+    for (t = 0; t < ntri; t++)
+        for (k = 0; k < 3; k++) {
+            const FxCorner *p = &c[sh->line ? (k < 2 ? k : 0) : 3 * t + k];
+
+            lay_tri[nlay_tri + t][2 * k] = p->x;
+            lay_tri[nlay_tri + t][2 * k + 1] = p->y;
+            box[0] = p->x < box[0] ? p->x : box[0], box[1] = p->x > box[1] ? p->x : box[1];
+            box[2] = p->y < box[2] ? p->y : box[2], box[3] = p->y > box[3] ? p->y : box[3];
+        }
+    for (db = -1; db <= 1; db++)
+        for (b = lay_bucket[bucket_of(d + db)]; b >= 0; b = lay[b].next) {
+            uint32_t ta, tb;
+            int on = 1, over = 0;
+
+            if (n[0] * lay[b].n[0] + n[1] * lay[b].n[1] + n[2] * lay[b].n[2] < 0.99 || fabs(lay[b].d - d) > tol + 8.0)
+                continue;
+            if (lay[b].box[0] >= box[1] || box[0] >= lay[b].box[1] || lay[b].box[2] >= box[3] || box[2] >= lay[b].box[3])
+                continue;
+            for (i = 0; i < sh->ncorner3 && on; i++)
+                on = fabs(lay[b].n[0] * sh->corner3[i][0] + lay[b].n[1] * sh->corner3[i][1] + lay[b].n[2] * sh->corner3[i][2]
+                          - lay[b].d) <= tol;
+            if (!on)
+                continue;
+            for (ta = 0; ta < ntri && !over; ta++)
+                for (tb = 0; tb < lay[b].ntri && !over; tb++)
+                    over = !outlines_apart(lay_tri[nlay_tri + ta], 3, lay_tri[lay[b].tri + tb], 3);
+            if (!over)
+                continue;
+            k = lay[b].layer + (lay[b].look != look_of(sh));
+            if (k > level)
+                level = (uint8_t)(k > LAYER_MOST ? LAYER_MOST : k);
+        }
+    for (k = 0; k < 3; k++)
+        lay[nlay].n[k] = n[k];
+    lay[nlay].d = d;
+    lay[nlay].tri = nlay_tri;
+    lay[nlay].ntri = ntri;
+    memcpy(lay[nlay].box, box, sizeof box);
+    lay[nlay].look = look_of(sh);
+    lay[nlay].layer = level;
+    b = bucket_of(d);
+    lay[nlay].next = lay_bucket[b];
+    lay_bucket[b] = (int32_t)nlay;
+    nlay++;
+    nlay_tri += ntri;
+    return level;
+}
+
+/* a queued face at its own depth (FxShape z), its layer and side */
 static void shape_draw(const FxShape *sh)
 {
     in_shape = 1;
     shape_z = sh->z;
+    layer_now = fx_draw_depth() ? layer_of(sh, fx_face_corners() + sh->first, sh->count) : 0;
+    back_now = sh->back;
     shape_draw_body(sh);
+    layer_now = back_now = 0;
     in_shape = 0;
 }
+
+int fx_draw_depth(void) { return 0; }
 
 /* The faces queued so far drawn now, as FxDrawList draws them, the chip's
    state as it was (fx_ground.c: a tunnel piece's faces before its rock). */

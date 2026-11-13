@@ -120,6 +120,10 @@ void fx_draw_mesh(nshvc_mesh m, const nshvc_view *view, const nshvc_instance *in
 int fx_draw_mesh_slot(void);
 /* The 3D's faces queued so far drawn now, in order. */
 void fx_draw_queued(void);
+/* Whether the 3D is drawn with its depths (docs/stuntracefx/native/DEPTH.md):
+   faces seen from behind drawn (fx_face_backs), each vertex at its true
+   depth. Off until the engine's depth settings are in. */
+int fx_draw_depth(void);
 int fx_draw_picture_now(void);
 int fx_draw_tweening(void);
 /* The palette entry a face's colour byte is shown in at the screen's depth

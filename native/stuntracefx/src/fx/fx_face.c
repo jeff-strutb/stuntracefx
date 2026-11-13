@@ -394,15 +394,18 @@ typedef struct {
     uint8_t tier;
     uint16_t index;
     float light;
+    uint16_t row;               /* a lit face's shade row in its own tier's table, as the chip read it */
+    int16_t sum;                /* and its light's sum before the chip's shifts */
 } Tint;
 
-static Tint chosen = { -1, 0, 0, 0 };
+static Tint chosen = { -1, 0, 0, 0, 0, 0 };
 
 static struct {
     int open, textured, whole, n;
     View view;
     Tint tint;
     Corner3 c[MOST];
+    int back;                   /* begun by fx_face_begin_back: it faces away */
 } face;
 
 static FxShape shapes[SHAPES];
@@ -425,17 +428,20 @@ void fx_face_material(int kind, uint16_t index, uint16_t table, uint16_t light)
     chosen.index = index;
     chosen.light = 0;
     if (kind == 1) {
-        uint16_t set = table >= 0xA275 ? 0xA275 : 0xA1C5, at = (uint16_t)(set + 2 * index);
+        uint16_t set = table >= 0xA275 ? 0xA275 : 0xA1C5, at = (uint16_t)(set + 2 * index), own = (uint16_t)(table + 2 * index);
 
         tier = (uint16_t)(table - set) / 0x2Cu;
         chosen.index = (uint16_t)(fx_rom_read(3, at) | fx_rom_read(3, (uint16_t)(at + 1)) << 8);
         chosen.light = (float)((int16_t)light / 1024.0);
+        chosen.row = (uint16_t)(fx_rom_read(3, own) | fx_rom_read(3, (uint16_t)(own + 1)) << 8);
+        chosen.sum = (int16_t)light;
     }
     chosen.tier = (uint8_t)(tier > 3 ? 3 : tier);
 }
 
 void fx_face_begin(int textured)
 {
+    face.back = 0;
     face.open = 1;
     face.textured = textured != 0;
     face.tint = chosen;
@@ -467,12 +473,207 @@ void fx_face_vertex(uint8_t p, uint8_t u, uint8_t v)
         check_point(p, &face.view);
 }
 
+/* ---- faces seen from behind (docs/stuntracefx/native/DEPTH.md, 4) ----
+
+   A face is known by its corners' places, exactly (a key of each corner's
+   three doubles): two faces share an edge when their corners there are the
+   same points, whatever the point's number in whichever projection of the
+   model. */
+
+enum { WALKED = 512, WALKED_CORNERS = 8, HELD = 192 };
+
+static struct {
+    int n;
+    uint32_t key[WALKED_CORNERS];
+} walked[WALKED];
+static int nwalked, walked_lost;        /* the faces the model's walk reached; whether some did not fit */
+static struct {
+    int n, textured;
+    View view;
+    Tint tint;
+    FxMaterial material;
+    Corner3 c[WALKED_CORNERS];
+    uint32_t key[WALKED_CORNERS];
+} held[HELD];
+static int nheld;
+
+static uint32_t corner_key(const Corner3 *c)
+{
+    double v[3] = { c->x + 0.0, c->y + 0.0, c->z + 0.0 };     /* -0 as 0 */
+    const uint8_t *b = (const uint8_t *)v;
+    uint32_t h = 2166136261u;
+    size_t i;
+
+    for (i = 0; i < sizeof v; i++)
+        h = (h ^ b[i]) * 16777619u;
+    return h;
+}
+
+int fx_face_backs(void) { return fx_draw_depth(); }
+
+void fx_face_begin_back(int textured)
+{
+    fx_face_begin(textured);
+    face.back = 1;
+}
+
+/* the face just ended, noted for its model's closing */
+static void walked_note(void)
+{
+    int k;
+
+    if (face.n < 3 || face.n > WALKED_CORNERS || !face.whole)
+        return;
+    if (nwalked == WALKED) {
+        walked_lost = 1;
+        return;
+    }
+    walked[nwalked].n = face.n;
+    for (k = 0; k < face.n; k++)
+        walked[nwalked].key[k] = corner_key(&face.c[k]);
+    nwalked++;
+}
+
 void fx_face_end(const FxMaterial *material)
 {
     if (!face.open)
         return;
     face.open = 0;
+    if (fx_face_backs())
+        walked_note();
+    if (face.back) {                    /* held until its model's walk is done */
+        int k;
+
+        if (face.n < 3 || face.n > WALKED_CORNERS || !face.whole || nheld == HELD)
+            return;
+        held[nheld].n = face.n;
+        held[nheld].textured = face.textured;
+        held[nheld].view = face.view;
+        held[nheld].tint = face.tint;
+        held[nheld].material = *material;
+        for (k = 0; k < face.n; k++) {
+            held[nheld].c[k] = face.c[k];
+            held[nheld].key[k] = corner_key(&face.c[k]);
+        }
+        nheld++;
+        return;
+    }
     commit(material);
+}
+
+static int key_order(const void *a, const void *b)
+{
+    uint64_t x = *(const uint64_t *)a, y = *(const uint64_t *)b;
+
+    return x < y ? -1 : x > y;
+}
+
+/* how many times edge e is in the sorted list */
+static int edges_of(const uint64_t *list, int n, uint64_t e)
+{
+    int lo = 0, hi = n, count = 0;
+
+    while (lo < hi) {
+        int mid = (lo + hi) / 2;
+
+        if (list[mid] < e)
+            lo = mid + 1;
+        else
+            hi = mid;
+    }
+    while (lo + count < n && list[lo + count] == e)
+        count++;
+    return count;
+}
+
+/* whether the faces the walk reached close: every edge between two
+   different points is there as often going one way as the other */
+static int walked_closed(void)
+{
+    static uint64_t edge[WALKED * WALKED_CORNERS];
+    int i, k, n = 0;
+
+    if (walked_lost)
+        return 0;
+    for (i = 0; i < nwalked; i++)
+        for (k = 0; k < walked[i].n; k++) {
+            uint32_t a = walked[i].key[k], b = walked[i].key[(k + 1) % walked[i].n];
+
+            if (a != b)
+                edge[n++] = (uint64_t)a << 32 | b;
+        }
+    if (!n)
+        return 0;
+    qsort(edge, (size_t)n, sizeof edge[0], key_order);
+    for (i = 0; i < n; i++)
+        if (edges_of(edge, n, edge[i]) != edges_of(edge, n, (edge[i] << 32) | (edge[i] >> 32)))
+            return 0;
+    return 1;
+}
+
+/* whether held face h has a twin among the faces the walk reached: the
+   same corners the other way round */
+static int has_twin(int h)
+{
+    int i, r, k, n = held[h].n;
+
+    for (i = 0; i < nwalked; i++) {
+        if (walked[i].n != n)
+            continue;
+        for (r = 0; r < n; r++) {
+            for (k = 0; k < n && walked[i].key[k] == held[h].key[(r - k + n) % n]; k++)
+                ;
+            if (k == n)
+                return 1;
+        }
+    }
+    return 0;
+}
+
+/* a lit face's colour turned to the eye: the chip's level for its light's
+   sum the other sign (FxModelMaterial: the sum shifted right 2, its high
+   byte, kept to 6-15), in its shade row */
+static uint8_t colour_behind(Tint *t, uint8_t front)
+{
+    int16_t sum = (int16_t)-t->sum;
+    int level = (int8_t)(uint8_t)((uint16_t)(int16_t)(sum >> 2) >> 8);
+
+    if (t->kind != 1)
+        return front;
+    level = level < 6 ? 6 : level > 15 ? 15 : level;
+    t->sum = sum;
+    t->light = -t->light;
+    return fx_rom_read(3, (uint16_t)(t->row + level - 6));
+}
+
+void fx_face_model_done(void)
+{
+    int h, k;
+
+    if (nheld && !walked_closed())
+        for (h = 0; h < nheld; h++) {
+            FxMaterial m = held[h].material;
+
+            if (has_twin(h))
+                continue;
+            face.open = 0;
+            face.back = 1;
+            face.whole = 1;
+            face.n = held[h].n;
+            face.textured = held[h].textured;
+            face.view = held[h].view;
+            face.tint = held[h].tint;
+            for (k = 0; k < face.n; k++)
+                face.c[k] = held[h].c[k];
+            if (!face.textured)
+                m.colour = colour_behind(&face.tint, m.colour);
+            if (fx_face_full())
+                fx_draw_queued();
+            commit(&m);
+        }
+    nheld = 0;
+    nwalked = 0;
+    walked_lost = 0;
 }
 
 void fx_face_reset(void)
@@ -1002,6 +1203,18 @@ static void commit(const FxMaterial *m)
     s->tint_index = face.tint.index;
     s->light = face.tint.light;
     s->under_first = s->under_count = 0;
+    s->back = (uint8_t)face.back;
+    s->ncorner3 = 0;
+    if (face.n <= 8) {                  /* its corners at full size, for its layer (fx_draw.c) */
+        int k;
+
+        for (k = 0; k < face.n; k++) {
+            s->corner3[k][0] = ldexp(face.c[k].x, corner_shift());
+            s->corner3[k][1] = ldexp(face.c[k].y, corner_shift());
+            s->corner3[k][2] = ldexp(face.c[k].z, corner_shift());
+        }
+        s->ncorner3 = (uint8_t)face.n;
+    }
     s->z = fx_far_z();
     s->plane[0] = s->plane[1] = s->plane[2] = s->plane[3] = 0;
     if (face.n >= 3) {                  /* its plane, from its first three corners */
