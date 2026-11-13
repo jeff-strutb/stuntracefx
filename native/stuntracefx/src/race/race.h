@@ -37,6 +37,18 @@ float race_step_progress(float between);
 int RaceViewForPicture(int panel);
 void race_steps_end(void);
 
+/* The race seen from above (overhead.c), chosen with SRFX_CAMERA=overhead:
+   - race_overhead_on: chosen;
+   - race_overhead_reset: a new screen's steps (the view's heading is taken
+     again from the player's car at its first picture);
+   - race_overhead_view: in a one-player picture's part between steps, after
+     the game's view is set from its camera: the overhead view in its place
+     (g's view place and angles, the chip's window words, fx_view) when
+     chosen and the race fills the window; else nothing. */
+int race_overhead_on(void);
+void race_overhead_reset(void);
+void race_overhead_view(void);
+
 /* The race the course menu shows behind it. RaceStart sets it up; each
    RaceFrameStep is one step of it, with no waiting inside. It draws the
    picture into fx_draw_picture(0) unless step_only is set. */

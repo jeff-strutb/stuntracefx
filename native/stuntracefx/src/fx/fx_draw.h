@@ -23,6 +23,14 @@ nshvc_draw_list fx_draw_picture(int picture);
 /* The screen's list's pixels per screen pixel: what race_frame_art_draw
    scales its art by. */
 void fx_draw_list_scale(float *sx, float *sy);
+/* The output's pixels per picture pixel of what the 3D's world draws now:
+   the list's scale, times the view's zoom while a zoomed view's world is
+   drawn (fx/fx_view.h); for detail set by the output's pixels. */
+void fx_draw_world_scale(float *sx, float *sy);
+/* The 3D's world is drawn (render/frame.c, before its text notice): what
+   the frame program draws after it is on the screen as drawn, not
+   magnified with a zoomed view's world. */
+void fx_draw_world_end(void);
 /* The words the chip's view takes (GsuParamsFromDp's g.view_*): the view
    over a rectangle of the screen, x, y, width, height in screen pixels, its
    horizon's centre at x + width / 2 across and centre_y down; focal length

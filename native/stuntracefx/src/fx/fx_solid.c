@@ -170,7 +170,7 @@ static float output_focal(void)
 {
     float sx, sy;
 
-    fx_draw_list_scale(&sx, &sy);
+    fx_draw_world_scale(&sx, &sy);
     return 128.0f * (sx > sy ? sx : sy);
 }
 

@@ -36,6 +36,7 @@
 #include "fx/fx_draw.h"
 #include "fx/fx_far.h"
 #include "fx/fx_ground.h"
+#include "fx/fx_view.h"
 
 enum { SLOTS = 0x31, SLOT_SIZE = 0x1E, SLOT_FIRST = 0x0AAA };
 
@@ -45,6 +46,7 @@ typedef struct {
     uint8_t shift;
     uint16_t depth, rec;
     double near;                /* its nearest point's depth (its place's less its radius), no more than the one drawn before's */
+    uint8_t merged;             /* a far object drawn among the near ones (fx_view_merge), its key unclamped */
 } Far;
 
 static Far far[FX_FAR_MAX], parked[FX_FAR_MAX];
@@ -138,14 +140,18 @@ void fx_far_pass(uint16_t *stack)
         while ((big >> s) > 0x3FFF)
             s++;
         {
-            Far *f = fx_ram[FX_FAR_BANK + (uint16_t)(rec + FX_FAR_PARKED)] ? &parked[nparked++] : &far[n++];
+            int tyre = fx_ram[FX_FAR_BANK + (uint16_t)(rec + FX_FAR_PARKED)] != 0;
+            /* a view other than the game's (fx_view_merge) draws every far
+               object among the near ones, as the parked tyres are */
+            Far *f = tyre || fx_view_merge() ? &parked[nparked++] : &far[n++];
 
             /* a parked tyre's key as the sort keys a slot: its record's
                +$02, its depth and its shape's bias, in 16 bits */
-            if (f >= parked && f < parked + FX_FAR_MAX)
+            if (tyre)
                 f->key = (int16_t)(uint16_t)(far_word((uint16_t)(rec + 0x02)) + (uint16_t)v[2] + (uint16_t)bias);
             else
                 f->key = (magnitude(d[1]) << 1) + (fx_ram[FX_FAR_BANK + (uint16_t)(rec + FX_FAR_LIFT)] ? 0x1F40 : 0) + bias + v[2];
+            f->merged = (uint8_t)(!tyre && fx_view_merge());
             for (k = 0; k < 3; k++)
                 f->at[k] = (int16_t)(v[k] >> s);
             f->shift = (uint8_t)s;
@@ -231,15 +237,19 @@ void fx_far_parked(uint16_t *stack)
     unsigned n = 0, i, j, b, k, near = 0;
     uint16_t slot;
 
-    if (!nparked)
+    if (!nparked && !fx_view_merge())  /* a merging view draws its near list here, far objects or none */
         return;
     qsort(parked, nparked, sizeof parked[0], farther_first);
     memset(used, 0, nparked);
     for (slot = ram_word(GSU_DRAW_LIST); slot && near < SLOTS; slot = ram_word(slot)) {
         int16_t key = (int16_t)ram_word((uint16_t)(slot + 0x02));
 
-        for (j = 0; j < nparked; j++)   /* the tyres keyed at or above it go before it */
-            if (!used[j] && (int16_t)(key - 1 - (int16_t)parked[j].key) < 0) {
+        /* the tyres keyed at or above it go before it; a merged far object
+           too, its key against the slot's as a whole number (a far one's
+           may pass the 16 bits a tyre's difference is taken in) */
+        for (j = 0; j < nparked; j++)
+            if (!used[j] && (parked[j].merged ? parked[j].key >= (int64_t)(uint16_t)key
+                                              : (int16_t)(key - 1 - (int16_t)parked[j].key) < 0)) {
                 used[j] = 1;
                 order[n].tyre = 1;
                 order[n++].at = j;
@@ -337,5 +347,5 @@ float fx_far_z(void)
 }
 
 int fx_far_shift(void) { return shift_now; }
-uint16_t fx_far_depth(uint16_t depth) { return shift_now ? depth_now : depth; }
+uint16_t fx_far_depth(uint16_t depth) { return fx_view_depth(shift_now ? depth_now : depth); }
 int fx_far_drawing(void) { return drawing; }

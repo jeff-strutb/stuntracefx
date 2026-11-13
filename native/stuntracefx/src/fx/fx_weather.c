@@ -79,7 +79,7 @@ void fx_weather_begin(int weather)
     cx = word_at(0x0034);
     cy = word_at(0x0036);
     fx_face_view_rect(&left, &right, &top, &bottom);
-    fx_draw_list_scale(&list_x, &list_y);
+    fx_draw_world_scale(&list_x, &list_y);
     if (list_x <= 0)
         list_x = 1;
     if (list_y <= 0)

@@ -40,6 +40,7 @@ static void step_clock_restart(void)
 {
     memset(&step_clock, 0, sizeof step_clock);
     fx_tween_reset();
+    race_overhead_reset();
 }
 
 /* The end of a step that handed a picture over: the state and the pictures
@@ -388,6 +389,7 @@ int RaceViewForPicture(int panel)
         if (panel)
             return 0;
         ViewFromRecord(view_camera(g.player_car));
+        race_overhead_view();           /* the view from above in the game's place, when chosen (overhead.c) */
         g.draw_side = 0;
         fx16_set(GSU_VIEW_246C, 0xFFFF);
         picture_objects();

@@ -39,12 +39,15 @@ void fx_far_pass(uint16_t *stack);
 void fx_far_record(uint16_t record);
 /* While a far object draws: the halvings of its place (0 when none, and
    for every near object), and its true depth in place of the chip's
-   halved one (`depth` as it is otherwise). */
+   halved one (`depth` as it is otherwise); for a model's detail and haze,
+   so less a view's extra distance (fx_view_depth). */
 int fx_far_shift(void);
 uint16_t fx_far_depth(uint16_t depth);
 int fx_far_drawing(void);
 /* After the near list is drawn (render/frame.c): it again with the parked
-   tyres among its objects by depth, when there are any. */
+   tyres among its objects by depth, when there are any. Under a view that
+   merges (fx_view_merge) the near list is drawn only here, with every far
+   object among it by depth as well. */
 void fx_far_parked(uint16_t *stack);
 /* While a pass draws: the near record a slot holds (its $0AAA address), 0
    for a far record or a tyre; `record` as it is outside a pass. */

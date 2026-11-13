@@ -15,6 +15,7 @@
 #include "fx/fx_far.h"
 #include "fx/fx_face.h"
 #include "fx/fx_ground.h"
+#include "fx/fx_view.h"
 #include "fx/fx_weather.h"
 #include "system/state.h"
 #include "system/perf.h"
@@ -36,6 +37,7 @@ typedef struct {
     uint32_t shader;            /* 0: none; else the shader and its inputs (the ground's) */
     float in[8];
     uint32_t mesh, draw;        /* an instanced mesh (no vertices), and its draw in the recording's meshes; mesh 0 none */
+    uint8_t world;              /* the 3D's world (its frame program's up to its text): magnified with the view's zoom */
 } Shape;
 
 /* an instanced mesh's draw: its view in the recording's pixels (cx, cy with
@@ -56,6 +58,10 @@ typedef struct {
        horizon_row), rising horizon_slope rows a column; known or not */
     float horizon_x, horizon_row, horizon_slope;
     int horizon_known;
+    /* its world's shapes magnified `zoom` times about (zoom_x, zoom_y), the
+       view's centre where they were recorded (fx_view: a view other than
+       the game's); 1 none */
+    float zoom, zoom_x, zoom_y;
     /* while the water cuts the picture (fx_face_cut): the parts past the
        water from the eye, kept apart until the 3D is done, and where the
        water's own shapes are */
@@ -89,6 +95,7 @@ static struct {
 } before_tween;
 static int offset_x, offset_y;
 static int drawing_3d;          /* the recording's 3D is being drawn: from its frame program's start to the HUD's */
+static int world_done;          /* the 3D's world is drawn (fx_draw_world_end): its text follows */
 static int origin_x, origin_y;  /* where a screen other than the race's puts the picture; 0, 0: none */
 static int side_under;          /* what is drawn now lies past the water from the eye */
 static void under_splice(Recording *r);
@@ -101,6 +108,14 @@ void fx_draw_list_scale(float *sx, float *sy)
 {
     *sx = screen_sx;
     *sy = screen_sy;
+}
+
+void fx_draw_world_scale(float *sx, float *sy)
+{
+    float z = recording && drawing_3d && !world_done && recording->zoom > 0 ? recording->zoom : 1.0f;
+
+    *sx = screen_sx * z;
+    *sy = screen_sy * z;
 }
 
 
@@ -201,8 +216,11 @@ void fx_draw_begin(int picture)
     picture &= 1;
     picture_now = picture;
     drawing_3d = 0;                     /* its view is known at its frame program's start */
+    world_done = 0;
     target.id = 0;
     recording = tweening ? &between[picture] : &recordings[picture];
+    recording->zoom = fx_view_zoom();   /* its centre with its horizon (horizon_of_view) */
+    recording->zoom_x = recording->zoom_y = 0;
     if (tweening)
         tween_drawn[picture] = 1;
     else {
@@ -317,7 +335,9 @@ int fx_draw_step_picture(int panel)
    through the eye level with the world meets the picture. The world's up
    axis in view space is row 1 of the matrix at $00E4 (n), the view's centre
    ($0034, $0036) and focal length 128 give the line
-   n.x (x - cx) + n.y (y - cy) + 128 n.z = 0. */
+   n.x (x - cx) + n.y (y - cy) + 128 n.z = 0; magnified by the recording's
+   zoom about the view's centre, its focal length 128 zoom. The centre is
+   also the zoom's. */
 static void horizon_of_view(Recording *r)
 {
     double nx = (int16_t)(fx_ram[0x00EA] | fx_ram[0x00EB] << 8) / 32768.0;
@@ -325,11 +345,13 @@ static void horizon_of_view(Recording *r)
     double nz = (int16_t)(fx_ram[0x00EE] | fx_ram[0x00EF] << 8) / 32768.0;
     double cx = (int16_t)(fx_ram[0x0034] | fx_ram[0x0035] << 8), cy = (int16_t)(fx_ram[0x0036] | fx_ram[0x0037] << 8);
 
+    r->zoom_x = (float)(cx + r->ox);
+    r->zoom_y = (float)(cy + r->oy);
     r->horizon_known = fabs(ny) > 1e-6;
     if (!r->horizon_known)
         return;
     r->horizon_x = (float)(cx + r->ox);
-    r->horizon_row = (float)(cy - 128.0 * nz / ny + r->oy);
+    r->horizon_row = (float)(cy - 128.0 * r->zoom * nz / ny + r->oy);
     r->horizon_slope = (float)(-nx / ny);
 }
 
@@ -369,6 +391,7 @@ int fx_draw_horizon_now(int panel, float *x, float *row, float *slope)
 void fx_draw_part(int hud)
 {
     drawing_3d = recording && !hud;
+    world_done = 0;
     if (recording && !hud)
         horizon_of_view(recording);
     if (recording && hud) {
@@ -384,6 +407,18 @@ void fx_draw_part(int hud)
 void fx_draw_side(int past)
 {
     side_under = past != 0;
+}
+
+void fx_draw_world_end(void)
+{
+    blocks_flush();                     /* a block gathered in the world is the world's */
+    world_done = 1;
+}
+
+/* what is emitted now is the 3D's world */
+static uint8_t in_world(void)
+{
+    return (uint8_t)(drawing_3d && !world_done);
 }
 
 void fx_draw_set_origin(int x, int y)
@@ -473,6 +508,7 @@ static void emit_with(const nshvc_vertex *v, uint32_t count, uint32_t image, int
         r->us[r->nus].count = count;
         r->us[r->nus].image = image;
         r->us[r->nus].lines = (uint8_t)lines;
+        r->us[r->nus].world = in_world();
         r->nus++;
         for (i = 0; i < count; i++) {
             r->uv[r->nuv + i] = v[i];
@@ -502,6 +538,7 @@ static void emit_with(const nshvc_vertex *v, uint32_t count, uint32_t image, int
     r->s[r->ns].lines = (uint8_t)lines;
     r->s[r->ns].shader = shader;
     r->s[r->ns].mesh = r->s[r->ns].draw = 0;
+    r->s[r->ns].world = in_world();
     if (shader)
         memcpy(r->s[r->ns].in, in, sizeof r->s[r->ns].in);
     r->ns++;
@@ -620,9 +657,11 @@ static void hud_pieces(const Recording *r, uint32_t from, uint32_t to, int playe
 /* An instanced mesh into list d, its view in the picture's pixels moved by
    (ox, oy) and scaled by (sx, sy) to the list's: x = (cx + ox + 128 X / Z)
    sx, its f the y scale's, the x scale's share of it in the rotation's
-   first row (the picture's pixels shown 7:6 wide), which moves only X. */
+   first row (the picture's pixels shown 7:6 wide), which moves only X;
+   magnified `zoom` times about (zx, zy) in the picture's pixels first (a
+   recording's world, Recording.zoom). */
 static void mesh_scaled(nshvc_draw_list d, uint32_t mesh, const nshvc_view *pv, const nshvc_instance *in, uint32_t count,
-                        float sx, float sy, float ox, float oy)
+                        float sx, float sy, float ox, float oy, float zoom, float zx, float zy)
 {
     nshvc_view v = *pv;
     nshvc_material m;
@@ -631,9 +670,9 @@ static void mesh_scaled(nshvc_draw_list d, uint32_t mesh, const nshvc_view *pv, 
 
     if (!count)
         return;
-    v.cx = (pv->cx + ox) * sx;
-    v.cy = (pv->cy + oy) * sy;
-    v.f = pv->f * sy;
+    v.cx = (zx + (pv->cx - zx) * zoom + ox) * sx;
+    v.cy = (zy + (pv->cy - zy) * zoom + oy) * sy;
+    v.f = pv->f * zoom * sy;
     for (k = 0; k < 3; k++)
         v.rot[k] = pv->rot[k] * sx / sy;
     memset(&m, 0, sizeof m);
@@ -657,7 +696,7 @@ void fx_draw_mesh(nshvc_mesh mesh, const nshvc_view *view, const nshvc_instance 
         return;
     blocks_flush();
     if (!r) {
-        mesh_scaled(target, mesh.id, view, instances, count, target_sx, target_sy, (float)offset_x, (float)offset_y);
+        mesh_scaled(target, mesh.id, view, instances, count, target_sx, target_sy, (float)offset_x, (float)offset_y, 1, 0, 0);
         return;
     }
     if (r->nmi + count > r->cap_mi) {
@@ -687,13 +726,16 @@ void fx_draw_mesh(nshvc_mesh mesh, const nshvc_view *view, const nshvc_instance 
     r->s[r->ns].first = r->nv;
     r->s[r->ns].mesh = mesh.id;
     r->s[r->ns].draw = r->nmd++;
+    r->s[r->ns].world = in_world();
     r->ns++;
     r->gen++;
 }
 
 /* Shapes [from, to) of a recording into the screen's list, scaled to its
    pixels; anchored: as the full window's HUD pieces, player -1 the one
-   player's, else that of two. */
+   player's, else that of two. The world's shapes of a recording drawn from
+   a zoomed view (Recording.zoom) are magnified about the view's centre
+   first: the same picture as a focal length of 128 zoom. */
 static void compose_recording(const Recording *r, uint32_t from, uint32_t to, int anchored, int player)
 {
     static nshvc_vertex *scaled;
@@ -716,7 +758,7 @@ static void compose_recording(const Recording *r, uint32_t from, uint32_t to, in
         hud_pieces(r, from, to, player, dx, dy);
     for (i = from; i < to; i++) {
         const Shape *sh = &r->s[i];
-        float ox = 0, oy = 0;
+        float ox = 0, oy = 0, zoom = sh->world && r->zoom > 0 ? r->zoom : 1.0f;
 
         if (anchored && i - from < PIECES) {
             ox = dx[i - from];
@@ -724,6 +766,10 @@ static void compose_recording(const Recording *r, uint32_t from, uint32_t to, in
         }
         for (k = sh->first; k < sh->first + sh->count; k++) {
             scaled[k] = r->v[k];
+            if (zoom != 1.0f) {
+                scaled[k].x = r->zoom_x + (scaled[k].x - r->zoom_x) * zoom;
+                scaled[k].y = r->zoom_y + (scaled[k].y - r->zoom_y) * zoom;
+            }
             scaled[k].x = (scaled[k].x + ox) * screen_sx;
             scaled[k].y = (scaled[k].y + oy) * screen_sy;
         }
@@ -745,7 +791,8 @@ static void compose_recording(const Recording *r, uint32_t from, uint32_t to, in
         if (sh->mesh) {
             const MeshDraw *d = &r->md[sh->draw];
 
-            mesh_scaled(screen_list, sh->mesh, &d->view, r->mi + d->first, d->count, screen_sx, screen_sy, 0, 0);
+            mesh_scaled(screen_list, sh->mesh, &d->view, r->mi + d->first, d->count, screen_sx, screen_sy, 0, 0,
+                        sh->world && r->zoom > 0 ? r->zoom : 1.0f, r->zoom_x, r->zoom_y);
             continue;
         }
         for (; j < to; j++) {

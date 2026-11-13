@@ -13,6 +13,7 @@
 #include "fx/fx.h"
 #include "fx/fx_face.h"
 #include "fx/fx_far.h"
+#include "fx/fx_view.h"
 
 /*
  * @routine 01:8000 FxModelCommands
@@ -423,9 +424,11 @@ FxModelDrawWithFlagsResult FxModelDrawWithFlags(uint16_t model_flags, uint16_t d
             FxMatrixApplyVectors(0x0132, 0x876C);
         }
     }
-    fx_stw(FX_LIGHT_X, 0);
-    fx_stw(FX_LIGHT_Y, 0x393E);
-    fx_stw(FX_LIGHT_Z, 0x727C);
+    /* the light in view space: the game's (0, $393E, $727C), or a view's
+       other than the game's turned to it (fx_view.h) */
+    fx_stw(FX_LIGHT_X, fx_view_light(0));
+    fx_stw(FX_LIGHT_Y, fx_view_light(1));
+    fx_stw(FX_LIGHT_Z, fx_view_light(2));
     light_x = fx_ldw(FX_LIGHT_X);
     light_y = fx_ldw(FX_LIGHT_Y);
     light_z = fx_ldw(FX_LIGHT_Z);

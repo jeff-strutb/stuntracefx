@@ -20,6 +20,7 @@
 #include "fx/fx_draw.h"
 #include "fx/fx_far.h"
 #include "fx/fx_tween.h"
+#include "fx/fx_view.h"
 #include "object/object.h"
 #include "race/race.h"
 #include "system/perf.h"
@@ -273,14 +274,17 @@ int fx_tween_begin(float t)
 {
     const Ends *was, *end;
 
-    if (drawing || steps < 2)
+    /* The overhead view (race/overhead.c) draws from a screen's first step
+       on, from that step's end alone (the progress is then 1): the step's
+       own picture is the game camera's. */
+    if (drawing || steps < (race_overhead_on() ? 1 : 2))
         return 0;
     if (t < 0)
         t = 0;
     if (t > 1)
         t = 1;
-    was = &ends[!last];
     end = &ends[last];
+    was = steps < 2 ? end : &ends[!last];
     picture_t = t;
     memcpy(&kept.g, &g, sizeof g);
     memcpy(&kept.objects, &objects, sizeof objects);
@@ -331,8 +335,10 @@ void fx_tween_draw(float between)
            whole of either */
         int picture = !panel && fx_draw_shown_picture() >= 0 ? fx_draw_shown_picture() : fx_draw_step_picture(panel);
 
-        if (picture < 0 || !RaceViewForPicture(panel))
+        if (picture < 0 || !RaceViewForPicture(panel)) {
+            fx_view_clear();
             break;
+        }
         heading[panel] = g.backdrop_heading;
         pitch[panel] = g.backdrop_pitch;
         panels = panel + 1;
@@ -344,6 +350,7 @@ void fx_tween_draw(float between)
         nshvc_profile_end();
         fx_draw_flush();
         fractions_on = 0;
+        fx_view_clear();                /* the panel's own view, if its part set one (race/overhead.c) */
     }
     nshvc_profile_begin(perf_tween_state);
     fx_tween_end();

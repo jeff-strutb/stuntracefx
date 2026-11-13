@@ -9,7 +9,9 @@
 
 #include "fx/fx.h"
 #include "fx/fx_far.h"
+#include "fx/fx_draw.h"
 #include "fx/fx_ground.h"
+#include "fx/fx_view.h"
 #include "fx/fx_weather.h"
 #include "nshvc/nshvc.h"
 #include "system/perf.h"
@@ -75,8 +77,10 @@ static FxFrameProgramResult frame_program(uint16_t draw_list_end)
     nshvc_profile_end();
     *stack = 0x0240;
     nshvc_profile_begin(perf_near);
-    { FxObjectsDrawResult r_ = FxObjectsDraw(draw_list_end, stack); up_ = r_.up; };
-    fx_ground_object_end();             /* the last near object's tunnel rock (fx_ground.c) */
+    if (!fx_view_merge()) {             /* a view that draws the far objects among the near ones draws them all in fx_far_parked */
+        { FxObjectsDrawResult r_ = FxObjectsDraw(draw_list_end, stack); up_ = r_.up; };
+        fx_ground_object_end();         /* the last near object's tunnel rock (fx_ground.c) */
+    }
     nshvc_profile_end();
     if (up_) {                       /* it returned past us */
         return (FxFrameProgramResult){up_ == 0 ? 0 : up_ - 0};
@@ -104,6 +108,7 @@ static FxFrameProgramResult frame_program(uint16_t draw_list_end)
         }
     }
     last_plot_result = FxEffectsRun(weather_record_ptr, stack);
+    fx_draw_world_end();                /* the text is on the screen, not in the world (fx_draw.c) */
     fx_stw(FX_EFFECT_MAX, 0);
     { FxTextNoticeResult r_ = FxTextNotice(last_plot_result, stack); text_draw_result = r_.text_draw_result; notice_car = r_.notice_car; };
     fx_rpix((uint8_t)text_draw_result, (uint8_t)notice_car);

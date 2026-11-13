@@ -68,6 +68,7 @@
 #include "fx/fx_far.h"
 #include "fx/fx_ground.h"
 #include "fx/fx_rt.h"
+#include "fx/fx_view.h"
 #include "system/state.h"
 #include "video/picture.h"
 #include "video/video.h"
@@ -80,13 +81,11 @@
 #define TEXEL_U 33.6
 #define TEXEL_V 53.7
 #define INK 0.8                 /* the marks' colour: the band's on their row, this much as bright */
-/* the chip's light for lit faces, fixed in view space (y down, z ahead;
-   FxModelProject's $0100-$0104), and a lit face's level against it where a
-   course has no lit faces to fit it from (land as polygons, below): the
-   chip's level is (its normal . the light, each as 127 a unit) / 1024, its
-   normals facing in */
-#define LIGHT_Y (0x393E / 32768.0)
-#define LIGHT_Z (0x727C / 32768.0)
+/* A lit face's level against the chip's light (fixed in view space, y
+   down, z ahead: FxModelProject's $0100-$0104, the picture's from
+   fx_view_light_vector) where a course has no lit faces to fit it from
+   (land as polygons, below): the chip's level is (its normal . the light,
+   each as 127 a unit) / 1024, its normals facing in */
 #define LIGHT_K (-127.0 * 127.0 / 1024.0)
 #define HORIZON_GAP 0.01        /* the polygon's far edge this far from the horizon, in output pixels */
 
@@ -479,7 +478,10 @@ static void survey_face(const double (*c)[3], int n, uint8_t colour, int texture
     else
         rec_area[fabs(u[0]) >= fabs(u[2]) ? 2 : 3] += area;
     if (lit) {
-        double x = u[1] * LIGHT_Y + u[2] * LIGHT_Z;
+        double l[3], x;
+
+        fx_view_light_vector(l);        /* the light the chip lit the face by (fx_view.h) */
+        x = u[0] * l[0] + u[1] * l[1] + u[2] * l[2];
 
         rock_survey.lit_ln += area * light * x;
         rock_survey.lit_nn += area * x * x;
@@ -1019,7 +1021,7 @@ static void land_draw(int kind, const double eye[3], const double m[9], int p)
     h_eye = land_height((const double (*)[3][3])world, ntri, eye[0], eye[2]) - eye[1];
     if (h_eye < 16)
         return;
-    fx_draw_list_scale(&sx, &sy);
+    fx_draw_world_scale(&sx, &sy);
     scale = sx > sy ? sx : sy;
     memset(land_words, 0, sizeof(uint32_t) * (size_t)(T_GRID + grid.nx * grid.nz));
     for (i = 0; i < 9; i++)
@@ -1299,9 +1301,11 @@ static uint32_t row_colour(int cls, int level)
    floor(k (n . the light)), kept to 6-15 */
 static int chip_level(const double n[3])
 {
-    double len = sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
-    double x = len > 0 ? (n[1] * LIGHT_Y + n[2] * LIGHT_Z) / len : 0;
-    double level = floor(grid.light_k * x);
+    double len = sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]), l[3], x, level;
+
+    fx_view_light_vector(l);            /* the picture's light (fx_view.h): the chip's own in the game's view */
+    x = len > 0 ? (n[0] * l[0] + n[1] * l[1] + n[2] * l[2]) / len : 0;
+    level = floor(grid.light_k * x);
 
     return level < 6 ? 6 : level > 15 ? 15 : (int)level;
 }
@@ -1335,7 +1339,7 @@ static void plane_vertices(double y, uint32_t colour, float z, const double eye[
 
     if (y - eye[1] <= 0)
         return;
-    fx_draw_list_scale(&sx, &sy);
+    fx_draw_world_scale(&sx, &sy);
     scale = sx > sy ? sx : sy;
     reach = 128.0 * (y - eye[1]) * scale / HORIZON_GAP;
     for (i = 0; i < 4; i++) {
@@ -2746,7 +2750,7 @@ static void ocean_draw(int cls, int under, int first, const double eye[3], const
     static nshvc_vertex bed[24];
     static FxCorner c[64];
     uint32_t words[OCEAN_IMAGE_W] = { 0 }, nb = 0, nc, j, deep;
-    double dh = water_y - eye[1], reach, q[4][3], up[3], light[3], ex, ez, bed_y, ox = 0, oy = 0;
+    double dh = water_y - eye[1], reach, q[4][3], up[3], light[3], l[3], ex, ez, bed_y, ox = 0, oy = 0;
     double vcx = (int16_t)ram_word(0x0034), vcy = (int16_t)ram_word(0x0036), ra[3], rb[3], rc[3], c1;
     float in[8], sx, sy, scale;
     int i, k, slot;
@@ -2765,7 +2769,7 @@ static void ocean_draw(int cls, int under, int first, const double eye[3], const
     fx_draw_land(bed, nb);
     /* the water's quad about the eye, out to HORIZON_GAP of the horizon
        (from above or below) */
-    fx_draw_list_scale(&sx, &sy);
+    fx_draw_world_scale(&sx, &sy);
     scale = sx > sy ? sx : sy;
     reach = 128.0 * fabs(dh) * scale / HORIZON_GAP;
     for (i = 0; i < 4; i++) {
@@ -2813,8 +2817,9 @@ static void ocean_draw(int cls, int under, int first, const double eye[3], const
     for (k = 0; k < 3; k++)
         up[k] = -m[3 + k];
     words[10] = sea_shade(cls, first, chip_level(up));
+    fx_view_light_vector(l);
     for (k = 0; k < 3; k++)
-        light[k] = grid.light_k * (m[3 * k + 1] * LIGHT_Y + m[3 * k + 2] * LIGHT_Z);
+        light[k] = grid.light_k * (m[3 * k] * l[0] + m[3 * k + 1] * l[1] + m[3 * k + 2] * l[2]);
     words[11] = float_word((float)light[0]);
     words[12] = float_word((float)light[1]);
     words[13] = float_word((float)light[2]);
@@ -2898,7 +2903,7 @@ void fx_ground_draw(void)
     cy = (int16_t)ram_word(0x0036);
     top = (int16_t)ram_word(0x003C);
     bottom = (int16_t)ram_word(0x003E);
-    fx_draw_list_scale(&sx, &sy);
+    fx_draw_world_scale(&sx, &sy);
     scale = sx > sy ? sx : sy;
     /* the plane's corners in view space: world axis k turns to row k
        (m[3k..3k+2], as the sort turns places), the quad far enough out
