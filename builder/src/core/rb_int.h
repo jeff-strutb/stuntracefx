@@ -26,7 +26,7 @@ void     rb_join(char *out, size_t n, const char *a, const char *b);
 void     rb_dirname(char *out, size_t n, const char *path);
 int      rb_set_exec(const char *path);               /* chmod 755 (POSIX) */
 int      rb_copy_file(const char *from, const char *to);
-int      rb_copy_tree(const char *from, const char *to);   /* cp -R of a folder (POSIX) */
+int      rb_copy_tree(const char *from, const char *to);   /* cp -R of a folder, or a file */
 
 void rb_err(char *err, size_t errlen, const char *fmt, ...);
 

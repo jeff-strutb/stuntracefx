@@ -22,7 +22,8 @@ int rb_host_payload(const char *name, char *path, size_t n, char *err, size_t er
     @autoreleasepool {
         static NSDictionary<NSString *, NSString *> *map;
         if (!map)
-            map = @{ @"game": @"stuntracefx", @"icon": @"AppIcon.icns", @"ios-app": @"ios/app", @"ios-sign": @"ios_sign.sh" };
+            map = @{ @"game": @"stuntracefx", @"shaders": @"shaders", @"icon": @"AppIcon.icns", @"ios-app": @"ios/app",
+                     @"ios-sign": @"ios_sign.sh" };
         NSString *rel = map[@(name)];
         NSString *src = rel ? [[[NSBundle mainBundle] resourcePath] stringByAppendingPathComponent:
                                   [@"payload" stringByAppendingPathComponent:rel]] : nil;
@@ -211,8 +212,8 @@ static void progress_cb(void *ctx, double f, const char *s)
     NSButton *ios = [NSButton radioButtonWithTitle:@"iPhone and iPad (an .ipa)" target:self action:@selector(pickTarget:)];
     NSTextField *macWhat = label(@"An app for this Mac (macOS 12 or later, Apple silicon and Intel), drawn with Metal; "
                                  @"a keyboard or a game controller.", 12, NO);
-    NSTextField *iosWhat = label(@"An app for the iPhone and iPad (iOS 15 or later), played by touch or with a game controller; "
-                                 @"the title's PUSH START reads TAP TO START.", 12, NO);
+    NSTextField *iosWhat = label(@"An app for the iPhone and iPad (iOS 15 or later), drawn with Metal; played by touch or "
+                                 @"with a game controller.", 12, NO);
     NSTextField *sign;
     mac.tag = RB_MACOS;
     ios.tag = RB_IOS;
