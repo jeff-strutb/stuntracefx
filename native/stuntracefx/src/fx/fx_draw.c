@@ -2674,6 +2674,7 @@ static void shape_draw_body(const FxShape *sh)
 
 #define LAYER_TOL 0.01
 #define GROUND_ABOVE 100.0      /* a car's ground: the topmost face no more than this over the point */
+#define GROUND_BELOW 100.0      /* and no more than this under it */
 #define LAYER_REL 1e-7
 enum { LAYER_SHAPES = 8192, LAYER_TRIS = 65536, LAYER_BUCKETS = 4096 };
 
@@ -2846,6 +2847,15 @@ static int inside_on_plane(const double (*c)[3], int nc, const double n[3], cons
     return in;
 }
 
+/* The ground under a car's point p (a tyre's middle): the topmost face of
+   the course drawn so far whose plane, along the world's up, lies no more
+   than GROUND_ABOVE over it and no more than GROUND_BELOW under it. The
+   game puts a tyre's middle 7 under to 9 over its road (DEPTH.md, 5), so a
+   face farther under is not the road it is on but something below it:
+   Aqua Tunnel's glass tube has no floor face, and its tyres found bars 1,581
+   to 1,703 under them and the car was drawn that far down for two seconds
+   (logged 2026-11-13, the overhead view). With none, the tyre keeps the
+   game's height. */
 int fx_draw_ground(const double p[3], const double up[3], double n_out[3], double *d_out)
 {
     double best = -1e30;
@@ -2861,7 +2871,7 @@ int fx_draw_ground(const double p[3], const double up[3], double n_out[3], doubl
         if (fabs(nu) < 0.5)
             continue;                   /* a wall, not ground */
         s = (lay[i].d - (lay[i].n[0] * p[0] + lay[i].n[1] * p[1] + lay[i].n[2] * p[2])) / nu;
-        if (s > GROUND_ABOVE || s <= best)
+        if (s > GROUND_ABOVE || s < -GROUND_BELOW || s <= best)
             continue;
         for (k = 0; k < 3; k++)
             q[k] = p[k] + s * up[k];

@@ -149,7 +149,11 @@ known. A car is the object with tyres; an object belongs to the car its own
 or its parents' chain reaches (no model is named).
 
 - Each tyre is moved along the normal of the ground under its middle, to
-  its radius over it.
+  its radius over it. Its ground is the topmost face of the course within
+  100 over and 100 under its middle; with none, the tyre keeps the game's
+  height. Without the lower bound, Aqua Tunnel's glass tube (no floor
+  face) seated tyres on bars 1,581 to 1,703 under them and the car was
+  drawn that far down for two seconds (logged 2026-11-13).
 - The car's other parts move by its tyres' mean move.
 - A face of the car whose corners all lie no more than 0.3 of a tyre's
   radius over the ground under its middle (the shadow; never the body,
