@@ -1862,11 +1862,15 @@ static void water_last(Recording *r)
    the part over it after the rest of the world, farthest first, tested
    against the depth and not written (the car and all that lies behind the
    piece are drawn by then and show through it), through fade.shade: its
-   own colour, as much of it shown as SEE_LEAST mixed toward whole by its
-   fade within SEE_INNER of SEE_RADIUS (at the car's depth) of the car on
-   the screen, rising smoothly to whole at SEE_RADIUS. A road or floor under
-   the car stays whole, and of what hides it only what lies near it on the
-   screen is seen through. */
+   own colour shown in quarter steps, as the rest of the game's art is
+   (Jeff, 2026-11-13: "it should be stepped since the rest of the game is in
+   that art style as well"): within SEE_INNER of SEE_RADIUS (at the car's
+   depth) of the car on the screen, SEE_LEAST mixed toward whole by its
+   fade, to the nearest quarter; from there to SEE_RADIUS in rings of equal
+   width, each quarter between that and whole; whole past it. A quarter is
+   a whole number of a pixel's samples on every GPU (1 of 4, 2 of 8), so
+   each step is exact. A road or floor under the car stays whole, and of
+   what hides it only what lies near it on the screen is seen through. */
 
 enum { SEE_POINTS = 6, SEE_KEYS = 8192 };
 #define SEE_RADIUS 1200.0       /* about four of the car's lengths */
