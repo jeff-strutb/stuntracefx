@@ -39,11 +39,17 @@ static uint8_t near_drawn[OBJECT_COUNT];
 /*
  * Each draw record's car, for seating the cars on the road in the
  * depth-tested 3D (docs/stuntracefx/native/DEPTH.md, 5): the cars are the
- * objects with tyres (a child on its record, child_car), and an object
- * belongs to the car its own or its parents' chain reaches (its body, its
- * eyes, its shadow, its tyres); 0 none, else the car's slot + 1. Kept per
- * near record (by its number) and per far record (by its number), with
- * whether the record is a tyre.
+ * objects with tyres (a child on its record, child_car); an object belongs
+ * to a car when it is the car (its body) or follows it (its +$06 the car:
+ * its tyres, shadow, eyes and a wreck's pieces, as 2d4d4c3a measured them);
+ * 0 none, else the car's slot + 1. Kept per near record (by its number) and
+ * per far record (by its number), with whether the record is a tyre.
+ *
+ * +$06 is a parent only for an object spawned to follow one; an object a
+ * course script placed keeps its flags there (ObjectSpawnFromScript), so it
+ * is compared with the car's reference and never followed (following one
+ * as a reference took the draw list out of the object table: 2026-11-13,
+ * a crash in draw_record on Easy Ride).
  */
 static uint8_t has_tyres[OBJECT_COUNT];
 static uint16_t record_car[2][FX_FAR_MAX];
@@ -67,16 +73,15 @@ static void cars_mark(void)
 
 static uint16_t car_of(const Object *o)
 {
-    int up;
+    unsigned k = obj_slot(o), at;
 
-    for (up = 0; up < 4 && o; up++) {
-        if (has_tyres[obj_slot(o)])
-            return (uint16_t)(obj_slot(o) + 1);
-        if (!o->parent)
-            return 0;
-        o = obj_at(o->parent);
-    }
-    return 0;
+    if (has_tyres[k])
+        return (uint16_t)(k + 1);
+    /* its +$06, when it names an object: the car it follows */
+    if (!o->parent || (o->parent - 1u) % OBJECT_SIZE)
+        return 0;
+    at = (o->parent - 1u) / OBJECT_SIZE;
+    return at < OBJECT_COUNT && has_tyres[at] ? (uint16_t)(at + 1) : 0;
 }
 
 static void record_car_note(int far, unsigned n, const Object *o)
