@@ -1591,6 +1591,7 @@ void fx_ground_object_end(void)
         return;
     shell_pending = -1;
     fx_draw_queued();                   /* the piece's own faces first */
+    fx_draw_piece(FX_PIECE_ROCK + (uint32_t)i);     /* the rock a piece of the ground of its own (fx_draw.c) */
     a = tunnels.t[i].along;
     p = 2 - a;
     p0 = tunnels.t[i].lo[p];
@@ -1632,6 +1633,7 @@ void fx_ground_object_end(void)
         land_face((const double (*)[3])quad, 4, n, shell_view.cls, shell_view.eye, shell_view.m, sv, &ns, SHELL_VERTICES);
     }
     fx_draw_land(sv, ns);
+    fx_draw_piece(0);
 }
 
 /* ---- the forest: the course's own trees round it ----

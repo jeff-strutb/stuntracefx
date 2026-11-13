@@ -11,9 +11,10 @@
 
    Shown in quarters. Within nshvc_input(4) of the radius about the car it
    shows q, nshvc_input(5) to the nearest quarter (the piece's own fade: 1,
-   0.75, 0.5, 0.25 as it comes in); from there to the radius, in rings of
-   equal width, each quarter between q and whole (q 0.25: 0.5, then 0.75);
-   past the radius whole. A quarter is a whole number of a pixel's samples
+   0.75, 0.5, 0.25 as it comes in; for the ground on to 0, none of it); from
+   there to the radius, in rings of equal width, each quarter between q and
+   whole (q 0.25: 0.5, then 0.75; q 0: 0.25, 0.5, then 0.75); past the
+   radius whole. A quarter is a whole number of a pixel's samples
    on every GPU (the engine covers alpha x samples + 0.5 of them: 1 of 4,
    2 of 8), so each step is exact.
 
@@ -40,7 +41,7 @@ vec4 shade(vec2 uv) {
     d = (nshvc_pixel() - vec2(nshvc_input(0), nshvc_input(1))) / vec2(nshvc_input(2), nshvc_input(3));
     r = length(d);
     inner = nshvc_input(4);
-    q = clamp(floor(nshvc_input(5) * 4.0 + 0.5) / 4.0, 0.25, 1.0);
+    q = clamp(floor(nshvc_input(5) * 4.0 + 0.5) / 4.0, 0.0, 1.0);
     rings = (1.0 - q) * 4.0 - 1.0;          /* the quarters between q and whole */
     shown = 1.0;
     if (r < inner)

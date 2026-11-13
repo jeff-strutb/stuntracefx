@@ -28,7 +28,7 @@
    under the water (fx/fx_draw.c, "seen through"; fade.shade's steps): the
    car's place less the water's origin and the radius about it (in uv's
    pixels), the radius's inner part, and how much of the water shows there
-   (1: none seen through). */
+   (1: none seen through; 0, the ground's: none of it). */
 const int N = 64;                   /* the lattice's pattern repeats every N cells (fx_ground.c's OCEAN_PERIOD) */
 const float ALPHA_NEAR = 0.6;       /* how much the water covers seen straight down */
 const int H = 11;                   /* the floats' first texel */
@@ -104,7 +104,7 @@ vec4 shade(vec2 xy) {
     /* seen through about the car under it, in quarter steps: q within the
        radius's inner part, then rings of equal width a quarter more each,
        never more than the water itself shows */
-    float q = clamp(floor(header(12) * 4.0 + 0.5) / 4.0, 0.25, 1.0);
+    float q = clamp(floor(header(12) * 4.0 + 0.5) / 4.0, 0.0, 1.0);
     if (q < 1.0) {
         float r = length(xy - vec2(header(8), header(9))) / header(10), inner = header(11);
         float rings = (1.0 - q) * 4.0 - 1.0, shown = 1.0;

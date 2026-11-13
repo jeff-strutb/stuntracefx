@@ -44,6 +44,7 @@ typedef struct {
     uint16_t piece;             /* the piece it is of (its recording's pieces, + 1; 0 none): seen through */
     uint8_t fade;               /* drawn seen through about the player's car, at this fade (of 255); 0 not */
     float fade_z;               /* then its depth, for the order (the farthest first) */
+    uint8_t ground;             /* and the ground's (piece_ground): wholly seen through at the middle */
 } Shape;
 
 /* A piece of the world that may hide the player's car (seen through, below) */
@@ -581,6 +582,7 @@ static void emit_with(const nshvc_vertex *v, uint32_t count, uint32_t image, int
     r->s[r->ns].piece = (uint16_t)r->piece_open;
     r->s[r->ns].fade = 0;
     r->s[r->ns].fade_z = 0;
+    r->s[r->ns].ground = 0;
     if (shader)
         memcpy(r->s[r->ns].in, in, sizeof r->s[r->ns].in);
     r->ns++;
@@ -895,7 +897,8 @@ static void compose_recording(const Recording *r, uint32_t from, uint32_t to, in
 
             if (next->mesh || next->first != sh->first + count || next->image != sh->image || next->lines != sh->lines
                 || next->shader != sh->shader || (sh->shader && memcmp(next->in, sh->in, sizeof sh->in))
-                || next->layer != sh->layer || next->back != sh->back || next->keep != sh->keep || next->fade != sh->fade)
+                || next->layer != sh->layer || next->back != sh->back || next->keep != sh->keep || next->fade != sh->fade
+                || next->ground != sh->ground)
                 break;
             count += next->count;
         }
@@ -1866,8 +1869,12 @@ static void water_last(Recording *r)
    (Jeff, 2026-11-13: "it should be stepped since the rest of the game is in
    that art style as well"): within SEE_INNER of SEE_RADIUS (at the car's
    depth) of the car on the screen, SEE_LEAST mixed toward whole by its
-   fade, to the nearest quarter; from there to SEE_RADIUS in rings of equal
-   width, each quarter between that and whole; whole past it. A quarter is
+   fade, to the nearest quarter, or nothing of it for the ground (the
+   land's pieces: its mountains, fill and tunnels' rock, and the water;
+   Jeff, 2026-11-13: "Unlike structures, you need to make ground terrain
+   fully transparent in the radius (stepped of course). It's too confusing
+   otherwise"); from there to SEE_RADIUS in rings of equal width, each
+   quarter between that and whole; whole past it. A quarter is
    a whole number of a pixel's samples on every GPU (1 of 4, 2 of 8), so
    each step is exact. A road or floor under the car stays whole, and of
    what hides it only what lies near it on the screen is seen through. The
@@ -1968,6 +1975,10 @@ static int see_on(void)
     see.on = 1;
     return 1;
 }
+
+/* a piece of the ground (the land's keys, FX_PIECE_*): seen wholly through
+   at the middle, where a structure shows SEE_LEAST */
+static int piece_ground(uint32_t key) { return (key & 0xF0000000u) == 0x40000000u; }
 
 /* a piece's fade now, from whether it hides the car */
 static float see_fade(uint32_t key, int hides)
@@ -2145,7 +2156,7 @@ int fx_draw_see_plane(const double n[3], double d, uint32_t key, float out[5])
     out[1] = (float)(see.cy - recording->oy + 128.0 * f[1] / f[2]);
     out[2] = (float)(128.0 * SEE_RADIUS / f[2]);
     out[3] = SEE_INNER;
-    out[4] = 1.0f - fade * (1.0f - SEE_LEAST);
+    out[4] = 1.0f - fade;               /* the ground's: wholly seen through at the middle */
     return 1;
 }
 
@@ -2295,6 +2306,7 @@ static void see_split(Recording *r)
             over.keep = 1;
             over.fade = (uint8_t)(fade * 254.0f + 1.0f);
             over.fade_z = (float)(zsum / zn);
+            over.ground = (uint8_t)piece_ground(r->pc[sh->piece - 1].key);
             faded[nfaded++] = over;
         }
     }
@@ -2333,7 +2345,7 @@ static void see_material(const Recording *r, const Shape *sh, nshvc_material *m)
     m->inputs[2] = r->see_r * zoom * screen_sx;
     m->inputs[3] = r->see_r * zoom * screen_sy;
     m->inputs[4] = SEE_INNER;
-    m->inputs[5] = 1.0f - fade * (1.0f - SEE_LEAST);
+    m->inputs[5] = 1.0f - fade * (1.0f - (sh->ground ? 0.0f : SEE_LEAST));
 }
 
 /* The ground's surface (fx_ground.c): triangles drawn by `shader` over

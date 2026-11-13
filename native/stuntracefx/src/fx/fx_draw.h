@@ -161,11 +161,13 @@ void fx_draw_mesh_seen(nshvc_mesh mesh, const nshvc_view *view, const nshvc_inst
    eye and the car (fade.shade's numbers 2-5, its steps the same). */
 int fx_draw_see_plane(const double n[3], double d, uint32_t key, float out[5]);
 /* the pieces' kinds and keys that are not objects (an object's key is its
-   slot + 1): the land's (fx_ground.c), its meshes' kinds (below $80) */
+   slot + 1): the land's (fx_ground.c; $4xxxxxxx, the ground, seen wholly
+   through at the middle), its meshes' kinds (below $80) */
 enum { FX_PIECE_KIND_FOREST = 0x10, FX_PIECE_KIND_CITY = 0x20, FX_PIECE_KIND_CLOUD = 0x40 };
 #define FX_PIECE_MOUNTAINS 0x40000001u
 #define FX_PIECE_FILL 0x40000002u
 #define FX_PIECE_WATER 0x40000003u
+#define FX_PIECE_ROCK 0x41000000u      /* + the tunnel's number: its rock (fx_ground.c) */
 /* The ground under view-space point p (docs/stuntracefx/native/DEPTH.md, 5):
    of the faces this picture has drawn that are not a car's and face up or
    down (up the world's up in view space), the topmost that the line from
