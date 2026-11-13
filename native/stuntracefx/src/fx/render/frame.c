@@ -634,6 +634,15 @@ static FxObjectSpriteResult object_sprite(uint16_t sprite_scale, uint16_t draw_l
             place_size = projection_scale;
             fx_stw(FX_MODEL_BA, screen_position_x_2);
             fx_stw(FX_MODEL_BC, screen_position_y);
+            /* A zoomed view (fx_view.h) shows the sprite `zoom` times the
+               size the chip works out, so one the chip rounds to nothing
+               (a car's tyre far off: 50 * 128 / 17000, under half a pixel)
+               is drawn while its zoomed size is half a pixel or more, from
+               a box of one pixel, which fx_sprite_place maps onto its exact
+               size; its solid (fx_solid.c) takes its own size as ever. */
+            if (size_1 == 0 && fx_view_zoom() > 1.0f && depth_positive && !(depth_positive & 0x8000)
+                && (double)projection_scale * 128.0 * fx_view_zoom() / depth_positive >= 0.5)
+                size_1 = 1;
             ce_2 = size_1;
             if (size_1 != 0) {
                 run_lB14C = 1;
