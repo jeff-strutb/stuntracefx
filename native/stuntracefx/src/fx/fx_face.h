@@ -52,8 +52,6 @@ typedef struct {
        (fx_draw.c) */
     uint8_t ncorner3;
     double corner3[8][3];
-    /* part of a car (fx_far_car): not the ground a car is seated on */
-    uint8_t car_part;
 } FxShape;
 
 /* A face: begun, its points given (fx_face_vertex, fx_rt.h), then ended

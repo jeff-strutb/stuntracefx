@@ -149,11 +149,20 @@ known. A car is the object with tyres; an object belongs to the car its own
 or its parents' chain reaches (no model is named).
 
 - Each tyre is moved along the normal of the ground under its middle, to
-  its radius over it. Its ground is the topmost face of the course within
-  100 over and 100 under its middle; with none, the tyre keeps the game's
-  height. Without the lower bound, Aqua Tunnel's glass tube (no floor
-  face) seated tyres on bars 1,581 to 1,703 under them and the car was
-  drawn that far down for two seconds (logged 2026-11-13).
+  its radius over it. Its ground is the track the game drives the car on,
+  never a face only drawn (Jeff, 2026-11-14: "treat only truly 3d objects
+  as things the car drives over, and have the actual track itself be the
+  base for the tires"): the collision models of the drawn pieces its car's
+  record touches (record +$14, as FxCollideModel and FxRecordTouches use
+  them), each a set of cells, a cell the half-spaces of its faces; the
+  topmost up-facing surface whose cell holds the point straight over or
+  under the middle, within 100 over and 100 under it (fx_track.c). Water,
+  painted lines and decorations have no collision model and never lift a
+  tyre; ramps and raised pieces do. With none, the tyre keeps the game's
+  height. The drawn faces were the ground before: Aqua Tunnel's tube
+  draws only two floor bands and a centre line a piece, so the car rose
+  onto each band and fell a radius between them (Bug 6), and centre
+  lines drawn flat over crests and dips lifted it 6 to 56.
 - The car's other parts move by its tyres' mean move.
 - A face of the car whose corners all lie no more than 0.3 of a tyre's
   radius over the ground under its middle (the shadow; never the body,

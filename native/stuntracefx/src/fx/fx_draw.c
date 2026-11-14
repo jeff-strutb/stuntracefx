@@ -2862,16 +2862,11 @@ static void shape_draw_body(const FxShape *sh)
    line's squares) do not climb either. */
 
 #define LAYER_TOL 0.01
-#define GROUND_ABOVE 100.0      /* a car's ground: the topmost face no more than this over the point */
-#define GROUND_BELOW 100.0      /* and no more than this under it */
 #define LAYER_REL 1e-7
 enum { LAYER_SHAPES = 8192, LAYER_TRIS = 65536, LAYER_BUCKETS = 4096 };
 
 static struct {
     double n[3], d;             /* its plane: n . p = d, n of unit length */
-    double c[8][3];             /* its corners in view space, exact */
-    int nc;
-    uint8_t car_part;           /* a car's: not ground a car is seated on */
     float box[4];               /* its outline's box on the screen: left, right, top, bottom */
     uint32_t tri, ntri;         /* its triangles (a line: one, its two ends and the first again) */
     uint32_t look;
@@ -3000,9 +2995,6 @@ static uint8_t layer_of(const FxShape *sh, const FxCorner *c, uint32_t count)
     for (k = 0; k < 3; k++)
         lay[nlay].n[k] = n[k];
     lay[nlay].d = d;
-    memcpy(lay[nlay].c, sh->corner3, sizeof lay[nlay].c);
-    lay[nlay].nc = sh->ncorner3;
-    lay[nlay].car_part = sh->car_part;
     lay[nlay].tri = nlay_tri;
     lay[nlay].ntri = ntri;
     memcpy(lay[nlay].box, box, sizeof box);
@@ -3014,65 +3006,6 @@ static uint8_t layer_of(const FxShape *sh, const FxCorner *c, uint32_t count)
     nlay++;
     nlay_tri += ntri;
     return level;
-}
-
-/* whether p, on plane n of the polygon c (nc corners), lies inside it:
-   on the plane's two axes the normal is least along */
-static int inside_on_plane(const double (*c)[3], int nc, const double n[3], const double p[3])
-{
-    int a = 0, b = 1, i, in = 0;
-    double ax = fabs(n[0]), ay = fabs(n[1]), az = fabs(n[2]);
-
-    if (ax >= ay && ax >= az)
-        a = 1, b = 2;
-    else if (ay >= az)
-        a = 0, b = 2;
-    for (i = 0; i < nc; i++) {
-        const double *u = c[i], *v = c[(i + 1) % nc];
-
-        if ((u[b] > p[b]) != (v[b] > p[b]) && p[a] < u[a] + (p[b] - u[b]) * (v[a] - u[a]) / (v[b] - u[b]))
-            in = !in;
-    }
-    return in;
-}
-
-/* The ground under a car's point p (a tyre's middle): the topmost face of
-   the course drawn so far whose plane, along the world's up, lies no more
-   than GROUND_ABOVE over it and no more than GROUND_BELOW under it. The
-   game puts a tyre's middle 7 under to 9 over its road (DEPTH.md, 5), so a
-   face farther under is not the road it is on but something below it:
-   Aqua Tunnel's glass tube has no floor face, and its tyres found bars 1,581
-   to 1,703 under them and the car was drawn that far down for two seconds
-   (logged 2026-11-13, the overhead view). With none, the tyre keeps the
-   game's height. */
-int fx_draw_ground(const double p[3], const double up[3], double n_out[3], double *d_out)
-{
-    double best = -1e30;
-    uint32_t i;
-    int found = 0, k;
-
-    for (i = 0; i < nlay; i++) {
-        double nu, s, q[3];
-
-        if (lay[i].car_part || lay[i].nc < 3)
-            continue;
-        nu = lay[i].n[0] * up[0] + lay[i].n[1] * up[1] + lay[i].n[2] * up[2];
-        if (fabs(nu) < 0.5)
-            continue;                   /* a wall, not ground */
-        s = (lay[i].d - (lay[i].n[0] * p[0] + lay[i].n[1] * p[1] + lay[i].n[2] * p[2])) / nu;
-        if (s > GROUND_ABOVE || s < -GROUND_BELOW || s <= best)
-            continue;
-        for (k = 0; k < 3; k++)
-            q[k] = p[k] + s * up[k];
-        if (!inside_on_plane((const double (*)[3])lay[i].c, lay[i].nc, lay[i].n, q))
-            continue;
-        best = s;
-        for (k = 0; k < 3; k++)
-            n_out[k] = nu > 0 ? lay[i].n[k] : -lay[i].n[k];
-        *d_out = nu > 0 ? lay[i].d : -lay[i].d;
-        found = 1;
-    }
-    return found;
 }
 
 /* a queued face, its layer and side */
