@@ -18,9 +18,11 @@ void fx_track_picture(void);
 void fx_track_piece(uint16_t object, const double place[3], const double turn[3][3]);
 /* The ground under point p of car `car` (its slot + 1, draw_record_car),
    up the world's up in view space: the topmost surface of the collision
-   models of the pieces the car's record touches whose cell holds the
-   point straight over or under p, no more than 100 over p and no more
-   than 100 under it; its plane n . x = d, n facing up. 0 when none. */
-int fx_track_ground(uint16_t car, const double p[3], const double up[3], double n[3], double *d);
+   models of the pieces a wheel of it touches whose cell holds the point
+   straight over or under p, no more than 100 over p and no more than 100
+   under it; its plane n . x = d, n facing up. 0 when none. The wheel is
+   `wheel` (a tyre's object, its slot + 1) when not 0, else any of the
+   car's. */
+int fx_track_ground(uint16_t car, uint16_t wheel, const double p[3], const double up[3], double n[3], double *d);
 
 #endif

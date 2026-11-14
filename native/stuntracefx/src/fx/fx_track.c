@@ -15,15 +15,20 @@
  * it lies behind every face of it; a face without bit 7 is a surface the
  * wheel is pushed out of. A cell's extent is only its faces' half-spaces:
  * the faces' corners do not bound it (a tube piece's floor, one face
- * 3840 by 1984, is the cell of the whole 3904-long piece). The wheel is
- * tested against the pieces its car's record touches (FxRecordTouches,
- * 04:A20B: on each axis the places less than the two touch boxes apart,
- * and the car's +$1A sharing no bit with the piece's +$16).
+ * 3840 by 1984, is the cell of the whole 3904-long piece). Each wheel is
+ * tested against the pieces its own record touches (FxWheelUpdate takes
+ * them from the wheel's contacts; FxRecordTouches, 04:A20B: on each axis
+ * the places less than the two touch boxes apart, the wheel's $14 and the
+ * piece's, and the wheel's +$1A sharing no bit with the piece's +$16).
+ * The car's body never touches a piece: its +$1A ($0505) shares bits
+ * with every piece's +$16 ($0181, FxRecordNew422); a wheel's ($0068,
+ * FxCarAddPart) shares none.
  *
  * So this is the track: each drawn piece's cells, made here in view space
  * where the piece is drawn (its corners exact, fx_face.c), and a tyre's
  * ground is the topmost surface, facing up, whose cell holds the point
- * straight over or under the tyre's middle, of a piece its car touches.
+ * straight over or under the tyre's middle, of a piece its wheel touches
+ * (the shadow's: of a piece any of the car's wheels touches).
  * What the game only draws on or near the road is never ground: Aqua
  * Tunnel's tube draws its floor as two bands 320 deep and a centre line a
  * piece (the glass shows the water between), which tyres stood on and fell
@@ -278,7 +283,7 @@ void fx_track_piece(uint16_t object, const double place[3], const double turn[3]
     npieces++;
 }
 
-/* FxRecordTouches: whether car record a touches piece record b */
+/* FxRecordTouches: whether wheel record a touches piece record b */
 static int touches(uint16_t a, uint16_t b)
 {
     static const uint16_t place[3] = { FXREC_POS_X, FXREC_POS_Y, FXREC_POS_Z };
@@ -294,20 +299,39 @@ static int touches(uint16_t a, uint16_t b)
     return !(rec_get(a, FXREC_MODE) & rec_get(b, FXREC_FLAGS16));
 }
 
-int fx_track_ground(uint16_t car, const double p[3], const double up[3], double n_out[3], double *d_out)
+/* whether the wheel (its record; 0: any of the car's parts) touches piece record b */
+static int wheel_touches(uint16_t car_record, uint16_t wheel_record, uint16_t b)
+{
+    uint16_t part;
+    int n;
+
+    if (wheel_record)
+        return touches(wheel_record, b);
+    for (part = rec_get(car_record, FXCAR_PARTS), n = 0; part && n < 32; part = rec_get(part, FXPART_NEXT), n++)
+        if (touches(part, b))
+            return 1;
+    return 0;
+}
+
+int fx_track_ground(uint16_t car, uint16_t wheel, const double p[3], const double up[3], double n_out[3], double *d_out)
 {
     double best = -1e30;
-    uint16_t car_record;
+    uint16_t car_record, wheel_record = 0;
     uint32_t i, s, f;
     int found = 0, k;
 
-    if (!car || car > OBJECT_COUNT)
+    if (!car || car > OBJECT_COUNT || wheel > OBJECT_COUNT)
         return 0;
     car_record = objects.object[car - 1].record;
-    if (!car_record)
+    if (wheel) {
+        wheel_record = objects.object[wheel - 1].record;
+        if (!wheel_record)
+            return 0;
+    } else if (!car_record) {
         return 0;
+    }
     for (i = 0; i < npieces; i++) {
-        if (!touches(car_record, piece[i].record))
+        if (!wheel_touches(car_record, wheel_record, piece[i].record))
             continue;
         for (s = piece[i].first; s < piece[i].first + piece[i].count; s++) {
             const Plane *pl = &plane[s];

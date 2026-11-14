@@ -244,7 +244,7 @@ int fx_face_seat_tyre(float pos[3], double radius)
         seated.sum[0] = seated.sum[1] = seated.sum[2] = 0;
     }
     up_of(object_now.view, up);
-    if (!fx_track_ground(seat_now.car, p, up, n, &d))
+    if (!fx_track_ground(seat_now.car, object_now.object, p, up, n, &d))
         return 0;
     h = n[0] * p[0] + n[1] * p[1] + n[2] * p[2] - d;
     move = radius - h;
@@ -1278,7 +1278,7 @@ static void lay_on_ground(void)
     up_of(object_now.view, up);
     for (i = 0; i < face.n; i++)
         c[0] += face.c[i].x / face.n, c[1] += face.c[i].y / face.n, c[2] += face.c[i].z / face.n;
-    if (!fx_track_ground(seat_now.car, c, up, n, &d))
+    if (!fx_track_ground(seat_now.car, 0, c, up, n, &d))
         return;
     for (i = 0; i < face.n; i++)
         if (n[0] * face.c[i].x + n[1] * face.c[i].y + n[2] * face.c[i].z - d > SHADOW_OVER * seated.radius)
