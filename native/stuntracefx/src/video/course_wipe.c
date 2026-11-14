@@ -53,14 +53,15 @@ typedef struct { int line0, line1; int32_t left, right; } Run;     /* rows line0
 void course_wipe_overlay(const int32_t left[224], const int32_t right[224], const nshvc_blend *blend)
 {
     const ScreenShape *sh = screen_shape();
-    nshvc_display d = nshvc_display_info();
+    float window_w, window_h;
     Run runs[224];
     int n = 0, line, k;
     float alpha, sx, sy;
     nshvc_image image;
 
+    screen_window(&window_w, &window_h);
     alpha = (blend->layers && blend->use_fixed) ? (float)(blend->fixed_bgr15 & 31) / 31.0f : 0.0f;
-    if (alpha <= 0.0f || d.width <= 0 || d.height <= 0) {
+    if (alpha <= 0.0f || window_w <= 0.0f || window_h <= 0.0f) {
         course_wipe_overlay_off();
         return;
     }
@@ -95,8 +96,8 @@ void course_wipe_overlay(const int32_t left[224], const int32_t right[224], cons
         runs[0] = box;
         n = 1;
     }
-    sx = (float)d.width / (float)sh->width;
-    sy = (float)d.height / (float)sh->height;
+    sx = window_w / (float)sh->width;
+    sy = window_h / (float)sh->height;
     for (k = 0; k < IDS; k++) {
         nshvc_image none = { 0 };
         float c[6];

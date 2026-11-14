@@ -37,6 +37,7 @@ typedef struct {
 
 void screen_update(void);                      /* from the window, once a picture */
 const ScreenShape *screen_shape(void);
+void screen_window(float *width, float *height);   /* the window in pixels the shape was made from */
 void screen_window_set(const float *values, int count); /* a check's window: width, height, safe area */
 int screen_anchor_x(int x0, int x1);           /* columns to add to a piece of the original's screen */
 int screen_view_anchor_x(int x0, int x1);      /* the same for a piece inside the original's view */

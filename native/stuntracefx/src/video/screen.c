@@ -33,6 +33,7 @@ enum {
 static ScreenShape shape = { 256, 224, 0, 0, { 0, 0, 0, 0 } };
 static float check_window[6];          /* --window: width, height, then safe left, top, right, bottom */
 static int checking;
+static float window_w, window_h;        /* the window as screen_update last took it (a check's, else the display's) */
 
 void screen_window_set(const float *values, int count)
 {
@@ -71,6 +72,8 @@ void screen_update(void)
                 h = SCREEN_MAX;
         }
     }
+    window_w = ww;
+    window_h = wh;
     shape.width = w;
     shape.height = h;
     shape.origin_x = (w - 256) / 2;
@@ -80,6 +83,12 @@ void screen_update(void)
     per = ww > 0.0f && wh > 0.0f ? fminf((float)w / ww, (float)h / wh) : 0.0f;
     for (i = 0; i < 4; i++)
         shape.safe[i] = safe[i] > 0.0f ? (int)ceilf(safe[i] * per) : 0;
+}
+
+void screen_window(float *width, float *height)
+{
+    *width = window_w;
+    *height = window_h;
 }
 
 const ScreenShape *screen_shape(void)
