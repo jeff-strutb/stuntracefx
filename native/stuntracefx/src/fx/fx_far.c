@@ -326,6 +326,18 @@ uint16_t fx_far_original(uint16_t record)
     return k < SLOTS ? slot_original[k] : 0;
 }
 
+int fx_far_record_number(uint16_t record)
+{
+    unsigned k;
+
+    if (!drawing || (uint16_t)(record - SLOT_FIRST) % SLOT_SIZE)
+        return -1;
+    k = (uint16_t)(record - SLOT_FIRST) / SLOT_SIZE;
+    if (k >= SLOTS || !slot_rec[k])
+        return -1;
+    return (slot_rec[k] - FX_FAR_RECORDS) / FX_FAR_SIZE;
+}
+
 static void fx_far_record_state(uint16_t record);
 
 void fx_far_record(uint16_t record)

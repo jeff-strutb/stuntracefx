@@ -50,6 +50,8 @@ void fx_far_parked(uint16_t *stack);
 /* While a pass draws: the near record a slot holds (its $0AAA address), 0
    for a far record or a tyre; `record` as it is outside a pass. */
 uint16_t fx_far_original(uint16_t record);
+/* While a far object draws: the number of the far record the slot at `record` holds, else -1 */
+int fx_far_record_number(uint16_t record);
 /* An object's place from the eye in the world's axes, whole, for its
    corners made exactly (fx_face.c): a far slot's from its far record (32
    bits, never halved), a near one's from the main CPU's draw record it was
