@@ -40,11 +40,23 @@ const ScreenShape *screen_shape(void);
 void screen_window_set(const float *values, int count); /* a check's window: width, height, safe area */
 int screen_anchor_x(int x0, int x1);           /* columns to add to a piece of the original's screen */
 int screen_view_anchor_x(int x0, int x1);      /* the same for a piece inside the original's view */
-/* How far apart (picture pixels) the HUD's shapes may lie and still be one piece when it is moved onto the
-   larger screen: a word's letters and the words of a line (a space is 8, a double space 16) and the lines of a
-   message go together, as the original drew them; at 0 each word was anchored by itself, the left one to the
-   left edge and the right one to the right. */
+/* When two shapes of the HUD (boxes x0..x1, y0..y1 in picture pixels) are one piece to move onto the larger
+   screen. They touch (as the original drew them); or they are words of one line, boxes of the same height on
+   the same rows with no more than a space between (a space is 8, a double space 16: HUD_TEXT_GAP); or they are
+   lines of one message, one above the other with columns in common and no more than that between. Without
+   the last two each word was anchored by itself, the left one to the left edge and the right one to the right.
+   Anything else beside it (the digits, the banner, the icons) is not one piece with a line of text. */
 enum { HUD_TEXT_GAP = 16 };
+static inline int hud_text_near(int ax0, int ax1, int ay0, int ay1, int bx0, int bx1, int by0, int by1)
+{
+    int dy0 = ay0 > by0 ? ay0 - by0 : by0 - ay0, dy1 = ay1 > by1 ? ay1 - by1 : by1 - ay1;
+
+    if (ax0 <= bx1 + 1 && bx0 <= ax1 + 1 && ay0 <= by1 + 1 && by0 <= ay1 + 1)
+        return 1;
+    if (dy0 <= 1 && dy1 <= 1 && ax0 <= bx1 + HUD_TEXT_GAP && bx0 <= ax1 + HUD_TEXT_GAP)
+        return 1;
+    return ax0 <= bx1 && bx0 <= ax1 && ay0 <= by1 + HUD_TEXT_GAP && by0 <= ay1 + HUD_TEXT_GAP;
+}
 int screen_anchor_y(int y0, int y1);           /* lines to add, by the piece's middle */
 int screen_bottom_shift(void);                 /* lines the panels' band moves down by */
 int screen_two_side(void);                     /* two players side by side (else above and below) */

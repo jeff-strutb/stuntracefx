@@ -991,14 +991,10 @@ void sprites_place_full(nshvc_sprite *out, const nshvc_sprite *in, uint32_t coun
                      (hud[i] && y >= VIEW_Y && y + h <= VIEW_Y + VIEW_H && (x + w <= VIEW_X || x >= VIEW_X + VIEW_W)));
         if (!shown[i])
             continue;
-        for (b = 0; b < i; b++) {
-            /* words and lines of the HUD's text inside the view go together (HUD_TEXT_GAP) */
-            int gap = hud[i] && y + h <= PANEL_TOP && in[b].y + in[b].height * 8 <= PANEL_TOP ? HUD_TEXT_GAP : 0;
-
-            if (shown[b] && hud[b] == hud[i] && in[b].x <= x + w + gap && x <= in[b].x + in[b].width * 8 + gap &&
-                in[b].y <= y + h + gap && y <= in[b].y + in[b].height * 8 + gap)
+        for (b = 0; b < i; b++)
+            if (shown[b] && hud[b] == hud[i] &&
+                hud_text_near(in[b].x, in[b].x + in[b].width * 8, in[b].y, in[b].y + in[b].height * 8, x, x + w, y, y + h))
                 up[piece_root(up, b)] = piece_root(up, i);
-        }
     }
     for (i = 0; i < n; i++) {
         x0[i] = y0[i] = 0x7FFF;
@@ -1072,13 +1068,10 @@ void sprites_place_two(nshvc_sprite *out, const nshvc_sprite *in, uint32_t count
                      (!hud[i] && (x + w <= view_x[p] || x >= view_x[p] + 144 || y + h <= view_y[p] || y >= view_y[p] + 80)));
         if (!shown[i])
             continue;
-        for (b = p ? 64 : 0; b < i; b++) {
-            int gap = hud[i] ? HUD_TEXT_GAP : 0;     /* a line's words and a message's lines go together */
-
-            if (shown[b] && hud[b] == hud[i] && in[b].x <= x + w + gap && x <= in[b].x + in[b].width * 8 + gap &&
-                in[b].y <= y + h + gap && y <= in[b].y + in[b].height * 8 + gap)
+        for (b = p ? 64 : 0; b < i; b++)
+            if (shown[b] && hud[b] == hud[i] &&
+                hud_text_near(in[b].x, in[b].x + in[b].width * 8, in[b].y, in[b].y + in[b].height * 8, x, x + w, y, y + h))
                 up[piece_root(up, b)] = piece_root(up, i);
-        }
     }
     for (i = 0; i < n; i++) {
         x0[i] = y0[i] = 0x7FFF;

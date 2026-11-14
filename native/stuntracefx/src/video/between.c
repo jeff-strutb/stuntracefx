@@ -12,12 +12,14 @@
 #include <string.h>
 
 #include "nshvc/nshvc.h"
+#include "race/race.h"
 #include "system/state.h"
 #include "video/between.h"
 #include "video/video.h"
 
 enum {
     SPRITE_FAR = 32,                    /* a sprite moved further: placed anew */
+    STEP_SPRITE_FAR = 64,               /* the same for a sprite a step moved (a HUD word slides 33 a step) */
     SCROLL_FAR = 64,                    /* a layer scrolled further: set anew */
     EDGE_FAR = 64,                      /* a window edge moved further */
 };
@@ -261,9 +263,32 @@ void video_update_begin(void)
     deferring = 1;
 }
 
+/* The race's sprites as the last two steps' ends left them: the HUD's
+   sprites change a step at a time (every 6 updates), so a picture between
+   steps eases them from the step before's to the newest's by the step's own
+   progress (race_step_progress), as the 3D and the Super FX's HUD are, not by
+   the update's `between`, which holds them between steps. */
+static struct {
+    nshvc_sprite s[2][128];
+    uint32_t count[2];
+    int kept;
+} steps_sprites;
+
 void video_update_end(void)
 {
     deferring = 0;
+    if (!pic.race.on) {
+        steps_sprites.kept = 0;
+        return;
+    }
+    if (!race_step_updated())
+        return;
+    memcpy(steps_sprites.s[0], steps_sprites.s[1], sizeof steps_sprites.s[0]);
+    steps_sprites.count[0] = steps_sprites.count[1];
+    steps_sprites.count[1] = pic.sprite_count > 128 ? 128 : pic.sprite_count;
+    memcpy(steps_sprites.s[1], pic.sprites, steps_sprites.count[1] * sizeof pic.sprites[0]);
+    if (steps_sprites.kept < 2)
+        steps_sprites.kept++;
 }
 
 float video_between(void)
@@ -331,6 +356,22 @@ static void race_ease(Picture *p, const Picture *now, float t)
             p->sprites[i].x = tween_position(p->sprites[i].x, now->sprites[i].x, t, SPRITE_FAR);
             p->sprites[i].y = tween_position(p->sprites[i].y, now->sprites[i].y, t, SPRITE_FAR);
         }
+    if (steps_sprites.kept == 2) {
+        /* what moves from one step's end to the next, by the step's progress */
+        float st = race_step_progress(t);
+        uint32_t m = steps_sprites.count[0] < steps_sprites.count[1] ? steps_sprites.count[0] : steps_sprites.count[1];
+
+        if (m > p->sprite_count)
+            m = p->sprite_count;
+        for (i = 0; i < m; i++) {
+            const nshvc_sprite *a = &steps_sprites.s[0][i], *b = &steps_sprites.s[1][i];
+
+            if ((a->x != b->x || a->y != b->y) && same_look(a, b) && same_look(&p->sprites[i], b)) {
+                p->sprites[i].x = tween_position(a->x, b->x, st, STEP_SPRITE_FAR);
+                p->sprites[i].y = tween_position(a->y, b->y, st, STEP_SPRITE_FAR);
+            }
+        }
+    }
     for (i = 0; i < 3; i++) {
         p->bg[i].scroll_x = scroll_tween(p->bg[i].scroll_x, now->bg[i].scroll_x, t);
         p->bg[i].scroll_y = scroll_tween(p->bg[i].scroll_y, now->bg[i].scroll_y, t);

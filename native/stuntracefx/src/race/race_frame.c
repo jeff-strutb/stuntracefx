@@ -57,6 +57,13 @@ static void step_end(int kind, uint8_t pace)
     step_clock.pace = pace;
 }
 
+/* Whether this update ran a step that handed a picture over (for video's
+   sprites kept at the steps' ends, video/between.c). */
+int race_step_updated(void)
+{
+    return step_clock.kind != STEP_NONE && step_clock.at == pause_game_updates();
+}
+
 /* How far a picture drawn now lies from the last step's end to the next:
    (updates since that step + between) / the step's updates, in [0, 1]. The
    updates are the game's own (pause_game_updates: the engine's less those
