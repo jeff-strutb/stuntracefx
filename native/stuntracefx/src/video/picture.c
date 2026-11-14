@@ -352,16 +352,29 @@ static void course_lines_send(int full)
             tween_lines(l1, newest_lines.wipe_edges[0], 224, LINE_EDGE_FAR, 0);
             tween_lines(r1, newest_lines.wipe_edges[1], 224, LINE_EDGE_FAR, 0);
         }
-        if (full) {
-            /* laid over the whole screen by overlays (course_wipe.c), not by
-               the picture's window and colour maths, which reach only the
-               256 x 224: the maths is left off for it */
+        if (full && g.course_screen_state == 0x0A) {
+            /* the wipe out of the screen (state $0A, WindowEdgesStep), whose
+               rectangle grows from the records' box to the whole picture:
+               laid over the whole window by overlays (course_wipe.c), as the
+               picture's window and colour maths reach only the 256 x 224;
+               the maths is left off for it */
             nshvc_blend b = pic.blend;
 
             course_wipe_overlay(l1, r1, &pic.blend);
             b.layers = 0;
             nshvc_blend_set(&b);
         } else {
+            /* the zoom to the records' box, the box and the previews' bands
+               stay about the cards they frame: window 1 and the colour maths
+               at the original's place, which darken only the maths' layers
+               (the records' text and the sprites stay lit) */
+            int origin_x = full ? screen_shape()->origin_x : 0;
+
+            course_wipe_overlay_off();
+            for (r = 0; r < 224; r++) {
+                l1[r] += origin_x;
+                r1[r] += origin_x;
+            }
             nshvc_lines(0, 224, NSHVC_LINE_WIN1_LEFT, l1);
             nshvc_lines(0, 224, NSHVC_LINE_WIN1_RIGHT, r1);
         }

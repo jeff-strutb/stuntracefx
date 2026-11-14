@@ -7,12 +7,18 @@
  * rectangle grows and fills the 256 x 224. Window and colour maths reach
  * only that picture, so on a larger screen the black stopped at a 4:3 area.
  *
+ * Only the wipe out of the screen (state $0A) comes here; the zoom to the
+ * records' box, the box itself and the previews' bands keep window 1 and
+ * the maths at the original's place (picture.c course_lines_send), as they
+ * frame cards and must leave the records' text lit.
+ *
  * Here the same rectangle is laid over the window as GPU overlays: one quad
  * for each run of rows with the same edges (the rounded corners are rows a
- * few columns apart), black at the level's share, the rectangle scaled from
- * the original's 256 x 224 to the whole screen, then to the window's pixels.
- * Its last columns and rows reach the window's edges, so at the full size it
- * covers all of it, at any size and aspect. The overlays are over the
+ * few columns apart), black at the level's share. Inside the box it grew
+ * from it stays at the original's place; beyond it, it is stretched so the
+ * original's last columns and rows reach the window's edges, so it grows on
+ * from the box without a jump and at the full size covers the whole window,
+ * at any size and aspect. The overlays are over the
  * sprites too, which the maths left alone; a level's share of black is
  * not quite a level's subtraction from each colour, but they meet at none
  * and at all.
@@ -25,12 +31,31 @@ enum { FIRST_ID = 0, IDS = 12 };        /* the engine's overlays 0-11: the pause
 
 static nshvc_image black, white;
 static int shown;
+static struct { int taken; float left, right, top, bottom; } start;  /* the box the wipe grew from */
+
+/* One edge, an original column or row c, to the screen's: between the
+   start box's lo and hi at the original's place (origin + c); from the
+   original's least (cmin) to lo, and from hi to its most (cmax), stretched
+   over what lies between the box and the screen's edge (0 and size). */
+static float stretch(float c, float lo, float hi, float cmin, float cmax, float origin, float size)
+{
+    if (c <= cmin)
+        return 0.0f;
+    if (c >= cmax)
+        return size;
+    if (c < lo)
+        return (origin + lo) * (c - cmin) / (lo - cmin);
+    if (c > hi)
+        return origin + hi + (size - origin - hi) * (c - hi) / (cmax - hi);
+    return origin + c;
+}
 
 void course_wipe_overlay_off(void)
 {
     nshvc_image none = { 0 };
     uint32_t id;
 
+    start.taken = 0;
     if (!shown)
         return;
     for (id = FIRST_ID; id < FIRST_ID + IDS; id++)
@@ -56,7 +81,7 @@ void course_wipe_overlay(const int32_t left[224], const int32_t right[224], cons
     float window_w, window_h;
     Run runs[224];
     int n = 0, line, k;
-    float alpha, sx, sy, dx = 0.0f, dy = 0.0f;
+    float alpha, sx, sy;
     nshvc_image image;
 
     screen_window(&window_w, &window_h);
@@ -96,20 +121,20 @@ void course_wipe_overlay(const int32_t left[224], const int32_t right[224], cons
         runs[0] = box;
         n = 1;
     }
-    /* the rectangle as a whole put at the middle of the screen: the original's
-       is drawn about the course's card, off the picture's middle, and it only
-       centres at its full size; moved by what its bounds are off the middle */
-    if (n) {
-        float lo = (float)runs[0].left, hi = (float)runs[0].right + 1.0f;
-
+    /* the rectangle's bounds when the wipe began (the records' box it grows
+       from), kept until the overlays go off */
+    if (n && !start.taken) {
+        start.left = (float)runs[0].left;
+        start.right = (float)runs[0].right + 1.0f;
         for (k = 1; k < n; k++) {
-            if ((float)runs[k].left < lo)
-                lo = (float)runs[k].left;
-            if ((float)runs[k].right + 1.0f > hi)
-                hi = (float)runs[k].right + 1.0f;
+            if ((float)runs[k].left < start.left)
+                start.left = (float)runs[k].left;
+            if ((float)runs[k].right + 1.0f > start.right)
+                start.right = (float)runs[k].right + 1.0f;
         }
-        dx = 128.0f - (lo + hi) / 2.0f;
-        dy = 112.0f - (float)(runs[0].line0 + runs[n - 1].line1) / 2.0f;
+        start.top = (float)runs[0].line0;
+        start.bottom = (float)runs[n - 1].line1;
+        start.taken = 1;
     }
     sx = window_w / (float)sh->width;
     sy = window_h / (float)sh->height;
@@ -122,13 +147,17 @@ void course_wipe_overlay(const int32_t left[224], const int32_t right[224], cons
             continue;
         }
         {
-            /* the original's columns and rows to the screen's, the first and last reaching its edges */
-            float xl = (float)runs[k].left + dx, xr = (float)runs[k].right + 1.0f + dx;
-            float yt = (float)runs[k].line0 + dy, yb = (float)runs[k].line1 + dy;
-            float x0 = xl <= 1.0f ? 0.0f : xl * (float)sh->width / 256.0f;
-            float x1 = xr >= 255.0f ? (float)sh->width : xr * (float)sh->width / 256.0f;
-            float y0 = yt <= 0.0f ? 0.0f : yt * (float)sh->height / 224.0f;
-            float y1 = yb >= 224.0f ? (float)sh->height : yb * (float)sh->height / 224.0f;
+            /* the original's columns and rows to the screen's: inside the box
+               it began as, at the original's place; beyond it, stretched so
+               the original's last column and row reach the window's edges */
+            float x0 = stretch((float)runs[k].left, start.left, start.right, 1.0f, 255.0f,
+                               (float)sh->origin_x, (float)sh->width);
+            float x1 = stretch((float)runs[k].right + 1.0f, start.left, start.right, 1.0f, 255.0f,
+                               (float)sh->origin_x, (float)sh->width);
+            float y0 = stretch((float)runs[k].line0, start.top, start.bottom, 0.0f, 224.0f,
+                               (float)sh->origin_y, (float)sh->height);
+            float y1 = stretch((float)runs[k].line1, start.top, start.bottom, 0.0f, 224.0f,
+                               (float)sh->origin_y, (float)sh->height);
 
             /* then the window's pixels, whole ones, so rows laid edge to edge leave no seam */
             x0 = roundf(x0 * sx);
