@@ -168,12 +168,6 @@ enum { FX_PIECE_KIND_FOREST = 0x10, FX_PIECE_KIND_CITY = 0x20, FX_PIECE_KIND_CLO
 #define FX_PIECE_FILL 0x40000002u
 #define FX_PIECE_WATER 0x40000003u
 #define FX_PIECE_ROCK 0x41000000u      /* + the tunnel's number: its rock (fx_ground.c) */
-/* The ground under view-space point p (docs/stuntracefx/native/DEPTH.md, 5):
-   of the faces this picture has drawn that are not a car's and face up or
-   down (up the world's up in view space), the topmost that the line from
-   p straight up and down meets no more than 100 over p; its plane n . x = d,
-   n facing up. 0 when none. */
-int fx_draw_ground(const double p[3], const double up[3], double n[3], double *d);
 int fx_draw_picture_now(void);
 int fx_draw_tweening(void);
 /* The palette entry a face's colour byte is shown in at the screen's depth

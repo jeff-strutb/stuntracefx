@@ -32,6 +32,7 @@
 #include "fx/fx_draw.h"
 #include "fx/fx_face.h"
 #include "fx/fx_far.h"
+#include "fx/fx_track.h"
 
 enum {
     POINTS = 256,               /* a model's point records ($04E4 + 6i, i a byte) */
@@ -107,6 +108,7 @@ static struct {
     int known;                  /* the object FxObjectsDraw took last has an exact place */
     double view[3][3];          /* the view's turn: row k, world axis k in view space */
     double chip_z;              /* its depth as the chip has it (its draw record's, whole): when not known */
+    uint16_t object;            /* its object (fx_far_object), 0 none */
 } object_now;
 static struct {
     int on;                     /* this model's corners are made exactly */
@@ -178,6 +180,7 @@ void fx_face_object(uint16_t record)
         int tyre;
         uint16_t object = record ? fx_far_object(record) : 0;
 
+        object_now.object = object;
         fx_draw_piece(object && !(record ? fx_far_car(record, &tyre) : 0) ? object : 0);
     }
     if (!fx_far_exact_place(record, rel, &in_view) || !view_of(object_now.view))
@@ -204,9 +207,11 @@ void fx_face_object(uint16_t record)
    9 over the road, a radius of 40.25; the body's lowest 1 to 17 under; the
    shadow 31 to 66 under), which the original hid by painting the cars after
    the road. With the depth test the cars are drawn after the course (the
-   merged pass's order), so the course's faces under them are known
-   (fx_draw_ground): each tyre is moved along the normal of the ground under
-   its middle to its radius over it (fx_face_seat_tyre); the car's other
+   merged pass's order), so the track under them is known: the collision
+   models of the pieces drawn, the ground the game drives them on
+   (fx_track.c), never a face only drawn on or near it. Each tyre is moved
+   along the normal of the ground under its middle to its radius over it
+   (fx_face_seat_tyre); the car's other
    parts are moved by its tyres' mean move; and a face of the car whose
    corners then all lie no more than SHADOW_OVER of a tyre's radius over
    the ground under its middle (the shadow: its two faces measured 39 to 58
@@ -239,7 +244,7 @@ int fx_face_seat_tyre(float pos[3], double radius)
         seated.sum[0] = seated.sum[1] = seated.sum[2] = 0;
     }
     up_of(object_now.view, up);
-    if (!fx_draw_ground(p, up, n, &d))
+    if (!fx_track_ground(seat_now.car, p, up, n, &d))
         return 0;
     h = n[0] * p[0] + n[1] * p[1] + n[2] * p[2] - d;
     move = radius - h;
@@ -296,6 +301,8 @@ void fx_face_model(uint16_t flags)
                 if (k != 1 || !(flags & 0x2000))
                     exact.turn[i][j] += m[k][i] * e[k][j];
     exact.on = 1;
+    if (!seat_now.car && !(flags & 0x2000))
+        fx_track_piece(object_now.object, object_now.place, (const double (*)[3])exact.turn);   /* the track under the cars (fx_track.c) */
 }
 
 void fx_face_source(uint16_t at, int32_t x, int32_t y, int32_t z)
@@ -1271,7 +1278,7 @@ static void lay_on_ground(void)
     up_of(object_now.view, up);
     for (i = 0; i < face.n; i++)
         c[0] += face.c[i].x / face.n, c[1] += face.c[i].y / face.n, c[2] += face.c[i].z / face.n;
-    if (!fx_draw_ground(c, up, n, &d))
+    if (!fx_track_ground(seat_now.car, c, up, n, &d))
         return;
     for (i = 0; i < face.n; i++)
         if (n[0] * face.c[i].x + n[1] * face.c[i].y + n[2] * face.c[i].z - d > SHADOW_OVER * seated.radius)
@@ -1316,7 +1323,6 @@ static void commit(const FxMaterial *m)
     if (seat_now.car && !seat_now.tyre && object_now.known && face.n >= 3)
         lay_on_ground();
     s->back = (uint8_t)face.back;
-    s->car_part = seat_now.car != 0;
     s->ncorner3 = 0;
     if (face.n <= 8) {                  /* its corners at full size, for its layer (fx_draw.c) */
         int k;
