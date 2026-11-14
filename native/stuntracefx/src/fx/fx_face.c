@@ -259,6 +259,7 @@ int fx_face_seat_tyre(float pos[3], double radius)
 
 void fx_face_picture(void)
 {
+    fx_track_picture();                 /* each picture's track its own, where its pieces are drawn */
     seated.car = 0;                     /* each picture's seat its own */
     seated.n = 0;
     seated.sum[0] = seated.sum[1] = seated.sum[2] = 0;
