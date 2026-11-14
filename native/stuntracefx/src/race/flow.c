@@ -808,7 +808,7 @@ static int demo_step(void)
     int r;
 
     if (flow.demo_mode == DEMO_TO_FADE) {
-        flow.stopped = 0;               /* a step begins (race_step's): the ending came in with it set */
+        flow.stopped = 0;               /* a step begins, as above */
         RaceFrameRun();
         return flow.stopped ? 0 : demo_after_step();
     }
@@ -823,8 +823,12 @@ static int demo_step(void)
     }
     if (flow.demo_mode == DEMO_WAIT_FADE)
         return 0;
-    flow.stopped = 0;                   /* as above: BootSoftRestart leaves it set, and a demo that
-                                           never counts a frame never reaches its next command */
+    /* a step begins, as race_step's: a demo comes in with it still set by
+       what ran before (BootSoftRestart, a race's end), and a step run with
+       it set stops at its first check (one_player_finish): the picture is
+       never handed over, no frame is counted, and the script never reaches
+       its next command */
+    flow.stopped = 0;
     RaceFrameRun();
     return flow.stopped ? 0 : demo_after_step();
 }
@@ -900,13 +904,6 @@ static void ending_step(void)
     int r;
 
     if (!flow.ending_running) {
-        /* each demo comes in on the race's fade left at its end (the overlay's
-           or the last demo's: $0D61 bit 7, $0E3A set), which keeps every
-           palette black; a new race screen starts it at 0, fading in
-           (CourseScreenBegin) */
-        g.fade_level = 0;
-        g.fade_low = 0;
-        g.fade_out = 0;
         demo_start(offsets[flow.ending_at]);
         flow.ending_running = 1;
         return;
