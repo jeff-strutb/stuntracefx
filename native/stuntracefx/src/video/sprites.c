@@ -996,8 +996,8 @@ void sprites_place_full(nshvc_sprite *out, const nshvc_sprite *in, uint32_t coun
         if (!shown[i])
             continue;
         for (b = 0; b < i; b++)
-            if (shown[b] && hud[b] == hud[i] && in[b].x <= x + w && x <= in[b].x + in[b].width * 8 &&
-                in[b].y <= y + h && y <= in[b].y + in[b].height * 8)
+            if (shown[b] && hud[b] == hud[i] &&
+                hud_text_near(in[b].x, in[b].x + in[b].width * 8, in[b].y, in[b].y + in[b].height * 8, x, x + w, y, y + h))
                 up[piece_root(up, b)] = piece_root(up, i);
     }
     for (i = 0; i < n; i++) {
@@ -1076,8 +1076,8 @@ void sprites_place_two(nshvc_sprite *out, const nshvc_sprite *in, uint32_t count
         if (!shown[i])
             continue;
         for (b = p ? 64 : 0; b < i; b++)
-            if (shown[b] && hud[b] == hud[i] && in[b].x <= x + w && x <= in[b].x + in[b].width * 8 &&
-                in[b].y <= y + h && y <= in[b].y + in[b].height * 8)
+            if (shown[b] && hud[b] == hud[i] &&
+                hud_text_near(in[b].x, in[b].x + in[b].width * 8, in[b].y, in[b].y + in[b].height * 8, x, x + w, y, y + h))
                 up[piece_root(up, b)] = piece_root(up, i);
     }
     for (i = 0; i < n; i++) {

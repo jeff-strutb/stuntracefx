@@ -433,16 +433,16 @@ static void lap_finish(int player)
     }
     place = g.player_rank[0] < 0x02 ? "1st" : g.player_rank[0] == 0x02 ? "2nd" : "3rd";
     for (int k = 0; k < 3; k++)
-        g.glyph_sprite_glyph[k] = hud_place_glyph(place[k]);
-    g.glyph_sprite_step[0] = 0x0021;
-    g.glyph_sprite_step[1] = 0x001D;
-    g.glyph_sprite_step[2] = 0x0019;
-    g.glyph_sprite_target[0] = 0x0008;
-    g.glyph_sprite_target[1] = 0x001C;
-    g.glyph_sprite_target[2] = 0x002F;
-    g.glyph_sprite_x[0] = 0x00D7;
-    g.glyph_sprite_x[1] = 0x00D3;
-    g.glyph_sprite_x[2] = 0x00CF;
+        g.glyph_sprite_block[GS_GLYPH + k] = hud_place_glyph(place[k]);
+    g.glyph_sprite_block[GS_STEP + 0] = 0x0021;
+    g.glyph_sprite_block[GS_STEP + 1] = 0x001D;
+    g.glyph_sprite_block[GS_STEP + 2] = 0x0019;
+    g.glyph_sprite_block[GS_TARGET + 0] = 0x0008;
+    g.glyph_sprite_block[GS_TARGET + 1] = 0x001C;
+    g.glyph_sprite_block[GS_TARGET + 2] = 0x002F;
+    g.glyph_sprite_block[GS_X + 0] = 0x00D7;
+    g.glyph_sprite_block[GS_X + 1] = 0x00D3;
+    g.glyph_sprite_block[GS_X + 2] = 0x00CF;
     if (g.champ_stage == 0x03) {
         GlyphSpritesInit();
         goto panel;

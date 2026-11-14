@@ -61,7 +61,7 @@ void fx_tween_end(void);
 int fx_tween_backdrop_angles(uint16_t heading[2], uint16_t pitch[2]);
 /* fx_tween.c's side of fx_draw: the picture between drawn into its own
    recording, then shown; and none shown. */
-void fx_draw_tween_on(void);
+void fx_draw_tween_on(float t);   /* t: the picture's progress through its step (fx_tween_begin's) */
 void fx_draw_tween_shown(void);
 void fx_draw_tween_off(void);
 void fx_draw_recompose(void);

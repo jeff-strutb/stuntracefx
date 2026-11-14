@@ -547,18 +547,18 @@ void GlyphListDraw(void)
 /* @routine 07:A426 GlyphSpriteDraw: sprite `sprite` at its own place. */
 void GlyphSpriteDraw(int sprite)
 {
-    hud_piece.x = g.glyph_sprite_x[sprite];
-    hud_piece.y = g.glyph_sprite_y[sprite];
-    hud_piece.glyph = g.glyph_sprite_glyph[sprite];
+    hud_piece.x = g.glyph_sprite_block[GS_X + sprite];
+    hud_piece.y = g.glyph_sprite_block[GS_Y + sprite];
+    hud_piece.glyph = g.glyph_sprite_block[GS_GLYPH + sprite];
     FxGlyph8x16(&hud_piece);
 }
 
 /* @routine 07:A41D GlyphSpriteDrawLeft8 */
 static void glyph_sprite_draw_left8(int sprite)
 {
-    hud_piece.x = (uint16_t)(g.glyph_sprite_x[sprite] - 8);
-    hud_piece.y = g.glyph_sprite_y[sprite];
-    hud_piece.glyph = g.glyph_sprite_glyph[sprite];
+    hud_piece.x = (uint16_t)(g.glyph_sprite_block[GS_X + sprite] - 8);
+    hud_piece.y = g.glyph_sprite_block[GS_Y + sprite];
+    hud_piece.glyph = g.glyph_sprite_block[GS_GLYPH + sprite];
     FxGlyph8x16(&hud_piece);
 }
 
@@ -566,10 +566,10 @@ static void glyph_sprite_draw_left8(int sprite)
 void GlyphSpritesInit(void)
 {
     for (int i = 0; i < 16; i++) {
-        g.glyph_sprite_x[i] = glyph_sprite_start_x((uint16_t)i);
-        g.glyph_sprite_y[i] = 0x0008;
-        g.glyph_sprite_glyph[i] = glyph_sprite_start_glyph((uint16_t)i);
-        g.glyph_sprite_step[i] = 0;
+        g.glyph_sprite_block[GS_X + i] = glyph_sprite_start_x((uint16_t)i);
+        g.glyph_sprite_block[GS_Y + i] = 0x0008;
+        g.glyph_sprite_block[GS_GLYPH + i] = glyph_sprite_start_glyph((uint16_t)i);
+        g.glyph_sprite_block[GS_STEP + i] = 0;
     }
     g.times_step = 0;
     g.times_timer = 0x001E;
@@ -793,13 +793,13 @@ void GlyphSpritesGrowAndTimes(void)
 {
     if (g.times_step) {
         for (int i = 1; i < 10; i++)
-            if (g.glyph_sprite_step[i - 1] >= 3 && g.glyph_sprite_step[i] < 7)
-                g.glyph_sprite_step[i]++;
-        if (g.glyph_sprite_step[0] < 7)
-            g.glyph_sprite_step[0]++;
+            if (g.glyph_sprite_block[GS_STEP + i - 1] >= 3 && g.glyph_sprite_block[GS_STEP + i] < 7)
+                g.glyph_sprite_block[GS_STEP + i]++;
+        if (g.glyph_sprite_block[GS_STEP + 0] < 7)
+            g.glyph_sprite_block[GS_STEP + 0]++;
         GlyphColours(0xBF, 0xB7, 0xB6);
         for (int i = 0; i < 16; i++) {
-            uint16_t step = g.glyph_sprite_step[i], y;
+            uint16_t step = g.glyph_sprite_block[GS_STEP + i], y;
 
             if (!step)
                 continue;
@@ -808,9 +808,9 @@ void GlyphSpritesGrowAndTimes(void)
             hud_piece.h = glyph_grow_size(y);
             hud_piece.u = glyph_grow_scale(y);
             hud_piece.v = glyph_grow_scale(y);
-            hud_piece.x = (uint16_t)(g.glyph_sprite_x[i] + glyph_grow_x_offset(y));
-            hud_piece.y = (uint16_t)(g.glyph_sprite_y[i] + glyph_grow_y_offset(y));
-            hud_piece.glyph = g.glyph_sprite_glyph[i];
+            hud_piece.x = (uint16_t)(g.glyph_sprite_block[GS_X + i] + glyph_grow_x_offset(y));
+            hud_piece.y = (uint16_t)(g.glyph_sprite_block[GS_Y + i] + glyph_grow_y_offset(y));
+            hud_piece.glyph = g.glyph_sprite_block[GS_GLYPH + i];
             FxScaledSpriteAdvance(&hud_piece, chip_view_right(), chip_view_bottom());
         }
     }
@@ -821,18 +821,18 @@ void GlyphSpritesGrowAndTimes(void)
 void GlyphSlideThree(void)
 {
     for (int i = 0; i < 3; i++) {
-        uint16_t x = g.glyph_sprite_x[i], step = g.glyph_sprite_step[i];
+        uint16_t x = g.glyph_sprite_block[GS_X + i], step = g.glyph_sprite_block[GS_STEP + i];
 
-        x = x >= step && (uint16_t)(x - step) >= g.glyph_sprite_target[i] ? (uint16_t)(x - step) : g.glyph_sprite_target[i];
-        g.glyph_sprite_x[i] = x;
+        x = x >= step && (uint16_t)(x - step) >= g.glyph_sprite_block[GS_TARGET + i] ? (uint16_t)(x - step) : g.glyph_sprite_block[GS_TARGET + i];
+        g.glyph_sprite_block[GS_X + i] = x;
         hud_piece.x = x;
         hud_piece.y = 0x0050;
-        hud_piece.glyph = g.glyph_sprite_glyph[i];
-        if (g.glyph_sprite_glyph[i] == hud_place_glyph('1'))     /* the place number's colours by place */
+        hud_piece.glyph = g.glyph_sprite_block[GS_GLYPH + i];
+        if (g.glyph_sprite_block[GS_GLYPH + i] == hud_place_glyph('1'))     /* the place number's colours by place */
             GlyphColours(0xBF, 0xB7, 0xB6);
-        else if (g.glyph_sprite_glyph[i] == hud_place_glyph('2'))
+        else if (g.glyph_sprite_block[GS_GLYPH + i] == hud_place_glyph('2'))
             GlyphColours(0xBF, 0xBC, 0xBD);
-        else if (g.glyph_sprite_glyph[i] == hud_place_glyph('3'))
+        else if (g.glyph_sprite_block[GS_GLYPH + i] == hud_place_glyph('3'))
             GlyphColours(0xBF, 0xBA, 0xB9);
         else
             GlyphColours(0xBF, 0xB3, 0xBE);
@@ -1029,8 +1029,8 @@ static void glyph_slide_draw(void)
     static const char one[] = "HITALL", two[] = "THECARS!";    /* HIT ALL and THE CARS!, the gap after the third */
 
     GlyphColours(0xBF, 0xB7, 0xB6);
-    hud_piece.x = g.glyph_sprite_x[0];
-    hud_piece.y = g.glyph_sprite_y[0];
+    hud_piece.x = g.glyph_sprite_block[GS_X + 0];
+    hud_piece.y = g.glyph_sprite_block[GS_Y + 0];
     for (int i = 0; i < 6; i++) {
         if (i == 3)
             hud_piece.x = (uint16_t)(hud_piece.x + 8);
@@ -1038,8 +1038,8 @@ static void glyph_slide_draw(void)
         FxSprite16x32(&hud_piece, chip_view_right(), chip_view_bottom());
     }
     GlyphColours(0xBF, 0xBC, 0xBD);
-    hud_piece.x = g.glyph_sprite_x[1];
-    hud_piece.y = g.glyph_sprite_y[1];
+    hud_piece.x = g.glyph_sprite_block[GS_X + 1];
+    hud_piece.y = g.glyph_sprite_block[GS_Y + 1];
     for (int i = 0; i < 8; i++) {
         if (i == 3)
             hud_piece.x = (uint16_t)(hud_piece.x + 8);
@@ -1051,16 +1051,16 @@ static void glyph_slide_draw(void)
 /* @routine 07:A451 GlyphSpritesSlideOut */
 void GlyphSpritesSlideOut(void)
 {
-    uint16_t a = (uint16_t)(g.glyph_sprite_x[0] - 0x0016);
+    uint16_t a = (uint16_t)(g.glyph_sprite_block[GS_X + 0] - 0x0016);
 
     if ((a & 0x8000) && a < 0xFF98)
         a = 0xFF98;
-    g.glyph_sprite_x[0] = a;
-    a = (uint16_t)(g.glyph_sprite_x[1] + 0x0016);
+    g.glyph_sprite_block[GS_X + 0] = a;
+    a = (uint16_t)(g.glyph_sprite_block[GS_X + 1] + 0x0016);
     if (a >= 0x00D0)
         a = 0x00D0;
-    g.glyph_sprite_x[1] = a;
-    if (g.glyph_sprite_x[0] == 0xFF98 && g.glyph_sprite_x[1] == 0x00D0) {
+    g.glyph_sprite_block[GS_X + 1] = a;
+    if (g.glyph_sprite_block[GS_X + 0] == 0xFF98 && g.glyph_sprite_block[GS_X + 1] == 0x00D0) {
         g.player_phase[0] = 6;
         g.player_phase[1] = 0;
         return;
@@ -1071,16 +1071,16 @@ void GlyphSpritesSlideOut(void)
 /* @routine 07:A492 GlyphSpritesSlideIn */
 void GlyphSpritesSlideIn(void)
 {
-    uint16_t a = (uint16_t)(g.glyph_sprite_x[0] - 0x0016);
+    uint16_t a = (uint16_t)(g.glyph_sprite_block[GS_X + 0] - 0x0016);
 
     if (a < 0x0034)
         a = 0x0034;
-    g.glyph_sprite_x[0] = a;
-    a = (uint16_t)(g.glyph_sprite_x[1] + 0x0016);
+    g.glyph_sprite_block[GS_X + 0] = a;
+    a = (uint16_t)(g.glyph_sprite_block[GS_X + 1] + 0x0016);
     if (!(a & 0x8000) && a >= 0x0024)
         a = 0x0024;
-    g.glyph_sprite_x[1] = a;
-    if (g.glyph_sprite_x[0] == 0x0034 && g.glyph_sprite_x[1] == 0x0024) {
+    g.glyph_sprite_block[GS_X + 1] = a;
+    if (g.glyph_sprite_block[GS_X + 0] == 0x0034 && g.glyph_sprite_block[GS_X + 1] == 0x0024) {
         if (g.race_timer == 0x10) {
             g.finish_mark = 0x10;
             sound_port0_push_raw(0x01);

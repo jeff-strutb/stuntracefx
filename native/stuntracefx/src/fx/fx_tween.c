@@ -295,7 +295,7 @@ int fx_tween_begin(float t)
     cameras_between(was->cameras, end->cameras, t);
     objects_between(&was->objects, &end->objects, t);
     records_between(was->fx, end->fx, t);
-    fx_draw_tween_on();
+    fx_draw_tween_on(t);
     return 1;
 }
 

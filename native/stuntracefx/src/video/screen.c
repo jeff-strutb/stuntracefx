@@ -27,6 +27,7 @@ enum {
     MIDDLE_RIGHT = 128 + 8,             /* wholly right of this, the right's */
     VIEW_LEFT = 24,                     /* the original's view on its screen */
     VIEW_RIGHT = 232,
+    VIEW_EDGE_ZONE = 56,                /* a piece within this of the view's left or right edge is the corner's */
     VIEW_CENTRE_Y = 96,
 };
 
@@ -128,9 +129,12 @@ int screen_anchor_x(int x0, int x1)
    box's left edge, its right edge to the box's right edge. */
 int screen_view_anchor_x(int x0, int x1)
 {
-    if (x1 < MIDDLE_LEFT)
+    /* only a piece at the view's own edges goes to the box's: the corner counters. What lies nearer the middle
+       (a message, a staircase of marks, a few words) keeps its place about the screen's middle, as the original
+       laid it, not thrown to opposite edges by being a little left or right of centre. */
+    if (x1 < VIEW_LEFT + VIEW_EDGE_ZONE)
         return box_left() - VIEW_LEFT;
-    if (x0 > MIDDLE_RIGHT)
+    if (x0 > VIEW_RIGHT - VIEW_EDGE_ZONE)
         return shape.width - box_right() - VIEW_RIGHT;
     return shape.origin_x;
 }

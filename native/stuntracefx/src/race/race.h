@@ -34,6 +34,7 @@ enum { RACE_MENU_STEP_UPDATES = 4 };
    - race_steps_end: the race's screen handed back, or the course menu's
      race over (the race session begins); the kept step ends dropped. */
 float race_step_progress(float between);
+int race_step_updated(void);            /* this update ran a step that handed a picture over */
 int RaceViewForPicture(int panel);
 void race_steps_end(void);
 

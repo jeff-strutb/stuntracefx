@@ -12,6 +12,9 @@
 
 #include <stdint.h>
 
+/* the glyph sprites' tables in Game.glyph_sprite_block: where each one starts (24 words each) */
+enum { GS_X = 0, GS_Y = 24, GS_GLYPH = 48, GS_STEP = 72, GS_TARGET = 96 };
+
 typedef struct {
     /* ---- the session: boot, modes, what was chosen ---- */
     uint8_t car[2];                     /* $0D89, $0D8A: each player's car, 0 to 3, 4 for none */
@@ -270,11 +273,10 @@ typedef struct {
     uint8_t sprites_counted;            /* $0E5C */
     uint16_t glyphs_extended;           /* $0FAE */
     uint8_t time_digits_a[5];           /* $0F64 */
-    uint16_t glyph_sprite_x[16];        /* $0FB0 */
-    uint16_t glyph_sprite_y[16];        /* $0FE0 */
-    uint16_t glyph_sprite_glyph[16];    /* $1010 */
-    uint16_t glyph_sprite_step[16];     /* $1040 */
-    uint16_t glyph_sprite_target[16];   /* $1070 */
+    /* The glyph sprites' five tables, one block as in the original ($0FB0 to $10A0): x, y, glyph, step and
+       target, 24 words apart (GS_X and the rest are the tables' first entries). The tally uses entries 0
+       to 24, and entry 24 of a table is entry 0 of the next, as it is there. */
+    uint16_t glyph_sprite_block[5 * 24];
     uint16_t glyph_first_end, glyph_end; /* $10E4, $10E6 */
     uint16_t glyph_word[19];            /* $10E8 */
     uint16_t glyph_on[19];              /* $110E */
