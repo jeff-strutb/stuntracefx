@@ -40,6 +40,11 @@ const ScreenShape *screen_shape(void);
 void screen_window_set(const float *values, int count); /* a check's window: width, height, safe area */
 int screen_anchor_x(int x0, int x1);           /* columns to add to a piece of the original's screen */
 int screen_view_anchor_x(int x0, int x1);      /* the same for a piece inside the original's view */
+/* How far apart (picture pixels) the HUD's shapes may lie and still be one piece when it is moved onto the
+   larger screen: a word's letters and the words of a line (a space is 8, a double space 16) and the lines of a
+   message go together, as the original drew them; at 0 each word was anchored by itself, the left one to the
+   left edge and the right one to the right. */
+enum { HUD_TEXT_GAP = 16 };
 int screen_anchor_y(int y0, int y1);           /* lines to add, by the piece's middle */
 int screen_bottom_shift(void);                 /* lines the panels' band moves down by */
 int screen_two_side(void);                     /* two players side by side (else above and below) */

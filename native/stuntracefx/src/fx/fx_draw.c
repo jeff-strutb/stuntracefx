@@ -95,6 +95,57 @@ static Recording recordings[2], *recording;
    draws them. */
 static Recording between[2];
 static int between_on[2], tweening, tween_drawn[2];
+/* Each panel's HUD (the shapes after the frame program) as the last two
+   steps left it, to ease between: the HUD is drawn once a step (every 6
+   updates), and its moving words are eased between the two by the picture's
+   progress through the step (hud_eased), as the 3D is. Vertices are kept
+   with each shape's first relative to the copy. */
+typedef struct {
+    Shape *s;
+    nshvc_vertex *v;
+    uint32_t ns, nv, cap_s, cap_v;
+    int ox, oy;
+} HudCopy;
+static HudCopy hud_was[2], hud_now[2];
+static float tween_t = -1.0f;           /* the picture between's progress through its step; -1 none */
+
+/* the HUD of recording r into c (empty when it has a mesh: not a flat HUD) */
+static void hud_copy_take(HudCopy *c, const Recording *r)
+{
+    uint32_t i, nv = 0;
+
+    c->ns = c->nv = 0;
+    c->ox = r->ox;
+    c->oy = r->oy;
+    if (r->hud_from >= r->ns)
+        return;
+    for (i = r->hud_from; i < r->ns; i++) {
+        if (r->s[i].mesh)
+            return;
+        nv += r->s[i].count;
+    }
+    if (r->ns - r->hud_from > c->cap_s) {
+        c->cap_s = r->ns - r->hud_from;
+        c->s = realloc(c->s, c->cap_s * sizeof *c->s);
+    }
+    if (nv > c->cap_v) {
+        c->cap_v = nv;
+        c->v = realloc(c->v, c->cap_v * sizeof *c->v);
+    }
+    if (!c->s || !c->v) {
+        c->cap_s = c->cap_v = 0;
+        return;
+    }
+    for (i = r->hud_from; i < r->ns; i++) {
+        Shape *d = &c->s[c->ns++];
+
+        *d = r->s[i];
+        memcpy(c->v + c->nv, r->v + r->s[i].first, r->s[i].count * sizeof *c->v);
+        d->first = c->nv;
+        c->nv += r->s[i].count;
+    }
+}
+
 /* the pictures a step drew its panels into: the last two pictures begun
    (a step's panels are its last), and at a step's end its own, in order */
 static struct {
@@ -294,8 +345,9 @@ void fx_draw_begin(int picture)
 }
 
 /* fx_tween.c's picture between two steps: drawn into its own recording */
-void fx_draw_tween_on(void)
+void fx_draw_tween_on(float t)
 {
+    tween_t = t;
     before_tween.recording = recording;
     before_tween.offset_x = offset_x;
     before_tween.offset_y = offset_y;
@@ -338,6 +390,7 @@ void fx_draw_tween_off(void)
 {
     between_on[0] = between_on[1] = 0;
     panels_now.n = panels_last.n = 0;
+    hud_was[0].ns = hud_was[1].ns = hud_now[0].ns = hud_now[1].ns = 0;
 }
 
 /* A step's end: one panel (one player, the course menu), the last picture
@@ -353,6 +406,16 @@ void fx_draw_step_end(void)
         panels_last.picture[1] = panels_now.picture[1];
     }
     panels_now.n = 0;
+    for (int k = 0; k < 2; k++) {
+        HudCopy t = hud_was[k];
+
+        hud_was[k] = hud_now[k];        /* the step before's, the buffers swapped */
+        hud_now[k] = t;
+        if (k < panels_last.n)
+            hud_copy_take(&hud_now[k], &recordings[panels_last.picture[k] & 1]);
+        else
+            hud_now[k].ns = hud_now[k].nv = 0;
+    }
 }
 
 int fx_draw_step_picture(int panel)
@@ -605,7 +668,8 @@ static void emit(const nshvc_vertex *v, uint32_t count, uint32_t image, int line
 
 /* The full window's HUD pieces: the shapes drawn after the frame program
    (the HUD's programs), in the original's picture places, are grouped into
-   pieces (shapes whose boxes touch, so a message's glyphs stay one piece)
+   pieces (shapes whose boxes lie within HUD_TEXT_GAP of one another, so a
+   message's glyphs, its words and its lines stay one piece)
    and each piece moved from the original's screen to the full window's by
    the screen's anchors (video/screen.c): the original's view offset (24,
    32), then sideways by where the piece lay against the view's middle and
@@ -638,7 +702,8 @@ static void hud_pieces(const Recording *r, uint32_t from, uint32_t to, int playe
     }
     for (i = 0; i < n; i++)
         for (j = i + 1; j < n; j++)
-            if (box[i][0] <= box[j][1] + 1 && box[j][0] <= box[i][1] + 1 && box[i][2] <= box[j][3] + 1 && box[j][2] <= box[i][3] + 1) {
+            if (box[i][0] <= box[j][1] + HUD_TEXT_GAP && box[j][0] <= box[i][1] + HUD_TEXT_GAP &&
+                box[i][2] <= box[j][3] + HUD_TEXT_GAP && box[j][2] <= box[i][3] + HUD_TEXT_GAP) {
                 int a = group[i], b = group[j];
 
                 while (group[a] != a)
@@ -956,22 +1021,105 @@ static void screen_list_size(uint32_t *w, uint32_t *h)
     screen_sy = (float)*h / (float)shh;
 }
 
+/* The HUD's words move on every picture, not only on the step's. A picture
+   between steps at progress t shows the HUD that lies t of the way from the
+   step before's to the newest's (the 3D's own t): each flat shape that is
+   the same shape in both (the same picture, the same texels and corners,
+   only moved, by no more than HUD_EASE_FAR pixels: a word sliding in or
+   out, a counter on the move) is put at its place rounded to a picture
+   pixel, as the sprites are (video/between.c). Everything else shows as
+   the newest step drew it: digits and letters that change, shapes that
+   come or go, the banners' rising pictures and the world's shapes. r's
+   shapes are the HUD of panel's picture; *out is a recording of the eased
+   HUD alone, to compose from its first shape. 0: nothing to ease. */
+enum { HUD_EASE_FAR = 32 };
+
+static int hud_eased(const Recording *r, int panel, Recording *out)
+{
+    static Shape *es;
+    static nshvc_vertex *ev;
+    static uint32_t cap_s, cap_v;
+    const HudCopy *was = &hud_was[panel], *now = &hud_now[panel];
+    uint32_t i, k;
+    int moved = 0;
+
+    if (tween_t < 0.0f || tween_t > 1.0f || !was->ns || was->ns != now->ns || now->ns != r->ns - r->hud_from)
+        return 0;
+    if (now->ns > cap_s) {
+        cap_s = now->ns;
+        es = realloc(es, cap_s * sizeof *es);
+    }
+    if (now->nv > cap_v) {
+        cap_v = now->nv;
+        ev = realloc(ev, cap_v * sizeof *ev);
+    }
+    if (!es || !ev) {
+        cap_s = cap_v = 0;
+        return 0;
+    }
+    memcpy(es, now->s, now->ns * sizeof *es);
+    memcpy(ev, now->v, now->nv * sizeof *ev);
+    for (i = 0; i < now->ns; i++) {
+        const Shape *a = &was->s[i], *b = &now->s[i];
+        const nshvc_vertex *va = was->v + a->first, *vb = now->v + b->first;
+        float dx, dy, sx, sy;
+
+        if (!b->count || a->count != b->count || a->image != b->image || a->lines != b->lines || a->shader != b->shader ||
+            memcmp(a->in, b->in, sizeof a->in) || b->world || b->fade || b->ground || b->piece)
+            continue;
+        dx = vb[0].x - va[0].x;
+        dy = vb[0].y - va[0].y;
+        if ((dx == 0.0f && dy == 0.0f) || dx > HUD_EASE_FAR || dx < -HUD_EASE_FAR || dy > HUD_EASE_FAR || dy < -HUD_EASE_FAR)
+            continue;
+        for (k = 1; k < b->count; k++)
+            if (va[k].u != vb[k].u || va[k].v != vb[k].v || fabsf((vb[k].x - va[k].x) - dx) > 0.01f ||
+                fabsf((vb[k].y - va[k].y) - dy) > 0.01f)
+                break;
+        if (k < b->count || va[0].u != vb[0].u || va[0].v != vb[0].v)
+            continue;
+        sx = roundf(dx * tween_t) - dx;
+        sy = roundf(dy * tween_t) - dy;
+        for (k = 0; k < b->count; k++) {
+            ev[b->first + k].x += sx;
+            ev[b->first + k].y += sy;
+        }
+        moved = 1;
+    }
+    if (!moved)
+        return 0;
+    *out = *r;
+    out->s = es;
+    out->v = ev;
+    out->ns = now->ns;
+    out->nv = now->nv;
+    out->hud_from = 0;
+    out->ox = now->ox;
+    out->oy = now->oy;
+    return 1;
+}
+
 /* Picture n: the step's own, or the 3D between steps with the step's HUD. */
 static void compose_picture(int p)
 {
     const Recording *r = &recordings[p];
     int other = origin_x || origin_y, one = race_full_window() && !other, two = race_two_full_window() && !other;
 
+    Recording eased;
+
     if (between_on[p])
         compose_recording(&between[p], 0, between[p].ns, 0, -1);
     else
         compose_recording(r, 0, r->hud_from, 0, -1);
-    compose_recording(r, r->hud_from, r->ns, one || two, two ? p : -1);
+    if (between_on[p] && hud_eased(r, two ? p : 0, &eased))
+        compose_recording(&eased, 0, eased.ns, one || two, two ? p : -1);
+    else
+        compose_recording(r, r->hud_from, r->ns, one || two, two ? p : -1);
 }
 
 static uint64_t picture_key(int p)
 {
-    return (uint64_t)recordings[p].gen << 33 ^ (uint64_t)between[p].gen << 1 ^ (uint64_t)between_on[p];
+    return (uint64_t)recordings[p].gen << 33 ^ (uint64_t)between[p].gen << 1 ^ (uint64_t)between_on[p] ^
+           (uint64_t)(between_on[p] && tween_t >= 0.0f ? (uint32_t)(tween_t * 4096.0f) : 0) << 12;
 }
 
 /* The screen's layer: picture n, or with two players both. */
