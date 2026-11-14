@@ -1193,15 +1193,30 @@ static void hole_finish(void)
     m = clip_depth(h3, k, c3, NEAR_Z, 1);
     if (m < 3)
         return;
-    hole = &holes[nholes++];
-    hole->n = m;
+    hole = &holes[nholes];
+    hole->n = 0;
     for (i = 0; i < m; i++) {
         double x, y;
+        float fx, fy;
 
         place(&v, c3[i].x, c3[i].y, c3[i].z, &x, &y);
-        hole->x[i] = (float)x;
-        hole->y[i] = (float)y;
+        fx = (float)x;
+        fy = (float)y;
+        /* a corner that lands on the one before it (two hull points the near
+           plane's clip or the float rounding make one) is left out: its
+           zero-length edge has every point on both of its sides, so the
+           water's cut (fx_draw.c hole_clip) would keep the whole of what is
+           left, the hole's inside, as water */
+        if (hole->n && hole->x[hole->n - 1] == fx && hole->y[hole->n - 1] == fy)
+            continue;
+        hole->x[hole->n] = fx;
+        hole->y[hole->n] = fy;
+        hole->n++;
     }
+    while (hole->n > 1 && hole->x[hole->n - 1] == hole->x[0] && hole->y[hole->n - 1] == hole->y[0])
+        hole->n--;                      /* the last on the first */
+    if (hole->n >= 3)
+        nholes++;
 }
 
 const FxHole *fx_face_holes(int *n)
