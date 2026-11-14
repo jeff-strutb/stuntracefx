@@ -12,6 +12,7 @@
  * across one pixel, over the shape's own bounds only.
  */
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -363,6 +364,54 @@ void pause_draw_panel(PauseImg *m)
     }
     for (b = 0; b < PAUSE_OPTION - PAUSE_CONTROLS; b++)
         panel_button(m, b, 0);
+}
+
+/* ---- the options menu ---- */
+
+static const char *const k_menu_name[PAUSE_MENU_ITEMS] = { "RESUME", "AUTO-ACCELERATE", "QUIT RACE" };
+
+/* an item's own rectangle, without the image's margin */
+static void menu_at(int item, float *x, float *y, float *w, float *h)
+{
+    *w = 340;
+    *h = 46;
+    *x = (PAUSE_PW - *w) / 2;
+    *y = 100 + (float)item * 62;
+}
+
+void pause_menu_box(int item, float *x, float *y, float *w, float *h)
+{
+    menu_at(item, x, y, w, h);
+    *x -= MARGIN;
+    *y -= MARGIN;
+    *w += 2 * MARGIN;
+    *h += 2 * MARGIN;
+}
+
+void pause_draw_menu_panel(PauseImg *m)
+{
+    rrect(m, 2, 2, PAUSE_PW - 4, PAUSE_PH - 4, 18, 0x0E1220, 0.62f);
+    rrect_edge(m, 3, 3, PAUSE_PW - 6, PAUSE_PH - 6, 17, 1.5f, GOLD, 1);
+    text_centre(m, "PAUSED", PAUSE_PW / 2.0f, 22, 3.5f, GOLD);
+    checks(m, 136, 26, 10, 9);
+    checks(m, PAUSE_PW - 136 - 90, 26, 10, 9);
+}
+
+void pause_draw_menu_item(PauseImg *m, int item, int on, int lit)
+{
+    float x, y, w, h;
+    char text[32];
+    const char *name = k_menu_name[item];
+
+    menu_at(item, &x, &y, &w, &h);
+    if (item == PAUSE_MENU_AUTO) {
+        snprintf(text, sizeof text, "%s %s", name, on ? "ON" : "OFF");
+        name = text;
+    }
+    /* as the panel buttons: lit, over the button unlit, whole */
+    rrect(m, x, y, w, h, 10, lit ? LIT_FILL : PLATE, lit ? 1 : 0.85f);
+    rrect_edge(m, x + 0.75f, y + 0.75f, w - 1.5f, h - 1.5f, 9.25f, lit ? 2 : 1, GOLD, 1);
+    text_centre(m, name, x + w / 2, y + (h - 7 * 2.25f) / 2, 2.25f, lit ? GOLD : WHITE);
 }
 
 void pause_draw_tag(PauseImg *m, int control, const char *key, int asking)

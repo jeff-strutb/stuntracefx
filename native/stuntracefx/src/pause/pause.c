@@ -47,6 +47,17 @@
 #include "save/save.h"
 #include "system/game.h"
 
+/* iOS: the touch controls cannot be changed, so the screen is an options menu
+   (resume, auto-accelerate, quit the race) in place of the controller's map */
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
+#if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
+#define MENU_MODE 1
+#else
+#define MENU_MODE 0
+#endif
+
 #define KEY_EVENTS (NSHVC_VERSION_MAJOR > 4 || (NSHVC_VERSION_MAJOR == 4 && NSHVC_VERSION_MINOR >= 5))
 #define CONTROLLER_BIND (NSHVC_VERSION_MAJOR > 4 || (NSHVC_VERSION_MAJOR == 4 && NSHVC_VERSION_MINOR >= 6))
 
@@ -114,6 +125,9 @@ static struct {
     int chosen;                         /* a control, PAUSE_RESUME or PAUSE_DEFAULTS */
     int asking;                         /* the control waiting for its key; -1 none */
     int wait_release;                   /* no press counts until every button is let go */
+    float ox, oy, scale;                /* where the panel lies in the window */
+    nshvc_image mi[PAUSE_MENU_ITEMS];   /* the options menu's items */
+    int mi_w[PAUSE_MENU_ITEMS], mi_h[PAUSE_MENU_ITEMS], mi_shown[PAUSE_MENU_ITEMS]; /* a picture: value * 2 + lit; -1 none yet */
     uint16_t last[2];                   /* the pads at the last update */
     uint16_t swallow[2];                /* after the screen: buttons kept from the game until let go */
     uint8_t keys[BUTTONS];              /* each button's key, in k_buttons' order */
@@ -382,6 +396,18 @@ static void pictures_make(float density)
 
     p.density = density;
     m = pause_img_new(0, 0, PAUSE_PW, PAUSE_PH, density);
+    if (MENU_MODE) {
+        pause_draw_menu_panel(&m);
+        p.panel = image_of(&m, &p.panel_w, &p.panel_h);
+        for (i = 0; i < PAUSE_MENU_ITEMS; i++) {
+            pause_menu_box(i, &x, &y, &w, &h);
+            p.mi_w[i] = (int)ceilf(w * density);
+            p.mi_h[i] = (int)ceilf(h * density);
+            p.mi[i] = nshvc_image_create((uint32_t)p.mi_w[i], (uint32_t)p.mi_h[i], NSHVC_IMAGE_RGBA);
+            p.mi_shown[i] = -1;
+        }
+        return;
+    }
     pause_draw_panel(&m);
     p.panel = image_of(&m, &p.panel_w, &p.panel_h);
     for (i = 0; i < PAUSE_ITEMS; i++) {
@@ -428,6 +454,30 @@ static void option_refresh(void)
     nshvc_image_write(p.option, m.px);
     free(m.px);
     p.option_shown = want;
+}
+
+/* The options menu's items as they stand: auto-accelerate's value, the
+   item chosen lit. */
+static void menu_refresh(void)
+{
+    int i;
+
+    for (i = 0; i < PAUSE_MENU_ITEMS; i++) {
+        int on = i == PAUSE_MENU_AUTO && option_auto_accelerate() != 0, lit = p.chosen == i, want = on * 2 + lit;
+        float x, y, w, h;
+        PauseImg m;
+
+        if (!p.mi[i].id || want == p.mi_shown[i])
+            continue;
+        pause_menu_box(i, &x, &y, &w, &h);
+        m = pause_img_new(x, y, w, h, p.density);
+        if (!m.px)
+            continue;
+        pause_draw_menu_item(&m, i, on, lit);
+        nshvc_image_write(p.mi[i], m.px);
+        free(m.px);
+        p.mi_shown[i] = want;
+    }
 }
 
 /* A tag's key as the player's device names it, in capitals. */
@@ -679,12 +729,26 @@ static void show(void)
         p.tint = nshvc_image_create(2, 2, NSHVC_IMAGE_RGBA);
         nshvc_image_write(p.tint, navy);
     }
-    tags_refresh();
-    hint_refresh();
-    option_refresh();
+    p.ox = ox;
+    p.oy = oy;
+    p.scale = scale;
+    if (MENU_MODE)
+        menu_refresh();
+    else {
+        tags_refresh();
+        hint_refresh();
+        option_refresh();
+    }
     c[0] = 0, c[1] = 0, c[2] = (float)d.width, c[3] = 0, c[4] = 0, c[5] = (float)d.height;
     nshvc_overlay_set(O_TINT, p.tint, c, TINT_ALPHA);
     place(O_PANEL, p.panel, 0, 0, p.panel_w, p.panel_h, ox, oy, scale);
+    if (MENU_MODE) {
+        for (i = 0; i < PAUSE_MENU_ITEMS; i++) {
+            pause_menu_box(i, &x, &y, &bw, &bh);
+            place(O_TAGS + (uint32_t)i, p.mi[i], x, y, p.mi_w[i], p.mi_h[i], ox, oy, scale);
+        }
+        return;
+    }
     for (i = 0; i < PAUSE_CONTROLS; i++) {
         pause_tag_box(i, &x, &y, &bw, &bh);
         place(O_TAGS + (uint32_t)i, p.tags[i], x, y, p.tag_w[i], p.tag_h[i], ox, oy, scale);
@@ -895,7 +959,7 @@ static void screen_open(void)
     p.stage = BLUR_CLEAN;
     p.shot_ok = 0;
     p.open = 1;
-    p.chosen = PAUSE_RESUME;
+    p.chosen = MENU_MODE ? PAUSE_MENU_RESUME : PAUSE_RESUME;
     p.asking = -1;
     p.wait_release = 0;
     music_pause(1);
@@ -908,6 +972,12 @@ static void screen_close(const uint16_t pad[2])
     p.asking = -1;
     p.swallow[0] = pad[0];
     p.swallow[1] = pad[1];
+    /* The gas on a touch screen is held by itself, every update the game
+       runs; B held as the screen closes (the tap that chose RESUME is B and
+       Start) must not be kept from the game "until let go", for it is never
+       let go and the gas would stay off until the brake dropped it. */
+    if (controls_source() == CONTROLS_TOUCH)
+        p.swallow[0] &= (uint16_t)~PAD_B;
     overlays_off();
     music_pause(0);
 }
@@ -927,6 +997,32 @@ static int held_back(uint16_t pad[2])
 }
 
 static int pause_step(const nshvc_input *in, uint16_t pad[2]);
+
+/* The options menu: a finger landing on an item chooses it (its tap, on
+   being let go, is the press that takes it, input/controls.c). */
+static void menu_touch(const nshvc_input *in)
+{
+    int i, t, n = in->touches < 10 ? in->touches : 10;
+
+    for (t = 0; t < n; t++) {
+        int known = 0;
+
+        for (i = 0; i < p.touches; i++)
+            known |= p.touch_id[i] == in->touch[t].id;
+        if (known || !p.open || p.stage != BLUR_DONE || p.scale <= 0)
+            continue;
+        for (i = 0; i < PAUSE_MENU_ITEMS; i++) {
+            float x, y, w, h, fx = (in->touch[t].x - p.ox) / p.scale, fy = (in->touch[t].y - p.oy) / p.scale;
+
+            pause_menu_box(i, &x, &y, &w, &h);
+            if (fx >= x && fx < x + w && fy >= y && fy < y + h)
+                p.chosen = i;
+        }
+    }
+    p.touches = n;
+    for (t = 0; t < n; t++)
+        p.touch_id[t] = in->touch[t].id;
+}
 
 /* the updates held, for the game's own count of its updates */
 static uint64_t held;
@@ -974,6 +1070,8 @@ static int pause_step(const nshvc_input *in, uint16_t pad[2])
     if (corner_pressed(in))
         toggle = 1;
 
+    if (MENU_MODE)
+        menu_touch(in);
     if (!p.open) {
         if (toggle) {
             screen_open();
@@ -1012,6 +1110,24 @@ static int pause_step(const nshvc_input *in, uint16_t pad[2])
         p.wait_release = 0;
     }
     nav = (uint16_t)(press[0] | press[1]);
+    if (MENU_MODE) {
+        if (nav & (PAD_UP | PAD_DOWN | PAD_LEFT | PAD_RIGHT)) {
+            int d = nav & (PAD_DOWN | PAD_RIGHT) ? 1 : PAUSE_MENU_ITEMS - 1;
+
+            p.chosen = (p.chosen + d) % PAUSE_MENU_ITEMS;
+        } else if (nav & (PAD_B | PAD_A | PAD_START)) {
+            if (p.chosen == PAUSE_MENU_AUTO) {
+                option_auto_accelerate_set(!option_auto_accelerate());
+            } else {
+                if (p.chosen == PAUSE_MENU_QUIT)
+                    race_pause_quit();  /* the game's own pause, taking its quit (race/pause.c) */
+                screen_close(pad);
+                return held_back(pad);
+            }
+        }
+        show();
+        return 0;
+    }
     if (nav & (PAD_UP | PAD_DOWN | PAD_LEFT | PAD_RIGHT)) {
         p.chosen = move(p.chosen, nav & PAD_UP     ? PAD_UP
                                   : nav & PAD_DOWN ? PAD_DOWN
