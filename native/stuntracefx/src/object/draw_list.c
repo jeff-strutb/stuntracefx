@@ -94,6 +94,13 @@ static void record_car_note(int far, unsigned n, const Object *o)
     record_object[far][n] = (uint16_t)(obj_slot(o) + 1);
 }
 
+static uint16_t far_gaze[FX_FAR_MAX];   /* per far record: its object's gaze for the side drawn (draw_record_gaze_far) */
+
+uint16_t draw_record_gaze_far(unsigned n)
+{
+    return n < FX_FAR_MAX ? far_gaze[n] : 0;
+}
+
 uint16_t draw_record_object(int far, unsigned n)
 {
     return n < FX_FAR_MAX ? record_object[far != 0][n] : 0;
@@ -333,11 +340,14 @@ static int drawn(const Object *o)
 static void far_record(Object *o, uint16_t at, const uint16_t *place, const uint8_t *turn)
 {
     uint8_t *r = &fx_ram[FX_FAR_BANK + at];
+    unsigned n = (unsigned)(at - FX_FAR_RECORDS) / FX_FAR_SIZE;
     uint16_t p[3] = {o->x, o->y, o->z};
     int32_t d[3], eye[3];
     unsigned k;
 
     draw_record(o, r, 1);
+    /* an eye's gaze as a near record's (every car's eyes are solid, far or near) */
+    far_gaze[n] = ObjectGazeBetween(o, g.draw_side ? 1 : 0, object_gaze(o, g.draw_side ? 1 : 0));
     if (place) {
         int16_t dy = (int16_t)(uint16_t)(place[1] - g.view_pos[1]);
 

@@ -4,7 +4,7 @@
  * approved there). Some of the race's objects are pictures facing the
  * view, drawn by FxObjectSprite with the picture picked for the angle they
  * are seen at: every car's tyres (shape $A1C8), the bonus course truck's
- * wheels ($A1E4), the 4WD's eyes ($A190) and the trees' trunks and
+ * wheels ($A1E4), every car's eyes ($A190, near or far) and the trees' trunks and
  * canopies ($A104, $A120; Night Cruise's bushes $A0E8). Each is drawn in
  * its place as a solid instead:
  *
@@ -155,6 +155,8 @@ static const Solid solids[] = {
 static const Solid *object, *armed;
 static const Mark *face;                /* an eye's face for its look */
 static int nface, record_index, cap_seen;
+static int far_index;                   /* the far record a far object's slot holds (its gaze: draw_record_gaze_far), else -1 */
+static uint16_t far_slot;               /* that slot's address: its look is in the slot's own record */
 static int coloured, two, tyre_row, size_halved;     /* size_halved: its size halved with its place (a far object's) */
 /* the object's place and the view's turn made exactly (fx_face_exact_object):
    its place whole, never halved; else the chip's, halved `halving` times */
@@ -199,6 +201,8 @@ void fx_solid_object(uint16_t shape, uint16_t record)
     int i;
 
     object = NULL;
+    far_index = fx_far_record_number(record);
+    far_slot = record;
     record = fx_far_original(record);   /* in a far or parked pass, the near record the slot holds */
     record_index = !record || (uint16_t)(record - 0x0AAA) % 30u ? -1 : (int)((uint16_t)(record - 0x0AAA) / 30u);
     for (i = 0; i < N(solids); i++)
@@ -257,12 +261,15 @@ void fx_solid_begin(void)
         return;
     tyre_row = two && object->shape != 0xA190;
     if (object->shape == 0xA190) {      /* an eye: by its gaze, in its look */
-        uint16_t look, gz = record_index >= 0 ? draw_record_gaze(record_index) : 0;
+        uint16_t look, gz = record_index >= 0 ? draw_record_gaze(record_index) : far_index >= 0 ? draw_record_gaze_far((unsigned)far_index) : 0;
         float phi, d[3];
 
         if (!(gz & 0x100))
             return;
-        look = word((uint16_t)(0x0AAA + 30 * record_index + 0x16));     /* the record's +$16: the eye's anim word */
+        /* the record's +$16: the eye's anim word, from the slot being drawn, which holds the
+           eye's own record: the near record's place holds another object's once the merged
+           pass has filled the slots in depth order */
+        look = word((uint16_t)(far_slot + 0x16));
         switch (look) {
         case 0x9AAF: face = eye_plain, nface = N(eye_plain); break;
         case 0x9AB1: face = eye_startled, nface = N(eye_startled); break;

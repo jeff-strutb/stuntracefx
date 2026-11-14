@@ -503,6 +503,8 @@ void ObjectDrawListBuild(void);
    byte is still the one that read gave; 0 otherwise. Indexed as
    ObjectDrawListBuild writes g.frame_records; rebuilt with them. */
 uint16_t draw_record_gaze(int record);
+/* the same for far record n (as record_car's far numbers; set with the far records) */
+uint16_t draw_record_gaze_far(unsigned n);
 /* A draw record's car (its slot + 1; 0 none): the object with tyres its own
    or its parents' chain reaches; *tyre whether the record is one of the
    car's tyres. `far` 0 a near record (its number), 1 a far one (its number
