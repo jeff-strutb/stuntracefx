@@ -313,30 +313,30 @@ static void player_one_phase_race(void)
     g.freeze = 0x0A;
     g.finish_lines = 0;
     g.finish_mark = 0;
-    g.glyph_sprite_x[0] = 0x0004;
-    g.glyph_sprite_y[0] = 0x0008;
+    g.glyph_sprite_block[GS_X + 0] = 0x0004;
+    g.glyph_sprite_block[GS_Y + 0] = 0x0008;
     for (int r = 0; r < 3; r++) {
         for (uint16_t n = rows[r].n; n; n--, x++) {
-            g.glyph_sprite_y[x] = rows[r].y;
-            g.glyph_sprite_x[x] = 0x0038;
-            g.glyph_sprite_glyph[x] = tally_glyph(x);
+            g.glyph_sprite_block[GS_Y + x] = rows[r].y;
+            g.glyph_sprite_block[GS_X + x] = 0x0038;
+            g.glyph_sprite_block[GS_GLYPH + x] = tally_glyph(x);
         }
     }
-    g.glyph_sprite_glyph[3] = (uint16_t)(0x1400 + ((g.digit_pair & 0x000F) << 1));
-    g.glyph_sprite_glyph[2] = (uint16_t)(0x1400 + (((g.digit_pair >> 4) & 0x000F) << 1));
+    g.glyph_sprite_block[GS_GLYPH + 3] = (uint16_t)(0x1400 + ((g.digit_pair & 0x000F) << 1));
+    g.glyph_sprite_block[GS_GLYPH + 2] = (uint16_t)(0x1400 + (((g.digit_pair >> 4) & 0x000F) << 1));
     if (!g.glyphs_extended) {
-        g.glyph_sprite_glyph[9] = 0x960E;
-        g.glyph_sprite_glyph[10] = 0x9610;
-        g.glyph_sprite_glyph[11] = 0x0000;
+        g.glyph_sprite_block[GS_GLYPH + 9] = 0x960E;
+        g.glyph_sprite_block[GS_GLYPH + 10] = 0x9610;
+        g.glyph_sprite_block[GS_GLYPH + 11] = 0x0000;
         return;
     }
     if (g.glyphs_extended >= 0x0002)
         return;
-    g.glyph_sprite_glyph[9] = 0x9610;
-    g.glyph_sprite_glyph[10] = 0x960E;
-    g.glyph_sprite_glyph[11] = 0x941C;
-    g.glyph_sprite_glyph[15] = 0x0000;
-    g.glyph_sprite_step[0] = 0x980E;
+    g.glyph_sprite_block[GS_GLYPH + 9] = 0x9610;
+    g.glyph_sprite_block[GS_GLYPH + 10] = 0x960E;
+    g.glyph_sprite_block[GS_GLYPH + 11] = 0x941C;
+    g.glyph_sprite_block[GS_GLYPH + 15] = 0x0000;
+    g.glyph_sprite_block[GS_STEP + 0] = 0x980E;
 }
 
 /* @routine 07:DFD2 PlayerOnePhaseTally: the result's sprites slide right, then the time. */
@@ -347,12 +347,12 @@ static void player_one_phase_tally(void)
     for (int x = 1; x < 25; x++) {
         uint16_t limit = tally_x_end(x);
 
-        a = (uint16_t)(g.glyph_sprite_x[x] + 0x000B);
+        a = (uint16_t)(g.glyph_sprite_block[GS_X + x] + 0x000B);
         if (a >= limit)
             a = limit;
-        g.glyph_sprite_x[x] = a;
+        g.glyph_sprite_block[GS_X + x] = a;
     }
-    a = (uint16_t)(g.glyph_sprite_x[0] + 0x000B);
+    a = (uint16_t)(g.glyph_sprite_block[GS_X + 0] + 0x000B);
     if (a >= 0x00AC) {
         g.time_left = (uint16_t)((g.time_left & 0xFF00) | (uint8_t)g.digit_pair);
         g.end_timer = 0x40;
@@ -363,10 +363,10 @@ static void player_one_phase_tally(void)
         g.digit_pair = g.time_shown;
         a = 0x00AC;
     }
-    g.glyph_sprite_x[0] = a;
+    g.glyph_sprite_block[GS_X + 0] = a;
     hud_piece.h = 0x0020;
     GlyphColours(0xBF, 0xBA, 0xB9);
-    BonusDigitsDrawAt(g.glyph_sprite_x[0]);
+    BonusDigitsDrawAt(g.glyph_sprite_block[GS_X + 0]);
     GlyphSpritesDrawAll();
 }
 
@@ -648,10 +648,10 @@ void RaceSoundsAndHud(void)
 /* @routine 07:DB97 TimeUpPhaseStart */
 static void time_up_phase_start(void)
 {
-    g.glyph_sprite_x[0] = 0x00DA;
-    g.glyph_sprite_y[0] = 0x0014;
-    g.glyph_sprite_x[1] = 0xFF9E;
-    g.glyph_sprite_y[1] = 0x0040;
+    g.glyph_sprite_block[GS_X + 0] = 0x00DA;
+    g.glyph_sprite_block[GS_Y + 0] = 0x0014;
+    g.glyph_sprite_block[GS_X + 1] = 0xFF9E;
+    g.glyph_sprite_block[GS_Y + 1] = 0x0040;
     g.player_phase[0] = (uint8_t)(g.player_phase[0] + 2);
 }
 
