@@ -266,8 +266,10 @@ void fx_solid_begin(void)
 
         if (!(gz & 0x100))
             return;
-        /* the record's +$16: the eye's anim word (a far object's slot holds its own record) */
-        look = word((uint16_t)((record_index >= 0 ? 0x0AAA + 30 * record_index : far_slot) + 0x16));
+        /* the record's +$16: the eye's anim word, from the slot being drawn, which holds the
+           eye's own record: the near record's place holds another object's once the merged
+           pass has filled the slots in depth order */
+        look = word((uint16_t)(far_slot + 0x16));
         switch (look) {
         case 0x9AAF: face = eye_plain, nface = N(eye_plain); break;
         case 0x9AB1: face = eye_startled, nface = N(eye_startled); break;
