@@ -976,7 +976,7 @@ void sprites_place_full(nshvc_sprite *out, const nshvc_sprite *in, uint32_t coun
     enum { VIEW_X = 24, VIEW_W = 208, VIEW_Y = 32, VIEW_H = 128, PANEL_TOP = 161, PANEL_END = 208, ROW0 = 16 };
     const ScreenShape *sh = screen_shape();
     const PanelBoxes *boxes = race_panel_boxes();
-    int up[128], shown[128], hud[128], x0[128], x1[128], y0[128], y1[128];
+    int up[128], shown[128], hud[128], lamp[128] = {0}, x0[128], x1[128], y0[128], y1[128];
     int i, b, n = count > 128 ? 128 : (int)count, lamps_gone = g.player_phase[0] >= 6;
     int ending = race_ending_running();     /* the ending shows no panels, so none of their sprites */
 
@@ -1008,6 +1008,7 @@ void sprites_place_full(nshvc_sprite *out, const nshvc_sprite *in, uint32_t coun
         if (shown[i]) {
             int p = piece_root(up, i);
 
+            lamp[p] |= (sprite_name(&in[i]) & 0x1F0) == 0xA0 && in[i].palette == 3;
             x0[p] = in[i].x < x0[p] ? in[i].x : x0[p];
             x1[p] = in[i].x + in[i].width * 8 - 1 > x1[p] ? in[i].x + in[i].width * 8 - 1 : x1[p];
             y0[p] = in[i].y < y0[p] ? in[i].y : y0[p];
@@ -1030,8 +1031,10 @@ void sprites_place_full(nshvc_sprite *out, const nshvc_sprite *in, uint32_t coun
                     dx = screen_anchor_x(boxes->x0[b], boxes->x1[b]);
             dy = screen_bottom_shift();
         } else if (hud[i]) {
-            dx = screen_view_anchor_x(x0[p], x1[p]);
+            dx = lamp[p] ? screen_lamp_anchor_x(x0[p], x1[p]) : screen_view_anchor_x(x0[p], x1[p]);
             dy = screen_anchor_y(y0[p], y1[p]);
+        } else if (lamp[p]) {                /* a lamp below priority 3 is on the view's edge too */
+            dx = screen_lamp_anchor_x(x0[p], x1[p]);
         }
         out[i].x = in[i].x + dx;
         out[i].y = in[i].y + dy;

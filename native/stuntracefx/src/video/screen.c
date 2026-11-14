@@ -135,6 +135,19 @@ int screen_view_anchor_x(int x0, int x1)
     return shape.origin_x;
 }
 
+/* The start lamps' pieces (the lights and their housings at the view's top
+   corners, which the original's bezel cut) go to the screen's own edges, not
+   the HUD box's: the box stops at 340 across, so on a very wide window the
+   lamps would hang well inside it. Only the safe area keeps them in. */
+int screen_lamp_anchor_x(int x0, int x1)
+{
+    if (x1 < MIDDLE_LEFT)
+        return shape.safe[0] - VIEW_LEFT;
+    if (x0 > MIDDLE_RIGHT)
+        return shape.width - shape.safe[2] - VIEW_RIGHT;
+    return shape.origin_x;
+}
+
 /* Down the screen by a piece's middle: above the view's centre it stays at
    the top, below it it goes to the bottom, about it it moves with the
    centre (the race's messages). The lines to add to the original's. */

@@ -41,6 +41,7 @@ void screen_window(float *width, float *height);   /* the window in pixels the s
 void screen_window_set(const float *values, int count); /* a check's window: width, height, safe area */
 int screen_anchor_x(int x0, int x1);           /* columns to add to a piece of the original's screen */
 int screen_view_anchor_x(int x0, int x1);      /* the same for a piece inside the original's view */
+int screen_lamp_anchor_x(int x0, int x1);      /* the same for the start lamps: to the screen's edges, not the HUD box's */
 int screen_anchor_y(int y0, int y1);           /* lines to add, by the piece's middle */
 int screen_bottom_shift(void);                 /* lines the panels' band moves down by */
 int screen_two_side(void);                     /* two players side by side (else above and below) */
