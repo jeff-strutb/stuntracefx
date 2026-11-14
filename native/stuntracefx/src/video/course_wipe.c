@@ -56,7 +56,7 @@ void course_wipe_overlay(const int32_t left[224], const int32_t right[224], cons
     float window_w, window_h;
     Run runs[224];
     int n = 0, line, k;
-    float alpha, sx, sy;
+    float alpha, sx, sy, dx = 0.0f, dy = 0.0f;
     nshvc_image image;
 
     screen_window(&window_w, &window_h);
@@ -96,6 +96,21 @@ void course_wipe_overlay(const int32_t left[224], const int32_t right[224], cons
         runs[0] = box;
         n = 1;
     }
+    /* the rectangle as a whole put at the middle of the screen: the original's
+       is drawn about the course's card, off the picture's middle, and it only
+       centres at its full size; moved by what its bounds are off the middle */
+    if (n) {
+        float lo = (float)runs[0].left, hi = (float)runs[0].right + 1.0f;
+
+        for (k = 1; k < n; k++) {
+            if ((float)runs[k].left < lo)
+                lo = (float)runs[k].left;
+            if ((float)runs[k].right + 1.0f > hi)
+                hi = (float)runs[k].right + 1.0f;
+        }
+        dx = 128.0f - (lo + hi) / 2.0f;
+        dy = 112.0f - (float)(runs[0].line0 + runs[n - 1].line1) / 2.0f;
+    }
     sx = window_w / (float)sh->width;
     sy = window_h / (float)sh->height;
     for (k = 0; k < IDS; k++) {
@@ -108,10 +123,12 @@ void course_wipe_overlay(const int32_t left[224], const int32_t right[224], cons
         }
         {
             /* the original's columns and rows to the screen's, the first and last reaching its edges */
-            float x0 = runs[k].left <= 1 ? 0.0f : (float)runs[k].left * (float)sh->width / 256.0f;
-            float x1 = runs[k].right >= 255 ? (float)sh->width : (float)(runs[k].right + 1) * (float)sh->width / 256.0f;
-            float y0 = runs[k].line0 == 0 ? 0.0f : (float)runs[k].line0 * (float)sh->height / 224.0f;
-            float y1 = runs[k].line1 >= 224 ? (float)sh->height : (float)runs[k].line1 * (float)sh->height / 224.0f;
+            float xl = (float)runs[k].left + dx, xr = (float)runs[k].right + 1.0f + dx;
+            float yt = (float)runs[k].line0 + dy, yb = (float)runs[k].line1 + dy;
+            float x0 = xl <= 1.0f ? 0.0f : xl * (float)sh->width / 256.0f;
+            float x1 = xr >= 255.0f ? (float)sh->width : xr * (float)sh->width / 256.0f;
+            float y0 = yt <= 0.0f ? 0.0f : yt * (float)sh->height / 224.0f;
+            float y1 = yb >= 224.0f ? (float)sh->height : yb * (float)sh->height / 224.0f;
 
             /* then the window's pixels, whole ones, so rows laid edge to edge leave no seam */
             x0 = roundf(x0 * sx);
