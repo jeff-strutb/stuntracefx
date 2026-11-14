@@ -10,6 +10,7 @@
 #include "audio/sound.h"
 #include "hud/hud.h"
 #include "menu/menu.h"
+#include "pause/pause.h"
 #include "race/race.h"
 #include "system/game.h"
 #include "system/state.h"
@@ -18,6 +19,29 @@
 typedef enum { PAUSE_ONE_PLAYER, PAUSE_PAD_1, PAUSE_PAD_2 } PauseKind;
 
 static PauseKind pause_kind;
+
+/* The options menu's QUIT RACE (pause/pause.c): the game's own pause begins
+   at the race's next step as Start would begin it, and takes its quit as the
+   player's choice would, down the same stages to leaving the race. A request
+   not taken within a second of the game's updates lapses. */
+static int quit_wanted;
+static uint64_t quit_at;
+static int quit_driving;                /* the pause that began took the quit: to be carried through */
+
+void race_pause_quit(void)
+{
+    quit_wanted = 1;
+    quit_at = pause_game_updates();
+}
+
+/* the quit asked for and still wanted; taken (cleared) as the pause begins */
+static int quit_take(void)
+{
+    if (!quit_wanted)
+        return 0;
+    quit_wanted = 0;
+    return pause_game_updates() - quit_at <= 60;
+}
 
 /* 07:BC88: the race goes on: sound $16, the flags that hold it cleared. */
 static void pause_resume(void)
@@ -178,6 +202,12 @@ static void stage_choice(void)
 {
     uint16_t pressed = frame_state.pressed_copy[0];
 
+    if (quit_driving) {
+        quit_driving = 0;
+        choice_move(0x0200, PauseChoiceLeft, PauseChoiceRight);  /* the cursor to quit, as its button moves it */
+        choice_made(1);
+        return;
+    }
     if (pressed & 0x9000)
         choice_made(1);
     else
@@ -189,6 +219,11 @@ static void stage_choice_p1(void)
 {
     uint16_t pressed = frame_state.pressed_copy[0];
 
+    if (quit_driving) {
+        choice_move(0x0200, PauseChoiceLeftPad1, PauseChoiceRightPad1);
+        choice_made(0);
+        return;                         /* quit_driving stays until the quit menu takes its first row */
+    }
     if (pressed & 0x9000)
         choice_made(0);
     else
@@ -297,6 +332,11 @@ static void quit_menu(int pad, uint8_t *panel, uint8_t stage, void (*park)(void)
     uint16_t pressed = frame_state.pressed_copy[pad];
     uint8_t cursor = g.records_cursor;
 
+    if (quit_driving && !cursor) {
+        quit_driving = 0;
+        quit_menu_take(panel, stage, park);     /* the first row, the one that leaves the race */
+        return;
+    }
     if (pressed & 0x9000) {
         quit_menu_take(panel, stage, park);
         return;
@@ -428,8 +468,11 @@ void PauseFrameStep(void)
  */
 int PauseOnStart(void)
 {
-    if (!(frame_state.pressed_copy[0] & 0x1000))
+    int start = frame_state.pressed_copy[0] & 0x1000;
+
+    if (!start && !quit_take())
         return 0;
+    quit_driving = !start;
     g.pause_player = 0;
     SoundPort1QueuePush(0x15);
     windows.layout_request = 0x01;
@@ -466,8 +509,11 @@ static void pause_pad_start(uint8_t owner, void (*sprites)(void), PauseKind kind
 /* @routine 07:BAE6 OamStagePause: split screen, pad 1's START. */
 int OamStagePause(void)
 {
-    if (!(frame_state.pressed_copy[0] & 0x1000))
+    int start = frame_state.pressed_copy[0] & 0x1000;
+
+    if (!start && !quit_take())
         return 0;
+    quit_driving = !start;
     pause_pad_start(0x00, TopGaugeSpritesOff, PAUSE_PAD_1);
     return 1;
 }

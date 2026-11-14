@@ -140,6 +140,7 @@ void OverlayFrameStep(void);
 void PauseFrameStep(void);
 int PauseOnStart(void);                 /* 1: paused, the step stops here */
 int OamStagePause(void);
+void race_pause_quit(void);             /* the options menu's QUIT RACE: the pause begins and takes its quit (race/pause.c) */
 int OamStagePause2(void);
 void OamStagePauseLoop(void);
 void OamStagePause2Loop(void);

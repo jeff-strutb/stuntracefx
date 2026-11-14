@@ -125,8 +125,6 @@ static struct {
     int chosen;                         /* a control, PAUSE_RESUME or PAUSE_DEFAULTS */
     int asking;                         /* the control waiting for its key; -1 none */
     int wait_release;                   /* no press counts until every button is let go */
-    int leave;                          /* the options menu's quit: 1 asked, 2 Start being given the game (its own pause) */
-    int leave_left;                     /* the updates of Start still to give */
     float ox, oy, scale;                /* where the panel lies in the window */
     nshvc_image mi[PAUSE_MENU_ITEMS];   /* the options menu's items */
     int mi_w[PAUSE_MENU_ITEMS], mi_h[PAUSE_MENU_ITEMS], mi_shown[PAUSE_MENU_ITEMS]; /* a picture: value * 2 + lit; -1 none yet */
@@ -989,23 +987,11 @@ static void screen_close(const uint16_t pad[2])
    held as it shut is kept from the game until let go. */
 static int held_back(uint16_t pad[2])
 {
-    int i, start = pad[0] & PAD_START;
+    int i;
 
     for (i = 0; i < 2; i++) {
         p.swallow[i] &= pad[i];
         pad[i] = (uint16_t)(pad[i] & ~p.swallow[i]);
-    }
-    /* The options menu's quit: the screen shut, Start given to the game once
-       the tap's own is let go, as a pad's Start is: the game opens its own
-       pause, whose choice is to continue or quit the race. */
-    if (p.leave == 1 && !start) {
-        p.leave = 2;
-        p.leave_left = 5;
-    }
-    if (p.leave == 2) {
-        pad[0] |= PAD_START;
-        if (--p.leave_left <= 0)
-            p.leave = 0;
     }
     return 1;
 }
@@ -1134,7 +1120,7 @@ static int pause_step(const nshvc_input *in, uint16_t pad[2])
                 option_auto_accelerate_set(!option_auto_accelerate());
             } else {
                 if (p.chosen == PAUSE_MENU_QUIT)
-                    p.leave = 1;
+                    race_pause_quit();  /* the game's own pause, taking its quit (race/pause.c) */
                 screen_close(pad);
                 return held_back(pad);
             }
