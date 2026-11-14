@@ -25,7 +25,7 @@ ROM's code was, as `native/stuntracefx/tools/extract_assets.py` makes it
 its shaders beside it. The game, and the builder itself, have the game's own
 icon (`native/stuntracefx/icon/icon.png`). Linux is not built yet.
 
-Version 0.92. The builder and the game it builds run on macOS 12 or later
+Version 0.99. The builder and the game it builds run on macOS 12 or later
 (Apple silicon and Intel) and Windows 10 or later (64-bit, with a Vulkan
 graphics driver); the iPhone and iPad app on iOS 15 or later.
 

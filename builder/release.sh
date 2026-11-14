@@ -2,7 +2,7 @@
 # builder/release.sh: build Stunt Race FX Builder for macOS and Windows and
 # publish both on the repository's GitHub Releases page as vVERSION.
 #
-# VERSION: 0.92 unless set. The release is tagged at HEAD as it is when this
+# VERSION: 0.99 unless set. The release is tagged at HEAD as it is when this
 # starts, which must already be on GitHub. Running it again at the same
 # version replaces the files of that release.
 #
@@ -19,7 +19,7 @@ for a in "$@"; do
     [ "$a" = --no-build ] && BUILD=0
 done
 
-VERSION=${VERSION:-0.92}
+VERSION=${VERSION:-0.99}
 TAG=v$VERSION
 DIST=build/builder/dist
 MAC=$DIST/StuntRaceFXBuilder-$VERSION-macOS.zip
@@ -54,7 +54,9 @@ The game's data is copyrighted, so the builder does not include it: you provide 
 - **Any window, any shape**: the race and the menus fill the window, wide or tall, and the 3D is drawn at the window's own resolution, sharp at any size.
 - **60 frames a second**: the race runs the cartridge's own physics step for step, and the 3D is drawn on every frame between its steps.
 - **The courses' ground as polygon scenery**: green polygon mountains, oceans of waves, snowfields, to the horizon; solid 3D tyres and trees, and no distance where the scenery is cut off.
-- **Its own pause screen** (Escape, Select + Start, or the corner button): remap the keyboard and a game controller, and turn Auto-Accelerate on or off.
+- **Its own pause screen** (Escape, Select + Start, or the corner button): remap the keyboard and a game controller, and turn Auto-Accelerate on or off; on the iPhone and iPad, a menu to resume, turn Auto-Accelerate on or off, or quit the race.
+- **A view from above**: the view button beside the pause button switches the race between the view behind the car and an angled view from above.
+- **Depth-tested 3D**: the courses, cars and scenery drawn at their true depths, the cars riding on the track itself.
 - **Touch controls** on the iPhone and iPad: a steering wheel under your right thumb, brake and boost pedals under your left, the gas held for you while you drive, a pause button; swipes and taps in the menus.
 - **Game controllers** and the keyboard, on every system.
 - **Records kept** as the cartridge's battery saved them, in your user folder, so a rebuild never loses them.
@@ -77,7 +79,7 @@ The first release (Rev 0) and the European and Japanese cartridges are not suppo
 - Windows: a folder, \`Stunt Race FX\`, with \`Stunt Race FX.exe\` in it.
 
 ### Playing
-- A keyboard or a game controller drives; on the iPhone and iPad, touch, or a game controller. The pause screen shows and changes what each key and button does.
+- A keyboard or a game controller drives; on the iPhone and iPad, touch, or a game controller. The pause screen shows and changes what each key and button does (on a computer).
 - Full screen: View, Enter Full Screen (Control-Command-F) on a Mac, Alt+Enter or F11 on Windows.
 - Records and settings live in your user folder (Application Support on macOS, the iPhone and the iPad, AppData on Windows), so rebuilding never touches them.
 
