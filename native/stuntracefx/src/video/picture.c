@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "fx/fx_draw.h"
+#include "race/race.h"
 #include "system/state.h"
 #include "video/between.h"
 #include "video/picture.h"
@@ -624,6 +625,17 @@ static void draw_picture(void)
             moved[k].y += sh->origin_y;
         }
         nshvc_sprites_set(moved, n, 0);
+    } else if (pic.race.on && race_ending_running()) {
+        /* the ending shows no panels: the HUD's sprites in their band (from line 161) are left out */
+        static nshvc_sprite kept[128];
+        uint32_t k, n = pic.sprite_count > 128 ? 128 : pic.sprite_count;
+
+        for (k = 0; k < n; k++) {
+            kept[k] = pic.sprites[k];
+            if (kept[k].priority == 3 && kept[k].y + kept[k].height * 8 > 161)
+                kept[k].y = 0x7FF;
+        }
+        nshvc_sprites_set(kept, n, 0);
     } else
         nshvc_sprites_set(pic.sprites, pic.sprite_count, 0);
     if (pic.line_tables)

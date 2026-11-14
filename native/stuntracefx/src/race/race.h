@@ -133,6 +133,7 @@ void race_session_begin(void);
 int race_session_update(void);
 int DemoRun(int which);
 int race_flow_stopped(void);
+int race_ending_running(void);        /* the ending's three demos are playing */
 void race_wait_overlay(void (*after)(void));
 void race_wait_champion(void (*after)(void));
 void race_go_on(void);

@@ -63,6 +63,7 @@ static struct {
 } flow;
 
 int race_flow_stopped(void) { return flow.stopped; }
+int race_ending_running(void) { return flow.state == FLOW_ENDING; }
 
 void race_wait_overlay(void (*after)(void))
 {

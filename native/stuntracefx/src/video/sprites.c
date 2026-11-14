@@ -9,6 +9,7 @@
 #include "audio/sound.h"
 #include "data/race_tables.h"
 #include "data/video_tables.h"
+#include "race/race.h"
 #include "system/game.h"
 #include "system/state.h"
 #include "video/picture.h"
@@ -955,6 +956,7 @@ static int piece_root(int *up, int i)
 
 /*
  * The sprites placed on the larger screen (fullwindow.c's sprites_place):
+ * - left out, in the ending, the HUD's sprites in the panel band;
  * - left out, what the original's screen kept out of sight: the bezel's
  *   sides (characters $40-$47, palette 3); its start lamps (characters
  *   $A0-$AF, palette 3) once the race runs (player 1's phase $0DD6 from 6);
@@ -976,6 +978,7 @@ void sprites_place_full(nshvc_sprite *out, const nshvc_sprite *in, uint32_t coun
     const PanelBoxes *boxes = race_panel_boxes();
     int up[128], shown[128], hud[128], x0[128], x1[128], y0[128], y1[128];
     int i, b, n = count > 128 ? 128 : (int)count, lamps_gone = g.player_phase[0] >= 6;
+    int ending = race_ending_running();     /* the ending shows no panels, so none of their sprites */
 
     for (i = 0; i < n; i++) {
         const nshvc_sprite *s = &in[i];
@@ -988,7 +991,8 @@ void sprites_place_full(nshvc_sprite *out, const nshvc_sprite *in, uint32_t coun
                      ((t & 0x1F0) == 0xA0 && s->palette == 3 && lamps_gone) ||
                      y < 0 || y >= PANEL_END || y + h <= ROW0 || x + w <= 0 || x >= 256 ||
                      (!hud[i] && (x + w <= VIEW_X || x >= VIEW_X + VIEW_W || y + h <= VIEW_Y || y >= VIEW_Y + VIEW_H)) ||
-                     (hud[i] && y >= VIEW_Y && y + h <= VIEW_Y + VIEW_H && (x + w <= VIEW_X || x >= VIEW_X + VIEW_W)));
+                     (hud[i] && y >= VIEW_Y && y + h <= VIEW_Y + VIEW_H && (x + w <= VIEW_X || x >= VIEW_X + VIEW_W)) ||
+                     (hud[i] && ending && y + h > PANEL_TOP));
         if (!shown[i])
             continue;
         for (b = 0; b < i; b++)

@@ -1444,8 +1444,16 @@ static void frame_image_build(void)
             if (t >= 0x2B0)
                 plot_tile(image, 256, 224, x * 8, y * 8 + 16, frame_art_8 + t * 64u, 8, 0, (w >> 14) & 1, (w >> 15) & 1);
         }
-    nshvc_image_write(race_video.frame_image, image);
     panel_boxes_find(image);
+    if (race_ending_running()) {
+        /* the ending shows the view with no panels (Jeff, 2026-11-14, from the original's
+           ending): the boxes' pixels are taken out of the frame and none are drawn over the 3D */
+        for (int k = 0; k < panel_boxes.count; k++)
+            for (y = panel_boxes.y0[k]; y <= panel_boxes.y1[k]; y++)
+                memset(image + y * 256 + panel_boxes.x0[k], 0, (size_t)(panel_boxes.x1[k] - panel_boxes.x0[k] + 1));
+        panel_boxes.count = 0;
+    }
+    nshvc_image_write(race_video.frame_image, image);
     frame_image_stale = 0;
 }
 
