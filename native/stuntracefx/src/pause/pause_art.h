@@ -56,6 +56,16 @@ void pause_draw_hint(PauseImg *m, const char *line1, uint32_t colour1, const cha
 /* the auto-accelerate button with its value, lit (chosen) or not; its box is pause_lit_box(PAUSE_OPTION) */
 void pause_draw_option(PauseImg *m, int on, int lit);
 
+/* ---- the options menu (iOS, whose controls cannot be changed) ---- */
+
+/* the panel of the options menu: the title and the items one under the
+   other, no controller; its items by their own pictures, over it */
+enum { PAUSE_MENU_RESUME, PAUSE_MENU_AUTO, PAUSE_MENU_QUIT, PAUSE_MENU_ITEMS };
+void pause_menu_box(int item, float *x, float *y, float *w, float *h);
+void pause_draw_menu_panel(PauseImg *m);
+/* an item, lit while chosen; `on` is the auto-accelerate item's value */
+void pause_draw_menu_item(PauseImg *m, int item, int on, int lit);
+
 /* the pause button in the window's corner, PAUSE_BUTTON points square in its
    own points: two bars, or a play triangle while the game is paused */
 #define PAUSE_BUTTON 40
