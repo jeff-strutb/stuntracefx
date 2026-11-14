@@ -37,6 +37,7 @@ typedef struct {
 
 void screen_update(void);                      /* from the window, once a picture */
 const ScreenShape *screen_shape(void);
+void screen_window(float *width, float *height);   /* the window in pixels the shape was made from */
 void screen_window_set(const float *values, int count); /* a check's window: width, height, safe area */
 int screen_anchor_x(int x0, int x1);           /* columns to add to a piece of the original's screen */
 int screen_view_anchor_x(int x0, int x1);      /* the same for a piece inside the original's view */
@@ -52,6 +53,10 @@ int race_full_window(void);                    /* the one-player race fills the 
 int race_results_page(void);                   /* the one-player race screen shows the results' page */
 int race_two_full_window(void);                /* two players fill the window */
 int race_course_full_window(void);             /* the course screen fills the window */
+/* The course screen's wipe laid over the whole window (course_wipe.c): the
+   edges window 1 has by original line, and the blend that gives its level; off. */
+void course_wipe_overlay(const int32_t left[224], const int32_t right[224], const nshvc_blend *blend);
+void course_wipe_overlay_off(void);
 nshvc_image fx_noise_image(void);              /* fx_draw.c: the static's noise texture */
 uint16_t fx_static_seed(int line);             /* fx_draw.c: the seed line 0-127 of the static's block was drawn with */
 void race_two_full_window_ready(int on);       /* interim: the 3D's side turns it on with its two-player rectangles */

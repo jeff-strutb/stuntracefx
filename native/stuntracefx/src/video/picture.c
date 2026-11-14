@@ -210,8 +210,8 @@ static void course_scroll_values(int32_t v[224])
 }
 
 /* The course screen's wipe: window 1's edges by line from its table, in
-   the screen's columns. */
-static void course_wipe_values(int32_t l1[224], int32_t r1[224], int origin_x)
+   the original's 256 x 224 columns and lines. */
+static void course_wipe_values(int32_t l1[224], int32_t r1[224])
 {
     const uint8_t *t = windows.wipe_table;
     int r, at = 0, line = 0;
@@ -229,10 +229,6 @@ static void course_wipe_values(int32_t l1[224], int32_t r1[224], int origin_x)
     for (r = line; r < 224; r++) {
         l1[r] = line ? l1[line - 1] : 1;
         r1[r] = line ? r1[line - 1] : 0;
-    }
-    for (r = 0; r < 224; r++) {
-        l1[r] += origin_x;
-        r1[r] += origin_x;
     }
 }
 
@@ -262,8 +258,7 @@ void video_newest_lines_take(void)
     if (newest_lines.course)
         course_scroll_values(newest_lines.scroll);
     if (newest_lines.wipe)
-        course_wipe_values(newest_lines.wipe_edges[0], newest_lines.wipe_edges[1],
-                           race_course_full_window() ? screen_shape()->origin_x : 0);
+        course_wipe_values(newest_lines.wipe_edges[0], newest_lines.wipe_edges[1]);
     newest_lines.ready = 1;
 }
 
@@ -335,7 +330,7 @@ static void split_half_send(void)
 
 /* The course screen: rows to $D8 lit; BG2's scroll in bands, by its table
    when the table is on; the sprites from row 55; window 1 from the wipe table. */
-static void course_lines_send(int full, int origin_x)
+static void course_lines_send(int full)
 {
     int32_t v[224], l1[224], r1[224];
     int r;
@@ -352,13 +347,24 @@ static void course_lines_send(int full, int origin_x)
         tween_lines(v, newest_lines.scroll, 224, 0, TWEEN_SCROLL);
     nshvc_lines(0, 224, (nshvc_line_field)(NSHVC_LINE_SCROLL_Y + 1), v);
     if (g.line_effects.course_wipe) {
-        course_wipe_values(l1, r1, origin_x);
+        course_wipe_values(l1, r1);
         if (newest_lines.ready && newest_lines.wipe) {  /* the wipe as it moves, between updates */
             tween_lines(l1, newest_lines.wipe_edges[0], 224, LINE_EDGE_FAR, 0);
             tween_lines(r1, newest_lines.wipe_edges[1], 224, LINE_EDGE_FAR, 0);
         }
-        nshvc_lines(0, 224, NSHVC_LINE_WIN1_LEFT, l1);
-        nshvc_lines(0, 224, NSHVC_LINE_WIN1_RIGHT, r1);
+        if (full) {
+            /* laid over the whole screen by overlays (course_wipe.c), not by
+               the picture's window and colour maths, which reach only the
+               256 x 224: the maths is left off for it */
+            nshvc_blend b = pic.blend;
+
+            course_wipe_overlay(l1, r1, &pic.blend);
+            b.layers = 0;
+            nshvc_blend_set(&b);
+        } else {
+            nshvc_lines(0, 224, NSHVC_LINE_WIN1_LEFT, l1);
+            nshvc_lines(0, 224, NSHVC_LINE_WIN1_RIGHT, r1);
+        }
     }
 }
 
@@ -371,9 +377,7 @@ static void race_lines_send(void)
     int one = !pic.race.split;
 
     if (pic.race.course_screen) {
-        int full = race_course_full_window();
-
-        course_lines_send(full, full ? screen_shape()->origin_x : 0);
+        course_lines_send(race_course_full_window());
         return;
     }
     blank_lines_send();
@@ -580,6 +584,8 @@ static void draw_picture(void)
     s.brightness = pic.brightness;
     s.blank = pic.blank;
     nshvc_screen_set(&s);
+    if (!(course_full && g.line_effects.course_wipe))
+        course_wipe_overlay_off();      /* the wipe's overlays only on its screen, blank or not */
     if (pic.blank)
         return;
     /* The race keeps mode 1 for its draw list (race_screen_layers); the
