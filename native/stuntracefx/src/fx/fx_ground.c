@@ -432,8 +432,30 @@ enum { CANDIDATES = 0x31 + FX_FAR_MAX };
 static struct {
     uint16_t shape;
     double at[3], lo[3], hi[3], area[4];
+    uint8_t roof;                       /* the colour of most area on its level faces in its upper half */
 } cand[CANDIDATES];
 static int ncand, surveying;
+
+/* The record's faces (world), kept while it is surveyed; a record with a
+   floor and no roof over it keeps them after, as a candidate for a tunnel
+   piece open above (the tunnels' lining, below). */
+enum { REC_FACES = 128, ROOFLESS = 16 };
+#define TUNNEL_HIGH 2000.0              /* a tunnel piece's most height and least width (the tunnels' rock) */
+#define TUNNEL_WIDE 2000.0
+typedef struct {
+    int n;
+    uint8_t colour;
+    double c[8][3];
+} WorldFace;
+static WorldFace rec_face[REC_FACES];
+static int nrec_face;
+static struct {
+    uint16_t shape;
+    double at[3], lo[3], hi[3];
+    int n;
+    WorldFace f[REC_FACES];
+} roofless[ROOFLESS];
+static int nroofless;
 
 static void survey_sink(double x, double y, double z, void *context)
 {
@@ -457,7 +479,18 @@ static void survey_face(const double (*c)[3], int n, uint8_t colour, int texture
     double nv[3] = { 0, 0, 0 }, len, area, u[3];
     int i, j;
 
-    (void)context;
+    if (n <= 8 && nrec_face < REC_FACES) {      /* in the world: as survey_sink places points */
+        const double *at = (const double *)context;
+
+        rec_face[nrec_face].n = n;
+        rec_face[nrec_face].colour = textured ? 0 : colour;
+        for (i = 0; i < n; i++) {
+            rec_face[nrec_face].c[i][0] = at[0] + c[i][0];
+            rec_face[nrec_face].c[i][1] = at[1] + c[i][1];
+            rec_face[nrec_face].c[i][2] = at[2] + c[i][2] - SURVEY_AHEAD;
+        }
+        nrec_face++;
+    }
     for (i = 0; i < n; i++) {           /* Newell's normal: its length is twice the area */
         const double *a = c[i], *b = c[(i + 1) % n];
 
@@ -613,6 +646,93 @@ static void rock_shades(void)
     grid.bias = x[3];
 }
 
+/* a face's area and unit normal (Newell's, as its corners go round) */
+static double face_area(const WorldFace *f, double u[3])
+{
+    double nv[3] = { 0, 0, 0 }, len;
+    int i;
+
+    for (i = 0; i < f->n; i++) {
+        const double *a = f->c[i], *b = f->c[(i + 1) % f->n];
+
+        nv[0] += (a[1] - b[1]) * (a[2] + b[2]);
+        nv[1] += (a[2] - b[2]) * (a[0] + b[0]);
+        nv[2] += (a[0] - b[0]) * (a[1] + b[1]);
+    }
+    len = sqrt(nv[0] * nv[0] + nv[1] * nv[1] + nv[2] * nv[2]);
+    for (i = 0; i < 3; i++)
+        u[i] = len > 0 ? nv[i] / len : 0;
+    return 0.5 * len;
+}
+
+static double face_mean_y(const WorldFace *f)
+{
+    double y = 0;
+    int i;
+
+    for (i = 0; i < f->n; i++)
+        y += f->c[i][1];
+    return y / f->n;
+}
+
+/* the surveyed record's roof colour: of its level untextured faces in its
+   upper half (y is down: under the middle of top and bottom), the colour
+   with the most area; 0 none */
+static uint8_t record_roof(double top, double bottom)
+{
+    static double area[256];
+    double u[3], best = 0;
+    int i, c, colour = 0;
+
+    memset(area, 0, sizeof area);
+    for (i = 0; i < nrec_face; i++) {
+        double a = face_area(&rec_face[i], u);
+
+        if (rec_face[i].colour && fabs(u[1]) > 0.7 && face_mean_y(&rec_face[i]) < (top + bottom) / 2)
+            area[rec_face[i].colour] += a;
+    }
+    for (c = 1; c < 256; c++)
+        if (area[c] > best) {
+            best = area[c];
+            colour = c;
+        }
+    return (uint8_t)colour;
+}
+
+/* the surveyed record kept when it has a floor (level faces at its
+   bottom, within FOOT) at least TUNNEL_WIDE across both ways and of at
+   least a quarter of its box's ground, no more than a tenth of that
+   level above its floor, and walls; no higher than TUNNEL_HIGH */
+static void record_roofless(uint16_t shape, const double at[3], const double lo[3], const double hi[3])
+{
+    double floor_area = 0, above = 0, side = 0, u[3];
+    double w = hi[0] - lo[0], d = hi[2] - lo[2];
+    int i;
+
+    if (nroofless == ROOFLESS || nrec_face == REC_FACES || hi[1] - lo[1] > TUNNEL_HIGH || w < TUNNEL_WIDE || d < TUNNEL_WIDE)
+        return;
+    for (i = 0; i < nrec_face; i++) {
+        double a = face_area(&rec_face[i], u);
+        int low = 1, k;
+
+        for (k = 0; k < rec_face[i].n; k++)
+            low = low && rec_face[i].c[k][1] >= hi[1] - FOOT;
+        if (fabs(u[1]) > 0.7)
+            *(low ? &floor_area : &above) += a;
+        else if (fabs(u[1]) < 0.3)
+            side += a;
+    }
+    if (floor_area < 0.25 * w * d || above > 0.1 * floor_area || side <= 0)
+        return;
+    roofless[nroofless].shape = shape;
+    memcpy(roofless[nroofless].at, at, sizeof roofless[nroofless].at);
+    memcpy(roofless[nroofless].lo, lo, sizeof roofless[nroofless].lo);
+    memcpy(roofless[nroofless].hi, hi, sizeof roofless[nroofless].hi);
+    roofless[nroofless].n = nrec_face;
+    memcpy(roofless[nroofless].f, rec_face, (size_t)nrec_face * sizeof rec_face[0]);
+    nroofless++;
+}
+
 /* one record (30 bytes) in the first slot, its place in the world `at` */
 static void survey_record(const uint8_t *record, double at[3], uint16_t *stack)
 {
@@ -633,6 +753,7 @@ static void survey_record(const uint8_t *record, double at[3], uint16_t *stack)
         float lowest = -1e9f;
 
         memset(rec_area, 0, sizeof rec_area);
+        nrec_face = 0;
         fx_face_survey(survey_sink, survey_face, at);
         *stack = 0x0240;
         (void)FxObjectsDraw(0, stack);
@@ -652,6 +773,8 @@ static void survey_record(const uint8_t *record, double at[3], uint16_t *stack)
                     cand[ncand].hi[q] = fmax(cand[ncand].hi[q], survey_point[i][q]);
                 }
             memcpy(cand[ncand].area, rec_area, sizeof rec_area);
+            cand[ncand].roof = record_roof(cand[ncand].lo[1], cand[ncand].hi[1]);
+            record_roofless(cand[ncand].shape, at, cand[ncand].lo, cand[ncand].hi);
             ncand++;
         }
         /* where the shape meets the ground: its lowest part (world y is
@@ -695,8 +818,6 @@ static int float_order(const void *a, const void *b)
    piece (a car inside it nearer the eye than it) still shows over its
    rock. */
 
-#define TUNNEL_HIGH 2000.0
-#define TUNNEL_WIDE 2000.0
 #define SHELL_THICK 256.0
 enum { TUNNELS = 64, SHELL_VERTICES = 3 * 8 * 7 };
 
@@ -706,8 +827,9 @@ static struct {
         uint16_t shape;
         double at[3], lo[3], hi[3];
         int along;                      /* the world axis its open ends lie along: 0 x, 2 z */
+        uint8_t roof;                   /* its roof's colour */
     } t[TUNNELS];
-} tunnels = { -1, 0, { { 0, { 0 }, { 0 }, { 0 }, 0 } } };
+} tunnels = { -1, 0, { { 0, { 0 }, { 0 }, { 0 }, 0, 0 } } };
 
 static void tunnels_find(unsigned course)
 {
@@ -726,7 +848,219 @@ static void tunnels_find(unsigned course)
         memcpy(tunnels.t[tunnels.n].lo, cand[i].lo, sizeof cand[i].lo);
         memcpy(tunnels.t[tunnels.n].hi, cand[i].hi, sizeof cand[i].hi);
         tunnels.t[tunnels.n].along = cand[i].area[2] >= cand[i].area[3] ? 2 : 0;
+        tunnels.t[tunnels.n].roof = cand[i].roof;
         tunnels.n++;
+    }
+}
+
+/* ---- the tunnels' lining ----
+
+   A tunnel piece open above: Sunset Valley's corner ($E3D8, logged
+   2026-11-17) has a floor, outer walls 640 high and its roof's lights 961
+   up, but no roof, no inner wall and no walls' tops; where the original
+   turned the backdrop black in a tunnel that was a dark ceiling, and with
+   the sky kept there (fx_ground_tunnel_sky) the sky showed through (Jeff,
+   2026-11-17: "the roof is now inexplicably open in some parts where it
+   should be enclosed"). Such a piece is a surveyed record with a floor and
+   no roof (record_roofless) whose box meets a tunnel piece's: its lining
+   closes it in its neighbour's roof colour. A ceiling: its floor's faces
+   LINING_GAP over its top (the lights under it, not on its plane). Walls
+   on its floor's open edges (an edge no other floor face has), up to the
+   ceiling from its own wall's top or, where it has none, from its floor;
+   where an open edge lies on a tunnel piece (within LINING_JOIN of its
+   box: the way on), from that piece's top, so over its roof nothing shows
+   between them; the rest of that edge is the way on, left open. A piece
+   none of whose open edges is a way on is not lined. Drawn after the
+   piece's own faces, as the rock, and only faces looking at the eye: each
+   faces into the piece, so from inside the piece is closed and from outside
+   nothing changes. */
+
+enum { LININGS = 8, LINING_FACES = 48 };
+#define LINING_GAP 32.0
+#define LINING_JOIN 128.0
+
+static struct {
+    int course, n;
+    struct {
+        uint16_t shape;
+        double at[3];
+        uint8_t colour;                 /* its neighbour's roof colour */
+        int nf;
+        WorldFace f[LINING_FACES];
+        double normal[LINING_FACES][3]; /* each face's, into the piece */
+    } l[LININGS];
+} linings = { -1, 0, { { 0, { 0 }, 0, 0, { { 0, 0, { { 0 } } } }, { { 0 } } } } };
+
+static int near_xz(const double *a, const double *b, double within)
+{
+    return fabs(a[0] - b[0]) <= within && fabs(a[2] - b[2]) <= within;
+}
+
+/* the tunnel piece whose box (within LINING_JOIN) has the place p across
+   the ground; -1 none */
+static int tunnel_at(const double p[3])
+{
+    int t;
+
+    for (t = 0; t < tunnels.n; t++)
+        if (p[0] >= tunnels.t[t].lo[0] - LINING_JOIN && p[0] <= tunnels.t[t].hi[0] + LINING_JOIN
+            && p[2] >= tunnels.t[t].lo[2] - LINING_JOIN && p[2] <= tunnels.t[t].hi[2] + LINING_JOIN)
+            return t;
+    return -1;
+}
+
+/* a lining's face: corners q (n of them) facing `normal` */
+static void lining_face(int j, const double (*q)[3], int n, const double normal[3])
+{
+    int k;
+
+    if (linings.l[j].nf == LINING_FACES)
+        return;
+    linings.l[j].f[linings.l[j].nf].n = n;
+    memcpy(linings.l[j].f[linings.l[j].nf].c, q, (size_t)n * sizeof q[0]);
+    for (k = 0; k < 3; k++)
+        linings.l[j].normal[linings.l[j].nf][k] = normal[k];
+    linings.l[j].nf++;
+}
+
+/* whether (x, z) is inside face f across the ground (crossings) */
+static int inside_xz(const WorldFace *f, double x, double z)
+{
+    int i, in = 0;
+
+    for (i = 0; i < f->n; i++) {
+        const double *a = f->c[i], *b = f->c[(i + 1) % f->n];
+
+        if ((a[2] > z) != (b[2] > z) && x < a[0] + (z - a[2]) * (b[0] - a[0]) / (b[2] - a[2]))
+            in = !in;
+    }
+    return in;
+}
+
+/* roofless record r, met by tunnel piece `join`, lined as lining j: 1
+   when it has a way on. Its floor: its level faces at its bottom (within
+   FOOT), less those lying on another larger one (the marks on it). */
+static int lining_make(int r, int join, int j)
+{
+    static const double down[3] = { 0, 1, 0 };          /* y is down: the ceiling faces the floor */
+    static uint8_t floor_of[REC_FACES];
+    static double area_of[REC_FACES];
+    double ceiling = roofless[r].lo[1] - LINING_GAP, u[3];
+    int f, g, k, e, ways = 0;
+
+    for (f = 0; f < roofless[r].n; f++) {
+        const WorldFace *ff = &roofless[r].f[f];
+        int low = 1;
+
+        for (k = 0; k < ff->n; k++)
+            low = low && ff->c[k][1] >= roofless[r].hi[1] - FOOT;
+        area_of[f] = face_area(ff, u);
+        floor_of[f] = low && area_of[f] > 0 && fabs(u[1]) > 0.7;
+    }
+    for (f = 0; f < roofless[r].n; f++) {
+        double cx = 0, cz = 0;
+
+        if (!floor_of[f])
+            continue;
+        for (k = 0; k < roofless[r].f[f].n; k++) {
+            cx += roofless[r].f[f].c[k][0] / roofless[r].f[f].n;
+            cz += roofless[r].f[f].c[k][2] / roofless[r].f[f].n;
+        }
+        for (g = 0; g < roofless[r].n; g++)
+            if (g != f && floor_of[g] == 1 && area_of[g] > area_of[f] && inside_xz(&roofless[r].f[g], cx, cz))
+                floor_of[f] = 2;        /* a mark on the floor */
+    }
+    linings.l[j].shape = roofless[r].shape;
+    memcpy(linings.l[j].at, roofless[r].at, sizeof linings.l[j].at);
+    linings.l[j].colour = tunnels.t[join].roof;
+    linings.l[j].nf = 0;
+    for (f = 0; f < roofless[r].n; f++) {
+        const WorldFace *ff = &roofless[r].f[f];
+        double q[8][3], cen[3] = { 0, 0, 0 };
+
+        if (floor_of[f] != 1)
+            continue;
+        for (k = 0; k < ff->n; k++) {
+            q[k][0] = ff->c[k][0];
+            q[k][1] = ceiling;
+            q[k][2] = ff->c[k][2];
+            cen[0] += ff->c[k][0] / ff->n;
+            cen[2] += ff->c[k][2] / ff->n;
+        }
+        lining_face(j, (const double (*)[3])q, ff->n, down);
+        for (e = 0; e < ff->n; e++) {   /* its open edges */
+            const double *a = ff->c[e], *b = ff->c[(e + 1) % ff->n];
+            double mid[3] = { (a[0] + b[0]) / 2, 0, (a[2] + b[2]) / 2 }, n[3] = { -(b[2] - a[2]), 0, b[0] - a[0] }, len, bottom;
+            int shared = 0, t;
+
+            len = sqrt(n[0] * n[0] + n[2] * n[2]);
+            if (len < 1)
+                continue;
+            for (g = 0; g < roofless[r].n && !shared; g++) {
+                const WorldFace *gg = &roofless[r].f[g];
+
+                if (g == f || floor_of[g] != 1)
+                    continue;
+                for (k = 0; k < gg->n && !shared; k++) {
+                    const double *c0 = gg->c[k], *c1 = gg->c[(k + 1) % gg->n];
+
+                    shared = (near_xz(c0, a, 2) && near_xz(c1, b, 2)) || (near_xz(c0, b, 2) && near_xz(c1, a, 2));
+                }
+            }
+            if (shared)
+                continue;
+            n[0] /= len;
+            n[2] /= len;
+            if (n[0] * (cen[0] - mid[0]) + n[2] * (cen[2] - mid[2]) < 0) {     /* into the piece */
+                n[0] = -n[0];
+                n[2] = -n[2];
+            }
+            t = tunnel_at(mid);
+            if (t >= 0) {               /* a way on: closed over its piece's roof */
+                bottom = tunnels.t[t].lo[1];
+                ways++;
+            } else {                    /* a wall: up from its own wall's top, else from the floor */
+                bottom = fmin(a[1], b[1]);
+                for (g = 0; g < roofless[r].n; g++) {
+                    const WorldFace *gg = &roofless[r].f[g];
+                    double top = 1e9;
+                    int at_a = 0, at_b = 0;
+
+                    if (face_area(gg, u) <= 0 || fabs(u[1]) >= 0.3)
+                        continue;
+                    for (k = 0; k < gg->n; k++) {
+                        at_a = at_a || near_xz(gg->c[k], a, 16);
+                        at_b = at_b || near_xz(gg->c[k], b, 16);
+                        top = fmin(top, gg->c[k][1]);
+                    }
+                    if (at_a && at_b)
+                        bottom = fmin(bottom, top);
+                }
+            }
+            if (bottom - ceiling > 1) {
+                double w[4][3] = { { a[0], bottom, a[2] }, { b[0], bottom, b[2] }, { b[0], ceiling, b[2] }, { a[0], ceiling, a[2] } };
+
+                lining_face(j, (const double (*)[3])w, 4, n);
+            }
+        }
+    }
+    return ways > 0;
+}
+
+static void linings_find(unsigned course)
+{
+    int r, t;
+
+    linings.course = (int)course;
+    linings.n = 0;
+    for (r = 0; r < nroofless && linings.n < LININGS; r++) {
+        for (t = 0; t < tunnels.n; t++)
+            if (roofless[r].lo[0] <= tunnels.t[t].hi[0] + LINING_JOIN && roofless[r].hi[0] >= tunnels.t[t].lo[0] - LINING_JOIN
+                && roofless[r].lo[2] <= tunnels.t[t].hi[2] + LINING_JOIN && roofless[r].hi[2] >= tunnels.t[t].lo[2] - LINING_JOIN
+                && roofless[r].lo[1] <= tunnels.t[t].hi[1] && roofless[r].hi[1] >= tunnels.t[t].lo[1])
+                break;
+        if (t < tunnels.n && lining_make(r, t, linings.n))
+            linings.n++;
     }
 }
 
@@ -745,6 +1079,7 @@ static void ground_survey(unsigned course, const double eye[3], const double m[9
 
     survey_points = 0;
     ncand = 0;
+    nroofless = 0;
     surveying = 1;
     memset(&rock_survey, 0, sizeof rock_survey);
     memcpy(kept, fx_ram, sizeof kept);
@@ -781,6 +1116,7 @@ static void ground_survey(unsigned course, const double eye[3], const double m[9
     fxs = state;
     rock_shades();
     tunnels_find(course);
+    linings_find(course);
     for (i = 0; i < (unsigned)survey_points; i++) {
         xmin = fmin(xmin, survey_point[i][0]);
         xmax = fmax(xmax, survey_point[i][0]);
@@ -876,9 +1212,9 @@ static void ground_survey(unsigned course, const double eye[3], const double m[9
     grid.level = next[grid.nx * grid.nz / 2];
     memcpy(grid_known, known, sizeof grid_known);
     fprintf(stderr, "ground: course %u, level %.0f, footprint x %.0f to %.0f, z %.0f to %.0f, lit level %.2f a unit of"
-            " facing (%s), %d rock shades, %d tunnel pieces\n", course, grid.level, grid.xmin, grid.xmax, grid.zmin, grid.zmax,
+            " facing (%s), %d rock shades, %d tunnel pieces, %d lined\n", course, grid.level, grid.xmin, grid.xmax, grid.zmin, grid.zmax,
             grid.light_k, grid.light_k == LIGHT_K ? "no lit faces: the chip's own scale" : "fitted from the course's lit faces",
-            grid.shades, tunnels.n);
+            grid.shades, tunnels.n, linings.n);
 }
 
 /* ---- the land drawn: a few planes, terrain.shade colouring them ----
@@ -1393,8 +1729,18 @@ static uint32_t face_colour(int cls, const double nv[3], const double nw[3], int
    face's own 1 / Z, the world's true depth), into v from *nv. */
 static uint32_t ground_now;             /* the land's plane's colour this picture (0: none yet) */
 
+static void land_face_as(const double (*pts)[3], int n, const double nw[3], int cls, uint32_t rgb, const double eye[3],
+                         const double m[9], nshvc_vertex *v, uint32_t *nv, uint32_t room);
+
 static void land_face(const double (*pts)[3], int n, const double nw[3], int cls, const double eye[3], const double m[9],
                       nshvc_vertex *v, uint32_t *nv, uint32_t room)
+{
+    land_face_as(pts, n, nw, cls, 0, eye, m, v, nv, room);
+}
+
+/* the same in colour rgb (0: by its class) */
+static void land_face_as(const double (*pts)[3], int n, const double nw[3], int cls, uint32_t rgb, const double eye[3],
+                         const double m[9], nshvc_vertex *v, uint32_t *nv, uint32_t room)
 {
     static FxCorner c[64];
     double vp[8][3], nview[3], d;
@@ -1414,7 +1760,7 @@ static void land_face(const double (*pts)[3], int n, const double nw[3], int cls
     nc = fx_face_triangles_whole((const double (*)[3])vp, n, c, sizeof c / sizeof c[0]);
     if (!nc || *nv + nc > room)
         return;
-    colour = face_colour(cls, nview, nw, 0);
+    colour = rgb ? rgb : face_colour(cls, nview, nw, 0);
     for (j = 0; j < nc; j++, (*nv)++) {
         memset(&v[*nv], 0, sizeof v[*nv]);
         v[*nv].x = c[j].x;
@@ -1547,28 +1893,61 @@ static struct {
 } shell_view;
 static int shell_pending = -1;
 
+/* The view the tunnels' lining is drawn in this picture (ground_draw sets
+   it on every course that draws its ground), and the lined piece being
+   drawn. */
+static struct {
+    int on;
+    double eye[3], m[9];
+} lining_view;
+static int lining_pending = -1;
+
+/* the record's place in the world: its place in view space (halved
+   `shift` times for a far one) turned back by the view's rows */
+static void record_place(uint16_t record, int shift, const double eye[3], const double m[9], double at[3])
+{
+    double v[3];
+    int k;
+
+    v[0] = ldexp((int16_t)(fx_ram[(uint16_t)(record + 0x12)] | fx_ram[(uint16_t)(record + 0x13)] << 8), shift);
+    v[1] = ldexp((int16_t)(fx_ram[(uint16_t)(record + 0x10)] | fx_ram[(uint16_t)(record + 0x11)] << 8), shift);
+    v[2] = ldexp((int16_t)(fx_ram[(uint16_t)(record + 0x14)] | fx_ram[(uint16_t)(record + 0x15)] << 8), shift);
+    for (k = 0; k < 3; k++)
+        at[k] = eye[k] + m[3 * k] * v[0] + m[3 * k + 1] * v[1] + m[3 * k + 2] * v[2];
+}
+
 void fx_ground_object_begin(uint16_t record, int shift)
 {
     uint16_t shape;
-    double v[3], at[3];
-    int i, k;
+    double at[3];
+    int i;
 
     shell_pending = -1;
-    if (!shell_view.on || surveying || tunnels.course != (int)g.course)
+    lining_pending = -1;
+    if (surveying)
         return;
     shape = (uint16_t)(fx_ram[(uint16_t)(record + 0x08)] | fx_ram[(uint16_t)(record + 0x09)] << 8);
+    if (lining_view.on && linings.course == (int)g.course)
+        for (i = 0; i < linings.n; i++)
+            if (linings.l[i].shape == shape) {
+                double dx, dz;
+
+                record_place(record, shift, lining_view.eye, lining_view.m, at);
+                dx = at[0] - linings.l[i].at[0];
+                dz = at[2] - linings.l[i].at[2];
+                if (dx * dx + dz * dz < 512.0 * 512.0 * (1 << (2 * shift))) {
+                    lining_pending = i;
+                    return;
+                }
+            }
+    if (!shell_view.on || tunnels.course != (int)g.course)
+        return;
     for (i = 0; i < tunnels.n; i++)
         if (tunnels.t[i].shape == shape)
             break;
     if (i == tunnels.n)
         return;
-    /* its place in the world: its place in view space (halved `shift`
-       times for a far one) turned back by the view's rows */
-    v[0] = ldexp((int16_t)(fx_ram[(uint16_t)(record + 0x12)] | fx_ram[(uint16_t)(record + 0x13)] << 8), shift);
-    v[1] = ldexp((int16_t)(fx_ram[(uint16_t)(record + 0x10)] | fx_ram[(uint16_t)(record + 0x11)] << 8), shift);
-    v[2] = ldexp((int16_t)(fx_ram[(uint16_t)(record + 0x14)] | fx_ram[(uint16_t)(record + 0x15)] << 8), shift);
-    for (k = 0; k < 3; k++)
-        at[k] = shell_view.eye[k] + shell_view.m[3 * k] * v[0] + shell_view.m[3 * k + 1] * v[1] + shell_view.m[3 * k + 2] * v[2];
+    record_place(record, shift, shell_view.eye, shell_view.m, at);
     for (; i < tunnels.n; i++) {
         double dx = at[0] - tunnels.t[i].at[0], dz = at[2] - tunnels.t[i].at[2];
 
@@ -1579,6 +1958,27 @@ void fx_ground_object_begin(uint16_t record, int shift)
         shell_pending = i;
 }
 
+/* the lined piece's lining, after its own faces (the tunnels' lining) */
+static void lining_draw(void)
+{
+    static nshvc_vertex lv[LINING_FACES * 3 * 8];
+    uint32_t nl = 0, rgb;
+    int j = lining_pending, f;
+
+    if (j < 0)
+        return;
+    lining_pending = -1;
+    rgb = linings.l[j].colour ? rgb_of(pic.palette[fx_draw_ink(linings.l[j].colour)]) : 0;
+    fx_draw_queued();                   /* the piece's own faces first */
+    fx_draw_piece(FX_PIECE_ROCK + TUNNELS + (uint32_t)j);
+    for (f = 0; f < linings.l[j].nf; f++)
+        land_face_as((const double (*)[3])linings.l[j].f[f].c, linings.l[j].f[f].n, linings.l[j].normal[f],
+                     g.course < 0x20 ? surface[g.course].cls : 0, rgb, lining_view.eye, lining_view.m, lv, &nl,
+                     sizeof lv / sizeof lv[0]);
+    fx_draw_land(lv, nl);
+    fx_draw_piece(0);
+}
+
 void fx_ground_object_end(void)
 {
     static nshvc_vertex sv[SHELL_VERTICES];
@@ -1587,6 +1987,7 @@ void fx_ground_object_end(void)
     double prof[5][2];
     int i = shell_pending, s, p, a, k;
 
+    lining_draw();
     if (i < 0)
         return;
     shell_pending = -1;
@@ -2740,9 +3141,9 @@ static uint32_t band_shade(int level, int whole)
 #define VERGE_NEAR 4000.0
 #define VERGE_FAR 40000.0
 
-int fx_ground_land(void)
+int fx_ground_tunnel_sky(void)
 {
-    return g.course < 0x20 && IS_LAND(surface[g.course].kind);
+    return g.course < 0x20 && surface[g.course].kind != SURF_NONE && surface[g.course].kind != SURF_AQUA;
 }
 
 int fx_ground_verge(uint8_t entry)
@@ -2925,6 +3326,8 @@ static void ground_draw(void)
        seen from below, over that backdrop (Jeff, 2026-11-11) */
     shell_view.on = 0;                  /* the tunnels' rock only where the land sets it */
     shell_pending = -1;
+    lining_view.on = 0;
+    lining_pending = -1;
     if (kind == SURF_NONE || (kind == SURF_AQUA && (g.picture_effects & 0x08) && !surface[course].cls))
         return;
     {
@@ -2939,6 +3342,9 @@ static void ground_draw(void)
     }
     for (i = 0; i < 9; i++)
         m[i] = (int16_t)ram_word((uint32_t)(0x00E4 + 2 * i)) / 32768.0;
+    lining_view.on = 1;                 /* the tunnels' lining on every course */
+    memcpy(lining_view.eye, eye, sizeof lining_view.eye);
+    memcpy(lining_view.m, m, sizeof lining_view.m);
     if (surface[course].cls == CLS_BAND || surface[course].cls == CLS_BAND_WHOLE)
         band_read(p);                   /* the band's colours as this picture's view shows them */
     if ((IS_LAND(kind) || surface[course].cls) && grid.course != (int)course) {
@@ -2954,7 +3360,7 @@ static void ground_draw(void)
        never takes the land, the mesas and the tunnels' rock away (Jeff,
        2026-11-17, GitHub issues 9 and 10: "not have black going into or out
        of the tunnel, but keep drawing like a natural tunnel look"; the
-       backdrop keeps its sky there too, fx_ground_land) */
+       backdrop keeps its sky there too, fx_ground_tunnel_sky) */
     if (IS_LAND(kind)) {                /* land: polygons, or the terrain over the view */
         if (surface[course].cls) {
             land_polygons(course, surface[course].cls, eye, m);

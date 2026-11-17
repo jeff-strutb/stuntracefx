@@ -19,10 +19,11 @@ void fx_ground_object_end(void);
    from the eye on screen row `row` of picture `panel` (fx_draw.c draws such
    faces in their corners' colours). */
 int fx_ground_verge(uint8_t entry);
-/* Whether the course stands on land (its tunnels open onto it): there a
-   tunnel keeps the sky and the land outside, where the original turned the
+/* Whether the course's tunnels keep the sky: every course's but Aqua
+   Tunnel's, whose sealed tube keeps the original's underwater backdrop;
+   their mouths open onto the outside, where the original turned the
    backdrop black (video/palette.c HudColourStep). */
-int fx_ground_land(void);
+int fx_ground_tunnel_sky(void);
 uint32_t fx_ground_verge_colour(uint8_t entry, double depth, float row, int panel);
 
 #endif

@@ -594,17 +594,35 @@ void fx_face_vertex(uint8_t p, uint8_t u, uint8_t v)
    A face is known by its corners' places, exactly (a key of each corner's
    three doubles): two faces share an edge when their corners there are the
    same points, whatever the point's number in whichever projection of the
-   model. */
+   model.
+
+   A tunnel's mouth (Sunset Valley's $E3A0 and $E3BC, logged 2026-11-17)
+   closes its opening with one face, a door in the walls' colour on the
+   tube's last corners, its rock face round it on the same plane: from
+   outside it faced the eye, so the mouth was a solid face, and from inside
+   it was drawn from behind, the tunnel's end a wall of that colour and rock
+   where the outside should show (Jeff, 2026-11-17, GitHub issues 9 and 10:
+   "not have black going into or out of the tunnel, but keep drawing like a
+   natural tunnel look"). Such a face is a cap: every edge of it is gone
+   along the same way by another face of its model not on its plane (the
+   tube's floor, walls and roof, where faces closing a surface go their
+   shared edges opposite ways). Of the course's shapes logged (22 shapes,
+   55,000 drawn) only the two doors are caps, in every picture. An open
+   model's caps are not drawn, facing the eye or not, so its mouth is open. */
 
 enum { WALKED = 512, WALKED_CORNERS = 8, HELD = 192 };
 
 static struct {
     int n;
     uint32_t key[WALKED_CORNERS];
+    double normal[3];                   /* its unit normal (Newell's), 0 for none */
+    int shape;                          /* the shape it made in the queue (shapes[]); -1 none */
+    unsigned age;                       /* the queue's age when it made it (queue_age) */
 } walked[WALKED];
 static int nwalked, walked_lost;        /* the faces the model's walk reached; whether some did not fit */
+static unsigned queue_age;              /* how many times the queue was drawn: a shape made before is gone */
 static struct {
-    int n, textured;
+    int n, textured, walk;              /* walk: its place among the walked faces; -1 none */
     View view;
     Tint tint;
     FxMaterial material;
@@ -631,35 +649,51 @@ void fx_face_begin_back(int textured)
     face.back = 1;
 }
 
-/* the face just ended, noted for its model's closing */
-static void walked_note(void)
+/* the face just ended, noted for its model's closing: its place among
+   the walked faces, -1 when not noted */
+static int walked_note(void)
 {
+    double nv[3] = { 0, 0, 0 }, len;
     int k;
 
     if (face.n < 3 || face.n > WALKED_CORNERS || !face.whole)
-        return;
+        return -1;
     if (nwalked == WALKED) {
         walked_lost = 1;
-        return;
+        return -1;
     }
     walked[nwalked].n = face.n;
-    for (k = 0; k < face.n; k++)
-        walked[nwalked].key[k] = corner_key(&face.c[k]);
-    nwalked++;
+    for (k = 0; k < face.n; k++) {
+        const Corner3 *a = &face.c[k], *b = &face.c[(k + 1) % face.n];
+
+        walked[nwalked].key[k] = corner_key(a);
+        nv[0] += (a->y - b->y) * (a->z + b->z);
+        nv[1] += (a->z - b->z) * (a->x + b->x);
+        nv[2] += (a->x - b->x) * (a->y + b->y);
+    }
+    len = sqrt(nv[0] * nv[0] + nv[1] * nv[1] + nv[2] * nv[2]);
+    for (k = 0; k < 3; k++)
+        walked[nwalked].normal[k] = len > 0 ? nv[k] / len : 0;
+    walked[nwalked].shape = -1;
+    walked[nwalked].age = queue_age;
+    return nwalked++;
 }
 
 void fx_face_end(const FxMaterial *material)
 {
+    int w, made;
+
     if (!face.open)
         return;
     face.open = 0;
-    walked_note();
+    w = walked_note();
     if (face.back) {                    /* held until its model's walk is done */
         int k;
 
         if (face.n < 3 || face.n > WALKED_CORNERS || !face.whole || nheld == HELD)
             return;
         held[nheld].n = face.n;
+        held[nheld].walk = w;
         held[nheld].textured = face.textured;
         held[nheld].view = face.view;
         held[nheld].tint = face.tint;
@@ -671,7 +705,10 @@ void fx_face_end(const FxMaterial *material)
         nheld++;
         return;
     }
+    made = nshapes;
     commit(material);
+    if (w >= 0 && nshapes > made)
+        walked[w].shape = made;
 }
 
 static int key_order(const void *a, const void *b)
@@ -724,6 +761,60 @@ static int walked_closed(void)
     return 1;
 }
 
+/* the walked faces that are caps (above): cap[i] set for each */
+static void walked_caps(uint8_t *cap)
+{
+    static struct {
+        uint64_t edge;
+        int face;
+    } list[WALKED * WALKED_CORNERS];
+    int i, k, n = 0;
+
+    memset(cap, 0, (size_t)nwalked);
+    if (walked_lost)
+        return;
+    for (i = 0; i < nwalked; i++)
+        for (k = 0; k < walked[i].n; k++) {
+            uint32_t a = walked[i].key[k], b = walked[i].key[(k + 1) % walked[i].n];
+
+            if (a != b) {
+                list[n].edge = (uint64_t)a << 32 | b;
+                list[n++].face = i;
+            }
+        }
+    qsort(list, (size_t)n, sizeof list[0], key_order);  /* by edge, its first member */
+    for (i = 0; i < nwalked; i++) {
+        int edges = 0, met = 0;
+
+        for (k = 0; k < walked[i].n; k++) {
+            uint32_t a = walked[i].key[k], b = walked[i].key[(k + 1) % walked[i].n];
+            uint64_t e = (uint64_t)a << 32 | b;
+            int lo = 0, hi = n, found = 0;
+
+            if (a == b)
+                continue;
+            edges++;
+            while (lo < hi) {
+                int mid = (lo + hi) / 2;
+
+                if (list[mid].edge < e)
+                    lo = mid + 1;
+                else
+                    hi = mid;
+            }
+            for (; lo < n && list[lo].edge == e && !found; lo++) {
+                const double *p = walked[i].normal, *q = walked[list[lo].face].normal;
+
+                found = list[lo].face != i && fabs(p[0] * q[0] + p[1] * q[1] + p[2] * q[2]) < 0.99;
+            }
+            if (!found)
+                break;
+            met++;
+        }
+        cap[i] = edges >= 3 && met == edges;
+    }
+}
+
 /* whether held face h has a twin among the faces the walk reached: the
    same corners the other way round */
 static int has_twin(int h)
@@ -761,13 +852,22 @@ static uint8_t colour_behind(Tint *t, uint8_t front)
 
 void fx_face_model_done(void)
 {
-    int h, k;
+    static uint8_t cap[WALKED];
+    int h, k, open = (nheld || nwalked) && !walked_closed();
 
-    if (nheld && !walked_closed())
+    if (open) {                         /* its caps not drawn: those queued left empty */
+        walked_caps(cap);
+        for (k = 0; k < nwalked; k++)
+            if (cap[k] && walked[k].shape >= 0 && walked[k].age == queue_age && walked[k].shape < nshapes) {
+                shapes[walked[k].shape].count = 0;
+                shapes[walked[k].shape].ncorner3 = 0;
+            }
+    }
+    if (nheld && open)
         for (h = 0; h < nheld; h++) {
             FxMaterial m = held[h].material;
 
-            if (has_twin(h))
+            if (has_twin(h) || (held[h].walk >= 0 && cap[held[h].walk]))
                 continue;
             face.open = 0;
             face.back = 1;
@@ -792,6 +892,7 @@ void fx_face_model_done(void)
 void fx_face_reset(void)
 {
     face.open = 0;
+    queue_age++;
     nshapes = 0;
     ncorners = 0;
 }

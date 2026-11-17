@@ -533,11 +533,12 @@ void HudColourStep(void)
 
     amount_step();
     /* in a tunnel (bit 3 of $0DA5) the original turns the backdrop black;
-       a course on land keeps its sky there, its openings showing the land
-       outside (Jeff, 2026-11-17, GitHub issues 9 and 10: "not have black
-       going into or out of the tunnel"); Aqua Tunnel's sealed tube keeps
-       the original's, behind its underwater backdrop */
-    if ((g.picture_effects & 0x08) && !fx_ground_land()) {
+       every course keeps its sky there, its open mouths showing the outside
+       (Jeff, 2026-11-17, GitHub issues 9 and 10: "not have black going into
+       or out of the tunnel"; "ALL tunnels in the game should be properly
+       'open'"); Aqua Tunnel's sealed tube keeps the original's, behind its
+       underwater backdrop */
+    if ((g.picture_effects & 0x08) && !fx_ground_tunnel_sky()) {
         palettes.gradient_was_off = 1;
         gradient.source[g.fx_buffer] = GRADIENT_AT_BLACK;
         memset(&palettes.buffer[2], 0, 14 * sizeof palettes.buffer[0]);
