@@ -2740,6 +2740,11 @@ static uint32_t band_shade(int level, int whole)
 #define VERGE_NEAR 4000.0
 #define VERGE_FAR 40000.0
 
+int fx_ground_land(void)
+{
+    return g.course < 0x20 && IS_LAND(surface[g.course].kind);
+}
+
 int fx_ground_verge(uint8_t entry)
 {
     return g.course == 0x07 && entry >= 139 && entry <= 143;
@@ -2943,11 +2948,13 @@ static void ground_draw(void)
         forest.course = -1;
         city.course = -1;
     }
-    /* land: none in a tunnel (bit 3 of $0DA5, which the tunnel's gates set
-       and clear: the original turns the backdrop's colours black there, so
-       its openings show black, not the land outside; Jeff, 2026-11-11) */
-    if (IS_LAND(kind) && (g.picture_effects & 0x08))
-        return;
+    /* land: drawn in a tunnel too (bit 3 of $0DA5, which the tunnel's
+       gates set and clear), at its true depths behind the tunnel's walls
+       and roof, so its openings show the land outside and going in or out
+       never takes the land, the mesas and the tunnels' rock away (Jeff,
+       2026-11-17, GitHub issues 9 and 10: "not have black going into or out
+       of the tunnel, but keep drawing like a natural tunnel look"; the
+       backdrop keeps its sky there too, fx_ground_land) */
     if (IS_LAND(kind)) {                /* land: polygons, or the terrain over the view */
         if (surface[course].cls) {
             land_polygons(course, surface[course].cls, eye, m);
