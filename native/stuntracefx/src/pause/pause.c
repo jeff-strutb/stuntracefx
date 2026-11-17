@@ -585,6 +585,8 @@ static void tags_refresh(void)
     }
 }
 
+/* The hint: only while a button is asked for, what to press for it and how
+   to cancel; empty otherwise. */
 static void hint_refresh(void)
 {
     char line1[48], line2[48];
@@ -603,18 +605,9 @@ static void hint_refresh(void)
                                             : KEY_EVENTS  ? "ESCAPE OR SELECT + START TO CANCEL"
                                                           : "SELECT + START TO CANCEL");
         colour = GOLD;
-    } else if (p.chosen >= PAUSE_PLAYER1) {
-        line1[0] = 0;                   /* the buttons say it: none of their own */
-        snprintf(line2, sizeof line2, "%s", KEY_EVENTS ? "ESCAPE OR SELECT + START TO RESUME" : "SELECT + START TO RESUME");
-    } else if (p.chosen >= PAUSE_OPTION) {
-        snprintf(line1, sizeof line1, "%s", p.chosen == PAUSE_FULL_SCREEN ? "THE GAME FILLS THE SCREEN, OR A WINDOW"
-                                                                          : "THE PICTURES DRAWN A SECOND, TOP RIGHT");
-        snprintf(line2, sizeof line2, "%s", KEY_EVENTS ? "ESCAPE OR SELECT + START TO RESUME" : "SELECT + START TO RESUME");
     } else {
-        snprintf(line1, sizeof line1, "%s", can_ask()  ? "CHOOSE A BUTTON TO CHANGE IT"
-                                            : p.player ? "PRESS A BUTTON ON PLAYER 2'S CONTROLLER"
-                                                       : "CHANGED FROM A KEYBOARD OR PAD");
-        snprintf(line2, sizeof line2, "%s", KEY_EVENTS ? "ESCAPE OR SELECT + START TO RESUME" : "SELECT + START TO RESUME");
+        line1[0] = 0;                   /* no hint for the items (Jeff, 2026-11-17: "unnecessary") */
+        line2[0] = 0;
     }
     if (!p.hint.id || (!strcmp(line1, p.hint_shown[0]) && !strcmp(line2, p.hint_shown[1])))
         return;
