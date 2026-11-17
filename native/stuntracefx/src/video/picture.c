@@ -566,6 +566,89 @@ static void full_two_draw(const ScreenShape *sh)
 
 static void draw_picture(void);
 
+/* The one-player results' page in the whole window (Jeff, 2026-11-17,
+   GitHub issue 8: "make the results screen properly resolution agnostic
+   just like the rest of the game/menus"; the grey frame to the window's
+   edges). BG1 is the page's list (race_results_list: the grey, the frame,
+   the panels at the race's places); BG2's page keeps the original's
+   scrolls about the picture's place, and window 2 keeps it to its box, the
+   26 x 17 entries the results write (ResultsMapRowsUpload): the rest of the
+   page is the race's hills, whose characters the results' pictures have
+   taken over, and the frame no longer covers it beyond the original's
+   picture. Window 1 (the page's opening and closing bands) moves with the
+   picture, its edges at the original's sides reaching the window's. The
+   sprites go as sprites_place_results puts them. */
+enum { RESULTS_BOX_W = 26 * 8, RESULTS_BOX_H = 17 * 8 };
+
+static int32_t results_left(int32_t x, int32_t right, const ScreenShape *sh)
+{
+    (void)right;
+    return x == 0 ? 0 : x + sh->origin_x;
+}
+
+static void results_full_draw(const ScreenShape *sh)
+{
+    static nshvc_sprite placed[128];
+    static int32_t sy_rows[1024], l1w[1024], r1w[1024], l2w[1024], r2w[1024];
+    int32_t l1[224], r1[224], l2[224], r2[224];
+    nshvc_windows w = pic.windows;
+    Background list, page = pic.bg[1];
+    int ox = sh->origin_x, oy = sh->origin_y, h = sh->height > 1024 ? 1024 : sh->height, r;
+    int sx = pic.race.backdrop_x[0], sy = pic.race.backdrop_y[0];
+    int box_x = ox - sx, box_y = oy - sy - 1;   /* the page's first column and line on the screen */
+
+    memset(&list, 0, sizeof list);
+    list.draw_list = race_results_list();
+    layer_send(0, &list);
+    page.scroll_x = 0;
+    page.scroll_y = 0;
+    layer_send(1, &page);
+    layer_send(2, &pic.bg[2]);
+    if (g.line_effects.window_bands)
+        window_band_values(l1, r1, l2, r2);
+    for (r = 0; r < h; r++) {
+        int line = r - oy, k = line < 0 ? 0 : line > 223 ? 223 : line;
+        int32_t a = g.line_effects.window_bands ? l1[k] : w.w[0].left, b = g.line_effects.window_bands ? r1[k] : w.w[0].right;
+
+        /* BG2: line r shows the page's line (sy + line + 1) & 255, as the original's table had it */
+        sy_rows[r] = 256 + ((sy + line + 1) & 255) - (r + 1);
+        if (a > b) {                    /* covers nothing: still nothing */
+            l1w[r] = a + ox;
+            r1w[r] = b + ox;
+        } else {
+            l1w[r] = results_left(a, b, sh);
+            r1w[r] = b >= 255 ? sh->width - 1 : b + ox;
+        }
+        l2w[r] = r >= box_y && r < box_y + RESULTS_BOX_H ? box_x : 1;
+        r2w[r] = r >= box_y && r < box_y + RESULTS_BOX_H ? box_x + RESULTS_BOX_W - 1 : 0;
+    }
+    w.layer_use[1] = (uint8_t)((w.layer_use[1] & (NSHVC_WIN1 | NSHVC_WIN1_INVERT)) | NSHVC_WIN2 | NSHVC_WIN2_INVERT);
+    w.mask_main[1] = 1;
+    nshvc_windows_set(&w);
+    nshvc_lines(0, (uint32_t)h, NSHVC_LINE_WIN1_LEFT, l1w);
+    nshvc_lines(0, (uint32_t)h, NSHVC_LINE_WIN1_RIGHT, r1w);
+    nshvc_lines(0, (uint32_t)h, NSHVC_LINE_WIN2_LEFT, l2w);
+    nshvc_lines(0, (uint32_t)h, NSHVC_LINE_WIN2_RIGHT, r2w);
+    nshvc_lines(0, (uint32_t)h, (nshvc_line_field)(NSHVC_LINE_SCROLL_Y + 1), sy_rows);
+    nshvc_line(0, (nshvc_line_field)(NSHVC_LINE_SCROLL_X + 1), (sx - ox) & 255);
+    nshvc_blend_set(&pic.blend);
+    nshvc_palette_write(0, 256, pic.palette);
+    if (g.line_effects.fixed_bands) {
+        int32_t lines[224], rows[1024];
+
+        fixed_line_values(pic.blend.fixed_bgr15, lines);
+        for (r = 0; r < h; r++) {
+            int line = r - oy;
+
+            rows[r] = lines[line < 0 ? 0 : line > 223 ? 223 : line];
+        }
+        nshvc_lines(0, (uint32_t)h, NSHVC_LINE_FIXED, rows);
+    }
+    nshvc_sprites_show((pic.main_screen >> 4) & 1, (pic.sub_screen >> 4) & 1);
+    sprites_place_results(placed, pic.sprites, pic.sprite_count);
+    nshvc_sprites_set(placed, pic.sprite_count, 0);
+}
+
 /* The picture: between two updates the update before's game state drawn
    (video_between_world_in), its moving per-line tables eased towards the
    newest world's (video_newest_lines_take). */
@@ -590,8 +673,9 @@ static void draw_picture(void)
     if (pic.race.on && pic.race.course_screen)
         pic.bg[0].draw_list = fx_draw_picture(0);   /* the static as this frame's loop drew it */
     memset(&s, 0, sizeof s);
-    s.width = full || menu_full || course_full ? sh->width : 256;
-    s.height = full || menu_full || course_full ? sh->height : 224;
+    results = race_results_page();
+    s.width = full || menu_full || course_full || results ? sh->width : 256;
+    s.height = full || menu_full || course_full || results ? sh->height : 224;
     s.origin_x = menu_full || course_full ? sh->origin_x : 0;   /* the race places its own (full_window_draw) */
     s.origin_y = menu_full || course_full ? sh->origin_y : 0;
     s.brightness = pic.brightness;
@@ -605,7 +689,6 @@ static void draw_picture(void)
        results' page has no list and BG2's page at priority 0, so it takes the
        original's mode 3: the page's sprites (the car, priority 1) over the
        page and under the frame, as they showed. */
-    results = race_results_page();
     nshvc_mode_set(results ? 3 : pic.mode, pic.bg3_priority, 0);
     {
         nshvc_limits l;
@@ -616,6 +699,10 @@ static void draw_picture(void)
         if (course_full)
             l.layer_clip[1] = l.layer_clip[4] = 1;      /* the cards and sprites kept to the original's picture */
         nshvc_limits_set(&l);
+    }
+    if (results) {
+        results_full_draw(sh);
+        return;
     }
     if (full) {
         if (pic.race.split)

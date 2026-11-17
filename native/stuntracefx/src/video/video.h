@@ -69,6 +69,7 @@ void screen_two_box_source(int player, int box, int *x, int *y, int *w, int *h);
 void screen_two_box(int player, int box, float *x, float *y, float *w, float *h);   /* and where it floats, scaled */
 int race_full_window(void);                    /* the one-player race fills the window */
 int race_results_page(void);                   /* the one-player race screen shows the results' page */
+nshvc_draw_list race_results_list(void);       /* that page's frame and panels in the whole window (BG1) */
 int race_two_full_window(void);                /* two players fill the window */
 int race_course_full_window(void);             /* the course screen fills the window */
 /* The course screen's wipe laid over the whole window (course_wipe.c): the
@@ -86,6 +87,7 @@ uint16_t race_full_sky_colour(int row);             /* one player's full window:
 uint16_t race_two_sky_colour(int player, int row);  /* two players' colour 1 on a screen row */
 int race_underwater_cells(uint8_t texels[80][64], uint16_t colours[16]); /* Aqua Tunnel's ripple cells; 0 if not loaded */
 void sprites_place_full(nshvc_sprite *out, const nshvc_sprite *in, uint32_t count); /* the race's sprites on the larger screen */
+void sprites_place_results(nshvc_sprite *out, const nshvc_sprite *in, uint32_t count); /* the results' page's */
 void sprites_place_two(nshvc_sprite *out, const nshvc_sprite *in, uint32_t count);  /* two players' */
 unsigned sprite_name_of(const nshvc_sprite *s);  /* a sprite's 9-bit character name, as the original's table holds it */
 

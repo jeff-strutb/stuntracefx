@@ -971,7 +971,17 @@ static int piece_root(int *up, int i)
  *   box under it (or by its own columns) and down to the bottom; inside the
  *   view, by the view's edges across and by its middle down.
  */
-void sprites_place_full(nshvc_sprite *out, const nshvc_sprite *in, uint32_t count)
+static void place_full(nshvc_sprite *out, const nshvc_sprite *in, uint32_t count, int results);
+
+void sprites_place_full(nshvc_sprite *out, const nshvc_sprite *in, uint32_t count) { place_full(out, in, count, 0); }
+
+/* The results' page (race_results_list): the frame's own sprites (the
+   bezel's sides) and the page's (the car, its text) at the original's
+   picture's place; the panel row's go with their boxes, as in the race;
+   what the original kept off its picture stays out of sight. */
+void sprites_place_results(nshvc_sprite *out, const nshvc_sprite *in, uint32_t count) { place_full(out, in, count, 1); }
+
+static void place_full(nshvc_sprite *out, const nshvc_sprite *in, uint32_t count, int results)
 {
     enum { VIEW_X = 24, VIEW_W = 208, VIEW_Y = 32, VIEW_H = 128, PANEL_TOP = 161, PANEL_END = 208, ROW0 = 16 };
     const ScreenShape *sh = screen_shape();
@@ -987,11 +997,11 @@ void sprites_place_full(nshvc_sprite *out, const nshvc_sprite *in, uint32_t coun
 
         up[i] = i;
         hud[i] = s->priority == 3;
-        shown[i] = !(((t & 0x1F8) == 0x40 && s->palette == 3) ||
-                     ((t & 0x1F0) == 0xA0 && s->palette == 3 && lamps_gone) ||
-                     y < 0 || y >= PANEL_END || y + h <= ROW0 || x + w <= 0 || x >= 256 ||
-                     (!hud[i] && (x + w <= VIEW_X || x >= VIEW_X + VIEW_W || y + h <= VIEW_Y || y >= VIEW_Y + VIEW_H)) ||
-                     (hud[i] && y >= VIEW_Y && y + h <= VIEW_Y + VIEW_H && (x + w <= VIEW_X || x >= VIEW_X + VIEW_W)) ||
+        shown[i] = !(y < 0 || y >= PANEL_END || y + h <= ROW0 || x + w <= 0 || x >= 256 ||
+                     (!results && (((t & 0x1F8) == 0x40 && s->palette == 3) ||
+                                   ((t & 0x1F0) == 0xA0 && s->palette == 3 && lamps_gone) ||
+                                   (!hud[i] && (x + w <= VIEW_X || x >= VIEW_X + VIEW_W || y + h <= VIEW_Y || y >= VIEW_Y + VIEW_H)) ||
+                                   (hud[i] && y >= VIEW_Y && y + h <= VIEW_Y + VIEW_H && (x + w <= VIEW_X || x >= VIEW_X + VIEW_W)))) ||
                      (hud[i] && ending && y + h > PANEL_TOP));
         if (!shown[i])
             continue;
@@ -1030,6 +1040,8 @@ void sprites_place_full(nshvc_sprite *out, const nshvc_sprite *in, uint32_t coun
                 if (centre >= boxes->x0[b] && centre <= boxes->x1[b])
                     dx = screen_anchor_x(boxes->x0[b], boxes->x1[b]);
             dy = screen_bottom_shift();
+        } else if (results) {
+            /* the page's own: at the picture's place */
         } else if (hud[i]) {
             dx = lamp[p] ? screen_lamp_anchor_x(x0[p], x1[p]) : screen_view_anchor_x(x0[p], x1[p]);
             dy = screen_anchor_y(y0[p], y1[p]);

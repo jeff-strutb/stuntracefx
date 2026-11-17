@@ -1310,6 +1310,8 @@ void NmiFrameUploadSprites(void)
     CgramUploadAll();
 }
 
+static uint32_t direct_of(uint16_t bgr);
+
 /* ---- the frame and panels around the 3D ---- */
 
 /* One tile into an image of `w` x `h` at (x, y): colour 0 stays clear. */
@@ -1337,6 +1339,7 @@ static void plot_tile(uint8_t *image, int w, int h, int x, int y, const uint8_t 
 enum { PANEL_TOP = 161, PANEL_END = 208, PANEL_ROWS = PANEL_END - PANEL_TOP };
 static PanelBoxes panel_boxes;
 static nshvc_image boxes_image;
+static uint8_t panel_bg;                /* the panel row's background colour, a palette entry */
 
 const PanelBoxes *race_panel_boxes(void)
 {
@@ -1352,6 +1355,7 @@ static void panel_boxes_find(const uint8_t *image)
     uint8_t bg = px[(PANEL_ROWS / 2) * 256];
     int x, y, n = 0, k;
 
+    panel_bg = bg;
     if (!boxes_image.id)
         boxes_image = nshvc_image_create(256, PANEL_ROWS, NSHVC_IMAGE_INDEXED);
     for (y = 0; y < PANEL_ROWS; y++)
@@ -2079,4 +2083,84 @@ void VramUploadGsuBuffer(void)
         return;
     race_art_write(RACE_ART_SPRITES + 0x060, fx_ram + (g.fx_buffer ? FX_TURN_PICTURE_LOW : FX_TURN_PICTURE_HIGH), 0x0C00);
     g.picture_turn_pending = 0;
+}
+
+/* ---- the results' page in the whole window ----
+
+   Jeff, 2026-11-17 (GitHub issue 8, stray tiles on the results screen): the
+   results screen "properly resolution agnostic just like the rest of the
+   game/menus", with the original's grey frame out to the window's edges.
+   The list on BG1, in the screen's pixels: the panel row's grey over the
+   whole window except the original's picture down to its panel row; the
+   frame's image (characters $2B0 on, as frame_image_build lays them out)
+   over that picture down to the panel row, its box's place left clear for
+   BG2's page; and the panel row's boxes where the race's full window puts
+   them (art_over_draw), at the HUD box's edges and the screen's bottom.
+   picture.c places BG2's page, its window and the sprites to match. */
+enum { RESULTS_BAND_TOP = 160 };        /* the frame's row 18 on: the panel row, its grey from the window */
+
+static void results_quad(nshvc_draw_list list, nshvc_image image, int x, int y, int w, int h, int u, int v)
+{
+    nshvc_vertex q[6];
+    nshvc_material m;
+
+    memset(&m, 0, sizeof m);
+    m.image = image;
+    memset(q, 0, sizeof q);
+    q[0].x = (float)x; q[0].y = (float)y; q[0].u = (float)u; q[0].v = (float)v;
+    q[1].x = (float)(x + w); q[1].y = (float)y; q[1].u = (float)(u + w); q[1].v = (float)v;
+    q[2].x = (float)(x + w); q[2].y = (float)(y + h); q[2].u = (float)(u + w); q[2].v = (float)(v + h);
+    q[5].x = (float)x; q[5].y = (float)(y + h); q[5].u = (float)u; q[5].v = (float)(v + h);
+    q[0].colour = q[1].colour = q[2].colour = q[5].colour = 1;
+    q[3] = q[0];
+    q[4] = q[2];
+    nshvc_draw_tris(list, q, 6, &m);
+}
+
+static void results_rect(nshvc_draw_list list, int x0, int y0, int x1, int y1, uint32_t colour)
+{
+    nshvc_vertex q[6];
+    int k;
+
+    if (x1 <= x0 || y1 <= y0)
+        return;
+    memset(q, 0, sizeof q);
+    q[0].x = (float)x0; q[0].y = (float)y0;
+    q[1].x = (float)x1; q[1].y = (float)y0;
+    q[2].x = (float)x1; q[2].y = (float)y1;
+    q[5].x = (float)x0; q[5].y = (float)y1;
+    q[3] = q[0];
+    q[4] = q[2];
+    for (k = 0; k < 6; k++)
+        q[k].colour = colour;
+    nshvc_draw_tris(list, q, 6, NULL);
+}
+
+nshvc_draw_list race_results_list(void)
+{
+    static nshvc_draw_list list;
+    const ScreenShape *sh = screen_shape();
+    int ox = sh->origin_x, oy = sh->origin_y, w = sh->width, h = sh->height, down = screen_bottom_shift(), k;
+    uint32_t grey;
+
+    if (!list.id)
+        list = nshvc_draw_list_create();
+    if (frame_image_stale)
+        frame_image_build();
+    nshvc_draw_list_clear(list, (uint32_t)w, (uint32_t)h);
+    grey = direct_of(pic.palette[panel_bg]);
+    /* the grey: above the frame's first line (16), beside the original's
+       picture, and the whole panel row down */
+    results_rect(list, 0, 0, w, oy + 16, grey);
+    results_rect(list, 0, oy + 16, ox, oy + RESULTS_BAND_TOP, grey);
+    results_rect(list, ox + 256, oy + 16, w, oy + RESULTS_BAND_TOP, grey);
+    results_rect(list, 0, oy + RESULTS_BAND_TOP, w, h, grey);
+    results_quad(list, race_video.frame_image, ox, oy, 256, RESULTS_BAND_TOP, 0, 0);
+    for (k = 0; k < panel_boxes.count; k++) {
+        int x0 = panel_boxes.x0[k], y0 = panel_boxes.y0[k];
+
+        results_quad(list, boxes_image, x0 + screen_anchor_x(x0, panel_boxes.x1[k]), y0 + down,
+                     panel_boxes.x1[k] - x0 + 1, panel_boxes.y1[k] - y0 + 1, x0, y0 - PANEL_TOP);
+    }
+    return list;
 }
