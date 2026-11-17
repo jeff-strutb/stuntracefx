@@ -433,6 +433,7 @@ static struct {
     uint16_t shape;
     double at[3], lo[3], hi[3], area[4];
     uint8_t roof;                       /* the colour of most area on its level faces in its upper half */
+    double end_floor[2][2];             /* its floor at the ends of its box across x [0] and z [1]: lo, hi */
 } cand[CANDIDATES];
 static int ncand, surveying;
 
@@ -699,6 +700,31 @@ static uint8_t record_roof(double top, double bottom)
     return (uint8_t)colour;
 }
 
+/* the surveyed record's floor at each end of its box: across x and z,
+   at lo and hi, the lowest corner (y is down: the largest) of its level
+   faces within END_NEAR of that end; its box's bottom where none is */
+#define END_NEAR 64.0
+static void record_end_floor(const double lo[3], const double hi[3], double out[2][2])
+{
+    double u[3];
+    int q, e, i, k;
+
+    for (q = 0; q < 2; q++)
+        for (e = 0; e < 2; e++) {
+            int ax = q ? 2 : 0;
+            double at = e ? hi[ax] : lo[ax], y = -1e9;
+
+            for (i = 0; i < nrec_face; i++) {
+                if (face_area(&rec_face[i], u) <= 0 || fabs(u[1]) <= 0.7)
+                    continue;
+                for (k = 0; k < rec_face[i].n; k++)
+                    if (fabs(rec_face[i].c[k][ax] - at) <= END_NEAR)
+                        y = fmax(y, rec_face[i].c[k][1]);
+            }
+            out[q][e] = y > -1e9 ? y : hi[1];
+        }
+}
+
 /* the surveyed record kept when it has a floor (level faces at its
    bottom, within FOOT) at least TUNNEL_WIDE across both ways and of at
    least a quarter of its box's ground, no more than a tenth of that
@@ -774,6 +800,7 @@ static void survey_record(const uint8_t *record, double at[3], uint16_t *stack)
                 }
             memcpy(cand[ncand].area, rec_area, sizeof rec_area);
             cand[ncand].roof = record_roof(cand[ncand].lo[1], cand[ncand].hi[1]);
+            record_end_floor(cand[ncand].lo, cand[ncand].hi, cand[ncand].end_floor);
             record_roofless(cand[ncand].shape, at, cand[ncand].lo, cand[ncand].hi);
             ncand++;
         }
@@ -807,19 +834,17 @@ static int float_order(const void *a, const void *b)
    piece no more than TUNNEL_HIGH high, at least TUNNEL_WIDE across both
    ways, the area facing down (outward) at least half its box's ground and
    the area facing sideways at least a quarter of that. Its open ends are
-   where no walls face: across x when its walls face x. Each gets a shell
-   of rock: walls from the ground (the plane, or its floor where that is
-   lower) widening out by a third of their height, SHELL_THICK outside its
-   walls, and a ridged roof SHELL_THICK above its ceiling, open at both
-   ends; drawn right after the piece's own faces in the 3D's order (at its
-   depth: 0, or a far object's), and only the faces that look at the eye,
-   so from outside the tunnel is rock with its mouths in it and from inside
-   nothing changes. Shaded as the mesas are. What the 3D draws after the
-   piece (a car inside it nearer the eye than it) still shows over its
-   rock. */
+   where no walls face: across x when its walls face x. Each is a section
+   of the tunnels' rock (rock_find, below), drawn right after the piece's
+   own faces in the 3D's order (at its depth: 0, or a far object's), and
+   only the faces that look at the eye, so from outside the tunnel is rock
+   with its mouths in it and from inside nothing changes. Shaded as the
+   mesas are. What the 3D draws after the piece (a car inside it nearer
+   the eye than it) still shows over its rock. */
 
 #define SHELL_THICK 256.0
-enum { TUNNELS = 64, SHELL_VERTICES = 3 * 8 * 7 };
+#define LINING_GAP 32.0                 /* the tunnels' ceiling over their highest point (the tunnels' lining) */
+enum { TUNNELS = 64, ROCK_SECTIONS = 96, SHELL_VERTICES = 3 * 8 * 3 };
 
 static struct {
     int course, n;
@@ -828,8 +853,10 @@ static struct {
         double at[3], lo[3], hi[3];
         int along;                      /* the world axis its open ends lie along: 0 x, 2 z */
         uint8_t roof;                   /* its roof's colour */
+        int cand;                       /* its survey record (cand[]) */
     } t[TUNNELS];
-} tunnels = { -1, 0, { { 0, { 0 }, { 0 }, { 0 }, 0, 0 } } };
+} tunnels;
+static double rock_high;                /* the tunnels' ceiling over their floor: the lowest piece's height and LINING_GAP */
 
 static void tunnels_find(unsigned course)
 {
@@ -849,8 +876,13 @@ static void tunnels_find(unsigned course)
         memcpy(tunnels.t[tunnels.n].hi, cand[i].hi, sizeof cand[i].hi);
         tunnels.t[tunnels.n].along = cand[i].area[2] >= cand[i].area[3] ? 2 : 0;
         tunnels.t[tunnels.n].roof = cand[i].roof;
+        tunnels.t[tunnels.n].cand = i;
         tunnels.n++;
     }
+    rock_high = 0;
+    for (i = 0; i < tunnels.n; i++)
+        if (i == 0 || tunnels.t[i].hi[1] - tunnels.t[i].lo[1] + LINING_GAP < rock_high)
+            rock_high = tunnels.t[i].hi[1] - tunnels.t[i].lo[1] + LINING_GAP;
 }
 
 /* ---- the tunnels' lining ----
@@ -885,7 +917,6 @@ static void tunnels_find(unsigned course)
    facing out, and only faces looking at the eye. */
 
 enum { LININGS = 8, LINING_FACES = 48, LINING_SIDES = 16 };
-#define LINING_GAP 32.0
 #define LINING_JOIN 128.0
 
 static struct {
@@ -992,7 +1023,7 @@ static int lining_make(int r, int join, int j)
     linings.l[j].nf = 0;
     linings.l[j].nside = 0;
     linings.l[j].ntop = 0;
-    linings.l[j].top_y = ceiling - SHELL_THICK;
+    linings.l[j].top_y = roofless[r].hi[1] - rock_high - SHELL_THICK;
     linings.l[j].floor_y = roofless[r].hi[1];
     for (f = 0; f < roofless[r].n; f++) {
         const WorldFace *ff = &roofless[r].f[f];
@@ -1102,6 +1133,140 @@ static void linings_find(unsigned course)
     }
 }
 
+/* ---- the tunnels' rock, in sections ----
+
+   Each tunnel piece (tunnels_find) and each mouth is a section of one
+   rock: walls SHELL_THICK outside the tube on both sides, from the ground
+   (the plane, or the floor where that is lower) to a flat top SHELL_THICK
+   over the tunnels' ceiling (rock_high over the floor), its top following
+   the floor from one end to the other (a ramp's rock slopes with it). A
+   corner's rock (the tunnels' lining) has the same top over its floor and
+   its walls end on its ways on. Where two sections meet both end on one
+   plane: a corner's way on, or between two pieces (or a piece and a
+   mouth) the middle of the ends they overlap by, so their walls and tops
+   go straight on (Jeff, 2026-11-17: "rock walls aren't lining up and one
+   section is missing it entirely": each piece's rock had been its own
+   shape, ridged and widening by its own height, and the mouths had none).
+   A mouth is a surveyed record that is neither a piece nor lined, with a
+   roof's area at least half its tube's ground, whose box meets a piece's
+   end across the piece's middle: its section goes from the join to the
+   far end of its box (its rock face's plane), as wide as the piece. */
+
+static struct {
+    int course, n;
+    struct {
+        uint16_t shape;
+        double at[3];
+        int along;                      /* the world axis it runs along: 0 x, 2 z */
+        double cp, half;                /* its middle across, and the tube's half width */
+        double s0, s1, f0, f1;          /* its ends along, and its floor at each */
+    } s[ROCK_SECTIONS];
+} rock;
+
+/* section k's end at s (0 its s0, 1 its s1) set to `at` */
+static void rock_end_at(int k, int e, double at)
+{
+    if (e)
+        rock.s[k].s1 = at;
+    else
+        rock.s[k].s0 = at;
+}
+
+static int rock_section(uint16_t shape, const double at[3], int along, double cp, double half, double s0, double s1, double f0,
+                        double f1)
+{
+    int k = rock.n;
+
+    if (k == ROCK_SECTIONS)
+        return -1;
+    rock.s[k].shape = shape;
+    memcpy(rock.s[k].at, at, sizeof rock.s[k].at);
+    rock.s[k].along = along;
+    rock.s[k].cp = cp;
+    rock.s[k].half = half;
+    rock.s[k].s0 = s0;
+    rock.s[k].s1 = s1;
+    rock.s[k].f0 = f0;
+    rock.s[k].f1 = f1;
+    rock.n++;
+    return k;
+}
+
+static void rock_find(unsigned course)
+{
+    double roof_need;
+    int t, u, c, j, w, e;
+
+    rock.course = (int)course;
+    rock.n = 0;
+    for (t = 0; t < tunnels.n; t++) {   /* the pieces: their own ends first */
+        int a = tunnels.t[t].along, p = 2 - a, q = a ? 1 : 0, ci = tunnels.t[t].cand;
+
+        (void)rock_section(tunnels.t[t].shape, tunnels.t[t].at, a, (tunnels.t[t].lo[p] + tunnels.t[t].hi[p]) / 2,
+                           (tunnels.t[t].hi[p] - tunnels.t[t].lo[p]) / 2, tunnels.t[t].lo[a], tunnels.t[t].hi[a],
+                           cand[ci].end_floor[q][0], cand[ci].end_floor[q][1]);
+    }
+    for (t = 0; t < tunnels.n; t++)     /* piece meets piece: the middle of their overlap */
+        for (u = 0; u < tunnels.n; u++) {
+            int a = tunnels.t[t].along;
+
+            if (u == t || tunnels.t[u].along != a || fabs(rock.s[u].cp - rock.s[t].cp) > END_NEAR
+                || fabs(tunnels.t[u].lo[a] - tunnels.t[t].hi[a]) > LINING_JOIN)
+                continue;
+            rock_end_at(t, 1, (tunnels.t[u].lo[a] + tunnels.t[t].hi[a]) / 2);
+            rock_end_at(u, 0, (tunnels.t[u].lo[a] + tunnels.t[t].hi[a]) / 2);
+        }
+    for (j = 0; j < linings.n; j++)     /* piece meets corner: the corner's way on */
+        for (w = 0; w < linings.l[j].nside; w++) {
+            const double *wa = linings.l[j].side[w].a, *wb = linings.l[j].side[w].b;
+
+            if (!linings.l[j].side[w].way)
+                continue;
+            for (t = 0; t < tunnels.n; t++) {
+                int a = tunnels.t[t].along, p = 2 - a;
+
+                if (fabs(wa[a] - wb[a]) > 1 || fabs((wa[p] + wb[p]) / 2 - rock.s[t].cp) > 2 * END_NEAR)
+                    continue;
+                for (e = 0; e < 2; e++)
+                    if (fabs(wa[a] - (e ? tunnels.t[t].hi[a] : tunnels.t[t].lo[a])) <= LINING_JOIN)
+                        rock_end_at(t, e, wa[a]);
+            }
+        }
+    for (c = 0; c < ncand; c++) {       /* the mouths */
+        double roof = rock_survey.facing < 0 ? cand[c].area[0] : cand[c].area[1];
+        int piece = 0;
+
+        for (t = 0; t < tunnels.n && !piece; t++)
+            piece = tunnels.t[t].cand == c;
+        for (j = 0; j < linings.n && !piece; j++)
+            piece = linings.l[j].shape == cand[c].shape && near_xz(linings.l[j].at, cand[c].at, 2);
+        if (piece)
+            continue;
+        for (t = 0; t < tunnels.n; t++) {
+            int a = tunnels.t[t].along, p = 2 - a, q = a ? 1 : 0;
+            double cp = rock.s[t].cp, len = tunnels.t[t].hi[a] - tunnels.t[t].lo[a];
+
+            roof_need = 0.5 * 2 * rock.s[t].half * len;
+            if (roof < roof_need || cand[c].lo[p] > cp || cand[c].hi[p] < cp || cand[c].hi[1] < tunnels.t[t].lo[1]
+                || cand[c].lo[1] > tunnels.t[t].hi[1])
+                continue;
+            if (fabs(cand[c].hi[a] - tunnels.t[t].lo[a]) <= LINING_JOIN) {          /* before the piece */
+                double mid = (cand[c].hi[a] + tunnels.t[t].lo[a]) / 2;
+
+                rock_end_at(t, 0, mid);
+                (void)rock_section(cand[c].shape, cand[c].at, a, cp, rock.s[t].half, cand[c].lo[a], mid,
+                                   cand[c].end_floor[q][0], rock.s[t].f0);
+            } else if (fabs(cand[c].lo[a] - tunnels.t[t].hi[a]) <= LINING_JOIN) {   /* after it */
+                double mid = (cand[c].lo[a] + tunnels.t[t].hi[a]) / 2;
+
+                rock_end_at(t, 1, mid);
+                (void)rock_section(cand[c].shape, cand[c].at, a, cp, rock.s[t].half, mid, cand[c].hi[a], rock.s[t].f1,
+                                   cand[c].end_floor[q][1]);
+            }
+        }
+    }
+}
+
 static void ground_survey(unsigned course, const double eye[3], const double m[9])
 {
     static uint8_t kept[0x10000];
@@ -1155,6 +1320,7 @@ static void ground_survey(unsigned course, const double eye[3], const double m[9
     rock_shades();
     tunnels_find(course);
     linings_find(course);
+    rock_find(course);
     for (i = 0; i < (unsigned)survey_points; i++) {
         xmin = fmin(xmin, survey_point[i][0]);
         xmax = fmax(xmax, survey_point[i][0]);
@@ -1250,9 +1416,9 @@ static void ground_survey(unsigned course, const double eye[3], const double m[9
     grid.level = next[grid.nx * grid.nz / 2];
     memcpy(grid_known, known, sizeof grid_known);
     fprintf(stderr, "ground: course %u, level %.0f, footprint x %.0f to %.0f, z %.0f to %.0f, lit level %.2f a unit of"
-            " facing (%s), %d rock shades, %d tunnel pieces, %d lined\n", course, grid.level, grid.xmin, grid.xmax, grid.zmin, grid.zmax,
+            " facing (%s), %d rock shades, %d tunnel pieces, %d lined, %d rock sections\n", course, grid.level, grid.xmin, grid.xmax, grid.zmin, grid.zmax,
             grid.light_k, grid.light_k == LIGHT_K ? "no lit faces: the chip's own scale" : "fitted from the course's lit faces",
-            grid.shades, tunnels.n, linings.n);
+            grid.shades, tunnels.n, linings.n, rock.n);
 }
 
 /* ---- the land drawn: a few planes, terrain.shade colouring them ----
@@ -1978,21 +2144,21 @@ void fx_ground_object_begin(uint16_t record, int shift)
                     return;
                 }
             }
-    if (!shell_view.on || tunnels.course != (int)g.course)
+    if (!shell_view.on || rock.course != (int)g.course)
         return;
-    for (i = 0; i < tunnels.n; i++)
-        if (tunnels.t[i].shape == shape)
+    for (i = 0; i < rock.n; i++)
+        if (rock.s[i].shape == shape)
             break;
-    if (i == tunnels.n)
+    if (i == rock.n)
         return;
     record_place(record, shift, shell_view.eye, shell_view.m, at);
-    for (; i < tunnels.n; i++) {
-        double dx = at[0] - tunnels.t[i].at[0], dz = at[2] - tunnels.t[i].at[2];
+    for (; i < rock.n; i++) {
+        double dx = at[0] - rock.s[i].at[0], dz = at[2] - rock.s[i].at[2];
 
-        if (tunnels.t[i].shape == shape && dx * dx + dz * dz < 512.0 * 512.0 * (1 << (2 * shift)))
+        if (rock.s[i].shape == shape && dx * dx + dz * dz < 512.0 * 512.0 * (1 << (2 * shift)))
             break;
     }
-    if (i < tunnels.n)
+    if (i < rock.n)
         shell_pending = i;
 }
 
@@ -2067,7 +2233,7 @@ static void lining_draw(void)
     lining_pending = -1;
     rgb = linings.l[j].colour ? rgb_of(pic.palette[fx_draw_ink(linings.l[j].colour)]) : 0;
     fx_draw_queued();                   /* the piece's own faces first */
-    fx_draw_piece(FX_PIECE_ROCK + TUNNELS + (uint32_t)j);
+    fx_draw_piece(FX_PIECE_ROCK + ROCK_SECTIONS + (uint32_t)j);
     for (f = 0; f < linings.l[j].nf; f++)
         land_face_as((const double (*)[3])linings.l[j].f[f].c, linings.l[j].f[f].n, linings.l[j].normal[f],
                      g.course < 0x20 ? surface[g.course].cls : 0, rgb, lining_view.eye, lining_view.m, lv, &nl,
@@ -2081,10 +2247,10 @@ static void lining_draw(void)
 void fx_ground_object_end(void)
 {
     static nshvc_vertex sv[SHELL_VERTICES];
+    static const double up[3] = { 0, -1, 0 };           /* y is down */
     uint32_t ns = 0;
-    double p0, p1, cp, half, a0, a1, top, base, ridge, spread, mid_y;
-    double prof[5][2];
-    int i = shell_pending, s, p, a, k;
+    double w, top[2], base[2], end[2];
+    int i = shell_pending, a, p, side, k;
 
     lining_draw();
     if (i < 0)
@@ -2092,42 +2258,37 @@ void fx_ground_object_end(void)
     shell_pending = -1;
     fx_draw_queued();                   /* the piece's own faces first */
     fx_draw_piece(FX_PIECE_ROCK + (uint32_t)i);     /* the rock a piece of the ground of its own (fx_draw.c) */
-    a = tunnels.t[i].along;
+    a = rock.s[i].along;
     p = 2 - a;
-    p0 = tunnels.t[i].lo[p];
-    p1 = tunnels.t[i].hi[p];
-    cp = (p0 + p1) / 2;
-    half = (p1 - p0) / 2;
-    a0 = tunnels.t[i].lo[a];
-    a1 = tunnels.t[i].hi[a];
-    top = tunnels.t[i].lo[1] - SHELL_THICK;                     /* y is down */
-    base = fmax(tunnels.t[i].hi[1], shell_view.plane_y);
-    ridge = top - 0.3 * half;
-    spread = (base - top) / 3;
-    mid_y = (tunnels.t[i].lo[1] + tunnels.t[i].hi[1]) / 2;
-    /* its cross-section across the tunnel: ground, wall top, ridge, wall
-       top, ground */
-    prof[0][0] = cp - half - SHELL_THICK - spread;
-    prof[0][1] = base;
-    prof[1][0] = cp - half - SHELL_THICK;
-    prof[1][1] = top;
-    prof[2][0] = cp;
-    prof[2][1] = ridge;
-    prof[3][0] = cp + half + SHELL_THICK;
-    prof[3][1] = top;
-    prof[4][0] = cp + half + SHELL_THICK + spread;
-    prof[4][1] = base;
-    for (s = 0; s < 4; s++) {
-        double quad[4][3], n[3], mp = (prof[s][0] + prof[s + 1][0]) / 2 - cp, my = (prof[s][1] + prof[s + 1][1]) / 2 - mid_y;
-        static const int end[4] = { 0, 0, 1, 1 }, edge[4] = { 0, 1, 1, 0 };
+    w = rock.s[i].half + SHELL_THICK;
+    end[0] = rock.s[i].s0;
+    end[1] = rock.s[i].s1;
+    top[0] = rock.s[i].f0 - rock_high - SHELL_THICK;
+    top[1] = rock.s[i].f1 - rock_high - SHELL_THICK;
+    base[0] = fmax(rock.s[i].f0, shell_view.plane_y);
+    base[1] = fmax(rock.s[i].f1, shell_view.plane_y);
+    for (side = -1; side <= 1; side += 2) {             /* its walls */
+        double quad[4][3], n[3] = { 0, 0, 0 };
+        static const int at_end[4] = { 0, 1, 1, 0 }, at_top[4] = { 0, 0, 1, 1 };
 
         for (k = 0; k < 4; k++) {
-            quad[k][p] = prof[s + edge[k]][0];
-            quad[k][1] = prof[s + edge[k]][1];
-            quad[k][a] = end[k] ? a1 : a0;
+            quad[k][p] = rock.s[i].cp + side * w;
+            quad[k][a] = end[at_end[k]];
+            quad[k][1] = at_top[k] ? top[at_end[k]] : base[at_end[k]];
+        }
+        n[p] = side;
+        land_face((const double (*)[3])quad, 4, n, shell_view.cls, shell_view.eye, shell_view.m, sv, &ns, SHELL_VERTICES);
+    }
+    {                                   /* its top */
+        double quad[4][3], n[3];
+
+        for (k = 0; k < 4; k++) {
+            quad[k][p] = rock.s[i].cp + (k == 0 || k == 3 ? -w : w);
+            quad[k][a] = end[k >= 2];
+            quad[k][1] = top[k >= 2];
         }
         normal_of(quad[0], quad[1], quad[2], n);
-        if (n[p] * mp + n[1] * my < 0)      /* outward: away from the tunnel's middle */
+        if (n[1] * up[1] < 0)
             for (k = 0; k < 3; k++)
                 n[k] = -n[k];
         land_face((const double (*)[3])quad, 4, n, shell_view.cls, shell_view.eye, shell_view.m, sv, &ns, SHELL_VERTICES);
