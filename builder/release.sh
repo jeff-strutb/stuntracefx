@@ -91,7 +91,7 @@ The first release (Rev 0) and the European and Japanese cartridges are not suppo
 
 ### Playing
 - A keyboard or a game controller drives; on the iPhone and iPad, touch, or a game controller. The pause screen shows and changes what each key and button does (on a computer).
-- Full screen is the default; the pause screen's FULL SCREEN switches to a window and back, as do View, Enter Full Screen (Control-Command-F) on a Mac and Alt+Enter or F11 on Windows.
+- Full screen is the default; the pause screen's FULL SCREEN switches to a window and back, as do View, Enter Full Screen (Control-Command-F) on a Mac and Alt+Enter or F11 on Windows and Linux.
 - Records and settings live in your user folder (Application Support on macOS, the iPhone and the iPad, AppData on Windows, ~/.local/share on Linux), so rebuilding never touches them.
 
 Source: [builder/](https://github.com/jeff-strutb/stuntracefx/tree/$REV/builder), [native/stuntracefx/](https://github.com/jeff-strutb/stuntracefx/tree/$REV/native/stuntracefx).
