@@ -2785,15 +2785,19 @@ static uint32_t two_player_colour(const FxShape *sh, uint8_t c)
    (Jeff, 2026-11-17: "all textures need to be moved 1px in front of their
    surface"; 1px "1 unit of distance ... so that they don't z-fight what
    they're sitting on"): a textured face is drawn at the depths of its
-   plane moved one unit toward the eye along its normal. On the screen it
-   stays where it is; only its depths change. Its plane is n . p = d, the
-   eye |d| / |n| from it; one over a pixel's depth on it is linear across
-   the screen and goes as 1 / d (fx_face.h FxShape.plane), so the moved
-   plane's is the face's own times D / (D - 1), D the eye's distance: the
-   same for every corner, so still exact across the screen. A face seen
-   nearly edge on (the eye within 2 units of its plane) keeps its depths:
-   the factor there would pass 2, and a face so seen covers next to no
-   pixels. A line has no plane and keeps its depths. */
+   plane moved one unit along its normal to the side it faces, the side
+   its surface shows it on: toward the eye for a face facing the eye, away
+   from it for one seen from behind (an open model's, sh->back), whose
+   surface then lies between it and the eye (a tunnel's sign on its wall,
+   seen from outside, stays behind the wall). On the screen it stays where
+   it is; only its depths change. Its plane is n . p = d, the eye |d| / |n|
+   from it; one over a pixel's depth on it is linear across the screen and
+   goes as 1 / d (fx_face.h FxShape.plane), so the moved plane's is the
+   face's own times D / (D - 1), or D / (D + 1) seen from behind, D the
+   eye's distance: the same for every corner, so still exact across the
+   screen. A face seen nearly edge on (the eye within 2 units of its plane)
+   keeps its depths: the factor there would pass 2, and a face so seen
+   covers next to no pixels. A line has no plane and keeps its depths. */
 static double texture_lift(const FxShape *sh)
 {
     double n = sqrt((double)sh->plane[0] * sh->plane[0] + (double)sh->plane[1] * sh->plane[1]
@@ -2803,7 +2807,9 @@ static double texture_lift(const FxShape *sh)
     if (sh->line || n <= 0 || sh->plane[3] == 0)
         return 1.0;
     away = fabs((double)sh->plane[3]) / n;
-    return away > 2.0 ? away / (away - 1.0) : 1.0;
+    if (away <= 2.0)
+        return 1.0;
+    return sh->back ? away / (away + 1.0) : away / (away - 1.0);
 }
 
 /* A face's shape in floats (fx_face.c) in place of the chip's entries for

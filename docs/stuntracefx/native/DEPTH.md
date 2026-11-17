@@ -110,9 +110,12 @@ front of the highest earlier face it overlaps whose plane it shares (within
 "All textures need to be moved 1px in front of their surface", 1px being
 "1 unit of distance ... so that they don't z-fight what they're sitting
 on". Every textured face is drawn at the depths of its plane moved one
-world unit toward the eye along its normal. Only its depths change: it
-stays where it is on the screen. The factor is D / (D - 1), D being the
-eye's distance from the plane, the same at every corner, so the depths stay
+world unit along its normal to the side it faces: toward the eye, or away
+from it for a face of an open model seen from behind, whose surface then
+lies between it and the eye (a tunnel's signs seen from outside stay
+behind its walls). Only its depths change: it stays where it is on the
+screen. The factor is D / (D - 1), or D / (D + 1) seen from behind, D being
+the eye's distance from the plane, the same at every corner, so the depths stay
 exact across the screen. A flat face that lies on a textured one and is
 drawn after it no longer gets a layer over it, so the texture stays in
 front whichever object the game draws first. The game's order between
