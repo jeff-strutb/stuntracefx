@@ -361,6 +361,8 @@ static void page_result(void)
         markup(text(""), "<tt>%s</tt>", e);
         text("To list the game with your other programs, copy <tt>Stunt Race FX.desktop</tt> from its folder to "
              "<tt>~/.local/share/applications</tt>.");
+        text("Escape, or Select and Start together, opens the pause screen, where you can change the controls, switch "
+             "full screen and show or hide the FPS counter.");
         gtk.g_free(e);
         button("Done", quit, 0);
         button("Open Folder", open_folder, 0);

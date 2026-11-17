@@ -167,8 +167,9 @@ static void page_result(void)
              24, 60, 540, 40, s_font);
         to16(s_out, t, 2048);
         add(L"STATIC", t, SS_LEFT | SS_NOPREFIX | SS_PATHELLIPSIS, 24, 110, 540, 22, 0, s_mono);
-        text(L"Alt+Enter switches to full screen and back. Tab switches between Original and Enhanced mode, F1 sets the "
-             L"frame rate to 60, F2 turns Widescreen on and off.", 24, 150, 540, 60, s_font);
+        text(L"Alt+Enter or F11 switches to full screen and back. Escape, or Select and Start together, opens the pause "
+             L"screen, where you can change the controls, switch full screen and show or hide the FPS counter.",
+             24, 150, 540, 60, s_font);
         button(L"Done", 240, BOTTOM, 100, ID_DONE, 0);
         button(L"Open Folder", 352, BOTTOM, 100, ID_SHOW, 0);
         button(L"Play", 464, BOTTOM, 100, ID_PLAY, 1);

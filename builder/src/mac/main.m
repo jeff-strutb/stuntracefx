@@ -436,8 +436,8 @@ static void progress_cb(void *ctx, double f, const char *s)
             NSButton *play = [self button:@"Open the Game" action:@selector(play:)];
             play.identifier = out;
             play.keyEquivalent = @"\r";
-            how = @"View, Enter Full Screen (Control-Command-F) fills the screen. Tab switches between Original and Enhanced "
-                  @"mode, F1 sets the frame rate to 60, F2 turns Widescreen on and off.";
+            how = @"View, Enter Full Screen (Control-Command-F) fills the screen. Escape, or Select and Start together, opens "
+                  @"the pause screen, where you can change the controls, switch full screen and show or hide the FPS counter.";
             buttons = @[ done, show, play ];
         }
         [self setPage:vstack(@[ label(@RB_PRODUCT " is ready", 20, YES),
