@@ -105,6 +105,23 @@ front of the highest earlier face it overlaps whose plane it shares (within
 - A solid's discs on one plane (a tyre's side and its hub, an eye's marks)
   are each drawn one layer in front of the one under it.
 
+### 3a. Textures a unit in front (Jeff, 2026-11-17)
+
+"All textures need to be moved 1px in front of their surface", 1px being
+"1 unit of distance ... so that they don't z-fight what they're sitting
+on". Every textured face is drawn at the depths of its plane moved one
+world unit toward the eye along its normal. Only its depths change: it
+stays where it is on the screen. The factor is D / (D - 1), D being the
+eye's distance from the plane, the same at every corner, so the depths stay
+exact across the screen. A flat face that lies on a textured one and is
+drawn after it no longer gets a layer over it, so the texture stays in
+front whichever object the game draws first. The game's order between
+objects follows their depths, which change as the eye moves, so a texture
+on another object's surface could show only once its object came to be
+drawn later; that fits Sunset Valley's tunnel's textures popping in as the
+car closes on them (not yet seen in a run). A face seen nearly edge on
+(the eye within 2 units of its plane) keeps its own depths.
+
 ### 4. Back faces
 
 Back faces are culled per surface, not left to depth. A model face's own

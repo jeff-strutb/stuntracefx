@@ -2781,6 +2781,31 @@ static uint32_t two_player_colour(const FxShape *sh, uint8_t c)
     return 0xFF000000u | (uint32_t)(rgb[0] + 0.5f) << 16 | (uint32_t)(rgb[1] + 0.5f) << 8 | (uint32_t)(rgb[2] + 0.5f);
 }
 
+/* Every texture one unit of the world in front of the surface it lies on
+   (Jeff, 2026-11-17: "all textures need to be moved 1px in front of their
+   surface"; 1px "1 unit of distance ... so that they don't z-fight what
+   they're sitting on"): a textured face is drawn at the depths of its
+   plane moved one unit toward the eye along its normal. On the screen it
+   stays where it is; only its depths change. Its plane is n . p = d, the
+   eye |d| / |n| from it; one over a pixel's depth on it is linear across
+   the screen and goes as 1 / d (fx_face.h FxShape.plane), so the moved
+   plane's is the face's own times D / (D - 1), D the eye's distance: the
+   same for every corner, so still exact across the screen. A face seen
+   nearly edge on (the eye within 2 units of its plane) keeps its depths:
+   the factor there would pass 2, and a face so seen covers next to no
+   pixels. A line has no plane and keeps its depths. */
+static double texture_lift(const FxShape *sh)
+{
+    double n = sqrt((double)sh->plane[0] * sh->plane[0] + (double)sh->plane[1] * sh->plane[1]
+                    + (double)sh->plane[2] * sh->plane[2]);
+    double away;
+
+    if (sh->line || n <= 0 || sh->plane[3] == 0)
+        return 1.0;
+    away = fabs((double)sh->plane[3]) / n;
+    return away > 2.0 ? away / (away - 1.0) : 1.0;
+}
+
 /* A face's shape in floats (fx_face.c) in place of the chip's entries for
    it, in the material of its first entry (p, after the kind byte). */
 static void shape_draw_body(const FxShape *sh)
@@ -2793,6 +2818,7 @@ static void shape_draw_body(const FxShape *sh)
     double u_off = 0, v_off = 0, vcx = (int16_t)rd(0x0034), vcy = (int16_t)rd(0x0036);
     float row_at = (float)(recording ? recording->oy : offset_y);
     int verge = 0;
+    double lift = 1.0;                  /* a textured face's depths over its surface's (texture_lift) */
 
     if (m->textured) {
         uint8_t bank = m->bank;
@@ -2807,6 +2833,7 @@ static void shape_draw_body(const FxShape *sh)
         v_off = (int16_t)rd(0x00C2) / 256.0;
         image = texture(bank, base, mask, colour, fxs.por).id;
         colour = 1;
+        lift = texture_lift(sh);
     } else {
         colour = m->colour;
         fxs.por = 0;
@@ -2830,7 +2857,9 @@ static void shape_draw_body(const FxShape *sh)
             v[i].y = c[done + i].y;
             v[i].u = (float)(c[done + i].u + u_off);
             v[i].v = (float)(c[done + i].v + v_off);
-            v[i].z = fx_draw_z(c[done + i].iz);
+            v[i].z = fx_draw_z(c[done + i].iz * lift);
+            if (v[i].z > 1.0f)
+                v[i].z = 1.0f;          /* a corner within two units of the eye: the nearest */
             v[i].colour = tinted;
             if (verge) {
                 double inv = (sh->plane[0] * (v[i].x - vcx) / 128.0 + sh->plane[1] * (v[i].y - vcy) / 128.0 + sh->plane[2])
@@ -2851,7 +2880,9 @@ static void shape_draw_body(const FxShape *sh)
    The game drew a face over an earlier one in the same plane (a marking on
    a road, a lamp on a wall) by drawing it later. With the depth test, such
    a face is drawn one layer in front of the highest earlier face of the
-   picture that it lies on and overlaps on the screen; faces that look the
+   picture that it lies on and overlaps on the screen, but for a textured
+   face, which is a unit in front of its plane (texture_lift) and stays in
+   front of a flat face drawn on it after it; faces that look the
    same share a layer, so a road cut into pieces does not climb. It lies on
    an earlier face when they face the same way and each of its corners is
    within LAYER_TOL (and LAYER_REL of its distance) of that face's plane:
@@ -2871,6 +2902,7 @@ static struct {
     uint32_t tri, ntri;         /* its triangles (a line: one, its two ends and the first again) */
     uint32_t look;
     uint8_t layer;
+    uint8_t textured;           /* a textured face: one unit in front of its plane (texture_lift) */
     int32_t next;               /* the next in its bucket */
 } lay[LAYER_SHAPES];
 static float lay_tri[LAYER_TRIS][6];
@@ -2976,6 +3008,8 @@ static uint8_t layer_of(const FxShape *sh, const FxCorner *c, uint32_t count)
 
             if (n[0] * lay[b].n[0] + n[1] * lay[b].n[1] + n[2] * lay[b].n[2] < 0.99 || fabs(lay[b].d - d) > tol + 8.0)
                 continue;
+            if (lay[b].textured && !sh->material.textured)
+                continue;               /* a texture stays in front of what is drawn on its plane after it */
             if (lay[b].box[0] >= box[1] || box[0] >= lay[b].box[1] || lay[b].box[2] >= box[3] || box[2] >= lay[b].box[3])
                 continue;
             for (i = 0; i < sh->ncorner3 && on; i++)
@@ -3000,6 +3034,7 @@ static uint8_t layer_of(const FxShape *sh, const FxCorner *c, uint32_t count)
     memcpy(lay[nlay].box, box, sizeof box);
     lay[nlay].look = look_of(sh);
     lay[nlay].layer = level;
+    lay[nlay].textured = sh->material.textured;
     b = bucket_of(d);
     lay[nlay].next = lay_bucket[b];
     lay_bucket[b] = (int32_t)nlay;
