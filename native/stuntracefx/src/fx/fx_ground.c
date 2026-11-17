@@ -872,10 +872,19 @@ static void tunnels_find(unsigned course)
    between them; the rest of that edge is the way on, left open. A piece
    none of whose open edges is a way on is not lined. Drawn after the
    piece's own faces, as the rock, and only faces looking at the eye: each
-   faces into the piece, so from inside the piece is closed and from outside
-   nothing changes. */
+   faces into the piece, so from inside the piece is closed.
 
-enum { LININGS = 8, LINING_FACES = 48 };
+   From outside it had no rock round it as the straight pieces have (the
+   tunnels' rock: it is not one of them), so over its 640-high walls the
+   inside showed (Jeff, 2026-11-17: "i can still see 'into' the tunnel").
+   Where the tunnels' rock is drawn, it gets its own: walls SHELL_THICK
+   outside each of its walls' edges, from the ground (the plane, or its
+   floor where that is lower) to SHELL_THICK over its ceiling, each meeting
+   the next at the line where their planes cross and ending on the way on's
+   line; a top over its floor and out to those walls. Shaded as the rock,
+   facing out, and only faces looking at the eye. */
+
+enum { LININGS = 8, LINING_FACES = 48, LINING_SIDES = 16 };
 #define LINING_GAP 32.0
 #define LINING_JOIN 128.0
 
@@ -888,8 +897,15 @@ static struct {
         int nf;
         WorldFace f[LINING_FACES];
         double normal[LINING_FACES][3]; /* each face's, into the piece */
+        int nside, ntop;
+        struct {
+            double a[3], b[3], in[3];   /* its floor's edge and the normal into the piece */
+            int way;                    /* a way on: no rock on it */
+        } side[LINING_SIDES];
+        WorldFace top[LINING_SIDES];    /* its floor's faces, at its rock's top */
+        double top_y, floor_y;
     } l[LININGS];
-} linings = { -1, 0, { { 0, { 0 }, 0, 0, { { 0, 0, { { 0 } } } }, { { 0 } } } } };
+} linings;
 
 static int near_xz(const double *a, const double *b, double within)
 {
@@ -974,6 +990,10 @@ static int lining_make(int r, int join, int j)
     memcpy(linings.l[j].at, roofless[r].at, sizeof linings.l[j].at);
     linings.l[j].colour = tunnels.t[join].roof;
     linings.l[j].nf = 0;
+    linings.l[j].nside = 0;
+    linings.l[j].ntop = 0;
+    linings.l[j].top_y = ceiling - SHELL_THICK;
+    linings.l[j].floor_y = roofless[r].hi[1];
     for (f = 0; f < roofless[r].n; f++) {
         const WorldFace *ff = &roofless[r].f[f];
         double q[8][3], cen[3] = { 0, 0, 0 };
@@ -988,6 +1008,16 @@ static int lining_make(int r, int join, int j)
             cen[2] += ff->c[k][2] / ff->n;
         }
         lining_face(j, (const double (*)[3])q, ff->n, down);
+        if (linings.l[j].ntop < LINING_SIDES) {     /* and its rock's top over it */
+            WorldFace *tf = &linings.l[j].top[linings.l[j].ntop++];
+
+            tf->n = ff->n;
+            for (k = 0; k < ff->n; k++) {
+                tf->c[k][0] = ff->c[k][0];
+                tf->c[k][1] = linings.l[j].top_y;
+                tf->c[k][2] = ff->c[k][2];
+            }
+        }
         for (e = 0; e < ff->n; e++) {   /* its open edges */
             const double *a = ff->c[e], *b = ff->c[(e + 1) % ff->n];
             double mid[3] = { (a[0] + b[0]) / 2, 0, (a[2] + b[2]) / 2 }, n[3] = { -(b[2] - a[2]), 0, b[0] - a[0] }, len, bottom;
@@ -1016,6 +1046,14 @@ static int lining_make(int r, int join, int j)
                 n[2] = -n[2];
             }
             t = tunnel_at(mid);
+            if (linings.l[j].nside < LINING_SIDES) {
+                int sd = linings.l[j].nside++;
+
+                memcpy(linings.l[j].side[sd].a, a, sizeof linings.l[j].side[sd].a);
+                memcpy(linings.l[j].side[sd].b, b, sizeof linings.l[j].side[sd].b);
+                memcpy(linings.l[j].side[sd].in, n, sizeof linings.l[j].side[sd].in);
+                linings.l[j].side[sd].way = t >= 0;
+            }
             if (t >= 0) {               /* a way on: closed over its piece's roof */
                 bottom = tunnels.t[t].lo[1];
                 ways++;
@@ -1958,10 +1996,69 @@ void fx_ground_object_begin(uint16_t record, int shift)
         shell_pending = i;
 }
 
+/* where side s's rock wall (SHELL_THICK out from its edge; a way on's,
+   its edge's own line) meets, at its end p (its edge's a or b), the next
+   side there: across the ground; p moved out by SHELL_THICK when none
+   meets it or the two are near one line */
+static void rock_end(int j, int s, const double p[3], double out[3])
+{
+    const double *in = linings.l[j].side[s].in;
+    double o[2] = { p[0] - in[0] * SHELL_THICK, p[2] - in[2] * SHELL_THICK };
+    double d[2] = { linings.l[j].side[s].b[0] - linings.l[j].side[s].a[0], linings.l[j].side[s].b[2] - linings.l[j].side[s].a[2] };
+    int t;
+
+    out[0] = o[0];
+    out[1] = p[1];
+    out[2] = o[1];
+    for (t = 0; t < linings.l[j].nside; t++) {
+        const double *ta = linings.l[j].side[t].a, *tb = linings.l[j].side[t].b, *tin = linings.l[j].side[t].in;
+        double off = linings.l[j].side[t].way ? 0 : SHELL_THICK;
+        double q[2] = { ta[0] - tin[0] * off, ta[2] - tin[2] * off }, e[2] = { tb[0] - ta[0], tb[2] - ta[2] };
+        double det = d[0] * e[1] - d[1] * e[0], len = sqrt(d[0] * d[0] + d[1] * d[1]) * sqrt(e[0] * e[0] + e[1] * e[1]), lam;
+
+        if (t == s || !(near_xz(ta, p, 2) || near_xz(tb, p, 2)) || len <= 0 || fabs(det) < 0.05 * len)
+            continue;
+        lam = ((q[0] - o[0]) * e[1] - (q[1] - o[1]) * e[0]) / det;
+        if (fabs(lam) * sqrt(d[0] * d[0] + d[1] * d[1]) > 4 * SHELL_THICK)
+            continue;                   /* a joint too sharp: left square */
+        out[0] = o[0] + lam * d[0];
+        out[2] = o[1] + lam * d[1];
+        return;
+    }
+}
+
+/* the lined piece's rock outside it (the tunnels' lining), into v */
+static void lining_rock(int j, nshvc_vertex *v, uint32_t *nv, uint32_t room)
+{
+    static const double up[3] = { 0, -1, 0 };           /* y is down */
+    double top = linings.l[j].top_y, base = fmax(linings.l[j].floor_y, shell_view.plane_y);
+    int s, f;
+
+    for (f = 0; f < linings.l[j].ntop; f++)
+        land_face((const double (*)[3])linings.l[j].top[f].c, linings.l[j].top[f].n, up, shell_view.cls, shell_view.eye,
+                  shell_view.m, v, nv, room);
+    for (s = 0; s < linings.l[j].nside; s++) {
+        const double *a = linings.l[j].side[s].a, *b = linings.l[j].side[s].b, *in = linings.l[j].side[s].in;
+        double out[3] = { -in[0], 0, -in[2] }, a2[3], b2[3];
+
+        if (linings.l[j].side[s].way)
+            continue;
+        rock_end(j, s, a, a2);
+        rock_end(j, s, b, b2);
+        {
+            double wall[4][3] = { { a2[0], base, a2[2] }, { b2[0], base, b2[2] }, { b2[0], top, b2[2] }, { a2[0], top, a2[2] } };
+            double band[4][3] = { { a[0], top, a[2] }, { b[0], top, b[2] }, { b2[0], top, b2[2] }, { a2[0], top, a2[2] } };
+
+            land_face((const double (*)[3])wall, 4, out, shell_view.cls, shell_view.eye, shell_view.m, v, nv, room);
+            land_face((const double (*)[3])band, 4, up, shell_view.cls, shell_view.eye, shell_view.m, v, nv, room);
+        }
+    }
+}
+
 /* the lined piece's lining, after its own faces (the tunnels' lining) */
 static void lining_draw(void)
 {
-    static nshvc_vertex lv[LINING_FACES * 3 * 8];
+    static nshvc_vertex lv[(LINING_FACES + 3 * LINING_SIDES) * 3 * 8];
     uint32_t nl = 0, rgb;
     int j = lining_pending, f;
 
@@ -1975,6 +2072,8 @@ static void lining_draw(void)
         land_face_as((const double (*)[3])linings.l[j].f[f].c, linings.l[j].f[f].n, linings.l[j].normal[f],
                      g.course < 0x20 ? surface[g.course].cls : 0, rgb, lining_view.eye, lining_view.m, lv, &nl,
                      sizeof lv / sizeof lv[0]);
+    if (shell_view.on)                  /* its rock outside, where the tunnels' rock is drawn */
+        lining_rock(j, lv, &nl, sizeof lv / sizeof lv[0]);
     fx_draw_land(lv, nl);
     fx_draw_piece(0);
 }
