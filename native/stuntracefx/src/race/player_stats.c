@@ -7,6 +7,7 @@
  * before them loads 0 after its BIT), PlayerOnePhaseReturn.
  */
 #include <math.h>
+#include <stdlib.h>
 
 #include "audio/sound.h"
 #include "data/cart.h"
@@ -136,8 +137,33 @@ double PlayerRaceProgress(int player)
  * from its car's record: the flags, the gauges, a speedometer sample, the
  * laps and the rank. Then GsuRecordBobTriggers.
  */
+/* A launch onto a later lap, for looking at a race's end while it is worked
+   on (Jeff, 2026-11-17: "start me on lap 3"): SRFX_LAP=<lap> in the
+   environment (2 or 3), beside SRFX_COURSE. At the first race's first
+   update, player 1's car is given the laps before it as already driven (its
+   record's lap count, the count the chip keeps); the race's own code then
+   counts them (RaceLapCrossed: their banners, splits and time), so one lap
+   more finishes it. Only that first race; nothing in a normal start. */
+static void launch_lap(uint16_t rec, int player)
+{
+    static int lap = -1;
+
+    if (lap < 0) {
+        const char *s = getenv("SRFX_LAP");
+        long n = s && *s ? strtol(s, NULL, 0) : 0;
+
+        lap = n >= 2 && n <= 3 ? (int)n : 0;
+    }
+    if (!lap || player != 0)
+        return;
+    if (rec_get(rec, FXREC_LAPS) == 0)
+        rec_put(rec, FXREC_LAPS, (uint16_t)(lap - 1));
+    lap = 0;
+}
+
 void PlayerStatsFromRecord(uint16_t rec, int player)
 {
+    launch_lap(rec, player);
     if (!g.lap_shown) {
         uint16_t f = rec_get(rec, FXREC_FLAGS40), w;
         uint8_t v;
