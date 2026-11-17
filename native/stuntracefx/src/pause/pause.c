@@ -8,8 +8,9 @@
  *
  * The pad moves among the tags and the panel's buttons; B, A or Start
  * chooses. A click of the pointer chooses what it is on (a tag, its button
- * on the controller, a panel button) and presses it. The PLAYER button above the controller switches the screen
- * between player 1's controls and player 2's (it opens on player 1's). A tag
+ * on the controller, a panel button) and presses it. The PLAYER 1 and
+ * PLAYER 2 buttons above the controller show and change that player's
+ * controls, the one in use filled gold (it opens on player 1's). A tag
  * chosen asks for its button's new key or controller button: for player 1
  * the next key pressed, or button pressed on player 1's controller, takes
  * it; for player 2, who has no keys, the next button pressed on player 2's
@@ -107,7 +108,7 @@
 enum { BLUR_DONE, BLUR_CLEAN, BLUR_ACROSS, BLUR_DOWN, BLUR_KEEP };
 
 /* The overlays, the game's only ones: the tint, the panel, the tags, the
-   item chosen, the option with its value, the player button, the hint, the
+   item chosen, the option with its value, the player buttons, the hint, the
    corner button, in that order upward. */
 enum { O_TINT = 12, O_PANEL, O_TAGS, O_LIT = O_TAGS + PAUSE_CONTROLS, O_OPTION, O_PLAYER, O_HINT, O_BUTTON, O_VIEW, O_END };
 _Static_assert(O_END <= NSHVC_OVERLAYS, "the pause screen's overlays fit the engine's");
@@ -131,7 +132,7 @@ enum { SAVE_VERSION = 1 };
 static struct {
     int ready;                          /* the saved keys laid out */
     int open;
-    int chosen;                         /* an item (pause_art.h): a control, a panel button, PAUSE_PLAYER */
+    int chosen;                         /* an item (pause_art.h): a control, a panel button, a player button */
     int player;                         /* whose controls the screen shows and changes: 0 player 1, 1 player 2 */
     int asking;                         /* the control waiting for its key; -1 none */
     int wait_release;                   /* no press counts until every button is let go */
@@ -155,8 +156,8 @@ static struct {
     char hint_shown[2][48];
     nshvc_image option;                 /* the options' buttons, with their values (pause_draw_options) */
     int option_w, option_h, option_shown; /* what it shows (options_want); -1 not yet */
-    nshvc_image player_img;             /* the player button, with its player (pause_draw_player) */
-    int player_w, player_h, player_shown; /* what it shows: player * 2 + lit; -1 not yet */
+    nshvc_image player_img;             /* the player buttons, the one in use shown (pause_draw_player) */
+    int player_w, player_h, player_shown; /* what it shows: player * 4 + the one chosen + 1; -1 not yet */
 
     /* the corner button: its two pictures (pause, play) at btn_density;
        the pointer's button and the touches at the last update */
@@ -502,10 +503,10 @@ static void option_refresh(void)
     p.option_shown = want;
 }
 
-/* The player button as it stands: the player shown, lit while chosen. */
+/* The player buttons as they stand: the one in use, the one chosen lit. */
 static void player_refresh(void)
 {
-    int want = p.player * 2 + (p.chosen == PAUSE_PLAYER);
+    int lit = p.chosen == PAUSE_PLAYER1 ? 0 : p.chosen == PAUSE_PLAYER2 ? 1 : -1, want = p.player * 4 + lit + 1;
     float x, y, w, h;
     PauseImg m;
 
@@ -515,7 +516,7 @@ static void player_refresh(void)
     m = pause_img_new(x, y, w, h, p.density);
     if (!m.px)
         return;
-    pause_draw_player(&m, p.player, p.chosen == PAUSE_PLAYER);
+    pause_draw_player(&m, p.player, lit);
     nshvc_image_write(p.player_img, m.px);
     free(m.px);
     p.player_shown = want;
@@ -602,8 +603,8 @@ static void hint_refresh(void)
                                             : KEY_EVENTS  ? "ESCAPE OR SELECT + START TO CANCEL"
                                                           : "SELECT + START TO CANCEL");
         colour = GOLD;
-    } else if (p.chosen == PAUSE_PLAYER) {
-        snprintf(line1, sizeof line1, "%s", p.player ? "SWITCH TO PLAYER 1'S CONTROLS" : "SWITCH TO PLAYER 2'S CONTROLS");
+    } else if (p.chosen >= PAUSE_PLAYER1) {
+        line1[0] = 0;                   /* the buttons say it: none of their own */
         snprintf(line2, sizeof line2, "%s", KEY_EVENTS ? "ESCAPE OR SELECT + START TO RESUME" : "SELECT + START TO RESUME");
     } else if (p.chosen >= PAUSE_OPTION) {
         snprintf(line1, sizeof line1, "%s", p.chosen == PAUSE_FULL_SCREEN ? "THE GAME FILLS THE SCREEN, OR A WINDOW"
@@ -834,7 +835,7 @@ static void show(void)
     if (p.chosen >= PAUSE_OPTION) {
         nshvc_image none = { 0 };
 
-        nshvc_overlay_set(O_LIT, none, NULL, 0);        /* the options' or the player button's own picture shows it lit */
+        nshvc_overlay_set(O_LIT, none, NULL, 0);        /* the options' or the player buttons' own picture shows it lit */
     } else {
         pause_lit_box(p.chosen, &x, &y, &bw, &bh);
         place(O_LIT, p.lit[p.chosen], x, y, p.lit_w[p.chosen], p.lit_h[p.chosen], ox, oy, scale);
@@ -859,9 +860,10 @@ static int control_at(int right, int row)
     return 0;
 }
 
-/* the item a direction leads to from item i: the player button above the
-   tags, down to the top left tag; the tags in their two columns, up from
-   the top row to the player button; under them a row of RESUME (under the
+/* the item a direction leads to from item i: the player buttons above the
+   tags, PLAYER 1 down to the top left tag and PLAYER 2 to the top right,
+   left and right between them; the tags in their two columns, up from the
+   top row to the player button on their side; under them a row of RESUME (under the
    left) and DEFAULTS (under the right), and under that FULL SCREEN (under
    RESUME; offered only where the window can be full screen) and FPS
    COUNTER (under DEFAULTS); left and right going round a row */
@@ -869,8 +871,13 @@ static int move(int i, uint16_t dir)
 {
     int right, row, full = display_can_full_screen();
 
-    if (i == PAUSE_PLAYER)
-        return dir & PAD_DOWN ? control_at(0, 0) : i;
+    if (i >= PAUSE_PLAYER1) {
+        if (dir & PAD_DOWN)
+            return control_at(i == PAUSE_PLAYER2, 0);
+        if (dir & (PAD_LEFT | PAD_RIGHT))
+            return i == PAUSE_PLAYER1 ? PAUSE_PLAYER2 : PAUSE_PLAYER1;
+        return i;
+    }
     if (i >= PAUSE_FULL_SCREEN) {
         if (dir & PAD_UP)
             return i == PAUSE_FULL_SCREEN ? PAUSE_RESUME : PAUSE_DEFAULTS;
@@ -890,7 +897,7 @@ static int move(int i, uint16_t dir)
     right = pause_controls[i].right;
     row = pause_controls[i].row;
     if (dir & PAD_UP)
-        return row > 0 ? control_at(right, row - 1) : PAUSE_PLAYER;
+        return row > 0 ? control_at(right, row - 1) : right ? PAUSE_PLAYER2 : PAUSE_PLAYER1;
     if (dir & PAD_DOWN)
         return row < 5 ? control_at(right, row + 1) : right ? PAUSE_DEFAULTS : PAUSE_RESUME;
     if (dir & (PAD_LEFT | PAD_RIGHT))
@@ -1267,8 +1274,8 @@ static int pause_step(const nshvc_input *in, uint16_t pad[2])
             screen_close(pad);
             return held_back(pad);
         }
-        if (p.chosen == PAUSE_PLAYER)
-            p.player = !p.player;
+        if (p.chosen >= PAUSE_PLAYER1)
+            p.player = p.chosen - PAUSE_PLAYER1;
         else if (p.chosen == PAUSE_DEFAULTS)
             keys_default(p.player);
         else if (p.chosen == PAUSE_FULL_SCREEN)

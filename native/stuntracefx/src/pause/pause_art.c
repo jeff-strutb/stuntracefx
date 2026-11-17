@@ -2,7 +2,7 @@
  * pause_art.c: the pause screen's pictures (pause_art.h): a dark plate edged
  * in gold, the title between a racing flag's checks, Jeff's controller
  * (pad_art.c) with a tag beside it for each of its buttons and a line from
- * the tag to the button, the player button above it (whose controls are
+ * the tag to the button, the player buttons above it (whose controls are
  * shown), the hint below, RESUME, DEFAULTS and the options. Each is
  * drawn once into an image; pause.c lays the images over the window and the
  * GPU shows them. What changes (a key's name on its tag, the item chosen,
@@ -393,25 +393,43 @@ void pause_draw_options(PauseImg *m, const int on[PAUSE_OPTIONS], int lit)
     }
 }
 
-/* the player button: between the title and the controller, clear of the
-   controller's top (its drawing reaches 120.7 points down) and of the lines
-   from the top tags (109 points down and lower) */
-#define PLAYER_X 240.0f
-#define PLAYER_Y 62.0f
-#define PLAYER_W 160.0f
+/* the player buttons, side by side: between the title and the controller,
+   clear of the controller's top (its drawing reaches 120.7 points down), of
+   the lines from the top tags (109 points down and lower) and of the tags'
+   columns (to 162 and from 478 points across) */
+#define PLAYER_W 140.0f
 #define PLAYER_H 30.0f
+#define PLAYER_GAP 12.0f
+#define PLAYER_Y 62.0f
+#define PLAYER_X(i) ((PAUSE_PW - 2 * PLAYER_W - PLAYER_GAP) / 2 + (float)(i) * (PLAYER_W + PLAYER_GAP))
 
 void pause_player_box(float *x, float *y, float *w, float *h)
 {
-    *x = PLAYER_X - MARGIN;
+    *x = PLAYER_X(0) - MARGIN;
     *y = PLAYER_Y - MARGIN;
-    *w = PLAYER_W + 2 * MARGIN;
+    *w = 2 * PLAYER_W + PLAYER_GAP + 2 * MARGIN;
     *h = PLAYER_H + 2 * MARGIN;
 }
 
+/* each: the one in use filled gold, its letters dark; the one chosen with
+   the chosen panel button's look, or, in use, a white edge */
 void pause_draw_player(PauseImg *m, int player, int lit)
 {
-    button_text(m, PLAYER_X, PLAYER_Y, PLAYER_W, PLAYER_H, player ? "PLAYER 2" : "PLAYER 1", lit);
+    static const char *const name[2] = { "PLAYER 1", "PLAYER 2" };
+    int i;
+
+    for (i = 0; i < 2; i++) {
+        float x = PLAYER_X(i), y = PLAYER_Y, w = PLAYER_W, h = PLAYER_H;
+
+        if (i != player) {
+            button_text(m, x, y, w, h, name[i], lit == i);
+            continue;
+        }
+        rrect(m, x, y, w, h, 8, GOLD, 1);
+        if (lit == i)
+            rrect_edge(m, x + 1, y + 1, w - 2, h - 2, 7, 2, WHITE, 1);
+        text_centre(m, name[i], x + w / 2, y + (h - 7 * 1.75f) / 2, 1.75f, PLATE);
+    }
 }
 
 static int in_rect(float px, float py, float x, float y, float w, float h)
@@ -424,8 +442,9 @@ int pause_item_at(float px, float py)
     float x, y, w, h;
     int i;
 
-    if (in_rect(px, py, PLAYER_X, PLAYER_Y, PLAYER_W, PLAYER_H))
-        return PAUSE_PLAYER;
+    for (i = 0; i < 2; i++)
+        if (in_rect(px, py, PLAYER_X(i), PLAYER_Y, PLAYER_W, PLAYER_H))
+            return PAUSE_PLAYER1 + i;
     for (i = PAUSE_CONTROLS; i < PAUSE_ITEMS; i++) {
         if (i == PAUSE_FULL_SCREEN && !full_screen_offered)
             continue;

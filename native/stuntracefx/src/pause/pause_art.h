@@ -46,11 +46,13 @@ extern const PauseControl pause_controls[PAUSE_CONTROLS];
 enum { PAUSE_RESUME = PAUSE_CONTROLS, PAUSE_DEFAULTS, PAUSE_FULL_SCREEN, PAUSE_FPS, PAUSE_ITEMS };
 #define PAUSE_OPTION PAUSE_FULL_SCREEN                  /* the first option */
 #define PAUSE_OPTIONS (PAUSE_ITEMS - PAUSE_OPTION)      /* full screen, the FPS counter */
-/* the player button above the controller: which player's controls the
-   screen shows and changes, PLAYER 1 or PLAYER 2; an item after the rest,
-   drawn into a picture of its own with its value and whether lit
-   (pause_draw_player), not the panel's, with no lit picture of its own */
-#define PAUSE_PLAYER PAUSE_ITEMS
+/* the player buttons above the controller, PLAYER 1 and PLAYER 2 side by
+   side: pressing one shows and changes that player's controls, and it is
+   shown in use. Items after the rest, drawn into a picture of their own
+   with which is in use and which is chosen (pause_draw_player), not the
+   panel's, with no lit pictures of their own. */
+#define PAUSE_PLAYER1 PAUSE_ITEMS
+#define PAUSE_PLAYER2 (PAUSE_ITEMS + 1)
 /* whether FULL SCREEN is offered (a window that can be full screen); FPS
    COUNTER sits alone in the middle of its row without it */
 void pause_art_full_screen(int offered);
@@ -71,12 +73,13 @@ void pause_draw_hint(PauseImg *m, const char *line1, uint32_t colour1, const cha
    them all */
 void pause_options_box(float *x, float *y, float *w, float *h);
 void pause_draw_options(PauseImg *m, const int on[PAUSE_OPTIONS], int lit);
-/* the player button: its box, and its picture showing player (0 or 1) */
+/* the player buttons: their box (both), and their picture: player (0 or 1)
+   the one in use, lit (0 or 1) the one chosen, -1 neither */
 void pause_player_box(float *x, float *y, float *w, float *h);
 void pause_draw_player(PauseImg *m, int player, int lit);
 /* the item at the panel's point (x, y), for the pointer: a control (its
-   tag, or its button on the controller), a panel button shown, or
-   PAUSE_PLAYER; -1 none */
+   tag, or its button on the controller), a panel button shown, or a
+   player button; -1 none */
 int pause_item_at(float x, float y);
 
 /* ---- the options menu (iOS, whose controls cannot be changed) ---- */
