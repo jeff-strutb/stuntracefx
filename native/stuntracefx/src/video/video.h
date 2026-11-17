@@ -69,7 +69,9 @@ void screen_two_box_source(int player, int box, int *x, int *y, int *w, int *h);
 void screen_two_box(int player, int box, float *x, float *y, float *w, float *h);   /* and where it floats, scaled */
 int race_full_window(void);                    /* the one-player race fills the window */
 int race_results_page(void);                   /* the one-player race screen shows the results' page */
-nshvc_draw_list race_results_list(void);       /* that page's frame and panels in the whole window (BG1) */
+nshvc_draw_list race_results_list(void);       /* that page's panels in the whole window (BG1) */
+nshvc_map race_results_map(void);              /* its BG2: the blue texture over the window, the box in it */
+int race_results_map_box_at(void);             /* where in that map the box's first pixel is, each way */
 int race_two_full_window(void);                /* two players fill the window */
 int race_course_full_window(void);             /* the course screen fills the window */
 /* The course screen's wipe laid over the whole window (course_wipe.c): the

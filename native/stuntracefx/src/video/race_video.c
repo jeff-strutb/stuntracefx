@@ -1133,6 +1133,9 @@ uint16_t *race_map_buffer(void)
    as they stand now; then BG2's scroll from the first half. $5C00 is the
    second page of the one-player backdrop's map, so the rows go there, with
    its tile numbering and priority (race_backdrop_rows_upload). */
+static uint16_t results_box[17][26];     /* the box's entries as last uploaded (race_results_map) */
+static int results_box_stale = 1;
+
 void ResultsMapRowsUpload(void)
 {
     uint16_t row[26];
@@ -1145,8 +1148,10 @@ void ResultsMapRowsUpload(void)
             row[i] = (uint16_t)((w & 0xDC00) | (((w & 0x3FF) + 0x200) & 0x3FF));
         }
         video_map_write(race_video.backdrop_one, 0, (uint32_t)(32 + r), 26, 1, row);
+        video_copy(results_box[r], row, sizeof row);
     }
     Bg2ScrollFromTable(0);
+    stale(&results_box_stale);
 }
 
 /* The unpacked course picture ($1000 bytes at the chip RAM's $3000) kept as
@@ -1310,8 +1315,6 @@ void NmiFrameUploadSprites(void)
     CgramUploadAll();
 }
 
-static uint32_t direct_of(uint16_t bgr);
-
 /* ---- the frame and panels around the 3D ---- */
 
 /* One tile into an image of `w` x `h` at (x, y): colour 0 stays clear. */
@@ -1339,7 +1342,6 @@ static void plot_tile(uint8_t *image, int w, int h, int x, int y, const uint8_t 
 enum { PANEL_TOP = 161, PANEL_END = 208, PANEL_ROWS = PANEL_END - PANEL_TOP };
 static PanelBoxes panel_boxes;
 static nshvc_image boxes_image;
-static uint8_t panel_bg;                /* the panel row's background colour, a palette entry */
 
 const PanelBoxes *race_panel_boxes(void)
 {
@@ -1355,7 +1357,6 @@ static void panel_boxes_find(const uint8_t *image)
     uint8_t bg = px[(PANEL_ROWS / 2) * 256];
     int x, y, n = 0, k;
 
-    panel_bg = bg;
     if (!boxes_image.id)
         boxes_image = nshvc_image_create(256, PANEL_ROWS, NSHVC_IMAGE_INDEXED);
     for (y = 0; y < PANEL_ROWS; y++)
@@ -2087,17 +2088,43 @@ void VramUploadGsuBuffer(void)
 
 /* ---- the results' page in the whole window ----
 
-   Jeff, 2026-11-17 (GitHub issue 8, stray tiles on the results screen): the
-   results screen "properly resolution agnostic just like the rest of the
-   game/menus", with the original's grey frame out to the window's edges.
-   The list on BG1, in the screen's pixels: the panel row's grey over the
-   whole window except the original's picture down to its panel row; the
-   frame's image (characters $2B0 on, as frame_image_build lays them out)
-   over that picture down to the panel row, its box's place left clear for
-   BG2's page; and the panel row's boxes where the race's full window puts
-   them (art_over_draw), at the HUD box's edges and the screen's bottom.
-   picture.c places BG2's page, its window and the sprites to match. */
-enum { RESULTS_BAND_TOP = 160 };        /* the frame's row 18 on: the panel row, its grey from the window */
+   Jeff, 2026-11-17 (GitHub issue 8): the results screen "properly resolution
+   agnostic just like the rest of the game/menus"; then, on seeing it with the
+   original's frame kept: "It's the bluish texture background that should be
+   full screen, and the gray and dark gray borders that used to wrap it
+   should be gone entirely". Every empty cell of the results' pages is the
+   same entry, the blue texture ($00EF in each page as unpacked, cell 0 of
+   every row included; the rim round the box was the frame's, BG1's), so
+   BG2 shows a map of that entry over the whole window with the box's
+   26 x 17 entries at the original's place (race_results_map), BG1 shows
+   only the panel row's boxes where the race's full window puts them
+   (race_results_list), and the frame is not drawn at all. */
+enum { RESULTS_MAP_CELLS = 128, RESULTS_BOX_AT = 64 };   /* the map 1024 pixels each way, the box's first cell at 64 */
+
+nshvc_map race_results_map(void)
+{
+    static nshvc_map map;
+    static uint16_t cells[RESULTS_MAP_CELLS * RESULTS_MAP_CELLS];
+    int r, c;
+
+    if (!map.id)
+        map = nshvc_map_create(RESULTS_MAP_CELLS, RESULTS_MAP_CELLS);
+    if (results_box_stale) {
+        uint16_t blank = results_box[0][0];     /* the texture: the page's first entry, empty on every page */
+
+        for (r = 0; r < RESULTS_MAP_CELLS; r++)
+            for (c = 0; c < RESULTS_MAP_CELLS; c++)
+                cells[r * RESULTS_MAP_CELLS + c] = blank;
+        for (r = 0; r < 17; r++)
+            for (c = 0; c < 26; c++)
+                cells[(RESULTS_BOX_AT + r) * RESULTS_MAP_CELLS + RESULTS_BOX_AT + c] = results_box[r][c];
+        video_map_write(map, 0, 0, RESULTS_MAP_CELLS, RESULTS_MAP_CELLS, cells);
+        results_box_stale = 0;
+    }
+    return map;
+}
+
+int race_results_map_box_at(void) { return RESULTS_BOX_AT * 8; }
 
 static void results_quad(nshvc_draw_list list, nshvc_image image, int x, int y, int w, int h, int u, int v)
 {
@@ -2117,45 +2144,17 @@ static void results_quad(nshvc_draw_list list, nshvc_image image, int x, int y, 
     nshvc_draw_tris(list, q, 6, &m);
 }
 
-static void results_rect(nshvc_draw_list list, int x0, int y0, int x1, int y1, uint32_t colour)
-{
-    nshvc_vertex q[6];
-    int k;
-
-    if (x1 <= x0 || y1 <= y0)
-        return;
-    memset(q, 0, sizeof q);
-    q[0].x = (float)x0; q[0].y = (float)y0;
-    q[1].x = (float)x1; q[1].y = (float)y0;
-    q[2].x = (float)x1; q[2].y = (float)y1;
-    q[5].x = (float)x0; q[5].y = (float)y1;
-    q[3] = q[0];
-    q[4] = q[2];
-    for (k = 0; k < 6; k++)
-        q[k].colour = colour;
-    nshvc_draw_tris(list, q, 6, NULL);
-}
-
 nshvc_draw_list race_results_list(void)
 {
     static nshvc_draw_list list;
     const ScreenShape *sh = screen_shape();
-    int ox = sh->origin_x, oy = sh->origin_y, w = sh->width, h = sh->height, down = screen_bottom_shift(), k;
-    uint32_t grey;
+    int down = screen_bottom_shift(), k;
 
     if (!list.id)
         list = nshvc_draw_list_create();
     if (frame_image_stale)
         frame_image_build();
-    nshvc_draw_list_clear(list, (uint32_t)w, (uint32_t)h);
-    grey = direct_of(pic.palette[panel_bg]);
-    /* the grey: above the frame's first line (16), beside the original's
-       picture, and the whole panel row down */
-    results_rect(list, 0, 0, w, oy + 16, grey);
-    results_rect(list, 0, oy + 16, ox, oy + RESULTS_BAND_TOP, grey);
-    results_rect(list, ox + 256, oy + 16, w, oy + RESULTS_BAND_TOP, grey);
-    results_rect(list, 0, oy + RESULTS_BAND_TOP, w, h, grey);
-    results_quad(list, race_video.frame_image, ox, oy, 256, RESULTS_BAND_TOP, 0, 0);
+    nshvc_draw_list_clear(list, (uint32_t)sh->width, (uint32_t)sh->height);
     for (k = 0; k < panel_boxes.count; k++) {
         int x0 = panel_boxes.x0[k], y0 = panel_boxes.y0[k];
 

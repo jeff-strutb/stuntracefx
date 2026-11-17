@@ -975,10 +975,11 @@ static void place_full(nshvc_sprite *out, const nshvc_sprite *in, uint32_t count
 
 void sprites_place_full(nshvc_sprite *out, const nshvc_sprite *in, uint32_t count) { place_full(out, in, count, 0); }
 
-/* The results' page (race_results_list): the frame's own sprites (the
-   bezel's sides) and the page's (the car, its text) at the original's
-   picture's place; the panel row's go with their boxes, as in the race;
-   what the original kept off its picture stays out of sight. */
+/* The results' page (race_results_list): the page's sprites (the car, its
+   text) at the original's picture's place, the car whole as it drives in
+   (the frame that hid its way in is gone); the panel row's go with their
+   boxes, as in the race; the frame's own (the bezel's sides) and what the
+   original kept off its picture stay out of sight. */
 void sprites_place_results(nshvc_sprite *out, const nshvc_sprite *in, uint32_t count) { place_full(out, in, count, 1); }
 
 static void place_full(nshvc_sprite *out, const nshvc_sprite *in, uint32_t count, int results)
@@ -998,8 +999,8 @@ static void place_full(nshvc_sprite *out, const nshvc_sprite *in, uint32_t count
         up[i] = i;
         hud[i] = s->priority == 3;
         shown[i] = !(y < 0 || y >= PANEL_END || y + h <= ROW0 || x + w <= 0 || x >= 256 ||
-                     (!results && (((t & 0x1F8) == 0x40 && s->palette == 3) ||
-                                   ((t & 0x1F0) == 0xA0 && s->palette == 3 && lamps_gone) ||
+                     ((t & 0x1F8) == 0x40 && s->palette == 3) ||
+                     (!results && (((t & 0x1F0) == 0xA0 && s->palette == 3 && lamps_gone) ||
                                    (!hud[i] && (x + w <= VIEW_X || x >= VIEW_X + VIEW_W || y + h <= VIEW_Y || y >= VIEW_Y + VIEW_H)) ||
                                    (hud[i] && y >= VIEW_Y && y + h <= VIEW_Y + VIEW_H && (x + w <= VIEW_X || x >= VIEW_X + VIEW_W)))) ||
                      (hud[i] && ending && y + h > PANEL_TOP));

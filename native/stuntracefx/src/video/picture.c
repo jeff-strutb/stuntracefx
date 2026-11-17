@@ -568,40 +568,31 @@ static void draw_picture(void);
 
 /* The one-player results' page in the whole window (Jeff, 2026-11-17,
    GitHub issue 8: "make the results screen properly resolution agnostic
-   just like the rest of the game/menus"; the grey frame to the window's
-   edges). BG1 is the page's list (race_results_list: the grey, the frame,
-   the panels at the race's places); BG2's page keeps the original's
-   scrolls about the picture's place, and window 2 keeps it to its box, the
-   26 x 17 entries the results write (ResultsMapRowsUpload): the rest of the
-   page is the race's hills, whose characters the results' pictures have
-   taken over, and the frame no longer covers it beyond the original's
-   picture. Window 1 (the page's opening and closing bands) moves with the
-   picture, its edges at the original's sides reaching the window's. The
-   sprites go as sprites_place_results puts them. */
-enum { RESULTS_BOX_W = 26 * 8, RESULTS_BOX_H = 17 * 8 };
-
-static int32_t results_left(int32_t x, int32_t right, const ScreenShape *sh)
-{
-    (void)right;
-    return x == 0 ? 0 : x + sh->origin_x;
-}
-
+   just like the rest of the game/menus", the blue texture full screen, the
+   frame's grey and dark grey gone): BG2 the blue texture over the window
+   with the box's entries at the original's place about the picture's
+   (race_results_map), BG1 the panel row's boxes (race_results_list). Window
+   1 (the page's opening and closing bands) moves with the picture, its
+   edges at the original's sides reaching the window's. The sprites go as
+   sprites_place_results puts them. */
 static void results_full_draw(const ScreenShape *sh)
 {
     static nshvc_sprite placed[128];
-    static int32_t sy_rows[1024], l1w[1024], r1w[1024], l2w[1024], r2w[1024];
+    static int32_t l1w[1024], r1w[1024];
     int32_t l1[224], r1[224], l2[224], r2[224];
     nshvc_windows w = pic.windows;
     Background list, page = pic.bg[1];
     int ox = sh->origin_x, oy = sh->origin_y, h = sh->height > 1024 ? 1024 : sh->height, r;
-    int sx = pic.race.backdrop_x[0], sy = pic.race.backdrop_y[0];
-    int box_x = ox - sx, box_y = oy - sy - 1;   /* the page's first column and line on the screen */
+    int at = race_results_map_box_at();
 
     memset(&list, 0, sizeof list);
     list.draw_list = race_results_list();
     layer_send(0, &list);
-    page.scroll_x = 0;
-    page.scroll_y = 0;
+    /* the box's first column where the original's scroll put it (x - scroll),
+       its first line where the original's line r + 1 + scroll did */
+    page.map = race_results_map();
+    page.scroll_x = at - (ox - pic.race.backdrop_x[0]);
+    page.scroll_y = at - (oy - pic.race.backdrop_y[0]);
     layer_send(1, &page);
     layer_send(2, &pic.bg[2]);
     if (g.line_effects.window_bands)
@@ -610,27 +601,17 @@ static void results_full_draw(const ScreenShape *sh)
         int line = r - oy, k = line < 0 ? 0 : line > 223 ? 223 : line;
         int32_t a = g.line_effects.window_bands ? l1[k] : w.w[0].left, b = g.line_effects.window_bands ? r1[k] : w.w[0].right;
 
-        /* BG2: line r shows the page's line (sy + line + 1) & 255, as the original's table had it */
-        sy_rows[r] = 256 + ((sy + line + 1) & 255) - (r + 1);
         if (a > b) {                    /* covers nothing: still nothing */
             l1w[r] = a + ox;
             r1w[r] = b + ox;
         } else {
-            l1w[r] = results_left(a, b, sh);
+            l1w[r] = a == 0 ? 0 : a + ox;
             r1w[r] = b >= 255 ? sh->width - 1 : b + ox;
         }
-        l2w[r] = r >= box_y && r < box_y + RESULTS_BOX_H ? box_x : 1;
-        r2w[r] = r >= box_y && r < box_y + RESULTS_BOX_H ? box_x + RESULTS_BOX_W - 1 : 0;
     }
-    w.layer_use[1] = (uint8_t)((w.layer_use[1] & (NSHVC_WIN1 | NSHVC_WIN1_INVERT)) | NSHVC_WIN2 | NSHVC_WIN2_INVERT);
-    w.mask_main[1] = 1;
     nshvc_windows_set(&w);
     nshvc_lines(0, (uint32_t)h, NSHVC_LINE_WIN1_LEFT, l1w);
     nshvc_lines(0, (uint32_t)h, NSHVC_LINE_WIN1_RIGHT, r1w);
-    nshvc_lines(0, (uint32_t)h, NSHVC_LINE_WIN2_LEFT, l2w);
-    nshvc_lines(0, (uint32_t)h, NSHVC_LINE_WIN2_RIGHT, r2w);
-    nshvc_lines(0, (uint32_t)h, (nshvc_line_field)(NSHVC_LINE_SCROLL_Y + 1), sy_rows);
-    nshvc_line(0, (nshvc_line_field)(NSHVC_LINE_SCROLL_X + 1), (sx - ox) & 255);
     nshvc_blend_set(&pic.blend);
     nshvc_palette_write(0, 256, pic.palette);
     if (g.line_effects.fixed_bands) {
