@@ -7,7 +7,13 @@
  * steer, Z the gas (B), X the brake (A), A boost (Y), S X, Q and W the hard
  * turns (L, R), Return Start, Shift Select; a controller by each button's
  * place, the SNES's own layout, its d-pad and left stick steering. Player 2
- * is the second controller, by the same places.
+ * is the second controller, by the same places. A controller is the player's
+ * it is first used for (a button pressed or its left stick moved): player
+ * 1's, then player 2's; it stays theirs until it is disconnected. (GitHub
+ * issue 9: on a Steam Deck the Deck's own controls are the engine's first
+ * controller, so a controller added to it was the second, player 2's, and
+ * drove nothing in a one-player race, though the pause screen, which reads
+ * both players, answered it.)
  *
  * The touch screen is the earlier front end's touch scheme, the race's pad
  * (object/gsu_record.c ctl_player: B accelerates, A brakes and reverses
@@ -65,7 +71,10 @@ static uint16_t ctl_of[BUTTONS] = { NSHVC_CTL_SOUTH, NSHVC_CTL_WEST, NSHVC_CTL_B
                                     NSHVC_CTL_EAST, NSHVC_CTL_NORTH, NSHVC_CTL_LB, NSHVC_CTL_RB };
 
 static int source = CONTROLS_KEYBOARD;
-static uint16_t ctl_last;               /* the first controller's buttons at the last update */
+
+enum { CONTROLLERS = 8 };               /* nshvc_input's controller[] */
+static int owner[2] = { -1, -1 };       /* each player's controller, -1 none yet */
+static uint32_t ctl_was[CONTROLLERS];   /* each controller's state (controller_state) at the last update */
 
 static int button_index(uint16_t button)
 {
@@ -102,7 +111,7 @@ const char *controls_name(uint16_t button)
     if (b < 0)
         return "";
     if (source == CONTROLS_CONTROLLER)
-        return ctl_of[b] ? nshvc_controller_label(0, ctl_of[b]) : "";
+        return ctl_of[b] ? nshvc_controller_label(owner[0] >= 0 ? (uint32_t)owner[0] : 0, ctl_of[b]) : "";
     return key_of[b] ? nshvc_key_name((nshvc_key)key_of[b]) : "";
 }
 
@@ -112,7 +121,7 @@ static uint16_t controller_pad(const nshvc_input *in, int c, const uint16_t *map
     uint16_t pad = 0;
     int b;
 
-    if (!in->controller[c].on)
+    if (c < 0 || !in->controller[c].on)
         return 0;
     for (b = 0; b < BUTTONS; b++)
         if (in->controller[c].buttons & map[b])
@@ -449,23 +458,59 @@ static uint16_t touch_pad(const nshvc_input *in)
 
 /* ---- each update ---- */
 
+int controls_controller(int player) { return player == 0 || player == 1 ? owner[player] : -1; }
+
+/* controller c's buttons and its left stick past half way (bits 16-19) */
+static uint32_t controller_state(const nshvc_input *in, int c)
+{
+    uint32_t s;
+
+    if (!in->controller[c].on)
+        return 0;
+    s = in->controller[c].buttons;
+    if (in->controller[c].ly < -0.5f)
+        s |= 1u << 16;
+    if (in->controller[c].ly > 0.5f)
+        s |= 1u << 17;
+    if (in->controller[c].lx < -0.5f)
+        s |= 1u << 18;
+    if (in->controller[c].lx > 0.5f)
+        s |= 1u << 19;
+    return s;
+}
+
 void controls_read(const nshvc_input *in, uint16_t pad[2])
 {
-    uint16_t now = in->controller[0].on ? in->controller[0].buttons : 0;
-    int i, keys = 0;
+    int i, c, keys = 0, used = 0;
 
     updates++;
+    for (i = 0; i < 2; i++)
+        if (owner[i] >= 0 && !in->controller[owner[i]].on)
+            owner[i] = -1;
+    for (c = 0; c < CONTROLLERS; c++) {
+        uint32_t now = controller_state(in, c), fresh = now & ~ctl_was[c];
+
+        ctl_was[c] = now;
+        if (fresh && owner[0] != c && owner[1] != c) {
+            if (owner[0] < 0)
+                owner[0] = c;
+            else if (owner[1] < 0)
+                owner[1] = c;
+        }
+        /* player 1's controller in use: a press, or its stick held over */
+        if (owner[0] == c && (fresh || (now & 0xF0000u)))
+            used = 1;
+    }
     for (i = 0; i < 8; i++)
         keys |= in->keys_pressed[i] != 0;
     if (keys)
         source = CONTROLS_KEYBOARD;
-    if ((now & ~ctl_last) || (in->controller[0].on && (fabsf(in->controller[0].lx) > 0.5f || fabsf(in->controller[0].ly) > 0.5f)))
+    if (used)
         source = CONTROLS_CONTROLLER;
-    ctl_last = now;
     if (in->touches)
         source = CONTROLS_TOUCH;
-    pad[0] = (uint16_t)(keyboard_pad(in) | controller_pad(in, 0, ctl_of) | touch_pad(in));
-    pad[1] = controller_pad(in, 1, k_ctl_default);
+    pad[0] = (uint16_t)(keyboard_pad(in) | controller_pad(in, owner[0], ctl_of) | touch_pad(in));
+    pad[1] = controller_pad(in, owner[1], k_ctl_default);
 }
 
 /* ---- the touch controls' pictures ---- */

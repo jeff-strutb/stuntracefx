@@ -133,7 +133,8 @@ static struct {
     uint8_t keys[BUTTONS];              /* each button's key, in k_buttons' order */
     uint16_t ctl[BUTTONS];              /* each button's button on player 1's controller (one NSHVC_CTL_* bit) */
     uint16_t ctl_last;                  /* that controller's buttons at the last update */
-    int ctl_on;                         /* it is connected */
+    int ctl_on;                         /* player 1 has a controller */
+    int ctl_slot;                       /* which (controls_controller), -1 none */
 
     /* the pictures: made at `density` pixels a point; 0 none yet */
     float density;
@@ -1052,11 +1053,15 @@ static int pause_step(const nshvc_input *in, uint16_t pad[2])
         keys_load();
 #if CONTROLLER_BIND
     {
-        uint16_t now = in->controller[0].on ? in->controller[0].buttons : 0;
+        int c = controls_controller(0);
+        uint16_t now = c >= 0 ? in->controller[c].buttons : 0;
 
+        if (c != p.ctl_slot)            /* another controller is player 1's: what it holds is pressed now */
+            p.ctl_last = 0;
+        p.ctl_slot = c;
         ctl_press = (uint16_t)(now & ~p.ctl_last);
         p.ctl_last = now;
-        p.ctl_on = in->controller[0].on;
+        p.ctl_on = c >= 0;
     }
 #endif
     for (i = 0; i < 2; i++) {
