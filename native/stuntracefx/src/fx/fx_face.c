@@ -608,16 +608,29 @@ void fx_face_vertex(uint8_t p, uint8_t u, uint8_t v)
    tube's floor, walls and roof, where faces closing a surface go their
    shared edges opposite ways). Of the course's shapes logged (22 shapes,
    55,000 drawn) only the two doors are caps, in every picture. An open
-   model's caps are not drawn, facing the eye or not, so its mouth is open. */
+   model's caps are not drawn, facing the eye or not.
+
+   The mouth's rock face is not cut round the opening: its triangles run
+   across it on the door's plane, the door over them (logged 2026-11-17,
+   the lines of sight out of the exit meeting $E3BC's rock from behind;
+   Jeff: "it shows a rock wall. Not open at all"). So a face on a cap's
+   plane that reaches outside it is drawn less the cap's polygon (the
+   cap is convex: the face cut by each of its edges' planes in turn, the
+   parts outside kept); one wholly inside it (the rim round the opening)
+   is drawn whole. So the mouth is open. */
 
 enum { WALKED = 512, WALKED_CORNERS = 8, HELD = 192 };
 
 static struct {
-    int n;
+    int n, textured, back;
     uint32_t key[WALKED_CORNERS];
     double normal[3];                   /* its unit normal (Newell's), 0 for none */
     int shape;                          /* the shape it made in the queue (shapes[]); -1 none */
     unsigned age;                       /* the queue's age when it made it (queue_age) */
+    Corner3 c[WALKED_CORNERS];          /* the face again, to draw it cut round a cap */
+    View view;
+    Tint tint;
+    FxMaterial material;
 } walked[WALKED];
 static int nwalked, walked_lost;        /* the faces the model's walk reached; whether some did not fit */
 static unsigned queue_age;              /* how many times the queue was drawn: a shape made before is gone */
@@ -651,7 +664,7 @@ void fx_face_begin_back(int textured)
 
 /* the face just ended, noted for its model's closing: its place among
    the walked faces, -1 when not noted */
-static int walked_note(void)
+static int walked_note(const FxMaterial *material)
 {
     double nv[3] = { 0, 0, 0 }, len;
     int k;
@@ -667,6 +680,7 @@ static int walked_note(void)
         const Corner3 *a = &face.c[k], *b = &face.c[(k + 1) % face.n];
 
         walked[nwalked].key[k] = corner_key(a);
+        walked[nwalked].c[k] = *a;
         nv[0] += (a->y - b->y) * (a->z + b->z);
         nv[1] += (a->z - b->z) * (a->x + b->x);
         nv[2] += (a->x - b->x) * (a->y + b->y);
@@ -676,6 +690,11 @@ static int walked_note(void)
         walked[nwalked].normal[k] = len > 0 ? nv[k] / len : 0;
     walked[nwalked].shape = -1;
     walked[nwalked].age = queue_age;
+    walked[nwalked].textured = face.textured;
+    walked[nwalked].back = face.back;
+    walked[nwalked].view = face.view;
+    walked[nwalked].tint = face.tint;
+    walked[nwalked].material = *material;
     return nwalked++;
 }
 
@@ -686,7 +705,7 @@ void fx_face_end(const FxMaterial *material)
     if (!face.open)
         return;
     face.open = 0;
-    w = walked_note();
+    w = walked_note(material);
     if (face.back) {                    /* held until its model's walk is done */
         int k;
 
@@ -770,7 +789,7 @@ static void walked_caps(uint8_t *cap)
     } list[WALKED * WALKED_CORNERS];
     int i, k, n = 0;
 
-    memset(cap, 0, (size_t)nwalked);
+    memset(cap, 0, WALKED);
     if (walked_lost)
         return;
     for (i = 0; i < nwalked; i++)
@@ -815,6 +834,139 @@ static void walked_caps(uint8_t *cap)
     }
 }
 
+/* ---- a cap cut out of the faces on its plane ---- */
+
+/* the part of polygon in (n corners) where e . (x, y, z) - d has the sign
+   of `side` (e . p - d its value at p), the crossings interpolated in
+   space (texels with them) */
+static int clip_plane(const Corner3 *in, int n, Corner3 *out, const double e[3], double d, double side)
+{
+    int i, m = 0;
+
+    for (i = 0; i < n && m < MOST - 1; i++) {
+        const Corner3 *a = &in[i], *b = &in[(i + 1) % n];
+        double sa = (e[0] * a->x + e[1] * a->y + e[2] * a->z - d) * side;
+        double sb = (e[0] * b->x + e[1] * b->y + e[2] * b->z - d) * side;
+
+        if (sa >= 0)
+            out[m++] = *a;
+        if ((sa >= 0) != (sb >= 0)) {
+            double t = sa / (sa - sb);
+
+            out[m].x = a->x + t * (b->x - a->x);
+            out[m].y = a->y + t * (b->y - a->y);
+            out[m].z = a->z + t * (b->z - a->z);
+            out[m].u = a->u + t * (b->u - a->u);
+            out[m].v = a->v + t * (b->v - a->v);
+            m++;
+        }
+    }
+    return m;
+}
+
+/* cap c's edge k's plane (through the edge, across the cap's): e . p = d,
+   and the side of it the cap is on (+1 or -1) */
+static double cap_edge(int c, int k, double e[3], double *d)
+{
+    const Corner3 *a = &walked[c].c[k], *b = &walked[c].c[(k + 1) % walked[c].n];
+    const double *n = walked[c].normal;
+    double t[3] = { b->x - a->x, b->y - a->y, b->z - a->z }, mid[3] = { 0, 0, 0 };
+    int i;
+
+    e[0] = t[1] * n[2] - t[2] * n[1];
+    e[1] = t[2] * n[0] - t[0] * n[2];
+    e[2] = t[0] * n[1] - t[1] * n[0];
+    *d = e[0] * a->x + e[1] * a->y + e[2] * a->z;
+    for (i = 0; i < walked[c].n; i++) {
+        mid[0] += walked[c].c[i].x / walked[c].n;
+        mid[1] += walked[c].c[i].y / walked[c].n;
+        mid[2] += walked[c].c[i].z / walked[c].n;
+    }
+    return e[0] * mid[0] + e[1] * mid[1] + e[2] * mid[2] - *d >= 0 ? 1 : -1;
+}
+
+/* a polygon's area (Newell's) */
+static double corners_area(const Corner3 *c, int n)
+{
+    double nv[3] = { 0, 0, 0 };
+    int i;
+
+    for (i = 0; i < n; i++) {
+        const Corner3 *a = &c[i], *b = &c[(i + 1) % n];
+
+        nv[0] += (a->y - b->y) * (a->z + b->z);
+        nv[1] += (a->z - b->z) * (a->x + b->x);
+        nv[2] += (a->x - b->x) * (a->y + b->y);
+    }
+    return 0.5 * sqrt(nv[0] * nv[0] + nv[1] * nv[1] + nv[2] * nv[2]);
+}
+
+/* whether walked face i lies on cap c's plane (its corners within 1, and a
+   ten-thousandth of their distance, of it) and the cap takes some of it
+   but not all: the part of it inside every edge of the cap more than a
+   millionth of it and less than all */
+static int cap_crosses(int i, int c)
+{
+    static Corner3 rest[MOST], next[MOST];
+    const double *n = walked[c].normal, *q = walked[i].normal;
+    const Corner3 *o = &walked[c].c[0];
+    double tol = 1.0 + 1e-4 * (fabs(o->x) + fabs(o->y) + fabs(o->z)), area, inside;
+    int k, j, nrest = walked[i].n;
+
+    if (fabs(n[0] * q[0] + n[1] * q[1] + n[2] * q[2]) < 0.99)
+        return 0;
+    for (j = 0; j < walked[i].n; j++) {
+        const Corner3 *p = &walked[i].c[j];
+
+        if (fabs(n[0] * (p->x - o->x) + n[1] * (p->y - o->y) + n[2] * (p->z - o->z)) > tol)
+            return 0;
+        rest[j] = *p;
+    }
+    area = corners_area(rest, nrest);
+    for (k = 0; k < walked[c].n && nrest >= 3; k++) {
+        double e[3], d, side = cap_edge(c, k, e, &d);
+
+        nrest = clip_plane(rest, nrest, next, e, d, side);
+        for (j = 0; j < nrest; j++)
+            rest[j] = next[j];
+    }
+    inside = nrest >= 3 ? corners_area(rest, nrest) : 0;
+    return inside > 1e-6 * area && inside < (1 - 1e-6) * area;
+}
+
+/* walked face i drawn less cap c: the parts outside each of its edges in
+   turn, in the material m given */
+static void commit_cut(int i, int c, const FxMaterial *m, const Tint *tint)
+{
+    static Corner3 rest[MOST], next[MOST], part[MOST];
+    int k, j, nrest = walked[i].n, npart;
+
+    for (j = 0; j < nrest; j++)
+        rest[j] = walked[i].c[j];
+    for (k = 0; k < walked[c].n && nrest >= 3; k++) {
+        double e[3], d, side = cap_edge(c, k, e, &d);
+
+        npart = clip_plane(rest, nrest, part, e, d, -side);
+        if (npart >= 3) {
+            face.open = 0;
+            face.back = walked[i].back;
+            face.whole = 1;
+            face.n = npart;
+            face.textured = walked[i].textured;
+            face.view = walked[i].view;
+            face.tint = *tint;
+            for (j = 0; j < npart; j++)
+                face.c[j] = part[j];
+            if (fx_face_full())
+                fx_draw_queued();
+            commit(m);
+        }
+        nrest = clip_plane(rest, nrest, next, e, d, side);
+        for (j = 0; j < nrest; j++)
+            rest[j] = next[j];
+    }
+}
+
 /* whether held face h has a twin among the faces the walk reached: the
    same corners the other way round */
 static int has_twin(int h)
@@ -850,18 +1002,39 @@ static uint8_t colour_behind(Tint *t, uint8_t front)
     return fx_rom_read(3, (uint16_t)(t->row + level - 6));
 }
 
+/* walked face k's shape, queued and not drawn yet, left empty: 1 when it was */
+static int unqueue(int k)
+{
+    if (walked[k].shape < 0 || walked[k].age != queue_age || walked[k].shape >= nshapes)
+        return 0;
+    shapes[walked[k].shape].count = 0;
+    shapes[walked[k].shape].ncorner3 = 0;
+    return 1;
+}
+
 void fx_face_model_done(void)
 {
     static uint8_t cap[WALKED];
-    int h, k, open = (nheld || nwalked) && !walked_closed();
+    static int cut[WALKED], recut[WALKED];
+    int h, k, c, ncut = 0, open = (nheld || nwalked) && !walked_closed();
 
     if (open) {                         /* its caps not drawn: those queued left empty */
         walked_caps(cap);
-        for (k = 0; k < nwalked; k++)
-            if (cap[k] && walked[k].shape >= 0 && walked[k].age == queue_age && walked[k].shape < nshapes) {
-                shapes[walked[k].shape].count = 0;
-                shapes[walked[k].shape].ncorner3 = 0;
-            }
+        for (k = 0; k < nwalked; k++) {
+            cut[k] = -1;
+            if (cap[k])
+                (void)unqueue(k);
+        }
+        for (c = 0; c < nwalked; c++)   /* the faces on a cap's plane reaching past it */
+            if (cap[c])
+                for (k = 0; k < nwalked; k++)
+                    if (!cap[k] && cut[k] < 0 && cap_crosses(k, c))
+                        cut[k] = c;
+        for (k = 0; k < nwalked; k++)   /* those facing the eye queued whole: taken out, drawn cut below */
+            if (cut[k] >= 0 && !walked[k].back && unqueue(k))
+                recut[ncut++] = k;
+        for (h = 0; h < ncut; h++)
+            commit_cut(recut[h], cut[recut[h]], &walked[recut[h]].material, &walked[recut[h]].tint);
     }
     if (nheld && open)
         for (h = 0; h < nheld; h++) {
@@ -869,6 +1042,14 @@ void fx_face_model_done(void)
 
             if (has_twin(h) || (held[h].walk >= 0 && cap[held[h].walk]))
                 continue;
+            if (held[h].walk >= 0 && cut[held[h].walk] >= 0) {
+                Tint t = held[h].tint;
+
+                if (!held[h].textured)
+                    m.colour = colour_behind(&t, m.colour);
+                commit_cut(held[h].walk, cut[held[h].walk], &m, &t);
+                continue;
+            }
             face.open = 0;
             face.back = 1;
             face.whole = 1;
