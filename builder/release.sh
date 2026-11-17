@@ -2,7 +2,7 @@
 # builder/release.sh: build Stunt Race FX Builder for macOS, Windows and Linux
 # and publish them on the repository's GitHub Releases page as vVERSION.
 #
-# VERSION: 0.99 unless set. The release is tagged at HEAD as it is when this
+# VERSION: 0.991 unless set. The release is tagged at HEAD as it is when this
 # starts, which must already be on GitHub. Running it again at the same
 # version replaces the files of that release.
 #
@@ -19,7 +19,7 @@ for a in "$@"; do
     [ "$a" = --no-build ] && BUILD=0
 done
 
-VERSION=${VERSION:-0.99}
+VERSION=${VERSION:-0.991}
 TAG=v$VERSION
 DIST=build/builder/dist
 MAC=$DIST/StuntRaceFXBuilder-$VERSION-macOS.zip
@@ -51,12 +51,19 @@ Stunt Race FX Builder makes a native build of **Stunt Race FX** (Super Nintendo,
 
 The game's data is copyrighted, so the builder does not include it: you provide your ROM, the builder checks it by MD5, takes the data the game reads from it (the ROM's code is not used: the C stands for it), and produces a game that runs on its own. The ROM is not needed once the build is done.
 
+### New in 0.991
+- **Full screen by default**, on every computer, Linux and the Steam Deck included; the pause screen switches between full screen and a window, and the game remembers your choice.
+- **FPS counter on or off** from the pause screen.
+- **Any controller is player 1**: the first controller you press a button on drives, so a controller added to a Steam Deck works, and the pause screen remaps that controller.
+- **Tunnels open onto the outside**: no black going into or out of a tunnel; the land and sky show through its mouths.
+- The builder's finished page lists the keys the game has now, and a game run without its data says to build it with the builder.
+
 ### Features
 - **Native**: the game's own C for your machine, no emulator; its 3D is drawn by the GPU (Metal on the Mac, iPhone and iPad, Vulkan on Windows and Linux).
 - **Any window, any shape**: the race and the menus fill the window, wide or tall, and the 3D is drawn at the window's own resolution, sharp at any size.
 - **60 frames a second**: the race runs the cartridge's own physics step for step, and the 3D is drawn on every frame between its steps.
 - **The courses' ground as polygon scenery**: green polygon mountains, oceans of waves, snowfields, to the horizon; solid 3D tyres and trees, and no distance where the scenery is cut off.
-- **Its own pause screen** (Escape, Select + Start, or the corner button): remap the keyboard and a game controller, and turn Auto-Accelerate on or off; on the iPhone and iPad, a menu to resume, turn Auto-Accelerate on or off, or quit the race.
+- **Its own pause screen** (Escape, Select + Start, or the corner button): remap the keyboard and a game controller, switch full screen, show or hide the FPS counter, and turn Auto-Accelerate on or off; on the iPhone and iPad, a menu to resume, turn Auto-Accelerate or the FPS counter on or off, or quit the race.
 - **A view from above**: the view button beside the pause button switches the race between the view behind the car and an angled view from above.
 - **Depth-tested 3D**: the courses, cars and scenery drawn at their true depths, the cars riding on the track itself.
 - **Touch controls** on the iPhone and iPad: a steering wheel under your right thumb, brake and boost pedals under your left, the gas held for you while you drive, a pause button; swipes and taps in the menus.
@@ -66,7 +73,8 @@ The game's data is copyrighted, so the builder does not include it: you provide 
 ### Download
 - **macOS** (12 or later, Apple silicon and Intel; the game it builds needs the same): \`StuntRaceFXBuilder-$VERSION-macOS.zip\`. Unzip and open Stunt Race FX Builder. It is not notarized: if macOS refuses to open it, Control-click it and choose Open, or allow it in System Settings, Privacy & Security.
 - **Windows** (10 or later, 64-bit; the game it builds needs the same, and a graphics driver with Vulkan): \`StuntRaceFXBuilder-$VERSION-Windows.zip\`. Unzip it and run \`StuntRaceFXBuilder.exe\` from the unzipped folder (the \`game\` folder beside it holds the game's code). It is not signed: if SmartScreen stops it, choose More info, then Run anyway.
-- **Linux** (x86_64 or arm64; glibc 2.35 or later, which is Ubuntu 22.04, Debian 12, Fedora 36 and anything newer; X11 or XWayland; a graphics driver with Vulkan; GTK 3 for the builder's window): \`StuntRaceFXBuilder-$VERSION-Linux-x86_64.tar.gz\` or \`StuntRaceFXBuilder-$VERSION-Linux-arm64.tar.gz\`. Extract it and run \`StuntRaceFXBuilder\` in the extracted folder (the \`game\` folder beside it holds the game's code). Without a desktop it builds from the terminal: \`./StuntRaceFXBuilder --rom YOUR_ROM.sfc --dest FOLDER --build\`.
+- **Linux** (x86_64 or arm64; glibc 2.35 or later, which is Ubuntu 22.04, Debian 12, Fedora 36 and anything newer; X11 or XWayland; a graphics driver with Vulkan; GTK 3 for the builder's window): \`StuntRaceFXBuilder-$VERSION-Linux-x86_64.tar.gz\` or \`StuntRaceFXBuilder-$VERSION-Linux-arm64.tar.gz\`. Extract it and run \`StuntRaceFXBuilder\` in the extracted folder (the \`game\` folder beside it holds the game's code). Without a desktop it builds from the terminal: \`./StuntRaceFXBuilder --rom YOUR_ROM.sfc --dest FOLDER --build\`. Run the builder, not the program in its \`game\` folder: that is the builder's copy of the game, without its data.
+- **Steam Deck**: in Desktop Mode, run the Linux x86_64 builder and build the game; then in Steam choose Add a Non-Steam Game and pick \`Stunt Race FX\` in the folder it made, to play it in Gaming Mode. It starts full screen.
 
 ### What it needs
 | Your dump | MD5 |
@@ -83,7 +91,7 @@ The first release (Rev 0) and the European and Japanese cartridges are not suppo
 
 ### Playing
 - A keyboard or a game controller drives; on the iPhone and iPad, touch, or a game controller. The pause screen shows and changes what each key and button does (on a computer).
-- Full screen: View, Enter Full Screen (Control-Command-F) on a Mac, Alt+Enter or F11 on Windows.
+- Full screen is the default; the pause screen's FULL SCREEN switches to a window and back, as do View, Enter Full Screen (Control-Command-F) on a Mac and Alt+Enter or F11 on Windows.
 - Records and settings live in your user folder (Application Support on macOS, the iPhone and the iPad, AppData on Windows, ~/.local/share on Linux), so rebuilding never touches them.
 
 Source: [builder/](https://github.com/jeff-strutb/stuntracefx/tree/$REV/builder), [native/stuntracefx/](https://github.com/jeff-strutb/stuntracefx/tree/$REV/native/stuntracefx).

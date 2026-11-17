@@ -18,7 +18,7 @@
 # Its icon, and the builder's, is the game's own (native/stuntracefx/icon/
 # icon.png, made into each system's form by nativeshvc's nshvc-icons).
 #
-# VERSION: 0.99 unless set.
+# VERSION: 0.991 unless set.
 # Needs nativeshvc's checkout (NSHVC, ../nativeshvc), the ROM (ROM, default
 # reference/stuntracefx/: check_payload.py reads it to prove its absence),
 # Xcode's clang and the iOS SDK, cmake and ninja, glslangValidator and
@@ -30,7 +30,7 @@
 set -e
 cd "$(dirname "$0")/.."
 ROOT=$PWD
-VERSION=${VERSION:-0.99}
+VERSION=${VERSION:-0.991}
 NSHVC=$(cd "${NSHVC:-../nativeshvc}" && pwd)
 B=$ROOT/build/builder
 DIST=$B/dist
