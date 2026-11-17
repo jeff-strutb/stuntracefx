@@ -44,6 +44,11 @@ extern const PauseControl pause_controls[PAUSE_CONTROLS];
    picture of their own (pause_draw_options), not the panel's. */
 enum { PAUSE_RESUME = PAUSE_CONTROLS, PAUSE_DEFAULTS, PAUSE_OPTION, PAUSE_FULL_SCREEN, PAUSE_FPS, PAUSE_ITEMS };
 #define PAUSE_OPTIONS (PAUSE_ITEMS - PAUSE_OPTION)      /* auto-accelerate, full screen, the FPS counter */
+/* the player button above the controller: which player's controls the
+   screen shows and changes, PLAYER 1 or PLAYER 2; an item after the rest,
+   drawn into a picture of its own with its value and whether lit
+   (pause_draw_player), not the panel's, with no lit picture of its own */
+#define PAUSE_PLAYER PAUSE_ITEMS
 /* whether FULL SCREEN is offered (a window that can be full screen); FPS
    COUNTER sits alone in the middle of its row without it */
 void pause_art_full_screen(int offered);
@@ -64,6 +69,9 @@ void pause_draw_hint(PauseImg *m, const char *line1, uint32_t colour1, const cha
    them all */
 void pause_options_box(float *x, float *y, float *w, float *h);
 void pause_draw_options(PauseImg *m, const int on[PAUSE_OPTIONS], int lit);
+/* the player button: its box, and its picture showing player (0 or 1) */
+void pause_player_box(float *x, float *y, float *w, float *h);
+void pause_draw_player(PauseImg *m, int player, int lit);
 
 /* ---- the options menu (iOS, whose controls cannot be changed) ---- */
 

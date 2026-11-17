@@ -3,11 +3,12 @@
  * engine reports it.
  *
  * The keyboard and the controllers give the SNES pad's buttons through
- * player 1's bindings (the pause screen changes them): by default arrows to
- * steer, Z the gas (B), X the brake (A), A boost (Y), S X, Q and W the hard
- * turns (L, R), Return Start, Shift Select; a controller by each button's
- * place, the SNES's own layout, its d-pad and left stick steering. Player 2
- * is the second controller, by the same places. A controller is the player's
+ * each player's bindings (the pause screen changes them): by default arrows
+ * to steer, Z the gas (B), X the brake (A), A boost (Y), S X, Q and W the
+ * hard turns (L, R), Return Start, Shift Select; a controller by each
+ * button's place, the SNES's own layout, its d-pad and left stick steering.
+ * Player 2 is the second controller, through player 2's own controller
+ * bindings (no keys: the keyboard is player 1's). A controller is the player's
  * it is first used for (a button pressed or its left stick moved): player
  * 1's, then player 2's; it stays theirs until it is disconnected. (GitHub
  * issue 9: on a Steam Deck the Deck's own controls are the engine's first
@@ -62,13 +63,14 @@
 #define BUTTONS 12
 static const uint16_t k_button[BUTTONS] = { PAD_B, PAD_Y, PAD_SELECT, PAD_START, PAD_UP, PAD_DOWN,
                                             PAD_LEFT, PAD_RIGHT, PAD_A, PAD_X, PAD_L, PAD_R };
-static const uint16_t k_ctl_default[BUTTONS] = { NSHVC_CTL_SOUTH, NSHVC_CTL_WEST, NSHVC_CTL_BACK, NSHVC_CTL_MENU,
-                                                 NSHVC_CTL_UP, NSHVC_CTL_DOWN, NSHVC_CTL_LEFT, NSHVC_CTL_RIGHT,
-                                                 NSHVC_CTL_EAST, NSHVC_CTL_NORTH, NSHVC_CTL_LB, NSHVC_CTL_RB };
 static int key_of[BUTTONS] = { 'Z', 'A', 0x10, 0x0D, 0x26, 0x28, 0x25, 0x27, 'X', 'S', 'Q', 'W' };
-static uint16_t ctl_of[BUTTONS] = { NSHVC_CTL_SOUTH, NSHVC_CTL_WEST, NSHVC_CTL_BACK, NSHVC_CTL_MENU,
-                                    NSHVC_CTL_UP, NSHVC_CTL_DOWN, NSHVC_CTL_LEFT, NSHVC_CTL_RIGHT,
-                                    NSHVC_CTL_EAST, NSHVC_CTL_NORTH, NSHVC_CTL_LB, NSHVC_CTL_RB };
+/* each player's controller buttons */
+static uint16_t ctl_of[2][BUTTONS] = {
+    { NSHVC_CTL_SOUTH, NSHVC_CTL_WEST, NSHVC_CTL_BACK, NSHVC_CTL_MENU, NSHVC_CTL_UP, NSHVC_CTL_DOWN, NSHVC_CTL_LEFT,
+      NSHVC_CTL_RIGHT, NSHVC_CTL_EAST, NSHVC_CTL_NORTH, NSHVC_CTL_LB, NSHVC_CTL_RB },
+    { NSHVC_CTL_SOUTH, NSHVC_CTL_WEST, NSHVC_CTL_BACK, NSHVC_CTL_MENU, NSHVC_CTL_UP, NSHVC_CTL_DOWN, NSHVC_CTL_LEFT,
+      NSHVC_CTL_RIGHT, NSHVC_CTL_EAST, NSHVC_CTL_NORTH, NSHVC_CTL_LB, NSHVC_CTL_RB },
+};
 
 static int source = CONTROLS_KEYBOARD;
 
@@ -94,24 +96,25 @@ void controls_bind_key(uint16_t button, int key)
         key_of[b] = key;
 }
 
-void controls_bind_controller(uint16_t button, uint16_t ctl)
+void controls_bind_controller(int player, uint16_t button, uint16_t ctl)
 {
     int b = button_index(button);
 
-    if (b >= 0)
-        ctl_of[b] = ctl;
+    if (b >= 0 && (player == 0 || player == 1))
+        ctl_of[player][b] = ctl;
 }
 
 int controls_source(void) { return source; }
 
-const char *controls_name(uint16_t button)
+const char *controls_name(int player, uint16_t button)
 {
     int b = button_index(button);
 
-    if (b < 0)
+    if (b < 0 || (player != 0 && player != 1))
         return "";
-    if (source == CONTROLS_CONTROLLER)
-        return ctl_of[b] ? nshvc_controller_label(owner[0] >= 0 ? (uint32_t)owner[0] : 0, ctl_of[b]) : "";
+    if (player == 1 || source == CONTROLS_CONTROLLER)
+        return ctl_of[player][b] ? nshvc_controller_label(owner[player] >= 0 ? (uint32_t)owner[player] : 0, ctl_of[player][b])
+                                 : "";
     return key_of[b] ? nshvc_key_name((nshvc_key)key_of[b]) : "";
 }
 
@@ -509,8 +512,8 @@ void controls_read(const nshvc_input *in, uint16_t pad[2])
         source = CONTROLS_CONTROLLER;
     if (in->touches)
         source = CONTROLS_TOUCH;
-    pad[0] = (uint16_t)(keyboard_pad(in) | controller_pad(in, owner[0], ctl_of) | touch_pad(in));
-    pad[1] = controller_pad(in, owner[1], k_ctl_default);
+    pad[0] = (uint16_t)(keyboard_pad(in) | controller_pad(in, owner[0], ctl_of[0]) | touch_pad(in));
+    pad[1] = controller_pad(in, owner[1], ctl_of[1]);
 }
 
 /* ---- the touch controls' pictures ---- */

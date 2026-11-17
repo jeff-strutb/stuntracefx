@@ -7,22 +7,27 @@
  * controller with a tag beside each button naming the key that makes it.
  *
  * The pad moves among the tags and the panel's buttons; B, A or Start
- * chooses. A tag chosen asks for its button's new key or controller button,
- * and the next key pressed, or button pressed on player 1's controller,
- * takes it (Escape or Select + Start cancels, so the controller buttons that
- * give Select and Start are the screen's own, as Escape is). A key or
+ * chooses. The PLAYER button above the controller switches the screen
+ * between player 1's controls and player 2's (it opens on player 1's). A tag
+ * chosen asks for its button's new key or controller button: for player 1
+ * the next key pressed, or button pressed on player 1's controller, takes
+ * it; for player 2, who has no keys, the next button pressed on player 2's
+ * controller (Escape or Select + Start cancels, so the controller buttons
+ * that give Select and Start are the screen's own, as Escape is). A key or
  * controller button another button had goes over to the button whose own
- * was taken, so every button keeps one of each. The keys and the controller
- * buttons are kept in the save folder ("keys", "buttons") and laid out at
- * the game's first update. RESUME, Escape or Select + Start again goes on;
- * DEFAULTS puts the game's own keys and buttons back; AUTO-ACCELERATE
+ * was taken, so every button keeps one of each. The keys and each player's
+ * controller buttons are kept in the save folder ("keys", "buttons",
+ * "buttons2") and laid out at the game's first update. RESUME, Escape or
+ * Select + Start again goes on; DEFAULTS puts the game's own keys and
+ * buttons back for the player shown; AUTO-ACCELERATE
  * turns the option over (on a touch screen the gas is held while driving;
  * the menus' save keeps it, option_auto_accelerate_set); FULL SCREEN
  * switches between full screen and a window (system/display.c, where the
  * window can) and FPS COUNTER shows or hides the counter (system/fps.c),
  * both kept in the options. Buttons held as the
  * screen closes reach the game only once let go. Each tag names what is
- * bound on the device the player last used (controls_name).
+ * bound for the player shown: player 1's on the device player 1 last used,
+ * player 2's on their controller (controls_name).
  *
  * Every picture is drawn once into an image (pause_art.c) and laid over the
  * window as an overlay the GPU blends. What changes is its own image (a tag,
@@ -103,9 +108,9 @@
 enum { BLUR_DONE, BLUR_CLEAN, BLUR_ACROSS, BLUR_DOWN, BLUR_KEEP };
 
 /* The overlays, the game's only ones: the tint, the panel, the tags, the
-   item chosen, the option with its value, the hint, the corner button, in
-   that order upward. */
-enum { O_TINT = 12, O_PANEL, O_TAGS, O_LIT = O_TAGS + PAUSE_CONTROLS, O_OPTION, O_HINT, O_BUTTON, O_VIEW, O_END };
+   item chosen, the option with its value, the player button, the hint, the
+   corner button, in that order upward. */
+enum { O_TINT = 12, O_PANEL, O_TAGS, O_LIT = O_TAGS + PAUSE_CONTROLS, O_OPTION, O_PLAYER, O_HINT, O_BUTTON, O_VIEW, O_END };
 _Static_assert(O_END <= NSHVC_OVERLAYS, "the pause screen's overlays fit the engine's");
 
 /* the buttons in the order the save keeps, and the game's own keys for
@@ -120,13 +125,15 @@ static const uint16_t k_default_ctl[BUTTONS] = { NSHVC_CTL_SOUTH, NSHVC_CTL_WEST
                                                  NSHVC_CTL_EAST, NSHVC_CTL_NORTH, NSHVC_CTL_LB, NSHVC_CTL_RB };
 enum { B_SELECT = 2, B_START = 3 };     /* their places in k_buttons */
 
-static const char SAVE_NAME[] = "keys", SAVE_NAME_CTL[] = "buttons";
+static const char SAVE_NAME[] = "keys";
+static const char *const k_save_ctl[2] = { "buttons", "buttons2" };    /* each player's controller buttons */
 enum { SAVE_VERSION = 1 };
 
 static struct {
     int ready;                          /* the saved keys laid out */
     int open;
-    int chosen;                         /* a control, PAUSE_RESUME or PAUSE_DEFAULTS */
+    int chosen;                         /* an item (pause_art.h): a control, a panel button, PAUSE_PLAYER */
+    int player;                         /* whose controls the screen shows and changes: 0 player 1, 1 player 2 */
     int asking;                         /* the control waiting for its key; -1 none */
     int wait_release;                   /* no press counts until every button is let go */
     float ox, oy, scale;                /* where the panel lies in the window */
@@ -135,10 +142,10 @@ static struct {
     uint16_t last[2];                   /* the pads at the last update */
     uint16_t swallow[2];                /* after the screen: buttons kept from the game until let go */
     uint8_t keys[BUTTONS];              /* each button's key, in k_buttons' order */
-    uint16_t ctl[BUTTONS];              /* each button's button on player 1's controller (one NSHVC_CTL_* bit) */
-    uint16_t ctl_last;                  /* that controller's buttons at the last update */
-    int ctl_on;                         /* player 1 has a controller */
-    int ctl_slot;                       /* which (controls_controller), -1 none */
+    uint16_t ctl[2][BUTTONS];           /* each player's: each button's button on their controller (one NSHVC_CTL_* bit) */
+    uint16_t ctl_last[2];               /* each player's controller's buttons at the last update */
+    int ctl_on[2];                      /* the player has a controller */
+    int ctl_slot[2];                    /* which (controls_controller), -1 none */
 
     /* the pictures: made at `density` pixels a point; 0 none yet */
     float density;
@@ -149,6 +156,8 @@ static struct {
     char hint_shown[2][48];
     nshvc_image option;                 /* the options' buttons, with their values (pause_draw_options) */
     int option_w, option_h, option_shown; /* what it shows (options_want); -1 not yet */
+    nshvc_image player_img;             /* the player button, with its player (pause_draw_player) */
+    int player_w, player_h, player_shown; /* what it shows: player * 2 + lit; -1 not yet */
 
     /* the corner button: its two pictures (pause, play) at btn_density;
        the pointer's button and the touches at the last update */
@@ -229,62 +238,70 @@ static int ctl_valid(const uint16_t *ctl)
     return 1;
 }
 
-/* Every button its controller button: all different, so as keys_apply. */
-static void ctl_apply(void)
+/* Every button its controller button, for player pl: all different, so as
+   keys_apply. */
+static void ctl_apply(int pl)
 {
 #if CONTROLLER_BIND
     int b;
 
     for (b = 0; b < BUTTONS; b++)
-        controls_bind_controller(k_buttons[b], p.ctl[b]);
+        controls_bind_controller(pl, k_buttons[b], p.ctl[pl][b]);
+#else
+    (void)pl;
 #endif
 }
 
-static void ctl_save(void)
+static void ctl_save(int pl)
 {
     uint8_t f[1 + 2 * BUTTONS];
     int b;
 
     f[0] = SAVE_VERSION;
     for (b = 0; b < BUTTONS; b++) {
-        f[1 + 2 * b] = (uint8_t)p.ctl[b];
-        f[2 + 2 * b] = (uint8_t)(p.ctl[b] >> 8);
+        f[1 + 2 * b] = (uint8_t)p.ctl[pl][b];
+        f[2 + 2 * b] = (uint8_t)(p.ctl[pl][b] >> 8);
     }
-    nshvc_save_write(SAVE_NAME_CTL, f, sizeof f);
+    nshvc_save_write(k_save_ctl[pl], f, sizeof f);
 }
 
 static void keys_load(void)
 {
     uint8_t f[1 + BUTTONS], c[1 + 2 * BUTTONS];
     uint16_t ctl[BUTTONS];
-    int b;
+    int b, pl;
 
     p.ready = 1;
     memcpy(p.keys, k_default_keys, BUTTONS);
-    memcpy(p.ctl, k_default_ctl, sizeof p.ctl);
     if (nshvc_save_read(SAVE_NAME, f, sizeof f) == (int)sizeof f && f[0] == SAVE_VERSION && keys_valid(f + 1)) {
         memcpy(p.keys, f + 1, BUTTONS);
         keys_apply();
     }
-    if (nshvc_save_read(SAVE_NAME_CTL, c, sizeof c) == (int)sizeof c && c[0] == SAVE_VERSION) {
-        for (b = 0; b < BUTTONS; b++)
-            ctl[b] = (uint16_t)(c[1 + 2 * b] | c[2 + 2 * b] << 8);
-        if (ctl_valid(ctl)) {
-            memcpy(p.ctl, ctl, sizeof p.ctl);
-            ctl_apply();
+    for (pl = 0; pl < 2; pl++) {
+        memcpy(p.ctl[pl], k_default_ctl, sizeof p.ctl[pl]);
+        if (nshvc_save_read(k_save_ctl[pl], c, sizeof c) == (int)sizeof c && c[0] == SAVE_VERSION) {
+            for (b = 0; b < BUTTONS; b++)
+                ctl[b] = (uint16_t)(c[1 + 2 * b] | c[2 + 2 * b] << 8);
+            if (ctl_valid(ctl)) {
+                memcpy(p.ctl[pl], ctl, sizeof p.ctl[pl]);
+                ctl_apply(pl);
+            }
         }
     }
 }
 
-/* DEFAULTS: the game's own keys and controller buttons, the saves gone */
-static void keys_default(void)
+/* DEFAULTS: the game's own controls for player pl, their saves gone: player
+   1's keys and controller buttons, player 2's controller buttons */
+static void keys_default(int pl)
 {
-    memcpy(p.keys, k_default_keys, BUTTONS);
-    memcpy(p.ctl, k_default_ctl, sizeof p.ctl);
-    keys_apply();
-    ctl_apply();
-    nshvc_save_delete(SAVE_NAME);
-    nshvc_save_delete(SAVE_NAME_CTL);
+    if (pl == 0) {
+        memcpy(p.keys, k_default_keys, BUTTONS);
+        keys_apply();
+        nshvc_save_delete(SAVE_NAME);
+    }
+    memcpy(p.ctl[pl], k_default_ctl, sizeof p.ctl[pl]);
+    ctl_apply(pl);
+    nshvc_save_delete(k_save_ctl[pl]);
 }
 
 static int button_index(uint16_t button)
@@ -317,36 +334,37 @@ static void rebind(int c, int vk)
     keys_save();
 }
 
-/* control c's controller button becomes ctl; the button that had ctl takes
-   c's old one, as rebind does for keys */
-static void rebind_ctl(int c, uint16_t ctl)
+/* player pl's control c's controller button becomes ctl; the button that
+   had ctl takes c's old one, as rebind does for keys */
+static void rebind_ctl(int pl, int c, uint16_t ctl)
 {
 #if CONTROLLER_BIND
     int b = button_index(pause_controls[c].button), j, other = -1;
-    uint16_t old = p.ctl[b];
+    uint16_t old = p.ctl[pl][b];
 
     if (old == ctl)
         return;
     for (j = 0; j < BUTTONS; j++)
-        if (j != b && p.ctl[j] == ctl)
+        if (j != b && p.ctl[pl][j] == ctl)
             other = j;
-    p.ctl[b] = ctl;
-    controls_bind_controller(k_buttons[b], ctl);
+    p.ctl[pl][b] = ctl;
+    controls_bind_controller(pl, k_buttons[b], ctl);
     if (other >= 0) {
-        p.ctl[other] = old;
-        controls_bind_controller(k_buttons[other], old);
+        p.ctl[pl][other] = old;
+        controls_bind_controller(pl, k_buttons[other], old);
     }
-    ctl_save();
+    ctl_save(pl);
 #else
-    (void)c, (void)ctl;
+    (void)pl, (void)c, (void)ctl;
 #endif
 }
 
-/* the first controller button gone down this update that may take a
-   button (not those giving Select and Start, the screen's own); 0 none */
-static uint16_t ctl_taken(uint16_t pressed)
+/* the first button gone down this update on player pl's controller that
+   may take a button (not those giving their Select and Start, the screen's
+   own); 0 none */
+static uint16_t ctl_taken(int pl, uint16_t pressed)
 {
-    uint16_t free_ = (uint16_t)(pressed & ~(p.ctl[B_SELECT] | p.ctl[B_START]));
+    uint16_t free_ = (uint16_t)(pressed & ~(p.ctl[pl][B_SELECT] | p.ctl[pl][B_START]));
 
     return CONTROLLER_BIND ? (uint16_t)(free_ & (uint16_t)-free_) : 0;
 }
@@ -365,7 +383,14 @@ static int key_taken(const nshvc_input *in)
     return 0;
 }
 
-static int can_ask(void) { return nshvc_display_info().keyboard || (CONTROLLER_BIND && p.ctl_on); }
+/* the player shown can be asked for a button: player 1 with a keyboard or
+   a controller, player 2 with a controller */
+static int can_ask(void)
+{
+    if (p.player)
+        return CONTROLLER_BIND && p.ctl_on[1];
+    return nshvc_display_info().keyboard || (CONTROLLER_BIND && p.ctl_on[0]);
+}
 #else
 static int key_pressed(const nshvc_input *in, int vk) { (void)in, (void)vk; return 0; }
 static int key_taken(const nshvc_input *in) { (void)in; return 0; }
@@ -441,6 +466,11 @@ static void pictures_make(float density)
     p.option_h = (int)ceilf(h * density);
     p.option = nshvc_image_create((uint32_t)p.option_w, (uint32_t)p.option_h, NSHVC_IMAGE_RGBA);
     p.option_shown = -1;
+    pause_player_box(&x, &y, &w, &h);
+    p.player_w = (int)ceilf(w * density);
+    p.player_h = (int)ceilf(h * density);
+    p.player_img = nshvc_image_create((uint32_t)p.player_w, (uint32_t)p.player_h, NSHVC_IMAGE_RGBA);
+    p.player_shown = -1;
 }
 
 /* each option's value, in PAUSE_OPTION's order */
@@ -454,7 +484,7 @@ static void options_now(int on[PAUSE_OPTIONS])
 /* The options' buttons as they stand: their values, the one chosen lit. */
 static void option_refresh(void)
 {
-    int on[PAUSE_OPTIONS], want, i, lit = p.chosen >= PAUSE_OPTION ? p.chosen : -1;
+    int on[PAUSE_OPTIONS], want, i, lit = p.chosen >= PAUSE_OPTION && p.chosen < PAUSE_ITEMS ? p.chosen : -1;
     float x, y, w, h;
     PauseImg m;
 
@@ -472,6 +502,25 @@ static void option_refresh(void)
     nshvc_image_write(p.option, m.px);
     free(m.px);
     p.option_shown = want;
+}
+
+/* The player button as it stands: the player shown, lit while chosen. */
+static void player_refresh(void)
+{
+    int want = p.player * 2 + (p.chosen == PAUSE_PLAYER);
+    float x, y, w, h;
+    PauseImg m;
+
+    if (!p.player_img.id || want == p.player_shown)
+        return;
+    pause_player_box(&x, &y, &w, &h);
+    m = pause_img_new(x, y, w, h, p.density);
+    if (!m.px)
+        return;
+    pause_draw_player(&m, p.player, p.chosen == PAUSE_PLAYER);
+    nshvc_image_write(p.player_img, m.px);
+    free(m.px);
+    p.player_shown = want;
 }
 
 /* The options menu's items as they stand: auto-accelerate's value, the
@@ -499,10 +548,10 @@ static void menu_refresh(void)
     }
 }
 
-/* A tag's key as the player's device names it, in capitals. */
+/* A tag's key as the player shown's device names it, in capitals. */
 static void tag_text(int c, char *out, size_t n)
 {
-    const char *s = controls_name(pause_controls[c].button);
+    const char *s = controls_name(p.player, pause_controls[c].button);
     size_t i;
 
     if (!s || !*s)
@@ -546,17 +595,25 @@ static void hint_refresh(void)
 
     if (p.asking >= 0) {
         snprintf(line1, sizeof line1, "PRESS A %s FOR %s",
-                 !(CONTROLLER_BIND && p.ctl_on) ? "KEY" : nshvc_display_info().keyboard ? "KEY OR BUTTON" : "BUTTON",
+                 p.player                               ? "BUTTON"
+                 : !(CONTROLLER_BIND && p.ctl_on[0])    ? "KEY"
+                 : nshvc_display_info().keyboard        ? "KEY OR BUTTON"
+                                                        : "BUTTON",
                  pause_controls[p.asking].name);
         snprintf(line2, sizeof line2, "%s", KEY_EVENTS ? "ESCAPE OR SELECT + START TO CANCEL" : "SELECT + START TO CANCEL");
         colour = GOLD;
+    } else if (p.chosen == PAUSE_PLAYER) {
+        snprintf(line1, sizeof line1, "%s", p.player ? "CHOOSE TO SHOW PLAYER 1'S CONTROLS" : "CHOOSE TO SHOW PLAYER 2'S CONTROLS");
+        snprintf(line2, sizeof line2, "%s", KEY_EVENTS ? "ESCAPE OR SELECT + START TO RESUME" : "SELECT + START TO RESUME");
     } else if (p.chosen >= PAUSE_OPTION) {
         snprintf(line1, sizeof line1, "%s", p.chosen == PAUSE_OPTION        ? "TOUCH: THE GAS HELD WHILE YOU DRIVE"
                                             : p.chosen == PAUSE_FULL_SCREEN ? "THE GAME FILLS THE SCREEN, OR A WINDOW"
                                                                             : "THE PICTURES DRAWN A SECOND, TOP RIGHT");
         snprintf(line2, sizeof line2, "%s", KEY_EVENTS ? "ESCAPE OR SELECT + START TO RESUME" : "SELECT + START TO RESUME");
     } else {
-        snprintf(line1, sizeof line1, "%s", can_ask() ? "CHOOSE A BUTTON TO CHANGE IT" : "CHANGED FROM A KEYBOARD OR PAD");
+        snprintf(line1, sizeof line1, "%s", can_ask()  ? "CHOOSE A BUTTON TO CHANGE IT"
+                                            : p.player ? "PRESS A BUTTON ON PLAYER 2'S CONTROLLER"
+                                                       : "CHANGED FROM A KEYBOARD OR PAD");
         snprintf(line2, sizeof line2, "%s", KEY_EVENTS ? "ESCAPE OR SELECT + START TO RESUME" : "SELECT + START TO RESUME");
     }
     if (!p.hint.id || (!strcmp(line1, p.hint_shown[0]) && !strcmp(line2, p.hint_shown[1])))
@@ -759,6 +816,7 @@ static void show(void)
         tags_refresh();
         hint_refresh();
         option_refresh();
+        player_refresh();
     }
     c[0] = 0, c[1] = 0, c[2] = (float)d.width, c[3] = 0, c[4] = 0, c[5] = (float)d.height;
     nshvc_overlay_set(O_TINT, p.tint, c, TINT_ALPHA);
@@ -777,13 +835,15 @@ static void show(void)
     if (p.chosen >= PAUSE_OPTION) {
         nshvc_image none = { 0 };
 
-        nshvc_overlay_set(O_LIT, none, NULL, 0);        /* the options' own picture shows it lit */
+        nshvc_overlay_set(O_LIT, none, NULL, 0);        /* the options' or the player button's own picture shows it lit */
     } else {
         pause_lit_box(p.chosen, &x, &y, &bw, &bh);
         place(O_LIT, p.lit[p.chosen], x, y, p.lit_w[p.chosen], p.lit_h[p.chosen], ox, oy, scale);
     }
     pause_options_box(&x, &y, &bw, &bh);
     place(O_OPTION, p.option, x, y, p.option_w, p.option_h, ox, oy, scale);
+    pause_player_box(&x, &y, &bw, &bh);
+    place(O_PLAYER, p.player_img, x, y, p.player_w, p.player_h, ox, oy, scale);
     pause_hint_box(&x, &y, &bw, &bh);
     place(O_HINT, p.hint, x, y, p.hint_w, p.hint_h, ox, oy, scale);
 }
@@ -800,8 +860,9 @@ static int control_at(int right, int row)
     return 0;
 }
 
-/* the item a direction leads to from item i: the tags in their two columns;
-   under them a row of RESUME (under the left), DEFAULTS and
+/* the item a direction leads to from item i: the player button above the
+   tags, down to the top left tag; the tags in their two columns, up from
+   the top row to the player button; under them a row of RESUME (under the left), DEFAULTS and
    AUTO-ACCELERATE (under the right), and under that FULL SCREEN (under
    DEFAULTS; offered only where the window can be full screen) and FPS
    COUNTER (under AUTO-ACCELERATE); left and right going round a row */
@@ -809,6 +870,8 @@ static int move(int i, uint16_t dir)
 {
     int right, row, full = display_can_full_screen();
 
+    if (i == PAUSE_PLAYER)
+        return dir & PAD_DOWN ? control_at(0, 0) : i;
     if (i >= PAUSE_FULL_SCREEN) {
         if (dir & PAD_UP)
             return i == PAUSE_FULL_SCREEN ? PAUSE_DEFAULTS : PAUSE_OPTION;
@@ -830,7 +893,7 @@ static int move(int i, uint16_t dir)
     right = pause_controls[i].right;
     row = pause_controls[i].row;
     if (dir & PAD_UP)
-        return row > 0 ? control_at(right, row - 1) : i;
+        return row > 0 ? control_at(right, row - 1) : PAUSE_PLAYER;
     if (dir & PAD_DOWN)
         return row < 5 ? control_at(right, row + 1) : right ? PAUSE_DEFAULTS : PAUSE_RESUME;
     if (dir & (PAD_LEFT | PAD_RIGHT))
@@ -992,6 +1055,7 @@ static void screen_open(void)
     p.shot_ok = 0;
     p.open = 1;
     p.chosen = MENU_MODE ? PAUSE_MENU_RESUME : PAUSE_RESUME;
+    p.player = 0;
     p.asking = -1;
     p.wait_release = 0;
     music_pause(1);
@@ -1077,22 +1141,22 @@ void pause_hold_other(void) { held++; }
 
 static int pause_step(const nshvc_input *in, uint16_t pad[2])
 {
-    uint16_t press[2], nav, ctl_press = 0, ctl;
+    uint16_t press[2], nav, ctl_press[2] = { 0, 0 }, ctl;
     int i, toggle = 0, vk;
 
     if (!p.ready)
         keys_load();
 #if CONTROLLER_BIND
-    {
-        int c = controls_controller(0);
+    for (i = 0; i < 2; i++) {
+        int c = controls_controller(i);
         uint16_t now = c >= 0 ? in->controller[c].buttons : 0;
 
-        if (c != p.ctl_slot)            /* another controller is player 1's: what it holds is pressed now */
-            p.ctl_last = 0;
-        p.ctl_slot = c;
-        ctl_press = (uint16_t)(now & ~p.ctl_last);
-        p.ctl_last = now;
-        p.ctl_on = c >= 0;
+        if (c != p.ctl_slot[i])         /* another controller is the player's: what it holds is pressed now */
+            p.ctl_last[i] = 0;
+        p.ctl_slot[i] = c;
+        ctl_press[i] = (uint16_t)(now & ~p.ctl_last[i]);
+        p.ctl_last[i] = now;
+        p.ctl_on[i] = c >= 0;
     }
 #endif
     for (i = 0; i < 2; i++) {
@@ -1118,16 +1182,17 @@ static int pause_step(const nshvc_input *in, uint16_t pad[2])
     }
 
     if (p.asking >= 0) {
-        /* a key for the control asked for; Escape or Select + Start: none */
+        /* a key (player 1's) or a button on the player shown's controller
+           for the control asked for; Escape or Select + Start: none */
         if (toggle) {
             p.asking = -1;
             p.wait_release = 1;
-        } else if ((vk = key_taken(in)) != 0) {
+        } else if (!p.player && (vk = key_taken(in)) != 0) {
             rebind(p.asking, vk);
             p.asking = -1;
             p.wait_release = 1;         /* the key may now make a button: not a press here */
-        } else if ((ctl = ctl_taken(ctl_press)) != 0) {
-            rebind_ctl(p.asking, ctl);
+        } else if ((ctl = ctl_taken(p.player, ctl_press[p.player])) != 0) {
+            rebind_ctl(p.player, p.asking, ctl);
             p.asking = -1;
             p.wait_release = 1;
         }
@@ -1176,8 +1241,10 @@ static int pause_step(const nshvc_input *in, uint16_t pad[2])
             screen_close(pad);
             return held_back(pad);
         }
-        if (p.chosen == PAUSE_DEFAULTS)
-            keys_default();
+        if (p.chosen == PAUSE_PLAYER)
+            p.player = !p.player;
+        else if (p.chosen == PAUSE_DEFAULTS)
+            keys_default(p.player);
         else if (p.chosen == PAUSE_OPTION)
             option_auto_accelerate_set(!option_auto_accelerate());
         else if (p.chosen == PAUSE_FULL_SCREEN)

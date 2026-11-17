@@ -2,7 +2,8 @@
  * pause_art.c: the pause screen's pictures (pause_art.h): a dark plate edged
  * in gold, the title between a racing flag's checks, Jeff's controller
  * (pad_art.c) with a tag beside it for each of its buttons and a line from
- * the tag to the button, the hint below, RESUME and DEFAULTS. Each is
+ * the tag to the button, the player button above it (whose controls are
+ * shown), the hint below, RESUME and DEFAULTS. Each is
  * drawn once into an image; pause.c lays the images over the window and the
  * GPU shows them. What changes (a key's name on its tag, the item chosen,
  * the hint) is its own image over the panel's, redrawn only when it changes
@@ -340,15 +341,21 @@ static void checks(PauseImg *m, float x, float y, int cols, float sq)
             rrect(m, x + (float)c * sq, y + (float)r * sq, sq, sq, 0, (c + r) & 1 ? 0x101010 : WHITE, 0.9f);
 }
 
+/* a button at (x, y, w, h) with text, lit while chosen */
+static void button_text(PauseImg *m, float x, float y, float w, float h, const char *text, int lit)
+{
+    /* lit, over the button unlit: whole, so the unlit letters do not show */
+    rrect(m, x, y, w, h, 8, lit ? LIT_FILL : PLATE, lit ? 1 : 0.85f);
+    rrect_edge(m, x + 0.75f, y + 0.75f, w - 1.5f, h - 1.5f, 7.5f, lit ? 1.75f : 1, GOLD, 1);
+    text_centre(m, text, x + w / 2, y + (h - 7 * 1.75f) / 2, 1.75f, lit ? GOLD : WHITE);
+}
+
 static void panel_button_text(PauseImg *m, int b, const char *text, int lit)
 {
     float x, y, w, h;
 
     button_at(b, &x, &y, &w, &h);
-    /* lit, over the button unlit: whole, so the unlit letters do not show */
-    rrect(m, x, y, w, h, 8, lit ? LIT_FILL : PLATE, lit ? 1 : 0.85f);
-    rrect_edge(m, x + 0.75f, y + 0.75f, w - 1.5f, h - 1.5f, 7.5f, lit ? 1.75f : 1, GOLD, 1);
-    text_centre(m, text, x + w / 2, y + (h - 7 * 1.75f) / 2, 1.75f, lit ? GOLD : WHITE);
+    button_text(m, x, y, w, h, text, lit);
 }
 
 static void panel_button(PauseImg *m, int b, int lit) { panel_button_text(m, b, k_button[b].name, lit); }
@@ -385,6 +392,27 @@ void pause_draw_options(PauseImg *m, const int on[PAUSE_OPTIONS], int lit)
         snprintf(text, sizeof text, "%s %s", k_button[i - PAUSE_CONTROLS].name, on[i - PAUSE_OPTION] ? "ON" : "OFF");
         panel_button_text(m, i - PAUSE_CONTROLS, text, lit == i);
     }
+}
+
+/* the player button: between the title and the controller, clear of the
+   controller's top (its drawing reaches 120.7 points down) and of the lines
+   from the top tags (109 points down and lower) */
+#define PLAYER_X 240.0f
+#define PLAYER_Y 62.0f
+#define PLAYER_W 160.0f
+#define PLAYER_H 30.0f
+
+void pause_player_box(float *x, float *y, float *w, float *h)
+{
+    *x = PLAYER_X - MARGIN;
+    *y = PLAYER_Y - MARGIN;
+    *w = PLAYER_W + 2 * MARGIN;
+    *h = PLAYER_H + 2 * MARGIN;
+}
+
+void pause_draw_player(PauseImg *m, int player, int lit)
+{
+    button_text(m, PLAYER_X, PLAYER_Y, PLAYER_W, PLAYER_H, player ? "PLAYER 2" : "PLAYER 1", lit);
 }
 
 void pause_draw_panel(PauseImg *m)

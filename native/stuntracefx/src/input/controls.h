@@ -35,12 +35,14 @@ void controls_hide(void);
 enum { CONTROLS_KEYBOARD, CONTROLS_CONTROLLER, CONTROLS_TOUCH };
 int controls_source(void);
 
-/* Player 1's bindings (the pause screen's): button is one PAD_* bit; a key
-   by its nshvc_key, a controller button by its one NSHVC_CTL_* bit. */
+/* The bindings (the pause screen's): button is one PAD_* bit; a key by its
+   nshvc_key (player 1's only: player 2 has no keys), a controller button by
+   its one NSHVC_CTL_* bit, for player 0 or 1. */
 void controls_bind_key(uint16_t button, int key);
-void controls_bind_controller(uint16_t button, uint16_t ctl);
-/* what is bound to button on the device player 1 last used, as that device
-   names it ("" for none) */
-const char *controls_name(uint16_t button);
+void controls_bind_controller(int player, uint16_t button, uint16_t ctl);
+/* what is bound to button for player 0 or 1, as the device names it ("" for
+   none): player 1's on the device player 1 last used, player 2's on their
+   controller */
+const char *controls_name(int player, uint16_t button);
 
 #endif
