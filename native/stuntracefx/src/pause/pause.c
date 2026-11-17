@@ -17,7 +17,10 @@
  * the game's first update. RESUME, Escape or Select + Start again goes on;
  * DEFAULTS puts the game's own keys and buttons back; AUTO-ACCELERATE
  * turns the option over (on a touch screen the gas is held while driving;
- * the menus' save keeps it, option_auto_accelerate_set). Buttons held as the
+ * the menus' save keeps it, option_auto_accelerate_set); FULL SCREEN
+ * switches between full screen and a window (system/display.c, where the
+ * window can) and FPS COUNTER shows or hides the counter (system/fps.c),
+ * both kept in the options. Buttons held as the
  * screen closes reach the game only once let go. Each tag names what is
  * bound on the device the player last used (controls_name).
  *
@@ -45,6 +48,7 @@
 #include "pause/pause_art.h"
 #include "race/race.h"
 #include "save/save.h"
+#include "system/display.h"
 #include "system/game.h"
 
 /* iOS: the touch controls cannot be changed, so the screen is an options menu
@@ -143,8 +147,8 @@ static struct {
     char tag_shown[PAUSE_CONTROLS][32]; /* what each tag's image shows, and whether asking */
     int tag_asking[PAUSE_CONTROLS];
     char hint_shown[2][48];
-    nshvc_image option;                 /* the auto-accelerate button, with its value */
-    int option_w, option_h, option_shown; /* what it shows: value * 2 + lit; -1 not yet */
+    nshvc_image option;                 /* the options' buttons, with their values (pause_draw_options) */
+    int option_w, option_h, option_shown; /* what it shows (options_want); -1 not yet */
 
     /* the corner button: its two pictures (pause, play) at btn_density;
        the pointer's button and the touches at the last update */
@@ -396,6 +400,7 @@ static void pictures_make(float density)
     int i;
 
     p.density = density;
+    pause_art_full_screen(display_can_full_screen());
     m = pause_img_new(0, 0, PAUSE_PW, PAUSE_PH, density);
     if (MENU_MODE) {
         pause_draw_menu_panel(&m);
@@ -431,27 +436,39 @@ static void pictures_make(float density)
     p.hint = nshvc_image_create((uint32_t)p.hint_w, (uint32_t)p.hint_h, NSHVC_IMAGE_RGBA);
     p.hint_shown[0][0] = 1;             /* no text: drawn at the first look */
     p.hint_shown[0][1] = 0;
-    pause_lit_box(PAUSE_OPTION, &x, &y, &w, &h);
+    pause_options_box(&x, &y, &w, &h);
     p.option_w = (int)ceilf(w * density);
     p.option_h = (int)ceilf(h * density);
     p.option = nshvc_image_create((uint32_t)p.option_w, (uint32_t)p.option_h, NSHVC_IMAGE_RGBA);
     p.option_shown = -1;
 }
 
-/* The option's button as it stands: its value, lit while chosen. */
+/* each option's value, in PAUSE_OPTION's order */
+static void options_now(int on[PAUSE_OPTIONS])
+{
+    on[0] = option_auto_accelerate() != 0;
+    on[PAUSE_FULL_SCREEN - PAUSE_OPTION] = display_full_screen() != 0;
+    on[PAUSE_FPS - PAUSE_OPTION] = option_fps() != 0;
+}
+
+/* The options' buttons as they stand: their values, the one chosen lit. */
 static void option_refresh(void)
 {
-    int on = option_auto_accelerate() != 0, lit = p.chosen == PAUSE_OPTION, want = on * 2 + lit;
+    int on[PAUSE_OPTIONS], want, i, lit = p.chosen >= PAUSE_OPTION ? p.chosen : -1;
     float x, y, w, h;
     PauseImg m;
 
+    options_now(on);
+    want = lit + 1;                     /* what the picture shows: the item lit, then each value a bit */
+    for (i = 0; i < PAUSE_OPTIONS; i++)
+        want |= on[i] << (8 + i);
     if (!p.option.id || want == p.option_shown)
         return;
-    pause_lit_box(PAUSE_OPTION, &x, &y, &w, &h);
+    pause_options_box(&x, &y, &w, &h);
     m = pause_img_new(x, y, w, h, p.density);
     if (!m.px)
         return;
-    pause_draw_option(&m, on, lit);
+    pause_draw_options(&m, on, lit);
     nshvc_image_write(p.option, m.px);
     free(m.px);
     p.option_shown = want;
@@ -464,7 +481,8 @@ static void menu_refresh(void)
     int i;
 
     for (i = 0; i < PAUSE_MENU_ITEMS; i++) {
-        int on = i == PAUSE_MENU_AUTO && option_auto_accelerate() != 0, lit = p.chosen == i, want = on * 2 + lit;
+        int on = i == PAUSE_MENU_AUTO ? option_auto_accelerate() != 0 : i == PAUSE_MENU_FPS && option_fps() != 0;
+        int lit = p.chosen == i, want = on * 2 + lit;
         float x, y, w, h;
         PauseImg m;
 
@@ -532,8 +550,10 @@ static void hint_refresh(void)
                  pause_controls[p.asking].name);
         snprintf(line2, sizeof line2, "%s", KEY_EVENTS ? "ESCAPE OR SELECT + START TO CANCEL" : "SELECT + START TO CANCEL");
         colour = GOLD;
-    } else if (p.chosen == PAUSE_OPTION) {
-        snprintf(line1, sizeof line1, "TOUCH: THE GAS HELD WHILE YOU DRIVE");
+    } else if (p.chosen >= PAUSE_OPTION) {
+        snprintf(line1, sizeof line1, "%s", p.chosen == PAUSE_OPTION        ? "TOUCH: THE GAS HELD WHILE YOU DRIVE"
+                                            : p.chosen == PAUSE_FULL_SCREEN ? "THE GAME FILLS THE SCREEN, OR A WINDOW"
+                                                                            : "THE PICTURES DRAWN A SECOND, TOP RIGHT");
         snprintf(line2, sizeof line2, "%s", KEY_EVENTS ? "ESCAPE OR SELECT + START TO RESUME" : "SELECT + START TO RESUME");
     } else {
         snprintf(line1, sizeof line1, "%s", can_ask() ? "CHOOSE A BUTTON TO CHANGE IT" : "CHANGED FROM A KEYBOARD OR PAD");
@@ -754,15 +774,15 @@ static void show(void)
         pause_tag_box(i, &x, &y, &bw, &bh);
         place(O_TAGS + (uint32_t)i, p.tags[i], x, y, p.tag_w[i], p.tag_h[i], ox, oy, scale);
     }
-    if (p.chosen == PAUSE_OPTION) {
+    if (p.chosen >= PAUSE_OPTION) {
         nshvc_image none = { 0 };
 
-        nshvc_overlay_set(O_LIT, none, NULL, 0);        /* the option's own picture shows it lit */
+        nshvc_overlay_set(O_LIT, none, NULL, 0);        /* the options' own picture shows it lit */
     } else {
         pause_lit_box(p.chosen, &x, &y, &bw, &bh);
         place(O_LIT, p.lit[p.chosen], x, y, p.lit_w[p.chosen], p.lit_h[p.chosen], ox, oy, scale);
     }
-    pause_lit_box(PAUSE_OPTION, &x, &y, &bw, &bh);
+    pause_options_box(&x, &y, &bw, &bh);
     place(O_OPTION, p.option, x, y, p.option_w, p.option_h, ox, oy, scale);
     pause_hint_box(&x, &y, &bw, &bh);
     place(O_HINT, p.hint, x, y, p.hint_w, p.hint_h, ox, oy, scale);
@@ -782,14 +802,25 @@ static int control_at(int right, int row)
 
 /* the item a direction leads to from item i: the tags in their two columns;
    under them a row of RESUME (under the left), DEFAULTS and
-   AUTO-ACCELERATE (under the right), left and right going round */
+   AUTO-ACCELERATE (under the right), and under that FULL SCREEN (under
+   DEFAULTS; offered only where the window can be full screen) and FPS
+   COUNTER (under AUTO-ACCELERATE); left and right going round a row */
 static int move(int i, uint16_t dir)
 {
-    int right, row;
+    int right, row, full = display_can_full_screen();
 
+    if (i >= PAUSE_FULL_SCREEN) {
+        if (dir & PAD_UP)
+            return i == PAUSE_FULL_SCREEN ? PAUSE_DEFAULTS : PAUSE_OPTION;
+        if ((dir & (PAD_LEFT | PAD_RIGHT)) && full)
+            return i == PAUSE_FPS ? PAUSE_FULL_SCREEN : PAUSE_FPS;
+        return i;
+    }
     if (i >= PAUSE_CONTROLS) {
         if (dir & PAD_UP)
             return control_at(i != PAUSE_RESUME, 5);
+        if (dir & PAD_DOWN)
+            return i == PAUSE_OPTION || !full ? PAUSE_FPS : PAUSE_FULL_SCREEN;
         if (dir & PAD_LEFT)
             return i == PAUSE_RESUME ? PAUSE_OPTION : i - 1;
         if (dir & PAD_RIGHT)
@@ -1123,6 +1154,8 @@ static int pause_step(const nshvc_input *in, uint16_t pad[2])
         } else if (nav & (PAD_B | PAD_A | PAD_START)) {
             if (p.chosen == PAUSE_MENU_AUTO) {
                 option_auto_accelerate_set(!option_auto_accelerate());
+            } else if (p.chosen == PAUSE_MENU_FPS) {
+                option_fps_set(!option_fps());
             } else {
                 if (p.chosen == PAUSE_MENU_QUIT)
                     race_pause_quit();  /* the game's own pause, taking its quit (race/pause.c) */
@@ -1147,6 +1180,10 @@ static int pause_step(const nshvc_input *in, uint16_t pad[2])
             keys_default();
         else if (p.chosen == PAUSE_OPTION)
             option_auto_accelerate_set(!option_auto_accelerate());
+        else if (p.chosen == PAUSE_FULL_SCREEN)
+            display_full_screen_set(!display_full_screen());
+        else if (p.chosen == PAUSE_FPS)
+            option_fps_set(!option_fps());
         else if (can_ask())
             p.asking = p.chosen;
     }

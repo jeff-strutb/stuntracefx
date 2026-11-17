@@ -10,7 +10,7 @@
 #include <stdint.h>
 
 #define PAUSE_PW 640                    /* the panel, in its own points */
-#define PAUSE_PH 400
+#define PAUSE_PH 440
 
 /* An image being drawn: 0xAARRGGBB, straight alpha, as the engine takes
    them. Its pixel (x, y) shows the panel's point (x0 + (x + 0.5) / density,
@@ -38,9 +38,15 @@ typedef struct {
 } PauseControl;
 extern const PauseControl pause_controls[PAUSE_CONTROLS];
 
-/* the panel's own buttons; the option shows its value with its name, so it
-   is drawn into its own picture (pause_draw_option), not the panel's */
-enum { PAUSE_RESUME = PAUSE_CONTROLS, PAUSE_DEFAULTS, PAUSE_OPTION, PAUSE_ITEMS };
+/* the panel's own buttons: RESUME, DEFAULTS and AUTO-ACCELERATE in a row
+   under the controls, FULL SCREEN and FPS COUNTER in a row under them. The
+   options show their values with their names, so they are drawn into a
+   picture of their own (pause_draw_options), not the panel's. */
+enum { PAUSE_RESUME = PAUSE_CONTROLS, PAUSE_DEFAULTS, PAUSE_OPTION, PAUSE_FULL_SCREEN, PAUSE_FPS, PAUSE_ITEMS };
+#define PAUSE_OPTIONS (PAUSE_ITEMS - PAUSE_OPTION)      /* auto-accelerate, full screen, the FPS counter */
+/* whether FULL SCREEN is offered (a window that can be full screen); FPS
+   COUNTER sits alone in the middle of its row without it */
+void pause_art_full_screen(int offered);
 
 /* the boxes the overlays cover, in points: a control's tag, an item lit
    (a control's tag, line and ring; a panel button), the hint's two lines */
@@ -53,17 +59,20 @@ void pause_draw_panel(PauseImg *m);     /* everything that never changes, every 
 void pause_draw_tag(PauseImg *m, int control, const char *key, int asking);
 void pause_draw_lit(PauseImg *m, int item);
 void pause_draw_hint(PauseImg *m, const char *line1, uint32_t colour1, const char *line2);
-/* the auto-accelerate button with its value, lit (chosen) or not; its box is pause_lit_box(PAUSE_OPTION) */
-void pause_draw_option(PauseImg *m, int on, int lit);
+/* the options with their values (on[k] for PAUSE_OPTION + k), the one
+   that is `lit` (an item, or -1) lit; their box, pause_options_box, holds
+   them all */
+void pause_options_box(float *x, float *y, float *w, float *h);
+void pause_draw_options(PauseImg *m, const int on[PAUSE_OPTIONS], int lit);
 
 /* ---- the options menu (iOS, whose controls cannot be changed) ---- */
 
 /* the panel of the options menu: the title and the items one under the
    other, no controller; its items by their own pictures, over it */
-enum { PAUSE_MENU_RESUME, PAUSE_MENU_AUTO, PAUSE_MENU_QUIT, PAUSE_MENU_ITEMS };
+enum { PAUSE_MENU_RESUME, PAUSE_MENU_AUTO, PAUSE_MENU_FPS, PAUSE_MENU_QUIT, PAUSE_MENU_ITEMS };
 void pause_menu_box(int item, float *x, float *y, float *w, float *h);
 void pause_draw_menu_panel(PauseImg *m);
-/* an item, lit while chosen; `on` is the auto-accelerate item's value */
+/* an item, lit while chosen; `on` is an option item's value */
 void pause_draw_menu_item(PauseImg *m, int item, int on, int lit);
 
 /* the pause button in the window's corner, PAUSE_BUTTON points square in its

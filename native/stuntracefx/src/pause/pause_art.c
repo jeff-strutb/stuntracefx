@@ -234,11 +234,28 @@ const PauseControl pause_controls[PAUSE_CONTROLS] = {
 static const struct {
     const char *name;
     float x, y, w, h;
-} k_button[3] = {
+} k_button[PAUSE_ITEMS - PAUSE_CONTROLS] = {
     { "RESUME", 79, 356, 112, 30 },
     { "DEFAULTS", 203, 356, 136, 30 },
-    { "AUTO-ACCELERATE", 351, 356, 210, 30 }, /* its value after the name (pause_draw_option) */
+    { "AUTO-ACCELERATE", 351, 356, 210, 30 }, /* the options: their values after their names (pause_draw_options) */
+    { "FULL SCREEN", 124, 396, 190, 30 },
+    { "FPS COUNTER", 326, 396, 190, 30 },
 };
+static int full_screen_offered = 1;
+
+void pause_art_full_screen(int offered) { full_screen_offered = offered != 0; }
+
+/* a panel button's rectangle: FPS COUNTER in the middle of its row when it
+   is alone there */
+static void button_at(int b, float *x, float *y, float *w, float *h)
+{
+    *x = k_button[b].x;
+    *y = k_button[b].y;
+    *w = k_button[b].w;
+    *h = k_button[b].h;
+    if (b == PAUSE_FPS - PAUSE_CONTROLS && !full_screen_offered)
+        *x = (PAUSE_PW - *w) / 2;
+}
 
 /* the tag itself, without the image's margin */
 static void tag_at(int i, float *x, float *y)
@@ -282,10 +299,11 @@ void pause_lit_box(int item, float *x, float *y, float *w, float *h)
     float x0, y0, x1, y1;
 
     if (item >= PAUSE_CONTROLS) {
-        x0 = k_button[item - PAUSE_CONTROLS].x;
-        y0 = k_button[item - PAUSE_CONTROLS].y;
-        x1 = x0 + k_button[item - PAUSE_CONTROLS].w;
-        y1 = y0 + k_button[item - PAUSE_CONTROLS].h;
+        float bw, bh;
+
+        button_at(item - PAUSE_CONTROLS, &x0, &y0, &bw, &bh);
+        x1 = x0 + bw;
+        y1 = y0 + bh;
     } else {
         const PauseControl *k = &pause_controls[item];
         float tx, ty, reach = k->br + RING_GAP + 1;
@@ -324,8 +342,9 @@ static void checks(PauseImg *m, float x, float y, int cols, float sq)
 
 static void panel_button_text(PauseImg *m, int b, const char *text, int lit)
 {
-    float x = k_button[b].x, y = k_button[b].y, w = k_button[b].w, h = k_button[b].h;
+    float x, y, w, h;
 
+    button_at(b, &x, &y, &w, &h);
     /* lit, over the button unlit: whole, so the unlit letters do not show */
     rrect(m, x, y, w, h, 8, lit ? LIT_FILL : PLATE, lit ? 1 : 0.85f);
     rrect_edge(m, x + 0.75f, y + 0.75f, w - 1.5f, h - 1.5f, 7.5f, lit ? 1.75f : 1, GOLD, 1);
@@ -334,9 +353,38 @@ static void panel_button_text(PauseImg *m, int b, const char *text, int lit)
 
 static void panel_button(PauseImg *m, int b, int lit) { panel_button_text(m, b, k_button[b].name, lit); }
 
-void pause_draw_option(PauseImg *m, int on, int lit)
+void pause_options_box(float *x, float *y, float *w, float *h)
 {
-    panel_button_text(m, PAUSE_OPTION - PAUSE_CONTROLS, on ? "AUTO-ACCELERATE ON" : "AUTO-ACCELERATE OFF", lit);
+    float x0 = PAUSE_PW, y0 = PAUSE_PH, x1 = 0, y1 = 0;
+    int i;
+
+    for (i = PAUSE_OPTION; i < PAUSE_ITEMS; i++) {
+        float bx, by, bw, bh;
+
+        button_at(i - PAUSE_CONTROLS, &bx, &by, &bw, &bh);
+        x0 = fminf(x0, bx);
+        y0 = fminf(y0, by);
+        x1 = fmaxf(x1, bx + bw);
+        y1 = fmaxf(y1, by + bh);
+    }
+    *x = x0 - MARGIN;
+    *y = y0 - MARGIN;
+    *w = x1 - x0 + 2 * MARGIN;
+    *h = y1 - y0 + 2 * MARGIN;
+}
+
+void pause_draw_options(PauseImg *m, const int on[PAUSE_OPTIONS], int lit)
+{
+    int i;
+
+    for (i = PAUSE_OPTION; i < PAUSE_ITEMS; i++) {
+        char text[32];
+
+        if (i == PAUSE_FULL_SCREEN && !full_screen_offered)
+            continue;
+        snprintf(text, sizeof text, "%s %s", k_button[i - PAUSE_CONTROLS].name, on[i - PAUSE_OPTION] ? "ON" : "OFF");
+        panel_button_text(m, i - PAUSE_CONTROLS, text, lit == i);
+    }
 }
 
 void pause_draw_panel(PauseImg *m)
@@ -368,7 +416,7 @@ void pause_draw_panel(PauseImg *m)
 
 /* ---- the options menu ---- */
 
-static const char *const k_menu_name[PAUSE_MENU_ITEMS] = { "RESUME", "AUTO-ACCELERATE", "QUIT RACE" };
+static const char *const k_menu_name[PAUSE_MENU_ITEMS] = { "RESUME", "AUTO-ACCELERATE", "FPS COUNTER", "QUIT RACE" };
 
 /* an item's own rectangle, without the image's margin */
 static void menu_at(int item, float *x, float *y, float *w, float *h)
@@ -404,7 +452,7 @@ void pause_draw_menu_item(PauseImg *m, int item, int on, int lit)
     const char *name = k_menu_name[item];
 
     menu_at(item, &x, &y, &w, &h);
-    if (item == PAUSE_MENU_AUTO) {
+    if (item == PAUSE_MENU_AUTO || item == PAUSE_MENU_FPS) {
         snprintf(text, sizeof text, "%s %s", name, on ? "ON" : "OFF");
         name = text;
     }
@@ -436,10 +484,8 @@ void pause_draw_lit(PauseImg *m, int item)
     float tx, ty, ex, ey, fx, fy;
     int dot;
 
-    if (item == PAUSE_OPTION) {
-        pause_draw_option(m, 0, 1);     /* (pause.c draws the option's own picture lit instead) */
-        return;
-    }
+    if (item >= PAUSE_OPTION)
+        return;                         /* an option: pause.c draws the options' own picture with it lit */
     if (item >= PAUSE_CONTROLS) {
         panel_button(m, item - PAUSE_CONTROLS, 1);
         return;

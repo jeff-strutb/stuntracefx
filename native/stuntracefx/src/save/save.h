@@ -64,6 +64,10 @@ int option_auto_accelerate(void);       /* 1 (the default): on a touch screen th
 void option_auto_accelerate_set(int on); /* saved at once */
 int option_overhead(void);              /* 1: the race seen from above (race/overhead.c); 0 (the default) behind the car */
 void option_overhead_set(int on);       /* saved at once */
+int option_fps(void);                  /* 1 (the default): the FPS counter shown (system/fps.c) */
+void option_fps_set(int on);            /* saved at once */
+int option_full_screen(void);           /* 1 (the default): full screen; 0 a window (system/display.c) */
+void option_full_screen_set(int on);    /* saved at once, when it changes */
 
 void SaveValidate(void);
 void SaveUnlocksCheck(void);

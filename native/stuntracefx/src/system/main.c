@@ -12,6 +12,7 @@
 #include "nshvc/nshvc.h"
 #include "pause/pause.h"
 #include "race/race.h"
+#include "system/display.h"
 #include "system/fps.h"
 #include "system/game.h"
 #include "system/perf.h"
@@ -26,6 +27,7 @@ static void init(void)
     video_init();
     fx_draw_init();
     session_start();
+    display_start();                    /* full screen, or the window the player chose */
 }
 
 static void update_body(const nshvc_input *input)
@@ -49,6 +51,7 @@ static void update_body(const nshvc_input *input)
 
 static void update(const nshvc_input *input)
 {
+    display_update();
     perf_update_begin();
     update_body(input);
     perf_update_end();

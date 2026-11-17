@@ -126,6 +126,21 @@ Withdrawn: a second part, asking for the window's pixel to be composed at severa
 on the texel grid (each texel solid, a pixel a texel edge crosses mixed by that coverage) for the maps, sprites, per-line
 changes and draw-list rows, mode 7 by its own coverage. No picture had shown otherwise.
 
+## 8. Full screen on Linux, and a game's own switch between full screen and a window (Jeff, 2026-11-17)
+
+Jeff, on players' reports of the game shown at 4:3 on a Steam Deck (the game's GitHub issues 6 and 9): "Yes, we need this
+ability. Also, add an option in the pause menu for a full screen / windowed toggle."
+
+Reported: on a Steam Deck, in SteamOS's Gaming Mode and docked to a 1080p display, the picture stays 4:3 and is scaled
+up, whatever window size Steam is told to use. Today the Linux host opens a window three times the size a game asks for
+and has no full screen; on macOS the View menu, and on Windows Alt+Enter and F11, switch a window to full screen and
+back, and a game cannot do either itself.
+
+Asked, for every game:
+- Full screen on Linux, as macOS and Windows have it, so a game can fill the display it is on, Gaming Mode's included.
+- A game can switch its window between full screen and a window, and read which it is in, on every host (for an
+  in-game options menu).
+
 ## Later engine features the game uses
 
 Asked through the engine's own sessions with Jeff's approval, each general, for every game; listed here so this file shows

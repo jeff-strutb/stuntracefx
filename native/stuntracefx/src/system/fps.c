@@ -15,12 +15,14 @@
  * digit and the word FPS a small RGBA picture, made once for each size (a
  * 5 x 7 font, white with a dark edge, each font pixel DOT window pixels, the
  * dot from the window's height), placed a pixel for a pixel inside the safe
- * area. SRFX_FPS=0 in the environment leaves it off.
+ * area. The pause screen shows and hides it (option_fps, saved);
+ * SRFX_FPS=0 in the environment leaves it off.
  */
 #include <stdlib.h>
 #include <string.h>
 
 #include "nshvc/nshvc.h"
+#include "save/save.h"
 #include "system/fps.h"
 
 enum {
@@ -137,8 +139,11 @@ void fps_draw(void)
 
         on = !(s && !strcmp(s, "0"));
     }
-    if (!on)
+    if (!on || !option_fps()) {
+        fps_hide();
+        from = -1;
         return;
+    }
     count++;
     if (from < 0) {
         from = now;
