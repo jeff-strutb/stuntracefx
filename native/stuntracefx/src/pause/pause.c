@@ -603,7 +603,7 @@ static void hint_refresh(void)
                                                           : "SELECT + START TO CANCEL");
         colour = GOLD;
     } else if (p.chosen == PAUSE_PLAYER) {
-        snprintf(line1, sizeof line1, "%s", p.player ? "CHOOSE TO SHOW PLAYER 1'S CONTROLS" : "CHOOSE TO SHOW PLAYER 2'S CONTROLS");
+        snprintf(line1, sizeof line1, "%s", p.player ? "SWITCH TO PLAYER 1'S CONTROLS" : "SWITCH TO PLAYER 2'S CONTROLS");
         snprintf(line2, sizeof line2, "%s", KEY_EVENTS ? "ESCAPE OR SELECT + START TO RESUME" : "SELECT + START TO RESUME");
     } else if (p.chosen >= PAUSE_OPTION) {
         snprintf(line1, sizeof line1, "%s", p.chosen == PAUSE_FULL_SCREEN ? "THE GAME FILLS THE SCREEN, OR A WINDOW"
