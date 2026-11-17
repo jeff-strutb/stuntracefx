@@ -3,7 +3,7 @@
  * in gold, the title between a racing flag's checks, Jeff's controller
  * (pad_art.c) with a tag beside it for each of its buttons and a line from
  * the tag to the button, the player button above it (whose controls are
- * shown), the hint below, RESUME and DEFAULTS. Each is
+ * shown), the hint below, RESUME, DEFAULTS and the options. Each is
  * drawn once into an image; pause.c lays the images over the window and the
  * GPU shows them. What changes (a key's name on its tag, the item chosen,
  * the hint) is its own image over the panel's, redrawn only when it changes
@@ -236,10 +236,9 @@ static const struct {
     const char *name;
     float x, y, w, h;
 } k_button[PAUSE_ITEMS - PAUSE_CONTROLS] = {
-    { "RESUME", 79, 356, 112, 30 },
-    { "DEFAULTS", 203, 356, 136, 30 },
-    { "AUTO-ACCELERATE", 351, 356, 210, 30 }, /* the options: their values after their names (pause_draw_options) */
-    { "FULL SCREEN", 124, 396, 190, 30 },
+    { "RESUME", 124, 356, 190, 30 },
+    { "DEFAULTS", 326, 356, 190, 30 },
+    { "FULL SCREEN", 124, 396, 190, 30 },   /* the options: their values after their names (pause_draw_options) */
     { "FPS COUNTER", 326, 396, 190, 30 },
 };
 static int full_screen_offered = 1;
@@ -413,6 +412,48 @@ void pause_player_box(float *x, float *y, float *w, float *h)
 void pause_draw_player(PauseImg *m, int player, int lit)
 {
     button_text(m, PLAYER_X, PLAYER_Y, PLAYER_W, PLAYER_H, player ? "PLAYER 2" : "PLAYER 1", lit);
+}
+
+static int in_rect(float px, float py, float x, float y, float w, float h)
+{
+    return px >= x && px < x + w && py >= y && py < y + h;
+}
+
+int pause_item_at(float px, float py)
+{
+    float x, y, w, h;
+    int i;
+
+    if (in_rect(px, py, PLAYER_X, PLAYER_Y, PLAYER_W, PLAYER_H))
+        return PAUSE_PLAYER;
+    for (i = PAUSE_CONTROLS; i < PAUSE_ITEMS; i++) {
+        if (i == PAUSE_FULL_SCREEN && !full_screen_offered)
+            continue;
+        button_at(i - PAUSE_CONTROLS, &x, &y, &w, &h);
+        if (in_rect(px, py, x, y, w, h))
+            return i;
+    }
+    for (i = 0; i < PAUSE_CONTROLS; i++) {
+        tag_at(i, &x, &y);
+        if (in_rect(px, py, x, y, TAG_W, TAG_H))
+            return i;
+    }
+    /* a button on the controller: the nearest within its ring */
+    {
+        int best = -1;
+        float bd = 0;
+
+        for (i = 0; i < PAUSE_CONTROLS; i++) {
+            const PauseControl *k = &pause_controls[i];
+            float d = hypotf(px - k->bx, py - k->by);
+
+            if (d <= k->br + RING_GAP && (best < 0 || d < bd)) {
+                best = i;
+                bd = d;
+            }
+        }
+        return best;
+    }
 }
 
 void pause_draw_panel(PauseImg *m)

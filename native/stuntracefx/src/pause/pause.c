@@ -7,21 +7,20 @@
  * controller with a tag beside each button naming the key that makes it.
  *
  * The pad moves among the tags and the panel's buttons; B, A or Start
- * chooses. The PLAYER button above the controller switches the screen
+ * chooses. A click of the pointer chooses what it is on (a tag, its button
+ * on the controller, a panel button) and presses it. The PLAYER button above the controller switches the screen
  * between player 1's controls and player 2's (it opens on player 1's). A tag
  * chosen asks for its button's new key or controller button: for player 1
  * the next key pressed, or button pressed on player 1's controller, takes
  * it; for player 2, who has no keys, the next button pressed on player 2's
- * controller (Escape or Select + Start cancels, so the controller buttons
+ * controller (Escape, Select + Start or a click cancels, so the controller buttons
  * that give Select and Start are the screen's own, as Escape is). A key or
  * controller button another button had goes over to the button whose own
  * was taken, so every button keeps one of each. The keys and each player's
  * controller buttons are kept in the save folder ("keys", "buttons",
  * "buttons2") and laid out at the game's first update. RESUME, Escape or
  * Select + Start again goes on; DEFAULTS puts the game's own keys and
- * buttons back for the player shown; AUTO-ACCELERATE
- * turns the option over (on a touch screen the gas is held while driving;
- * the menus' save keeps it, option_auto_accelerate_set); FULL SCREEN
+ * buttons back for the player shown; FULL SCREEN
  * switches between full screen and a window (system/display.c, where the
  * window can) and FPS COUNTER shows or hides the counter (system/fps.c),
  * both kept in the options. Buttons held as the
@@ -476,7 +475,6 @@ static void pictures_make(float density)
 /* each option's value, in PAUSE_OPTION's order */
 static void options_now(int on[PAUSE_OPTIONS])
 {
-    on[0] = option_auto_accelerate() != 0;
     on[PAUSE_FULL_SCREEN - PAUSE_OPTION] = display_full_screen() != 0;
     on[PAUSE_FPS - PAUSE_OPTION] = option_fps() != 0;
 }
@@ -600,15 +598,16 @@ static void hint_refresh(void)
                  : nshvc_display_info().keyboard        ? "KEY OR BUTTON"
                                                         : "BUTTON",
                  pause_controls[p.asking].name);
-        snprintf(line2, sizeof line2, "%s", KEY_EVENTS ? "ESCAPE OR SELECT + START TO CANCEL" : "SELECT + START TO CANCEL");
+        snprintf(line2, sizeof line2, "%s", CORNER_BUTTON ? "ESCAPE, SELECT + START OR A CLICK TO CANCEL"
+                                            : KEY_EVENTS  ? "ESCAPE OR SELECT + START TO CANCEL"
+                                                          : "SELECT + START TO CANCEL");
         colour = GOLD;
     } else if (p.chosen == PAUSE_PLAYER) {
         snprintf(line1, sizeof line1, "%s", p.player ? "CHOOSE TO SHOW PLAYER 1'S CONTROLS" : "CHOOSE TO SHOW PLAYER 2'S CONTROLS");
         snprintf(line2, sizeof line2, "%s", KEY_EVENTS ? "ESCAPE OR SELECT + START TO RESUME" : "SELECT + START TO RESUME");
     } else if (p.chosen >= PAUSE_OPTION) {
-        snprintf(line1, sizeof line1, "%s", p.chosen == PAUSE_OPTION        ? "TOUCH: THE GAS HELD WHILE YOU DRIVE"
-                                            : p.chosen == PAUSE_FULL_SCREEN ? "THE GAME FILLS THE SCREEN, OR A WINDOW"
-                                                                            : "THE PICTURES DRAWN A SECOND, TOP RIGHT");
+        snprintf(line1, sizeof line1, "%s", p.chosen == PAUSE_FULL_SCREEN ? "THE GAME FILLS THE SCREEN, OR A WINDOW"
+                                                                          : "THE PICTURES DRAWN A SECOND, TOP RIGHT");
         snprintf(line2, sizeof line2, "%s", KEY_EVENTS ? "ESCAPE OR SELECT + START TO RESUME" : "SELECT + START TO RESUME");
     } else {
         snprintf(line1, sizeof line1, "%s", can_ask()  ? "CHOOSE A BUTTON TO CHANGE IT"
@@ -862,10 +861,10 @@ static int control_at(int right, int row)
 
 /* the item a direction leads to from item i: the player button above the
    tags, down to the top left tag; the tags in their two columns, up from
-   the top row to the player button; under them a row of RESUME (under the left), DEFAULTS and
-   AUTO-ACCELERATE (under the right), and under that FULL SCREEN (under
-   DEFAULTS; offered only where the window can be full screen) and FPS
-   COUNTER (under AUTO-ACCELERATE); left and right going round a row */
+   the top row to the player button; under them a row of RESUME (under the
+   left) and DEFAULTS (under the right), and under that FULL SCREEN (under
+   RESUME; offered only where the window can be full screen) and FPS
+   COUNTER (under DEFAULTS); left and right going round a row */
 static int move(int i, uint16_t dir)
 {
     int right, row, full = display_can_full_screen();
@@ -874,7 +873,7 @@ static int move(int i, uint16_t dir)
         return dir & PAD_DOWN ? control_at(0, 0) : i;
     if (i >= PAUSE_FULL_SCREEN) {
         if (dir & PAD_UP)
-            return i == PAUSE_FULL_SCREEN ? PAUSE_DEFAULTS : PAUSE_OPTION;
+            return i == PAUSE_FULL_SCREEN ? PAUSE_RESUME : PAUSE_DEFAULTS;
         if ((dir & (PAD_LEFT | PAD_RIGHT)) && full)
             return i == PAUSE_FPS ? PAUSE_FULL_SCREEN : PAUSE_FPS;
         return i;
@@ -883,11 +882,9 @@ static int move(int i, uint16_t dir)
         if (dir & PAD_UP)
             return control_at(i != PAUSE_RESUME, 5);
         if (dir & PAD_DOWN)
-            return i == PAUSE_OPTION || !full ? PAUSE_FPS : PAUSE_FULL_SCREEN;
-        if (dir & PAD_LEFT)
-            return i == PAUSE_RESUME ? PAUSE_OPTION : i - 1;
-        if (dir & PAD_RIGHT)
-            return i == PAUSE_OPTION ? PAUSE_RESUME : i + 1;
+            return i == PAUSE_DEFAULTS || !full ? PAUSE_FPS : PAUSE_FULL_SCREEN;
+        if (dir & (PAD_LEFT | PAD_RIGHT))
+            return i == PAUSE_RESUME ? PAUSE_DEFAULTS : PAUSE_RESUME;
         return i;
     }
     right = pause_controls[i].right;
@@ -1094,6 +1091,25 @@ static int held_back(uint16_t pad[2])
 
 static int pause_step(const nshvc_input *in, uint16_t pad[2]);
 
+/* A click on the open screen: whether the pointer's button went down this
+   update in the window (not the touch screen's, whose taps are the pad's,
+   input/controls.c), and the item it is on (pause_item_at), -1 none. Read
+   before corner_pressed keeps the button's state for the next update. */
+static int panel_click(const nshvc_input *in, int *item)
+{
+    *item = -1;
+#if CORNER_BUTTON
+    if (MENU_MODE || !p.open || p.stage != BLUR_DONE || p.scale <= 0 || !(in->pointer.buttons & 1) || p.pointer_down ||
+        !in->pointer.inside || controls_source() == CONTROLS_TOUCH)
+        return 0;
+    *item = pause_item_at((in->pointer.x - p.ox) / p.scale, (in->pointer.y - p.oy) / p.scale);
+    return 1;
+#else
+    (void)in;
+    return 0;
+#endif
+}
+
 /* The options menu: a finger landing on an item chooses it (its tap, on
    being let go, is the press that takes it, input/controls.c). */
 static void menu_touch(const nshvc_input *in)
@@ -1142,7 +1158,7 @@ void pause_hold_other(void) { held++; }
 static int pause_step(const nshvc_input *in, uint16_t pad[2])
 {
     uint16_t press[2], nav, ctl_press[2] = { 0, 0 }, ctl;
-    int i, toggle = 0, vk;
+    int i, toggle = 0, vk, item, clicked, confirm;
 
     if (!p.ready)
         keys_load();
@@ -1167,6 +1183,7 @@ static int pause_step(const nshvc_input *in, uint16_t pad[2])
     }
     if (key_pressed(in, VK_ESCAPE))
         toggle = 1;
+    clicked = panel_click(in, &item);
     if (corner_pressed(in))
         toggle = 1;
 
@@ -1187,6 +1204,8 @@ static int pause_step(const nshvc_input *in, uint16_t pad[2])
         if (toggle) {
             p.asking = -1;
             p.wait_release = 1;
+        } else if (clicked) {
+            p.asking = -1;              /* the item clicked, if any, chosen below */
         } else if (!p.player && (vk = key_taken(in)) != 0) {
             rebind(p.asking, vk);
             p.asking = -1;
@@ -1196,14 +1215,16 @@ static int pause_step(const nshvc_input *in, uint16_t pad[2])
             p.asking = -1;
             p.wait_release = 1;
         }
-        show();
-        return 0;
+        if (item < 0) {
+            show();
+            return 0;
+        }
     }
     if (toggle) {
         screen_close(pad);
         return held_back(pad);
     }
-    if (p.wait_release) {
+    if (p.wait_release && item < 0) {   /* a click is not a pad's press */
         if (pad[0] | pad[1]) {
             show();
             return 0;
@@ -1231,12 +1252,17 @@ static int pause_step(const nshvc_input *in, uint16_t pad[2])
         show();
         return 0;
     }
-    if (nav & (PAD_UP | PAD_DOWN | PAD_LEFT | PAD_RIGHT)) {
+    confirm = item >= 0;                /* a click chooses its item and presses it */
+    if (item >= 0)
+        p.chosen = item;
+    else if (nav & (PAD_UP | PAD_DOWN | PAD_LEFT | PAD_RIGHT))
         p.chosen = move(p.chosen, nav & PAD_UP     ? PAD_UP
                                   : nav & PAD_DOWN ? PAD_DOWN
                                   : nav & PAD_LEFT ? PAD_LEFT
                                                    : PAD_RIGHT);
-    } else if (nav & (PAD_B | PAD_A | PAD_START)) {
+    else
+        confirm = (nav & (PAD_B | PAD_A | PAD_START)) != 0;
+    if (confirm) {
         if (p.chosen == PAUSE_RESUME) {
             screen_close(pad);
             return held_back(pad);
@@ -1245,8 +1271,6 @@ static int pause_step(const nshvc_input *in, uint16_t pad[2])
             p.player = !p.player;
         else if (p.chosen == PAUSE_DEFAULTS)
             keys_default(p.player);
-        else if (p.chosen == PAUSE_OPTION)
-            option_auto_accelerate_set(!option_auto_accelerate());
         else if (p.chosen == PAUSE_FULL_SCREEN)
             display_full_screen_set(!display_full_screen());
         else if (p.chosen == PAUSE_FPS)

@@ -38,12 +38,14 @@ typedef struct {
 } PauseControl;
 extern const PauseControl pause_controls[PAUSE_CONTROLS];
 
-/* the panel's own buttons: RESUME, DEFAULTS and AUTO-ACCELERATE in a row
-   under the controls, FULL SCREEN and FPS COUNTER in a row under them. The
-   options show their values with their names, so they are drawn into a
-   picture of their own (pause_draw_options), not the panel's. */
-enum { PAUSE_RESUME = PAUSE_CONTROLS, PAUSE_DEFAULTS, PAUSE_OPTION, PAUSE_FULL_SCREEN, PAUSE_FPS, PAUSE_ITEMS };
-#define PAUSE_OPTIONS (PAUSE_ITEMS - PAUSE_OPTION)      /* auto-accelerate, full screen, the FPS counter */
+/* the panel's own buttons: RESUME and DEFAULTS in a row under the
+   controls, FULL SCREEN and FPS COUNTER in a row under them. The options
+   show their values with their names, so they are drawn into a picture of
+   their own (pause_draw_options), not the panel's. (Auto-accelerate, a
+   touch screen's, is the iPhone and iPad menu's only, Jeff 2026-11-17.) */
+enum { PAUSE_RESUME = PAUSE_CONTROLS, PAUSE_DEFAULTS, PAUSE_FULL_SCREEN, PAUSE_FPS, PAUSE_ITEMS };
+#define PAUSE_OPTION PAUSE_FULL_SCREEN                  /* the first option */
+#define PAUSE_OPTIONS (PAUSE_ITEMS - PAUSE_OPTION)      /* full screen, the FPS counter */
 /* the player button above the controller: which player's controls the
    screen shows and changes, PLAYER 1 or PLAYER 2; an item after the rest,
    drawn into a picture of its own with its value and whether lit
@@ -72,6 +74,10 @@ void pause_draw_options(PauseImg *m, const int on[PAUSE_OPTIONS], int lit);
 /* the player button: its box, and its picture showing player (0 or 1) */
 void pause_player_box(float *x, float *y, float *w, float *h);
 void pause_draw_player(PauseImg *m, int player, int lit);
+/* the item at the panel's point (x, y), for the pointer: a control (its
+   tag, or its button on the controller), a panel button shown, or
+   PAUSE_PLAYER; -1 none */
+int pause_item_at(float x, float y);
 
 /* ---- the options menu (iOS, whose controls cannot be changed) ---- */
 
