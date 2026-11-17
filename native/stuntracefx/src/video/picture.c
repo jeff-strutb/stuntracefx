@@ -484,6 +484,8 @@ static void full_windows(nshvc_windows *w, int width)
     }
 }
 
+static int bands_full(nshvc_windows *w);
+
 static void full_window_draw(const ScreenShape *sh)
 {
     static uint16_t palette[256];
@@ -500,7 +502,7 @@ static void full_window_draw(const ScreenShape *sh)
     hills.scroll_y = pic.race.wide_y - sh->origin_y;
     layer_send(1, &hills);
     layer_send(2, &pic.bg[2]);
-    if (g.line_effects.window_bands)
+    if (!bands_full(&w) && g.line_effects.window_bands)
         full_windows(&w, sh->width);
     nshvc_windows_set(&w);
     nshvc_blend_set(&pic.blend);
@@ -566,6 +568,25 @@ static void full_two_draw(const ScreenShape *sh)
 
 static void draw_picture(void);
 
+/* The one-player race's opening and closing bands (WindowBandsAnimate) in
+   the whole window: laid as overlays (course_wipe.c bands_overlay), window
+   1 then keeps nothing out, the overlays covering what it did. 1 while they
+   run. */
+static int bands_full(nshvc_windows *w)
+{
+    int32_t l1[224], r1[224], l2[224], r2[224];
+
+    if (windows.bands_kind || !windows.bands_state || pic.race.split) {
+        bands_overlay_off();
+        return 0;
+    }
+    window_band_values(l1, r1, l2, r2);
+    bands_overlay(l1, r1);
+    w->w[0].left = 1;
+    w->w[0].right = 0;
+    return 1;
+}
+
 /* The one-player results' page in the whole window (Jeff, 2026-11-17,
    GitHub issue 8: "make the results screen properly resolution agnostic
    just like the rest of the game/menus", the blue texture full screen, the
@@ -583,7 +604,7 @@ static void results_full_draw(const ScreenShape *sh)
     nshvc_windows w = pic.windows;
     Background list, page = pic.bg[1];
     int ox = sh->origin_x, oy = sh->origin_y, h = sh->height > 1024 ? 1024 : sh->height, r;
-    int at = race_results_map_box_at();
+    int at = race_results_map_box_at(), bands;
 
     memset(&list, 0, sizeof list);
     list.draw_list = race_results_list();
@@ -595,11 +616,13 @@ static void results_full_draw(const ScreenShape *sh)
     page.scroll_y = at - (oy - pic.race.backdrop_y[0]);
     layer_send(1, &page);
     layer_send(2, &pic.bg[2]);
-    if (g.line_effects.window_bands)
+    bands = bands_full(&w);
+    if (g.line_effects.window_bands && !bands)
         window_band_values(l1, r1, l2, r2);
     for (r = 0; r < h; r++) {
         int line = r - oy, k = line < 0 ? 0 : line > 223 ? 223 : line;
-        int32_t a = g.line_effects.window_bands ? l1[k] : w.w[0].left, b = g.line_effects.window_bands ? r1[k] : w.w[0].right;
+        int use = g.line_effects.window_bands && !bands;
+        int32_t a = use ? l1[k] : w.w[0].left, b = use ? r1[k] : w.w[0].right;
 
         if (a > b) {                    /* covers nothing: still nothing */
             l1w[r] = a + ox;
@@ -685,6 +708,8 @@ static void draw_picture(void)
         results_full_draw(sh);
         return;
     }
+    if (!(full && !pic.race.split))
+        bands_overlay_off();            /* the bands' overlays only on the one-player race's screens */
     if (full) {
         if (pic.race.split)
             full_two_draw(sh);

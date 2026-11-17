@@ -170,3 +170,103 @@ void course_wipe_overlay(const int32_t left[224], const int32_t right[224], cons
     }
     shown = 1;
 }
+
+/* ---- the race's bands over the whole window ----
+
+   Jeff, 2026-11-17, on the results screen made full-window: "the black
+   'load in' transition on it should be properly covering the full window,
+   just like we updated the other black 'transition' animation on other menu
+   screens to do so. Rebuild it from scratch if necessary".
+
+   In the original the one-player race's opening and closing (the bands,
+   windows.c WindowBandsAnimate: setup 8, every layer kept out inside window
+   1 and the colour maths there) are window 1 shaped over the 3D's view, the
+   frame round it left lit. In the whole window the view is the whole window,
+   so the bands' rows are laid as black GPU overlays with the view's
+   rectangle (columns 24 to 232, lines 32 to 160, as the race's sprites take
+   it, sprites.c) stretched over the window: closed, they cover all of it,
+   at any size and aspect. One quad for each run of rows with the same
+   edges; more runs than overlays, their bounds. Over everything, as the
+   original's window kept every layer, the sprites too, out of it. */
+enum { BANDS_FIRST = 9, BANDS_IDS = 3 };     /* the overlays after the touch controls' (0-3) and the FPS counter's (4-8) */
+enum { VIEW_LEFT = 24, VIEW_RIGHT = 232, VIEW_TOP = 32, VIEW_BOTTOM = 160 };
+
+static int bands_shown;
+
+void bands_overlay_off(void)
+{
+    nshvc_image none = { 0 };
+    uint32_t id;
+
+    if (!bands_shown)
+        return;
+    for (id = BANDS_FIRST; id < BANDS_FIRST + BANDS_IDS; id++)
+        nshvc_overlay_set(id, none, NULL, 0);
+    bands_shown = 0;
+}
+
+static float view_to(float c, float lo, float hi, float size)
+{
+    float t = (c - lo) / (hi - lo);
+
+    return roundf((t < 0.0f ? 0.0f : t > 1.0f ? 1.0f : t) * size);
+}
+
+void bands_overlay(const int32_t left[224], const int32_t right[224])
+{
+    float window_w, window_h;
+    Run runs[224];
+    int n = 0, line, k;
+
+    screen_window(&window_w, &window_h);
+    if (window_w <= 0.0f || window_h <= 0.0f) {
+        bands_overlay_off();
+        return;
+    }
+    if (!black.id) {
+        black = solid(0xFF000000u);
+        white = solid(0xFFFFFFFFu);
+    }
+    for (line = 0; line < 224; line++) {
+        if (left[line] > right[line])
+            continue;
+        if (n && runs[n - 1].line1 == line && runs[n - 1].left == left[line] && runs[n - 1].right == right[line]) {
+            runs[n - 1].line1 = line + 1;
+            continue;
+        }
+        runs[n].line0 = line;
+        runs[n].line1 = line + 1;
+        runs[n].left = left[line];
+        runs[n].right = right[line];
+        n++;
+    }
+    if (n > BANDS_IDS) {
+        Run box = runs[0];
+
+        for (k = 1; k < n; k++) {
+            if (runs[k].left < box.left)
+                box.left = runs[k].left;
+            if (runs[k].right > box.right)
+                box.right = runs[k].right;
+            box.line1 = runs[k].line1;
+        }
+        runs[0] = box;
+        n = 1;
+    }
+    for (k = 0; k < BANDS_IDS; k++) {
+        nshvc_image none = { 0 };
+        float c[6], x0, x1, y0, y1;
+
+        if (k >= n) {
+            nshvc_overlay_set((uint32_t)(BANDS_FIRST + k), none, NULL, 0);
+            continue;
+        }
+        x0 = view_to((float)runs[k].left, VIEW_LEFT, VIEW_RIGHT, window_w);
+        x1 = view_to((float)runs[k].right + 1.0f, VIEW_LEFT, VIEW_RIGHT, window_w);
+        y0 = view_to((float)runs[k].line0, VIEW_TOP, VIEW_BOTTOM, window_h);
+        y1 = view_to((float)runs[k].line1, VIEW_TOP, VIEW_BOTTOM, window_h);
+        c[0] = x0, c[1] = y0, c[2] = x1, c[3] = y0, c[4] = x0, c[5] = y1;
+        nshvc_overlay_set((uint32_t)(BANDS_FIRST + k), black, c, 1.0f);
+    }
+    bands_shown = 1;
+}

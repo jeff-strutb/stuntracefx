@@ -78,6 +78,8 @@ int race_course_full_window(void);             /* the course screen fills the wi
    edges window 1 has by original line, and the blend that gives its level; off. */
 void course_wipe_overlay(const int32_t left[224], const int32_t right[224], const nshvc_blend *blend);
 void course_wipe_overlay_off(void);
+void bands_overlay(const int32_t left[224], const int32_t right[224]); /* the race's bands over the whole window */
+void bands_overlay_off(void);
 nshvc_image fx_noise_image(void);              /* fx_draw.c: the static's noise texture */
 uint16_t fx_static_seed(int line);             /* fx_draw.c: the seed line 0-127 of the static's block was drawn with */
 void race_two_full_window_ready(int on);       /* interim: the 3D's side turns it on with its two-player rectangles */
