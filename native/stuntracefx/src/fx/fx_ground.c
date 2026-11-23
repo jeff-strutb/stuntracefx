@@ -97,7 +97,6 @@ enum { SURF_NONE, SURF_GRASS, SURF_ROCK, SURF_CEMENT, SURF_SNOW, SURF_ICE, SURF_
 #define CLS_WHITE 0xFD          /* class 0, the chip's snow whites (the table's 0 is no class) */
 #define CLS_BAND 0xFC           /* a sea in the band's own sea's colours (band_shade): Lake Side */
 #define CLS_BAND_WHOLE 0xFB     /* land or a sea in all of them: the battle courses */
-#define AQUA_CEMENT 21         /* the shade class of the cement courses' greys (Night Owl's, Night Cruise's) */
 #define WATER_DEEPEST 32767     /* water at the lowest place the course's shapes meet the ground (the survey's) */
 #define DEEPEST_BELOW 1.0       /* ... one unit under it: a flat road or shoulder at that place lies in the water's plane, which would
                                    tie in depth with it and flicker (GitHub issue 12), so the water lies a unit behind what stands there */
@@ -762,6 +761,122 @@ static void record_roofless(uint16_t shape, const double at[3], const double lo[
     nroofless++;
 }
 
+/* ---- the tube's wrap (Aqua Tunnel) ----
+
+   Jeff (2026-11-23, Aqua Tunnel): "All I wanted you to do was wrap the
+   already extant shape of the tunnel on the sections that didn't have
+   'walls' (so you could see inside it) so that you could no longer see
+   inside. Nothing more clever or complicated than that." The tube's
+   pieces between its mouths and the sea (the ramps down to the glass
+   tube on both sides) are their inside only: a roof, its chamfers and
+   two walls, all facing in, standing over the sea, so from outside the
+   inside showed. A piece is wrapped when, of its level faces, those seen
+   from below (its roof) lie above those seen from above (its floor), no
+   face seen from above lies over its roof (a mouth's housing, the
+   sea-level piece's own top), and its roof rises over the sea. Its wrap
+   is its own faces in its roof's colour (roof, chamfers, walls: the
+   shape), each turned to face out, drawn right after the piece in the
+   cement courses' greys, and only the faces that look at the eye: from
+   outside the shape is closed, from inside nothing changes. The survey
+   keeps the faces of each record that may be one (no higher than
+   TUNNEL_HIGH, at least TUNNEL_WIDE across, its top over the sea);
+   which way Newell's normals point is known only after the survey
+   (rock_survey.facing), so each keeps its level faces' heights both
+   ways round. */
+
+#define WRAP_CEMENT 21                  /* the cement courses' greys (Night Owl's, Night Cruise's): its shade class */
+enum { WRAP_KEPT = 24, WRAPS = 8, WRAP_FACES = 48 };
+
+static struct {
+    int on;                             /* this survey keeps them (Aqua Tunnel) */
+    double plane_y;                     /* the sea's level */
+    int n;
+    struct {
+        uint16_t shape;
+        double at[3];
+        double y[2], low[2], area[2];   /* level faces by Newell's normal (0: +y, 1: -y): area-weighted mean y, the highest face's mean y, area */
+        int nf;
+        WorldFace f[WRAP_FACES];        /* its faces in its roof's colour, each once */
+        double u[WRAP_FACES][3];        /* their Newell normals */
+    } k[WRAP_KEPT];
+} wrap_kept;
+
+static struct {
+    int course, n;
+    struct {
+        uint16_t shape;
+        double at[3];
+        int nf;
+        WorldFace f[WRAP_FACES];
+        double out[WRAP_FACES][3];      /* each face's normal turned out of the piece */
+    } w[WRAPS];
+} wraps;
+
+/* the view the wrap is drawn in this picture (ground_draw: Aqua Tunnel),
+   and the wrapped piece being drawn */
+static struct {
+    int on;
+} wrap_view;
+static int wrap_pending = -1;
+
+static int same_face(const WorldFace *a, const WorldFace *b)
+{
+    int i, k;
+
+    if (a->n != b->n)
+        return 0;
+    for (i = 0; i < a->n; i++)
+        for (k = 0; k < 3; k++)
+            if (fabs(a->c[i][k] - b->c[i][k]) > 0.5)
+                return 0;
+    return 1;
+}
+
+/* candidate c (its record's faces in rec_face) kept for the wrap when it may be one */
+static void wrap_keep(int c)
+{
+    int i, j, q, kk;
+
+    if (!wrap_kept.on || wrap_kept.n == WRAP_KEPT || !cand[c].roof || cand[c].hi[1] - cand[c].lo[1] > TUNNEL_HIGH
+        || cand[c].hi[0] - cand[c].lo[0] < TUNNEL_WIDE || cand[c].hi[2] - cand[c].lo[2] < TUNNEL_WIDE
+        || cand[c].lo[1] >= wrap_kept.plane_y)
+        return;
+    kk = wrap_kept.n;
+    wrap_kept.k[kk].shape = cand[c].shape;
+    memcpy(wrap_kept.k[kk].at, cand[c].at, sizeof wrap_kept.k[kk].at);
+    wrap_kept.k[kk].nf = 0;
+    for (q = 0; q < 2; q++) {
+        wrap_kept.k[kk].y[q] = 0;
+        wrap_kept.k[kk].low[q] = 1e9;
+        wrap_kept.k[kk].area[q] = 0;
+    }
+    for (i = 0; i < nrec_face; i++) {
+        double u[3], a = face_area(&rec_face[i], u), my = face_mean_y(&rec_face[i]);
+
+        if (a <= 0)
+            continue;
+        if (fabs(u[1]) > 0.7) {
+            q = u[1] > 0 ? 0 : 1;
+            wrap_kept.k[kk].y[q] += a * my;
+            wrap_kept.k[kk].area[q] += a;
+            wrap_kept.k[kk].low[q] = fmin(wrap_kept.k[kk].low[q], my);
+        }
+        if (rec_face[i].colour != cand[c].roof || wrap_kept.k[kk].nf == WRAP_FACES)
+            continue;
+        for (j = 0; j < wrap_kept.k[kk].nf && !same_face(&wrap_kept.k[kk].f[j], &rec_face[i]); j++)
+            ;
+        if (j < wrap_kept.k[kk].nf)
+            continue;                   /* drawn more than once by its record */
+        wrap_kept.k[kk].f[j] = rec_face[i];
+        memcpy(wrap_kept.k[kk].u[j], u, sizeof u);
+        wrap_kept.k[kk].nf++;
+    }
+    for (q = 0; q < 2; q++)
+        if (wrap_kept.k[kk].area[q] > 0)
+            wrap_kept.k[kk].y[q] /= wrap_kept.k[kk].area[q];
+    wrap_kept.n++;
+}
+
 /* one record (30 bytes) in the first slot, its place in the world `at` */
 static void survey_record(const uint8_t *record, double at[3], uint16_t *stack)
 {
@@ -805,6 +920,7 @@ static void survey_record(const uint8_t *record, double at[3], uint16_t *stack)
             cand[ncand].roof = record_roof(cand[ncand].lo[1], cand[ncand].hi[1]);
             record_end_floor(cand[ncand].lo, cand[ncand].hi, cand[ncand].end_floor);
             record_roofless(cand[ncand].shape, at, cand[ncand].lo, cand[ncand].hi);
+            wrap_keep(ncand);
             ncand++;
         }
         /* where the shape meets the ground: its lowest part (world y is
@@ -1270,6 +1386,37 @@ static void rock_find(unsigned course)
     }
 }
 
+/* the kept records that are wrapped (the tube's wrap, above) */
+static void wraps_find(unsigned course)
+{
+    int i, j, k, roof = rock_survey.facing < 0 ? 0 : 1, floor = 1 - roof;   /* the level faces seen from below, from above */
+    double s = rock_survey.facing < 0 ? 1 : -1;                             /* Newell's normal to the side a face is seen from */
+
+    wraps.course = (int)course;
+    wraps.n = 0;
+    for (i = 0; i < wrap_kept.n && wraps.n < WRAPS; i++) {
+        double roof_top = 1e9;
+
+        if (wrap_kept.k[i].area[roof] <= 0 || wrap_kept.k[i].area[floor] <= 0 || wrap_kept.k[i].y[roof] >= wrap_kept.k[i].y[floor]
+            || wrap_kept.k[i].low[floor] < wrap_kept.k[i].low[roof])
+            continue;                   /* no roof over a floor, or closed over its roof */
+        for (j = 0; j < wrap_kept.k[i].nf; j++)
+            for (k = 0; k < wrap_kept.k[i].f[j].n; k++)
+                if (s * wrap_kept.k[i].u[j][1] > 0.7)
+                    roof_top = fmin(roof_top, wrap_kept.k[i].f[j].c[k][1]);
+        if (roof_top >= wrap_kept.plane_y)
+            continue;                   /* its roof under the sea */
+        wraps.w[wraps.n].shape = wrap_kept.k[i].shape;
+        memcpy(wraps.w[wraps.n].at, wrap_kept.k[i].at, sizeof wraps.w[wraps.n].at);
+        wraps.w[wraps.n].nf = wrap_kept.k[i].nf;
+        memcpy(wraps.w[wraps.n].f, wrap_kept.k[i].f, (size_t)wrap_kept.k[i].nf * sizeof wrap_kept.k[i].f[0]);
+        for (j = 0; j < wrap_kept.k[i].nf; j++)
+            for (k = 0; k < 3; k++)
+                wraps.w[wraps.n].out[j][k] = -s * wrap_kept.k[i].u[j][k];
+        wraps.n++;
+    }
+}
+
 static void ground_survey(unsigned course, const double eye[3], const double m[9])
 {
     static uint8_t kept[0x10000];
@@ -1286,6 +1433,9 @@ static void ground_survey(unsigned course, const double eye[3], const double m[9
     survey_points = 0;
     ncand = 0;
     nroofless = 0;
+    wrap_kept.n = 0;
+    wrap_kept.on = surface[course].kind == SURF_AQUA;
+    wrap_kept.plane_y = surface[course].y;
     surveying = 1;
     memset(&rock_survey, 0, sizeof rock_survey);
     memcpy(kept, fx_ram, sizeof kept);
@@ -1324,6 +1474,7 @@ static void ground_survey(unsigned course, const double eye[3], const double m[9
     tunnels_find(course);
     linings_find(course);
     rock_find(course);
+    wraps_find(course);
     for (i = 0; i < (unsigned)survey_points; i++) {
         xmin = fmin(xmin, survey_point[i][0]);
         xmax = fmax(xmax, survey_point[i][0]);
@@ -1422,6 +1573,8 @@ static void ground_survey(unsigned course, const double eye[3], const double m[9
             " facing (%s), %d rock shades, %d tunnel pieces, %d lined, %d rock sections\n", course, grid.level, grid.xmin, grid.xmax, grid.zmin, grid.zmax,
             grid.light_k, grid.light_k == LIGHT_K ? "no lit faces: the chip's own scale" : "fitted from the course's lit faces",
             grid.shades, tunnels.n, linings.n, rock.n);
+    if (wrap_kept.on)
+        fprintf(stderr, "ground: course %u, %d tube pieces wrapped\n", course, wraps.n);
 }
 
 /* ---- the land drawn: a few planes, terrain.shade colouring them ----
@@ -2136,9 +2289,23 @@ void fx_ground_object_begin(uint16_t record, int shift)
 
     shell_pending = -1;
     lining_pending = -1;
+    wrap_pending = -1;
     if (surveying)
         return;
     shape = (uint16_t)(fx_ram[(uint16_t)(record + 0x08)] | fx_ram[(uint16_t)(record + 0x09)] << 8);
+    if (wrap_view.on && wraps.course == (int)g.course)
+        for (i = 0; i < wraps.n; i++)
+            if (wraps.w[i].shape == shape) {
+                double dx, dz;
+
+                record_place(record, shift, lining_view.eye, lining_view.m, at);
+                dx = at[0] - wraps.w[i].at[0];
+                dz = at[2] - wraps.w[i].at[2];
+                if (dx * dx + dz * dz < 512.0 * 512.0 * (1 << (2 * shift))) {
+                    wrap_pending = i;
+                    return;
+                }
+            }
     if (lining_view.on && linings.course == (int)g.course)
         for (i = 0; i < linings.n; i++)
             if (linings.l[i].shape == shape) {
@@ -2252,6 +2419,25 @@ static void lining_draw(void)
     fx_draw_piece(0);
 }
 
+/* the wrapped piece's wrap, after its own faces (the tube's wrap) */
+static void wrap_draw(void)
+{
+    static nshvc_vertex wv[WRAP_FACES * 3 * 8];
+    uint32_t nw = 0;
+    int j = wrap_pending, f;
+
+    if (j < 0)
+        return;
+    wrap_pending = -1;
+    fx_draw_queued();                   /* the piece's own faces first */
+    fx_draw_piece(FX_PIECE_ROCK + ROCK_SECTIONS + LININGS + (uint32_t)j);
+    for (f = 0; f < wraps.w[j].nf; f++)
+        land_face((const double (*)[3])wraps.w[j].f[f].c, wraps.w[j].f[f].n, wraps.w[j].out[f], WRAP_CEMENT, lining_view.eye,
+                  lining_view.m, wv, &nw, sizeof wv / sizeof wv[0]);
+    fx_draw_land(wv, nw);
+    fx_draw_piece(0);
+}
+
 void fx_ground_object_end(void)
 {
     static nshvc_vertex sv[SHELL_VERTICES];
@@ -2261,6 +2447,7 @@ void fx_ground_object_end(void)
     int i = shell_pending, a, p, side, k;
 
     lining_draw();
+    wrap_draw();
     if (i < 0)
         return;
     shell_pending = -1;
@@ -3621,6 +3808,8 @@ static void ground_draw(void)
     shell_pending = -1;
     lining_view.on = 0;
     lining_pending = -1;
+    wrap_view.on = 0;
+    wrap_pending = -1;
     if (kind == SURF_NONE || (kind == SURF_AQUA && (g.picture_effects & 0x08) && !surface[course].cls))
         return;
     {
@@ -3647,18 +3836,7 @@ static void ground_draw(void)
         forest.course = -1;
         city.course = -1;
     }
-    /* Aqua Tunnel's tube pieces and mouths stand over the sea: their rock,
-       in the cement's class (the cement courses', 21), from the sea's level
-       up, so the tube cannot be seen into from outside (Jeff, 2026-11-23,
-       GitHub issue 10: "build a proper cement enclosure around the exposed
-       tunnel, both entrance side and exit side") */
-    if (kind == SURF_AQUA && surface[course].cls) {
-        shell_view.on = 1;
-        shell_view.cls = AQUA_CEMENT;
-        shell_view.plane_y = surface[course].y;
-        memcpy(shell_view.eye, eye, sizeof shell_view.eye);
-        memcpy(shell_view.m, m, sizeof shell_view.m);
-    }
+    wrap_view.on = kind == SURF_AQUA;   /* Aqua Tunnel's open tube pieces wrapped (the tube's wrap) */
     /* land: drawn in a tunnel too (bit 3 of $0DA5, which the tunnel's
        gates set and clear), at its true depths behind the tunnel's walls
        and roof, so its openings show the land outside and going in or out
