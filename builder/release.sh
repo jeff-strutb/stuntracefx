@@ -52,7 +52,7 @@ Stunt Race FX Builder makes a native build of **Stunt Race FX** (Super Nintendo,
 The game's data is copyrighted, so the builder does not include it: you provide your ROM, the builder checks it by MD5, takes the data the game reads from it (the ROM's code is not used: the C stands for it), and produces a game that runs on its own. The ROM is not needed once the build is done.
 
 ### New in 0.992
-- **Modern controls**: an ORIGINAL / MODERN switch on the pause screen. Modern steers across the whole range with the stick or the touch wheel, from a gentle turn to the sharpest, with no need for L and R; on the keyboard and the d-pad a held direction builds from a gentle turn to the sharp one. Original is the game as it was.
+- **Modern controls**: an ORIGINAL / MODERN switch on the pause screen. Modern steers across the whole range with the stick or the touch wheel, from a gentle turn to the sharpest, with no need for L and R; on the keyboard and the d-pad a held direction builds from a gentle turn to the sharp one. Modern is the default; Original, the game as it was, is a choice on the pause screen.
 - **Start opens the pause screen** during a race, in place of the cartridge's own pause; QUIT RACE is on the pause screen on every system.
 - **The pause screen by controller alone**: every item can be reached, chosen and left with a controller, whatever has been remapped.
 - **Controls named for what they do**: each tag on the pause screen says what its button does in the game (ACCELERATE, BRAKE, BOOST and so on), with a line to the button and the key or button bound to it beneath.

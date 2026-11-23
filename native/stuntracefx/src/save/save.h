@@ -68,7 +68,7 @@ int option_fps(void);                  /* 1 (the default): the FPS counter shown
 void option_fps_set(int on);            /* saved at once */
 int option_full_screen(void);           /* 1 (the default): full screen; 0 a window (system/display.c) */
 void option_full_screen_set(int on);    /* saved at once, when it changes */
-int option_modern(void);                /* 1: Modern controls (input/controls.c); 0 (the default) Original */
+int option_modern(void);                /* 1 (the default): Modern controls (input/controls.c); 0 Original */
 void option_modern_set(int on);         /* saved at once, when it changes */
 
 void SaveValidate(void);

@@ -9,9 +9,10 @@
  * first launch when a user hasn't yet set their preference"); and the
  * controls, Original (the game's own: Left and Right steer, L and R the sharp
  * turn) or Modern (one steer value from the stick or the wheel covers the
- * whole range, input/controls.c), Original until the player chooses Modern
- * (Jeff, 2026-11-23: "Implement a original/modern Controls toggle in the
- * pause menu. Original is how it is now"). The frame
+ * whole range, input/controls.c), Modern until the player chooses Original
+ * (Jeff, 2026-11-23: "make modern controls the default"). A file written
+ * before the option (fifth layout or earlier) has no choice in it and reads
+ * as Modern; a file of the sixth layout keeps what it says. The frame
  * rate and the picture's shape are no options: the game is the Enhanced
  * game (decisions 4 and 5).
  */
@@ -28,10 +29,10 @@ typedef struct {
     uint8_t overhead;                   /* 1: the race seen from above */
     uint8_t fps;                        /* 1: the FPS counter shown */
     uint8_t full_screen;                /* 1: full screen, 0: a window */
-    uint8_t modern;                     /* 1: Modern controls (a file of the fifth layout (5: none) reads as Original) */
+    uint8_t modern;                     /* 1: Modern controls (a file of the fifth layout (5: none) reads as the default, Modern) */
 } OptionsFile;
 
-static OptionsFile options = { sizeof (OptionsFile), 1, 0, 1, 1, 0 };
+static OptionsFile options = { sizeof (OptionsFile), 1, 0, 1, 1, 1 };
 static int loaded;
 
 static void options_load(void)
