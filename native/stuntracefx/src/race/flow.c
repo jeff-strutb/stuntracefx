@@ -576,6 +576,8 @@ static void soft_reset_finish(void)
 {
     pic.blank = 1;
     g.reset_state = 0;
+    sound_hold_b = 0;                   /* $10DC, $10DE: the restart clears the ending's holds */
+    sound_alt_set_loaded = 0;
     SoftResetApu();
     memset(&g, 0, sizeof g);
     memset(&objects, 0, sizeof objects);
