@@ -1839,15 +1839,20 @@ static uint32_t row_colour(int cls, int level)
 
 /* the light level the chip gives a lit face whose normal in view space is n:
    floor(k (n . the light)), kept to 6-15 */
-static int chip_level(const double n[3])
+static int level_by(double light_k, const double n[3])
 {
     double len = sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]), l[3], x, level;
 
     fx_view_light_vector(l);            /* the picture's light (fx_view.h): the chip's own in the game's view */
     x = len > 0 ? (n[0] * l[0] + n[1] * l[1] + n[2] * l[2]) / len : 0;
-    level = floor(grid.light_k * x);
+    level = floor(light_k * x);
 
     return level < 6 ? 6 : level > 15 ? 15 : (int)level;
+}
+
+static int chip_level(const double n[3])
+{
+    return level_by(grid.light_k, n);
 }
 
 static uint32_t land_colour(int cls, const double n[3])
@@ -3325,6 +3330,16 @@ static void land_polygons(unsigned course, int cls, const double eye[3], const d
 #define OCEAN_WAVE 0.08
 #define SEABED_BELOW 512.0
 #define SEABED_DARK 0.55
+/* WATER_LIGHT: the water's facets are lit by the survey's fitted scale
+   (grid.light_k) with the chip's own sign (LIGHT_K's: an outward normal
+   against the light, a face lit from above), never the fit's. The fit
+   takes its sign from the survey's facing (the sum of its faces' normals
+   along z), which on Lake Side and the night city arena comes out the
+   other way (+15.04, +15.52 against Sea Breeze's -15.80 and Harbor City's
+   -15.84, in runs of 2026-11-23): there a level facet's n . k was -10, so
+   every facet and the flat water took level 6, one colour, the lake "like
+   a big blue bowl" (Jeff, 2026-11-23). With the chip's sign a level facet
+   is level 9 or 10 there as at Sea Breeze, its tilted facets 8 to 12. */
 #define OCEAN_IMAGE_W 24        /* ocean.shade's image: 11 colours, then 13 floats */
 
 static nshvc_image ocean_image[4];
@@ -3346,11 +3361,19 @@ static nshvc_shader ocean_shader;
    the lightest third, the water as the original shows it beside the road
    (Lake Side's lake light cyan, 95,255,227 in its pictures: it lies out
    toward the horizon's rows; the rest lies under the road near the eye);
-   a lit face's level 6-15 takes the one as far along them (6 the
-   darkest), so a level face seen from the race's camera (level 9 or 10)
-   is the band's light teal (Lake Side's 74,239,198 to 90,247,214). With
-   whole (CLS_BAND_WHOLE), all of them (the battle courses). */
+   a level face seen from the race's camera (BAND_LEVEL) takes the one as
+   far along them as level 10 is along 6-15, the band's light teal (Lake
+   Side's 74,239,198 to 90,247,214), and each level more or less the next
+   colour of the band lighter or darker, into the band's sea-greens. Taken
+   as far along the lightest third alone, the lake's 4 or 5 teals (luma 173
+   to 220) were spread over 10 levels, 5 or 6 of luma a level, where Sea
+   Breeze's sea has 12, Harbor City's 9 and the beach's 10 to 12: a facet
+   tilted a level or two was the next teal or none, and the lake read flat
+   (Jeff, 2026-11-23: "there is no water"). A band colour a level gives the
+   lake's facets 8 to 12 of luma a level. With whole (CLS_BAND_WHOLE), all
+   of them as far along as the level is (the battle courses). */
 #define BAND_FROM 7              /* rows under the horizon the band's ground half begins: 256 - 249 */
+#define BAND_LEVEL 10            /* the level of a level face in the race's view (n . k 10.0 to 10.2 on Lake Side, 10.6 to 10.8 at Sea Breeze) */
 
 static struct {
     int n;
@@ -3384,8 +3407,14 @@ static uint32_t band_shade(int level, int whole)
 
     if (!band.n)
         return 0xFF000000u;
+    level = level < 6 ? 6 : level > 15 ? 15 : level;
     from = whole ? 0 : 2 * band.n / 3;
-    k = from + (int)lround((level < 6 ? 0 : level > 15 ? 9 : level - 6) / 9.0 * (band.n - 1 - from));
+    if (whole) {
+        k = (int)lround((level - 6) / 9.0 * (band.n - 1));
+    } else {
+        k = from + (int)lround((BAND_LEVEL - 6) / 9.0 * (band.n - 1 - from)) + level - BAND_LEVEL;
+        k = k < 0 ? 0 : k > band.n - 1 ? band.n - 1 : k;
+    }
     return rgb_of(band.seen[k]);
 }
 
@@ -3451,6 +3480,7 @@ static void ocean_draw(int cls, int under, int first, const double eye[3], const
     uint32_t words[OCEAN_IMAGE_W] = { 0 }, nb = 0, nc, j, deep;
     double dh = water_y - eye[1], reach, q[4][3], up[3], light[3], l[3], ex, ez, bed_y, ox = 0, oy = 0;
     double vcx = (int16_t)ram_word(0x0034), vcy = (int16_t)ram_word(0x0036), ra[3], rb[3], rc[3], c1;
+    double water_k = -fabs(grid.light_k);       /* WATER_LIGHT */
     float in[8], sx, sy, scale;
     int i, k, slot;
 
@@ -3515,10 +3545,10 @@ static void ocean_draw(int cls, int under, int first, const double eye[3], const
         words[i] = sea_shade(cls, first, 6 + i);
     for (k = 0; k < 3; k++)
         up[k] = -m[3 + k];
-    words[10] = sea_shade(cls, first, chip_level(up));
+    words[10] = sea_shade(cls, first, level_by(water_k, up));
     fx_view_light_vector(l);
     for (k = 0; k < 3; k++)
-        light[k] = grid.light_k * (m[3 * k] * l[0] + m[3 * k + 1] * l[1] + m[3 * k + 2] * l[2]);
+        light[k] = water_k * (m[3 * k] * l[0] + m[3 * k + 1] * l[1] + m[3 * k + 2] * l[2]);
     words[11] = float_word((float)light[0]);
     words[12] = float_word((float)light[1]);
     words[13] = float_word((float)light[2]);
