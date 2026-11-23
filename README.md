@@ -29,6 +29,8 @@ If you have a game you would like to see again, write to me at
 
 ## Stunt Race FX
 
+https://github.com/user-attachments/assets/2be4aa56-dd7f-43b9-b41a-6fada61afd53
+
 <p>
 <img src="docs/stuntracefx/img/original-race.png" width="25%" alt="Stunt Race FX as the cartridge drew it: the coupe chasing two rivals through the trees, in the original's 4:3 screen with its bezel and panels">
 <img src="docs/stuntracefx/img/enhanced-race.png" width="40%" alt="Stunt Race FX Remastered at 16:9: the car under the red bridge on Easy Ride, polygon mountains behind, solid 3D tyres, the HUD across the window">
