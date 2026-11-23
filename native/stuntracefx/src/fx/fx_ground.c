@@ -98,6 +98,8 @@ enum { SURF_NONE, SURF_GRASS, SURF_ROCK, SURF_CEMENT, SURF_SNOW, SURF_ICE, SURF_
 #define CLS_BAND 0xFC           /* a sea in the band's own sea's colours (band_shade): Lake Side */
 #define CLS_BAND_WHOLE 0xFB     /* land or a sea in all of them: the battle courses */
 #define WATER_DEEPEST 32767     /* water at the lowest place the course's shapes meet the ground (the survey's) */
+#define DEEPEST_BELOW 1.0       /* ... one unit under it: a flat road or shoulder at that place lies in the water's plane, which would
+                                   tie in depth with it and flicker (GitHub issue 12), so the water lies a unit behind what stands there */
 
 /* Each course's surface (g.course, $0E3D), from pictures of every course
    (2026-11-09): its kind, and for water the height of its level (world y
@@ -3631,7 +3633,7 @@ static void ground_draw(void)
         }
         return;
     }
-    water_y = surface[course].y == WATER_DEEPEST ? (grid.nx ? grid.deepest : 0) : surface[course].y;
+    water_y = surface[course].y == WATER_DEEPEST ? (grid.nx ? grid.deepest + DEEPEST_BELOW : 0) : surface[course].y;
     dh = water_y - eye[1];                      /* world y is down: > 0, the surface below the eye */
     /* water seen from below too (Aqua Tunnel's, a sea with an under class:
        Harbor City's) is drawn with the eye under it, and cuts the picture */
