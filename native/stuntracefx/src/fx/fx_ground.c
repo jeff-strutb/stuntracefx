@@ -97,6 +97,7 @@ enum { SURF_NONE, SURF_GRASS, SURF_ROCK, SURF_CEMENT, SURF_SNOW, SURF_ICE, SURF_
 #define CLS_WHITE 0xFD          /* class 0, the chip's snow whites (the table's 0 is no class) */
 #define CLS_BAND 0xFC           /* a sea in the band's own sea's colours (band_shade): Lake Side */
 #define CLS_BAND_WHOLE 0xFB     /* land or a sea in all of them: the battle courses */
+#define AQUA_CEMENT 21         /* the shade class of the cement courses' greys (Night Owl's, Night Cruise's) */
 #define WATER_DEEPEST 32767     /* water at the lowest place the course's shapes meet the ground (the survey's) */
 #define DEEPEST_BELOW 1.0       /* ... one unit under it: a flat road or shoulder at that place lies in the water's plane, which would
                                    tie in depth with it and flicker (GitHub issue 12), so the water lies a unit behind what stands there */
@@ -3615,6 +3616,18 @@ static void ground_draw(void)
         fill.course = -1;
         forest.course = -1;
         city.course = -1;
+    }
+    /* Aqua Tunnel's tube pieces and mouths stand over the sea: their rock,
+       in the cement's class (the cement courses', 21), from the sea's level
+       up, so the tube cannot be seen into from outside (Jeff, 2026-11-23,
+       GitHub issue 10: "build a proper cement enclosure around the exposed
+       tunnel, both entrance side and exit side") */
+    if (kind == SURF_AQUA && surface[course].cls) {
+        shell_view.on = 1;
+        shell_view.cls = AQUA_CEMENT;
+        shell_view.plane_y = surface[course].y;
+        memcpy(shell_view.eye, eye, sizeof shell_view.eye);
+        memcpy(shell_view.m, m, sizeof shell_view.m);
     }
     /* land: drawn in a tunnel too (bit 3 of $0DA5, which the tunnel's
        gates set and clear), at its true depths behind the tunnel's walls
