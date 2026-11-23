@@ -8,6 +8,9 @@
  * GsuRecordNew424B (08:CC31), GsuRecordListFlag80 (08:B467), ReturnLongC096
  * (08:C096), ObjectRecordChildrenMark (08:C097).
  */
+#include <math.h>
+#include <stdlib.h>
+
 #include "audio/sound.h"
 #include "fx/fx.h"
 #include "math/math.h"
@@ -599,6 +602,27 @@ void CarControlsToRecord(Object *o, uint16_t held, uint16_t prev, int player)
         rec_or(rec, FXREC_SIDES, 0x0004);
     else if (held & 0x0010)
         rec_or(rec, FXREC_SIDES, 0x0008);
+    /* Modern controls: the player's steer value steers, in place of Left and Right
+       and L and R (fx/race/fx_drive.c FxSteerFromInput). The bits of +$42 still say
+       that a turn is asked for, to the left (1, and 4 past the knee) or to the right
+       (2, and 8), as the chip's own tests of the car's state (it cannot turn in the air,
+       or while spun) clear them; the value is the car's analogue word. The bonus truck,
+       whose steering is scaled by its speed, steers by the bits as in the Original. */
+    rec_put(rec, FXCAR_ANALOG_STEER, 0);
+    if (frame_state.steer_on[player] && rec_get(rec, FXCAR_SCRIPT) != car_script_word(CAR_BONUS_TRUCK)) {
+        float s = frame_state.steer[player];
+        int n;
+
+        s = s > 1 ? 1 : s < -1 ? -1 : s;
+        n = (int)lrintf(-s * FX_ANALOG_ONE);        /* positive to the left, as the chip's bit 0 */
+        rec_and(rec, FXREC_SIDES, 0xFFF0);
+        if (n) {
+            rec_or(rec, FXREC_SIDES, n > 0 ? 0x0001 : 0x0002);
+            if (abs(n) > FX_ANALOG_KNEE)
+                rec_or(rec, FXREC_SIDES, n > 0 ? 0x0004 : 0x0008);
+        }
+        rec_put(rec, FXCAR_ANALOG_STEER, (uint16_t)(FX_ANALOG_ON | (FX_ANALOG_MIDDLE + n)));
+    }
     if (held & 0x0080) {
         rec_or(rec, FXREC_SIDES, 0x2040);
         if ((uint16_t)(rec_get(rec, FXREC_SPEED) - 0x0032) & 0x8000)

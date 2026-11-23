@@ -195,6 +195,40 @@ FxDriveDecideResult FxDriveDecide(uint16_t point_x, uint16_t point_z, uint16_t s
  * address. Exit: R3 = the new value; R4, R5, R6 from the limits; R0 and
  * the flags from the last test; the last RAM address the last value read.
  */
+/*
+ * Modern controls: the car's steer value toward the steer value asked for in its analogue word
+ * (FXCAR_ANALOG_STEER), by the car's own words, as the Original's Left and Right and L and R
+ * are by them. m, from 0 to FX_ANALOG_ONE, is how far the stick or wheel is over: the target is
+ * MAX at the knee (half way, where the Original's Left and Right end, in proportion up to it)
+ * and MAX + MAX2 at the end (where its L and R end, in proportion from the knee); so the
+ * Original's two turns are the knee and the end, whatever the car, and between is every turn. The
+ * value builds as the Original's does: from nothing or from the other side by RATE, else by $80
+ * a step, and RATE2 more while the Original's L or R would be held (control_bits 4 or 8, set past
+ * the knee); it is never past the target, and follows it down at once, as the Original's limit
+ * does. left: the side of bit 0.
+ */
+static uint16_t steer_analog(uint16_t analog, uint16_t control_bits, uint16_t steer_bias)
+{
+    int32_t m = (int32_t)(analog & 0x7FFF) - FX_ANALOG_MIDDLE, limit, v, d = (control_bits & 1) ? 1 : -1;
+    int32_t rate = fx_ldw(FX_STEER_RATE), rate2 = fx_ldw(FX_STEER_RATE2);
+    int32_t max = fx_ldw(FX_STEER_MAX), max2 = fx_ldw(FX_STEER_MAX2);
+
+    m = m < 0 ? -m : m;
+    if (m > FX_ANALOG_ONE)
+        m = FX_ANALOG_ONE;
+    limit = m <= FX_ANALOG_KNEE ? max * m / FX_ANALOG_KNEE
+                                : max + max2 * (m - FX_ANALOG_KNEE) / (FX_ANALOG_ONE - FX_ANALOG_KNEE);
+    v = (int32_t)(int16_t)steer_bias * d;           /* the value toward the side asked for */
+    if (v < 0)
+        v = 0;                                      /* from the other side: through nothing */
+    v += v == 0 ? rate : 0x80;
+    if (control_bits & 0x000C)
+        v += rate2;
+    if (v > limit)
+        v = limit;
+    return (uint16_t)(v * d);
+}
+
 FxSteerFromInputResult FxSteerFromInput(uint16_t control_bits, uint16_t car_record)
 {
     uint16_t speed;
@@ -245,6 +279,12 @@ FxSteerFromInputResult FxSteerFromInput(uint16_t control_bits, uint16_t car_reco
     }
     steer_bias = fx_ldw((uint16_t)(FXCAR_STEER_BIAS + car_record));
     neg_steer_rate = (uint16_t)((uint16_t)~steer_rate + 1);
+    {
+        uint16_t analog = fx_ldw((uint16_t)(FXCAR_ANALOG_STEER + car_record));
+
+        if ((analog & FX_ANALOG_ON) && (3 & control_bits) && !speed_scaled_steer)
+            return (FxSteerFromInputResult){steer_analog(analog, control_bits, steer_bias), 0};
+    }
     if ((0x000F & control_bits) != 0) {
         steer_max = 0;
         if ((3 & control_bits) == 0) {

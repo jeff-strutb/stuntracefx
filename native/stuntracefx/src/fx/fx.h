@@ -22,6 +22,18 @@ _Noreturn void fx_bad_dispatch(uint16_t at);
 
 #define FX_PARTICLE_LIFE 0x000A         /* a particle slot's +$0A: its life's offset (render/frame.c) */
 #define FXCAR_44 0x0044
+/* A car's analogue steer value (Modern controls; input/controls.c), written each step by the game
+   (object/gsu_record.c CarControlsToRecord), read by FxSteerFromInput. 0: none, the car steers by
+   the bits of +$42 as ever (the Original, the rivals, a demo, the bonus truck). Else FX_ANALOG_ON
+   | (FX_ANALOG_MIDDLE + n): n from -FX_ANALOG_ONE to FX_ANALOG_ONE, positive to the left, the
+   side Left (+$42 bit 0) steers to. FX_ANALOG_KNEE is the half of ONE where the Original's Left
+   and Right turn ends and its L and R's begins. The word was free: no code of either side names
+   +$68 of a car's record, which FxPoolTake clears whole. */
+#define FXCAR_ANALOG_STEER 0x0068
+#define FX_ANALOG_ON 0x8000
+#define FX_ANALOG_MIDDLE 0x4000
+#define FX_ANALOG_ONE 0x3FFF
+#define FX_ANALOG_KNEE 0x2000
 #define FXCAR_64 0x0064
 #define FXCAR_8C 0x008C
 #define FXCAR_ENTRY 0x006E
