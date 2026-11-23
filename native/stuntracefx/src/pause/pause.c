@@ -1,13 +1,17 @@
 /*
- * pause.c: the pause screen. The game owns its pausing: Escape, or Start
- * pressed while Select is held on either pad, stops the game's logic where it
- * stands; the engine's updates go on, and so does the drawing of the picture
+ * pause.c: the pause screen. The game owns its pausing: Escape, Start pressed
+ * while Select is held on either pad, or Start alone from either player
+ * where a race would have begun the original's pause (race/pause.c, which
+ * asks with pause_request; Jeff, 2026-11-23: "The original pause in game
+ * should be replaced by Start to load the pause menu we have now"), stops
+ * the game's logic where it stands; the engine's updates go on, and so does the drawing of the picture
  * as it stood. The sound goes silent and its driver holds where it is
  * (music_pause). Over the picture lie a navy tint and a panel: Jeff's
- * controller with a tag beside each button naming the key that makes it.
+ * controller with a tag beside each button saying what it does in the game and,
+ * smaller, the key or button bound to it, and a line from the tag to the button.
  *
- * The pad moves among the tags and the panel's buttons; B, A or Start
- * chooses. A click of the pointer chooses what it is on (a tag, its button
+ * The pad moves among the tags and the panel's buttons (move, which lists
+ * the graph); B, A or Start chooses. A click of the pointer chooses what it is on (a tag, its button
  * on the controller, a panel button) and presses it. The PLAYER 1 and
  * PLAYER 2 buttons above the controller show and change that player's
  * controls, the one in use filled gold (it opens on player 1's). A tag
@@ -20,7 +24,9 @@
  * was taken, so every button keeps one of each. The keys and each player's
  * controller buttons are kept in the save folder ("keys", "buttons",
  * "buttons2") and laid out at the game's first update. RESUME, Escape or
- * Select + Start again goes on; DEFAULTS puts the game's own keys and
+ * Select + Start again goes on; QUIT RACE (offered while a race is being
+ * driven) closes the screen and asks the game's own pause for its quit
+ * (race_pause_quit); DEFAULTS puts the game's own keys and
  * buttons back for the player shown; FULL SCREEN
  * switches between full screen and a window (system/display.c, where the
  * window can) and FPS COUNTER shows or hides the counter (system/fps.c),
@@ -131,10 +137,12 @@ enum { SAVE_VERSION = 1 };
 
 static struct {
     int ready;                          /* the saved keys laid out */
+    int requested;                      /* the race asked for the screen (Start, pause_request) */
     int open;
     int chosen;                         /* an item (pause_art.h): a control, a panel button, a player button */
     int player;                         /* whose controls the screen shows and changes: 0 player 1, 1 player 2 */
     int asking;                         /* the control waiting for its key; -1 none */
+    int quit_ok;                        /* QUIT RACE offered: a race was being driven as the screen opened */
     int wait_release;                   /* no press counts until every button is let go */
     float ox, oy, scale;                /* where the panel lies in the window */
     nshvc_image mi[PAUSE_MENU_ITEMS];   /* the options menu's items */
@@ -441,7 +449,7 @@ static void pictures_make(float density)
     }
     pause_draw_panel(&m);
     p.panel = image_of(&m, &p.panel_w, &p.panel_h);
-    for (i = 0; i < PAUSE_ITEMS; i++) {
+    for (i = 0; i < PAUSE_OPTION; i++) {            /* the buttons are lit in their own picture */
         pause_lit_box(i, &x, &y, &w, &h);
         m = pause_img_new(x, y, w, h, density);
         pause_draw_lit(&m, i);
@@ -476,6 +484,7 @@ static void pictures_make(float density)
 /* each option's value, in PAUSE_OPTION's order */
 static void options_now(int on[PAUSE_OPTIONS])
 {
+    memset(on, 0, PAUSE_OPTIONS * sizeof on[0]);    /* only those from PAUSE_VALUED on have a value */
     on[PAUSE_FULL_SCREEN - PAUSE_OPTION] = display_full_screen() != 0;
     on[PAUSE_FPS - PAUSE_OPTION] = option_fps() != 0;
 }
@@ -488,9 +497,10 @@ static void option_refresh(void)
     PauseImg m;
 
     options_now(on);
-    want = lit + 1;                     /* what the picture shows: the item lit, then each value a bit */
+    want = lit + 1;                     /* what the picture shows: the item lit, each value a bit, what is offered */
     for (i = 0; i < PAUSE_OPTIONS; i++)
         want |= on[i] << (8 + i);
+    want |= pause_item_offered(PAUSE_QUIT) << 16 | pause_item_offered(PAUSE_FULL_SCREEN) << 17;
     if (!p.option.id || want == p.option_shown)
         return;
     pause_options_box(&x, &y, &w, &h);
@@ -853,16 +863,57 @@ static int control_at(int right, int row)
     return 0;
 }
 
-/* the item a direction leads to from item i: the player buttons above the
-   tags, PLAYER 1 down to the top left tag and PLAYER 2 to the top right,
-   left and right between them; the tags in their two columns, up from the
-   top row to the player button on their side; under them a row of RESUME (under the
-   left) and DEFAULTS (under the right), and under that FULL SCREEN (under
-   RESUME; offered only where the window can be full screen) and FPS
-   COUNTER (under DEFAULTS); left and right going round a row */
+/* the panel button of row `row` whose middle is nearest x (offered ones
+   only; the row always has RESUME or FPS COUNTER, which are always offered) */
+static int button_near(int row, float x)
+{
+    int i, best = -1;
+    float bd = 0;
+
+    for (i = PAUSE_OPTION; i < PAUSE_ITEMS; i++) {
+        float bx, by, bw, bh, d;
+
+        if (!pause_item_offered(i) || pause_item_row(i) != row)
+            continue;
+        pause_button_rect(i, &bx, &by, &bw, &bh);
+        d = fabsf(bx + bw / 2 - x);
+        if (best < 0 || d < bd) {
+            best = i;
+            bd = d;
+        }
+    }
+    return best;
+}
+
+/* the next offered button along item i's row, going right (or left), round */
+static int button_along(int i, int right)
+{
+    int n = PAUSE_ITEMS - PAUSE_OPTION, k, j = i;
+
+    for (k = 0; k < n; k++) {
+        j = right ? (j + 1 - PAUSE_OPTION) % n + PAUSE_OPTION : (j - 1 - PAUSE_OPTION + n) % n + PAUSE_OPTION;
+        if (pause_item_row(j) == pause_item_row(i) && pause_item_offered(j))
+            return j;
+    }
+    return i;
+}
+
+/* The item a direction leads to from item i.
+   Player buttons: Down to the top tag on their side (PLAYER 1 the left column,
+   PLAYER 2 the right); Left and Right between them.
+   Tags, two columns of six: Up and Down along a column; Left and Right to the
+   other column's tag in the row; Up from the top row to the player button on
+   their side; Down from the bottom row to the first button of the first row
+   (left column) or its last (right).
+   Panel buttons, two rows each centred: Left and Right along the row, round;
+   Down from the first row to the second row's button nearest across; Up from
+   the second row likewise to the first's; Up from the first row to the bottom
+   tag of the column the button's middle lies in (the left half's, else the
+   right's). Every item reaches every other by these. */
 static int move(int i, uint16_t dir)
 {
-    int right, row, full = display_can_full_screen();
+    int right, row;
+    float x, y, w, h;
 
     if (i >= PAUSE_PLAYER1) {
         if (dir & PAD_DOWN)
@@ -871,28 +922,26 @@ static int move(int i, uint16_t dir)
             return i == PAUSE_PLAYER1 ? PAUSE_PLAYER2 : PAUSE_PLAYER1;
         return i;
     }
-    if (i >= PAUSE_FULL_SCREEN) {
-        if (dir & PAD_UP)
-            return i == PAUSE_FULL_SCREEN ? PAUSE_RESUME : PAUSE_DEFAULTS;
-        if ((dir & (PAD_LEFT | PAD_RIGHT)) && full)
-            return i == PAUSE_FPS ? PAUSE_FULL_SCREEN : PAUSE_FPS;
-        return i;
-    }
-    if (i >= PAUSE_CONTROLS) {
-        if (dir & PAD_UP)
-            return control_at(i != PAUSE_RESUME, 5);
-        if (dir & PAD_DOWN)
-            return i == PAUSE_DEFAULTS || !full ? PAUSE_FPS : PAUSE_FULL_SCREEN;
+    if (i >= PAUSE_OPTION) {
+        pause_button_rect(i, &x, &y, &w, &h);
+        row = pause_item_row(i);
         if (dir & (PAD_LEFT | PAD_RIGHT))
-            return i == PAUSE_RESUME ? PAUSE_DEFAULTS : PAUSE_RESUME;
+            return button_along(i, (dir & PAD_RIGHT) != 0);
+        if (dir & PAD_UP)
+            return row ? button_near(0, x + w / 2) : control_at(x + w / 2 >= PAUSE_PW / 2.0f, 5);
+        if (dir & PAD_DOWN)
+            return row ? i : button_near(1, x + w / 2);
         return i;
     }
     right = pause_controls[i].right;
     row = pause_controls[i].row;
     if (dir & PAD_UP)
         return row > 0 ? control_at(right, row - 1) : right ? PAUSE_PLAYER2 : PAUSE_PLAYER1;
-    if (dir & PAD_DOWN)
-        return row < 5 ? control_at(right, row + 1) : right ? PAUSE_DEFAULTS : PAUSE_RESUME;
+    if (dir & PAD_DOWN) {
+        if (row < 5)
+            return control_at(right, row + 1);
+        return button_near(0, right ? (float)PAUSE_PW : 0.0f);
+    }
     if (dir & (PAD_LEFT | PAD_RIGHT))
         return control_at(!right, row);
     return i;
@@ -1052,6 +1101,8 @@ static void screen_open(void)
     p.shot_ok = 0;
     p.open = 1;
     p.chosen = MENU_MODE ? PAUSE_MENU_RESUME : PAUSE_RESUME;
+    p.quit_ok = MENU_MODE || race_pausable();
+    pause_art_quit(p.quit_ok);
     p.player = 0;
     p.asking = -1;
     p.wait_release = 0;
@@ -1149,6 +1200,8 @@ int pause_update(const nshvc_input *in, uint16_t pad[2])
     return run;
 }
 
+void pause_request(void) { p.requested = 1; }
+
 int pause_holding(void) { return p.open; }
 
 uint64_t pause_game_updates(void) { return nshvc_updates() - held; }
@@ -1158,7 +1211,7 @@ void pause_hold_other(void) { held++; }
 static int pause_step(const nshvc_input *in, uint16_t pad[2])
 {
     uint16_t press[2], nav, ctl_press[2] = { 0, 0 }, ctl;
-    int i, toggle = 0, vk, item, clicked, confirm;
+    int i, toggle = 0, vk, item, clicked, confirm, request;
 
     if (!p.ready)
         keys_load();
@@ -1183,6 +1236,8 @@ static int pause_step(const nshvc_input *in, uint16_t pad[2])
     }
     if (key_pressed(in, VK_ESCAPE))
         toggle = 1;
+    request = p.requested;
+    p.requested = 0;
     clicked = panel_click(in, &item);
     if (corner_pressed(in))
         toggle = 1;
@@ -1190,7 +1245,7 @@ static int pause_step(const nshvc_input *in, uint16_t pad[2])
     if (MENU_MODE)
         menu_touch(in);
     if (!p.open) {
-        if (toggle) {
+        if (toggle || request) {
             screen_open();
             show();
             return 0;
@@ -1269,7 +1324,11 @@ static int pause_step(const nshvc_input *in, uint16_t pad[2])
         }
         if (p.chosen >= PAUSE_PLAYER1)
             p.player = p.chosen - PAUSE_PLAYER1;
-        else if (p.chosen == PAUSE_DEFAULTS)
+        else if (p.chosen == PAUSE_QUIT) {
+            race_pause_quit();          /* the game's own pause, taking its quit (race/pause.c) */
+            screen_close(pad);
+            return held_back(pad);
+        } else if (p.chosen == PAUSE_DEFAULTS)
             keys_default(p.player);
         else if (p.chosen == PAUSE_FULL_SCREEN)
             display_full_screen_set(!display_full_screen());

@@ -4,6 +4,10 @@
  * with its turning picture (07:BC24 table). The race's step in progress is
  * held until the pause ends and then goes on from where the pause started it.
  *
+ * The player no longer begins them: Start, where they began, opens the game's
+ * pause screen (pause/pause.c) instead. They begin only for that screen's
+ * QUIT RACE, which takes the quit they offer (race_pause_quit).
+ *
  * Not converted, nothing reaches them: PauseStageLeaveRts (07:BD08),
  * PauseQuitMenuCursor0 (07:C021), PauseQuitMenuBack (07:C03E).
  */
@@ -32,6 +36,35 @@ void race_pause_quit(void)
 {
     quit_wanted = 1;
     quit_at = pause_game_updates();
+}
+
+/* The pause's places: every step of a race in which the original would have
+   begun its pause (PauseOnStart, OamStagePause, OamStagePause2) notes the game
+   update it ran at, so the pause screen knows a race is being driven and QUIT
+   RACE can take its quit (race_pausable). */
+static uint64_t site_at;
+static int site_seen;
+
+static void site_note(void)
+{
+    site_at = pause_game_updates();
+    site_seen = 1;
+}
+
+/* A race is being driven: a pause place ran within the last two seconds of the
+   game's updates (a step runs every 6). */
+int race_pausable(void) { return site_seen && pause_game_updates() - site_at <= 120; }
+
+/* Start, pressed by either player where the original would have begun its
+   pause: the game's pause screen (pause/pause.c) opens instead, at the next
+   update; the original's pause screens are not begun by it. The press is
+   taken, as the original's pause took it. */
+static void start_to_screen(int pad)
+{
+    if (frame_state.pressed_copy[pad] & 0x1000) {
+        frame_state.pressed_copy[pad] &= (uint16_t)~0x1000;
+        pause_request();
+    }
 }
 
 /* the quit asked for and still wanted; taken (cleared) as the pause begins */
@@ -463,16 +496,18 @@ void PauseFrameStep(void)
 
 /*
  * @routine 07:BBB2 PauseOnStart
- * WHAT IT DOES: The race's pause on player 1's START: the screen laid out and
- * the race held; returns 1 when it paused and the step must stop here.
+ * WHAT IT DOES: The race's pause place for player 1: Start opens the game's
+ * pause screen (start_to_screen), and the step goes on; the original's pause
+ * only begins for the pause screen's QUIT RACE, which it takes through its
+ * choice and quit stages; returns 1 when it began and the step must stop here.
  */
 int PauseOnStart(void)
 {
-    int start = frame_state.pressed_copy[0] & 0x1000;
-
-    if (!start && !quit_take())
+    site_note();
+    start_to_screen(0);
+    if (!quit_take())
         return 0;
-    quit_driving = !start;
+    quit_driving = 1;
     g.pause_player = 0;
     SoundPort1QueuePush(0x15);
     windows.layout_request = 0x01;
@@ -509,22 +544,22 @@ static void pause_pad_start(uint8_t owner, void (*sprites)(void), PauseKind kind
 /* @routine 07:BAE6 OamStagePause: split screen, pad 1's START. */
 int OamStagePause(void)
 {
-    int start = frame_state.pressed_copy[0] & 0x1000;
-
-    if (!start && !quit_take())
+    site_note();
+    start_to_screen(0);
+    if (!quit_take())
         return 0;
-    quit_driving = !start;
+    quit_driving = 1;
     pause_pad_start(0x00, TopGaugeSpritesOff, PAUSE_PAD_1);
     return 1;
 }
 
-/* @routine 07:BB4C OamStagePause2: split screen, pad 2's START. */
+/* @routine 07:BB4C OamStagePause2: split screen, pad 2's START: the pause
+   screen's; the original's pause for player 2 is not begun. */
 int OamStagePause2(void)
 {
-    if (!(frame_state.pressed_copy[1] & 0x1000))
-        return 0;
-    pause_pad_start(0xFF, BottomGaugeSpritesOff, PAUSE_PAD_2);
-    return 1;
+    site_note();
+    start_to_screen(1);
+    return 0;
 }
 
 /* @routine 07:BB16 OamStagePauseLoop: the pause's stages from the results;

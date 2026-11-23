@@ -218,6 +218,7 @@ static void text_centre(PauseImg *m, const char *s, float cx, float top, float d
 
 const PauseControl pause_controls[PAUSE_CONTROLS] = {
     /* the spots: the drawing's (pad_art.c) at PADK, its (500, 300) at (PAD_CX, PAD_CY) */
+    /* the spots: the drawing's (pad_art.c) at PADK, its (500, 300) at (PAD_CX, PAD_CY) */
     { PAD_L, "L", WHITE, 228.9f, 124.8f, 10, 0, 0 },
     { PAD_UP, "UP", WHITE, 227.9f, 173.1f, 7, 0, 1 },
     { PAD_LEFT, "LEFT", WHITE, 211.1f, 189.8f, 7, 0, 2 },
@@ -232,30 +233,65 @@ const PauseControl pause_controls[PAUSE_CONTROLS] = {
     { PAD_START, "START", WHITE, 332.3f, 201.0f, 8, 1, 5 },
 };
 
-static const struct {
-    const char *name;
-    float x, y, w, h;
-} k_button[PAUSE_ITEMS - PAUSE_CONTROLS] = {
-    { "RESUME", 124, 356, 190, 30 },
-    { "DEFAULTS", 326, 356, 190, 30 },
-    { "FULL SCREEN", 124, 396, 190, 30 },   /* the options: their values after their names (pause_draw_options) */
-    { "FPS COUNTER", 326, 396, 190, 30 },
+#define BTN_W 190.0f
+#define BTN_H 30.0f
+#define BTN_GAP 12.0f
+#define BTN_Y0 356.0f                   /* the first row's top */
+#define BTN_ROW 40.0f                   /* from one row's top to the next */
+#define BTN_COLS 3                      /* the most a row takes */
+
+static const char *const k_name[PAUSE_ITEMS - PAUSE_CONTROLS] = {
+    "RESUME", "DEFAULTS", "QUIT RACE", "FULL SCREEN", "FPS COUNTER",
+};
+/* the rows, left to right (-1: none); a switch for the controls goes after FPS COUNTER */
+static const int k_row[2][BTN_COLS] = {
+    { PAUSE_RESUME, PAUSE_DEFAULTS, PAUSE_QUIT },
+    { PAUSE_FULL_SCREEN, PAUSE_FPS, -1 },
 };
 static int full_screen_offered = 1;
+static int quit_offered;
 
 void pause_art_full_screen(int offered) { full_screen_offered = offered != 0; }
+void pause_art_quit(int offered) { quit_offered = offered != 0; }
 
-/* a panel button's rectangle: FPS COUNTER in the middle of its row when it
-   is alone there */
+int pause_item_offered(int item)
+{
+    return item == PAUSE_FULL_SCREEN ? full_screen_offered : item == PAUSE_QUIT ? quit_offered : 1;
+}
+
+int pause_item_row(int item)
+{
+    int r, c;
+
+    for (r = 0; r < 2; r++)
+        for (c = 0; c < BTN_COLS; c++)
+            if (k_row[r][c] == item)
+                return r;
+    return 0;
+}
+
+/* a panel button's rectangle: each row's offered buttons side by side, the row
+   centred (FPS COUNTER in the middle of its row when it is alone there) */
 static void button_at(int b, float *x, float *y, float *w, float *h)
 {
-    *x = k_button[b].x;
-    *y = k_button[b].y;
-    *w = k_button[b].w;
-    *h = k_button[b].h;
-    if (b == PAUSE_FPS - PAUSE_CONTROLS && !full_screen_offered)
-        *x = (PAUSE_PW - *w) / 2;
+    int item = b + PAUSE_CONTROLS, row = pause_item_row(item), n = 0, at = 0, c;
+
+    for (c = 0; c < BTN_COLS; c++) {
+        int it = k_row[row][c];
+
+        if (it < 0 || !pause_item_offered(it))
+            continue;
+        if (it == item)
+            at = n;
+        n++;
+    }
+    *w = BTN_W;
+    *h = BTN_H;
+    *y = BTN_Y0 + (float)row * BTN_ROW;
+    *x = (PAUSE_PW - ((float)n * BTN_W + (float)(n > 0 ? n - 1 : 0) * BTN_GAP)) / 2 + (float)at * (BTN_W + BTN_GAP);
 }
+
+void pause_button_rect(int item, float *x, float *y, float *w, float *h) { button_at(item - PAUSE_CONTROLS, x, y, w, h); }
 
 /* the tag itself, without the image's margin */
 static void tag_at(int i, float *x, float *y)
@@ -357,26 +393,15 @@ static void panel_button_text(PauseImg *m, int b, const char *text, int lit)
     button_text(m, x, y, w, h, text, lit);
 }
 
-static void panel_button(PauseImg *m, int b, int lit) { panel_button_text(m, b, k_button[b].name, lit); }
-
 void pause_options_box(float *x, float *y, float *w, float *h)
 {
-    float x0 = PAUSE_PW, y0 = PAUSE_PH, x1 = 0, y1 = 0;
-    int i;
+    /* every place of both rows, offered or not, so the box never changes */
+    float total = (float)BTN_COLS * BTN_W + (float)(BTN_COLS - 1) * BTN_GAP;
 
-    for (i = PAUSE_OPTION; i < PAUSE_ITEMS; i++) {
-        float bx, by, bw, bh;
-
-        button_at(i - PAUSE_CONTROLS, &bx, &by, &bw, &bh);
-        x0 = fminf(x0, bx);
-        y0 = fminf(y0, by);
-        x1 = fmaxf(x1, bx + bw);
-        y1 = fmaxf(y1, by + bh);
-    }
-    *x = x0 - MARGIN;
-    *y = y0 - MARGIN;
-    *w = x1 - x0 + 2 * MARGIN;
-    *h = y1 - y0 + 2 * MARGIN;
+    *x = (PAUSE_PW - total) / 2 - MARGIN;
+    *y = BTN_Y0 - MARGIN;
+    *w = total + 2 * MARGIN;
+    *h = BTN_ROW + BTN_H + 2 * MARGIN;
 }
 
 void pause_draw_options(PauseImg *m, const int on[PAUSE_OPTIONS], int lit)
@@ -386,9 +411,12 @@ void pause_draw_options(PauseImg *m, const int on[PAUSE_OPTIONS], int lit)
     for (i = PAUSE_OPTION; i < PAUSE_ITEMS; i++) {
         char text[32];
 
-        if (i == PAUSE_FULL_SCREEN && !full_screen_offered)
+        if (!pause_item_offered(i))
             continue;
-        snprintf(text, sizeof text, "%s %s", k_button[i - PAUSE_CONTROLS].name, on[i - PAUSE_OPTION] ? "ON" : "OFF");
+        if (i >= PAUSE_VALUED)
+            snprintf(text, sizeof text, "%s %s", k_name[i - PAUSE_CONTROLS], on[i - PAUSE_OPTION] ? "ON" : "OFF");
+        else
+            snprintf(text, sizeof text, "%s", k_name[i - PAUSE_CONTROLS]);
         panel_button_text(m, i - PAUSE_CONTROLS, text, lit == i);
     }
 }
@@ -446,7 +474,7 @@ int pause_item_at(float px, float py)
         if (in_rect(px, py, PLAYER_X(i), PLAYER_Y, PLAYER_W, PLAYER_H))
             return PAUSE_PLAYER1 + i;
     for (i = PAUSE_CONTROLS; i < PAUSE_ITEMS; i++) {
-        if (i == PAUSE_FULL_SCREEN && !full_screen_offered)
+        if (!pause_item_offered(i))
             continue;
         button_at(i - PAUSE_CONTROLS, &x, &y, &w, &h);
         if (in_rect(px, py, x, y, w, h))
@@ -477,7 +505,7 @@ int pause_item_at(float px, float py)
 
 void pause_draw_panel(PauseImg *m)
 {
-    int i, b;
+    int i;
 
     /* the plate, edged in gold */
     rrect(m, 2, 2, PAUSE_PW - 4, PAUSE_PH - 4, 18, 0x0E1220, 0.62f);
@@ -498,8 +526,6 @@ void pause_draw_panel(PauseImg *m)
         if (dot)
             disc(m, fx, fy, 1.6f, LINE_GREY, 1);
     }
-    for (b = 0; b < PAUSE_OPTION - PAUSE_CONTROLS; b++)
-        panel_button(m, b, 0);
 }
 
 /* ---- the options menu ---- */
@@ -573,11 +599,7 @@ void pause_draw_lit(PauseImg *m, int item)
     int dot;
 
     if (item >= PAUSE_OPTION)
-        return;                         /* an option: pause.c draws the options' own picture with it lit */
-    if (item >= PAUSE_CONTROLS) {
-        panel_button(m, item - PAUSE_CONTROLS, 1);
-        return;
-    }
+        return;                         /* a panel button: pause.c draws the buttons' own picture with it lit */
     k = &pause_controls[item];
     control_line(item, &ex, &ey, &fx, &fy, &dot);
     line(m, ex, ey, fx, fy, 1.75f, GOLD, 1);

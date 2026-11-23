@@ -38,14 +38,19 @@ typedef struct {
 } PauseControl;
 extern const PauseControl pause_controls[PAUSE_CONTROLS];
 
-/* the panel's own buttons: RESUME and DEFAULTS in a row under the
-   controls, FULL SCREEN and FPS COUNTER in a row under them. The options
-   show their values with their names, so they are drawn into a picture of
-   their own (pause_draw_options), not the panel's. (Auto-accelerate, a
-   touch screen's, is the iPhone and iPad menu's only, Jeff 2026-11-17.) */
-enum { PAUSE_RESUME = PAUSE_CONTROLS, PAUSE_DEFAULTS, PAUSE_FULL_SCREEN, PAUSE_FPS, PAUSE_ITEMS };
-#define PAUSE_OPTION PAUSE_FULL_SCREEN                  /* the first option */
-#define PAUSE_OPTIONS (PAUSE_ITEMS - PAUSE_OPTION)      /* full screen, the FPS counter */
+/* the panel's own buttons, in two rows of centred buttons under the controls:
+   RESUME, DEFAULTS and QUIT RACE (offered while a race is being driven); FULL
+   SCREEN (offered where the window can be) and FPS COUNTER. They show their
+   values with their names, so all are drawn into a picture of their own
+   (pause_draw_options), not the panel's. A row takes up to three, so the
+   controls switch of ORIGINAL / MODERN would be a third in the second row,
+   after FPS COUNTER: a new item before PAUSE_ITEMS, named in k_row of
+   pause_art.c. (Auto-accelerate, a touch screen's, is the iPhone and iPad
+   menu's only, Jeff 2026-11-17.) */
+enum { PAUSE_RESUME = PAUSE_CONTROLS, PAUSE_DEFAULTS, PAUSE_QUIT, PAUSE_FULL_SCREEN, PAUSE_FPS, PAUSE_ITEMS };
+#define PAUSE_OPTION PAUSE_RESUME                       /* the first of the buttons in the picture of their own */
+#define PAUSE_OPTIONS (PAUSE_ITEMS - PAUSE_OPTION)
+#define PAUSE_VALUED PAUSE_FULL_SCREEN                  /* from this item on, a button shows ON or OFF */
 /* the player buttons above the controller, PLAYER 1 and PLAYER 2 side by
    side: pressing one shows and changes that player's controls, and it is
    shown in use. Items after the rest, drawn into a picture of their own
@@ -53,9 +58,16 @@ enum { PAUSE_RESUME = PAUSE_CONTROLS, PAUSE_DEFAULTS, PAUSE_FULL_SCREEN, PAUSE_F
    panel's, with no lit pictures of their own. */
 #define PAUSE_PLAYER1 PAUSE_ITEMS
 #define PAUSE_PLAYER2 (PAUSE_ITEMS + 1)
-/* whether FULL SCREEN is offered (a window that can be full screen); FPS
-   COUNTER sits alone in the middle of its row without it */
+/* whether FULL SCREEN is offered (a window that can be full screen) and
+   whether QUIT RACE is (a race is being driven); the rows centre what is */
 void pause_art_full_screen(int offered);
+void pause_art_quit(int offered);
+/* whether a panel button is offered now */
+int pause_item_offered(int item);
+/* a panel button's rectangle in points, as laid out now */
+void pause_button_rect(int item, float *x, float *y, float *w, float *h);
+/* the row of a panel button (0 RESUME's, 1 FULL SCREEN's) */
+int pause_item_row(int item);
 
 /* the boxes the overlays cover, in points: a control's tag, an item lit
    (a control's tag, line and ring; a panel button), the hint's two lines */
@@ -68,9 +80,9 @@ void pause_draw_panel(PauseImg *m);     /* everything that never changes, every 
 void pause_draw_tag(PauseImg *m, int control, const char *key, int asking);
 void pause_draw_lit(PauseImg *m, int item);
 void pause_draw_hint(PauseImg *m, const char *line1, uint32_t colour1, const char *line2);
-/* the options with their values (on[k] for PAUSE_OPTION + k), the one
-   that is `lit` (an item, or -1) lit; their box, pause_options_box, holds
-   them all */
+/* the panel's buttons with their values (on[k] for PAUSE_OPTION + k), the
+   one that is `lit` (an item, or -1) lit; their box, pause_options_box, holds
+   every place of both rows */
 void pause_options_box(float *x, float *y, float *w, float *h);
 void pause_draw_options(PauseImg *m, const int on[PAUSE_OPTIONS], int lit);
 /* the player buttons: their box (both), and their picture: player (0 or 1)

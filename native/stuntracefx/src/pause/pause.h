@@ -13,6 +13,10 @@
    corner button and a binding's key or controller button. */
 int pause_update(const nshvc_input *input, uint16_t pad[2]);
 
+/* Start, pressed by either player where the original race would have begun
+   its pause (race/pause.c): the screen opens at the next update. */
+void pause_request(void);
+
 /* Whether the pause screen holds the game: the picture is drawn as the last
    update the game ran left it (draw's `between` at 1). */
 int pause_holding(void);

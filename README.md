@@ -202,10 +202,11 @@ Recordings of the original are kept only to find such bugs.
   turns see-through about it in quarter steps (the ground wholly at the
   middle). A view button beside the pause button switches between the two
   views over 2 seconds, the game held; the choice is saved.
-- **The game's own pause screen.** Escape, Select with Start, or the corner
-  button (a pointer or a touch) opens it over the blurred picture: rebinding
-  keys and a controller's buttons, defaults, and Auto-Accelerate. On the
-  iPhone and iPad it is a menu: resume, Auto-Accelerate, quit the race.
+- **The game's own pause screen.** Start in a race (the original's pause is
+  replaced by it), Escape, Select with Start, or the corner button (a pointer
+  or a touch) opens it over the blurred picture: rebinding keys and a
+  controller's buttons, defaults, and quitting the race. On the iPhone and
+  iPad it is a menu: resume, Auto-Accelerate, quit the race.
 - **Touch controls** on the iPhone and iPad, in landscape and portrait: the
   wheel under the finger, brake and boost pedals, the gas held by
   Auto-Accelerate, swipes and taps in the menus.
