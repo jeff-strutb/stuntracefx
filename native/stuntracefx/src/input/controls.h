@@ -32,6 +32,13 @@ uint16_t controls_controller_buttons(const nshvc_input *in, int c);
    the next update on, until an update passes without this. */
 void controls_driving(void);
 
+/* The player's (0 or 1) analogue steer value for the race, Modern controls
+   only (save/options.c): -1 full left .. 1 full right, this update's; 1 when
+   it is to be used, 0 (nothing in *s) in Original, and in any update the race
+   does not read the player's controls (a demo, a wait). The wheel, the stick
+   and the d-pad and keys' ramp are in controls.c. */
+int controls_steer(int player, float *s);
+
 /* In draw: the touch screen's controls laid over the picture, once a finger
    has been on it. */
 void controls_draw(void);

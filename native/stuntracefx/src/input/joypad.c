@@ -53,6 +53,13 @@ void JoypadAccumulate(void)
         frame_state.pressed_copy[i] |= (uint16_t)((now ^ g.pad_last[i]) & now);
         g.pad_last[i] = now;
     }
+    /* the analogue steer value is a position, not a press: the last update's of the step is the step's */
+    for (int i = 0; i < 2; i++) {
+        float s = 0;
+
+        frame_state.steer_on[i] = (uint8_t)controls_steer(i, &s);
+        frame_state.steer[i] = s;
+    }
     frame_state.pressed[1] = (uint16_t)((frame_state.pad_now[1] ^ frame_state.held[1]) & frame_state.pad_now[1]);
     frame_state.held[1] |= frame_state.pad_now[1];
     frame_state.held[0] |= frame_state.pad_now[0];

@@ -59,6 +59,21 @@
  * car or from above (race/overhead.c), its picture what it switches to: a
  * cube seen from above, or a road going away.
  *
+ * Modern controls (the option the pause screen switches, save/options.c): a
+ * race's player does not steer by the Left and Right buttons the above make
+ * but by one analogue steer value from -1 (full left) to 1 (full right),
+ * which covers the whole range, from no turn through Original's Left and Right
+ * turn to its L and R sharp turn (object/gsu_record.c CarControlsToRecord,
+ * fx/race/fx_drive.c FxSteerFromInput). It comes from the first of: a held L
+ * or R, full lock at once; the touch wheel's position; a controller's left
+ * stick (the most deflected where one player has several); the d-pad's or the
+ * keyboard's Left and Right, which have no range, as a value that grows from 0
+ * to 1 over half a second while held and is 0 when let go. The stick and the
+ * wheel have no turn within a fifth of their travel (the wheel's Left of the
+ * Original) and reach 1 at nine tenths (its L and R): the wheel's own two
+ * thresholds, so the range between is what the Original's two steps skip.
+ * The pad's buttons are the same in both: the menus read them.
+ *
  * A point is the window's shorter side over 430 (the phone in landscape the
  * scheme was made on). Time is counted in updates, 1/60 s each. Nothing is
  * drawn or pressed until a first touch.
@@ -172,21 +187,31 @@ static uint32_t stick_of(const nshvc_input *in, int c)
     return s;
 }
 
-/* controller c through `map`; its left stick steers */
-static uint16_t controller_pad(const nshvc_input *in, int c, const uint16_t *map)
+/* controller c's buttons through `map`, not its stick */
+static uint16_t controller_buttons_pad(const nshvc_input *in, int c, const uint16_t *map)
 {
     uint16_t pad = 0, buttons;
-    uint32_t dirs;
     int b;
 
     if (c < 0 || !in->controller[c].on)
         return 0;
     /* what it held as it appeared is its rest, not a press (ctl_rest) */
     buttons = (uint16_t)(in->controller[c].buttons & ~ctl_rest[c]);
-    dirs = stick[c] & ~ctl_rest[c];
     for (b = 0; b < BUTTONS; b++)
         if (buttons & map[b])
             pad |= k_button[b];
+    return pad;
+}
+
+/* controller c through `map`; its left stick steers */
+static uint16_t controller_pad(const nshvc_input *in, int c, const uint16_t *map)
+{
+    uint16_t pad = controller_buttons_pad(in, c, map);
+    uint32_t dirs;
+
+    if (c < 0 || !in->controller[c].on)
+        return 0;
+    dirs = stick[c] & ~ctl_rest[c];
     if (dirs & STICK_UP)
         pad |= PAD_UP;
     if (dirs & STICK_DOWN)
@@ -247,9 +272,19 @@ static uint32_t gesture_at;
 static int gesture_fingers, gesture_moved;
 static uint16_t held;                   /* buttons held by fingers */
 static uint16_t pulse;                  /* buttons pressed a moment */
+static int steer_marked;                /* the race read the player's controls this update (controls_driving) */
+static float steer_value[2];            /* each player's analogue steer value, -1 left .. 1 right, this update's */
+static float ramp[2];                   /* the d-pad's and the keyboard's, grown toward 1 while held */
+static const float k_dead = 0.2f;       /* no turn within this much of the stick's or the wheel's travel: the wheel's Left of the Original */
+static const float k_full = 0.9f;       /* full turn from here: the wheel's L and R of the Original */
+static const float k_ramp = 1.0f / 30;  /* a step of the ramp each update: 0 to 1 in half a second */
 static uint32_t pulse_until;
 
-void controls_driving(void) { driving_marked = 1; }
+void controls_driving(void)
+{
+    driving_marked = 1;
+    steer_marked = 1;
+}
 
 /* the window in pixels, a point in pixels, and the safe area's top */
 static void window(float *w, float *h, float *pt, float *safe_top)
@@ -547,11 +582,73 @@ static uint32_t controller_state(const nshvc_input *in, int c)
    pad (see the header) */
 static int two_players(void) { return g.split_screen != 0 || g.menu_mode == 2; }
 
+/* the analogue steer value for an axis position x (-1 .. 1): none within k_dead
+   of the middle, 1 from k_full out, in proportion between */
+static float steer_axis(float x)
+{
+    float m = fabsf(x);
+
+    if (m <= k_dead)
+        return 0;
+    m = (m - k_dead) / (k_full - k_dead);
+    if (m > 1)
+        m = 1;
+    return x < 0 ? -m : m;
+}
+
+/* Player p's analogue steer value this update (Modern controls, see the top):
+   dig is the player's buttons from the keyboard and the controllers' buttons
+   alone (no stick, no touch), axis the controllers' left stick's x already
+   through steer_axis, wheel_on whether a finger holds the touch wheel. */
+static void steer_make(int p, uint16_t dig, float axis, int wheel_on)
+{
+    int dir = dig & PAD_LEFT ? -1 : dig & PAD_RIGHT ? 1 : 0;
+
+    /* the ramp: grows while a direction is held, from 0 when it changes, 0 when let go */
+    if (!dir || ramp[p] * (float)dir < 0)
+        ramp[p] = 0;
+    if (dir) {
+        ramp[p] += (float)dir * k_ramp;
+        if (ramp[p] > 1)
+            ramp[p] = 1;
+        if (ramp[p] < -1)
+            ramp[p] = -1;
+    }
+    if (dig & PAD_L)                    /* the sharp turn at once, as the Original's L and R */
+        steer_value[p] = ramp[p] = -1;
+    else if (dig & PAD_R)
+        steer_value[p] = ramp[p] = 1;
+    else if (wheel_on)
+        steer_value[p] = steer_axis(wheel_turn);
+    else if (axis != 0)
+        steer_value[p] = axis;
+    else
+        steer_value[p] = ramp[p];
+}
+
+/* the controller c's stick, as a steer value; 0 for a stick held as it appeared */
+static float controller_axis(const nshvc_input *in, int c)
+{
+    if (c < 0 || !in->controller[c].on || (ctl_rest[c] & (STICK_LEFT | STICK_RIGHT)))
+        return 0;
+    return steer_axis(in->controller[c].lx);
+}
+
+int controls_steer(int player, float *s)
+{
+    if (!steer_marked || !option_modern() || (player != 0 && player != 1))
+        return 0;
+    *s = steer_value[player];
+    return 1;
+}
+
 void controls_read(const nshvc_input *in, uint16_t pad[2])
 {
     int i, c, keys = 0, used = 0, two = two_players();
-    uint16_t one = 0;
+    uint16_t one = 0, dig_one = 0;
+    float axis_one = 0;
 
+    steer_marked = 0;                   /* the race marks it again, if it reads the player's controls this update */
     updates++;
     /* The engine numbers the controllers the system lists, and a system
        renumbers them as one is connected or disconnected (Windows counts the
@@ -601,8 +698,14 @@ void controls_read(const nshvc_input *in, uint16_t pad[2])
             used = 1;
             in_use = c;
         }
-        if (!two)
+        if (!two) {
+            float a = controller_axis(in, c);
+
             one |= controller_pad(in, c, ctl_of[0]);
+            dig_one |= controller_buttons_pad(in, c, ctl_of[0]);
+            if (fabsf(a) > fabsf(axis_one))
+                axis_one = a;
+        }
     }
     for (i = 0; i < 8; i++)
         keys |= in->keys_pressed[i] != 0;
@@ -615,9 +718,14 @@ void controls_read(const nshvc_input *in, uint16_t pad[2])
     if (two) {
         pad[0] = (uint16_t)(keyboard_pad(in) | controller_pad(in, owner[0], ctl_of[0]) | touch_pad(in));
         pad[1] = controller_pad(in, owner[1], ctl_of[1]);
+        steer_make(0, (uint16_t)(keyboard_pad(in) | controller_buttons_pad(in, owner[0], ctl_of[0])),
+                   controller_axis(in, owner[0]), driving && has(ROLE_WHEEL));
+        steer_make(1, controller_buttons_pad(in, owner[1], ctl_of[1]), controller_axis(in, owner[1]), 0);
     } else {
         pad[0] = (uint16_t)(keyboard_pad(in) | one | touch_pad(in));
         pad[1] = 0;
+        steer_make(0, (uint16_t)(keyboard_pad(in) | dig_one), axis_one, driving && has(ROLE_WHEEL));
+        steer_make(1, 0, 0, 0);
     }
 }
 

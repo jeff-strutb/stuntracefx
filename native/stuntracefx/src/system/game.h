@@ -21,6 +21,8 @@ typedef struct {
     uint16_t pad_now[2];                /* the pads as read this update */
     uint16_t pressed_copy[2];           /* $0D1A, $0D1C: the race's presses, folded in by the raster */
     uint16_t menu_pressed[2];
+    float steer[2];                     /* each player's analogue steer value, -1 left .. 1 right, at the last update the race read the controls */
+    uint8_t steer_on[2];                /* it is to be used (Modern controls, input/controls.h controls_steer) */
     uint8_t brightness, brightness_target, half_rate;
     uint8_t frames;
 } FrameState;
