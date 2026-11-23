@@ -363,7 +363,9 @@ static void progress_cb(void *ctx, double f, const char *s)
         }
         a.messageText = [NSString stringWithFormat:@"Replace %s?", rb_output_name(self.target)];
         a.informativeText = [NSString stringWithFormat:@"An earlier build is at %s. Your records and settings are kept; they "
-                                                       @"live in your Library (on the iPhone, with the app's data), not in the build.", out];
+                                                       @"live in the folder stunt-race-fx-save beside the app (in your Library when "
+                                                       @"that place cannot be written; on the iPhone and iPad, with the app's data), "
+                                                       @"not in the app.", out];
         [a addButtonWithTitle:@"Replace"];
         [a addButtonWithTitle:@"Cancel"];
         [a beginSheetModalForWindow:self.window completionHandler:^(NSModalResponse r) {
@@ -430,6 +432,8 @@ static void progress_cb(void *ctx, double f, const char *s)
             how = self.signing ? @"It is signed with your Xcode signing. Install it on your iPhone or iPad from Xcode (Window, Devices and Simulators: "
                                  @"drag it onto the device's installed apps) or Apple Configurator."
                                : @"It is not signed: sign and install it yourself, for example with AltStore or Sideloadly.";
+            how = [how stringByAppendingString:@" Your records and settings stay in the app's own data on the device: installing a new build "
+                                               @"over it keeps them, deleting the app deletes them."];
             show.keyEquivalent = @"\r";
             buttons = @[ done, show ];
         } else {
@@ -437,7 +441,10 @@ static void progress_cb(void *ctx, double f, const char *s)
             play.identifier = out;
             play.keyEquivalent = @"\r";
             how = @"View, Enter Full Screen (Control-Command-F) fills the screen. Escape, or Select and Start together, opens "
-                  @"the pause screen, where you can change the controls, switch full screen and show or hide the FPS counter.";
+                  @"the pause screen, where you can change the controls, switch full screen and show or hide the FPS counter. "
+                  @"Your records and settings are kept in the folder stunt-race-fx-save beside the game: copy it with the app "
+                  @"to take them along (where that place cannot be written, they are kept in your Library instead). Records "
+                  @"an earlier build kept in your Library are copied into it the first time.";
             buttons = @[ done, show, play ];
         }
         [self setPage:vstack(@[ label(@RB_PRODUCT " is ready", 20, YES),

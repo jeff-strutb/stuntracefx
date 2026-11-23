@@ -25,6 +25,23 @@ ROM's code was, as `native/stuntracefx/tools/extract_assets.py` makes it
 its shaders beside it. The game, and the builder itself, have the game's own
 icon (`native/stuntracefx/icon/icon.png`).
 
+**Records and settings** live in the game's own folder, so a built game copied
+to another machine or drive carries them (the game opts in with the engine's
+`save_in_game_folder`, `native/stuntracefx/src/system/main.c`): a folder `save`
+inside the game's folder on Windows and Linux, `stunt-race-fx-save` beside the
+`.app` on the Mac (beside it, not inside, so the app's signature stays valid).
+Where the place cannot be written (a read-only disk, Program Files, a disk
+image, a quarantined app) the engine falls back to the system's folder, and
+the files an earlier build kept there are copied into the game's folder the
+first time it is used, the originals left alone. The iPhone and iPad keep them
+in the app's own data (the engine ignores the flag there): installing a build
+over the app keeps them, deleting the app deletes them. Rebuilding into the
+same place never deletes them: on the Mac the app is replaced and the folder
+beside it is not touched; on Windows and Linux an earlier build that has a
+`save` folder is updated in place (everything but `save` and the marker file
+replaced, `rb_clear_except` and `finish` in `src/core/`), so a rebuild that
+stops partway leaves `save` where it was.
+
 Version 0.991. The builder and the game it builds run on macOS 12 or later
 (Apple silicon and Intel), Windows 10 or later (64-bit, with a Direct3D 12
 graphics driver; no Vulkan driver is needed) and Linux with glibc 2.35 or later (x86_64 or arm64, X11 or

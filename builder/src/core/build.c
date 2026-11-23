@@ -37,6 +37,7 @@ extern char **environ;
 #endif
 
 #define MARKER ".stuntracefx-builder"
+#define GAME_SAVE "save"                   /* the game's records and settings, beside its program (Windows, Linux) */
 #define GAME_EXE RB_PRODUCT                /* the Mac app's and iPhone app's executable */
 #define IOS_APP RB_PRODUCT ".app"
 #define COPIER_HEADER 512u                 /* a copier's header before the ROM (.smc) */
@@ -406,7 +407,7 @@ static int linux_desktop(ctx *c)
 /* sealed and moved into place */
 static int finish(ctx *c)
 {
-    char out[2048], mk[2048], staged[2048];
+    char out[2048], mk[2048], staged[2048], save[2048];
     int ours = 0, t = c->job->target;
     if (t == RB_MACOS && !mac_plist(c))
         return 0;
@@ -453,6 +454,23 @@ static int finish(ctx *c)
         if (!ours) {
             rb_err(c->err, c->errlen, "%s already exists and was not made by this builder; move it away or pick another folder", out);
             return 0;
+        }
+        /* The game keeps its records and settings in a folder "save" beside
+           its program (nshvc_game.save_in_game_folder): on Windows and Linux
+           that is inside the folder this build replaces. An earlier build
+           that has one is updated in place, the folder "save" (and the
+           marker, which keeps it ours should this stop partway) left where
+           it is and everything else replaced; it is never deleted. On the
+           Mac it is beside the app, outside what is replaced, and on the
+           iPhone in the app's own container. */
+        rb_join(save, sizeof save, out, GAME_SAVE);
+        if ((t == RB_WINDOWS || t == RB_LINUX) && rb_is_dir(save)) {
+            if (!rb_clear_except(out, GAME_SAVE, MARKER) || !rb_copy_tree(staged, out)) {
+                rb_err(c->err, c->errlen, "cannot update the earlier build at %s (your records and settings in its \"%s\" folder are untouched)", out, GAME_SAVE);
+                return 0;
+            }
+            rb_rmtree(staged);
+            return 1;
         }
         if (!rb_rmtree(out)) {
             rb_err(c->err, c->errlen, "cannot replace the earlier build at %s", out);

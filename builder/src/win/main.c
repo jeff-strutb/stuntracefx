@@ -170,6 +170,10 @@ static void page_result(void)
         text(L"Alt+Enter or F11 switches to full screen and back. Escape, or Select and Start together, opens the pause "
              L"screen, where you can change the controls, switch full screen and show or hide the FPS counter.",
              24, 150, 540, 60, s_font);
+        text(L"Your records and settings are kept in the \"save\" folder inside the game's folder: copy the whole folder to take "
+             L"them along (where that place cannot be written, they are kept in your AppData folder instead). Records an "
+             L"earlier build kept in AppData are copied into it the first time.",
+             24, 215, 540, 80, s_font);
         button(L"Done", 240, BOTTOM, 100, ID_DONE, 0);
         button(L"Open Folder", 352, BOTTOM, 100, ID_SHOW, 0);
         button(L"Play", 464, BOTTOM, 100, ID_PLAY, 1);
@@ -316,7 +320,7 @@ static void build(void)
             return;
         }
         swprintf(msg, 4096, L"An earlier build is at %ls.\r\n\r\nReplace it? Your records and settings are kept; they live "
-                            L"in your AppData folder, not in the game's.", o16);
+                            L"in the game's \"save\" folder, which the replacement leaves alone.", o16);
         if (!s_scripted && MessageBoxW(s_wnd, msg, L"Stunt Race FX Builder", MB_ICONQUESTION | MB_YESNO) != IDYES)
             return;
     }

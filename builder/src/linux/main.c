@@ -363,6 +363,9 @@ static void page_result(void)
              "<tt>~/.local/share/applications</tt>.");
         text("F11 or Alt+Enter switches between full screen and a window. Escape, or Select and Start together, opens the pause screen, where you can change the controls, switch "
              "full screen and show or hide the FPS counter.");
+        text("Your records and settings are kept in the <tt>save</tt> folder inside the game's folder: copy the whole folder to "
+             "take them along (where that place cannot be written, they are kept in <tt>~/.local/share</tt> instead). Records an "
+             "earlier build kept there are copied into it the first time.");
         gtk.g_free(e);
         button("Done", quit, 0);
         button("Open Folder", open_folder, 0);
@@ -538,7 +541,7 @@ static void build(void)
             return;
         }
         snprintf(msg, sizeof msg, "An earlier build is at %s.\n\nReplace it? Your records and settings are kept; they "
-                 "live in ~/.local/share, not in the game's folder.", out);
+                 "live in the game's \"save\" folder, which the replacement leaves alone.", out);
         if (!ask(1, msg))
             return;
     }

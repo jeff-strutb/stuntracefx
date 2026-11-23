@@ -130,6 +130,13 @@ FX (USA) (Rev 1), checked by MD5, and ships none of the ROM's data:
 | Windows 10+ (64-bit) | a folder with the game | a Direct3D 12 graphics driver (no Vulkan driver needed) |
 | Linux, glibc 2.35+ (x86_64, arm64) | a folder with the game | X11 or XWayland, a Vulkan driver |
 
+A built game keeps its records and settings in its own folder, so it is
+portable: a `save` folder inside the game's folder on Windows and Linux,
+`stunt-race-fx-save` beside the app on the Mac (the system's folder where that
+place cannot be written; the app's own data on the iPhone, iPad and Android).
+Saves an earlier build kept in the system's folder are copied across the first
+time, and rebuilding with the builder into the same place leaves them alone.
+
 The game also builds for Android (the engine's Android host), which the
 builder does not make. The PSP is tabled (Jeff, 2026-11-05): the tag
 `psp-tabled` holds its port as last run.

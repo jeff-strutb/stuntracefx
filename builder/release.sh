@@ -73,7 +73,7 @@ The game's data is copyrighted, so the builder does not include it: you provide 
 - **Depth-tested 3D**: the courses, cars and scenery drawn at their true depths, the cars riding on the track itself.
 - **Touch controls** on the iPhone and iPad: a steering wheel under your right thumb, brake and boost pedals under your left, the gas held for you while you drive, a pause button; swipes and taps in the menus.
 - **Game controllers** and the keyboard, on every system.
-- **Records kept** as the cartridge's battery saved them, in your user folder, so a rebuild never loses them.
+- **Records kept** as the cartridge's battery saved them, in the game's own folder so a copied game carries them (see Playing), and a rebuild never loses them.
 
 ### Download
 - **macOS** (12 or later, Apple silicon and Intel; the game it builds needs the same): \`StuntRaceFXBuilder-$VERSION-macOS.zip\`. Unzip and open Stunt Race FX Builder. It is not notarized: if macOS refuses to open it, Control-click it and choose Open, or allow it in System Settings, Privacy & Security.
@@ -97,7 +97,7 @@ The first release (Rev 0) and the European and Japanese cartridges are not suppo
 ### Playing
 - A keyboard or a game controller drives; on the iPhone and iPad, touch, or a game controller. The pause screen shows and changes what each key and button does (on a computer).
 - Full screen is the default; the pause screen's FULL SCREEN switches to a window and back, as do View, Enter Full Screen (Control-Command-F) on a Mac and Alt+Enter or F11 on Windows and Linux.
-- Records and settings live in your user folder (Application Support on macOS, the iPhone and the iPad, AppData on Windows, ~/.local/share on Linux), so rebuilding never touches them.
+- Records and settings live in the game's own folder, so a built game copied to another machine or drive carries them: a folder named \`save\` inside the game's folder on Windows and Linux, \`stunt-race-fx-save\` beside the app on the Mac (not inside it, so the app's signature stays valid). Where that place cannot be written (a read-only disk, Program Files, a disk image, an app run from a quarantined download) they are kept in the system's folder instead (Application Support on macOS, AppData on Windows, ~/.local/share on Linux). Records and settings an earlier build kept in the system's folder are copied into the game's the first time, and the originals are left where they were. The iPhone and iPad keep them in the app's own data. Rebuilding with the builder into the same place updates the game and leaves the saves alone; copying a game over another by hand, or deleting its folder, is not the builder's to guard.
 
 Source: [builder/](https://github.com/jeff-strutb/stuntracefx/tree/$REV/builder), [native/stuntracefx/](https://github.com/jeff-strutb/stuntracefx/tree/$REV/native/stuntracefx).
 EOF

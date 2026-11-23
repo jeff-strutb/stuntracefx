@@ -151,6 +151,34 @@ int rb_rmtree(const char *path)
     return ok;
 }
 
+/* everything in dir but the entries named keep and keep2 (either may be NULL) */
+int rb_clear_except(const char *dir, const char *keep, const char *keep2)
+{
+    char pat[2048], child[2048];
+    WIN32_FIND_DATAW fd;
+    HANDLE h;
+    wchar_t *w;
+    int ok = 1;
+    rb_join(pat, sizeof pat, dir, "*");
+    w = wide(pat);
+    h = FindFirstFileW(w, &fd);
+    free(w);
+    if (h == INVALID_HANDLE_VALUE)
+        return 1;
+    do {
+        char name[1024];
+        if (!wcscmp(fd.cFileName, L".") || !wcscmp(fd.cFileName, L".."))
+            continue;
+        WideCharToMultiByte(CP_UTF8, 0, fd.cFileName, -1, name, sizeof name, NULL, NULL);
+        if ((keep && !strcmp(name, keep)) || (keep2 && !strcmp(name, keep2)))
+            continue;
+        rb_join(child, sizeof child, dir, name);
+        ok &= rb_rmtree(child);
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+    return ok;
+}
+
 int rb_set_exec(const char *path) { (void)path; return 1; }
 
 int rb_copy_tree(const char *from, const char *to)
@@ -231,6 +259,27 @@ int rb_rmtree(const char *path)
         closedir(d);
     }
     return ok & (rmdir(path) == 0);
+}
+
+/* everything in dir but the entries named keep and keep2 (either may be NULL) */
+int rb_clear_except(const char *dir, const char *keep, const char *keep2)
+{
+    DIR *d;
+    struct dirent *e;
+    int ok = 1;
+    if (!(d = opendir(dir)))
+        return 1;
+    while ((e = readdir(d)) != NULL) {
+        char child[2048];
+        if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, ".."))
+            continue;
+        if ((keep && !strcmp(e->d_name, keep)) || (keep2 && !strcmp(e->d_name, keep2)))
+            continue;
+        rb_join(child, sizeof child, dir, e->d_name);
+        ok &= rb_rmtree(child);
+    }
+    closedir(d);
+    return ok;
 }
 
 int rb_set_exec(const char *path) { return chmod(path, 0755) == 0; }

@@ -20,6 +20,7 @@ int      rb_exists(const char *path);
 int      rb_mkdirs(const char *path);                 /* mkdir -p; 1 on success */
 int      rb_rmtree(const char *path);                 /* rm -rf; 1 on success */
 int      rb_rename(const char *from, const char *to);
+int      rb_clear_except(const char *dir, const char *keep, const char *keep2);   /* rm -rf of all in dir but those two; 1 on success */
 int      rb_write_file(const char *path, const void *p, size_t n);
 void    *rb_read_file(const char *path, size_t *n);   /* malloc'd; NULL when unreadable */
 void     rb_join(char *out, size_t n, const char *a, const char *b);

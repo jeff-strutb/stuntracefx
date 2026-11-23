@@ -20,6 +20,13 @@
 #include "video/picture.h"
 #include "video/video.h"
 
+/* nshvc_game.save_in_game_folder, API 6.12: the saves in the game's own folder
+   where the host can (Windows and Linux: "save" beside the program; macOS:
+   "stunt-race-fx-save" beside the .app; iOS and Android keep the app's
+   container), the files in the system's folder carried over the first time.
+   An older engine keeps them in the system's folder. */
+#define SAVE_IN_GAME_FOLDER (NSHVC_VERSION_MAJOR > 6 || (NSHVC_VERSION_MAJOR == 6 && NSHVC_VERSION_MINOR >= 12))
+
 static void init(void)
 {
     cart_load();
@@ -112,6 +119,9 @@ int main(int argc, char **argv)
     game.title = "Stunt Race FX";
     game.id = "stunt-race-fx";
     game.update_hz = 60;
+#if SAVE_IN_GAME_FOLDER
+    game.save_in_game_folder = 1;       /* records and settings beside the game, so a copied game carries them */
+#endif
     game.init = init;
     game.update = update;
     game.draw = draw;
