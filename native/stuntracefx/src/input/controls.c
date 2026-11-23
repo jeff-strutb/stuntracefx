@@ -7,14 +7,27 @@
  * to steer, Z the gas (B), X the brake (A), A boost (Y), S X, Q and W the
  * hard turns (L, R), Return Start, Shift Select; a controller by each
  * button's place, the SNES's own layout, its d-pad and left stick steering.
- * Player 2 is the second controller, through player 2's own controller
- * bindings (no keys: the keyboard is player 1's). A controller is the player's
- * it is first used for (a button pressed or its left stick moved): player
- * 1's, then player 2's; it stays theirs until it is disconnected. (GitHub
- * issue 9: on a Steam Deck the Deck's own controls are the engine's first
- * controller, so a controller added to it was the second, player 2's, and
- * drove nothing in a one-player race, though the pause screen, which reads
- * both players, answered it.)
+ * Every connected controller plays player 1 wherever one player is
+ * playing, so a controller can never be dead because of which one it is
+ * (GitHub issue 13, an 8BitDo Pro 2 "not detected": the menus and a
+ * one-player race read player 1 only, and a controller claimed as player 2,
+ * because another device, a Steam Input or DS4Windows virtual pad, was
+ * claimed first, drove nothing and showed no sign of why). Player 2's pad is
+ * read only where the game reads it as a second player: the two-player race
+ * (object/car_parts.c PlayerCar2Step, split screen), its car select
+ * (menu/screens.c CarSelectTwoPlayers) and the mode menu with Two Player
+ * chosen, whose course preview reads player 2's presses (menu/handlers.c
+ * preview_countdown); two_players() is that test. There, and only there,
+ * ownership decides: a controller belongs to the player it is first used for
+ * (a button pressed or its left stick moved): player 1's, then player 2's;
+ * it stays theirs until it is disconnected. Player 2
+ * is that second controller, through player 2's own controller bindings (no
+ * keys: the keyboard is player 1's). Everywhere else the controllers all give
+ * player 1's pad, through player 1's bindings, and player 2's pad is empty.
+ * (GitHub issue 9: on a Steam Deck the Deck's own controls are the engine's
+ * first controller, so a controller added to it was the second, player 2's,
+ * and drove nothing in a one-player race, though the pause screen, which
+ * reads both players, answered it.)
  *
  * The touch screen is the earlier front end's touch scheme, the race's pad
  * (object/gsu_record.c ctl_player: B accelerates, A brakes and reverses
@@ -57,6 +70,7 @@
 #include "race/race.h"
 #include "save/save.h"
 #include "system/game.h"
+#include "system/state.h"
 
 /* ---- the keyboard and the controllers ---- */
 
@@ -482,9 +496,15 @@ static uint32_t controller_state(const nshvc_input *in, int c)
     return s;
 }
 
+/* two players are playing: the two-player race (the split screen), or the
+   mode menu on Two Player, whose car select and course preview read the second
+   pad (see the header) */
+static int two_players(void) { return g.split_screen != 0 || g.menu_mode == 2; }
+
 void controls_read(const nshvc_input *in, uint16_t pad[2])
 {
-    int i, c, keys = 0, used = 0;
+    int i, c, keys = 0, used = 0, two = two_players();
+    uint16_t one = 0;
 
     updates++;
     for (i = 0; i < 2; i++)
@@ -500,9 +520,12 @@ void controls_read(const nshvc_input *in, uint16_t pad[2])
             else if (owner[1] < 0)
                 owner[1] = c;
         }
-        /* player 1's controller in use: a press, or its stick held over */
-        if (owner[0] == c && (fresh || (now & 0xF0000u)))
+        /* a controller in use: a press, or its stick held over; player 1's
+           where two play, any where one does */
+        if ((two ? owner[0] == c : in->controller[c].on) && (fresh || (now & 0xF0000u)))
             used = 1;
+        if (!two)
+            one |= controller_pad(in, c, ctl_of[0]);
     }
     for (i = 0; i < 8; i++)
         keys |= in->keys_pressed[i] != 0;
@@ -512,8 +535,13 @@ void controls_read(const nshvc_input *in, uint16_t pad[2])
         source = CONTROLS_CONTROLLER;
     if (in->touches)
         source = CONTROLS_TOUCH;
-    pad[0] = (uint16_t)(keyboard_pad(in) | controller_pad(in, owner[0], ctl_of[0]) | touch_pad(in));
-    pad[1] = controller_pad(in, owner[1], ctl_of[1]);
+    if (two) {
+        pad[0] = (uint16_t)(keyboard_pad(in) | controller_pad(in, owner[0], ctl_of[0]) | touch_pad(in));
+        pad[1] = controller_pad(in, owner[1], ctl_of[1]);
+    } else {
+        pad[0] = (uint16_t)(keyboard_pad(in) | one | touch_pad(in));
+        pad[1] = 0;
+    }
 }
 
 /* ---- the touch controls' pictures ---- */
