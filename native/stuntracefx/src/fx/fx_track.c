@@ -323,11 +323,9 @@ int fx_track_ground(uint16_t car, uint16_t wheel, const double p[3], const doubl
     if (!car || car > OBJECT_COUNT || wheel > OBJECT_COUNT)
         return 0;
     car_record = objects.object[car - 1].record;
-    if (wheel) {
-        wheel_record = objects.object[wheel - 1].record;
-        if (!wheel_record)
-            return 0;
-    } else if (!car_record) {
+    if (wheel)
+        wheel_record = objects.object[wheel - 1].record;    /* none (the bonus truck's wheels): any part of the car */
+    if (!wheel_record && !car_record) {
         return 0;
     }
     for (i = 0; i < npieces; i++) {

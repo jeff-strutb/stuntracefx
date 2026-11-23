@@ -58,6 +58,32 @@ static uint16_t record_object[2][FX_FAR_MAX];   /* each record's object: its slo
 
 static const Object *child_car(const Object *o);
 
+/* A wheel of the bonus truck (ObjectSparkStart, ObjectSparkStep: no record
+   of its own), on the truck's attachment (ObjectSparksStart) on the car
+   whose record the truck runs on: that car, else NULL. It is a tyre of the
+   car's as a child on a part record is (fx_face_seat_tyre seats it). */
+static const Object *spark_wheel_car(const Object *o)
+{
+    ObjectHandler h = object_handler_of(o->handler_bank, o->handler);
+    const Object *attached, *car;
+
+    if ((h != H_SPARK_START && h != H_SPARK_STEP) || !o->parent)
+        return NULL;
+    attached = obj_at(o->parent);
+    if (!attached->parent)
+        return NULL;
+    car = obj_at(attached->parent);
+    return car->record ? car : NULL;
+}
+
+/* the car an object is a tyre of: a child on its record, or the bonus truck's wheel */
+static const Object *tyre_car(const Object *o)
+{
+    const Object *car = child_car(o);
+
+    return car ? car : spark_wheel_car(o);
+}
+
 static void cars_mark(void)
 {
     ObjRef ref = objects.used_head;
@@ -65,7 +91,7 @@ static void cars_mark(void)
 
     memset(has_tyres, 0, sizeof has_tyres);
     for (; ref && n < OBJECT_COUNT; ref = obj_at(ref)->next, n++) {
-        const Object *car = child_car(obj_at(ref));
+        const Object *car = tyre_car(obj_at(ref));
 
         if (car)
             has_tyres[obj_slot(car)] = 1;
@@ -87,10 +113,13 @@ static uint16_t car_of(const Object *o)
 
 static void record_car_note(int far, unsigned n, const Object *o)
 {
+    const Object *tyre;
+
     if (n >= FX_FAR_MAX)
         return;
-    record_car[far][n] = car_of(o);
-    record_tyre[far][n] = child_car(o) != NULL;
+    tyre = tyre_car(o);
+    record_car[far][n] = tyre ? (uint16_t)(obj_slot(tyre) + 1) : car_of(o);
+    record_tyre[far][n] = tyre != NULL;
     record_object[far][n] = (uint16_t)(obj_slot(o) + 1);
 }
 
