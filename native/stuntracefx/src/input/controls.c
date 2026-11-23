@@ -96,6 +96,7 @@ static int owner[2] = { -1, -1 };       /* each player's controller, -1 none yet
 static uint32_t ctl_was[CONTROLLERS];   /* each controller's state (controller_state) at the last update */
 static uint32_t ctl_rest[CONTROLLERS];  /* what it held when it appeared, until let go: its rest, not a use */
 static uint8_t ctl_here[CONTROLLERS];   /* it was connected at the last update */
+static uint32_t stick[CONTROLLERS];     /* each one's left stick as directions (STICK_*), from the update's read */
 static uint32_t set_was;                /* the connected controllers at the last update, a bit each */
 static uint32_t epoch;                  /* counts the times the owners were dropped */
 
@@ -139,6 +140,33 @@ const char *controls_name(int player, uint16_t button)
     return key_of[b] ? nshvc_key_name((nshvc_key)key_of[b]) : "";
 }
 
+/* The left stick as directions: a direction comes on with the stick half way
+   over and goes off with it a third of the way back, so a stick resting near
+   half way does not flicker between held and let go (a press each time, or a
+   steering that stutters). Bits 16-19, past the buttons'. One place for the
+   steering and the use of a controller. */
+enum { STICK_UP = 1u << 16, STICK_DOWN = 1u << 17, STICK_LEFT = 1u << 18, STICK_RIGHT = 1u << 19 };
+static const float k_stick_on = 0.5f;
+static const float k_stick_off = 0.35f;
+
+static uint32_t stick_of(const nshvc_input *in, int c)
+{
+    uint32_t was = stick[c], s = 0;
+    float x = in->controller[c].lx, y = in->controller[c].ly;
+
+    if (!in->controller[c].on)
+        return 0;
+    if (y < (was & STICK_UP ? -k_stick_off : -k_stick_on))
+        s |= STICK_UP;
+    if (y > (was & STICK_DOWN ? k_stick_off : k_stick_on))
+        s |= STICK_DOWN;
+    if (x < (was & STICK_LEFT ? -k_stick_off : -k_stick_on))
+        s |= STICK_LEFT;
+    if (x > (was & STICK_RIGHT ? k_stick_off : k_stick_on))
+        s |= STICK_RIGHT;
+    return s;
+}
+
 /* controller c through `map`; its left stick steers */
 static uint16_t controller_pad(const nshvc_input *in, int c, const uint16_t *map)
 {
@@ -150,13 +178,13 @@ static uint16_t controller_pad(const nshvc_input *in, int c, const uint16_t *map
     for (b = 0; b < BUTTONS; b++)
         if (in->controller[c].buttons & map[b])
             pad |= k_button[b];
-    if (in->controller[c].ly < -0.5f)
+    if (stick[c] & STICK_UP)
         pad |= PAD_UP;
-    if (in->controller[c].ly > 0.5f)
+    if (stick[c] & STICK_DOWN)
         pad |= PAD_DOWN;
-    if (in->controller[c].lx < -0.5f)
+    if (stick[c] & STICK_LEFT)
         pad |= PAD_LEFT;
-    if (in->controller[c].lx > 0.5f)
+    if (stick[c] & STICK_RIGHT)
         pad |= PAD_RIGHT;
     return pad;
 }
@@ -486,22 +514,15 @@ int controls_controller(int player) { return player == 0 || player == 1 ? owner[
 
 uint32_t controls_owner_epoch(void) { return epoch; }
 
-/* controller c's buttons and its left stick past half way (bits 16-19) */
+/* controller c's buttons and its left stick's directions (bits 16-19), the
+   update's read of the stick (stick_of) taken */
 static uint32_t controller_state(const nshvc_input *in, int c)
 {
     uint32_t s;
 
     if (!in->controller[c].on)
         return 0;
-    s = in->controller[c].buttons;
-    if (in->controller[c].ly < -0.5f)
-        s |= 1u << 16;
-    if (in->controller[c].ly > 0.5f)
-        s |= 1u << 17;
-    if (in->controller[c].lx < -0.5f)
-        s |= 1u << 18;
-    if (in->controller[c].lx > 0.5f)
-        s |= 1u << 19;
+    s = in->controller[c].buttons | stick[c];
     return s;
 }
 
@@ -534,7 +555,10 @@ void controls_read(const nshvc_input *in, uint16_t pad[2])
         }
     }
     for (c = 0; c < CONTROLLERS; c++) {
-        uint32_t now = controller_state(in, c), fresh;
+        uint32_t now, fresh;
+
+        stick[c] = stick_of(in, c);
+        now = controller_state(in, c);
 
         /* a controller's first update is not a press: what it holds as it
            appears (a button or a stick over at rest, a virtual pad's state)
@@ -557,7 +581,7 @@ void controls_read(const nshvc_input *in, uint16_t pad[2])
         }
         /* a controller in use: a press, or its stick held over; player 1's
            where two play, any where one does */
-        if ((two ? owner[0] == c : in->controller[c].on) && (fresh || (now & 0xF0000u & ~ctl_rest[c])))
+        if ((two ? owner[0] == c : in->controller[c].on) && (fresh || (stick[c] & ~ctl_rest[c])))
             used = 1;
         if (!two)
             one |= controller_pad(in, c, ctl_of[0]);
