@@ -175,23 +175,34 @@ static uint32_t stick_of(const nshvc_input *in, int c)
 /* controller c through `map`; its left stick steers */
 static uint16_t controller_pad(const nshvc_input *in, int c, const uint16_t *map)
 {
-    uint16_t pad = 0;
+    uint16_t pad = 0, buttons;
+    uint32_t dirs;
     int b;
 
     if (c < 0 || !in->controller[c].on)
         return 0;
+    /* what it held as it appeared is its rest, not a press (ctl_rest) */
+    buttons = (uint16_t)(in->controller[c].buttons & ~ctl_rest[c]);
+    dirs = stick[c] & ~ctl_rest[c];
     for (b = 0; b < BUTTONS; b++)
-        if (in->controller[c].buttons & map[b])
+        if (buttons & map[b])
             pad |= k_button[b];
-    if (stick[c] & STICK_UP)
+    if (dirs & STICK_UP)
         pad |= PAD_UP;
-    if (stick[c] & STICK_DOWN)
+    if (dirs & STICK_DOWN)
         pad |= PAD_DOWN;
-    if (stick[c] & STICK_LEFT)
+    if (dirs & STICK_LEFT)
         pad |= PAD_LEFT;
-    if (stick[c] & STICK_RIGHT)
+    if (dirs & STICK_RIGHT)
         pad |= PAD_RIGHT;
     return pad;
+}
+
+uint16_t controls_controller_buttons(const nshvc_input *in, int c)
+{
+    if (c < 0 || c >= CONTROLLERS || !in->controller[c].on)
+        return 0;
+    return (uint16_t)(in->controller[c].buttons & ~ctl_rest[c]);
 }
 
 static uint16_t keyboard_pad(const nshvc_input *in)

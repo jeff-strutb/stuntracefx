@@ -1249,7 +1249,7 @@ static int pause_step(const nshvc_input *in, uint16_t pad[2])
 #if CONTROLLER_BIND
     for (i = 0; i < 2; i++) {
         int c = controls_controller(i);
-        uint16_t now = c >= 0 ? in->controller[c].buttons : 0;
+        uint16_t now = controls_controller_buttons(in, c);
 
         /* another controller is the player's (or the owners were dropped, an
            index then being possibly another pad's): what it holds is pressed now */

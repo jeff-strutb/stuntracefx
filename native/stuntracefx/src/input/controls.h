@@ -23,6 +23,9 @@ int controls_controller(int player);
    disconnected): what is kept of a player's controller, its last buttons,
    is then another's. */
 uint32_t controls_owner_epoch(void);
+/* controller c's buttons (NSHVC_CTL_*) as the game takes them: those it held
+   as it appeared are its rest and count for nothing until let go */
+uint16_t controls_controller_buttons(const nshvc_input *in, int c);
 
 /* The race, each update it reads the player's controls (not in a demo, not
    paused): the touch screen drives (the wheel, the pedals, the gas) from
