@@ -548,6 +548,12 @@ void HudColourStep(void)
         palettes.target_shown = palettes.target;
         palettes.gradient_was_off = 0;
         colours_from_sets(2);
+        /* the picture that leaves the black list takes its band as well:
+           its buffer's gradient start was set to the black list on the
+           pictures before and stayed there, so the sky showed black for
+           this one picture on the way out (GitHub issue 10: "sky flikering
+           to black on the exit") */
+        gradient_band_rebuild();
     } else {
         gradient_band_rebuild();
         if (buffer_from_blend())
