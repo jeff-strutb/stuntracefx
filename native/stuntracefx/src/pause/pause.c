@@ -11,7 +11,9 @@
  * smaller, the key or button bound to it, and a line from the tag to the button.
  *
  * The pad moves among the tags and the panel's buttons (move, which lists
- * the graph); B, A or Start chooses. A click of the pointer chooses what it is on (a tag, its button
+ * the graph); B, A or Start chooses. The left stick and each controller's own
+ * d-pad, south, east and menu buttons always move and choose here, whatever
+ * the player has bound (raw_nav), so no remapping strands the player. A click of the pointer chooses what it is on (a tag, its button
  * on the controller, a panel button) and presses it. The PLAYER 1 and
  * PLAYER 2 buttons above the controller show and change that player's
  * controls, the one in use filled gold (it opens on player 1's). A tag
@@ -404,6 +406,34 @@ static int key_pressed(const nshvc_input *in, int vk) { (void)in, (void)vk; retu
 static int key_taken(const nshvc_input *in) { (void)in; return 0; }
 static int can_ask(void) { return 0; }
 #endif
+
+/* The screen's own reading of a controller's buttons, whatever the player has
+   bound: its d-pad (Up, Down, Left, Right), its south button and its east
+   button (B, A), and its menu button (Start) press as the pad's buttons do, in
+   the screen. The left stick always does too (input/controls.c, which gives
+   the stick to the d-pad whatever is bound). A player who has bound those
+   buttons to other things, or the d-pad's to others' places, can still move
+   and choose; what the player's own bindings give goes on working beside them. */
+static uint16_t raw_nav(uint16_t ctl_press)
+{
+    uint16_t nav = 0;
+
+    if (ctl_press & NSHVC_CTL_UP)
+        nav |= PAD_UP;
+    if (ctl_press & NSHVC_CTL_DOWN)
+        nav |= PAD_DOWN;
+    if (ctl_press & NSHVC_CTL_LEFT)
+        nav |= PAD_LEFT;
+    if (ctl_press & NSHVC_CTL_RIGHT)
+        nav |= PAD_RIGHT;
+    if (ctl_press & NSHVC_CTL_SOUTH)
+        nav |= PAD_B;
+    if (ctl_press & NSHVC_CTL_EAST)
+        nav |= PAD_A;
+    if (ctl_press & NSHVC_CTL_MENU)
+        nav |= PAD_START;
+    return nav;
+}
 
 /* ---- the pictures ---- */
 
@@ -1286,7 +1316,7 @@ static int pause_step(const nshvc_input *in, uint16_t pad[2])
         }
         p.wait_release = 0;
     }
-    nav = (uint16_t)(press[0] | press[1]);
+    nav = (uint16_t)(press[0] | press[1] | raw_nav(ctl_press[0]) | raw_nav(ctl_press[1]));
     if (MENU_MODE) {
         if (nav & (PAD_UP | PAD_DOWN | PAD_LEFT | PAD_RIGHT)) {
             int d = nav & (PAD_DOWN | PAD_RIGHT) ? 1 : PAUSE_MENU_ITEMS - 1;
