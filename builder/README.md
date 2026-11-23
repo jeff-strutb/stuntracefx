@@ -42,7 +42,7 @@ beside it is not touched; on Windows and Linux an earlier build that has a
 replaced, `rb_clear_except` and `finish` in `src/core/`), so a rebuild that
 stops partway leaves `save` where it was.
 
-Version 0.991. The builder and the game it builds run on macOS 12 or later
+Version 0.992. The builder and the game it builds run on macOS 12 or later
 (Apple silicon and Intel), Windows 10 or later (64-bit, with a Direct3D 12
 graphics driver; no Vulkan driver is needed) and Linux with glibc 2.35 or later (x86_64 or arm64, X11 or
 XWayland, a Vulkan driver; GTK 3 for the builder's window, else it builds

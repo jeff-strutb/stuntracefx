@@ -2,7 +2,7 @@
 # builder/release.sh: build Stunt Race FX Builder for macOS, Windows and Linux
 # and publish them on the repository's GitHub Releases page as vVERSION.
 #
-# VERSION: 0.991 unless set. The release is tagged at HEAD as it is when this
+# VERSION: 0.992 unless set. The release is tagged at HEAD as it is when this
 # starts, which must already be on GitHub. Running it again at the same
 # version replaces the files of that release.
 #
@@ -19,7 +19,7 @@ for a in "$@"; do
     [ "$a" = --no-build ] && BUILD=0
 done
 
-VERSION=${VERSION:-0.991}
+VERSION=${VERSION:-0.992}
 TAG=v$VERSION
 DIST=build/builder/dist
 MAC=$DIST/StuntRaceFXBuilder-$VERSION-macOS.zip
@@ -51,24 +51,26 @@ Stunt Race FX Builder makes a native build of **Stunt Race FX** (Super Nintendo,
 
 The game's data is copyrighted, so the builder does not include it: you provide your ROM, the builder checks it by MD5, takes the data the game reads from it (the ROM's code is not used: the C stands for it), and produces a game that runs on its own. The ROM is not needed once the build is done.
 
-### New in 0.991
-- **Full screen by default**, on every computer, Linux and the Steam Deck included; the pause screen switches between full screen and a window (or F11 and Alt+Enter on Windows and Linux), and the game remembers your choice.
-- **FPS counter on or off** from the pause screen.
-- **Any controller is player 1**: the first controller you press a button on drives, so a controller added to a Steam Deck works.
-- **Player 2's controls remapped too**: PLAYER 1 and PLAYER 2 buttons on the pause screen switch which player's keys and buttons it shows and changes.
-- **Click on the pause screen**: the mouse chooses a control to remap and presses its buttons.
-- **Tunnels open onto the outside**: no black going into or out of a tunnel; the land and sky show through its mouths, and solid rock covers it outside.
-- **Textures sit cleanly on their surfaces**: signs and markings no longer flicker or break up against the faces they are painted on.
-- **The results screen fills the window**: its blue background to the window's edges at any shape, the panels where the race puts them, and its black opening and closing over the whole window.
-- Auto-Accelerate, a touch-screen option, is now only on the iPhone and iPad.
-- The builder's finished page lists the keys the game has now, and a game run without its data says to build it with the builder.
+### New in 0.992
+- **Modern controls**: an ORIGINAL / MODERN switch on the pause screen. Modern steers across the whole range with the stick or the touch wheel, from a gentle turn to the sharpest, with no need for L and R; on the keyboard and the d-pad a held direction builds from a gentle turn to the sharp one. Original is the game as it was.
+- **Start opens the pause screen** during a race, in place of the cartridge's own pause; QUIT RACE is on the pause screen on every system.
+- **The pause screen by controller alone**: every item can be reached, chosen and left with a controller, whatever has been remapped.
+- **Controls named for what they do**: each tag on the pause screen says what its button does in the game (ACCELERATE, BRAKE, BOOST and so on), with a line to the button and the key or button bound to it beneath.
+- **Controllers that just work**: any connected controller drives in a one-player game, so a controller is never ignored because another device was found first; a player keeps their controller when another is plugged in or removed; a device that reports a button held when it appears no longer takes over.
+- **More controllers on Windows and Linux**: Windows sees controllers beyond the Xbox kind (DualShock, DualSense, Switch Pro and others), and Linux reads each controller's own layout.
+- **Windows draws with Direct3D 12**: no Vulkan driver is needed.
+- **Saves travel with the game**: records and settings are kept in the game's own folder, so a copied game carries them; saves from earlier builds are carried over the first time, and a rebuild never deletes them.
+- **Lake Side**: the road at the start no longer shows the lake's colour through it, and the lake is drawn as water, with waves.
+- **Aqua Tunnel**: the sky stays through the tube, with no black on the way out, and the tube's mouths are closed in.
+- **Bonus courses**: the truck's wheels stand on the road.
+- **After the credits**: a cup started without closing the game no longer has a black HUD and pause screen.
 
 ### Features
 - **Native**: the game's own C for your machine, no emulator; its 3D is drawn by the GPU (Metal on the Mac, iPhone and iPad, Direct3D 12 on Windows, Vulkan on Linux).
 - **Any window, any shape**: the race and the menus fill the window, wide or tall, and the 3D is drawn at the window's own resolution, sharp at any size.
 - **60 frames a second**: the race runs the cartridge's own physics step for step, and the 3D is drawn on every frame between its steps.
 - **The courses' ground as polygon scenery**: green polygon mountains, oceans of waves, snowfields, to the horizon; solid 3D tyres and trees, and no distance where the scenery is cut off.
-- **Its own pause screen** (Escape, Select + Start, or the corner button): remap the keyboard and each player's controller, switch full screen, and show or hide the FPS counter; on the iPhone and iPad, a menu to resume, turn Auto-Accelerate or the FPS counter on or off, or quit the race.
+- **Its own pause screen** (Start in a race, Escape, Select + Start, or the corner button): remap the keyboard and each player's controller, choose Original or Modern controls, switch full screen, show or hide the FPS counter, and quit the race; on the iPhone and iPad, a menu with the same choices for touch.
 - **A view from above**: the view button beside the pause button switches the race between the view behind the car and an angled view from above.
 - **Depth-tested 3D**: the courses, cars and scenery drawn at their true depths, the cars riding on the track itself.
 - **Touch controls** on the iPhone and iPad: a steering wheel under your right thumb, brake and boost pedals under your left, the gas held for you while you drive, a pause button; swipes and taps in the menus.
