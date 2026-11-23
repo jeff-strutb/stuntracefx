@@ -97,6 +97,7 @@ static uint32_t ctl_was[CONTROLLERS];   /* each controller's state (controller_s
 static uint32_t ctl_rest[CONTROLLERS];  /* what it held when it appeared, until let go: its rest, not a use */
 static uint8_t ctl_here[CONTROLLERS];   /* it was connected at the last update */
 static uint32_t stick[CONTROLLERS];     /* each one's left stick as directions (STICK_*), from the update's read */
+static int in_use = -1;                 /* the controller last used for player 1, -1 none */
 static uint32_t set_was;                /* the connected controllers at the last update, a bit each */
 static uint32_t epoch;                  /* counts the times the owners were dropped */
 
@@ -130,13 +131,17 @@ int controls_source(void) { return source; }
 
 const char *controls_name(int player, uint16_t button)
 {
-    int b = button_index(button);
+    int b = button_index(button), c;
 
     if (b < 0 || (player != 0 && player != 1))
         return "";
-    if (player == 1 || source == CONTROLS_CONTROLLER)
-        return ctl_of[player][b] ? nshvc_controller_label(owner[player] >= 0 ? (uint32_t)owner[player] : 0, ctl_of[player][b])
-                                 : "";
+    if (player == 1 || source == CONTROLS_CONTROLLER) {
+        /* player 1's: the controller last used (where one plays any does),
+           else the first claimed, else the engine's first; player 2's: their
+           controller, and none shown while they have none */
+        c = player == 1 ? owner[1] : in_use >= 0 ? in_use : owner[0] >= 0 ? owner[0] : 0;
+        return ctl_of[player][b] && c >= 0 ? nshvc_controller_label((uint32_t)c, ctl_of[player][b]) : "";
+    }
     return key_of[b] ? nshvc_key_name((nshvc_key)key_of[b]) : "";
 }
 
@@ -549,7 +554,7 @@ void controls_read(const nshvc_input *in, uint16_t pad[2])
             if (in->controller[c].on)
                 set |= 1u << c;
         if (set != set_was) {
-            owner[0] = owner[1] = -1;
+            owner[0] = owner[1] = in_use = -1;
             epoch++;
             set_was = set;
         }
@@ -581,8 +586,10 @@ void controls_read(const nshvc_input *in, uint16_t pad[2])
         }
         /* a controller in use: a press, or its stick held over; player 1's
            where two play, any where one does */
-        if ((two ? owner[0] == c : in->controller[c].on) && (fresh || (stick[c] & ~ctl_rest[c])))
+        if ((two ? owner[0] == c : in->controller[c].on) && (fresh || (stick[c] & ~ctl_rest[c]))) {
             used = 1;
+            in_use = c;
+        }
         if (!two)
             one |= controller_pad(in, c, ctl_of[0]);
     }
