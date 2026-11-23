@@ -2,7 +2,7 @@
 # builder/release.sh: build Stunt Race FX Builder for macOS, Windows and Linux
 # and publish them on the repository's GitHub Releases page as vVERSION.
 #
-# VERSION: 0.992 unless set. The release is tagged at HEAD as it is when this
+# VERSION: 0.993 unless set. The release is tagged at HEAD as it is when this
 # starts, which must already be on GitHub. Running it again at the same
 # version replaces the files of that release.
 #
@@ -19,7 +19,7 @@ for a in "$@"; do
     [ "$a" = --no-build ] && BUILD=0
 done
 
-VERSION=${VERSION:-0.992}
+VERSION=${VERSION:-0.993}
 TAG=v$VERSION
 DIST=build/builder/dist
 MAC=$DIST/StuntRaceFXBuilder-$VERSION-macOS.zip
@@ -50,6 +50,10 @@ cat > $NOTES <<EOF
 Stunt Race FX Builder makes a native build of **Stunt Race FX** (Super Nintendo, 1994) from your own copy of the cartridge: the game as C, compiled for your machine and running on nativeshvc, with everything drawn by the GPU. On a Mac it builds the game for the Mac, or for the iPhone and iPad; on Windows, for Windows; on Linux, for Linux.
 
 The game's data is copyrighted, so the builder does not include it: you provide your ROM, the builder checks it by MD5, takes the data the game reads from it (the ROM's code is not used: the C stands for it), and produces a game that runs on its own. The ROM is not needed once the build is done.
+
+### New in 0.993
+- **Modern controls are the default**: a new game steers with the whole range of the stick or the touch wheel; ORIGINAL is one switch away on the pause screen. A game that already has a choice saved keeps it.
+- **Aqua Tunnel**: the grey slabs 0.992 left over the road are gone; only the tube's open ramps are closed in, in their own shape, so you cannot see inside them from outside.
 
 ### New in 0.992
 - **Modern controls**: an ORIGINAL / MODERN switch on the pause screen. Modern steers across the whole range with the stick or the touch wheel, from a gentle turn to the sharpest, with no need for L and R; on the keyboard and the d-pad a held direction builds from a gentle turn to the sharp one. Modern is the default; Original, the game as it was, is a choice on the pause screen.
