@@ -536,8 +536,8 @@ void HudColourStep(void)
        every course keeps its sky there, its open mouths showing the outside
        (Jeff, 2026-11-17, GitHub issues 9 and 10: "not have black going into
        or out of the tunnel"; "ALL tunnels in the game should be properly
-       'open'"); Aqua Tunnel's sealed tube keeps the original's, behind its
-       underwater backdrop */
+       'open'"; Aqua Tunnel's too, Jeff, 2026-11-23: "sky is still black
+       until leaving the tunnel then it pops back in") */
     if ((g.picture_effects & 0x08) && !fx_ground_tunnel_sky()) {
         palettes.gradient_was_off = 1;
         gradient.source[g.fx_buffer] = GRADIENT_AT_BLACK;

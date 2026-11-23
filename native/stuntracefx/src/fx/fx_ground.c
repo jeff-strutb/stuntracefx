@@ -3405,7 +3405,7 @@ static uint32_t band_shade(int level, int whole)
 
 int fx_ground_tunnel_sky(void)
 {
-    return g.course < 0x20 && surface[g.course].kind != SURF_NONE && surface[g.course].kind != SURF_AQUA;
+    return g.course < 0x20 && surface[g.course].kind != SURF_NONE;
 }
 
 int fx_ground_verge(uint8_t entry)
