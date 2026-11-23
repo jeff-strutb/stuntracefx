@@ -156,6 +156,7 @@ static struct {
     uint16_t ctl_last[2];               /* each player's controller's buttons at the last update */
     int ctl_on[2];                      /* the player has a controller */
     int ctl_slot[2];                    /* which (controls_controller), -1 none */
+    uint32_t ctl_epoch;                 /* controls_owner_epoch at the last update */
 
     /* the pictures: made at `density` pixels a point; 0 none yet */
     float density;
@@ -1250,13 +1251,16 @@ static int pause_step(const nshvc_input *in, uint16_t pad[2])
         int c = controls_controller(i);
         uint16_t now = c >= 0 ? in->controller[c].buttons : 0;
 
-        if (c != p.ctl_slot[i])         /* another controller is the player's: what it holds is pressed now */
+        /* another controller is the player's (or the owners were dropped, an
+           index then being possibly another pad's): what it holds is pressed now */
+        if (c != p.ctl_slot[i] || controls_owner_epoch() != p.ctl_epoch)
             p.ctl_last[i] = 0;
         p.ctl_slot[i] = c;
         ctl_press[i] = (uint16_t)(now & ~p.ctl_last[i]);
         p.ctl_last[i] = now;
         p.ctl_on[i] = c >= 0;
     }
+    p.ctl_epoch = controls_owner_epoch();
 #endif
     for (i = 0; i < 2; i++) {
         press[i] = (uint16_t)(pad[i] & ~p.last[i]);

@@ -13,11 +13,16 @@
 
 /* Each update, first: both players' pads from the devices. Player 1: the
    keyboard, the touch screen and the first controller used; player 2: the
-   next controller used. A controller's left stick always steers. */
+   next controller used where two play; every controller where one does (see
+   controls.c). A controller's left stick always steers. */
 void controls_read(const nshvc_input *in, uint16_t pad[2]);
 /* the engine's controller (an index of nshvc_input.controller[]) that is
    player 0's or 1's, -1 none yet */
 int controls_controller(int player);
+/* Counts the times the owners were dropped (a controller connected or
+   disconnected): what is kept of a player's controller, its last buttons,
+   is then another's. */
+uint32_t controls_owner_epoch(void);
 
 /* The race, each update it reads the player's controls (not in a demo, not
    paused): the touch screen drives (the wheel, the pedals, the gas) from
