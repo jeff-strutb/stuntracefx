@@ -127,7 +127,7 @@ FX (USA) (Rev 1), checked by MD5, and ships none of the ROM's data:
 | Builder runs on | Builds | The game needs |
 |---|---|---|
 | macOS 12+ (Apple silicon and Intel) | the Mac app (universal), or the iPhone and iPad app (`.ipa`, signed with the player's own Xcode signing when there is one) | macOS 12+, Metal; iOS 15+ |
-| Windows 10+ (64-bit) | a folder with the game | a Vulkan driver |
+| Windows 10+ (64-bit) | a folder with the game | a Direct3D 12 graphics driver (no Vulkan driver needed) |
 | Linux, glibc 2.35+ (x86_64, arm64) | a folder with the game | X11 or XWayland, a Vulkan driver |
 
 The game also builds for Android (the engine's Android host), which the
@@ -175,7 +175,7 @@ Recordings of the original are kept only to find such bugs.
   side or above and below, by the window's shape.
 - **3D at the display's resolution, on the GPU.** The CPU runs the game and
   builds draw lists; the GPU draws every picture (Metal on Apple devices,
-  Vulkan on Windows and Linux), edges antialiased. View distance is
+  Direct3D 12 on Windows, Vulkan on Linux), edges antialiased. View distance is
   unlimited: what the original culled at its 45-degree view and its draw
   distance is kept.
 - **A true 60 Hz tick and an unlocked frame rate.** The race runs the
@@ -229,7 +229,7 @@ cmake --build native/stuntracefx/build/macos
 of the cartridge with the data the game reads (`tools/assets.csv`) at its
 place and nothing where the code was. Other hosts take `NSHVC_HOST` and
 `NSHVC_RENDER` as `builder/build.sh` sets them (iOS with Metal, Windows
-with Vulkan through mingw-w64); plain cmake with no host builds the
+with Direct3D 12 through mingw-w64); plain cmake with no host builds the
 headless, null-rendered game.
 
 Switches for looking at the game while it is worked on, in the environment:

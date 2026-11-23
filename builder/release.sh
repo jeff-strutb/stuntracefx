@@ -64,7 +64,7 @@ The game's data is copyrighted, so the builder does not include it: you provide 
 - The builder's finished page lists the keys the game has now, and a game run without its data says to build it with the builder.
 
 ### Features
-- **Native**: the game's own C for your machine, no emulator; its 3D is drawn by the GPU (Metal on the Mac, iPhone and iPad, Vulkan on Windows and Linux).
+- **Native**: the game's own C for your machine, no emulator; its 3D is drawn by the GPU (Metal on the Mac, iPhone and iPad, Direct3D 12 on Windows, Vulkan on Linux).
 - **Any window, any shape**: the race and the menus fill the window, wide or tall, and the 3D is drawn at the window's own resolution, sharp at any size.
 - **60 frames a second**: the race runs the cartridge's own physics step for step, and the 3D is drawn on every frame between its steps.
 - **The courses' ground as polygon scenery**: green polygon mountains, oceans of waves, snowfields, to the horizon; solid 3D tyres and trees, and no distance where the scenery is cut off.
@@ -77,7 +77,7 @@ The game's data is copyrighted, so the builder does not include it: you provide 
 
 ### Download
 - **macOS** (12 or later, Apple silicon and Intel; the game it builds needs the same): \`StuntRaceFXBuilder-$VERSION-macOS.zip\`. Unzip and open Stunt Race FX Builder. It is not notarized: if macOS refuses to open it, Control-click it and choose Open, or allow it in System Settings, Privacy & Security.
-- **Windows** (10 or later, 64-bit; the game it builds needs the same, and a graphics driver with Vulkan): \`StuntRaceFXBuilder-$VERSION-Windows.zip\`. Unzip it and run \`StuntRaceFXBuilder.exe\` from the unzipped folder (the \`game\` folder beside it holds the game's code). It is not signed: if SmartScreen stops it, choose More info, then Run anyway.
+- **Windows** (10 or later, 64-bit; the game it builds needs the same, and a graphics driver with Direct3D 12; no Vulkan driver is needed): \`StuntRaceFXBuilder-$VERSION-Windows.zip\`. Unzip it and run \`StuntRaceFXBuilder.exe\` from the unzipped folder (the \`game\` folder beside it holds the game's code). It is not signed: if SmartScreen stops it, choose More info, then Run anyway.
 - **Linux** (x86_64 or arm64; glibc 2.35 or later, which is Ubuntu 22.04, Debian 12, Fedora 36 and anything newer; X11 or XWayland; a graphics driver with Vulkan; GTK 3 for the builder's window): \`StuntRaceFXBuilder-$VERSION-Linux-x86_64.tar.gz\` or \`StuntRaceFXBuilder-$VERSION-Linux-arm64.tar.gz\`. Extract it and run \`StuntRaceFXBuilder\` in the extracted folder (the \`game\` folder beside it holds the game's code). Without a desktop it builds from the terminal: \`./StuntRaceFXBuilder --rom YOUR_ROM.sfc --dest FOLDER --build\`. Run the builder, not the program in its \`game\` folder: that is the builder's copy of the game, without its data.
 - **Steam Deck**: in Desktop Mode, run the Linux x86_64 builder and build the game; then in Steam choose Add a Non-Steam Game and pick \`Stunt Race FX\` in the folder it made, to play it in Gaming Mode. It starts full screen.
 

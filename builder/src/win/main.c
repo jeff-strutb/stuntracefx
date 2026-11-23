@@ -107,7 +107,7 @@ static void page_intro(void)
     text(L"Stunt Race FX Builder makes a native Windows build of Stunt Race FX (Super Nintendo, 1994) from your own "
          L"copy of it: the game as C, compiled for your PC.", 24, 60, 540, 40, s_font);
     text(L"Stunt Race FX", 24, 116, 540, 24, s_bold);
-    text(L"A Windows program (Windows 10 or later, 64-bit, with a Vulkan graphics driver), played with the keyboard or a game "
+    text(L"A Windows program (Windows 10 or later, 64-bit, with a Direct3D 12 graphics driver), played with the keyboard or a game "
          L"controller. It needs your ROM of the cartridge, " RB_ROM_NAME L", once, to build.",
          44, 142, 520, 56, s_font);
     button(L"Continue", 464, BOTTOM, 100, ID_NEXT, 1);

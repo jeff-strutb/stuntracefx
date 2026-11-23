@@ -22,9 +22,10 @@
 # Needs nativeshvc's checkout (NSHVC, ../nativeshvc), the ROM (ROM, default
 # reference/stuntracefx/: check_payload.py reads it to prove its absence),
 # Xcode's clang and the iOS SDK, cmake and ninja, glslangValidator and
-# spirv-cross (the game's shaders; dxc for their D3D12 form), mingw-w64
-# (x86_64-w64-mingw32-*) and the Vulkan headers (brew's vulkan-headers) for
-# Windows and Linux. Linux is built on a Linux machine over ssh (LINUX_HOST,
+# spirv-cross (the game's shaders; dxc, nativeshvc's own under build/tools/dxc
+# or on PATH, makes their DXIL, which the Windows game, Direct3D 12, loads),
+# mingw-w64 (x86_64-w64-mingw32-*) for Windows, and the Vulkan headers (brew's
+# vulkan-headers) for Linux. Linux is built on a Linux machine over ssh (LINUX_HOST,
 # default strutb@192.168.1.25, in ~/srfx-linux there): builder/linux/
 # build-linux.sh says what it needs on it.
 set -e
@@ -93,9 +94,8 @@ printf 'APPL????' > "$IAPP/PkgInfo"
 cp builder/src/mac/ios_sign.sh $B/payload-macos/ios_sign.sh
 
 # ---- the payload: Windows ---------------------------------------------------------------------
-game game-windows -DNSHVC_HOST=windows -DNSHVC_RENDER=vulkan -DCMAKE_SYSTEM_NAME=Windows \
-    -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc -DCMAKE_RC_COMPILER=x86_64-w64-mingw32-windres \
-    -DNSHVC_VULKAN_INCLUDE="$(brew --prefix)/include"
+game game-windows -DNSHVC_HOST=windows -DNSHVC_RENDER=d3d12 -DCMAKE_SYSTEM_NAME=Windows \
+    -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc -DCMAKE_RC_COMPILER=x86_64-w64-mingw32-windres
 x86_64-w64-mingw32-strip -o $B/payload-windows/stuntracefx.exe $B/game-windows/stuntracefx.exe
 cp -R $B/game-windows/shaders $B/payload-windows/shaders
 

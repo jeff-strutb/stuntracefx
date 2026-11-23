@@ -26,8 +26,8 @@ its shaders beside it. The game, and the builder itself, have the game's own
 icon (`native/stuntracefx/icon/icon.png`).
 
 Version 0.991. The builder and the game it builds run on macOS 12 or later
-(Apple silicon and Intel), Windows 10 or later (64-bit, with a Vulkan
-graphics driver) and Linux with glibc 2.35 or later (x86_64 or arm64, X11 or
+(Apple silicon and Intel), Windows 10 or later (64-bit, with a Direct3D 12
+graphics driver; no Vulkan driver is needed) and Linux with glibc 2.35 or later (x86_64 or arm64, X11 or
 XWayland, a Vulkan driver; GTK 3 for the builder's window, else it builds
 from the terminal with `--rom FILE --dest DIR --build`); the iPhone and iPad
 app on iOS 15 or later.
@@ -57,13 +57,14 @@ The payload is the native game built from HEAD (a worktree of it, so
 uncommitted work, and `cart.dat`, which is never committed, cannot ship), as
 nativeshvc's `nshvc-build` configures it: on macOS universal (arm64 and x86_64
 built apart and joined) drawn with Metal, with its shaders and icon, and the
-iPhone app beside it (unsigned); on Windows drawn with Vulkan, its shaders
-beside it; on Linux (x86_64 and arm64) drawn with Vulkan, built on a Linux
+iPhone app beside it (unsigned); on Windows drawn with Direct3D 12, its shaders
+(DXIL) beside it; on Linux (x86_64 and arm64) drawn with Vulkan, built on a Linux
 machine over ssh (`LINUX_HOST`) against Ubuntu 22.04's C library. The builder's data table (`cart_table.h`) is written from the
 game's `assets.csv` at the same commit, so the two always agree. Building
 needs nativeshvc's checkout (`NSHVC`, `../nativeshvc`), Xcode's clang and the
 iOS SDK, cmake and ninja, glslangValidator and spirv-cross (dxc for the D3D12
-shaders), mingw-w64 and brew's vulkan-headers for Windows, and the ROM (`ROM`,
+shaders; nativeshvc's own is used), mingw-w64 for Windows, brew's vulkan-headers
+for Linux, and the ROM (`ROM`,
 default under `reference/`; `check_payload.py` reads it to prove its absence).
 
 Every front end takes arguments for a scripted run:
