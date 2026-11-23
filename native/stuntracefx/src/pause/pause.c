@@ -32,7 +32,12 @@
  * buttons back for the player shown; FULL SCREEN
  * switches between full screen and a window (system/display.c, where the
  * window can) and FPS COUNTER shows or hides the counter (system/fps.c),
- * both kept in the options. Buttons held as the
+ * both kept in the options, and CONTROLS switches between ORIGINAL (Left and
+ * Right steer, L and R the sharp turn) and MODERN (one analogue steer value
+ * covers the whole range, input/controls.c; in it L and R are tagged FULL
+ * TURN, what they do there), kept in the options too (Jeff, 2026-11-23:
+ * "Implement a original/modern Controls toggle in the pause menu"); on
+ * the iPhone and iPad it is an item of the options menu. Buttons held as the
  * screen closes reach the game only once let go. Each tag names what is
  * bound for the player shown: player 1's on the device player 1 last used,
  * player 2's on their controller (controls_name).
@@ -518,6 +523,7 @@ static void options_now(int on[PAUSE_OPTIONS])
     memset(on, 0, PAUSE_OPTIONS * sizeof on[0]);    /* only those from PAUSE_VALUED on have a value */
     on[PAUSE_FULL_SCREEN - PAUSE_OPTION] = display_full_screen() != 0;
     on[PAUSE_FPS - PAUSE_OPTION] = option_fps() != 0;
+    on[PAUSE_MODE - PAUSE_OPTION] = option_modern() != 0;
 }
 
 /* The options' buttons as they stand: their values, the one chosen lit. */
@@ -570,7 +576,9 @@ static void menu_refresh(void)
     int i;
 
     for (i = 0; i < PAUSE_MENU_ITEMS; i++) {
-        int on = i == PAUSE_MENU_AUTO ? option_auto_accelerate() != 0 : i == PAUSE_MENU_FPS && option_fps() != 0;
+        int on = i == PAUSE_MENU_AUTO ? option_auto_accelerate() != 0
+                 : i == PAUSE_MENU_FPS ? option_fps() != 0
+                                       : i == PAUSE_MENU_CONTROLS && option_modern() != 0;
         int lit = p.chosen == i, want = on * 2 + lit;
         float x, y, w, h;
         PauseImg m;
@@ -603,8 +611,15 @@ static void tag_text(int c, char *out, size_t n)
 
 static void tags_refresh(void)
 {
+    static int modern_shown = -1;
     int c;
 
+    if (option_modern() != modern_shown) {  /* L and R's tags say what they do in the controls shown */
+        modern_shown = option_modern() != 0;
+        pause_art_modern(modern_shown);
+        for (c = 0; c < PAUSE_CONTROLS; c++)
+            p.tag_asking[c] = -1;
+    }
     for (c = 0; c < PAUSE_CONTROLS; c++) {
         char key[32];
         int asking = p.asking == c;
@@ -1331,6 +1346,8 @@ static int pause_step(const nshvc_input *in, uint16_t pad[2])
                 option_auto_accelerate_set(!option_auto_accelerate());
             } else if (p.chosen == PAUSE_MENU_FPS) {
                 option_fps_set(!option_fps());
+            } else if (p.chosen == PAUSE_MENU_CONTROLS) {
+                option_modern_set(!option_modern());
             } else {
                 if (p.chosen == PAUSE_MENU_QUIT)
                     race_pause_quit();  /* the game's own pause, taking its quit (race/pause.c) */
@@ -1368,6 +1385,8 @@ static int pause_step(const nshvc_input *in, uint16_t pad[2])
             display_full_screen_set(!display_full_screen());
         else if (p.chosen == PAUSE_FPS)
             option_fps_set(!option_fps());
+        else if (p.chosen == PAUSE_MODE)
+            option_modern_set(!option_modern());
         else if (can_ask())
             p.asking = p.chosen;
     }

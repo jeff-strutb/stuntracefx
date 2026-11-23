@@ -246,15 +246,31 @@ const PauseControl pause_controls[PAUSE_CONTROLS] = {
 #define BTN_COLS 3                      /* the most a row takes */
 
 static const char *const k_name[PAUSE_ITEMS - PAUSE_CONTROLS] = {
-    "RESUME", "DEFAULTS", "QUIT RACE", "FULL SCREEN", "FPS COUNTER",
+    "RESUME", "DEFAULTS", "QUIT RACE", "FULL SCREEN", "FPS COUNTER", "CONTROLS",
 };
-/* the rows, left to right (-1: none); a switch for the controls goes after FPS COUNTER */
+/* the rows, left to right (-1: none) */
 static const int k_row[2][BTN_COLS] = {
     { PAUSE_RESUME, PAUSE_DEFAULTS, PAUSE_QUIT },
-    { PAUSE_FULL_SCREEN, PAUSE_FPS, -1 },
+    { PAUSE_FULL_SCREEN, PAUSE_FPS, PAUSE_MODE },
 };
 static int full_screen_offered = 1;
 static int quit_offered;
+static int modern;
+void pause_art_modern(int on) { modern = on != 0; }
+
+/* what a control's tag says: in Modern, L and R put the wheel at full lock at
+   once (input/controls.c), the sharp turn the stick or the wheel reaches at
+   full deflection, not a turn of their own */
+static const char *control_name(int i)
+{
+    const PauseControl *k = &pause_controls[i];
+
+    if (modern && k->button == PAD_L)
+        return "FULL TURN LEFT";
+    if (modern && k->button == PAD_R)
+        return "FULL TURN RIGHT";
+    return k->name;
+}
 
 void pause_art_full_screen(int offered) { full_screen_offered = offered != 0; }
 void pause_art_quit(int offered) { quit_offered = offered != 0; }
@@ -418,7 +434,9 @@ void pause_draw_options(PauseImg *m, const int on[PAUSE_OPTIONS], int lit)
 
         if (!pause_item_offered(i))
             continue;
-        if (i >= PAUSE_VALUED)
+        if (i == PAUSE_MODE)
+            snprintf(text, sizeof text, "%s %s", k_name[i - PAUSE_CONTROLS], on[i - PAUSE_OPTION] ? "MODERN" : "ORIGINAL");
+        else if (i >= PAUSE_VALUED)
             snprintf(text, sizeof text, "%s %s", k_name[i - PAUSE_CONTROLS], on[i - PAUSE_OPTION] ? "ON" : "OFF");
         else
             snprintf(text, sizeof text, "%s", k_name[i - PAUSE_CONTROLS]);
@@ -535,7 +553,7 @@ void pause_draw_panel(PauseImg *m)
 
 /* ---- the options menu ---- */
 
-static const char *const k_menu_name[PAUSE_MENU_ITEMS] = { "RESUME", "AUTO-ACCELERATE", "FPS COUNTER", "QUIT RACE" };
+static const char *const k_menu_name[PAUSE_MENU_ITEMS] = { "RESUME", "AUTO-ACCELERATE", "FPS COUNTER", "CONTROLS", "QUIT RACE" };
 
 /* an item's own rectangle, without the image's margin */
 static void menu_at(int item, float *x, float *y, float *w, float *h)
@@ -574,6 +592,9 @@ void pause_draw_menu_item(PauseImg *m, int item, int on, int lit)
     if (item == PAUSE_MENU_AUTO || item == PAUSE_MENU_FPS) {
         snprintf(text, sizeof text, "%s %s", name, on ? "ON" : "OFF");
         name = text;
+    } else if (item == PAUSE_MENU_CONTROLS) {
+        snprintf(text, sizeof text, "%s %s", name, on ? "MODERN" : "ORIGINAL");
+        name = text;
     }
     /* as the panel buttons: lit, over the button unlit, whole */
     rrect(m, x, y, w, h, 10, lit ? LIT_FILL : PLATE, lit ? 1 : 0.85f);
@@ -593,8 +614,8 @@ void pause_draw_tag(PauseImg *m, int control, const char *key, int asking)
     tag_at(control, &tx, &ty);
     rrect(m, tx, ty, TAG_W, TAG_H, 6, asking ? LIT_FILL : PLATE, 0.85f);
     rrect_edge(m, tx + 0.75f, ty + 0.75f, TAG_W - 1.5f, TAG_H - 1.5f, 5.5f, 0.9f, k->colour == WHITE ? 0x7A7A84 : k->colour, 1);
-    dot = fminf(1.3f, room / ((float)strlen(k->name) * 6 - 1));
-    text_at(m, k->name, tx + 9, ty + 5, dot, k->colour);
+    dot = fminf(1.3f, room / ((float)strlen(control_name(control)) * 6 - 1));
+    text_at(m, control_name(control), tx + 9, ty + 5, dot, k->colour);
     if (!*shown)
         return;
     dot = fminf(1.0f, room / ((float)strlen(shown) * 6 - 1));

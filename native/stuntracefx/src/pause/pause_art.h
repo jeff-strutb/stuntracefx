@@ -40,17 +40,16 @@ extern const PauseControl pause_controls[PAUSE_CONTROLS];
 
 /* the panel's own buttons, in two rows of centred buttons under the controls:
    RESUME, DEFAULTS and QUIT RACE (offered while a race is being driven); FULL
-   SCREEN (offered where the window can be) and FPS COUNTER. They show their
-   values with their names, so all are drawn into a picture of their own
-   (pause_draw_options), not the panel's. A row takes up to three, so the
-   controls switch of ORIGINAL / MODERN would be a third in the second row,
-   after FPS COUNTER: a new item before PAUSE_ITEMS, named in k_row of
-   pause_art.c. (Auto-accelerate, a touch screen's, is the iPhone and iPad
+   SCREEN (offered where the window can be), FPS COUNTER and the controls
+   switch, CONTROLS ORIGINAL or CONTROLS MODERN (input/controls.c). They show
+   their values with their names, so all are drawn into a picture of their own
+   (pause_draw_options), not the panel's. A row takes up to three (k_row of
+   pause_art.c). (Auto-accelerate, a touch screen's, is the iPhone and iPad
    menu's only, Jeff 2026-11-17.) */
-enum { PAUSE_RESUME = PAUSE_CONTROLS, PAUSE_DEFAULTS, PAUSE_QUIT, PAUSE_FULL_SCREEN, PAUSE_FPS, PAUSE_ITEMS };
+enum { PAUSE_RESUME = PAUSE_CONTROLS, PAUSE_DEFAULTS, PAUSE_QUIT, PAUSE_FULL_SCREEN, PAUSE_FPS, PAUSE_MODE, PAUSE_ITEMS };
 #define PAUSE_OPTION PAUSE_RESUME                       /* the first of the buttons in the picture of their own */
 #define PAUSE_OPTIONS (PAUSE_ITEMS - PAUSE_OPTION)
-#define PAUSE_VALUED PAUSE_FULL_SCREEN                  /* from this item on, a button shows ON or OFF */
+#define PAUSE_VALUED PAUSE_FULL_SCREEN                  /* from this item on, a button shows a value: ON or OFF, or for PAUSE_MODE ORIGINAL or MODERN */
 /* the player buttons above the controller, PLAYER 1 and PLAYER 2 side by
    side: pressing one shows and changes that player's controls, and it is
    shown in use. Items after the rest, drawn into a picture of their own
@@ -58,6 +57,10 @@ enum { PAUSE_RESUME = PAUSE_CONTROLS, PAUSE_DEFAULTS, PAUSE_QUIT, PAUSE_FULL_SCR
    panel's, with no lit pictures of their own. */
 #define PAUSE_PLAYER1 PAUSE_ITEMS
 #define PAUSE_PLAYER2 (PAUSE_ITEMS + 1)
+/* the controls the tags describe: Modern (1) or Original (0). In Modern L and R
+   no longer steer harder by themselves: they put the wheel at full lock at
+   once, so their tags say so. */
+void pause_art_modern(int on);
 /* whether FULL SCREEN is offered (a window that can be full screen) and
    whether QUIT RACE is (a race is being driven); the rows centre what is */
 void pause_art_full_screen(int offered);
@@ -99,10 +102,10 @@ int pause_item_at(float x, float y);
 
 /* the panel of the options menu: the title and the items one under the
    other, no controller; its items by their own pictures, over it */
-enum { PAUSE_MENU_RESUME, PAUSE_MENU_AUTO, PAUSE_MENU_FPS, PAUSE_MENU_QUIT, PAUSE_MENU_ITEMS };
+enum { PAUSE_MENU_RESUME, PAUSE_MENU_AUTO, PAUSE_MENU_FPS, PAUSE_MENU_CONTROLS, PAUSE_MENU_QUIT, PAUSE_MENU_ITEMS };
 void pause_menu_box(int item, float *x, float *y, float *w, float *h);
 void pause_draw_menu_panel(PauseImg *m);
-/* an item, lit while chosen; `on` is an option item's value */
+/* an item, lit while chosen; `on` is an option item's value (CONTROLS: 1 Modern) */
 void pause_draw_menu_item(PauseImg *m, int item, int on, int lit);
 
 /* the pause button in the window's corner, PAUSE_BUTTON points square in its
