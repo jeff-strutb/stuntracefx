@@ -20,10 +20,11 @@
  * preview_countdown); two_players() is that test. There, and only there,
  * ownership decides: a controller belongs to the player it is first used for
  * (a button pressed or its left stick moved): player 1's, then player 2's;
- * it stays theirs until a controller is connected or
- * disconnected (the engine's index of a controller may then be another's,
- * so both are claimed afresh); what a controller holds on its
- * first update is its rest, not a use. Player 2
+ * it stays theirs for as long as that controller is connected (the engine's
+ * identity of it, nshvc_input.controller[].seq, 6.11: another controller's
+ * coming or going changes nothing; before it, any change in the controllers
+ * dropped both owners, an index then possibly another pad's); what a
+ * controller holds on its first update is its rest, not a use. Player 2
  * is that second controller, through player 2's own controller bindings (no
  * keys: the keyboard is player 1's). Everywhere else the controllers all give
  * player 1's pad, through player 1's bindings, and player 2's pad is empty.
@@ -113,7 +114,12 @@ static uint32_t ctl_rest[CONTROLLERS];  /* what it held when it appeared, until 
 static uint8_t ctl_here[CONTROLLERS];   /* it was connected at the last update */
 static uint32_t stick[CONTROLLERS];     /* each one's left stick as directions (STICK_*), from the update's read */
 static int in_use = -1;                 /* the controller last used for player 1, -1 none */
+#define CONTROLLER_IDENTITY (NSHVC_VERSION_MAJOR > 6 || (NSHVC_VERSION_MAJOR == 6 && NSHVC_VERSION_MINOR >= 11))
+#if CONTROLLER_IDENTITY
+static uint32_t ctl_seq[CONTROLLERS];   /* each one's seq (nshvc_input) when last seen */
+#else
 static uint32_t set_was;                /* the connected controllers at the last update, a bit each */
+#endif
 static uint32_t epoch;                  /* counts the times the owners were dropped */
 
 static int button_index(uint16_t button)
@@ -650,11 +656,40 @@ void controls_read(const nshvc_input *in, uint16_t pad[2])
 
     steer_marked = 0;                   /* the race marks it again, if it reads the player's controls this update */
     updates++;
-    /* The engine numbers the controllers the system lists, and a system
-       renumbers them as one is connected or disconnected (Windows counts the
-       XInput slots in use, macOS and iOS take GameController's order), so an
-       index kept across such a change may be another pad: the owners are
-       dropped, and the controllers used next are claimed afresh. */
+#if CONTROLLER_IDENTITY
+    /* From API 6.11 a controller keeps its index while it stays connected,
+       and `seq` changes whenever the device at an index changes or connects
+       (a pad taken out and another put in between two updates included), so
+       a player's controller is the index and the seq it was claimed at: it
+       is kept across any other controller's coming or going and lost only
+       when that device goes. What was kept of the device (its rest, its
+       last buttons) goes with it. */
+    for (c = 0; c < CONTROLLERS; c++) {
+        if (!in->controller[c].on)
+            continue;
+        if (ctl_here[c] && in->controller[c].seq != ctl_seq[c]) {
+            ctl_here[c] = 0;            /* another device at the index: first seen again below */
+            for (i = 0; i < 2; i++)
+                if (owner[i] == c) {
+                    owner[i] = -1;
+                    epoch++;
+                }
+            if (in_use == c)
+                in_use = -1;
+        }
+        ctl_seq[c] = in->controller[c].seq;
+    }
+    for (i = 0; i < 2; i++)
+        if (owner[i] >= 0 && !in->controller[owner[i]].on) {
+            owner[i] = -1;
+            epoch++;
+        }
+#else
+    /* Before it the engine numbered the controllers the system lists, and a
+       system renumbers them as one is connected or disconnected (Windows
+       counts the XInput slots in use, macOS and iOS take GameController's
+       order), so an index kept across such a change may be another pad: the
+       owners are dropped, and the controllers used next are claimed afresh. */
     {
         uint32_t set = 0;
 
@@ -667,6 +702,7 @@ void controls_read(const nshvc_input *in, uint16_t pad[2])
             set_was = set;
         }
     }
+#endif
     for (c = 0; c < CONTROLLERS; c++) {
         uint32_t now, fresh;
 
