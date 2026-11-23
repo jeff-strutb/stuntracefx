@@ -1,8 +1,9 @@
 /*
  * pause_art.c: the pause screen's pictures (pause_art.h): a dark plate edged
  * in gold, the title between a racing flag's checks, Jeff's controller
- * (pad_art.c) with a tag beside it for each of its buttons and a line from
- * the tag to the button, the player buttons above it (whose controls are
+ * (pad_art.c) with a tag beside it for each of its buttons, saying what the
+ * button does in the game and, smaller, the key or button bound to it, and a
+ * line from the tag to the button, the player buttons above it (whose controls are
  * shown), the hint below, RESUME, DEFAULTS and the options. Each is
  * drawn once into an image; pause.c lays the images over the window and the
  * GPU shows them. What changes (a key's name on its tag, the item chosen,
@@ -25,14 +26,15 @@
 #define PLATE 0x141414
 #define WHITE 0xF2F2F2
 #define LIT_FILL 0x3A2E08               /* a tag asked for, a panel button chosen */
-#define LINE_GREY 0x8A8A94
+#define LINE_GREY 0xA4A4B0
+#define BIND_GREY 0xB4B4C0              /* the key or button on a tag, under what it does */
 
 #define PADK 0.3645f                    /* the controller: points a drawing pixel */
 #define PAD_CX 320.0f                   /* where its (500, 300) goes */
 #define PAD_CY 190.0f
 
 #define TAG_W 150.0f
-#define TAG_H 26.0f
+#define TAG_H 30.0f
 #define MARGIN 2.0f                     /* round an image's box, for its edges' blending */
 
 PauseImg pause_img_new(float x, float y, float w, float h, float density)
@@ -218,19 +220,22 @@ static void text_centre(PauseImg *m, const char *s, float cx, float top, float d
 
 const PauseControl pause_controls[PAUSE_CONTROLS] = {
     /* the spots: the drawing's (pad_art.c) at PADK, its (500, 300) at (PAD_CX, PAD_CY) */
-    /* the spots: the drawing's (pad_art.c) at PADK, its (500, 300) at (PAD_CX, PAD_CY) */
-    { PAD_L, "L", WHITE, 228.9f, 124.8f, 10, 0, 0 },
-    { PAD_UP, "UP", WHITE, 227.9f, 173.1f, 7, 0, 1 },
-    { PAD_LEFT, "LEFT", WHITE, 211.1f, 189.8f, 7, 0, 2 },
-    { PAD_RIGHT, "RIGHT", WHITE, 244.4f, 189.8f, 7, 0, 3 },
-    { PAD_DOWN, "DOWN", WHITE, 227.9f, 206.4f, 7, 0, 4 },
-    { PAD_SELECT, "SELECT", WHITE, 297.6f, 201.0f, 8, 0, 5 },
-    { PAD_R, "R", WHITE, 411.3f, 124.8f, 10, 1, 0 },
-    { PAD_X, "X", 0x5A8CF5, 407.7f, 163.6f, 10.5f, 1, 1 },
-    { PAD_Y, "Y", 0x3CC070, 383.3f, 188.2f, 10.5f, 1, 2 },
-    { PAD_A, "A", 0xF0504A, 437.2f, 191.1f, 10.5f, 1, 3 },
-    { PAD_B, "B", 0xF5D34A, 412.6f, 215.9f, 10.5f, 1, 4 },
-    { PAD_START, "START", WHITE, 332.3f, 201.0f, 8, 1, 5 },
+    /* what each does in the race: CarControlsToRecord's reading of the pad (object/gsu_record.c): B the gas,
+       A the brake, and reverse below a crawl, Y the boost, X the jump, Left and Right steer, L and R steer
+       sharply, Up and Down tilt the car while it is in the air, Select the camera, Start the pause (the
+       game's pause screen, race/pause.c) */
+    { PAD_L, "SHARP TURN LEFT", WHITE, 228.9f, 124.8f, 10, 0, 0 },
+    { PAD_UP, "AIR TILT UP", WHITE, 227.9f, 173.1f, 7, 0, 1 },
+    { PAD_LEFT, "STEER LEFT", WHITE, 211.1f, 189.8f, 7, 0, 2 },
+    { PAD_RIGHT, "STEER RIGHT", WHITE, 244.4f, 189.8f, 7, 0, 3 },
+    { PAD_DOWN, "AIR TILT DOWN", WHITE, 227.9f, 206.4f, 7, 0, 4 },
+    { PAD_SELECT, "CHANGE CAMERA", WHITE, 297.6f, 201.0f, 8, 0, 5 },
+    { PAD_R, "SHARP TURN RIGHT", WHITE, 411.3f, 124.8f, 10, 1, 0 },
+    { PAD_X, "JUMP", 0x5A8CF5, 407.7f, 163.6f, 10.5f, 1, 1 },
+    { PAD_Y, "BOOST", 0x3CC070, 383.3f, 188.2f, 10.5f, 1, 2 },
+    { PAD_A, "BRAKE / REVERSE", 0xF0504A, 437.2f, 191.1f, 10.5f, 1, 3 },
+    { PAD_B, "ACCELERATE", 0xF5D34A, 412.6f, 215.9f, 10.5f, 1, 4 },
+    { PAD_START, "PAUSE", WHITE, 332.3f, 201.0f, 8, 1, 5 },
 };
 
 #define BTN_W 190.0f
@@ -325,7 +330,7 @@ static void control_line(int i, float *ex, float *ey, float *fx, float *fy, int 
     end = k->button & (PAD_A | PAD_B | PAD_X | PAD_Y) ? k->br : 0;
     *fx = k->bx - dx / l * end;
     *fy = k->by - dy / l * end;
-    *dot = end == 0;
+    *dot = 1;
 }
 
 #define RING_GAP 2.5f                   /* the chosen button's ring, out from its reach */
@@ -522,9 +527,9 @@ void pause_draw_panel(PauseImg *m)
         int dot;
 
         control_line(i, &ex, &ey, &fx, &fy, &dot);
-        line(m, ex, ey, fx, fy, 1.1f, LINE_GREY, 1);
+        line(m, ex, ey, fx, fy, 1.25f, LINE_GREY, 1);
         if (dot)
-            disc(m, fx, fy, 1.6f, LINE_GREY, 1);
+            disc(m, fx, fy, 1.9f, LINE_GREY, 1);
     }
 }
 
@@ -576,20 +581,24 @@ void pause_draw_menu_item(PauseImg *m, int item, int on, int lit)
     text_centre(m, name, x + w / 2, y + (h - 7 * 2.25f) / 2, 2.25f, lit ? GOLD : WHITE);
 }
 
+/* A tag: what the button does, in the button's colour, and under it,
+   smaller, the key or controller button bound to it ("..." while it is asked
+   for). */
 void pause_draw_tag(PauseImg *m, int control, const char *key, int asking)
 {
     const PauseControl *k = &pause_controls[control];
-    float tx, ty, dot, room = TAG_W - 66;
+    float tx, ty, dot, room = TAG_W - 18;
     const char *shown = asking ? "..." : key;
 
     tag_at(control, &tx, &ty);
     rrect(m, tx, ty, TAG_W, TAG_H, 6, asking ? LIT_FILL : PLATE, 0.85f);
     rrect_edge(m, tx + 0.75f, ty + 0.75f, TAG_W - 1.5f, TAG_H - 1.5f, 5.5f, 0.9f, k->colour == WHITE ? 0x7A7A84 : k->colour, 1);
-    text_at(m, k->name, tx + 9, ty + (TAG_H - 7 * 1.5f) / 2, 1.5f, k->colour);
+    dot = fminf(1.3f, room / ((float)strlen(k->name) * 6 - 1));
+    text_at(m, k->name, tx + 9, ty + 5, dot, k->colour);
     if (!*shown)
         return;
-    dot = fminf(1.5f, room / (6.0f * (float)strlen(shown) - 1));
-    text_at(m, shown, tx + TAG_W - 9 - text_width(shown, dot), ty + (TAG_H - 7 * dot) / 2, dot, asking ? GOLD : WHITE);
+    dot = fminf(1.0f, room / ((float)strlen(shown) * 6 - 1));
+    text_at(m, shown, tx + 9, ty + 17.5f, dot, asking ? GOLD : BIND_GREY);
 }
 
 void pause_draw_lit(PauseImg *m, int item)

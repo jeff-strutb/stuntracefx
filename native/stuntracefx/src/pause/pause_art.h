@@ -31,7 +31,7 @@ PauseImg pause_img_new(float x, float y, float w, float h, float density);
 #define PAUSE_CONTROLS 12
 typedef struct {
     uint16_t button;                    /* PAD_B... (system/game.h) */
-    const char *name;
+    const char *name;                   /* what it does in the race (object/gsu_record.c CarControlsToRecord, race/pause.c) */
     uint32_t colour;                    /* its name's on the tag */
     float bx, by, br;                   /* the button's spot on the controller, its reach */
     int right, row;                     /* the tag's column (0 left) and row */
@@ -77,6 +77,7 @@ void pause_hint_box(float *x, float *y, float *w, float *h);
 
 /* the pictures; each fills an image made for its box */
 void pause_draw_panel(PauseImg *m);     /* everything that never changes, every item unlit */
+/* a tag: what the button does, then (smaller) the key or controller button bound to it */
 void pause_draw_tag(PauseImg *m, int control, const char *key, int asking);
 void pause_draw_lit(PauseImg *m, int item);
 void pause_draw_hint(PauseImg *m, const char *line1, uint32_t colour1, const char *line2);
